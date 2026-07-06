@@ -240,7 +240,7 @@ export function getCSSSelector(element: HTMLElement): string {
         return `#${element.id}`;
     }
 
-    let path = [];
+    const path = [];
     while (element && element.nodeType === Node.ELEMENT_NODE) {
         let selector = element.tagName.toLowerCase();
 
@@ -330,7 +330,7 @@ export function setIdsOnAllElements(
     useTimestampIds?: boolean,
 ): void {
     const allElements = Array.from(document.getElementsByTagName("*"));
-    let idPrefix = `id_${daysIntoYear()}_${frameId}_`;
+    const idPrefix = `id_${daysIntoYear()}_${frameId}_`;
 
     const skipIdsFor = [
         "BR",
@@ -369,7 +369,7 @@ export function setIdsOnAllElements(
     ];
 
     for (let i = 0; i < allElements.length; i++) {
-        let element = allElements[i];
+        const element = allElements[i];
 
         if (
             !element.hasAttribute("id") &&

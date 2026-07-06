@@ -292,7 +292,7 @@ function tokenize(text: string): string[] {
     // Preserve email addresses and URLs as tokens (bounded quantifiers per email spec limits)
     const emailPattern = /[\w.+-]{1,254}@[\w.-]{1,253}\.\w{2,63}/g;
     const emails: string[] = [];
-    let stripped = text.replace(emailPattern, (match) => {
+    const stripped = text.replace(emailPattern, (match) => {
         emails.push(match);
         return " __EMAIL__ ";
     });

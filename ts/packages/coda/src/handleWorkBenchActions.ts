@@ -12,7 +12,7 @@ import * as fs from "fs/promises";
 import { aliasManager } from "./commandAliasMgr";
 
 async function handleOpenFileAction(action: any): Promise<ActionResult> {
-    let actionResult: ActionResult = {
+    const actionResult: ActionResult = {
         handled: true,
         message: "Ok",
     };

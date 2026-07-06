@@ -453,13 +453,13 @@ async function mapInputToAppNameFromIndex(
     backupProgramNameTable?: string[],
 ): Promise<string | undefined> {
     try {
-        let matchedNames = await programNameIndex.search(input, 1);
+        const matchedNames = await programNameIndex.search(input, 1);
         if (matchedNames && matchedNames.length > 0) {
             return matchedNames[0].item.value;
         }
     } catch (e: any) {
         if (backupProgramNameTable !== undefined) {
-            let stringMatches = searchTable(input, backupProgramNameTable, 1);
+            const stringMatches = searchTable(input, backupProgramNameTable, 1);
 
             if (stringMatches && stringMatches.length > 0) {
                 return stringMatches[0];

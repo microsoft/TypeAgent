@@ -103,7 +103,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
             `Displaying ${matchesToDisplay.length} matches of total ${messageIndexMatches.length}`,
         );
         for (let i = 0; i < matchesToDisplay.length; ++i) {
-            let pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
+            const pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
             this.writeScoredMessage(
                 pos,
                 matchesToDisplay.length,
@@ -203,7 +203,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
 
     public writeTags(tags: kp.Tag[] | undefined) {
         if (tags && tags.length > 0) {
-            let tagStrings = kp.mergeTags(tags);
+            const tagStrings = kp.mergeTags(tags);
             tagStrings.sort();
             this.writeList(tagStrings, { type: "ol" });
         }
@@ -265,7 +265,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
             `Displaying ${matchesToDisplay.length} matches of total ${semanticRefMatches.length}`,
         );
         for (let i = 0; i < matchesToDisplay.length; ++i) {
-            let pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
+            const pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
             this.writeScoredRef(
                 pos,
                 matchesToDisplay.length,
@@ -510,7 +510,9 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         }
         if (distinctKnowledge) {
             for (let i = 0; i < distinctKnowledge.length; ++i) {
-                let pos = this.sortAsc ? distinctKnowledge.length - (i + 1) : i;
+                const pos = this.sortAsc
+                    ? distinctKnowledge.length - (i + 1)
+                    : i;
                 const knowledge = distinctKnowledge[pos];
                 this.writeInColor(
                     chalk.green,
@@ -700,7 +702,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
 
 function getPodcastParticipants(podcast: cm.Podcast) {
     const participants = new Set<string>();
-    for (let message of podcast.messages) {
+    for (const message of podcast.messages) {
         const meta = message.metadata;
         if (meta.speaker) {
             participants.add(meta.speaker);

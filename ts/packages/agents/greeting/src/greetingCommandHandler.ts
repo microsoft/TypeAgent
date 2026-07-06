@@ -50,7 +50,7 @@ type GreetingAgentContext = {
 };
 
 async function initializeGreetingAgentContext(): Promise<GreetingAgentContext> {
-    let context: GreetingAgentContext = {
+    const context: GreetingAgentContext = {
         user: {
             givenName: undefined,
             surName: undefined,
@@ -183,7 +183,7 @@ export class GreetingCommandHandler implements CommandHandler {
         if (response.success) {
             context.actionIO.appendDiagnosticData(response.data);
 
-            let action: GreetingAction = response.data as GreetingAction;
+            const action: GreetingAction = response.data as GreetingAction;
             let result: ActionResultSuccess | undefined = undefined;
             switch (action.actionName) {
                 case "personalizedGreetingAction":
@@ -235,7 +235,7 @@ export class GreetingCommandHandler implements CommandHandler {
                 apiSettings = openai.apiSettingsFromEnv();
             }
         }
-        let completionSettings: CompletionSettings = {
+        const completionSettings: CompletionSettings = {
             temperature: 1.0,
             // Max response tokens
             max_tokens: 1000,
@@ -261,7 +261,7 @@ export class GreetingCommandHandler implements CommandHandler {
         },
     ): Promise<Result<GreetingAction>> {
         // Create Model instance
-        let chatModel = this.createModel(true);
+        const chatModel = this.createModel(true);
 
         // Capture per-call token usage reported by the model so the agent can
         // attribute it to the request. TypeChat's translate() doesn't expose a
@@ -279,9 +279,9 @@ export class GreetingCommandHandler implements CommandHandler {
         }
 
         // Create Chat History
-        let maxContextLength = 8196;
-        let maxWindowLength = 30;
-        let chatHistory: PromptSection[] = [];
+        const maxContextLength = 8196;
+        const maxWindowLength = 30;
+        const chatHistory: PromptSection[] = [];
 
         // create TypeChat object
         const chat = createTypeChat<GreetingAction>(

@@ -571,7 +571,7 @@ const TASKFLOW_BUILTIN_ACTIONS = new Set([
 ]);
 
 export function instantiate(): AppAgent {
-    let agentContext: TaskFlowAgentContext = {};
+    const agentContext: TaskFlowAgentContext = {};
 
     return {
         async initializeAgentContext() {

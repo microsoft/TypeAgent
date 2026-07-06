@@ -246,7 +246,7 @@ export class searchResultsPhraseGenerator {
         let avgUrlsPerDomain: number = 0;
         let count: number = 0;
         //let minD: string = "";
-        let domainsWithMaxUrlCount: string[] = [];
+        const domainsWithMaxUrlCount: string[] = [];
 
         for (const [domain, stats] of Object.entries(this.cache.domains)) {
             const dd: urlResolverCache.domainData =
@@ -278,7 +278,7 @@ export class searchResultsPhraseGenerator {
         let totalPhraseCount = 0;
         let minPhraseCount = Number.MAX_SAFE_INTEGER;
         let maxPhraseCount = Number.MIN_SAFE_INTEGER;
-        let urlsWithMaxPhraseCount: string[] = [];
+        const urlsWithMaxPhraseCount: string[] = [];
 
         for (const [url, info] of Object.entries(this.cache.urls)) {
             const ii: urlResolverCache.urlData =

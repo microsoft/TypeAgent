@@ -335,7 +335,7 @@ export async function createTextIndex<TSourceId = any>(
         text: string,
         postings?: TSourceId[],
     ): Promise<TextId> {
-        let textId = await entriesFolder.put(text);
+        const textId = await entriesFolder.put(text);
         const tasks = [];
         if (postings && postings.length > 0) {
             tasks.push(postingFolder.put(postings, textId));
@@ -369,7 +369,7 @@ export async function createTextIndex<TSourceId = any>(
         if (!existingPostings || existingPostings.length === 0) {
             return;
         }
-        let updatedPostings = collections.removeItemFromArray(
+        const updatedPostings = collections.removeItemFromArray(
             existingPostings,
             postings,
         );
@@ -416,7 +416,7 @@ export async function createTextIndex<TSourceId = any>(
     ): Promise<void> {
         maxMatches ??= 1;
         // Check exact match first
-        let postingsExact = await get(value);
+        const postingsExact = await get(value);
         let postingsAlias: TSourceId[] | undefined;
         if (aliases) {
             // If no exact match, see if matched any (optional) aliases.
@@ -513,7 +513,7 @@ export async function createTextIndex<TSourceId = any>(
         maxMatches ??= 1;
         // Check exact match first
         let matchedIds: TextId[] = [];
-        let exactMatchId = textToId(value);
+        const exactMatchId = textToId(value);
         if (exactMatchId) {
             matchedIds.push(exactMatchId);
         }
@@ -573,13 +573,13 @@ export async function createTextIndex<TSourceId = any>(
         if (!semanticIndex) {
             return [];
         }
-        let matches = await semanticIndex.nearestNeighbors(
+        const matches = await semanticIndex.nearestNeighbors(
             value,
             maxMatches,
             minScore,
         );
         // Also do an exact match
-        let textId: TextId | undefined = textToId(value);
+        const textId: TextId | undefined = textToId(value);
         if (textId) {
             // Remove prior match
             const pos = matches.findIndex((m) => m.item === textId);

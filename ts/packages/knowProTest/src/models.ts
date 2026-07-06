@@ -54,7 +54,7 @@ export function createGpt41Models(): {
 }
 
 export function create35Model(): LanguageModel | undefined {
-    let modelName = "GPT_35_TURBO";
+    const modelName = "GPT_35_TURBO";
     if (hasApiSettings(openai.EnvVars.AZURE_OPENAI_API_KEY, modelName)) {
         return { model: createKnowledgeModel(modelName), modelName };
     }

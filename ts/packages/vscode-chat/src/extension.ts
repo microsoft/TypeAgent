@@ -358,7 +358,7 @@ export async function activate(
             if (isUntitledConversation(conversationId)) {
                 return;
             }
-            let state = conversationLabelState.get(conversationId);
+            const state = conversationLabelState.get(conversationId);
             if (state === undefined) {
                 upsertConversationState(conversationId, item.label, item.label);
                 return;

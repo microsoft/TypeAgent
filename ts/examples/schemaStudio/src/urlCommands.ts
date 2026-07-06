@@ -352,8 +352,8 @@ export function createURLValidateCommands(
         }
 
         // Start checking each URL
-        let passCount = 0;
-        let failCount = 0;
+        const passCount = 0;
+        const failCount = 0;
         for (const url of urls) {
             const temp = url.split("\t");
 

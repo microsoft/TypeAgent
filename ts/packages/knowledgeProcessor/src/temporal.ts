@@ -363,7 +363,7 @@ export function createRecentItemsWindow<T>(
     }
 
     function getContext(maxContextLength: number): string[] {
-        let sections: string[] = [];
+        const sections: string[] = [];
         let totalLength = 0;
         // Get the range of sections that could be pushed on, NEWEST first
         for (const item of entries.itemsReverse()) {

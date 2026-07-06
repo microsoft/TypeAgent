@@ -11,7 +11,7 @@ async function openDemoFile(window: BrowserWindow) {
 
     const result = await dialog.showOpenDialog(window, options);
     if (result && !result.canceled) {
-        let paths = result.filePaths;
+        const paths = result.filePaths;
         if (paths && paths.length > 0) {
             const content = readFileSync(paths[0], "utf-8").toString();
             console.log(content);
@@ -161,7 +161,7 @@ export async function runDemo(
     try {
         const lines = data.split(/\r?\n/);
 
-        for (let line of lines) {
+        for (const line of lines) {
             if (getDemoState() === "aborted") break;
             if (line.startsWith("@pauseForInput")) {
                 setDemoState(chatView, "paused");
@@ -169,7 +169,7 @@ export async function runDemo(
                 if (getDemoState() === "aborted") break;
                 setDemoState(chatView, "running");
             } else if (line && !line.startsWith("#")) {
-                var manualInput = awaitKeyboardInput && !line.startsWith("@");
+                const manualInput = awaitKeyboardInput && !line.startsWith("@");
                 if (manualInput) setDemoState(chatView, "paused");
                 await sendChatInputText(line, chatView);
                 await getActionCompleteEvent(manualInput);

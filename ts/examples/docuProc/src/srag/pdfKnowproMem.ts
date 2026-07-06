@@ -360,7 +360,7 @@ export async function createKnowproCommands(
         context.printer.writeLine("Building index");
         const maxMessages = namedArgs.maxMessages ?? messageCount;
 
-        let progress = new ProgressBar(context.printer, maxMessages);
+        const progress = new ProgressBar(context.printer, maxMessages);
         const indexResult = await context.pdfIndex?.buildIndex(
             createIndexingEventHandler(context.printer, progress, maxMessages),
         );
@@ -417,7 +417,7 @@ export async function createKnowproCommands(
             return;
         }
         const commandDef = searchTermsDef();
-        let [termArgs, namedArgs] = parseFreeAndNamedArguments(
+        const [termArgs, namedArgs] = parseFreeAndNamedArguments(
             args,
             commandDef,
         );
@@ -827,7 +827,7 @@ export async function createKnowproCommands(
             }
         }
         context.printer.writeHeading("Message Abstract");
-        let topicMatches = semanticRefsInMessage.get("topic");
+        const topicMatches = semanticRefsInMessage.get("topic");
         if (topicMatches && topicMatches.length > 0) {
             const topics = kp.getDistinctTopicMatches(
                 semanticRefs,
@@ -841,7 +841,7 @@ export async function createKnowproCommands(
             context.printer.writeLine();
         }
 
-        let entityMatches = semanticRefsInMessage.get("entity");
+        const entityMatches = semanticRefsInMessage.get("entity");
         if (entityMatches && entityMatches.length > 0) {
             const entities = kp.getDistinctEntityMatches(
                 semanticRefs,
@@ -939,7 +939,7 @@ export async function createKnowproCommands(
     function createAnswerOptions(
         namedArgs: NamedArgs,
     ): kp.AnswerContextOptions {
-        let topK = namedArgs.knowledgeTopK;
+        const topK = namedArgs.knowledgeTopK;
         if (topK === undefined) {
             return {};
         }
@@ -1084,7 +1084,7 @@ export async function createKnowproCommands(
     }*/
 
     function createSearchOptions(namedArgs: NamedArgs): kp.SearchOptions {
-        let options = kp.createSearchOptions();
+        const options = kp.createSearchOptions();
         options.exactMatch = namedArgs.exact;
         options.maxKnowledgeMatches = namedArgs.knowledgeTopK;
         options.maxMessageMatches = namedArgs.messageTopK;
@@ -1104,7 +1104,7 @@ export async function createKnowproCommands(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
     ): kp.WhenFilter {
-        let filter: kp.WhenFilter = {
+        const filter: kp.WhenFilter = {
             knowledgeType: namedArgs.ktype,
         };
         const conv: kp.IConversation | undefined = context.conversation;

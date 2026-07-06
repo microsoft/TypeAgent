@@ -203,7 +203,7 @@ app.post("/montageUpdated", (req: Request, res: Response) => {
 });
 
 let clients: any[] = [];
-let messageQueue: any[] = [];
+const messageQueue: any[] = [];
 //let filePath: string;
 
 app.get("/events", (req, res) => {

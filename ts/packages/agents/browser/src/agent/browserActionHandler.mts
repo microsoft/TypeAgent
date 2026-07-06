@@ -2224,7 +2224,7 @@ async function executeBrowserActionImpl(
     const browserCtrl = context.sessionContext.agentContext.browserControl;
     if (browserCtrl) {
         try {
-            let schemaName = "browser";
+            const schemaName = "browser";
             if (action.schemaName === "browser.actionDiscovery") {
                 const discoveryResult = await handleSchemaDiscoveryAction(
                     action,

@@ -113,7 +113,7 @@ export default class RequestCommand extends Command {
             throw Error(`The file '${fileName}' does not exist.`);
         }
 
-        let retVal: string[] = new Array<string>();
+        const retVal: string[] = new Array<string>();
         retVal.push(Buffer.from(readFileSync(fileName)).toString("base64"));
 
         return retVal;

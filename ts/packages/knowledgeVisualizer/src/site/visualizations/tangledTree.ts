@@ -24,8 +24,8 @@ export class TangledTree {
         // precompute level depth
         levels.forEach((l, i) => l.forEach((n) => (n.level = i)));
 
-        var nodes = levels.reduce((a, x) => a.concat(x), []);
-        var nodes_index = {};
+        const nodes = levels.reduce((a, x) => a.concat(x), []);
+        const nodes_index = {};
         nodes.forEach((d) => (nodes_index[d.id] = d));
 
         // objectification
@@ -37,13 +37,13 @@ export class TangledTree {
 
         // precompute bundles
         levels.forEach((l, i) => {
-            var index = {};
+            const index = {};
             l.forEach((n) => {
                 if (n.parents.length == 0) {
                     return;
                 }
 
-                var id = n.parents
+                const id = n.parents
                     .map((d) => d.id)
                     .sort()
                     .join("-X-");
@@ -63,14 +63,14 @@ export class TangledTree {
             l.bundles.forEach((b, i) => (b.i = i));
         });
 
-        let links = new Array();
+        const links = new Array();
         nodes.forEach((d) => {
             d.parents.forEach((p) =>
                 links.push({ source: d, bundle: d.bundle, target: p }),
             );
         });
 
-        var bundles = levels.reduce((a, x) => a.concat(x.bundles), []);
+        const bundles = levels.reduce((a, x) => a.concat(x.bundles), []);
 
         // reverse pointer from parent to bundles
         bundles.forEach((b) =>
@@ -127,8 +127,8 @@ export class TangledTree {
             (n) => (n.height = (Math.max(1, n.bundles.length) - 1) * metro_d),
         );
 
-        var x_offset = padding;
-        var y_offset = padding;
+        let x_offset = padding;
+        let y_offset = padding;
         levels.forEach((l) => {
             x_offset += l.bundles.length * bundle_width;
             y_offset += level_y_padding;
@@ -140,7 +140,7 @@ export class TangledTree {
             });
         });
 
-        var i = 0;
+        let i = 0;
         levels.forEach((l) => {
             l.bundles.forEach((b) => {
                 b.x =
@@ -166,7 +166,7 @@ export class TangledTree {
         });
 
         // compress vertical space
-        var y_negative_offset = 0;
+        let y_negative_offset = 0;
         levels.forEach((l) => {
             y_negative_offset +=
                 -min_family_height +
@@ -191,7 +191,7 @@ export class TangledTree {
             l.c2 = c;
         });
 
-        var layout = {
+        const layout = {
             width: max(nodes, (n) => n.x) + node_width + 2 * padding,
             height: max(nodes, (n) => n.y) + node_height / 2 + 2 * padding,
             node_height,
@@ -227,7 +227,7 @@ export class TangledTree {
         </style>
       
         ${tangleLayout.bundles.map((b, i) => {
-            let d = b.links
+            const d = b.links
                 .map(
                     (l) => `
             M${l.xt} ${l.yt}
@@ -269,9 +269,9 @@ export class TangledTree {
 
     public update(data: any): void {
         console.log(data);
-        let options = { c: 0, bigc: 0, color: (_, i) => this.color(i) };
+        const options = { c: 0, bigc: 0, color: (_, i) => this.color(i) };
         try {
-            let div = document.createElement("div");
+            const div = document.createElement("div");
 
             if (data.length > 0) {
                 div.innerHTML = this.renderChart(data, options);

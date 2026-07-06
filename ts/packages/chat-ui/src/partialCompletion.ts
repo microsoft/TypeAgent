@@ -20,7 +20,6 @@ function pcTrace(...args: unknown[]): void {
         (globalThis as { __partialCompletionTrace?: boolean })
             .__partialCompletionTrace === true
     ) {
-        // eslint-disable-next-line no-console
         console.debug("[partialCompletion]", ...args);
     }
 }

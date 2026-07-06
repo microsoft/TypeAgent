@@ -88,7 +88,7 @@ async function importPdfFiles(
     maxPagesToProcess: number = -1,
 ): Promise<void> {
     // Canonicalize filenames.
-    let filenames = files.map((file) =>
+    const filenames = files.map((file) =>
         fs.existsSync(file) ? fs.realpathSync(file) : file,
     );
 

@@ -149,7 +149,7 @@ export class CrossContextHtmlReducer {
      */
     reduce(html: string): string {
         // Parse document using cross-context parser
-        let domPurify =
+        const domPurify =
             this.dependencies.DOMPurify ||
             (typeof DOMPurify !== "undefined" ? DOMPurify : undefined);
         if (!domPurify) {
@@ -170,11 +170,11 @@ export class CrossContextHtmlReducer {
             );
         } while (preprocessed !== previous);
 
-        let safeHtml = domPurify.sanitize(preprocessed, {
+        const safeHtml = domPurify.sanitize(preprocessed, {
             RETURN_TRUSTED_TYPE: false,
         });
 
-        let doc = this.parseDocument(safeHtml);
+        const doc = this.parseDocument(safeHtml);
         if (!doc) {
             console.warn("Failed to parse HTML, returning original");
             return html;
@@ -332,7 +332,7 @@ export class CrossContextHtmlReducer {
     private removeDataAttributes(doc: Document): void {
         const elements = doc.querySelectorAll("*");
         elements.forEach((element) => {
-            let dataAttributes = Array.from(element.attributes).filter((a) =>
+            const dataAttributes = Array.from(element.attributes).filter((a) =>
                 a.name.startsWith("data-"),
             );
             dataAttributes.forEach((attr) => {

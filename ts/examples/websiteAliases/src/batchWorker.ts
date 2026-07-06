@@ -57,11 +57,11 @@ async function getTypeChatResponse(
     pageMarkdown: string,
 ): Promise<Result<domains>> {
     // Create Model instance
-    let chatModel = createModel(false);
+    const chatModel = createModel(false);
 
     // Create Chat History
-    let maxContextLength = 8196;
-    let maxWindowLength = 30;
+    const maxContextLength = 8196;
+    const maxWindowLength = 30;
 
     // create TypeChat object
     const chat = createTypeChat<domains>(
@@ -109,7 +109,7 @@ function createModel(fastModel: boolean = true): ChatModelWithStreaming {
         }
     }
 
-    let completionSettings: CompletionSettings = {
+    const completionSettings: CompletionSettings = {
         temperature: 1.0,
         // Max response tokens
         max_tokens: 1000,

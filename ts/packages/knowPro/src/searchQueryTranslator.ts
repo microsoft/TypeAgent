@@ -102,7 +102,7 @@ export async function searchQueryFromLanguage(
     promptPreamble?: PromptSection[],
 ): Promise<Result<querySchema.SearchQuery>> {
     const timeRange = getTimeRangePromptSectionForConversation(conversation);
-    let queryContext: PromptSection[] =
+    const queryContext: PromptSection[] =
         promptPreamble && promptPreamble.length > 0
             ? [...promptPreamble, ...timeRange]
             : timeRange;
@@ -128,7 +128,7 @@ export async function searchQueryFromLanguage2(
         return error("Scoped queries not supported");
     }
     const timeRange = getTimeRangePromptSectionForConversation(conversation);
-    let queryContext: PromptSection[] =
+    const queryContext: PromptSection[] =
         promptPreamble && promptPreamble.length > 0
             ? [...promptPreamble, ...timeRange]
             : timeRange;

@@ -960,7 +960,9 @@ async function runFix(opts: Options): Promise<number> {
             `${num(unfixable)} occurrence(s) could not be auto-fixed; run \`npm run code-lint\` to see them.`,
         );
     }
-    console.log("Review the diff, run prettier, and rebuild before committing.");
+    console.log(
+        "Review the diff, run prettier, and rebuild before committing.",
+    );
     return 0;
 }
 

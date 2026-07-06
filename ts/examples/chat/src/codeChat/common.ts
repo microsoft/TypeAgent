@@ -39,7 +39,7 @@ export async function loadTypescriptCode(
     const sourceText = await readAllLines(sourcePath); // Load lines of code
     const sourceCode = await tsCode.loadSourceFile(sourcePath);
     moduleDir = getModuleDirPath(sourceFile, moduleDir);
-    let modules = moduleDir
+    const modules = moduleDir
         ? await tsCode.loadImports(sourceCode, moduleDir)
         : undefined;
 

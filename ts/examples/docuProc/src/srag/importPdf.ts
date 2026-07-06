@@ -72,7 +72,7 @@ export async function chunkifyPdfFiles(
             fs.mkdirSync(CHUNKED_DOCS_DIR, { recursive: true });
         }
 
-        let { stdout, stderr } = await execFilePromise(
+        const { stdout, stderr } = await execFilePromise(
             "python3",
             [
                 "-X",
@@ -117,7 +117,7 @@ export async function loadPdfChunksFromJson(
     rootDir: string,
     filenames: string[],
 ): Promise<(ChunkedFile | ErrorItem)[]> {
-    let results: (ChunkedFile | ErrorItem)[] = [];
+    const results: (ChunkedFile | ErrorItem)[] = [];
     try {
         for (const filename of filenames) {
             const paperId = getPaperIdFromFilename(filename);
@@ -202,7 +202,7 @@ export async function importPdf(
         results = await chunkifyPdfFiles(outputDir, [pdfFilePath]);
         t1 = Date.now();
     } else {
-        let pdfFileName = getPaperIdFromFilename(pdfFilePath);
+        const pdfFileName = getPaperIdFromFilename(pdfFilePath);
         const chunkedJsonFile = path.join(
             CHUNKED_DOCS_DIR,
             pdfFileName,
@@ -212,7 +212,7 @@ export async function importPdf(
         t1 = Date.now();
     }
 
-    let numLines = 0;
+    const numLines = 0;
     let numBlobs = 0;
     let numChunks = 0;
     let numErrors = 0;
@@ -295,7 +295,7 @@ export function processPdfChunks(
     chunks: Chunk[],
 ): PdfChunkMessage[] {
     const fileName = path.basename(pdfFileName);
-    let chunkMessages: PdfChunkMessage[] = [];
+    const chunkMessages: PdfChunkMessage[] = [];
     const pageChunksMap: Record<
         string,
         { pageRootChunk: Chunk; pageChunks: Chunk[] }
@@ -339,7 +339,7 @@ export function processPdfChunks(
                             : blob.paraHeader;
                     }
 
-                    let chunkMessageMeta: PdfChunkMessageMeta =
+                    const chunkMessageMeta: PdfChunkMessageMeta =
                         new PdfChunkMessageMeta(
                             fileName,
                             chunk.pageid,
@@ -347,7 +347,7 @@ export function processPdfChunks(
                             sectionName,
                             catMetaEntry,
                         );
-                    let chunkMessage: PdfChunkMessage = new PdfChunkMessage(
+                    const chunkMessage: PdfChunkMessage = new PdfChunkMessage(
                         [],
                         chunkMessageMeta,
                     );
@@ -371,7 +371,7 @@ export async function indexPdfChunks(
     chunkResults: (ChunkedFile | ErrorItem)[] = [],
 ): Promise<PdfChunkMessage[]> {
     const pdfCatalog = await loadCatalogWithMeta();
-    let pdfChunkMessages: PdfChunkMessage[] = [];
+    const pdfChunkMessages: PdfChunkMessage[] = [];
 
     if (pdfCatalog !== undefined) {
         const chunkedFiles = chunkResults.filter(
@@ -384,7 +384,7 @@ export async function indexPdfChunks(
             assert(fs.existsSync(pdfFile), `File not found: ${pdfFile}`);
             const paperId = getPaperIdFromFilename(pdfFile);
 
-            let catEntry = pdfCatalog[paperId];
+            const catEntry = pdfCatalog[paperId];
             if (catEntry !== undefined) {
                 const messages = processPdfChunks(
                     pdfFilePath,

@@ -80,7 +80,7 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         // Collect everything so we can batch efficiently
         let i = 0;
         for (const message of messages) {
-            let messageOrdinal = baseMessageOrdinal + i;
+            const messageOrdinal = baseMessageOrdinal + i;
             for (
                 let chunkOrdinal = 0;
                 chunkOrdinal < message.textChunks.length;
@@ -217,7 +217,7 @@ export async function addToMessageIndex(
     eventHandler?: IndexingEventHandlers,
     batchSize: number = 8,
 ): Promise<ListIndexingResult> {
-    let result: ListIndexingResult = {
+    const result: ListIndexingResult = {
         numberCompleted: 0,
     };
     if (conversation.secondaryIndexes) {
