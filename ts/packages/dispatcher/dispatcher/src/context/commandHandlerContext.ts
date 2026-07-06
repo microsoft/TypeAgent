@@ -1075,9 +1075,27 @@ export async function initializeCommandHandlerContext(
             for (const source of options.appAgentSources) {
                 const connection = source.connect(context.appAgentHost);
                 context.appAgentConnections.push(connection);
-                for (const provider of connection.providers) {
-                    await installAppProvider(context, provider);
-                }
+                // Register the vended initial providers under a SINGLE held
+                // command lock, acquired synchronously in the same tick as the
+                // `connect()` above (which joined this session to the source's
+                // client registry). The applicator's fan-out add/remove legs
+                // acquire the SAME command lock (FIFO), and the lock is free
+                // here, so this section grabs it first and holds it across every
+                // initial add. Any concurrent uninstall/update barrier that
+                // observed this newly-connected host therefore enqueues its op
+                // strictly AFTER this section runs. That closes the
+                // connect-vs-drain race where a sibling drain could remove an
+                // agent on this session before its initial add had landed —
+                // leaking it here while it is gone everywhere else (design §5.7,
+                // §7.3). Uses `installAppProvider` directly (not the
+                // add-known-agents path) so `reconcileKnownAgents` below still
+                // sees the true persisted-vs-available diff.
+                const { providers } = connection;
+                await context.commandLock(async () => {
+                    for (const provider of providers) {
+                        await installAppProvider(context, provider);
+                    }
+                });
             }
         }
 

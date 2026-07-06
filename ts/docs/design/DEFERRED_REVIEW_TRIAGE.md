@@ -19,9 +19,7 @@
 | --- | --------------------- | ---------------------------------------------------------------- | -------- | ----------------------------------------------- |
 | 2   | Security              | Feed cache file symlink safety                                   | P3       | Do not address (optional `lstat` guard)         |
 | 3   | Security              | Transient npm auth file mode on Windows                          | P3       | Do not address                                  |
-| 4   | Concurrency/lifecycle | Sibling connecting concurrently with in-flight drain leaks agent | **P1**   | Fix with #5 (connect under lock)                |
-| 5   | Concurrency/lifecycle | Session connecting mid-`removing` misses v2                      | **P1**   | Fix — unify connect registration with barrier   |
-| 6   | Concurrency/lifecycle | Load tombstone `withTombstone` kept                              | P2       | Keep until #5 lands, then reconsider            |
+| 6   | Concurrency/lifecycle | Load tombstone `withTombstone` kept                              | P2       | Keep (defense-in-depth; #4/#5 landed)           |
 | 7   | Concurrency/lifecycle | Leaf-op invariant enforced by convention                         | P3       | Keep convention (optional assertion)            |
 | 8   | Concurrency/lifecycle | verify-0 park never re-checks self-dropping refcount             | P2       | Add refcount-drop notification (later)          |
 | 9   | Concurrency/lifecycle | Wedged-straggler v2 dir + phase-3 GC backstop                    | P3       | Keep (startup sweep backstop)                   |
@@ -82,55 +80,18 @@ Ref: [agentInstallSource/DEFERRED_REVIEW_LOG.md](./agentInstallSource/DEFERRED_R
 
 ## 2. Concurrency, lifecycle & GC
 
-### 2.1 Sibling connecting concurrently with an in-flight drain leaks the drained agent — **P1, FIX (with 2.2)**
-
-Ref: [UPDATE_COORDINATION_DEFERRED_LOG.md](./connectedProvider/UPDATE_COORDINATION_DEFERRED_LOG.md) → _"Sibling connecting concurrently with an in-flight drain can leak the drained agent"_.
-
-A session `S` mid-`connect()` adds itself to `clients` synchronously, then registers initial providers via `await installAppProvider(...)` **not** under `S`'s `commandLock`. Another session's drain can enqueue `S.removeProvider(X)` that runs before `X` is registered (no-op), then init registers `X` — leaving `X` loaded on `S` while gone everywhere else.
-
-**Options**
-
-- **A. Run `connect()`'s initial provider registration under the session `commandLock`.**
-  - Pros: initial adds and fan-out removes serialize in one order; closes the race directly; same mechanism the rest of the system already relies on.
-  - Cons: initial connect now contends the command lock (slightly slower cold connect).
-- **B. Enqueue the initial adds through the same applicator FIFO as fan-out ops.**
-  - Pros: one FIFO order for init-adds and fan-out-removes; no lock contention on connect.
-  - Cons: larger plumbing change; initial registration becomes async-ordered rather than inline.
-- **C. Leave as-is.** Pros: none. Cons: a real (if narrow) cross-session leak that `reconcileKnownAgents` records rather than heals.
-
-**Recommendation: A (or B), fixed together with 2.2** — both share the same root cause (initial connect registration is not ordered against the barrier fan-out). Prefer **A** for the smallest, most local change; choose **B** if cold-connect latency under the command lock proves a problem.
-
-### 2.2 Session connecting mid-`removing` misses v2 — **P1, FIX**
-
-Refs: [UPDATE_COORDINATION_DEFERRED_LOG.md](./connectedProvider/UPDATE_COORDINATION_DEFERRED_LOG.md) → _"STILL OPEN: session connecting mid-`removing` update misses v2"_ and _"STILL OPEN (carried to M5): connect mid-`removing` misses `v2`"_ (same issue, carried forward).
-
-`startReplace` snapshots its target set at start. A session that `connect()`s after that, while the entry is `removing`, is not a barrier target and never receives v2 (nor v1) until it reconnects; `activeProviders()` also hides a `removing` name from the late joiner.
-
-**Options**
-
-- **A. Unify `connect()` initial registration with the barrier fan-out (same fix as 2.1-A/B).**
-  - Pros: one mechanism fixes both leaks; late joiner participates in the barrier or is registered after commit consistently.
-  - Cons: touches the connect path + barrier target set.
-- **B. On update completion, fan v2 out to any session that joined after `startReplace`.**
-  - Pros: narrower; only the completion path changes.
-  - Cons: needs a "joined-after" set + a second fan-out; two code paths add v2 (parked add-legs + late fan-out), more states to reason about.
-- **C. Leave as-is + rely on the load tombstone (2.3).**
-  - Pros: no code change. Cons: late joiner is simply missing the agent until reconnect — a correctness/UX gap.
-
-**Recommendation: A.** Fold this into the same connect-under-lock / shared-FIFO rework as 2.1 so the two related races are closed by one change. Once landed, revisit the tombstone (2.3).
-
 ### 2.3 Load tombstone `withTombstone` kept — **P2, keep for now**
 
 Ref: [UPDATE_COORDINATION_DEFERRED_LOG.md](./connectedProvider/UPDATE_COORDINATION_DEFERRED_LOG.md) → _"KEPT (not removed): load tombstone `withTombstone`"_.
 
-The tombstone refuses `loadAppAgent` for a name while its entry is `removing`. Under the single lock-held barrier, each session's remove+unload are atomic, so the original per-session race is closed — but a session that `connect()`s mid-`removing` is still not a barrier target, and the tombstone is the cheap backstop for exactly that window.
+The tombstone refuses `loadAppAgent` for a name while its entry is `removing`. Under the single lock-held barrier, each session's remove+unload are atomic, so the original per-session race is closed. The connect-mid-`removing` races it originally backstopped are now themselves fixed (a late joiner is enrolled on the in-flight barrier and receives the decided version on completion, and `connect()`'s initial registration runs under the session command lock), so the tombstone is retained purely as defense-in-depth for the load path.
 
 **Options**
 
-- **A. Keep the tombstone.** Pros: cheap backstop for the still-open connect-mid-`removing` case (2.2). Cons: a little extra state that looks redundant once you assume the barrier covers everything.
-- **B. Remove it now.** Pros: less code. Cons: reopens the connect-mid-`removing` load race until 2.2 is fixed.
+- **A. Keep the tombstone.** Pros: cheap defense-in-depth for the `loadAppAgent` path even though the connect-mid-`removing` races are closed. Cons: a little extra state that looks redundant once you assume the barrier + late-joiner fan-out cover everything.
+- **B. Remove it now.** Pros: less code. Cons: removes the redundant backstop on the load path.
 
-**Recommendation: A (keep).** Remove only after 2.2 lands and the barrier provably covers late joiners; the tombstone's `removing.provider` retention is the reason the backstop works today.
+**Recommendation: A (keep).** The connect-mid-`removing` races are fixed, but the tombstone's `removing.provider` retention is cheap and keeps the load path defensively guarded; reconsider removing it only if that redundancy proves unnecessary.
 
 ### 2.4 Leaf-op invariant enforced by convention, not at runtime — **P3, keep convention**
 

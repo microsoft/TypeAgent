@@ -54,14 +54,6 @@
 - **Rationale:** Reaching an inactive-entry state at prune time requires contriving a record with no live entry, which does not occur in the normal seed→install→op flow; the branch is a trivial defensive fallback (same `pruneAgentRoot` call, best-effort). The primary drained path is fully covered. Low regression risk.
 - **Follow-up:** none.
 
-### 2026-07-05 — Sibling connecting concurrently with an in-flight drain can leak the drained agent
-
-- **Milestone / gate round:** M2 / review round 2 (MEDIUM, PRE-EXISTING — not an M2 regression)
-- **Finding / gap:** A session `S` that is mid-`connect()` can end up still hosting an agent that was uninstalled/updated by another session. `connect(S)` adds `S` to `clients` synchronously, then registers its initial providers via `await installAppProvider(...)` NOT wrapped in `S`'s `commandLock`. During that await another session's `uninstall`/`update` → `startDrain` snapshots `clients` (now includes `S`) and enqueues `S.removeProvider(X)`; `S`'s applicator can run that remove (lock is free during init) before `X` is actually registered, so `removeAgent('X')` no-ops, then init registers `X`. Net: `X` stays loaded on `S` while gone everywhere else; `reconcileKnownAgents` records it as known rather than healing it.
-- **Decision:** Deferred (out of M2 scope).
-- **Rationale:** The sibling fan-out enqueue predates M2; M2 only added the ISSUING session to the enqueue path, and the issuing session is fully initialized and holds its own `commandLock` for the current `@package` command, so its enqueued op runs strictly after that command — race-free. The only susceptible party is a DIFFERENT session mid-`connect()`, which existed before M2. The M3 refcount barrier + `replaceProvider` rework is the natural place to close it (init adds and fan-out removes should share one FIFO order, or the initial registration should run under the session's `commandLock`).
-- **Follow-up:** Revisit during M3 (§5.6/§5.7): run `connect()`'s initial provider registration under the session's `commandLock`, or enqueue the initial adds through the same applicator so init adds and fan-out removes share one FIFO order.
-
 ### 2026-07-05 — Leaf-op invariant (§5.7) enforced by convention, not at runtime
 
 - **Milestone / gate round:** M3 / review round 2 (LOW)
@@ -77,26 +69,6 @@
   effectively pinned by construction.
 - **Follow-up:** Consider a re-entrancy assertion if a future leg grows a nested
   lock acquisition.
-
-### 2026-07-05 — STILL OPEN: session connecting mid-`removing` update misses v2
-
-- **Milestone / gate round:** M3 / review round 1 (Finding B — pre-existing)
-- **Finding / gap:** `startReplace` snapshots its target set (`clients ∪ issuing`)
-  at start; a session that `connect()`s AFTER that, while the entry is `removing`,
-  is not a barrier target and — because update completion adds v2 only via the
-  parked hosts' add-legs (no separate fan-out on completion) — never receives v2
-  until it reconnects. `activeProviders()` also excludes a `removing` name, so the
-  late joiner sees neither v1 nor v2. Same root as the M2-deferred connect-vs-
-  drain race.
-- **Decision:** Still deferred (not an M3 regression; not a no-coexistence
-  violation — already-connected sessions are correct).
-- **Rationale:** Closing it cleanly means unifying `connect()`'s initial
-  registration and the barrier fan-out under one FIFO / the session command lock,
-  a larger change than M3's teardown/swap core. M3 was scoped to the correctness
-  core (one lock section + verify-0), which it delivers.
-- **Follow-up:** Address in M4/M5: either run `connect()` initial registration
-  under the session command lock, or have update-completion fan v2 out to any
-  session that joined after `startReplace`.
 
 ### 2026-07-05 — DEFERRED: full pre-launch `v2` startability probe
 
@@ -154,16 +126,6 @@
 - **Follow-up:** Optionally add a refcount-drop notification from the provider so
   the barrier can advance without waiting out the timeout.
 
-### 2026-07-05 — STILL OPEN (carried to M5): connect mid-`removing` misses `v2`
-
-- **Milestone / gate round:** M4 (carried from M3 Finding B)
-- **Finding / gap:** Unchanged from M3: a session that `connect()`s while a name
-  is `removing` is not a barrier target and never receives `v2` (nor `v1`) until
-  it reconnects. M4 did not change `connect()`'s registration path.
-- **Decision:** Still deferred to M5 (or later): unify `connect()` initial
-  registration and the barrier fan-out under one FIFO / the session command lock.
-- **Follow-up:** Evaluate in M5 §6 cleanup.
-
 ### 2026-07-05 — KEPT (not removed): load tombstone `withTombstone`
 
 - **Milestone / gate round:** M5 / §6 (5.1 step 2)
@@ -173,14 +135,16 @@
   own command lock, so the per-session removed-but-still-loadable race the
   tombstone originally guarded is closed.
 - **Decision:** KEPT, not removed. A surviving window remains: a session that
-  `connect()`s mid-`removing` is NOT a barrier target (the still-open
-  connect-during-removing item), so the barrier's per-session serialization does
-  not cover it. The tombstone is the cheap backstop for exactly that §7.3
-  connect-during-removing case (see the code comments and the entry's
-  `removing.provider` retention).
-- **Follow-up:** Reconsider removing the tombstone once `connect()` initial
-  registration is unified with the barrier fan-out (the connect-mid-removing
-  follow-up above). Until then it stays.
+  `connect()`s mid-`removing` is NOT a barrier target, so the barrier's
+  per-session serialization does not cover its `loadAppAgent` calls. The tombstone
+  is the cheap backstop for exactly that §7.3 connect-during-removing case (see
+  the code comments and the entry's `removing.provider` retention).
+- **Follow-up:** The connect-during-removing races themselves are now CLOSED — the
+  late joiner is enrolled on the in-flight barrier and receives the decided
+  version on completion, and `connect()`'s initial registration runs under the
+  session command lock (source `fanOutLateJoiners` + dispatcher connect loop). The
+  tombstone is retained as defense-in-depth for the load path; reconsider removing
+  it only if that redundancy proves unnecessary.
 
 ### 2026-07-05 — DEFERRED: rollback-prune of a REAL distinct v2 root untested (path-source limit)
 

@@ -903,6 +903,78 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
         await uninstalling;
     });
 
+    it("connect during removing enrolls a late joiner that receives the decided version", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = fastHost();
+        const gated = gatedHost();
+        built.connect(issuing);
+        built.connect(gated.host);
+        await installFoo(built, issuing);
+
+        // An update starts a drain; the gated sibling keeps it `removing`.
+        const updating = built.testApi.update("foo", undefined, issuing);
+        await flush();
+
+        // A session connecting now is excluded from the draining name in its
+        // initial set, but IS enrolled as a late joiner (design §7.3).
+        const lateAdds: string[] = [];
+        const lateConn = built.connect(
+            withReplace({
+                addProvider: async (p) => {
+                    lateAdds.push(p.getAppAgentNames()[0]);
+                },
+                removeProvider: async () => {},
+            }),
+        );
+        expect(
+            new Set(
+                lateConn.providers.flatMap((p) => p.getAppAgentNames()),
+            ).has("foo"),
+        ).toBe(false);
+        expect(lateAdds).toEqual([]);
+
+        // Commit the update: the decided v2 is fanned out to the late joiner so
+        // it converges on the same version as the participants (design §7.3).
+        gated.release();
+        await updating;
+        await flush();
+        expect(lateAdds).toEqual(["foo"]);
+
+        lateConn.dispose();
+    });
+
+    it("drops a late joiner that disconnects before the barrier decides", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = fastHost();
+        const gated = gatedHost();
+        built.connect(issuing);
+        built.connect(gated.host);
+        await installFoo(built, issuing);
+
+        const updating = built.testApi.update("foo", undefined, issuing);
+        await flush();
+
+        const lateAdds: string[] = [];
+        const lateConn = built.connect(
+            withReplace({
+                addProvider: async (p) => {
+                    lateAdds.push(p.getAppAgentNames()[0]);
+                },
+                removeProvider: async () => {},
+            }),
+        );
+        // The late joiner leaves before the barrier decides: the decided version
+        // must NOT be fanned out to a gone session (design §7.3 close race).
+        lateConn.dispose();
+
+        gated.release();
+        await updating;
+        await flush();
+        expect(lateAdds).toEqual([]);
+    });
+
     it("disconnect while pending completes the drain (auto-ack)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
