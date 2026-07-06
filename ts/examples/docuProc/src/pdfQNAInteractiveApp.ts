@@ -96,8 +96,8 @@ export async function interactiveAppLoop(
     const model = openai.createJsonChatModel("GPT_4", ["PdfDownloader"]);
     const pdfDownloader = createPDFDownloadTranslator(model);
 
-    let context = await createKnowProContext(captureTokenStats);
-    let showTokenStats = false;
+    const context = await createKnowProContext(captureTokenStats);
+    const showTokenStats = false;
     let printer = context.printer;
 
     await createKnowproCommands(context, handlers);
@@ -668,7 +668,7 @@ export async function purgeNormalizedFile(
     verbose: boolean,
 ): Promise<void> {
     // Step 1: Find chunks to remove.
-    let toDelete: Set<ChunkId> = new Set();
+    const toDelete: Set<ChunkId> = new Set();
     for await (const chunk of chunkyIndex.chunkFolder.allObjects()) {
         if (chunk.fileName === fileName) {
             toDelete.add(chunk.id);

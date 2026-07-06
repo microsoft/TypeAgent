@@ -25,6 +25,13 @@
     "clean": "fluid-build . -t clean",
     "cli": "pnpm -C packages/cli run start",
     "cli:dev": "pnpm -C packages/cli run start:dev",
+    "code-circular": "npx tsx tools/scripts/code/circularDepsReport.ts",
+    "code-complexity": "npx tsx tools/scripts/code/complexityReport.ts",
+    "code-consistency": "npx tsx tools/scripts/code/consistencyReport.ts",
+    "code-deadcode": "npx tsx tools/scripts/code/deadCodeReport.ts",
+    "code-debt": "npx tsx tools/scripts/code/debtMarkersReport.ts",
+    "code-duplication": "npx tsx tools/scripts/code/duplicationReport.ts",
+    "code-lint": "npx tsx tools/scripts/code/lintReport.ts",
     "copilot": "node packages/copilot-plugin/scripts/launch.mjs",
     "copilot:dev": "node packages/copilot-plugin/scripts/launch-dev.mjs",
     "devtunnel:setup": "node tools/scripts/setup-devtunnel.mjs",
@@ -73,10 +80,16 @@
   "devDependencies": {
     "@fluidframework/build-tools": "^0.57.0",
     "@types/node": "^22.0.0",
+    "eslint": "^10.6.0",
+    "eslint-plugin-sonarjs": "^4.1.0",
+    "jscpd": "^4.2.5",
+    "knip": "^6.24.0",
+    "madge": "^8.0.0",
     "markdown-link-check": "^3.14.2",
     "prettier": "^3.5.3",
     "shx": "^0.4.0",
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "typescript-eslint": "^8.62.1"
   },
   "packageManager": "pnpm@10.34.4+sha512.8768be55200ae3f2226b6527fcca2687e14bc4e5f12d7721a0f25da3df47915177058648db4177baf348120fa0ba2752d8d8d93f6beaf1fe64ae18da8de961af",
   "engines": {
@@ -108,7 +121,6 @@
       "keytar",
       "koffi",
       "onnxruntime-node",
-      "protobufjs",
       "puppeteer",
       "sharp"
     ],

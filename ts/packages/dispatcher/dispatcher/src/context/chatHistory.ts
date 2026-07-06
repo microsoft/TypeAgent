@@ -268,7 +268,7 @@ export function createChatHistory(init: boolean): ChatHistory {
                     // LLM like to correct/change casing.  Normalize for look up.
                     const normalizedName = normalizeParamString(entity.name);
                     const uniqueIndex = `${normalizedName}.${entity.type}`;
-                    let existing = uniqueEntities.get(uniqueIndex);
+                    const existing = uniqueEntities.get(uniqueIndex);
                     const promptEntity: PromptEntity = {
                         ...entity,
                         sourceAppAgentName: appAgentName,

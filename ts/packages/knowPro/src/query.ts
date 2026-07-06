@@ -363,7 +363,7 @@ export function lookupTermFiltered(
 ): ScoredSemanticRefOrdinal[] | undefined {
     const scoredRefs = semanticRefIndex.lookupTerm(term.text);
     if (scoredRefs && scoredRefs.length > 0) {
-        let filtered = scoredRefs.filter((sr) => {
+        const filtered = scoredRefs.filter((sr) => {
             const semanticRef = semanticRefs.get(sr.semanticRefOrdinal);
             const result = filter(semanticRef, sr);
             return result;
@@ -1160,7 +1160,7 @@ export class GetScopeExpr extends QueryOpExpr<TextRangesInScope> {
     }
 
     public eval(context: QueryEvalContext): TextRangesInScope {
-        let rangesInScope = new TextRangesInScope();
+        const rangesInScope = new TextRangesInScope();
         for (const selector of this.rangeSelectors) {
             const range = selector.eval(context);
             if (range) {
@@ -1421,7 +1421,7 @@ export class RankMessagesBySimilarityExpr extends QueryOpExpr<MessageAccumulator
         const messageIndex =
             context.conversation.secondaryIndexes?.messageIndex;
         if (messageIndex && isMessageTextEmbeddingIndex(messageIndex)) {
-            let messageOrdinals = this.getMessageOrdinalsInIndex(
+            const messageOrdinals = this.getMessageOrdinalsInIndex(
                 messageIndex,
                 matches,
             );
@@ -1451,7 +1451,7 @@ export class RankMessagesBySimilarityExpr extends QueryOpExpr<MessageAccumulator
         messageIndex: IMessageTextEmbeddingIndex,
         matches: MessageAccumulator,
     ) {
-        let messageOrdinals: MessageOrdinal[] = [];
+        const messageOrdinals: MessageOrdinal[] = [];
         const indexSize = messageIndex.size;
         for (const messageOrdinal of matches.getMatchedValues()) {
             if (messageOrdinal < indexSize) {
@@ -1518,7 +1518,7 @@ export class MatchMessagesOrExpr extends MatchMessagesBooleanExpr {
             if (matches === undefined || matches.size === 0) {
                 continue;
             }
-            let messageMatches =
+            const messageMatches =
                 matches instanceof SemanticRefAccumulator
                     ? this.accumulateMessages(context, matches)
                     : matches;
@@ -1556,7 +1556,7 @@ export class MatchMessagesAndExpr extends MatchMessagesBooleanExpr {
                 // We can't possibly have an 'and'
                 break;
             }
-            let messageMatches =
+            const messageMatches =
                 matches instanceof SemanticRefAccumulator
                     ? this.accumulateMessages(context, matches)
                     : matches;

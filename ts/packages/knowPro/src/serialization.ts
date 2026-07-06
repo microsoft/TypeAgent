@@ -62,7 +62,7 @@ export async function readConversationDataFromFile(
     if (!jsonData) {
         return undefined;
     }
-    let fileData: ConversationFileData = {
+    const fileData: ConversationFileData = {
         jsonData: jsonData,
         binaryData: {},
     };
@@ -103,7 +103,7 @@ export async function readConversationDataFromBuffer(
         return undefined;
     }
     let embeddings: Float32Array[] | undefined;
-    let fileData: ConversationFileData = {
+    const fileData: ConversationFileData = {
         jsonData: JSON.parse(jsonData),
         binaryData: {},
     };
@@ -245,7 +245,7 @@ function toConversationFileData(
     conversationData: IConversationDataWithIndexes,
     modelMeta?: EmbeddingModelMetadata,
 ): ConversationFileData {
-    let fileData: ConversationFileData = {
+    const fileData: ConversationFileData = {
         jsonData: {
             ...conversationData,
             fileHeader: createFileHeader(),
@@ -301,7 +301,7 @@ function fromConversationFileData(
     fileData: ConversationFileData,
 ): IConversationDataWithIndexes {
     // TODO: Remove this temporary backward compat. All future files should have proper headers
-    let embeddingFileHeader = fileData.jsonData.embeddingFileHeader ?? {
+    const embeddingFileHeader = fileData.jsonData.embeddingFileHeader ?? {
         relatedCount:
             fileData.jsonData.relatedTermsIndexData?.textEmbeddingData
                 ?.textItems.length,

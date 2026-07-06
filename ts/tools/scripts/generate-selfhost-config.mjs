@@ -234,7 +234,7 @@ function main() {
         return 1;
     }
 
-    let embedding = (arg("--embedding") ?? "local").toLowerCase();
+    const embedding = (arg("--embedding") ?? "local").toLowerCase();
     const validEmbedding = ["local", "ollama", "openai", "none"];
     if (!validEmbedding.includes(embedding)) {
         console.error(

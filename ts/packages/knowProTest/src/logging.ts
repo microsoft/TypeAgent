@@ -19,7 +19,7 @@ export class KnowproLog {
             const timestamp = new Date();
             const dirPath = this.ensureCommandLogDir(timestamp, commandName);
             const fileName = `${dateTime.timestampString(timestamp)}.json`;
-            let filePath = path.join(dirPath, fileName);
+            const filePath = path.join(dirPath, fileName);
             writeObjectToUniqueFile(filePath, obj);
         } catch (ex) {
             console.log(`Error while writing log file:\n{ex}`);

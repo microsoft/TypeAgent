@@ -158,12 +158,12 @@ export async function getLookupSettings(
         rewriteFocus = lookupConfig.rewriteFocus;
     }
     fastModelName ??= "GPT_35_TURBO";
-    let fastModel =
+    const fastModel =
         openai.createLocalChatModel(fastModelName, undefined, [
             "chatResponseHandler",
         ]) ??
         openai.createJsonChatModel(fastModelName, ["chatResponseHandler"]);
-    let generalModel = openai.createJsonChatModel(undefined, [
+    const generalModel = openai.createJsonChatModel(undefined, [
         "chatResponseHandler",
     ]);
     rewriteFocus ??=
@@ -194,7 +194,7 @@ async function createActionResultWithMessage(
     settings: LookupSettings,
 ): Promise<ActionResult> {
     let historyText = "";
-    let linkEntities: Entity[] = [];
+    const linkEntities: Entity[] = [];
     let refCount = 0;
     for (const answer of answers) {
         historyText += `${answer.text}\n`;

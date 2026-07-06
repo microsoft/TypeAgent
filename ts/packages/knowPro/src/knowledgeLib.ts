@@ -36,7 +36,7 @@ export function getTopKnowledge<T>(
     toKnowledge: (item: T) => Knowledge,
     topK?: number,
 ) {
-    let topKValues =
+    const topKValues =
         topK !== undefined && topK > 0 ? getTopK(values, topK) : values;
 
     const mergedKnowledge: ScoredKnowledge[] = [];
@@ -55,7 +55,7 @@ export function* getScoredSemanticRefsFromOrdinals(
     semanticRefMatches: ScoredSemanticRefOrdinal[],
     knowledgeType: KnowledgeType,
 ): IterableIterator<Scored<SemanticRef>> {
-    for (let semanticRefMatch of semanticRefMatches) {
+    for (const semanticRefMatch of semanticRefMatches) {
         const semanticRef = semanticRefs.get(
             semanticRefMatch.semanticRefOrdinal,
         );

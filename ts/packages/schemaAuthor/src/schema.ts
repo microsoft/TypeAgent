@@ -22,7 +22,7 @@ export function loadActionSchema(
     let schemaText = getTypeSchema(schema, typeName, node.symbol.valueType);
     const refTypes = getReferencedTypes(node);
     if (refTypes) {
-        let refTypesSchema = getSchemaForReferencedTypes(schema, refTypes);
+        const refTypesSchema = getSchemaForReferencedTypes(schema, refTypes);
         schemaText = appendBlock(schemaText, refTypesSchema);
     }
     return {

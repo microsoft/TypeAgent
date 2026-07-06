@@ -273,7 +273,7 @@ export function setContent(
         // use the same stylesheets as the main page
         let css: string = "";
         const links = document.head.getElementsByTagName("link");
-        let promises: Promise<void>[] = [];
+        const promises: Promise<void>[] = [];
         for (let i = 0; i < links.length; i++) {
             if (links[i].rel.toLowerCase() == "stylesheet") {
                 if (links[i].href.startsWith("./")) {

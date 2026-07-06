@@ -54,7 +54,7 @@ export class SearchTermParser {
     }
 
     public removeNoise(terms: string[]): string[] {
-        let cleanTerms = terms.filter(
+        const cleanTerms = terms.filter(
             (t) =>
                 this.isNumeric(t) ||
                 (t.length >= this.minTermLength && !this.noiseTerms.has(t)),

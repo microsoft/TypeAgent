@@ -199,7 +199,7 @@ export function splitTranscriptIntoTurns(transcript: string): TranscriptTurn[] {
         const match = regex.exec(line);
         if (match && match.groups) {
             let speaker = match.groups["speaker"];
-            let speech = match.groups["speech"];
+            const speech = match.groups["speech"];
             if (turn) {
                 if (speaker) {
                     turns.push(turn);
@@ -291,7 +291,7 @@ export function timestampTranscriptTurns(
         0,
     );
     const ticksPerChar = ticksLength / textLength;
-    for (let turn of turns) {
+    for (const turn of turns) {
         turn.timestamp = new Date(startTicks).toISOString();
         // Now, we will 'elapse' time .. proportional to length of the text
         // This assumes that each speaker speaks equally fast...
@@ -335,7 +335,7 @@ function assignTurnListeners(
     for (const turn of turns) {
         const speaker = getSpeaker(turn);
         if (speaker) {
-            let listeners: string[] = [];
+            const listeners: string[] = [];
             for (const p of participants) {
                 if (p !== speaker) {
                     listeners.push(p);
@@ -383,7 +383,7 @@ export function createTranscriptOverview(
     metadata: TranscriptMetadata,
     turns: TranscriptTurn[],
 ): string {
-    let participantSet = getTranscriptParticipants(turns);
+    const participantSet = getTranscriptParticipants(turns);
     let overview = metadata.name;
     if (metadata.description) {
         overview += "\n";
@@ -400,9 +400,9 @@ export function createTranscriptOverview(
 export function getTranscriptParticipants(
     turns: TranscriptTurn[],
 ): Set<string> {
-    let participantSet = new Set<string>();
+    const participantSet = new Set<string>();
     for (const turn of turns) {
-        let speaker = getSpeaker(turn);
+        const speaker = getSpeaker(turn);
         if (speaker) {
             participantSet.add(speaker);
         }

@@ -38,7 +38,7 @@ async function rehydrateImages(context: ActionContext, files: string[]) {
             name = files[i].substring(files[i].lastIndexOf("\\") + 1);
         }
 
-        let a = await context.sessionContext.sessionStorage?.read(
+        const a = await context.sessionContext.sessionStorage?.read(
             `\\..\\user_files\\${name}`,
             "base64",
         );

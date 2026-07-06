@@ -542,7 +542,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
         this.addExact(range.start.messageOrdinal, score);
         if (range.end) {
             let ordinal = range.start.messageOrdinal + 1;
-            let endOrdinal = range.end.messageOrdinal;
+            const endOrdinal = range.end.messageOrdinal;
             for (; ordinal < endOrdinal; ++ordinal) {
                 this.addExact(ordinal, score);
             }
@@ -598,7 +598,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
     public static fromScoredOrdinals(
         ordinals: ScoredMessageOrdinal[] | undefined,
     ): MessageAccumulator {
-        let accumulator = new MessageAccumulator();
+        const accumulator = new MessageAccumulator();
         if (ordinals && ordinals.length > 0) {
             accumulator.addScoredMatches(ordinals);
         }
@@ -610,11 +610,11 @@ export function intersectScoredMessageOrdinals(
     x: ScoredMessageOrdinal[] | undefined,
     y: ScoredMessageOrdinal[] | undefined,
 ) {
-    let xSet =
+    const xSet =
         x !== undefined && x.length > 0
             ? MessageAccumulator.fromScoredOrdinals(x)
             : undefined;
-    let ySet =
+    const ySet =
         y !== undefined && y?.length > 0
             ? MessageAccumulator.fromScoredOrdinals(y)
             : undefined;
@@ -665,7 +665,7 @@ export class TextRangeCollection implements Iterable<TextRange> {
         // Future: merge ranges
 
         // Is this text range already in this collection?
-        let pos = collections.binarySearch(
+        const pos = collections.binarySearch(
             this.ranges,
             textRange,
             compareTextRange,
@@ -883,7 +883,7 @@ function* union<T>(
 ): IterableIterator<T> {
     const x: Iterator<T> = Array.isArray(xArray) ? xArray.values() : xArray;
     const y: Iterator<T> = Array.isArray(yArray) ? yArray.values() : yArray;
-    let unionSet = new Set<T>();
+    const unionSet = new Set<T>();
     let xVal = x.next();
     while (!xVal.done) {
         unionSet.add(xVal.value);
@@ -924,7 +924,7 @@ export function setIntersect<T = any>(
     if (set === undefined) {
         set = new Set<T>(values);
     } else {
-        let intersect = new Set<T>();
+        const intersect = new Set<T>();
         for (const value of values) {
             if (set.has(value)) {
                 intersect.add(value);

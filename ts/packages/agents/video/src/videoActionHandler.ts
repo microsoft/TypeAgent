@@ -47,7 +47,7 @@ async function executeVideoAction(
         completion_tokens: 0,
         total_tokens: 0,
     };
-    let result = await handleVideoAction(action as VideoAction, context);
+    const result = await handleVideoAction(action as VideoAction, context);
     if (result !== undefined && result.error === undefined) {
         result.tokenUsage = tokenUsage;
     }
@@ -116,7 +116,7 @@ async function getInPaintItems(
 
     return await Promise.all(
         relatedFiles.map(async (file) => {
-            let a = await context!.sessionContext.sessionStorage?.read(
+            const a = await context!.sessionContext.sessionStorage?.read(
                 `\\..\\user_files\\${file}`,
                 "base64",
             );

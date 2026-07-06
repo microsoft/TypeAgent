@@ -92,7 +92,7 @@ export function addSynonymsAsAliases(
     synonyms: TermSynonyms[],
 ): void {
     for (const ts of synonyms) {
-        let relatedTerm: kp.Term = { text: ts.term.toLowerCase() };
+        const relatedTerm: kp.Term = { text: ts.term.toLowerCase() };
         for (const synonym of ts.relatedTerms) {
             aliases.addRelatedTerm(synonym.toLowerCase(), relatedTerm);
         }
@@ -196,7 +196,7 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
     }
 
     getKnowledge(): kpLib.KnowledgeResponse | undefined {
-        let metaKnowledge = this.metadata.getKnowledge();
+        const metaKnowledge = this.metadata.getKnowledge();
         if (!metaKnowledge) {
             return this.knowledge;
         }

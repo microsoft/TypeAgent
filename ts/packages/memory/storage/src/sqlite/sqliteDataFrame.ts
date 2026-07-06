@@ -49,7 +49,7 @@ export class SqliteDataFrame implements kp.dataFrame.IDataFrame {
         op: kp.ComparisonOp,
     ): kp.dataFrame.DataFrameRow[] | undefined {
         const stmt = this.sqlGet(columnName, op);
-        let rows: kp.dataFrame.DataFrameRow[] = [];
+        const rows: kp.dataFrame.DataFrameRow[] = [];
         for (const row of stmt.iterate(columnValue)) {
             rows.push(this.toDataFrameRow(row));
         }
@@ -79,7 +79,7 @@ export class SqliteDataFrame implements kp.dataFrame.IDataFrame {
     }
 
     public *[Symbol.iterator](): Iterator<kp.dataFrame.DataFrameRow> {
-        for (let row of this.sql_getAll.iterate()) {
+        for (const row of this.sql_getAll.iterate()) {
             const value = this.toDataFrameRow(row);
             if (value !== undefined) {
                 yield value;
@@ -110,7 +110,7 @@ export class SqliteDataFrame implements kp.dataFrame.IDataFrame {
     }
 
     private getAddValues(row: kp.dataFrame.DataFrameRow) {
-        let values: any[] = [];
+        const values: any[] = [];
         values.push(this.serializeSourceRef(row.sourceRef));
         for (const colName of this.recordColumnNames) {
             values.push(row.record[colName]);
@@ -128,7 +128,7 @@ export class SqliteDataFrame implements kp.dataFrame.IDataFrame {
     }
 
     private sqlGet(columnName: string, op: kp.ComparisonOp) {
-        let sql = `SELECT * from ${this.name} WHERE ${columnName} ${comparisonOpToSql(op)} ?`;
+        const sql = `SELECT * from ${this.name} WHERE ${columnName} ${comparisonOpToSql(op)} ?`;
         return this.db.prepare(sql);
     }
 
@@ -143,12 +143,12 @@ export class SqliteDataFrame implements kp.dataFrame.IDataFrame {
     }
 
     private ensureDb() {
-        let schemaSql = dataFrameToSchemaSql(this.name, this.columns);
+        const schemaSql = dataFrameToSchemaSql(this.name, this.columns);
         if (!schemaSql) {
             throw new Error(`No schema for Sqlite data frame ${this.name}`);
         }
         this.db.exec(schemaSql);
-        let indexSql = dataFrameToIndexSql(this.name, this.columns);
+        const indexSql = dataFrameToIndexSql(this.name, this.columns);
         if (indexSql) {
             this.db.exec(indexSql);
         }
@@ -163,8 +163,8 @@ export function dataFrameTermGroupToSql(
     group: kp.dataFrame.DataFrameTermGroup,
     colDefs: kp.dataFrame.DataFrameColumns,
 ): string {
-    let clauses: string[] = [];
-    for (let searchTerm of group.terms) {
+    const clauses: string[] = [];
+    for (const searchTerm of group.terms) {
         const colDef = colDefs.get(searchTerm.columnName);
         if (!colDef) {
             throw new Error(
@@ -231,13 +231,13 @@ export function dataFrameToSchemaSql(
     if (colDefs.size === 0) {
         return "";
     }
-    let columns: string[] = [];
+    const columns: string[] = [];
     columns.push("rowId INTEGER PRIMARY KEY AUTOINCREMENT");
     columns.push("sourceRef TEXT NOT NULL");
     for (const [columnName, columnDef] of colDefs) {
         columns.push(columnDefToSchemaSql(columnName, columnDef));
     }
-    let schemaSql = `CREATE TABLE IF NOT EXISTS ${dfName} (\n${columns.join(", \n")}\n)`;
+    const schemaSql = `CREATE TABLE IF NOT EXISTS ${dfName} (\n${columns.join(", \n")}\n)`;
     return schemaSql;
 }
 
@@ -248,7 +248,7 @@ export function dataFrameToIndexSql(
     if (colDefs.size === 0) {
         return "";
     }
-    let indexes: string[] = [];
+    const indexes: string[] = [];
     for (const [columnName, columnDef] of colDefs) {
         if (columnDef.index) {
             indexes.push(columnDefToIndexSql(dfName, columnName, columnDef));
@@ -279,6 +279,6 @@ function columnDefToIndexSql(
     columnName: string,
     columnDef: kp.dataFrame.DataFrameColumnDef,
 ) {
-    let sql = `CREATE INDEX IF NOT EXISTS idx_${columnName} ON ${dfName} (${columnName});`;
+    const sql = `CREATE INDEX IF NOT EXISTS idx_${columnName} ON ${dfName} (${columnName});`;
     return sql;
 }

@@ -78,7 +78,7 @@ export class ChatServer {
         debug(`Received request: ${request.url}`);
 
         // serve up the requested file if we have it
-        let root: string = path.resolve("out/renderer");
+        const root: string = path.resolve("out/renderer");
         let requestedFile: string =
             request.url == "/" || request.url === undefined
                 ? "index.html"

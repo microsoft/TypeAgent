@@ -125,7 +125,7 @@ export async function createSemanticMap<T = any>(
     ): Promise<void> {
         let newItems: string[] | undefined;
         for (const item of items) {
-            let [text, value] = item;
+            const [text, value] = item;
             if (semanticIndex !== undefined && !map.has(text)) {
                 newItems ??= [];
                 newItems.push(text);

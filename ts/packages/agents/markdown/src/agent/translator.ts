@@ -98,7 +98,7 @@ export class MarkdownAgent<T extends object> {
         cursorPosition?: number,
         context?: any, // Already deserialized from JSON string
     ) {
-        let contentPrompt = [];
+        const contentPrompt = [];
         if (currentMarkdown) {
             contentPrompt.push({
                 type: "text",
@@ -112,7 +112,7 @@ export class MarkdownAgent<T extends object> {
         }
 
         // Add cursor position context if available
-        let positionPrompt = [];
+        const positionPrompt = [];
         if (typeof cursorPosition === "number" && cursorPosition >= 0) {
             positionPrompt.push({
                 type: "text",

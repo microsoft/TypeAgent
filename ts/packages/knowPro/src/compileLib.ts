@@ -149,7 +149,7 @@ function validateSearchTerm(term: SearchTerm): string | undefined {
     }
     if (term.relatedTerms !== undefined && term.relatedTerms.length > 0) {
         for (let i = 0; i < term.relatedTerms.length; ++i) {
-            let relatedTerm = term.relatedTerms[i];
+            const relatedTerm = term.relatedTerms[i];
             if (!validateTerm(relatedTerm)) {
                 let error = `Invalid related term for:\n${JSON.stringify(term.term)}`;
                 if (i > 0) {

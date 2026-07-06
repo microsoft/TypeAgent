@@ -126,7 +126,7 @@ function writeFileSafety(filePath: string, content: string) {
 }
 
 async function withLockFile<T>(file: string, fn: () => Promise<T>): Promise<T> {
-    let release = await lockfile.lock(file);
+    const release = await lockfile.lock(file);
     try {
         return await fn();
     } finally {
@@ -718,7 +718,7 @@ export class GraphClient extends EventEmitter {
     public async getEmailAddressesOfUsernamesLocal(
         usernames: string[],
     ): Promise<string[]> {
-        let emailAddresses: string[] = [];
+        const emailAddresses: string[] = [];
         try {
             if (this._userEmailAddresses.size === 0) {
                 await this.loadUserEmailAddresses();
@@ -744,7 +744,7 @@ export class GraphClient extends EventEmitter {
         usernames: string[],
     ): Promise<string[]> {
         const client = await this.ensureClient();
-        let emailAddresses: string[] = [];
+        const emailAddresses: string[] = [];
         try {
             for (const username of usernames) {
                 const response = await client

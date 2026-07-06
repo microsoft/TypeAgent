@@ -23,9 +23,7 @@ export interface VscodeActionsIndex {
 
 export function createVscodeActionsIndex() {
     let vscodeActionEmbeddings: Record<string, NormalizedEmbedding> = {};
-    let embeddingModel: TextEmbeddingModel;
-
-    embeddingModel = openai.createEmbeddingModel();
+    const embeddingModel: TextEmbeddingModel = openai.createEmbeddingModel();
     return {
         addOrUpdate,
         remove,
@@ -38,7 +36,7 @@ export function createVscodeActionsIndex() {
         actionData: any,
     ): Promise<Float32Array> {
         const actionString: string = `${actionData.typeName} ${actionData.actionName} ${actionData.comments.join(" ")}`;
-        let embedding = await generateEmbedding(
+        const embedding = await generateEmbedding(
             embeddingModel,
             JSON.stringify(actionString, null, 2),
         );

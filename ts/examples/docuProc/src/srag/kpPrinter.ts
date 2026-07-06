@@ -295,7 +295,9 @@ export class KPPrinter extends AppPrinter {
         }
         if (distinctKnowledge) {
             for (let i = 0; i < distinctKnowledge.length; ++i) {
-                let pos = this.sortAsc ? distinctKnowledge.length - (i + 1) : i;
+                const pos = this.sortAsc
+                    ? distinctKnowledge.length - (i + 1)
+                    : i;
                 const knowledge = distinctKnowledge[pos];
                 this.writeInColor(
                     chalk.green,
@@ -431,7 +433,7 @@ export class KPPrinter extends AppPrinter {
             `Displaying ${matchesToDisplay.length} matches of total ${messageIndexMatches.length}`,
         );
         for (let i = 0; i < matchesToDisplay.length; ++i) {
-            let pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
+            const pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
             this.writeScoredMessage(
                 pos,
                 matchesToDisplay.length,
@@ -505,7 +507,7 @@ export class KPPrinter extends AppPrinter {
             `Displaying ${matchesToDisplay.length} matches of total ${semanticRefMatches.length}`,
         );
         for (let i = 0; i < matchesToDisplay.length; ++i) {
-            let pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
+            const pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
             this.writeScoredRef(
                 pos,
                 matchesToDisplay.length,

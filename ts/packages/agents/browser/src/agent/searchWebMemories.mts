@@ -191,7 +191,7 @@ export async function searchWebMemories(
     context: SessionContext<BrowserActionContext>,
 ): Promise<SearchWebMemoriesResponse> {
     const startTime = Date.now();
-    let timing = {
+    const timing = {
         parsing: 0,
         search: 0,
         processing: 0,

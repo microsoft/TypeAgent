@@ -55,7 +55,7 @@ export default class Filter extends Command {
         return restaurants
             .map((restaurant) => this.normalizeRestaurant(restaurant))
             .filter((restaurant: FilterRestaurant) => {
-                let allowedHosts = ["tripadvisor.com", "www.tripadvisor.com"];
+                const allowedHosts = ["tripadvisor.com", "www.tripadvisor.com"];
 
                 const sourceIncludesTripAdvisor =
                     typeof restaurant.source === "string" &&

@@ -65,7 +65,7 @@ export class SqliteCollection<T, TOrdinal extends number>
     }
 
     public getMultiple(ordinals: TOrdinal[]): T[] {
-        let actualOrdinals: number[] = new Array<number>(ordinals.length);
+        const actualOrdinals: number[] = new Array<number>(ordinals.length);
         for (let i = 0; i < ordinals.length; ++i) {
             actualOrdinals[i] = ordinals[i] + 1;
         }

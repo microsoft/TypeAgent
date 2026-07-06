@@ -218,7 +218,7 @@ export async function createConversationManager(
         createKnowledgeExtractorSettings(),
     );
 
-    let topicMerger = await createMerger();
+    const topicMerger = await createMerger();
 
     const searchProcessor = createSearchProcessor(
         conversation,
@@ -500,7 +500,7 @@ export async function addMessageToConversation(
     const messageIndex = await conversation.getMessageIndex();
     await messageIndex.put(messageBlock.value, messageBlock.blockId);
 
-    let extractedKnowledge = await extractKnowledgeFromMessage(
+    const extractedKnowledge = await extractKnowledgeFromMessage(
         knowledgeExtractor,
         message,
         messageBlock,
@@ -671,7 +671,7 @@ function getMessageHeaderAndText(
         if (typeof message.text === "string") {
             return message.header + "\n\n" + message.text;
         }
-        let textBlock: TextBlock = {
+        const textBlock: TextBlock = {
             type: message.text.type,
             value: message.header + "\n\n" + message.text.value,
             sourceIds: message.text.sourceIds,

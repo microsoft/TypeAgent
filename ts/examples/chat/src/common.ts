@@ -345,7 +345,7 @@ export async function findConversationThread(
     predicate: (threadDef: conversation.ConversationThread) => boolean,
 ): Promise<conversation.ConversationThread | undefined> {
     const threadIndex = await cm.conversation.getThreadIndex();
-    let allThreads: NameValue<conversation.ConversationThread>[] =
+    const allThreads: NameValue<conversation.ConversationThread>[] =
         await asyncArray.toArray(threadIndex.entries());
     for (const threadEntry of allThreads) {
         if (predicate(threadEntry.value)) {

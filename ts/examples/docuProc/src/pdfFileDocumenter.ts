@@ -101,7 +101,7 @@ export function createPdfDocumenter(model: ChatModel): PdfFileDocumenter {
         // Process each page
         let pageCount = 0;
         for (const pageid in pageChunksMap) {
-            let content: MultimodalPromptContent[] = [];
+            const content: MultimodalPromptContent[] = [];
             pageCount++;
             const { pageRootChunk, pageChunks } = pageChunksMap[pageid];
 
@@ -205,7 +205,7 @@ The document information should be extracted from the chunk. Every chunk should 
 For each chunk, the summary should contain most five sentences that covers the main points.
 Also document the root chunk which is for page. The root chunk doesn't have any content and no parentId.`;
 
-            let promptSections: PromptSection[] = [
+            const promptSections: PromptSection[] = [
                 { role: "user", content: content },
             ];
 

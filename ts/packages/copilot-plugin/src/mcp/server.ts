@@ -31,7 +31,6 @@ import { extractMessageText } from "../shared/message-formatter.js";
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function stripAnsi(text: string): string {
-    // eslint-disable-next-line no-control-regex
     return text.replace(/\x1b\[[0-9;]*m/g, "");
 }
 

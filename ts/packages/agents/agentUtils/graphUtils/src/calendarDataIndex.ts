@@ -47,7 +47,7 @@ export function createCalendarDataIndex() {
         if (embeddingModel === undefined) {
             return;
         }
-        let embedding = await generateEmbedding(
+        const embedding = await generateEmbedding(
             embeddingModel,
             String(eventInfo.eventData),
         );

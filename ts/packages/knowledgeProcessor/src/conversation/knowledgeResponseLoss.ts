@@ -225,14 +225,14 @@ async function facetLoss(
     model: TextEmbeddingModel,
 ) {
     let loss = 0;
-    let potentialNameLoss = 2;
-    let potentialValueLoss = 1;
-    let potentialLoss = potentialNameLoss + potentialValueLoss;
+    const potentialNameLoss = 2;
+    const potentialValueLoss = 1;
+    const potentialLoss = potentialNameLoss + potentialValueLoss;
     if (!refFacets || refFacets.length === 0) {
         console.log("no ref facets");
         return 0;
     }
-    let potentialLossTotal = refFacets.length * potentialLoss;
+    const potentialLossTotal = refFacets.length * potentialLoss;
     const genMap = await createSemanticMap<Facet>(model);
     genMap.setMultiple(genFacets.map((facet) => [facet.name, facet]));
     for (const facet of refFacets) {
@@ -457,17 +457,17 @@ class NormalizedKnowledgeResponse {
         const potentialTopicLoss = 1;
         const potentialLossTotal =
             potentialEntityLoss + potentialActionLoss + potentialTopicLoss;
-        let genEntityLoss = await entityLoss(
+        const genEntityLoss = await entityLoss(
             this.entities,
             normGenResponse.entities,
             model,
         );
-        let actionLoss = await actionsLoss(
+        const actionLoss = await actionsLoss(
             this.response.actions,
             normGenResponse.response.actions,
             model,
         );
-        let topicLoss = await stringListLoss(
+        const topicLoss = await stringListLoss(
             this.response.topics,
             normGenResponse.response.topics,
             model,

@@ -352,7 +352,7 @@ async function searchAlbumsWithTrackArtists(
     albumEntity: Entity | undefined,
 ) {
     // Try again without artist, as the artist on the album might not match the one in the tracks.
-    let albums = await searchAlbumSorted(
+    const albums = await searchAlbumSorted(
         albumName,
         undefined,
         context,

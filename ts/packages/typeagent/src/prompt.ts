@@ -166,7 +166,7 @@ export function createPromptBuilder(
             return pushText(sections);
         }
         if (Array.isArray(sections)) {
-            for (let section of sections) {
+            for (const section of sections) {
                 if (!push(section)) {
                     return false;
                 }
@@ -201,13 +201,13 @@ export function createPromptBuilder(
         sections: PromptSection[] | IterableIterator<PromptSection>,
     ): boolean {
         if (Array.isArray(sections)) {
-            for (let section of sections) {
+            for (const section of sections) {
                 if (!pushSection(section)) {
                     return false;
                 }
             }
         } else {
-            for (let section of sections) {
+            for (const section of sections) {
                 if (!pushSection(section)) {
                     return false;
                 }

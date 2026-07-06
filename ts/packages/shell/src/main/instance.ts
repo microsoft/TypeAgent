@@ -295,7 +295,6 @@ async function initializeDispatcher(
             // links instead of the app quitting; a manual retry clears it.
             let reconnectStopped = false;
             let lastReconnectError: string | undefined;
-            let onConnectionLost: (() => void) | undefined;
 
             const broadcastReconnect = (
                 status: ConnectionStatus | undefined,
@@ -444,7 +443,7 @@ async function initializeDispatcher(
                 }
             };
 
-            onConnectionLost = () => {
+            const onConnectionLost = () => {
                 if (quitting) return;
                 debugShellInit(
                     "Dispatcher connection lost; will attempt to reconnect.",

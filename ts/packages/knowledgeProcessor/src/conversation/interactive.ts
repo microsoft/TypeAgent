@@ -36,7 +36,7 @@ export async function interactivelyProcessUserInput(
     ) => Promise<TranslationEvaluation>,
     maxAttempts: number = 3,
 ): Promise<Result<any> | undefined> {
-    let previousUserInputs: PromptSection[] = [];
+    const previousUserInputs: PromptSection[] = [];
     let userInput: string | undefined = initialUserInput;
     let attempt = 1;
     while (true) {

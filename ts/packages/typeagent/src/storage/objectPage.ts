@@ -38,7 +38,7 @@ export async function createObjectPage<T = any>(
 ): Promise<ObjectPage<T>> {
     const pageSettings = settings ?? {};
     const fileSystem = fSys ?? fsDefault();
-    let data: T[] =
+    const data: T[] =
         (await readObjectFromFile(
             filePath,
             pageSettings.deserializer,

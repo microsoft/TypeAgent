@@ -248,7 +248,7 @@ function createMessageIndexingEventHandler(
 }
 
 export function normalizeTextRange(range: TextRange): TextRange {
-    let range_n: TextRange = { ...range };
+    const range_n: TextRange = { ...range };
     if (range_n.start.chunkOrdinal === undefined) {
         range_n.start.chunkOrdinal = 0;
     }

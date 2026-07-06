@@ -137,9 +137,9 @@ const {
 } = createDispatcherRpcClient(dispatcherChannel.channel);
 
 export async function createWebSocket(autoReconnect: boolean = true) {
-    let url = window.location;
-    let protocol = url.protocol.toLowerCase() == "https:" ? "wss" : "ws";
-    let port = url.hostname.toLowerCase() == "localhost" ? ":3000" : "";
+    const url = window.location;
+    const protocol = url.protocol.toLowerCase() == "https:" ? "wss" : "ws";
+    const port = url.hostname.toLowerCase() == "localhost" ? ":3000" : "";
 
     const endpoint = `${protocol}://${url.hostname}${port}`;
 
