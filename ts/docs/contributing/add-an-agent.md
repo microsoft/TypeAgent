@@ -58,3 +58,67 @@ If your agent introduces or exemplifies a pattern not already covered, update
 [Build locally](./build-locally.md), confirm the agent renders, then open a PR
 including the new `README.md`, the regenerated `agents/toc.yml`, and any
 companion or pattern-doc updates.
+
+## Making an agent installable
+
+Bundled agents ship with the app. To let users **install** your agent on demand
+through `@package install`, it must be reachable from an
+[install source](../architecture/lifecycle/agent-sources.md). There are three
+ways, matching the three source kinds.
+
+### Local `path` (development)
+
+No packaging needed — a built agent directory installs directly from disk:
+
+```
+@package install echo <path to the built echo package>
+```
+
+This is the flow the [Creating an Agent](https://github.com/microsoft/TypeAgent/blob/main/docs/content/tutorial/agent.md)
+tutorial uses. It is the fastest inner loop and lets a local build **shadow** a
+published version when its `path` source is ordered ahead of the feed.
+
+### A `catalog` entry
+
+A catalog is a JSON file mapping agent short names to packages, so users install
+by name (`@package install echo`). Add an entry pointing at either a local path
+or a published package name:
+
+```jsonc
+{
+  "agents": {
+    "echo": { "name": "@company/echo-agent", "execMode": "separate" },
+  },
+}
+```
+
+### Publishing to a feed
+
+A `feed` source installs from an Azure Artifacts npm registry by package
+specifier (`@package install echo echo-agent@^1.2`). Two author-side requirements
+make a published package discoverable **as an agent**:
+
+1. **Declare the sentinel keyword.** Add `typeagent-agent` to your package's
+   `keywords` in `package.json`. Feed enumeration keeps only packages carrying
+   this keyword — scope membership alone is not enough, because support libraries
+   live in the same scope.
+
+   ```jsonc
+   // package.json
+   {
+     "keywords": ["typeagent-agent"],
+   }
+   ```
+
+2. **Pass the policy check.** `npm run check:policy` fails the build if a package
+   that exposes `"./agent/manifest"` in its `exports` is missing the keyword, so
+   the marker cannot be forgotten.
+
+Feed **installs** (by whoever runs `@package install`) additionally require
+`az login` on the installing machine and, unless the source is configured with an
+explicit `registry`/`scopes`, the `TYPEAGENT_FEED_REGISTRY` /
+`TYPEAGENT_FEED_SCOPES` environment values. See
+[Agent sources › the feed source](../architecture/lifecycle/agent-sources.md#the-feed-source)
+for how auth and enumeration work, and the
+[Agent Install Sources reference](https://github.com/microsoft/TypeAgent/blob/main/docs/content/reference/install-sources.md)
+for the `@package source` commands that configure and order sources.

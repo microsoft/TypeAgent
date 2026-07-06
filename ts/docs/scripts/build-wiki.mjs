@@ -104,6 +104,11 @@ const ARCH_GROUPS = [
         files: ["agent-patterns.md", "agentServerConversations.md"],
     },
     {
+        dir: "lifecycle",
+        name: "Agent installation & lifecycle",
+        files: ["agent-sources.md", "agent-lifecycle.md"],
+    },
+    {
         dir: "browser",
         name: "Browser agent",
         files: ["browserAgent.md", "browserRpc.md", "browserScenarios.md"],

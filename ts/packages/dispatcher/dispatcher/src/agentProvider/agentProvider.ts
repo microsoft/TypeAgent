@@ -3,6 +3,26 @@
 
 import { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 
+/**
+ * A read-only view over a set of app agents: enumerate names, fetch manifests,
+ * and load/unload agent instances. Implemented by the bundled providers, the
+ * MCP provider, and the npm provider that backs installed agents.
+ *
+ * Implementor requirements:
+ * - **Read-only.** Never mutate dispatcher state or reach into grammars,
+ *   collision detection, or the embedding cache — this is purely a source of
+ *   agents to load.
+ * - **Stable names.** `getAppAgentNames()` must return the same names for the
+ *   life of the provider. A provider handed to {@link AppAgentHost.addProvider}
+ *   must expose exactly one name (the host asserts this).
+ * - **Balanced, refcount-safe load/unload.** When an instance is shared across
+ *   sessions, N `loadAppAgent` calls require N `unloadAppAgent` calls before the
+ *   underlying agent is actually torn down.
+ * - **Honest `isLoaded`.** If implemented, it must reflect the true refcount
+ *   (some holder loaded it without a matching unload); the installed-agent
+ *   source's verify-0 barrier trusts it to confirm a version is fully released.
+ *   Providers that do not refcount omit it (treated as always released).
+ */
 export interface AppAgentProvider {
     getAppAgentNames(): string[];
     getAppAgentManifest(appAgentName: string): Promise<AppAgentManifest>;
@@ -41,6 +61,20 @@ export interface AppAgentProvider {
  * cache. Both operations are applied through an idle-gated FIFO applicator and
  * resolve when the op is **applied** (the ack the source's lifecycle tracker
  * waits on, 7).
+ *
+ * Implementor (the dispatcher) must guarantee:
+ * - **FIFO, idle-gated apply.** Ops are applied in call order and deferred until
+ *   the session is idle; each returned promise resolves only once the op has
+ *   been applied (the source's lifecycle tracker treats that resolution as the
+ *   ack).
+ * - **Single-agent registration.** `addProvider` asserts the provider exposes
+ *   exactly one name.
+ * - **Identity-based removal.** `removeProvider`/`replaceProvider` match the
+ *   provider by identity, not by name.
+ * - **Command-lock-held swap.** `replaceProvider` runs its remove → park → add
+ *   as one command-lock-held section so no request interleaves the swap.
+ * - **Disposal safety.** After the session's {@link AppAgentConnection.dispose},
+ *   a late op must no-op, and a barrier the host is mid-parking on auto-acks.
  */
 export interface AppAgentHost {
     /**
@@ -159,6 +193,20 @@ export interface ReplaceProviderOptions {
  * The concrete host object also carries the write/command surface
  * (`install`/`uninstall`/`update`/`packageCommands`), but the dispatcher is
  * handed only the narrow `connect` view, so it can never drive an install.
+ *
+ * Implementor requirements (a custom source, e.g. an embedder not using
+ * `default-agent-provider`):
+ * - **One `connect` per dispatcher.** Return the SHARED singleton provider
+ *   instances (the same instances on every call) and record `host` so later
+ *   install/uninstall/update can be fanned out to that session.
+ * - **Mutate only through `host`.** Reach live sessions only via the given
+ *   {@link AppAgentHost}; never touch dispatcher internals directly.
+ * - **Respect disposal.** Stop fanning out to a host once its
+ *   {@link AppAgentConnection.dispose} has been called; a fan-out that raced
+ *   disposal must no-op.
+ * - **Honor the swap barrier.** When driving {@link AppAgentHost.replaceProvider},
+ *   resolve its `whenReady` only after every host has quiesced and the old
+ *   version's shared refcount is verified 0.
  */
 export interface AppAgentSource {
     /**
@@ -172,6 +220,14 @@ export interface AppAgentSource {
 /**
  * The result of {@link AppAgentSource.connect}: the provider(s) to register into
  * the connecting dispatcher plus a teardown handle (3.2).
+ *
+ * Implementor requirements:
+ * - `providers` must be the source's SHARED singletons, not per-session copies.
+ * - `whenReady` must always resolve — to the decided provider(s) once any
+ *   in-flight teardown/swap barrier settles, or to `[]` immediately when nothing
+ *   is in flight — and must not outlive that barrier.
+ * - `dispose()` must be idempotent and must only deregister THIS host from
+ *   fan-out; it must never tear down the shared providers other sessions hold.
  */
 export interface AppAgentConnection {
     /**

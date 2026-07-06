@@ -66,17 +66,21 @@ function fakeContext(): any {
 // appends a { content } object).
 function capturingContext(): { context: any; output: () => string } {
     const captured: string[] = [];
+    const stripAnsi = (text: string) =>
+        text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
     const context = {
         actionIO: {
             appendDisplay: (content: any) => {
-                captured.push(
+                const text =
                     typeof content === "string"
                         ? content
                         : Array.isArray(content?.content)
                           ? content.content
                                 .map((row: string[]) => row.join(" "))
                                 .join("\n")
-                          : (content?.content ?? JSON.stringify(content)),
+                          : (content?.content ?? JSON.stringify(content));
+                captured.push(
+                    typeof text === "string" ? stripAnsi(text) : text,
                 );
             },
             setDisplay: () => {},
