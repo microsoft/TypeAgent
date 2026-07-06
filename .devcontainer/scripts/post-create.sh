@@ -48,19 +48,43 @@ VOLUME_PATHS=(
 # Discover the workspace ts/node_modules path dynamically (works for worktrees
 # and for variants that mount the workspace outside /workspaces, e.g. the
 # `agent` devcontainer that bind-mounts the host path verbatim).
-WS_TS_DIR=""
-_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-if [[ -n "$_REPO_ROOT" ]] && [[ -d "$_REPO_ROOT/ts" ]]; then
-    WS_TS_DIR="$_REPO_ROOT/ts"
-elif [[ -d "$(pwd)/ts" ]]; then
-    WS_TS_DIR="$(pwd)/ts"
-elif [[ -d "/workspaces/TypeAgent/ts" ]]; then
-    WS_TS_DIR="/workspaces/TypeAgent/ts"
+find_ts_dir() {
+    local root=$1
+    if [[ -d "$root" ]]; then
+        find "$root" -maxdepth 2 -type d -name "ts" 2>/dev/null | head -1 || true
+    fi
+}
+
+resolve_ts_workspace() {
+    local repo_root
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null || true)
+
+    if [[ -n "$repo_root" ]] && [[ -d "$repo_root/ts" ]]; then
+        echo "$repo_root/ts"
+    elif [[ -d "$(pwd)/ts" ]]; then
+        echo "$(pwd)/ts"
+    elif [[ -n "${containerWorkspaceFolder:-}" ]] && [[ -d "${containerWorkspaceFolder}/ts" ]]; then
+        echo "${containerWorkspaceFolder}/ts"
+    elif [[ -d "/workspaces/TypeAgent/ts" ]]; then
+        echo "/workspaces/TypeAgent/ts"
+    else
+        find_ts_dir "/workspaces"
+    fi
+}
+
+TS_DIR=$(resolve_ts_workspace)
+
+# Resolve TypeScript workspace early and fail fast if it is missing.
+echo "Looking for TypeScript workspace..."
+if [[ -n "$TS_DIR" ]]; then
+    echo "Found: $TS_DIR"
+    VOLUME_PATHS+=("$TS_DIR/node_modules")
 else
-    WS_TS_DIR=$(find /workspaces -maxdepth 2 -type d -name "ts" 2>/dev/null | head -1)
-fi
-if [[ -n "$WS_TS_DIR" ]]; then
-    VOLUME_PATHS+=("$WS_TS_DIR/node_modules")
+    echo "Error: Could not find TypeScript workspace directory (expected ts/)" >&2
+    echo "Checked: git repo root, current directory, containerWorkspaceFolder, /workspaces" >&2
+    echo "Listing /workspaces contents:"
+    ls -la /workspaces/ 2>/dev/null || echo "  /workspaces not accessible"
+    exit 1
 fi
 
 for p in "${VOLUME_PATHS[@]}"; do
@@ -79,27 +103,7 @@ done
 echo ""
 
 # Navigate to TypeScript workspace
-echo "Looking for TypeScript workspace..."
-REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-if [[ -n "$REPO_ROOT" ]] && [[ -d "$REPO_ROOT/ts" ]]; then
-    cd "$REPO_ROOT/ts"
-    echo "Found: $REPO_ROOT/ts"
-else
-    # Try glob pattern
-    TS_DIR=$(find /workspaces -maxdepth 2 -type d -name "ts" 2>/dev/null | head -1)
-    if [[ -n "$TS_DIR" ]]; then
-        cd "$TS_DIR"
-        echo "Found: $TS_DIR"
-    else
-        echo "Warning: Could not find ts directory in /workspaces"
-        echo "Listing /workspaces contents:"
-        ls -la /workspaces/ 2>/dev/null || echo "  /workspaces not accessible"
-        echo ""
-        echo "Skipping dependency installation. Run manually after container starts:"
-        echo "  cd ts && pnpm install"
-        exit 0
-    fi
-fi
+cd "$TS_DIR"
 
 # Enable pnpm
 echo ""
