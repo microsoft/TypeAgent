@@ -216,26 +216,30 @@ overlapping swap. The mechanism lives in the source barrier
 ([`defaultAgentProviders.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/src/defaultAgentProviders.ts))
 plus the `replaceProvider` primitive on `AppAgentHost`.
 
-### The request-slip problem
+### What the swap must guarantee
 
-A naïve remove-then-add unregisters the agent name from each session's
-`AppAgentManager` between the remove and the re-add. In that gap a request naming
-the agent **slips** — the command path silently falls back to `system`, and the
-NL path (which binds via schema candidacy _after_ translation) misroutes to
-another agent. Any correct fix must keep the name **registered** throughout and
-gate only the execution/instance side.
+Because agent storage is name-keyed and shared, a correct swap has to keep two
+things true on every dispatcher at once:
 
-### One command-lock-held critical section
+1. **No request is processed while the name is absent.** If a request lands while
+   the name is unregistered, it slips to the wrong place: a `@foo …` command falls
+   back to the `system` agent, and a natural-language request — which is routed to
+   an agent only _after_ translation — is misrouted to whichever agent is still
+   registered.
+2. **All dispatchers move `v1 → v2` in lockstep.** Grammars are used during
+   translation, so a dispatcher still on v1 grammars talking to a v2 process would
+   mismatch. Every update is therefore treated as potentially schema-changing and
+   freezes all dispatchers together across the swap.
 
-On every dispatcher the entire local swap runs as a **single `commandLock`-held
-section** — `remove v1 → wait for shared v2 ready → add v2`, all under one
-acquisition. Because the whole update is then mutually exclusive with requests
-(the command lock already gates every request), the slip is structurally
-impossible: no per-name gate, no park machinery, no tombstone. Every update is
-treated as potentially schema-changing and always uses this coordinated freeze —
-grammars are used during translation, so a dispatcher on v1 grammars talking to a
-v2 process would mismatch; the only safe option is to freeze all dispatchers in
-lockstep across the swap.
+### The design: one command-lock-held section
+
+Both guarantees fall out of running the entire local swap as a **single
+`commandLock`-held section** — `remove v1 → wait for shared v2 ready → add v2`,
+all under one acquisition. The command lock already gates every request, so the
+swap is mutually exclusive with request processing: no request can observe the
+name mid-swap, and every dispatcher is frozen for the duration. Nothing extra is
+needed — no per-name gate, no park machinery, no tombstone; the lock the
+dispatcher already holds does the work.
 
 Structurally the held section is **`uninstall(v1)` immediately followed by
 `install(v2)`** under one lock, so update reuses the uninstall/install primitives
