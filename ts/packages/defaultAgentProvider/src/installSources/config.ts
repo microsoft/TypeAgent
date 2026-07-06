@@ -1,25 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Concrete install-source *config* taxonomy plus the host-side `InstallSource`,
+// The install-source config types plus the host-side `InstallSource`,
 // `InstallSourceInfo`, and the install-record shapes (`ResolvedCandidate` /
-// `InstalledAgentRecord`). These are owned by the host
-// (default-agent-provider), NOT the dispatcher core: the core knows nothing
-// about how sources are configured, listed, resolved, or recorded - it only
-// exposes the per-session `AppAgentHost` surface the host uses to register and
-// tear down agents. The host contributes the whole `@package` command surface
-// (`@package install`/`uninstall`/`update`/`list`, with the source table nested
-// as `@package source`) via `InstalledAgentSourceApi.sourceCommands()`. Keeping
-// these here frees the core of
-// npm / Azure Artifacts vocabulary (registry URLs, scopes, catalog paths) and
-// lets the host own how a source is added, listed, ordered, removed, and
-// persisted - including any future auth UI.
+// `InstalledAgentRecord`). These live in the host (default-agent-provider), not
+// the dispatcher core: the core knows nothing about how sources are configured,
+// listed, resolved, or recorded - it only exposes the per-session `AppAgentHost`
+// the host uses to register and tear down agents. The host contributes the whole
+// `@package` command table (`@package install`/`uninstall`/`update`/`list`, with
+// the source table nested as `@package source`) via
+// `InstalledAgentSourceApi.sourceCommands()`. Keeping these here keeps npm /
+// Azure Artifacts details (registry URLs, scopes, catalog paths) out of the
+// core, and lets the host decide how a source is added, listed, ordered,
+// removed, and persisted, including any future auth UI.
 
 /**
  * The result of a source's `find`: which source matched and how the agent
- * should be acquired. A match is a commitment - if `find` returns a candidate,
- * `materialize` must succeed. The registry's `find ->
- * materialize` handoff type; not seen outside this implementation.
+ * should be acquired. If `find` returns a candidate, `materialize` must
+ * succeed. Passed from `find` to `materialize`; not used outside this file.
  */
 export interface ResolvedCandidate {
     source: string; // which source matched
@@ -31,7 +29,7 @@ export interface ResolvedCandidate {
     // source reads the packument during the membership check and pins the
     // dist-tag/range to an exact version here. It lets `materialize` name the
     // content-addressed install root (`module@version`) up front and skip the
-    // npm install entirely when that root already exists (dedup / same-version
+    // npm install when that root already exists (dedup / same-version
     // no-op). Optional: a source that cannot resolve offline leaves it undefined
     // and `materialize` derives the version from the installed package.json.
     version?: string;
@@ -59,7 +57,7 @@ export const AGENT_INSTALL_ROOTS_SUBDIR = "agents";
  */
 export interface InstalledAgentRecord {
     name: string; // dispatcher agent name
-    kind: string; // loading mechanism; "npm" today (reserved seam for future kinds)
+    kind: string; // loading mechanism; "npm" today (reserved for future kinds)
     module?: string; // package name; present only for npm-resolved records
     path?: string; // present for catalog / path installs
     source: string; // provenance, required
@@ -80,25 +78,24 @@ export interface InstalledAgentRecord {
 }
 
 /**
- * Source-produced record data before the installer assigns the authoritative
+ * Source-produced record data before the installer assigns the final
  * dispatcher name.
  */
 export type MaterializedInstallRecord = Omit<InstalledAgentRecord, "name">;
 
 /**
- * A per-operation sink a source calls to surface a non-fatal degrade (e.g. a
+ * A per-command callback a source calls to report a non-fatal problem (e.g. a
  * corrupt catalog file or a dropped malformed entry) so the host can show it to
  * the user for the command that triggered it (`@package install`,
  * `@package source where`). Distinct from the source's own process-lifetime
- * debug/console log:
- * this is scoped to the current resolve so the warning is surfaced once per
- * command rather than once per process.
+ * debug/console log: it is scoped to the current resolve, so the warning is
+ * shown once per command rather than once per process.
  */
 export type SourceWarning = (message: string) => void;
 
 /**
- * A per-operation sink the registry's ordered resolution walk calls to report
- * progress - which source it is currently probing - so the host can surface a
+ * A per-command callback the registry's resolution walk calls to report
+ * progress - which source it is currently probing - so the host can show a
  * live status line for the triggering command (`@package install`,
  * `@package source where`). Like {@link SourceWarning} it is scoped to the
  * current resolve, not the process.
@@ -123,7 +120,7 @@ export type UpdateOutcomeStatus = "updated" | "reverted";
 export type UninstallOutcomeStatus = "uninstalled" | "reverted";
 
 /**
- * The three install-source kinds. There is deliberately no
+ * The three install-source kinds. There is no
  * `builtin` kind: the bundled agents that ship in the app are a separate static
  * provider, not an install source (they are never installed/uninstalled/
  * updated). Install sources only resolve user-installed agents.
@@ -190,59 +187,57 @@ export interface InstallSourceInfo {
 }
 
 /**
- * A live install source built from a host config. Implements a two-phase
- * contract so the registry can probe cheaply (`find`) before doing any real
- * work (`materialize`). `ResolvedCandidate` /
- * `MaterializedInstallRecord` (defined above) are host-owned record shapes;
- * everything here is host-internal.
+ * A live install source built from a host config. Two phases so the registry can
+ * probe cheaply (`find`) before doing the install (`materialize`).
+ * `ResolvedCandidate` / `MaterializedInstallRecord` (defined above) are
+ * host-owned record shapes; everything here is host-internal.
  */
 export interface InstallSource {
     readonly name: string;
     readonly kind: string;
     /**
-     * CHEAP + side-effect free: can this source resolve `ref`? A match is a
-     * commitment - if `find` returns a candidate, `materialize` must succeed.
-     * Returning `undefined` is a non-match; the registry's ordered walk
-     * continues to the next source. `onWarn`, when supplied, is a
-     * per-command sink for non-fatal degrade messages (corrupt catalog /
-     * dropped entry) so the host can surface them for the triggering command.
+     * Cheap and side-effect free: can this source resolve `ref`? If `find`
+     * returns a candidate, `materialize` must succeed. Returning `undefined` is
+     * a non-match; the registry's ordered walk continues to the next source.
+     * `onWarn`, when supplied, is a per-command callback for non-fatal problems
+     * (corrupt catalog / dropped entry) so the host can show them for the
+     * triggering command.
      */
     find(
         ref: string,
         onWarn?: SourceWarning,
     ): Promise<ResolvedCandidate | undefined>;
     /**
-     * The INVERSE of {@link find}, in candidate space: given the
-     * `ResolvedCandidate` this source produced for an agent at install time
-     * (recovered by the host from the persisted record), produce a FRESH
-     * candidate for the current version - so `@package update` never has to know which
-     * candidate field is this source's re-resolution handle, or how a version
-     * `range` applies. The source owns that policy
-     * entirely: which handle it reads (`module` / `path` / the catalog key in
-     * `ref`), how `opts.range` narrows the target, and validating a corrupt
-     * candidate. Because the source speaks only `ref` / `ResolvedCandidate`, the
-     * persisted `InstalledAgentRecord` (its dispatcher `name`, loader `kind`)
-     * never leaks in - the host maps record <-> candidate.
+     * The inverse of {@link find}: given the `ResolvedCandidate` this source
+     * produced for an agent at install time (recovered by the host from the
+     * persisted record), produce a new candidate for the current version. This
+     * way `@package update` never has to know which candidate field is this
+     * source's re-resolution handle, or how a version `range` applies. The
+     * source decides: which handle it reads (`module` / `path` / the catalog key
+     * in `ref`), how `opts.range` narrows the target, and how to validate a
+     * corrupt candidate. The source only sees `ref` / `ResolvedCandidate`; the
+     * host maps between the record and the candidate, so the persisted
+     * `InstalledAgentRecord` (its dispatcher `name`, loader `kind`) never reaches
+     * the source.
      *
-     * Like `find` this is CHEAP + side-effect free and its match is a
-     * commitment (the returned candidate must `materialize`). Returns
-     * `undefined` when the agent no longer resolves (path deleted, catalog key
-     * gone, feed package removed) so the host can surface a clear "no longer
-     * resolvable" error. Optional so a test-double source can omit it (its
-     * agents are then not updatable).
+     * Like `find`, this is cheap and side-effect free, and the returned
+     * candidate must `materialize`. Returns `undefined` when the agent no longer
+     * resolves (path deleted, catalog key gone, feed package removed) so the host
+     * can report a clear "no longer resolvable" error. Optional so a test-double
+     * source can omit it (its agents are then not updatable).
      */
     reresolve?(
         candidate: ResolvedCandidate,
         opts?: { range?: string | undefined },
         onWarn?: SourceWarning,
     ): Promise<ResolvedCandidate | undefined>;
-    /** Does the actual work (npm install / copy / record data). A source that
-     * needs a per-agent, version-scoped install root labels it
-     * from the candidate's package name. Sources whose materialize is already
-     * non-destructive (`path`, `catalog`) own no such root. */
+    /** Performs the install (npm install / copy / record data). A source that
+     * needs a per-agent, version-scoped install root names it from the
+     * candidate's package name. Sources whose materialize is already
+     * non-destructive (`path`, `catalog`) have no such root. */
     materialize(
         candidate: ResolvedCandidate,
     ): Promise<MaterializedInstallRecord>;
-    /** Enumerable sources (`path` is not) advertise their agents. */
+    /** Sources that can list their agents (catalog, feed) implement this; `path` cannot. */
     listAgents?(onWarn?: SourceWarning): Promise<string[]>;
 }

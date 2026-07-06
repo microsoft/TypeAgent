@@ -157,7 +157,7 @@ export type InstallSourcesResolveOptions = {
 // present without being installed.
 //
 // CAVEAT: the `workspace` entry is seeded *conditionally* on the
-// ambient filesystem, and the seed is recomputed every launch until something
+// local filesystem, and the seed is recomputed every launch until something
 // is persisted. So one instance dir launched from a dev checkout vs. a shipped
 // build (or two different checkouts) sees a different source list, and the
 // first `@package source` edit then freezes the checkout-specific catalog path - which
@@ -198,9 +198,9 @@ export function getResolvedInstallSources(
  * The shared npm root all feed sources install into: always
  * `<instanceDir>/installedAgents`, derived at runtime and never persisted. It
  * is `undefined` for the in-memory case (no instance dir), where nothing is
- * ever installed; deliberately not falling back to `process.cwd()`, which
+ * ever installed; it does not fall back to `process.cwd()`, which
  * would silently anchor installs to wherever the process happened to launch
- * (see the same anti-ambient-CWD stance in pathSource.ts).
+ * (see the same reasoning against an implicit CWD in pathSource.ts).
  */
 export function getInstallDir(
     instanceConfigs: InstanceConfigProvider | undefined,

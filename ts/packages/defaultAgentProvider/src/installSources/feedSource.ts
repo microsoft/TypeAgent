@@ -57,8 +57,8 @@ export function moduleNameFromSpec(spec: string): string {
     return at > 0 ? spec.slice(0, at) : spec;
 }
 
-// A syntactically valid npm package name (optionally scoped). Used as a boundary
-// guard so a corrupt record can never smuggle shell metacharacters into the
+// A syntactically valid npm package name (optionally scoped). Used to reject a
+// corrupt record that would otherwise inject shell metacharacters into the
 // install spec on the Windows `.cmd` path.
 export function isSafeModuleName(name: string): boolean {
     return /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/.test(name);
@@ -484,7 +484,7 @@ export function createFeedSource(
             }
             // Validate the user-supplied range against the real semver-range
             // grammar (or an npm dist-tag) before it is ever embedded in a spec
-            // (hardening; defense in depth against `@package update <range>`
+            // (guards against `@package update <range>`
             // shell injection on Windows).
             if (opts?.range !== undefined && !isSafeVersionRange(opts.range)) {
                 throw new Error(
@@ -528,11 +528,10 @@ export function createFeedSource(
             // Install the exact resolved version -- reproducible, and it matches
             // the content-addressed root name.
             const installSpec = `${moduleName}@${version}`;
-            // Boundary guard: only a
-            // strict `name@concrete-version` spec is ever handed to `npm install`,
-            // so a corrupt record or an unresolved range can never inject shell
-            // metacharacters into the install command (the Windows path runs npm
-            // under a shell).
+            // Only a strict `name@concrete-version` spec is ever handed to `npm
+            // install`, so a corrupt record or an unresolved range can never
+            // inject shell metacharacters into the install command (the Windows
+            // path runs npm under a shell).
             if (!isSafeModuleName(moduleName) || !isConcreteVersion(version)) {
                 throw new Error(
                     `feed source '${config.name}': refusing to install unsafe spec '${installSpec}'`,

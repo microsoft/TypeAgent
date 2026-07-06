@@ -17,10 +17,10 @@ import { createFeedSource } from "./feedSource.js";
 import { createLimiter, Limiter } from "@typeagent/common-utils";
 
 /**
- * The host's install-source registry. Owns source listing, ordering,
+ * The host's install-source registry. Handles source listing, ordering,
  * configuration, ordered resolution, and the typed `add(config)`
  * used by seeding, tests, and the host's `@package source` command handlers.
- * This is entirely host-internal - the dispatcher core has no registry
+ * This is host-internal - the dispatcher core has no registry
  * interface; it receives the `@package source` command table via
  * `InstalledAgentSourceApi.sourceCommands()`.
  */
@@ -37,8 +37,8 @@ export interface DefaultInstallSourceRegistry {
     remove(name: string): void;
     // resolve a ref: explicit source, else walk the configured order
     // sequentially, first match wins. `onWarn`, when supplied, receives
-    // non-fatal source degrade messages (e.g. a corrupt catalog) for the caller
-    // to surface on the triggering command. `onStatus`, when supplied, is
+    // non-fatal source problem messages (e.g. a corrupt catalog) for the caller
+    // to show on the triggering command. `onStatus`, when supplied, is
     // called with the name of each source as it is probed so the caller can
     // show a live status line.
     resolve(
@@ -49,9 +49,9 @@ export interface DefaultInstallSourceRegistry {
     ): Promise<MaterializedInstallRecord>;
     // Re-resolve + re-materialize a previously-installed record against its
     // recorded source, for `@package update`. The source that
-    // produced the record owns the whole policy (which handle to read, how a
+    // produced the record decides everything (which handle to read, how a
     // version `range` applies, corrupt-record validation) via
-    // {@link InstallSource.reresolve}; the registry just runs it + materialize
+    // {@link InstallSource.reresolve}; the registry runs it + materialize
     // under the shared limiter and carries the source's re-resolution handle
     // (`ref`) through so the next update still works. Throws when the source is
     // gone, does not support update, or no longer resolves the record.
@@ -115,7 +115,7 @@ function buildSource(
 export function createInstallSourceRegistry(
     initialConfigs: InstallSourceConfig[],
     deps: RegistryDeps,
-    // Test-only seam: how a config is turned into a live source. Production
+    // Test-only hook: how a config is turned into a live source. Production
     // never passes this - it defaults to the real per-kind builder. Tests
     // override it to inject a source with mocked dependencies (e.g. a feed
     // source with a stubbed npm install) without any test-only field leaking
@@ -130,14 +130,14 @@ export function createInstallSourceRegistry(
     // (first match wins).
     let entries = new Map<string, Entry>();
 
-    // Process-lifetime background sink: a source degrade (corrupt catalog,
-    // dropped entry) is surfaced to the server log at most once per distinct
+    // Process-lifetime dedup for the server log: a source problem (corrupt
+    // catalog, dropped entry) is logged at most once per distinct
     // message, regardless of which read path hit it (resolve, where,
-    // listAgents, seeding) or whether a command supplied its own sink. The
-    // sources themselves hold NO dedup state - they just report every problem
-    // via `onWarn`; this is the single place the "once per process" policy for
-    // the console lives. A caller's per-command sink composes on top (below),
-    // so an install/where still surfaces the message to the user every time
+    // listAgents, seeding) or whether a command supplied its own callback. The
+    // sources hold no dedup state - they report every problem
+    // via `onWarn`; this is the only place that does the once-per-process
+    // console dedup. A caller's per-command callback runs on top (below),
+    // so an install/where still shows the message to the user every time
     // while the server log stays deduped.
     const backgroundWarned = new Set<string>();
     function composeWarn(caller?: SourceWarning): SourceWarning {
@@ -150,9 +150,9 @@ export function createInstallSourceRegistry(
         };
     }
     // Wrap a built source so every find/listAgents call routes its warnings
-    // through the composed background+caller sink. Wrapping at this single build
-    // choke point means every access path - resolve, where, get()->listAgents
-    // - gets the server-log dedup for free.
+    // through the combined background+caller callback. Wrapping here, at the one
+    // place sources are built, means every access path - resolve, where,
+    // get()->listAgents - gets the server-log dedup.
     function build(config: InstallSourceConfig): InstallSource {
         const source = buildSourceFn(config);
         return {
@@ -190,8 +190,8 @@ export function createInstallSourceRegistry(
 
     // Sources eligible for the implicit resolution walk, in priority order.
     // `excludePathSources` is a runtime-only filter (hosts without a usable
-    // local filesystem) that narrows what gets probed here; it deliberately
-    // does NOT touch `entries`, `list()`, or `persist()`, so the persisted and
+    // local filesystem) that narrows what gets probed here; it does
+    // not touch `entries`, `list()`, or `persist()`, so the persisted and
     // displayed source list keeps every source.
     function resolutionSources(): InstallSource[] {
         const all = Array.from(entries.values());
@@ -202,7 +202,7 @@ export function createInstallSourceRegistry(
     }
 
     // The host-rendered one-line summary the core shows for `@package source list`. This
-    // is where the kind taxonomy is interpreted (the core never sees it).
+    // is where the kind is interpreted (the core never sees it).
     function describe(config: InstallSourceConfig): string {
         switch (config.kind) {
             case "feed":
@@ -254,7 +254,7 @@ export function createInstallSourceRegistry(
             return entry.source.materialize(candidate);
         }
         // Probe the sources sequentially in resolution (map iteration) order;
-        // first match wins , so a later source is never probed once an
+        // first match wins, so a later source is never probed once an
         // earlier one matches.
         const ordered = resolutionSources();
         for (const source of ordered) {
@@ -339,8 +339,7 @@ export function createInstallSourceRegistry(
             return limiter(async () => {
                 const entry = entries.get(record.source);
                 if (entry === undefined) {
-                    // Friendly, actionable message: the recorded source was
-                    // removed since install.
+                    // The recorded source was removed since install.
                     throw new Error(
                         `Source '${record.source}' for agent '${record.name}' is no longer configured; ` +
                             `re-add it with '@package source add' to update, or '@package uninstall ${record.name}'.`,
@@ -354,10 +353,10 @@ export function createInstallSourceRegistry(
                 onStatus?.(
                     `Re-resolving '${record.name}' from source '${record.source}'...`,
                 );
-                // The source speaks only ResolvedCandidate. Recover the
+                // The source only sees ResolvedCandidate. Recover the
                 // candidate this source produced at install time from the
                 // record's fields, dropping the persistence-only `name`/`kind`
-                // so they never leak into a source.
+                // so they never reach the source.
                 const prior: ResolvedCandidate = { source: record.source };
                 if (record.module !== undefined) {
                     prior.module = record.module;
@@ -383,9 +382,9 @@ export function createInstallSourceRegistry(
                 }
                 // The source's `materialize` persists its own re-resolution
                 // handle (feed: spec; catalog: key; path: path), so the
-                // re-materialized record is already self-sufficient for the next
-                // update - no host-side carry needed. It builds a fresh
-                // version-scoped root labeled by the package name.
+                // re-materialized record is ready for the next update - the host
+                // does not need to carry anything. It builds a fresh
+                // version-scoped root named by the package name.
                 return entry.source.materialize(candidate);
             });
         },

@@ -86,7 +86,7 @@ export interface AppAgentHost {
      * (`provider.getAppAgentNames().length === 1`). Resolves when APPLIED — may
      * be deferred until the session is idle.
      *
-     * `notify`: when true, the dispatcher surfaces a system message
+     * `notify`: when true, the dispatcher shows a system message
      * naming the agent and its resulting state. Because every op — including the
      * issuing session's — now applies asynchronously through the idle-gated
      * queue (the inline path was removed), the issuing session is notified
@@ -101,7 +101,7 @@ export interface AppAgentHost {
      * the name(s) via `getAppAgentNames()` and calls the name-based
      * `removeAgent` per name. Resolves when APPLIED.
      *
-     * `notify`: when true, the dispatcher surfaces a system message
+     * `notify`: when true, the dispatcher shows a system message
      * that the agent was uninstalled/updated. As with {@link addProvider}, the
      * issuing session is notified like a sibling now that every op applies
      * through the idle-gated queue.

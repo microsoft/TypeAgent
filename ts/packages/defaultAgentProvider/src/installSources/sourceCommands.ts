@@ -147,7 +147,7 @@ class SourceWhereCommandHandler implements CommandHandler {
     ) {
         const { registry } = this.deps;
         const { ref } = params.args;
-        // Surface non-fatal source degrade warnings (e.g. a corrupt catalog
+        // Show non-fatal source warnings (e.g. a corrupt catalog
         // skipped during the walk) once, for this dry-run command. The status
         // callback reports which source is being probed as the sequential walk
         // advances.

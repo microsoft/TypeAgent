@@ -253,19 +253,6 @@ export type DefaultAppAgentSourceOptions = InstallSourcesResolveOptions & {
 const DEFAULT_QUIESCE_TIMEOUT_MS = 15_000;
 
 /**
- * Build the registry-backed {@link AppAgentSource} for the default host. It
- * owns the `agents.json` record store + the source registry and:
- *
- * - vends **one single-agent provider per installed record** (shared instances,
- *   refcounted) at `connect()`, plus the host-owned `@package` app agent
- * bound to that session's {@link AppAgentHost};
- * - implements install/uninstall/update by mutating the record store and, in
- *   Phase 1 (this milestone), registering/tearing down on the **issuing session
- *   only** — the handler reaches its own `AppAgentHost` off the package agent's
- *   `agentContext`. Cross-session fan-out over the client registry is added in
- *   Milestone 3.
- */
-/**
  * Build the registry-backed {@link AppAgentSource} for the default host. Thin
  * wrapper over {@link createDefaultInstalledAgentSource} that
  * **strips the test-only `testApi`** via destructuring, returning a runtime
@@ -305,17 +292,16 @@ type DynamicAgentEntry =
       };
 
 /**
- * A source-coordinated teardown/swap barrier hardened with
- * the timeout/cancel/rollback envelope. Every target host runs
- * `replaceProvider`, tears down the shared old (`v1`) version, and fills its slot
- * via `quiesce`. Once every slot is filled AND verify-0 confirms the shared `v1`
- * refcount is 0, the source COMMITS — releasing the hosts to add `v2` (update) /
- * settle (uninstall). Any stall — a straggler that won't idle or a `v1` that
- * won't terminate — or an out-of-band abort resolves to ROLLBACK instead: `v1` is
- * restored in every
- * session and `v2` is discarded, as if the op never happened. The
- * outcome is decided BEFORE the hosts are released, so a host only ever adds one
- * version (`v2` on commit, `v1` on rollback) — never a second swap round.
+ * A source-coordinated teardown/swap barrier with a timeout/cancel/rollback
+ * envelope. Every target host runs `replaceProvider`, tears down the shared old
+ * (`v1`) version, and fills its slot via `quiesce`. Once every slot is filled and
+ * verify-0 confirms the shared `v1` refcount is 0, the source commits — releasing
+ * the hosts to add `v2` (update) / settle (uninstall). Any stall — a straggler
+ * that won't idle or a `v1` that won't terminate — or an out-of-band abort
+ * resolves to rollback instead: `v1` is restored in every session and `v2` is
+ * discarded, as if the op never happened. The outcome is decided before the
+ * hosts are released, so a host only ever adds one version (`v2` on commit, `v1`
+ * on rollback) — never a second swap round.
  */
 type ReplaceOutcome = "committed" | "rolledback";
 
@@ -354,7 +340,7 @@ type ReplaceBarrier = {
     // Run once when the outcome is decided (the superseded old version is already
     // fully unloaded — verify-0 passed before commit — and a rollback's discarded
     // `v2` was never added): prune the superseded install root (commit: `v1`;
-    // rollback: `v2`) per the Milestone 1 GC rules.
+    // rollback: `v2`).
     readonly finalizeGc: (outcome: ReplaceOutcome) => void;
     // Report the terminal outcome to the issuing conversation.
     readonly onOutcome: ((status: UpdateOutcomeStatus) => void) | undefined;
@@ -434,7 +420,7 @@ export function createDefaultInstalledAgentSource(
         return getBundledAgentNames().has(name);
     }
 
-    // Per-name lifecycle tracker: the source of truth for the
+    // Per-name lifecycle tracker: the current state of the
     // dynamic agent set. A name is `active` (vended) or `removing` (draining).
     const entries = new Map<string, DynamicAgentEntry>();
 
@@ -634,7 +620,7 @@ export function createDefaultInstalledAgentSource(
         // install (`v2` commit / `v1` rollback / nothing on a committed
         // uninstall), so late joiner and participants converge on one version.
         barrier.resolveDecided(decideAdd(barrier));
-        // Surface the terminal status to the issuing conversation:
+        // Report the final status to the issuing conversation:
         // a commit is `updated`; a rollback is `reverted` (the quiesce timeout
         // abandoned a straggler and restored `v1`).
         const status: UpdateOutcomeStatus =
@@ -872,7 +858,7 @@ export function createDefaultInstalledAgentSource(
                 // resolve + materialize is serialized by the registry's limiter.
                 // After it returns, we re-take the same shared
                 // limiter to write the record (sequential, not nested). Collect
-                // any non-fatal source degrade warnings raised during resolve.
+                // any non-fatal source warnings raised during resolve.
                 const warningSet = new Set<string>();
                 const resolved = await registry.resolve(
                     ref,
@@ -1016,7 +1002,7 @@ export function createDefaultInstalledAgentSource(
                                 }
                             }
                         },
-                        // Surface the terminal async status: a
+                        // Report the final status: a
                         // committed uninstall is `uninstalled`; a straggler-timeout
                         // rollback is `reverted` (the agent stays installed), so the
                         // issuing conversation is never left believing a reverted
@@ -1065,8 +1051,8 @@ export function createDefaultInstalledAgentSource(
                     throw new Error(`Agent '${name}' not found`);
                 }
                 // Re-resolve + materialize against the recorded source. The
-                // source that produced the record owns the whole re-resolution
-                // policy (which handle to read, how `range` applies, and
+                // source that produced the record handles the whole re-resolution
+                // (which handle to read, how `range` applies, and
                 // corrupt-record validation) via InstallSource.reresolve; the
                 // registry runs it + materialize under the shared limiter and
                 // preserves the re-resolution handle so a later update still
@@ -1215,7 +1201,7 @@ export function createDefaultInstalledAgentSource(
                 } else {
                     // No live old version to tear down: commit v2 directly (write
                     // the record + add to every session); there is no barrier
-                    // (nothing to coordinate), so surface the terminal status
+                    // (nothing to coordinate), so report the final status
                     // directly.
                     writeInstalledRecord();
                     entries.set(name, {

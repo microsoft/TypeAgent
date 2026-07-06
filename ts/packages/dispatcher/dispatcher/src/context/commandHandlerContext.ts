@@ -767,7 +767,7 @@ export function reconcileKnownAgents(context: CommandHandlerContext): void {
  * The {@link AppAgentHost.addProvider} body: register
  * the provider (deriving its enabled state from session config with the manifest
  * default as fallback, via {@link installAppProvider}), record it in the known
- * set, and — on a sibling fan-out (`notify`) — surface a system message naming
+ * set, and — on a sibling fan-out (`notify`) — show a system message naming
  * the agent and its resulting state. Runs through the idle-gated applicator.
  */
 async function hostAddProvider(
@@ -780,7 +780,7 @@ async function hostAddProvider(
     // Record the newly-added agent(s) so a later load reconciles accurately.
     addKnownAgents(context, provider.getAppAgentNames());
 
-    // Sibling fan-out notification: surface a system message naming
+    // Sibling fan-out notification: show a system message naming
     // the agent and its resulting (config/manifest-derived) state.
     if (notify) {
         const name = provider.getAppAgentNames()[0];

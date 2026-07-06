@@ -33,11 +33,11 @@ export function createCatalogSource(
 
     // Catalog problems (a corrupt/unreadable file, a malformed entry) degrade
     // to "no agents" / a dropped entry so the ordered resolve walk continues.
-    // The source just *reports* each problem (debug trace + the caller's
-    // per-command `onWarn` sink, when supplied) every time it is hit; it holds
-    // no dedup state of its own. Deciding how often to surface a repeat - once
-    // per command vs. once per process for the server log - is the caller's
-    // policy (the registry adds process-lifetime console dedup).
+    // The source reports each problem (debug trace + the caller's
+    // per-command `onWarn` callback, when supplied) every time it is hit; it holds
+    // no dedup state of its own. How often to show a repeat - once
+    // per command vs. once per process for the server log - is up to the caller
+    // (the registry adds process-lifetime console dedup).
     function warn(message: string, onWarn?: SourceWarning): void {
         debug(message);
         onWarn?.(message);
@@ -60,10 +60,10 @@ export function createCatalogSource(
 
     // Resolve a catalog entry to its single resolution handle - a `path`
     // (relative paths resolve against the catalog dir) or a package `name`
-    // (-> module). A matched entry must carry exactly one ; an entry
+    // (-> module). A matched entry must carry exactly one handle; an entry
     // with neither is a catalog authoring mistake. Rather than throw (which
     // would break the whole resolve walk) it is warned and dropped, i.e.
-    // treated as a non-match - the same degrade philosophy as a corrupt file.
+    // treated as a non-match - handled the same way as a corrupt file.
     // Returns undefined for a dropped entry.
     function entryHandle(
         ref: string,

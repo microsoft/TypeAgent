@@ -29,7 +29,7 @@ export class FeedAuthError extends Error {
 type CachedToken = { token: string; expiresAt: number };
 let cachedToken: CachedToken | undefined;
 
-// Injection seam for tests: an optional command runner returning the raw JSON
+// Test hook: an optional command runner returning the raw JSON
 // output of `az account get-access-token`.
 export type AzTokenRunner = () => Promise<string>;
 

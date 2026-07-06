@@ -37,25 +37,24 @@ import {
 const AGENT_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
 /**
- * The record-store / registry surface the `@package` handlers use, supplied by
- * the host's `AppAgentSource`. All `agents.json` access, source
- * resolution, AND the cross-session fan-out live behind this so the
- * handlers never touch the dispatcher's internals. Each mutating op takes the
- * `issuingHost` (the session that ran the command, reached off the package
- * agent's own `agentContext`) so the source can register/tear down the agent in
- * the issuing session (awaited) while fanning out to siblings best-effort
- * as a follow-up.
+ * The record-store / registry API the `@package` handlers use, supplied by
+ * the host's `AppAgentSource`. All `agents.json` access, source resolution, and
+ * the cross-session fan-out live behind this, so the handlers never touch the
+ * dispatcher's internals. Each mutating op takes the `issuingHost` (the session
+ * that ran the command, reached off the package agent's own `agentContext`) so
+ * the source can register/tear down the agent in the issuing session (awaited)
+ * while fanning out to the other sessions best-effort as a follow-up.
  */
 export interface InstalledAgentSourceApi {
     // Resolve + materialize + write a record, then fan out `addProvider` to
-    // every connected session. Resolve/materialize errors
-    // surface synchronously (the record commit is the fail-fast boundary); the
-    // apply then lands asynchronously on every session — INCLUDING the issuing
+    // every connected session. Resolve/materialize errors are thrown
+    // synchronously (the record commit is where it fails fast); the
+    // apply then lands asynchronously on every session — including the issuing
     // one — through its idle-gated applicator, each notified with a system
     // message. Each session derives the agent's enabled state from its own
     // config with the manifest default as fallback. Returns which
-    // source won + any warnings once the record is committed. `onStatus`, when
-    // supplied, is called as each source is probed during the sequential
+    // source matched plus any warnings once the record is committed. `onStatus`,
+    // when supplied, is called as each source is probed during the sequential
     // resolution walk so the caller can show a live status line.
     install(
         name: string,
@@ -67,8 +66,8 @@ export interface InstalledAgentSourceApi {
     // Drop the record (commit), then fan out `removeProvider` to every session —
     // including the issuing one — through its idle-gated applicator, each
     // notified. The teardown is coordinated by the same
-    // barrier as `update`, so a straggler that won't idle ROLLS BACK (the agent
-    // stays installed); `onOutcome` surfaces that terminal async
+    // barrier as `update`, so a straggler that won't idle rolls back (the agent
+    // stays installed); `onOutcome` reports that final
     // status (uninstalled / reverted). Returns as soon as the teardown starts;
     // the unload lands at each session's next idle.
     uninstall(
@@ -76,18 +75,17 @@ export interface InstalledAgentSourceApi {
         issuingHost: AppAgentHost,
         onOutcome?: (status: UninstallOutcomeStatus) => void,
     ): Promise<void>;
-    // Re-materialize against the recorded source (fail-fast on error), write the
-    // record (commit), then start a coordinated, time-bounded swap
-    // (global no-coexistence): the old version is removed across
-    // EVERY session before the new one is added to ANY, all under one held command
-    // lock per session, so two versions of the name are never loaded at once
-    // (required because an agent's persisted storage is keyed by agent name and
-    // cannot be shared between versions). The whole swap is enqueued on every
-    // session's idle-gated applicator — including the issuing one  — so this
-    // returns as soon as the record is committed ("update started"); the swap
-    // settles asynchronously and rolls back to v1 on timeout/failed-start.
-    // `onOutcome`: the terminal async status
-    // (updated / reverted) once the swap settles.
+    // Re-materialize against the recorded source (fails fast on error), write the
+    // record (commit), then start a coordinated, time-bounded swap: the old
+    // version is removed across every session before the new one is added to any,
+    // all under one held command lock per session, so two versions of the name
+    // are never loaded at once (required because an agent's persisted storage is
+    // keyed by agent name and cannot be shared between versions). The whole swap
+    // is enqueued on every session's idle-gated applicator — including the
+    // issuing one — so this returns as soon as the record is committed ("update
+    // started"); the swap settles asynchronously and rolls back to v1 on
+    // timeout/failed-start. `onOutcome`: the final status (updated / reverted)
+    // once the swap settles.
     update(
         name: string,
         range: string | undefined,
@@ -105,11 +103,11 @@ export interface InstalledAgentSourceApi {
 }
 
 /**
- * The host-owned `agentContext` of the `@package` app agent. It is
- * NOT the dispatcher's `CommandHandlerContext`: the only dispatcher capability
- * it exposes is the narrow {@link AppAgentHost} (to register/tear down agents in
+ * The host-owned `agentContext` of the `@package` app agent. It is not the
+ * dispatcher's `CommandHandlerContext`: the only dispatcher capability it
+ * exposes is the narrow {@link AppAgentHost} (to register/tear down agents in
  * the issuing session), plus the host's own {@link InstalledAgentSourceApi}
- * closures. So a handler can never cast its way back to dispatcher internals.
+ * closures. So a handler can never reach back into dispatcher internals.
  */
 export interface PackageAgentContext {
     readonly appAgentHost: AppAgentHost;
@@ -216,7 +214,7 @@ class InstallCommandHandler implements CommandHandler {
         const { name, ref } = args;
         const sourceName = flags.source ?? undefined;
 
-        // Name validation runs BEFORE materialize so a bad name fails fast
+        // Name validation runs before materialize so a bad name fails fast
         // without touching disk or the feed. Name uniqueness
         // is enforced at the record-store write.
         if (!AGENT_NAME_RE.test(name)) {
@@ -227,9 +225,9 @@ class InstallCommandHandler implements CommandHandler {
 
         displayStatus(`Resolving '${ref}'...`, context);
         // The source resolves + writes the record + fans out to every connected
-        // session. Resolve/materialize errors surface here
-        // (fail-fast on the record commit); the apply then lands asynchronously
-        // on every session — including THIS one — through its idle-gated
+        // session. Resolve/materialize errors are thrown here
+        // (it fails fast on the record commit); the apply then lands asynchronously
+        // on every session — including this one — through its idle-gated
         // applicator, each honoring the agent's manifest default.
         // The status callback reports which source is being probed as the
         // sequential resolution walk advances.
@@ -240,7 +238,7 @@ class InstallCommandHandler implements CommandHandler {
             appAgentHost,
             (message) => displayStatus(message, context),
         );
-        // Surface any non-fatal source degrade warnings once, for this command.
+        // Show any non-fatal source warnings once, for this command.
         for (const warning of warnings ?? []) {
             displayWarn(warning, context);
         }
@@ -291,9 +289,9 @@ class UninstallCommandHandler implements CommandHandler {
         const { appAgentHost, source } = context.sessionContext.agentContext;
         const name = params.args.name;
         // Start the coordinated teardown + fan out removeProvider to every
-        // session — including THIS one — through its idle-gated applicator, each
+        // session — including this one — through its idle-gated applicator, each
         // notified. This returns as soon as the teardown
-        // starts; the unload lands at each session's next idle, and the terminal
+        // starts; the unload lands at each session's next idle, and the final
         // outcome (uninstalled / reverted-on-timeout) arrives via `onOutcome`.
         await source.uninstall(name, appAgentHost, (outcome) => {
             displayStatus(
@@ -352,15 +350,15 @@ class UpdateCommandHandler implements CommandHandler {
 
         // The source materializes the new version first and only rewrites the
         // record after it succeeds, so a failed update is a no-op and that
-        // error surfaces here. It then STARTS a coordinated, time-bounded
-        // swap (global no-coexistence) that
-        // is enqueued on every session's idle-gated applicator — including THIS
-        // one  — so this returns as soon as the record is committed ("update
+        // error is thrown here. It then starts a coordinated, time-bounded
+        // swap (no two versions loaded at once) that
+        // is enqueued on every session's idle-gated applicator — including this
+        // one — so this returns as soon as the record is committed ("update
         // started"); the old version drains and the new one re-adds
-        // asynchronously (or rolls back to v1 on timeout), surfaced via the
+        // asynchronously (or rolls back to v1 on timeout), reported via the
         // `onOutcome` status callback + per-session fan-out notifications.
         await source.update(name, range, appAgentHost, (outcome) => {
-            // Async terminal status for the issuing conversation. The command
+            // Final status for the issuing conversation. The command
             // already returned "update started"; report the
             // settled outcome as a follow-up status line.
             const message =

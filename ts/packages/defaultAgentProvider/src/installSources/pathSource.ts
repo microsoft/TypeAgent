@@ -17,9 +17,9 @@ import {
 // `ref` is a filesystem path: absolute or (only when a baseDir is configured)
 // relative to that baseDir.
 export function createPathSource(config: PathSourceConfig): InstallSource {
-    // A relative ref needs a base directory to anchor it. There is deliberately
-    // no ambient default: this source may run in a different process (and CWD)
-    // than the host app that issued the command (e.g. the agent server), so
+    // A relative ref needs a base directory to anchor it. There is no implicit
+    // default: this source may run in a different process (and CWD) than the
+    // host app that issued the command (e.g. the agent server), so
     // resolving against the local process.cwd() would be silently wrong. An
     // explicit baseDir is the only anchor; without it, only absolute paths
     // resolve and a bare relative ref is a non-match. Source-add persists
