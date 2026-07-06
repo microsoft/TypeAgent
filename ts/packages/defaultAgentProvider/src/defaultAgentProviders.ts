@@ -836,7 +836,7 @@ export function createDefaultInstalledAgentSource(
     // host — INCLUDING the issuing one — enqueues the add on its own idle-gated
     // applicator and is notified with a system message; none is applied inline
     // under a held command lock. Each session derives the agent's enabled
-    // state from its own config with the manifest default as fallback (Model B).
+    // state from its own config with the manifest default as fallback.
     // A per-host throw is caught and logged, never failing the committed op.
     // Returns immediately; each add lands at that session's next idle.
     function fanOutAdd(
@@ -883,7 +883,8 @@ export function createDefaultInstalledAgentSource(
                 // The source assigns the authoritative dispatcher name. The
                 // source's `materialize` already persists its own re-resolution
                 // handle (feed: the spec; catalog: the key; path: the path), so
-                // `@update` can reconstruct the candidate later (                // Q13) - no host-side key backfill needed.
+                // `@package update` can reconstruct the candidate later - no
+                // host-side key backfill needed.
                 const record: InstalledAgentRecord = { ...resolved, name };
                 // Build the shared per-agent provider AND structurally validate
                 // its freshly-materialized manifest BEFORE persisting: a
@@ -1138,9 +1139,9 @@ export function createDefaultInstalledAgentSource(
                 // everywhere (verify-0 passed before commit) AND no other agent
                 // still references it (content-addressed roots are shared, so the
                 // prune is refcount-guarded). The new root differs
-                // whenever the version changed (roots are keyed `module@version`,
-                // .5); an update that resolves the same version is a
-                // no-op handled above and never reaches the barrier.
+                // whenever the version changed (roots are keyed
+                // `module@version`); an update that resolves the same version is
+                // a no-op handled above and never reaches the barrier.
                 const oldRoot = existing.installRoot;
                 const newRoot = record.installRoot;
                 if (oldEntry?.status === "active") {
@@ -1235,9 +1236,10 @@ export function createDefaultInstalledAgentSource(
             }
         },
         sourceCommands() {
-            // The host owns the entire `@source` surface (list/order/where/
-            // remove/add): the kind taxonomy, typed flags, validation, and any
-            // auth UI. The dispatcher core merges this table in as `@source`.
+            // The host owns the entire `@package source` surface (list/order/
+            // where/remove/add): the kind taxonomy, typed flags, validation, and
+            // any auth UI. The dispatcher core merges this table in under
+            // `@package` as `source`.
             return getSourceCommands({
                 registry,
                 recordsUsingSource: (sourceName: string) => {
@@ -1261,11 +1263,11 @@ export function createDefaultInstalledAgentSource(
                     (record) => entries.get(record.name)?.status !== "removing",
                 )
                 .map((record) => {
-                    const handle = record.ref ?? record.module ?? record.path;
+                    const ref = record.ref ?? record.module ?? record.path;
                     return {
                         name: record.name,
                         source: record.source,
-                        ...(handle !== undefined ? { handle } : {}),
+                        ...(ref !== undefined ? { ref } : {}),
                     };
                 });
         },

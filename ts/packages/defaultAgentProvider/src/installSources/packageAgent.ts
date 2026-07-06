@@ -100,7 +100,7 @@ export interface InstalledAgentSourceApi {
     listSources(): string[];
     // Enumerable agent refs across the configured sources (for `@package install`).
     listAvailable(): Promise<string[]>;
-    // The host-owned `@source` command table, nested under `@package source`.
+    // The host-owned source command table, nested under `@package source`.
     sourceCommands(): CommandHandlerTable;
 }
 
@@ -163,8 +163,8 @@ class ListInstalledCommandHandler implements CommandHandler {
             for (const record of groupRecords) {
                 text.push([
                     chalk.cyanBright(record.name),
-                    record.handle !== undefined
-                        ? chalk.gray(record.handle)
+                    record.ref !== undefined
+                        ? chalk.gray(record.ref)
                         : chalk.gray("—"),
                 ]);
             }
@@ -412,7 +412,7 @@ export const PACKAGE_AGENT_NAME = "package";
 
 /**
  * Build the full `@package` command table: install / uninstall /
- * update / list, plus the host's `@source` table nested under `source`.
+ * update / list, plus the host's source command table nested under `source`.
  */
 export function buildPackageCommandTable(
     sourceCommands: CommandHandlerTable,

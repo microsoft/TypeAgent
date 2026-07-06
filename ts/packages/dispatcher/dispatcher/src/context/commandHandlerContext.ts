@@ -153,14 +153,14 @@ export function ensureCommandResult(
 export type CommandHandlerContext = {
     readonly agents: AppAgentManager;
     readonly portRegistrar: IPortRegistrar;
-    // The per-dispatcher AppAgentHost applicator (3.1, ): an
+    // The per-dispatcher AppAgentHost applicator: an
     // idle-gated FIFO add/remove surface connected AppAgentSources use to mutate
-    // this session's live agent set. In M2 this instance is placed into the
-    // host-owned `@package` agent's own agentContext (3.4).
+    // this session's live agent set. This instance is placed into the
+    // host-owned `@package` agent's own agentContext.
     appAgentHost: AppAgentHostApplicator;
     // Live connections to the injected AppAgentSources. Disposed at context
     // teardown, which deregisters this host from each source's registry without
-    // tearing down the shared provider instances (6).
+    // tearing down the shared provider instances.
     readonly appAgentConnections: AppAgentConnection[];
     session: Session;
 
@@ -318,7 +318,7 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     // Dynamic (installed) agent sources. Each is connected once per dispatcher
     // at context init; `connect()` vends the provider(s) to register and a
     // teardown handle, and lets the source fan out live install/uninstall to
-    // this session (3.2).
+    // this session.
     appAgentSources?: AppAgentSource[];
     persistDir?: string | undefined; // the directory to save state.
     instanceDir?: string | undefined; // global instance directory for cross-session agent storage (config, auth tokens, user preferences). When omitted, falls back to persistDir.
@@ -609,7 +609,7 @@ export async function installAppProvider(
 }
 
 /**
- * Whether an app agent is currently "on" in this session (5, Model B):
+ * Whether an app agent is currently "on" in this session:
  * either its command surface is enabled or any of its schemas is enabled. Used
  * to word the add/reconcile notification (enabled vs. disabled).
  */
@@ -637,7 +637,7 @@ function isAgentEnabled(context: CommandHandlerContext, name: string): boolean {
 }
 
 /**
- * Add agent names to this session's persisted known set (5, Model B) so
+ * Add agent names to this session's persisted known set so
  * a later load reconciles against an accurate baseline. No-op before the
  * baseline is established (reconciliation records it at load).
  */
@@ -657,8 +657,8 @@ function addKnownAgents(
 }
 
 /**
- * Remove agent names from this session's persisted known set (5,
- * Model B). No-op before the baseline is established.
+ * Remove agent names from this session's persisted known set. No-op before the
+ * baseline is established.
  */
 function removeKnownAgents(
     context: CommandHandlerContext,
@@ -674,7 +674,7 @@ function removeKnownAgents(
 
 /**
  * Drop the persisted enable preference for the given agent(s) from session
- * config (5, Model B, sub-decision): an explicit `@uninstall` clears the
+ * config: an explicit `@package uninstall` clears the
  * schema/action/command overrides so a fresh reinstall starts from the manifest
  * default. (Reconciliation-removal, by contrast, leaves the entry dormant.)
  * `schemaNames` must be captured BEFORE the provider is removed, since the
@@ -699,8 +699,8 @@ function dropAgentConfig(
 }
 
 /**
- * Emit the cross-session fan-out system message for a single add/remove
- * (5, Model B): name the agent and its resulting state so the change is
+ * Emit the cross-session fan-out system message for a single add/remove:
+ * name the agent and its resulting state so the change is
  * visible, not silent. Exported for unit testing of the wording/visibility.
  */
 export function emitAgentChangeNotification(
@@ -722,7 +722,7 @@ export function emitAgentChangeNotification(
 
 /**
  * Reconcile this session's persisted known agent set against what is actually
- * available now (5, Model B). Agents that appeared while the session was
+ * available now. Agents that appeared while the session was
  * offline are reported as added (adopting their manifest default); agents that
  * disappeared are reported as removed (their enable preference stays dormant in
  * config). The first time a session has no recorded baseline (brand-new session,
@@ -764,12 +764,11 @@ export function reconcileKnownAgents(context: CommandHandlerContext): void {
 }
 
 /**
- * The {@link AppAgentHost.addProvider} body (3.1, , Model B): register
+ * The {@link AppAgentHost.addProvider} body: register
  * the provider (deriving its enabled state from session config with the manifest
  * default as fallback, via {@link installAppProvider}), record it in the known
  * set, and — on a sibling fan-out (`notify`) — surface a system message naming
- * the agent and its resulting state. Runs through the idle-gated applicator
- * (7.1).
+ * the agent and its resulting state. Runs through the idle-gated applicator.
  */
 async function hostAddProvider(
     context: CommandHandlerContext,
@@ -778,11 +777,10 @@ async function hostAddProvider(
 ) {
     await installAppProvider(context, provider);
 
-    // Record the newly-added agent(s) so a later load reconciles accurately
-    // (5, Model B).
+    // Record the newly-added agent(s) so a later load reconciles accurately.
     addKnownAgents(context, provider.getAppAgentNames());
 
-    // Sibling fan-out notification (5): surface a system message naming
+    // Sibling fan-out notification: surface a system message naming
     // the agent and its resulting (config/manifest-derived) state.
     if (notify) {
         const name = provider.getAppAgentNames()[0];
@@ -796,15 +794,15 @@ async function hostAddProvider(
 }
 
 /**
- * The {@link AppAgentHost.removeProvider} body (3.1): tear down a
+ * The {@link AppAgentHost.removeProvider} body: tear down a
  * previously-added provider by identity via the {@link AppAgentManager}
  * removeProvider primitive, and forget it from the known set. Runs through the
- * idle-gated applicator (7.1). On a sibling fan-out (`notify`), surfaces
- * a system message (5).
+ * idle-gated applicator. On a sibling fan-out (`notify`), surfaces
+ * a system message.
  *
- * `dropConfig` (5, Model B): when true (explicit `@uninstall`), also
+ * `dropConfig`: when true (explicit `@package uninstall`), also
  * clears the agent's persisted enable preference so a fresh reinstall starts
- * from the manifest default. An `@update` passes `false` so the remove leg of
+ * from the manifest default. An `@package update` passes `false` so the remove leg of
  * its remove-then-add swap leaves the user's per-session preference intact
  * across a version bump.
  */
@@ -1052,7 +1050,7 @@ export async function initializeCommandHandlerContext(
 
         await initializeMemory(context, sessionDirPath);
 
-        // Build the per-dispatcher AppAgentHost applicator (3.1, ).
+        // Build the per-dispatcher AppAgentHost applicator.
         // Its apply closures reach the fully-built `context`.
         const hostApplyFns: AppAgentHostApplyFns = {
             applyAdd: (provider, notify) =>
@@ -1067,7 +1065,7 @@ export async function initializeCommandHandlerContext(
 
         await addAppAgentProviders(context, options?.appAgentProviders);
 
-        // Connect the injected dynamic agent sources (3.2, ). The
+        // Connect the injected dynamic agent sources. The
         // initial set comes from the vended `connection.providers` registered
         // through the normal path; subsequent add/remove deltas arrive via the
         // `AppAgentHost` fan-out.
@@ -1086,8 +1084,8 @@ export async function initializeCommandHandlerContext(
                 // strictly AFTER this section runs. That closes the
                 // connect-vs-drain race where a sibling drain could remove an
                 // agent on this session before its initial add had landed —
-                // leaking it here while it is gone everywhere else (5.7,
-                // ). Uses `installAppProvider` directly (not the
+                // leaking it here while it is gone everywhere else. Uses
+                // `installAppProvider` directly (not the
                 // add-known-agents path) so `reconcileKnownAgents` below still
                 // sees the true persisted-vs-available diff.
                 const { providers, whenReady } = connection;
@@ -1101,7 +1099,7 @@ export async function initializeCommandHandlerContext(
                     // register the decided version(s) inline. Because the load
                     // happens only after the decision, the session never loads a
                     // doomed version (verify-0 pollution) nor runs a command with
-                    // the upgrading agent absent (7.3). The wait is
+                    // the upgrading agent absent. The wait is
                     // bounded by the barrier's own quiesce-timeout envelope, and
                     // the barrier decides independently of this session's command
                     // lock, so holding it here cannot deadlock. Resolves to `[]`
@@ -1129,8 +1127,8 @@ export async function initializeCommandHandlerContext(
         }
         await setAppAgentStates(context);
 
-        // Reconcile this session's known agent set against what is now available
-        // (5, Model B): report agents that appeared/disappeared while it
+        // Reconcile this session's known agent set against what is now available:
+        // report agents that appeared/disappeared while it
         // was offline, and record the baseline for the next load.
         reconcileKnownAgents(context);
         debug("Context initialized");
@@ -1474,7 +1472,7 @@ export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
     // Stop accepting fan-out ops into this (closing) session: abandon queued
-    // add/remove and make any later fan-out a no-op (6, ).
+    // add/remove and make any later fan-out a no-op.
     context.appAgentHost.dispose();
     // Drain in-flight/queued entries before tearing down agents.
     try {
@@ -1487,11 +1485,11 @@ export async function closeCommandHandlerContext(
     // Tear down every loaded agent, including those vended by the dynamic
     // sources: `close()` unloads each agent instance from its provider and drops
     // its session context. The shared provider instances themselves are NOT torn
-    // down — other sessions still hold them (6).
+    // down — other sessions still hold them.
     await context.agents.close();
     // Only after this session's agent instances are unloaded do we disconnect
     // from the dynamic sources: deregister this host from each source's client
-    // registry so any in-flight barrier stops waiting on it (6).
+    // registry so any in-flight barrier stops waiting on it.
     for (const connection of context.appAgentConnections) {
         try {
             connection.dispose();
@@ -1520,8 +1518,8 @@ export async function setSessionOnCommandHandlerContext(
         context.logger,
     );
     await setAppAgentStates(context);
-    // Reconcile the newly-activated session's known agent set (5,
-    // Model B): switching to a session that was created/last-saved against a
+    // Reconcile the newly-activated session's known agent set:
+    // switching to a session that was created/last-saved against a
     // different available set reports the delta and re-baselines.
     reconcileKnownAgents(context);
     context.translatorCache.clear();

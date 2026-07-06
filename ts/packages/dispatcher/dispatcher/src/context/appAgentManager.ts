@@ -184,7 +184,7 @@ export class AppAgentManager implements ActionConfigProvider {
     // installed agents these are identical across dispatchers, so every
     // `connect()` rebuilds the same artifacts. Share them across dispatchers
     // (build once per agent version, reference from each manager) to avoid the
-    // redundant rebuild on connect and on `@update`.
+    // redundant rebuild on connect and on `@package update`.
     private readonly agents = new Map<string, AppAgentRecord>();
     private readonly actionConfigs = new Map<string, ActionConfig>();
     private readonly loadingSchemas = new Set<string>();
@@ -1164,7 +1164,7 @@ export class AppAgentManager implements ActionConfigProvider {
     }
 
     /**
-     * Remove a whole provider by identity (3.1, ): derive the
+     * Remove a whole provider by identity: derive the
      * provider's agent name(s) via {@link AppAgentProvider.getAppAgentNames} and
      * tear each one down through the existing name-based {@link removeAgent}
      * (schemas, grammars, embeddings, and any live `SessionContext` are dropped

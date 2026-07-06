@@ -31,13 +31,13 @@ type QueuedOp = {
  */
 export type AppAgentHostApplyFns = {
     // Register a provider's single agent; its enabled state is derived from
-    // session config with the manifest default as fallback (5, Model B).
-    // `notify` requests a sibling-fan-out system message (5).
+    // session config, falling back to the agent's manifest default.
+    // `notify` requests a sibling fan-out system message.
     applyAdd: (provider: AppAgentProvider, notify: boolean) => Promise<void>;
     // Unload a previously-added provider by identity. `notify` requests a
-    // sibling-fan-out system message (5). `dropConfig` clears the
+    // sibling fan-out system message. `dropConfig` clears the
     // agent's persisted enable preference (true for uninstall, false for the
-    // remove leg of an update; 5, Model B).
+    // remove leg of an update, which preserves it across a version bump).
     applyRemove: (
         provider: AppAgentProvider,
         notify: boolean,
@@ -46,18 +46,18 @@ export type AppAgentHostApplyFns = {
 };
 
 /**
- * The dispatcher-side {@link AppAgentHost} implementation (3.1, ):
- * an idle-gated FIFO applicator. Each `addProvider` / `removeProvider` is
+ * The dispatcher-side {@link AppAgentHost} implementation: an idle-gated FIFO
+ * applicator. Each `addProvider` / `removeProvider` is
  * enqueued and applied at the session's next idle (gated through the session's
  * command lock, so it runs between user commands and never interleaves with an
  * in-flight command), in FIFO order (so an update's remove-then-add lands in
  * order). The returned Promise resolves when the op is **applied** — the ack the
- * source's lifecycle tracker waits on (7.2).
+ * source's lifecycle tracker waits on.
  *
  * On {@link dispose}, queued ops (including one waiting on the command lock) are
  * abandoned and their acks resolved (auto-ack: a gone session has removed
  * everything), and any later op is a no-op — so a fan-out that lands after close
- * cannot touch a torn-down session (6).
+ * cannot touch a torn-down session.
  */
 export class AppAgentHostApplicator implements AppAgentHost {
     private closed = false;
@@ -70,7 +70,7 @@ export class AppAgentHostApplicator implements AppAgentHost {
 
     constructor(
         // The session's single-slot command lock; gating each op on it defers
-        // application until the session is idle (7.1).
+        // application until the session is idle.
         private readonly commandLock: Limiter,
         private readonly apply: AppAgentHostApplyFns,
     ) {}
@@ -79,10 +79,10 @@ export class AppAgentHostApplicator implements AppAgentHost {
         provider: AppAgentProvider,
         notify: boolean = false,
     ): Promise<void> {
-        // Assert the single-agent invariant at the add boundary (3.1,
-        //  Option A vs B): source-vended providers are single-agent, so a
-        // facade regression fails loudly rather than desyncing the source's
-        // per-name lifecycle tracker.
+        // Assert the single-agent invariant at the add boundary:
+        // source-vended providers are single-agent, so a facade regression
+        // fails loudly rather than desyncing the source's per-name lifecycle
+        // tracker.
         const names = provider.getAppAgentNames();
         if (names.length !== 1) {
             return Promise.reject(
@@ -109,8 +109,8 @@ export class AppAgentHostApplicator implements AppAgentHost {
         newProviderThunk: (() => AppAgentProvider | undefined) | undefined,
         options: ReplaceProviderOptions,
     ): Promise<void> {
-        // Assert the single-agent invariant on the old provider at the boundary
-        // (3.1); the new provider is asserted below when it is built.
+        // Assert the single-agent invariant on the old provider at the boundary;
+        // the new provider is asserted below when it is built.
         const oldNames = oldProvider.getAppAgentNames();
         if (oldNames.length !== 1) {
             return Promise.reject(
@@ -120,16 +120,16 @@ export class AppAgentHostApplicator implements AppAgentHost {
             );
         }
         const notify = options.notify ?? false;
-        // Default to preserving the enable preference (Model B): a bare
+        // Default to preserving the enable preference: a bare
         // `replaceProvider` is a swap, not a removal, so unlike `removeProvider`
         // (which defaults dropConfig=true for uninstall) it keeps config by
         // default. The barrier always passes `dropConfig` explicitly regardless.
         const dropConfig = options.dropConfig ?? false;
         // The whole teardown → quiesce → wait → (add) sequence is ONE queued op,
         // so `pump` holds the session's command lock across all of it: no user
-        // command interleaves between the remove and the add (5.7,
-        // closes the update request-slip of ). Teardown/startup are leaf ops —
-        // they never reacquire the command lock or dispatch a command.
+        // command interleaves between the remove and the add. Teardown/startup
+        // are leaf ops — they never reacquire the command lock or dispatch a
+        // command.
         const run = async () => {
             // 1. Teardown leg: unload `old` + drop routing (decrement the shared
             //    refcount), exactly like a remove.
@@ -140,16 +140,16 @@ export class AppAgentHostApplicator implements AppAgentHost {
             //    host's quiesce ACK and has verified the shared old refcount is 0.
             await options.whenReady;
             // The session may have been torn down while parked (dispose leaves a
-            // running op to finish, ): skip the startup leg rather than add the
+            // running op to finish): skip the startup leg rather than add the
             // new version into a closing session. The source already dropped this
             // host from the barrier on disconnect, so this is a clean no-op.
             if (this.closed) {
                 return;
             }
             // 4. Startup leg: call the thunk AFTER the barrier releases and add
-            //    whatever it returns. The source decides post-barrier (design
-            //    ): the NEW version on a committed update, the OLD version on
-            //    a cancelled/timed-out update that ROLLS BACK (v1 restored), or
+            //    whatever it returns. The source decides post-barrier: the NEW
+            //    version on a committed update, the OLD version on a
+            //    cancelled/timed-out update that ROLLS BACK (v1 restored), or
             //    `undefined` (no add) on a committed uninstall (`old → ∅`).
             if (newProviderThunk !== undefined) {
                 const newProvider = newProviderThunk();
@@ -177,7 +177,7 @@ export class AppAgentHostApplicator implements AppAgentHost {
         run: () => Promise<void>,
     ): Promise<void> {
         if (this.closed) {
-            // Late op (fan-out that lands after dispose): no-op (6).
+            // Late op (fan-out that lands after dispose): no-op.
             debug(`Skipping ${kind} on closed host`);
             return Promise.resolve();
         }
@@ -257,10 +257,10 @@ export class AppAgentHostApplicator implements AppAgentHost {
     }
 
     /**
-     * Abandon queued ops and auto-ack them (7.1). An op already running
+     * Abandon queued ops and auto-ack them. An op already running
      * `run()` is left to finish; every not-yet-started op (queued, or waiting on
      * the command lock) is auto-acked. Idempotent. After this,
-     * {@link addProvider}/{@link removeProvider} are no-ops (6).
+     * {@link addProvider}/{@link removeProvider} are no-ops.
      */
     public dispose(): void {
         if (this.closed) {

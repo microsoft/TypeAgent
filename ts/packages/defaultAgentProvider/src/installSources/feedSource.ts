@@ -71,7 +71,7 @@ export function isConcreteVersion(version: string): boolean {
     return semver.valid(version) !== null;
 }
 
-// A user-supplied `@update <range>`: either a real semver range (which may
+// A user-supplied `@package update <range>`: either a real semver range (which may
 // legitimately contain spaces, `||`, `>`, `<`, `-`) or an npm dist-tag. Anything
 // else is rejected early (defense in depth) rather than flowing toward npm; a
 // naive metacharacter blocklist would wrongly reject valid `||` OR-ranges, so we
@@ -285,7 +285,7 @@ async function fetchPackument(
 }
 
 // Resolve the version part of an npm specifier against a package's packument to
-// a single concrete published version. Handles the three request
+// a single concrete published version. Handles the four request
 // shapes npm accepts: no version (the `latest` dist-tag), a dist-tag, an exact
 // version, and a semver range (highest satisfying published version). Returns
 // undefined when it cannot be pinned (no packument, unknown tag, unsatisfiable
@@ -361,7 +361,7 @@ export function createFeedSource(
     const now = deps.now ?? Date.now;
     const cacheTtlMs = deps.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
     // Sanitize the source name before embedding it in a filename so a stray
-    // path separator in config can't escape installDir (review M1-2).
+    // path separator in config can't escape installDir.
     const safeName = config.name.replace(/[^A-Za-z0-9._-]/g, "_");
     const cacheFilePath =
         deps.cacheFilePath ??
@@ -484,7 +484,7 @@ export function createFeedSource(
             }
             // Validate the user-supplied range against the real semver-range
             // grammar (or an npm dist-tag) before it is ever embedded in a spec
-            // (hardening; defense in depth against `@update <range>`
+            // (hardening; defense in depth against `@package update <range>`
             // shell injection on Windows).
             if (opts?.range !== undefined && !isSafeVersionRange(opts.range)) {
                 throw new Error(
@@ -572,7 +572,7 @@ export function createFeedSource(
 
             // FAST PATH: a completed install already sits at the
             // content-addressed root -> reuse it with no npm install at all
-            // (dedup / same-version no-op, .5).
+            // (dedup / same-version no-op).
             if (fs.existsSync(installedPkgJsonUnder(finalRoot))) {
                 return buildRecord();
             }

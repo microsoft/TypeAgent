@@ -19,12 +19,13 @@ import { createLimiter, Limiter } from "@typeagent/common-utils";
 /**
  * The host's install-source registry. Owns source listing, ordering,
  * configuration, ordered resolution, and the typed `add(config)`
- * used by seeding, tests, and the host's `@source` command handlers. This is
- * entirely host-internal - the dispatcher core has no registry interface; it
- * receives the `@source` command table via `InstalledAgentSourceApi.sourceCommands()`.
+ * used by seeding, tests, and the host's `@package source` command handlers.
+ * This is entirely host-internal - the dispatcher core has no registry
+ * interface; it receives the `@package source` command table via
+ * `InstalledAgentSourceApi.sourceCommands()`.
  */
 export interface DefaultInstallSourceRegistry {
-    // Host-rendered summaries for `@source list`.
+    // Host-rendered summaries for `@package source list`.
     list(): InstallSourceInfo[];
     get(name: string): InstallSource | undefined;
     // Reprioritize the single source list (which is the resolution priority
@@ -47,7 +48,7 @@ export interface DefaultInstallSourceRegistry {
         onStatus?: SourceStatus,
     ): Promise<MaterializedInstallRecord>;
     // Re-resolve + re-materialize a previously-installed record against its
-    // recorded source, for `@update`. The source that
+    // recorded source, for `@package update`. The source that
     // produced the record owns the whole policy (which handle to read, how a
     // version `range` applies, corrupt-record validation) via
     // {@link InstallSource.reresolve}; the registry just runs it + materialize
@@ -74,11 +75,11 @@ export interface DefaultInstallSourceRegistry {
 export interface RegistryDeps {
     // Shared npm root all feed sources install into.
     installDir: string;
-    // Shared serialize-to-one limiter; the installer (M2) reuses it so the
+    // Shared serialize-to-one limiter; the installer reuses it so the
     // record write joins the same serialization domain.
     // Defaults to a fresh createLimiter(1) when omitted.
     limiter?: Limiter;
-    // Persist the ordered source list to instance config (wired in M2.5 / M3).
+    // Persist the ordered source list to instance config.
     // Called after add/remove/setOrder.
     persist?: (configs: InstallSourceConfig[]) => void;
     // Runtime-only resolution filter for hosts without a usable local
@@ -132,7 +133,7 @@ export function createInstallSourceRegistry(
     // Process-lifetime background sink: a source degrade (corrupt catalog,
     // dropped entry) is surfaced to the server log at most once per distinct
     // message, regardless of which read path hit it (resolve, where,
-    // listAvailable, seeding) or whether a command supplied its own sink. The
+    // listAgents, seeding) or whether a command supplied its own sink. The
     // sources themselves hold NO dedup state - they just report every problem
     // via `onWarn`; this is the single place the "once per process" policy for
     // the console lives. A caller's per-command sink composes on top (below),
@@ -150,7 +151,7 @@ export function createInstallSourceRegistry(
     }
     // Wrap a built source so every find/listAgents call routes its warnings
     // through the composed background+caller sink. Wrapping at this single build
-    // choke point means every access path - resolve, where, get()->listAvailable
+    // choke point means every access path - resolve, where, get()->listAgents
     // - gets the server-log dedup for free.
     function build(config: InstallSourceConfig): InstallSource {
         const source = buildSourceFn(config);
@@ -200,7 +201,7 @@ export function createInstallSourceRegistry(
         return eligible.map((e) => e.source);
     }
 
-    // The host-rendered one-line summary the core shows for `@source list`. This
+    // The host-rendered one-line summary the core shows for `@package source list`. This
     // is where the kind taxonomy is interpreted (the core never sees it).
     function describe(config: InstallSourceConfig): string {
         switch (config.kind) {
@@ -247,7 +248,7 @@ export function createInstallSourceRegistry(
             onStatus?.(`Resolving '${ref}' from source '${sourceName}'...`);
             const candidate = await entry.source.find(ref, onWarn);
             if (candidate === undefined) {
-                // Explicit --source non-match is a hard error .
+                // Explicit --source non-match is a hard error.
                 throw new Error(`'${ref}' not found in source '${sourceName}'`);
             }
             return entry.source.materialize(candidate);
@@ -319,7 +320,7 @@ export function createInstallSourceRegistry(
             onStatus?: SourceStatus,
         ): Promise<MaterializedInstallRecord> {
             // The whole install op (resolve -> materialize) runs under the
-            // shared limiter. The installer (M2) reuses the
+            // shared limiter. The installer reuses the
             // same limiter for the record write.
             return limiter(() =>
                 resolveUnlocked(ref, sourceName, onWarn, onStatus),
@@ -342,7 +343,7 @@ export function createInstallSourceRegistry(
                     // removed since install.
                     throw new Error(
                         `Source '${record.source}' for agent '${record.name}' is no longer configured; ` +
-                            `re-add it with '@source add' to update, or '@uninstall ${record.name}'.`,
+                            `re-add it with '@package source add' to update, or '@package uninstall ${record.name}'.`,
                     );
                 }
                 if (entry.source.reresolve === undefined) {

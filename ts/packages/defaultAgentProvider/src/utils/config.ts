@@ -28,7 +28,7 @@ export type InstanceConfig = {
         [key: string]: McpAppAgentConfig;
     };
     // Install sources + resolution order. Runtime edits via
-    // @source / @install land here; absent fields fall back to the shipped
+    // `@package source` / `@package install` edits land here; absent fields fall back to the shipped
     // seed defaults (see getResolvedInstallSources).
     installSources?: InstallSourcesConfig;
 };
@@ -160,7 +160,7 @@ export type InstallSourcesResolveOptions = {
 // ambient filesystem, and the seed is recomputed every launch until something
 // is persisted. So one instance dir launched from a dev checkout vs. a shipped
 // build (or two different checkouts) sees a different source list, and the
-// first `@source` edit then freezes the checkout-specific catalog path - which
+// first `@package source` edit then freezes the checkout-specific catalog path - which
 // goes stale in another context. Sharing an instance dir across dev/shipped
 // contexts is unsupported; pin sources explicitly for cross-context use.
 function getSeedInstallSources(): InstallSourceConfig[] {
@@ -178,9 +178,10 @@ function getSeedInstallSources(): InstallSourceConfig[] {
 }
 
 /**
- * Resolve the effective install sources in resolution priority order : the persisted instance overrides when present, otherwise the shipped
- * seed defaults. This returns the full configured list verbatim — it is what
- * seeds the registry and gets persisted back when `@source` edits the list, so
+ * Resolve the effective install sources in resolution priority order: the
+ * persisted instance overrides when present, otherwise the shipped seed
+ * defaults. This returns the full configured list verbatim — it is what seeds
+ * the registry and gets persisted back when `@package source` edits the list, so
  * it must never be narrowed here. Runtime-only filtering (e.g.
  * `excludePathSources` for hosts without a usable local filesystem) is applied
  * during the registry's resolution walk, never to this list, so it cannot leak

@@ -21,17 +21,17 @@ import chalk from "chalk";
 import { DefaultInstallSourceRegistry } from "./registry.js";
 import { getAddSourceCommandHandlers } from "./addSource.js";
 
-// The host owns the entire `@source` command surface. The dispatcher core has
-// no install-source registry interface: it contributes only the live-session
-// `@install`/`@uninstall`/`@update` commands and merges this whole table in as
-// `@source` (via `InstalledAgentSourceApi.sourceCommands()`). All knowledge of the
-// kind taxonomy, listing/ordering, resolution preview, and the add grammar
-// lives here.
+// The host owns the entire `@package source` command surface. The dispatcher
+// core has no install-source registry interface: it exposes only the
+// per-session `AppAgentHost` mutation surface, and merges this whole table in
+// under `@package` as `source` (via `InstalledAgentSourceApi.sourceCommands()`).
+// All knowledge of the kind taxonomy, listing/ordering, resolution preview, and
+// the add grammar lives here.
 
 export interface SourceCommandsDeps {
     registry: DefaultInstallSourceRegistry;
     // Returns the names of installed agents whose record was acquired from
-    // `sourceName`, powering `@source remove`'s "still referenced" warning.
+    // `sourceName`, powering `@package source remove`'s "still referenced" warning.
     // Injected (rather than imported) so this command module stays decoupled
     // from the installed-agent record store: the installer owns agents.json
     // access and supplies a closure over it (see createDefaultInstalledAgentSource).
@@ -231,7 +231,7 @@ class SourceRemoveCommandHandler implements CommandHandler {
                 `Source '${name}' is still referenced by: ${referencing.join(
                     ", ",
                 )}. ` +
-                    `Those agents stay loadable but can no longer be '@update'd. ` +
+                    `Those agents stay loadable but can no longer be '@package update'd. ` +
                     `Re-run with --force to remove anyway.`,
                 context,
             );
@@ -262,9 +262,9 @@ class SourceRemoveCommandHandler implements CommandHandler {
 }
 
 /**
- * Build the host's full `@source` command table (list / order / where / remove
- * / add). The dispatcher core merges this in as `@source` via
- * `InstalledAgentSourceApi.sourceCommands()`.
+ * Build the host's full `@package source` command table (list / order / where /
+ * remove / add). The dispatcher core merges this in under `@package` as
+ * `source` via `InstalledAgentSourceApi.sourceCommands()`.
  */
 export function getSourceCommands(
     deps: SourceCommandsDeps,

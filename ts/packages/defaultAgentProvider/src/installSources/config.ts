@@ -6,9 +6,11 @@
 // `InstalledAgentRecord`). These are owned by the host
 // (default-agent-provider), NOT the dispatcher core: the core knows nothing
 // about how sources are configured, listed, resolved, or recorded - it only
-// contributes the live-session `@install`/`@uninstall`/`@update` commands and
-// receives the whole `@source` command table from the host via
-// `InstalledAgentSourceApi.sourceCommands()`. Keeping these here frees the core of
+// exposes the per-session `AppAgentHost` surface the host uses to register and
+// tear down agents. The host contributes the whole `@package` command surface
+// (`@package install`/`uninstall`/`update`/`list`, with the source table nested
+// as `@package source`) via `InstalledAgentSourceApi.sourceCommands()`. Keeping
+// these here frees the core of
 // npm / Azure Artifacts vocabulary (registry URLs, scopes, catalog paths) and
 // lets the host own how a source is added, listed, ordered, removed, and
 // persisted - including any future auth UI.
@@ -53,7 +55,7 @@ export const AGENT_INSTALL_ROOTS_SUBDIR = "agents";
  * The single shape the installed-agent provider loads and the
  * `agents.json` persistence schema. A record carries exactly one resolution
  * handle: `module` (package name, npm-resolved) OR `path` (filesystem-resolved).
- * The presence of `path` is the load-time discriminator .
+ * The presence of `path` is the load-time discriminator.
  */
 export interface InstalledAgentRecord {
     name: string; // dispatcher agent name
@@ -86,8 +88,9 @@ export type MaterializedInstallRecord = Omit<InstalledAgentRecord, "name">;
 /**
  * A per-operation sink a source calls to surface a non-fatal degrade (e.g. a
  * corrupt catalog file or a dropped malformed entry) so the host can show it to
- * the user for the command that triggered it (`@package install`, `@source
- * where`). Distinct from the source's own process-lifetime debug/console log:
+ * the user for the command that triggered it (`@package install`,
+ * `@package source where`). Distinct from the source's own process-lifetime
+ * debug/console log:
  * this is scoped to the current resolve so the warning is surfaced once per
  * command rather than once per process.
  */
@@ -96,15 +99,15 @@ export type SourceWarning = (message: string) => void;
 /**
  * A per-operation sink the registry's ordered resolution walk calls to report
  * progress - which source it is currently probing - so the host can surface a
- * live status line for the triggering command (`@package install`, `@source
- * where`). Like {@link SourceWarning} it is scoped to the current resolve, not
- * the process.
+ * live status line for the triggering command (`@package install`,
+ * `@package source where`). Like {@link SourceWarning} it is scoped to the
+ * current resolve, not the process.
  */
 export type SourceStatus = (message: string) => void;
 
 /**
  * The terminal outcome the issuing conversation is told about after a coordinated
- * `@update` settles asynchronously. `updated` = the swap
+ * `@package update` settles asynchronously. `updated` = the swap
  * committed to `v2`; `reverted` = a phase timeout (a straggler that would not
  * idle, or a `v2` that would not start) rolled back to `v1`, leaving `v1` serving
  * in every session.
@@ -113,7 +116,7 @@ export type UpdateOutcomeStatus = "updated" | "reverted";
 
 /**
  * The terminal outcome the issuing conversation is told about after a coordinated
- * `@uninstall` settles asynchronously. `uninstalled` = the
+ * `@package uninstall` settles asynchronously. `uninstalled` = the
  * teardown committed and the name is free; `reverted` = a phase timeout rolled
  * back and the agent is still installed and serving in every session.
  */
@@ -159,9 +162,10 @@ export interface FeedSourceConfig {
  * A `catalog` source looks up a JSON list of available agents (name ->
  * `NpmAppAgentInfo`). `ref` is an agent short name; `find` is a map lookup
  * (instant); enumerable. Nothing in a catalog is installed automatically; a
- * catalog only resolves an agent on explicit `@install`.
+ * catalog only resolves an agent on explicit `@package install`.
  *
- * The catalog is a local filesystem path; remote URLs are not supported . Relative package paths resolve against the catalog's dir.
+ * The catalog is a local filesystem path; remote URLs are not supported.
+ * Relative package paths resolve against the catalog's dir.
  */
 export interface CatalogSourceConfig {
     kind: "catalog";
@@ -175,7 +179,7 @@ export type InstallSourceConfig =
     | CatalogSourceConfig;
 
 /**
- * The host-rendered summary of one configured source for `@source list`.
+ * The host-rendered summary of one configured source for `@package source list`.
  * `kind` and `detail` are display strings the host produces from the config
  * taxonomy above.
  */
@@ -199,7 +203,7 @@ export interface InstallSource {
      * CHEAP + side-effect free: can this source resolve `ref`? A match is a
      * commitment - if `find` returns a candidate, `materialize` must succeed.
      * Returning `undefined` is a non-match; the registry's ordered walk
-     * continues to the next source . `onWarn`, when supplied, is a
+     * continues to the next source. `onWarn`, when supplied, is a
      * per-command sink for non-fatal degrade messages (corrupt catalog /
      * dropped entry) so the host can surface them for the triggering command.
      */
@@ -211,7 +215,7 @@ export interface InstallSource {
      * The INVERSE of {@link find}, in candidate space: given the
      * `ResolvedCandidate` this source produced for an agent at install time
      * (recovered by the host from the persisted record), produce a FRESH
-     * candidate for the current version - so `@update` never has to know which
+     * candidate for the current version - so `@package update` never has to know which
      * candidate field is this source's re-resolution handle, or how a version
      * `range` applies. The source owns that policy
      * entirely: which handle it reads (`module` / `path` / the catalog key in

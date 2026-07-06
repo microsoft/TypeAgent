@@ -143,7 +143,7 @@ export function createCatalogSource(
             // The catalog key is this source's re-resolution handle: `find`
             // (and `reresolve`, which calls it) always set it, so a candidate
             // without one is an invariant violation - fail fast rather than
-            // persist a record `@update` can never re-look-up. Stored even when
+            // persist a record `@package update` can never re-look-up. Stored even when
             // the agent was installed under a different dispatcher name than its
             // key (the record's own name is host-assigned, not stored here).
             if (candidate.ref === undefined) {
@@ -152,7 +152,7 @@ export function createCatalogSource(
                 );
             }
             record.ref = candidate.ref;
-            // Exactly one resolution handle .
+            // Exactly one resolution handle.
             if (candidate.path !== undefined) {
                 record.path = candidate.path;
             } else if (candidate.module !== undefined) {

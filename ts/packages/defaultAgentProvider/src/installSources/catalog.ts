@@ -6,7 +6,7 @@ import { NpmAppAgentInfo } from "dispatcher-node-providers";
 
 // Catalog data model. A catalog is a JSON file listing the
 // available agents: name -> NpmAppAgentInfo. A catalog source resolves an agent
-// short name to a record on explicit `@install`; nothing in a catalog is
+// short name to a record on explicit `@package install`; nothing in a catalog is
 // installed automatically. Catalogs are referenced by filesystem path (the
 // shipped/bundled agents are no longer modeled as a catalog source - they are a
 // separate static provider).

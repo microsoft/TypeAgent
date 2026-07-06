@@ -6,8 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { getAddSourceCommandHandlers } from "../src/installSources/addSource.js";
 
-// `getAddSourceCommandHandlers` owns the per-kind `@source add` grammar +
-// validation. The dispatcher core merges these typed handlers into `@source`
+// `getAddSourceCommandHandlers` owns the per-kind `@package source add` grammar +
+// validation. The dispatcher core merges these typed handlers into `@package source`
 // (via `InstalledAgentSourceApi.sourceCommands`) and parses the args/flags; here we
 // invoke each handler directly with already-parsed params and assert the
 // config it hands to `registry.add` (or the validation error it throws).
@@ -158,7 +158,11 @@ describe("getAddSourceCommandHandlers", () => {
             process.env[envVar] = base;
             try {
                 expect(
-                    await run("path", { name: "local" }, { baseDir: `\${${envVar}}/agents` }),
+                    await run(
+                        "path",
+                        { name: "local" },
+                        { baseDir: `\${${envVar}}/agents` },
+                    ),
                 ).toEqual({
                     kind: "path",
                     name: "local",
@@ -174,7 +178,9 @@ describe("getAddSourceCommandHandlers", () => {
         });
 
         it("expands home in baseDir before persisting", async () => {
-            const base = fs.mkdtempSync(path.join(os.homedir(), "ta-path-home-"));
+            const base = fs.mkdtempSync(
+                path.join(os.homedir(), "ta-path-home-"),
+            );
             const relFromHome = path.relative(os.homedir(), base);
             const withTilde = path.join("~", relFromHome);
             expect(
@@ -222,7 +228,11 @@ describe("getAddSourceCommandHandlers", () => {
             process.env[envVar] = dir;
             try {
                 await expect(
-                    runExpectThrow("catalog", { name: "c" }, { catalog: `\${${envVar}}/catalog.json` }),
+                    runExpectThrow(
+                        "catalog",
+                        { name: "c" },
+                        { catalog: `\${${envVar}}/catalog.json` },
+                    ),
                 ).rejects.toThrow(/not accessible/);
             } finally {
                 if (prev === undefined) {

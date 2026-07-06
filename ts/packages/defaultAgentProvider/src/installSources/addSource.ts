@@ -17,13 +17,14 @@ import {
 import { DefaultInstallSourceRegistry } from "./registry.js";
 import { expandHome } from "./paths.js";
 
-// Host-owned `@source add <kind>` command handlers. The dispatcher core merges
-// these into the system `@source` table (via `InstalledAgentSourceApi.sourceCommands`)
-// so the core never learns the kind taxonomy or the per-kind flags. This is
-// where a host would hook in richer prompting / auth UI for adding a source.
+// Host-owned `@package source add <kind>` command handlers. The dispatcher core
+// merges these into the `@package source` table (via
+// `InstalledAgentSourceApi.sourceCommands`) so the core never learns the kind
+// taxonomy or the per-kind flags. This is where a host would hook in richer
+// prompting / auth UI for adding a source.
 //
 // Each handler is fully typed (args + flags), so the dispatcher gives the user
-// intellisense, completion, and usage for `@source add feed/catalog/path` -
+// intellisense, completion, and usage for `@package source add feed/catalog/path` -
 // exactly like a built-in command - while the grammar lives entirely here.
 
 function validateFeedRegistry(url: string): void {
@@ -180,9 +181,10 @@ class PathAddCommandHandler implements CommandHandler {
 }
 
 /**
- * Build the host's `@source add` subcommand table (`feed`/`catalog`/`path`),
- * bound to the given registry. The dispatcher core merges this into the system
- * `@source` table via `InstalledAgentSourceApi.sourceCommands()`.
+ * Build the host's `@package source add` subcommand table
+ * (`feed`/`catalog`/`path`), bound to the given registry. The dispatcher core
+ * merges this into the `@package source` table via
+ * `InstalledAgentSourceApi.sourceCommands()`.
  */
 export function getAddSourceCommandHandlers(
     registry: DefaultInstallSourceRegistry,

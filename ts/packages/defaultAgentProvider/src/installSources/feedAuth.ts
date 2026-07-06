@@ -60,7 +60,7 @@ async function defaultAzRunner(): Promise<string> {
 /**
  * Mint (or reuse) a short-lived Azure DevOps bearer token via the Azure CLI.
  * Cached in memory until shortly before expiry; re-minted on demand. Throws an
- * actionable `az login` hint when `az` is missing or logged out .
+ * actionable `az login` hint when `az` is missing or logged out.
  */
 export async function getFeedAccessToken(
     runner: AzTokenRunner = defaultAzRunner,
