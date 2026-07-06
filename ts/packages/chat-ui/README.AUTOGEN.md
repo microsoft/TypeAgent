@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=0b78eca89672771908038a6fa85c76ac674759920c221adecabe08812ede926e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=0f5a5f8a999718b2894cf4359d93f82bd73a5ce9838bbabfa5a4c2ce69e56760 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-ui — AI-generated documentation
@@ -12,63 +12,64 @@
 
 ## Overview
 
-The `chat-ui` package provides shared DOM-based chat rendering for TypeAgent surfaces, including the VS Code shell extension and the browser extension chat panel. It offers a framework-free chat UI that supports rendering user and agent bubbles, streaming display updates, dynamic status, history replay, command completions, and metrics tooltips.
+The `chat-ui` package provides a shared, framework-free chat user interface for various TypeAgent surfaces, such as the VS Code shell extension and the browser extension chat panel. It is designed to render user and agent messages, support streaming updates, manage chat history, and provide features like command completions, feedback collection, and connection status indicators. The package is built with a focus on flexibility and reusability, making it suitable for integration into different host environments.
 
 ## What it does
 
-The `chat-ui` package includes several key components and functionalities:
+The `chat-ui` package offers the following key capabilities:
 
-- **ChatPanel**: The main component for rendering the chat interface. It handles user input, agent messages, and display updates.
-- **FeedbackWidget**: A component for collecting user feedback on interactions within the chat panel.
-- **PartialCompletion**: Manages command completions using the `@typeagent/completion-ui` package.
-- **PlatformAdapter**: Abstracts platform-specific behaviors for handling link clicks and settings.
-- **Styles**: Shared CSS styles for consistent chat UI appearance across different hosts.
+- **ChatPanel**: The primary component for rendering the chat interface. It supports user input, agent messages, streaming updates, and history replay. It also provides methods like `addAgentMessage`, `setDisplayInfo`, and `replayHistory` for dynamic interaction.
+- **FeedbackWidget**: A component for collecting user feedback on chat interactions. It supports feedback submission and UI management.
+- **PartialCompletion**: Integrates with the `@typeagent/completion-ui` package to handle command completions, including input updates, acceptance, and dismissal.
+- **Connection Status Management**: Provides a shared model and UI for displaying the connection status between the chat client and the server, including reconnect options.
+- **PlatformAdapter**: Abstracts platform-specific behaviors, such as handling link clicks and settings, to ensure compatibility across different environments.
+- **Shared Styles**: Includes a CSS file (`styles/chat.css`) to ensure a consistent appearance for the chat UI across all host applications.
 
-The package supports actions such as `addAgentMessage`, `setDisplayInfo`, and `replayHistory`, which allow hosts to interact with the chat panel and update its content dynamically.
+The package is used by multiple TypeAgent components, including the VS Code shell, the browser extension, and the Visual Studio extension webview.
 
 ## Setup
 
-To use the `chat-ui` package, you need to install it and its dependencies. Ensure you have the following workspace dependencies:
+To integrate the `chat-ui` package into your project, follow these steps:
 
-- `@typeagent/agent-sdk`
-- `@typeagent/completion-ui`
-- `@typeagent/dispatcher-types`
+1. **Install the package**: Add `chat-ui` to your project dependencies using your package manager.
+2. **Install dependencies**: Ensure the following workspace dependencies are installed:
+   - `@typeagent/agent-sdk`
+   - `@typeagent/completion-ui`
+   - `@typeagent/dispatcher-types`
+3. **Bundle styles**: The package includes a CSS file located at `styles/chat.css`. You must include this file in your project's build process to ensure the chat UI is styled correctly.
+4. **External dependencies**: The package relies on the following external libraries:
+   - `ansi_up` for ANSI escape code processing.
+   - `dompurify` for sanitizing HTML content.
+   - `markdown-it` for rendering Markdown content.
 
-Additionally, the package relies on external dependencies such as `ansi_up`, `dompurify`, and `markdown-it`.
-
-For detailed setup instructions, including environment variables and API keys, refer to the hand-written README.
+For additional details, refer to the hand-written README.
 
 ## Key Files
 
-The `chat-ui` package is organized into several key files:
+The `chat-ui` package is organized into several key files, each responsible for specific functionality:
 
-- **[index.ts](./src/index.ts)**: Exports the main components and types used by the package.
-- **[chatPanel.ts](./src/chatPanel.ts)**: Implements the `ChatPanel` component, handling user input, agent messages, and display updates.
+- **[index.ts](./src/index.ts)**: The main entry point, exporting the package's primary components and utilities.
+- **[chatPanel.ts](./src/chatPanel.ts)**: Implements the `ChatPanel` component, which is the core of the chat UI. It handles user input, agent messages, and display updates.
 - **[feedbackWidget.ts](./src/feedbackWidget.ts)**: Implements the `FeedbackWidget` component for collecting user feedback.
 - **[partialCompletion.ts](./src/partialCompletion.ts)**: Manages command completions using the `@typeagent/completion-ui` package.
-- **[platformAdapter.ts](./src/platformAdapter.ts)**: Defines the `PlatformAdapter` interface for handling platform-specific behaviors.
-- **[setContent.ts](./src/setContent.ts)**: Contains functions for processing and sanitizing content before rendering.
-- **[styles/chat.css](./styles/chat.css)**: Provides shared CSS styles for the chat UI.
-
-### Key Components
-
-- **ChatPanel**: The core component of the chat UI, responsible for rendering user and agent messages, handling user input, and updating the display dynamically. It uses DOMPurify to sanitize HTML content before insertion.
-- **FeedbackWidget**: Collects user feedback on interactions within the chat panel. It includes methods for submitting feedback and managing the feedback UI.
-- **PartialCompletion**: Integrates with the `@typeagent/completion-ui` package to manage command completions. It handles input updates, completion acceptance, and dismissal.
-- **PlatformAdapter**: Abstracts platform-specific behaviors, such as handling link clicks and settings. This allows the chat UI to be adaptable to different environments like Electron and Chrome extensions.
-- **Styles**: Shared CSS styles that ensure a consistent appearance of the chat UI across different hosts.
+- **[connectionStatus.ts](./src/connectionStatus.ts)**: Defines the `ConnectionStatus` model and related utilities for managing and displaying connection status.
+- **[platformAdapter.ts](./src/platformAdapter.ts)**: Provides an interface for handling platform-specific behaviors, such as link clicks and settings.
+- **[styles/chat.css](./styles/chat.css)**: Contains shared CSS styles for the chat UI, ensuring a consistent look and feel across different hosts.
 
 ## How to extend
 
-To extend the `chat-ui` package, follow these steps:
+To extend the `chat-ui` package, follow these guidelines:
 
-1. **Start with the main component**: Open the [chatPanel.ts](./src/chatPanel.ts) file to understand how the `ChatPanel` component is implemented. This is the core of the chat UI.
-2. **Add new features**: Implement new functionalities or modify existing ones within the `ChatPanel` component. Ensure that any new HTML content is sanitized using DOMPurify.
-3. **Update styles**: If you need to change the appearance of the chat UI, modify the [styles/chat.css](./styles/chat.css) file.
-4. **Handle platform-specific behaviors**: If your extension needs to handle specific platform behaviors, update the [platformAdapter.ts](./src/platformAdapter.ts) file.
-5. **Test your changes**: Run tests to ensure your changes work as expected. You can add new tests or modify existing ones to cover your new functionalities.
+1. **Understand the core components**: Start by reviewing the [chatPanel.ts](./src/chatPanel.ts) file, as it contains the implementation of the `ChatPanel` component, which is central to the package's functionality.
+2. **Add new features**: To introduce new features, modify or extend the relevant components. For example:
+   - To add new user interactions, update the `ChatPanel` or `FeedbackWidget` components.
+   - To support additional command completions, extend the `PartialCompletion` component.
+3. **Update styles**: If your changes require visual updates, modify the [styles/chat.css](./styles/chat.css) file to ensure the new features are styled appropriately.
+4. **Handle platform-specific needs**: If your changes involve platform-specific behaviors, update the [platformAdapter.ts](./src/platformAdapter.ts) file to include the necessary logic.
+5. **Ensure content safety**: When adding or modifying HTML content, use the `setContent` utility or the `DOMPurify` library to sanitize the content and prevent security vulnerabilities.
+6. **Test your changes**: Add or update tests to verify the functionality of your changes. Ensure that the package remains compatible with its existing integrations.
 
-By following these steps, you can effectively extend the `chat-ui` package to meet your specific requirements. For detailed instructions and examples, refer to the hand-written README.
+By following these steps, you can effectively extend the `chat-ui` package to meet your specific requirements while maintaining compatibility with the rest of the TypeAgent ecosystem.
 
 ## Reference
 
@@ -76,7 +77,7 @@ By following these steps, you can effectively extend the `chat-ui` package to me
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 - `./styles` → [./styles/chat.css](./styles/chat.css)
 
 ### Dependencies
@@ -98,10 +99,10 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/chatPanel.ts`, `./src/contextMenu.ts`, …and 9 more under `./src/`.
+`./src/index.ts`, `./src/chatPanel.ts`, `./src/connectionStatus.ts`, …and 10 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
