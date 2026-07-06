@@ -231,6 +231,9 @@ function main() {
             {
                 cwd: tsRoot,
                 stdio: "inherit",
+                // Node 24 (CVE-2024-27980) disallows spawning .cmd/.bat files
+                // without shell:true on Windows.
+                shell: process.platform === "win32",
             },
         );
 
