@@ -1,7 +1,7 @@
 # Connected AppAgent Provider — Design Doc
 
-> Status: **Implemented** (Milestones 1–5; see
-> [EXECUTION_PLAN.md](./EXECUTION_PLAN.md))
+> Status: **Implemented** (Milestones 1–5). See the _Implementation reference_ appendix below
+> for the file map and test coverage (migrated from the retired execution plan).
 > Scope: `ts/packages/dispatcher` (a new `AppAgentSource` connection interface
 > whose `connect()` vends shared `AppAgentProvider`s, the dispatcher-side
 > `AppAgentHost` callback that registers/unregisters live agents, removal of the
@@ -666,3 +666,71 @@ facade regression fails loudly rather than desyncing the tracker. The hybrid onl
 pays off for **multi-agent dynamic providers** (§9 pro 11 / MCP hot-reload), where
 one provider maps to N names and lifecycle events are per-name while add/remove
 are per-provider — a generalization deferred out of this design.
+
+---
+
+## Implementation reference
+
+> Migrated from the retired `EXECUTION_PLAN.md` after the work shipped. A point-in-time map of the
+> implementation and its test coverage; the code is the source of truth.
+
+### Source-of-truth file map
+
+| Concern                                                                             | File                                                                                                 |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Provider + installer interfaces                                                     | `packages/dispatcher/dispatcher/src/agentProvider/agentProvider.ts`                                  |
+| `DispatcherOptions`, `installAppProvider`, `setAppAgentStates`, init/teardown       | `packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts`                                |
+| `AppAgentManager` (`addProvider` / `removeAgent` / lazy init / `getSessionContext`) | `packages/dispatcher/dispatcher/src/context/appAgentManager.ts`                                      |
+| `@package` handlers (install/uninstall/update/list)                                 | `packages/dispatcher/dispatcher/src/context/system/handlers/installCommandHandlers.ts`               |
+| System agent + `getSystemHandlers` (`@package`/`@source` grafting)                  | `packages/dispatcher/dispatcher/src/context/system/systemAgent.ts`                                   |
+| Command routing (`resolveCommand` → `actualAppAgentName` → `getSessionContext`)     | `packages/dispatcher/dispatcher/src/command/command.ts`, `.../execute/actionContext.ts`              |
+| Default providers + installer + source registry wiring                              | `packages/defaultAgentProvider/src/defaultAgentProviders.ts`                                         |
+| Installed-agent provider + `combineAppAgentProviders` facade                        | `packages/defaultAgentProvider/src/installSources/installedAgents.ts`                                |
+| `@source` command table                                                             | `packages/defaultAgentProvider/src/installSources/sourceCommands.ts`                                 |
+| Source registry impl                                                                | `packages/defaultAgentProvider/src/installSources/registry.ts`                                       |
+| Host wiring (N-client server)                                                       | `packages/agentServer/server/src/server.ts`, `.../conversationManager.ts`, `.../sharedDispatcher.ts` |
+| Host wiring (1-client web)                                                          | `packages/api/src/webDispatcher.ts`                                                                  |
+| Standalone host                                                                     | `packages/shell/src/main/instance.ts`                                                                |
+
+#### Package layering (dependency direction — must stay acyclic)
+
+The **interfaces** (`AppAgentHost`, `AppAgentSource`, `AppAgentConnection`) land in `agent-dispatcher`
+core; the `AppAgentSource` **implementation** (record store, registry, `@package` app agent, client
+registry, per-name lifecycle tracker) lands in `default-agent-provider` (§3.3). The dispatcher core
+never gains a dependency on the record store or the source taxonomy.
+
+| Package (npm name)       | Role                         | What it adds                                                                                                                                                                                                                                               |
+| ------------------------ | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agent-dispatcher`       | dispatcher core; hosting API | `AppAgentHost` / `AppAgentSource` / `AppAgentConnection` **interfaces**; `AppAgentHost` impl (applicator + `removeProvider`); `connect()`/`dispose()` lifecycle; `appAgentSources` option. **Removes** `AppAgentInstaller` + the four `@package` handlers. |
+| `default-agent-provider` | reference host wiring        | `AppAgentSource` **impl**: per-agent providers, `@package` app agent, client registry, fan-out, per-name lifecycle tracker (§7.2).                                                                                                                         |
+| `agentServer` / `api`    | host wiring                  | inject `appAgentSources`; drop `agentInstaller`.                                                                                                                                                                                                           |
+
+### Test coverage map (by milestone)
+
+| Scenario                                                                          | Milestone |
+| --------------------------------------------------------------------------------- | --------- |
+| Applicator FIFO ordering (incl. update remove-then-add)                           | 1         |
+| Applicator ack resolves only when applied; idle-gating defers during busy session | 1         |
+| `dispose()` auto-acks pending removals; late op no-ops                            | 1         |
+| `removeProvider` teardown (single-agent) vs unknown provider no-op                | 1         |
+| Single-agent invariant assertion fires on a multi-name provider                   | 1         |
+| `@package` handler runs with host `agentContext` (no `CommandHandlerContext`)     | 2         |
+| Install registers into the **issuing** session live (no restart)                  | 2         |
+| Uninstall tears down a live `SessionContext` in the issuing session               | 2         |
+| Each installed agent vended as its own single-root provider                       | 2         |
+| `AppAgentInstaller` fully removed; all hosts smoke-boot                           | 2         |
+| Fan-out: install in A appears (disabled) in B live                                | 3         |
+| Enable policy: issuing `true`, siblings `false`, late-connect disabled            | 3         |
+| Sibling notification system message on add/remove                                 | 3         |
+| Sibling `addProvider` throw isolated (install still succeeds)                     | 3         |
+| Fan-out after `dispose()` no-ops; double `dispose()` safe                         | 3         |
+| Web (1 client) vs server (N clients) fan-out both work                            | 3         |
+| Uninstall drains all sessions before name reuse                                   | 4         |
+| Name reuse during `removing` rejected                                             | 4         |
+| Connect during `removing` skips draining name                                     | 4         |
+| Disconnect while `pending` auto-acks and drops from `pending`                     | 4         |
+| Load during `removing` refused (tombstone)                                        | 4         |
+| `@package list` hides a draining agent                                            | 4         |
+| Failed update = old agent intact everywhere (no-op)                               | 4         |
+| Sibling fan-out failure doesn't roll back committed record                        | 4         |
+| No dangling references to removed symbols; help matches `@package`                | 5         |

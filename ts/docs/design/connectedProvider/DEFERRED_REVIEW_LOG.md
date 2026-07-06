@@ -1,8 +1,8 @@
 # Connected AppAgent Provider — Deferred Review Log
 
 > Every gate **review finding** or **test gap** deliberately **not addressed**,
-> with a rationale. See [EXECUTION_PLAN.md](./EXECUTION_PLAN.md) for the gate
-> structure.
+> with a rationale. The design of record is [DESIGN.md](./DESIGN.md); the execution plan that
+> defined the gate structure has been retired.
 
 ## Milestone 1 — gate
 

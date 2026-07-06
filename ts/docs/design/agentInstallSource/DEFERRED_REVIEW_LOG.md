@@ -3,7 +3,8 @@
 > Running log of subagent **review findings** and **test gaps** (from the Milestone Gates and the Final
 > Gate) that were **deliberately not addressed**. Everything declined must be recorded here with a reason,
 > so reviewers see the conscious trade-offs rather than silent omissions.
-> See the gate procedure in [EXECUTION_PLAN.md](./EXECUTION_PLAN.md#milestone-gate-run-at-the-end-of-every-milestone).
+> The design of record is [DESIGN.md](./DESIGN.md); the execution plan that defined the gate procedure
+> has been retired (its file map and test coverage are migrated into DESIGN.md's _Implementation reference_).
 
 ## How to use
 
@@ -27,15 +28,6 @@
 
 ## Entries
 
-### 2026-06-27 — `getProviderConfig` first-config singleton cache
-
-- **Milestone / gate:** M2 gate
-- **Kind:** Review finding
-- **Raised by:** review round 2 (major #2)
-- **Summary:** `getProviderConfig(configName?)` caches the first config it loads and ignores later `configName` arguments. In theory a process that mixed multiple named configs would get the wrong one.
-- **Why not addressed:** TypeAgent runs a single config per process; no-arg callers (mcp, constructions, indexing) are designed to read the active named config. A per-name `Map` would regress those processes by letting an unrelated no-arg call pin the default. Confirmed correct for real usage and left unchanged.
-- **Follow-up:** none (revisit only if multi-config-per-process is ever introduced).
-
 ### 2026-06-27 — Indexing registry skips non-builtin (feed/path) agents
 
 - **Milestone / gate:** M2 gate
@@ -44,15 +36,6 @@
 - **Summary:** `getIndexingServiceRegistry` resolves indexing services from the config `agents` map (builtins). Feed/path-installed agents are absent and warn-skipped, so they cannot register an indexing service.
 - **Why not addressed:** Indexing services are a builtin-only capability today; the `config.json` `agents` map remains the authoritative builtin list until M4. Pre-existing behavior, clarified with a comment.
 - **Follow-up:** M4 cleanup of the `config.json` `agents` map will revisit whether indexing should consult installed records.
-
-### 2026-06-27 — execMode propagation through installed records not asserted end-to-end
-
-- **Milestone / gate:** M2 gate
-- **Kind:** Test gap
-- **Raised by:** test-gap round 2 (gap #3, MED)
-- **Summary:** Tests assert `execMode` is carried on the `InstalledAgentRecord` and mapped by `recordToNpmInfo`, but no test drives a `dispatcher`-execMode agent all the way through `createNpmAppAgentProvider` to confirm it actually loads in-process.
-- **Why not addressed:** `recordToNpmInfo` mapping is unit-covered and `createNpmAppAgentProvider`'s execMode handling is pre-existing, separately tested behavior. An end-to-end in-process load test would require a bundled dispatcher-execMode fixture agent; low marginal value over the existing unit coverage.
-- **Follow-up:** none (consider a fixture-based load test if execMode routing changes).
 
 ### 2026-06-28 — Feed `@update <range>` building `module@range` not unit-tested
 
@@ -66,62 +49,6 @@
   A hermetic test would mean re-architecting the installer factory for injection — out of
   proportion to the thin `range !== undefined ? \`${m}@${range}\` : m` logic.
 - **Follow-up:** add if the installer factory ever gains a DI seam for the registry.
-
-### 2026-06-28 — Catalog renamed-install re-lookup not covered end-to-end
-
-- **Milestone / gate:** M3 gate
-- **Kind:** Test gap
-- **Raised by:** test-gap round 1 & 2 (deferred)
-- **Summary:** The `ref`-preservation fix is unit-covered via the path source (install fills
-  `ref`, update keeps it). The original catalog scenario — install a catalog agent under a
-  different name, then `@update` re-looks-up the original catalog key — is not driven
-  end-to-end.
-- **Why not addressed:** It needs a real bundled/loadable catalog agent fixture and a
-  catalog source wired into the hermetic installer; the underlying `ref`-preservation logic
-  is already locked in by the path-source unit test.
-- **Follow-up:** none (covered indirectly; add a fixture-based test if catalog re-lookup
-  logic changes).
-
-### 2026-06-28 — `UpdateCommandHandler` happy-path call order not unit-tested
-
-- **Milestone / gate:** M3 gate
-- **Kind:** Test gap
-- **Raised by:** test-gap round 1 & 2 (deferred)
-- **Summary:** The handler's success path (`installer.update` → `agents.removeAgent` →
-  `installAppProvider`) is not asserted in isolation; only its two error branches
-  (no installer, update unsupported) are unit-tested.
-- **Why not addressed:** `installAppProvider` is a heavy named import from
-  `commandHandlerContext.js` and the spec already needs a side-effect import of that module
-  first to dodge a TDZ module cycle, which precludes `jest.unstable_mockModule`. The thin
-  three-call sequence is exercised end-to-end by the installer tests plus `@install`
-  coverage; an isolated mock would require changing the test environment for little value.
-- **Follow-up:** none.
-
-### 2026-06-28 — `@source add` duplicate-name error path not unit-tested
-
-- **Milestone / gate:** M3 gate
-- **Kind:** Test gap
-- **Raised by:** test-gap round 2 (LOW)
-- **Summary:** `registry.add` throws `'source already exists'` on a duplicate name; the
-  handler passes that through but no handler test exercises it (the fake registry's `add` is
-  a no-op `jest.fn`).
-- **Why not addressed:** The duplicate guard is the registry's responsibility and is covered
-  by the registry's own tests; the handler merely propagates the error without wrapping.
-- **Follow-up:** none.
-
-### 2026-06-28 — No isolated unit test for the `agent-keyword` policy rule
-
-- **Milestone / gate:** M4 gate
-- **Kind:** Test gap
-- **Raised by:** test-gap round 1
-- **Summary:** `tools/scripts/policyChecks/agentKeyword.mjs` has no positive/negative fixture
-  unit test.
-- **Why not addressed:** `ts/tools/scripts` has no jest/node:test harness (unlike
-  `tools/docsAutogen`); standing one up for a pure, single-purpose rule is disproportionate.
-  The full-repo `npm run check:policy` run is an effective integration test (it classified
-  all 134 package.json files — 36 agents flagged, 98 non-agents untouched) and is wired into
-  CI (`pipelines/azure-build-ts.yml`), so a future agent missing the keyword fails the build.
-- **Follow-up:** none (add a fixture test if a scripts test harness is ever introduced).
 
 ### 2026-06-28 — `agent-keyword` autofix needs a second `--fix` pass to sort
 

@@ -722,3 +722,69 @@ The unified provider would become a router holding a `kind -> AppAgentLoader` re
 20. **Feed install location is a single shared, configurable root (Q20).** All `feed` sources `npm install` into one shared npm root, default `<instanceDir>/installedAgents` (replacing today's `externalagents`), configurable via `installSources.installDir`. One root means the installed-agent provider needs one `requirePath` for feed modules; the provider selects the resolution root by record provenance (feed -> `installDir`, bundled catalog -> app bundle `node_modules`, path -> explicit `path`). The root holds only a `package.json` marker with no persistent credentials (auth is the transient per-install `--userconfig`, §4.1). Per-feed isolated roots are deferred (§4.1).
 21. **Source removal + existing installs (Q21).** Removing a source warns when installed records reference it. If removal proceeds (`--force`), those records remain loadable, but `@update` for them fails until the source is re-added.
 22. **Backward-compat policy (Q22).** Migration/back-compat is best effort for one release and may be dropped when implementation is not trivial; correctness and operability of the new model take priority.
+
+---
+
+## Implementation reference
+
+> Migrated from the retired `EXECUTION_PLAN.md` after the work shipped. A point-in-time map of the
+> implementation and its test coverage; the code is the source of truth.
+
+### Source-of-truth file map
+
+| Concern                                                        | File                                                                                                                                                                                                                            |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Provider + installer interfaces                                | `packages/dispatcher/dispatcher/src/agentProvider/agentProvider.ts`                                                                                                                                                             |
+| `DispatcherOptions`, `installAppProvider`, `setAppAgentStates` | `packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts`                                                                                                                                                           |
+| `AppAgentManager` (`addProvider` / `removeAgent` / lazy init)  | `packages/dispatcher/dispatcher/src/context/appAgentManager.ts`                                                                                                                                                                 |
+| `@install` / `@uninstall` handlers                             | `packages/dispatcher/dispatcher/src/context/system/handlers/installCommandHandlers.ts`                                                                                                                                          |
+| System agent handler registration                              | `packages/dispatcher/dispatcher/src/context/system/systemAgent.ts`                                                                                                                                                              |
+| npm provider + `NpmAppAgentInfo`                               | `packages/dispatcher/nodeProviders/src/agentProvider/npmAgentProvider.ts`                                                                                                                                                       |
+| Default providers + installer + feed/npm install               | `packages/defaultAgentProvider/src/defaultAgentProviders.ts`                                                                                                                                                                    |
+| Config types                                                   | `packages/defaultAgentProvider/src/utils/config.ts`                                                                                                                                                                             |
+| Bundled agent map                                              | `packages/defaultAgentProvider/data/config.json`                                                                                                                                                                                |
+| Repo policy checks                                             | `tools/scripts/repo-policy-check.mjs`                                                                                                                                                                                           |
+| Callers                                                        | `packages/shell/src/main/instance.ts`, `packages/agentServer/server/src/server.ts`, `packages/api/src/webDispatcher.ts`, `packages/defaultAgentProvider/src/collisions/*`, `packages/agents/onboarding/src/testing/runTests.ts` |
+
+#### Package layering (dependency direction — must stay acyclic)
+
+Interfaces land in `agent-dispatcher` core; the feed/npm/Azure **implementation** lands in `default-agent-provider` (§4.5 _Code / API organization_). The dispatcher core never gains a dependency on Azure DevOps, npm, or `az`.
+
+| Package (npm name)          | Role                              | What it adds                                                                                                    |
+| --------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `agent-dispatcher`          | dispatcher core; command handlers | `installSource.ts` **interfaces**; `sources?()` on `AppAgentInstaller`; `@install`/`@update`/`@source` handlers |
+| `dispatcher-node-providers` | npm loading mechanism             | unchanged (`createNpmAppAgentProvider`)                                                                         |
+| `default-agent-provider`    | reference host wiring             | registry + path/catalog/feed **impl**, feed auth (`az`), `agents.json`, bundled catalog                         |
+
+### Test coverage map (by milestone)
+
+| Scenario                                                                      | Milestone |
+| ----------------------------------------------------------------------------- | --------- |
+| Source `find`/`materialize` per kind (path/catalog/feed)                      | 1         |
+| Feed cache hit (offline) → skip feed, no failure                              | 1         |
+| Feed keyword narrowing keeps agents, drops libraries                          | 1         |
+| Registry ordered first-match + explicit `--source` non-match error            | 1         |
+| Mutex serializes concurrent install ops                                       | 1         |
+| First run, empty `agents.json` → full default set pre-installed               | 2         |
+| Pre-install partial failure → warn + continue                                 | 2         |
+| Legacy `externalAgentsConfig.json` path entries migrate; feed entries dropped | 2         |
+| Provenance-based load roots (feed vs bundled vs path)                         | 2         |
+| `path` install shadows feed when ordered first                                | 2         |
+| `@install` duplicate name → fast error, no disk/feed touch                    | 2         |
+| Concurrent installs serialized (no `node_modules` interleave)                 | 2         |
+| Uninstall tears down a live `SessionContext`                                  | 2         |
+| All hosts boot on fresh + migrated instance                                   | 2         |
+| Feed auth missing `az` → actionable `az login` hint                           | 2         |
+| `@update` feed bump / path refresh / catalog re-lookup                        | 3         |
+| Failed `@update` → old agent intact (no-op)                                   | 3         |
+| `@source` add/remove/order round-trip + restart persistence                   | 3         |
+| `@source` bad URL / unreadable catalog rejected; unknown order entry warns    | 3         |
+| Policy rule: agent missing keyword fails, library passes                      | 4         |
+
+### Final-gate outcome
+
+> Review r1/r2 + test-gap r1/r2 complete. One MAJOR fixed — `catalogSource.find` now fails fast on an
+> entry with neither `path` nor `name` (§4.2/Q17) instead of persisting a handle-less record. Added a
+> registry reload round-trip test (sources + order survive a restart), a catalog malformed-entry test,
+> and an `order()`-drops-on-remove assertion. Full build green, `defaultAgentProvider` suite 3844
+> passing, policy checks green. See [DEFERRED_REVIEW_LOG.md](./DEFERRED_REVIEW_LOG.md).

@@ -694,6 +694,13 @@ export function createDefaultInstalledAgentSource(
             return;
         }
         if (!verifyZero(barrier)) {
+            // Parked: every host quiesced but the shared `v1` ref is still held.
+            // In practice this is only reached via the closing-session race (a
+            // slot auto-acked before its `agents.close()` decrement landed),
+            // which the disconnect re-poll in connect().dispose() resolves — NOT
+            // the timeout. The quiesce timer is the backstop for a genuinely
+            // wedged ref that never drops; a ref that self-drops with no
+            // disconnect is not reachable today.
             debug(
                 `barrier '${barrier.name}': all hosts quiesced but refcount != 0; waiting for straggler (quiesce timeout is the backstop)`,
             );

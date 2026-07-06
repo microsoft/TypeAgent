@@ -1,7 +1,7 @@
 # Update Coordination — Rework (Implemented)
 
-> **Status: Implemented.** Shipped across Milestones 1–5 (see
-> [UPDATE_COORDINATION_EXECUTION_PLAN.md](./UPDATE_COORDINATION_EXECUTION_PLAN.md)).
+> **Status: Implemented.** Shipped across Milestones 1–5. See the _Implementation reference_
+> appendix below for the file map and test coverage (migrated from the retired execution plan).
 > Resolves the open item "request-slip in the update absence window" in
 > [DEFERRED_REVIEW_LOG.md](./DEFERRED_REVIEW_LOG.md) and supersedes the disruptive
 > global drain-then-add previously described in [DESIGN.md](./DESIGN.md) §7.2.
@@ -475,3 +475,69 @@ commits (no timeout stall)` — parks on a held ref, then a disconnect (ref
   global stop-the-world.** Correct and simple; deliberately chosen over a lighter
   per-name gate (§5) because that gate can't spare NL traffic under the
   always-schema-changing model. Revisit only if the freeze proves painful.
+
+---
+
+## Implementation reference
+
+> Migrated from the retired `UPDATE_COORDINATION_EXECUTION_PLAN.md` after the work shipped. A
+> point-in-time map of the implementation and its test coverage; the code is the source of truth.
+
+### Source-of-truth file map
+
+| Concern                                                                                                                                                                       | File                                                                      |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `AppAgentHost` / `AppAgentSource` / `AppAgentConnection` **interfaces**                                                                                                       | `packages/dispatcher/dispatcher/src/agentProvider/agentProvider.ts`       |
+| `AppAgentHostApplicator` (idle-gated FIFO applicator)                                                                                                                         | `packages/dispatcher/dispatcher/src/context/appAgentHost.ts`              |
+| Applicator wiring, `AppAgentHostApplyFns` (`applyAdd`/`applyRemove`), `commandLock`                                                                                           | `packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts`     |
+| `AppAgentManager.addProvider` / `removeProvider` / lazy load / `getSessionContext`                                                                                            | `packages/dispatcher/dispatcher/src/context/appAgentManager.ts`           |
+| npm provider refcount (`createNpmAppAgentProvider`, `moduleAgents`, `AgentProcess.count`, `unloadAppAgent` → `close()`)                                                       | `packages/dispatcher/nodeProviders/src/agentProvider/npmAgentProvider.ts` |
+| Per-name lifecycle tracker (`DynamicAgentEntry`, `entries`, `fanOutAdd`, `busy`) + `install`/`uninstall`/`update`                                                             | `packages/defaultAgentProvider/src/defaultAgentProviders.ts`              |
+| `@package` app agent handlers + `InstalledAgentSourceApi`                                                                                                                     | `packages/defaultAgentProvider/src/installSources/packageAgent.ts`        |
+| Installed-agent provider building + per-record require-root (`createInstalledAppAgentProvider`, `recordToNpmInfo`) + `agents.json` store (`readAgentsJson`/`writeAgentsJson`) | `packages/defaultAgentProvider/src/installSources/installedAgents.ts`     |
+| Record shapes (`InstalledAgentRecord`, `MaterializedInstallRecord`)                                                                                                           | `packages/defaultAgentProvider/src/installSources/config.ts`              |
+| Feed source (`npm install` into `installDir`)                                                                                                                                 | `packages/defaultAgentProvider/src/installSources/feedSource.ts`          |
+| Install-source registry (`installDir`, `resolve`, `reresolve`, `materialize`)                                                                                                 | `packages/defaultAgentProvider/src/installSources/registry.ts`            |
+
+#### Package layering (dependency direction — must stay acyclic)
+
+The connected-provider layering rule is unchanged and **must hold**: nothing in
+`agent-dispatcher` may `import` from `default-agent-provider`. The **coordination interfaces**
+(`AppAgentHost.replaceProvider`, refcount-visibility on the provider contract) land in `agent-dispatcher`
+core; the **barrier coordination** (verify-0, `whenReady`, timeout/rollback policy) lands in
+`default-agent-provider` as part of the source.
+
+| Package (npm name)          | Role                         | What it adds                                                                                                                                                                                             |
+| --------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agent-dispatcher`          | dispatcher core; hosting API | `AppAgentHost.replaceProvider(old, new?)` (single lock-held teardown/swap — `new` omitted = uninstall); refcount visibility on the host apply path.                                                      |
+| `dispatcher-node-providers` | npm agent provider           | expose loaded/refcount state (`isLoaded` / `getRefCount`) on `createNpmAppAgentProvider`.                                                                                                                |
+| `default-agent-provider`    | reference host wiring        | per-agent version-scoped install roots + GC; source-side barrier (verify-0, `whenReady`, timeout/rollback); `uninstall` and `update` run through the one `replaceProvider` barrier; async update status. |
+
+### Test coverage map (by milestone)
+
+| Scenario                                                                           | Milestone |
+| ---------------------------------------------------------------------------------- | --------- |
+| Feed install lands in `installDir/<name>@<version>/...`; provider resolves from it | 1         |
+| Update materializes `v2` alongside a still-present `v1` dir (both on disk)         | 1         |
+| Failed materialize leaves the `v1` dir intact (clean abort)                        | 1         |
+| Startup orphan sweep removes crashed-update `v2` / un-pruned `v1`, keeps current   | 1         |
+| Record carries version/install-id; back-compat for a record lacking one            | 1         |
+| Issuing install/uninstall/update apply via the queue (no inline path)              | 2         |
+| `@package update` returns "started" then reports "updated"/"failed" async          | 2         |
+| Later user command queued after an update runs strictly after it (FIFO)            | 2         |
+| npm provider exposes loaded/refcount state (`isLoaded`/`getRefCount`)              | 3         |
+| `replaceProvider` holds one command-lock section across remove→wait→add            | 3         |
+| Thunk-omitted `replaceProvider` is a lock-held uninstall (remove→verify-0→free)    | 3         |
+| A request never interleaves the swap (runs strictly before or after)               | 3         |
+| verify-0 blocks `v2` start / uninstall name-free until the last host unloads       | 3         |
+| Mid-`foo`-request host blocks verify-0 until it drains                             | 3         |
+| `v1`/`v2` are separate provider instances with separate refcounts                  | 3         |
+| Uninstall + update both go through the one barrier                                 | 3         |
+| Leaf-op invariant: teardown/startup does not reacquire the command lock            | 3         |
+| Disconnect during the freeze drops the host from the barrier                       | 3, 4      |
+| Straggler-won't-idle → quiesce timeout → rollback                                  | 4         |
+| `v2`-won't-start → start/verify timeout → rollback                                 | 4         |
+| Abort mid-freeze → rollback (no deadlock on the held lock)                         | 4         |
+| Rollback leaves `v1` active + serving everywhere; `v2` discarded                   | 4         |
+| Issuing status: updating / updated / cancelled-reverted / failed-reverted          | 4         |
+| Sibling system message on update outcome                                           | 4         |
