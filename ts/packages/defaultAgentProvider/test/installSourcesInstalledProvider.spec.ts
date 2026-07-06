@@ -1294,11 +1294,11 @@ describe("AppAgentSource lifecycle tracker (design §7)", () => {
     });
 });
 
-describe("Update Coordination — cancel, timeout & rollback (design §5.3)", () => {
+describe("Update Coordination — timeout & rollback (design §5.3)", () => {
     const flush = () => new Promise((r) => setTimeout(r, 0));
     const settle = async () => {
-        // Drain the timer + microtask chain a few times so a phase-timeout /
-        // abort rollback (timer → decide → release → re-add → GC finalize)
+        // Drain the timer + microtask chain a few times so a phase-timeout
+        // rollback (timer → decide → release → re-add → GC finalize)
         // completes before assertions.
         for (let i = 0; i < 4; i++) {
             await new Promise((r) => setTimeout(r, 5));
@@ -1306,8 +1306,8 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
     };
 
     // A recording host that tracks op kind. Its removeProvider optionally blocks
-    // on a gate, so it can be held as the "straggler that won't idle" or to keep
-    // the freeze window open for an abort.
+    // on a gate, so it can be held as the "straggler that won't idle" that drives
+    // a quiesce-timeout rollback.
     function recordingHost(gate?: Promise<void>) {
         const calls: { op: "add" | "remove" }[] = [];
         return {
@@ -1374,17 +1374,13 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         straggler.calls.length = 0;
 
         const outcomes: string[] = [];
-        await built.testApi.update(
-            "foo",
-            undefined,
-            issuing.host,
-            undefined,
-            (o) => outcomes.push(o),
+        await built.testApi.update("foo", undefined, issuing.host, (o) =>
+            outcomes.push(o),
         );
         // The straggler never quiesces → the phase-1 backstop fires → rollback.
         await settle();
 
-        expect(outcomes).toEqual(["failed-reverted"]);
+        expect(outcomes).toEqual(["reverted"]);
         // v1 is restored everywhere: record kept (installRoot back), name active.
         expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
             v1Root,
@@ -1397,51 +1393,6 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
 
         releaseStraggler();
         await flush();
-    });
-
-    it("an out-of-band abort rolls back without deadlocking (§5.3)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir, {
-            // A long quiesce timeout so ONLY the abort drives the rollback.
-            updateCoordination: {
-                quiesceTimeoutMs: 5_000,
-            },
-        });
-        const issuing = recordingHost();
-        let releaseFreeze!: () => void;
-        const gate = new Promise<void>((r) => (releaseFreeze = r));
-        const frozen = recordingHost(gate);
-        built.connect(issuing.host);
-        built.connect(frozen.host);
-        const v1Root = await installFooV1(built, instanceDir, issuing.host);
-        issuing.calls.length = 0;
-        frozen.calls.length = 0;
-
-        const controller = new AbortController();
-        const outcomes: string[] = [];
-        await built.testApi.update(
-            "foo",
-            undefined,
-            issuing.host,
-            controller.signal,
-            (o) => outcomes.push(o),
-        );
-        // Cancel while the freeze is still open (the frozen host has not idled).
-        controller.abort();
-        await settle();
-        // Release the frozen host afterwards: the rollback must not have wedged
-        // on it (no deadlock), and the late quiesce is a harmless no-op.
-        releaseFreeze();
-        await settle();
-
-        expect(outcomes).toEqual(["cancelled-reverted"]);
-        expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
-            v1Root,
-        );
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
-        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
     });
 
     it("a lingering verify-0 refcount parks the barrier until the quiesce timeout rolls back (§5.6)", async () => {
@@ -1460,12 +1411,8 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         issuing.calls.length = 0;
 
         const outcomes: string[] = [];
-        await built.testApi.update(
-            "foo",
-            undefined,
-            issuing.host,
-            undefined,
-            (o) => outcomes.push(o),
+        await built.testApi.update("foo", undefined, issuing.host, (o) =>
+            outcomes.push(o),
         );
         // All hosts have quiesced, but verify-0 is non-zero → parked. Before the
         // timeout, v2 has NOT been added (no commit, no coexistence).
@@ -1475,7 +1422,7 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
 
         // The quiesce backstop resolves the park → rollback.
         await settle();
-        expect(outcomes).toEqual(["failed-reverted"]);
+        expect(outcomes).toEqual(["reverted"]);
         expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
             v1Root,
         );
@@ -1511,12 +1458,8 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         issuing.calls.length = 0;
 
         const outcomes: string[] = [];
-        await built.testApi.update(
-            "foo",
-            undefined,
-            issuing.host,
-            undefined,
-            (o) => outcomes.push(o),
+        await built.testApi.update("foo", undefined, issuing.host, (o) =>
+            outcomes.push(o),
         );
         // Every slot has quiesced, but v1's ref is still held → the barrier is
         // parked on verify-0 (no commit, no v2 added).
@@ -1549,12 +1492,8 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         issuing.calls.length = 0;
 
         const outcomes: string[] = [];
-        await built.testApi.update(
-            "foo",
-            undefined,
-            issuing.host,
-            undefined,
-            (o) => outcomes.push(o),
+        await built.testApi.update("foo", undefined, issuing.host, (o) =>
+            outcomes.push(o),
         );
         await settle();
 
@@ -1570,36 +1509,31 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir, {
             updateCoordination: {
-                quiesceTimeoutMs: 5_000,
+                quiesceTimeoutMs: 20,
             },
         });
         const issuing = recordingHost();
-        let releaseFreeze!: () => void;
-        const gate = new Promise<void>((r) => (releaseFreeze = r));
-        const frozen = recordingHost(gate);
+        let releaseStraggler!: () => void;
+        const gate = new Promise<void>((r) => (releaseStraggler = r));
+        const straggler = recordingHost(gate);
         built.connect(issuing.host);
-        const frozenConn = built.connect(frozen.host);
+        const stragglerConn = built.connect(straggler.host);
         const v1Root = await installFooV1(built, instanceDir, issuing.host);
 
-        const controller = new AbortController();
         const outcomes: string[] = [];
-        await built.testApi.update(
-            "foo",
-            undefined,
-            issuing.host,
-            controller.signal,
-            (o) => outcomes.push(o),
+        await built.testApi.update("foo", undefined, issuing.host, (o) =>
+            outcomes.push(o),
         );
-        controller.abort();
+        // The straggler never idles → the quiesce timeout drives the rollback.
         await settle();
 
-        // Disconnect the frozen session mid-rollback: must not throw, and the
+        // Disconnect the straggler mid-rollback: must not throw, and the
         // name must remain active on v1.
-        expect(() => frozenConn.dispose()).not.toThrow();
-        releaseFreeze();
+        expect(() => stragglerConn.dispose()).not.toThrow();
+        releaseStraggler();
         await settle();
 
-        expect(outcomes).toEqual(["cancelled-reverted"]);
+        expect(outcomes).toEqual(["reverted"]);
         expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
             v1Root,
         );
@@ -1624,12 +1558,8 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         const v1Root = await installFooV1(built, instanceDir, issuing.host);
 
         const outcomes: string[] = [];
-        await built.testApi.update(
-            "foo",
-            undefined,
-            issuing.host,
-            undefined,
-            (o) => outcomes.push(o),
+        await built.testApi.update("foo", undefined, issuing.host, (o) =>
+            outcomes.push(o),
         );
         await settle();
 
@@ -1637,7 +1567,7 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         // that rolls back NEVER overwrote the v1 record — it is durable the
         // instant the rollback settles, with no async gap in which a follow-up op
         // could read a stale v2 baseline.
-        expect(outcomes).toEqual(["failed-reverted"]);
+        expect(outcomes).toEqual(["reverted"]);
         expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
             v1Root,
         );
@@ -1670,7 +1600,7 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir, {
             // A long quiesce timeout: if the closed host stalled phase 1, the
-            // update would (wrongly) roll back with `failed-reverted` after 5 s.
+            // update would (wrongly) roll back with `reverted` after 5 s.
             updateCoordination: {
                 quiesceTimeoutMs: 5_000,
             },
@@ -1691,12 +1621,8 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         issuing.calls.length = 0;
 
         const outcomes: string[] = [];
-        await built.testApi.update(
-            "foo",
-            undefined,
-            issuing.host,
-            undefined,
-            (o) => outcomes.push(o),
+        await built.testApi.update("foo", undefined, issuing.host, (o) =>
+            outcomes.push(o),
         );
         // Commits within a few 5 ms ticks — far under the 5 s timeout — proving
         // the closed host filled its slot from the success path, not the timer.
@@ -1782,12 +1708,8 @@ describe("Update Coordination — cancel, timeout & rollback (design §5.3)", ()
         liveStraggler.calls.length = 0;
 
         const outcomes: string[] = [];
-        await built.testApi.update(
-            "foo",
-            undefined,
-            issuing.host,
-            undefined,
-            (o) => outcomes.push(o),
+        await built.testApi.update("foo", undefined, issuing.host, (o) =>
+            outcomes.push(o),
         );
         await flush();
         // The closed host filled its slot, but the LIVE straggler has not

@@ -145,15 +145,15 @@ of the bespoke drain / `pending` / `then` state machine.
 - **update** (`active(v1) → active(v2)`): the **only** op needing the resume-hold,
   and it is just the other two under one lock.
 
-### 5.3 Cancellation / timeout (keep v1 until v2 succeeds)
+### 5.3 Timeout & rollback (keep v1 until v2 succeeds)
 
-The held wait spans a process restart, so it must be **cancelable** (user) and
-**time-bounded** (safety). Ordering makes cancel a clean rollback: keep `v1`
-fully intact and restartable until `v2` is confirmed serving; only prune `v1`
-after success.
+The held wait spans a process restart, so it must be **time-bounded** (safety),
+and — as a future extension — **cancelable** (user). Ordering makes both a clean
+rollback: keep `v1` fully intact and restartable until `v2` is confirmed serving;
+only prune `v1` after success.
 
 ```
-if cancel / timeout before v2 is serving:
+if timeout (or a future cancel) before v2 is serving:
     restart v1 (still on disk), swap v1 artifacts back in, release lock,
     discard v2  → active(v1), as if the update never happened
 ```
@@ -201,18 +201,24 @@ if cancel / timeout before v2 is serving:
   **no separate v2 start/verify timeout** because there is no start probe — the
   structural check above is a synchronous manifest read done before the barrier.
   Config-tunable; start conservative.
-- **Cancel is out-of-band.** During the freeze the command lock is held, so a
-  typed `cancel` command would queue behind the frozen op and **deadlock**. Cancel
-  must ride the existing interrupt/abort path (`abortSignal`), not the command
-  queue; the issuing dispatcher's abort maps to a source-coordinated rollback.
-  Initially cancel need only be **available on the API** (abort-driven); the
-  user-facing cancel UX is deferred (TODO in `packageAgent.ts`).
+- **Cancel is a deferred extension (not currently wired).** A user-facing "cancel
+  update" affordance is **not implemented**: the only rollback trigger today is the
+  quiesce timeout above. The design constraint it must satisfy when built is
+  recorded here so the machinery is not re-derived. During the freeze the command
+  lock is held, so a typed `cancel` command would queue behind the frozen op and
+  **deadlock**; cancel must therefore ride the out-of-band interrupt/abort path,
+  **not** the command queue. It also needs a **longer-lived abort source** (e.g. a
+  registry of in-flight update controllers keyed by agent name): the per-command
+  `abortSignal` is torn down the instant `@update` returns "update started", so it
+  can never fire once the swap is actually running. The earlier per-command
+  `abortSignal` plumbing was removed as dead code (it was reachable only from
+  tests) until that UX — and its durable abort source — exists.
 - **Surfacing:** the issuing conversation gets async status (§5.4:
-  updating / updated / cancelled-reverted / failed-reverted); siblings experience
-  the brief freeze and get a system message on the outcome. Uninstall runs through
-  the same barrier and surfaces the analogous terminal outcome (`uninstalled` on a
-  clean commit, `reverted` — still installed — on a straggler-timeout rollback), so
-  the caller is never told an agent is gone when it actually reverted.
+  updating / updated / reverted); siblings experience the brief freeze and get a
+  system message on the outcome. Uninstall runs through the same barrier and
+  surfaces the analogous terminal outcome (`uninstalled` on a clean commit,
+  `reverted` — still installed — on a straggler-timeout rollback), so the caller is
+  never told an agent is gone when it actually reverted.
 
 ### 5.4 Uniform enqueue model — delete `immediate`
 
@@ -228,7 +234,7 @@ deadlock. Make the issuing session **enqueue like a sibling** instead:
    sits ahead of any later user command in the FIFO — no request slips ahead.
 3. **Completion is reported asynchronously** (a follow-up message / streaming
    command result): `@update` returns "update started"; the
-   "updated"/"failed"/"cancelled" outcome arrives when the op settles. `@update`
+   "updated"/"reverted" outcome arrives when the op settles. `@update`
    never blocks the command lock waiting on the cross-session restart.
 
 **Outcome-callback contract.** The async terminal outcome is delivered through a
@@ -236,9 +242,8 @@ one-shot `onOutcome(status)` callback on `update()` and `uninstall()`, invoked
 **exactly once** at the barrier's decide point (or synchronously on the no-barrier
 fast paths below):
 
-- `update`: `status ∈ { "updated", "cancelled-reverted", "failed-reverted" }` —
-  `updated` on commit, `cancelled-reverted` on an abort rollback, `failed-reverted`
-  on a quiesce-timeout rollback.
+- `update`: `status ∈ { "updated", "reverted" }` —
+  `updated` on commit, `reverted` on a quiesce-timeout rollback.
 - `uninstall`: `status ∈ { "uninstalled", "reverted" }` — `uninstalled` on commit,
   `reverted` on a straggler-timeout rollback (the agent stays installed).
 - **No-barrier fast paths still fire exactly one outcome.** An update whose old

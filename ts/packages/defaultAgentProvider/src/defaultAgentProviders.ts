@@ -362,13 +362,8 @@ type ReplaceBarrier = {
     phase: ReplacePhase;
     // undefined until decided; set exactly once (commit XOR rollback).
     outcome: ReplaceOutcome | undefined;
-    // Why a rollback was chosen (design §5.4): an out-of-band abort
-    // (`cancelled`) vs the quiesce timeout (`failed`). Undefined on commit.
-    rollbackKind: "cancelled" | "failed" | undefined;
     // Phase-1 backstop timer (straggler / `v1` won't die → rollback, §5.3).
     quiesceTimer: ReturnType<typeof setTimeout> | undefined;
-    // Detaches the out-of-band abort listener (design §5.3 cancel).
-    detachAbort: (() => void) | undefined;
 };
 
 /**
@@ -590,14 +585,12 @@ export function createDefaultInstalledAgentSource(
         return isLoadedProbe(barrier.oldProvider, barrier.name) !== true;
     }
 
-    // Cancel any live phase timers + the abort listener (design §5.3). Idempotent.
+    // Cancel any live phase timer (design §5.3). Idempotent.
     function clearBarrierTimers(barrier: ReplaceBarrier): void {
         if (barrier.quiesceTimer !== undefined) {
             clearTimeout(barrier.quiesceTimer);
             barrier.quiesceTimer = undefined;
         }
-        barrier.detachAbort?.();
-        barrier.detachAbort = undefined;
     }
 
     // The provider each host adds AFTER the barrier releases (design §5.3). The
@@ -644,14 +637,10 @@ export function createDefaultInstalledAgentSource(
         // uninstall), so late joiner and participants converge on one version.
         barrier.resolveDecided(decideAdd(barrier));
         // Surface the terminal status to the issuing conversation (design §5.4):
-        // a commit is `updated`; a rollback is `cancelled-reverted` (abort) or
-        // `failed-reverted` (quiesce timeout).
+        // a commit is `updated`; a rollback is `reverted` (the quiesce timeout
+        // abandoned a straggler and restored `v1`).
         const status: UpdateOutcomeStatus =
-            outcome === "committed"
-                ? "updated"
-                : barrier.rollbackKind === "cancelled"
-                  ? "cancelled-reverted"
-                  : "failed-reverted";
+            outcome === "committed" ? "updated" : "reverted";
         // A throwing user `onOutcome` (a display wrapper) must not escape as an
         // unhandled rejection nor skip the GC.
         try {
@@ -682,17 +671,11 @@ export function createDefaultInstalledAgentSource(
     }
 
     // Roll back the swap (design §5.3): keep `v1`, discard `v2`. Triggered by the
-    // quiesce timeout (`kind: "failed"`) or an out-of-band abort
-    // (`kind: "cancelled"`).
-    function rollback(
-        barrier: ReplaceBarrier,
-        kind: "cancelled" | "failed",
-        reason: string,
-    ): void {
+    // quiesce timeout (a straggler that won't idle, or a `v1` that won't die).
+    function rollback(barrier: ReplaceBarrier, reason: string): void {
         if (barrier.outcome !== undefined) {
             return;
         }
-        barrier.rollbackKind = kind;
         debug(`barrier '${barrier.name}': rolling back (${reason})`);
         decide(barrier, "rolledback");
     }
@@ -739,7 +722,7 @@ export function createDefaultInstalledAgentSource(
     }
 
     // Begin a coordinated teardown/swap across every connected session (design
-    // §5.6, §5.7) wrapped in the §5.3 timeout/cancel/rollback envelope. Every host
+    // §5.6, §5.7) wrapped in the §5.3 timeout/rollback envelope. Every host
     // — INCLUDING the issuing one — runs `replaceProvider` on its own idle-gated
     // applicator: under a SINGLE held command lock it removes the old version,
     // quiesces (fills its barrier slot), then awaits the shared `whenReady` before
@@ -747,9 +730,9 @@ export function createDefaultInstalledAgentSource(
     // any session and no two versions coexist. Returns immediately once the
     // barrier is wired; the swap resolves to COMMIT (`v2`/free the name) once the
     // last host quiesces and verify-0 confirms the shared old refcount is 0 — or
-    // to ROLLBACK (`v1` restored, `v2` discarded) on a quiesce timeout or an
-    // out-of-band abort (design §5.3). A per-host
-    // failure is treated as a quiesce so a failed/gone session never wedges it.
+    // to ROLLBACK (`v1` restored, `v2` discarded) on a quiesce timeout (design
+    // §5.3). A per-host failure is treated as a quiesce so a failed/gone session
+    // never wedges it.
     //
     // `dropConfig` (design §5, Model B): forwarded to every remove leg — `true`
     // for uninstall (clear the enable preference), `false` for update (preserve
@@ -767,10 +750,6 @@ export function createDefaultInstalledAgentSource(
         finalizeGc: (outcome: ReplaceOutcome) => void;
         // Report the terminal outcome to the issuing conversation (§5.4).
         onOutcome?: ((status: UpdateOutcomeStatus) => void) | undefined;
-        // Out-of-band cancel (design §5.3): abort → rollback. Rides the abort
-        // path, NEVER the command queue (which would deadlock behind the frozen
-        // op).
-        abortSignal?: AbortSignal | undefined;
     }): void {
         const {
             name,
@@ -781,7 +760,6 @@ export function createDefaultInstalledAgentSource(
             onDecided,
             finalizeGc,
             onOutcome,
-            abortSignal,
         } = params;
         // The issuing host is always part of the barrier even if it never
         // formally connected (defensive); it is otherwise treated as a sibling.
@@ -810,9 +788,7 @@ export function createDefaultInstalledAgentSource(
             onOutcome,
             phase: "quiescing",
             outcome: undefined,
-            rollbackKind: undefined,
             quiesceTimer: undefined,
-            detachAbort: undefined,
         };
         entries.set(name, {
             status: "removing",
@@ -823,22 +799,9 @@ export function createDefaultInstalledAgentSource(
         // Phase-1 backstop (design §5.3 liveness): a straggler that won't idle or
         // a `v1` that won't terminate (verify-0 never passes) rolls back.
         barrier.quiesceTimer = setTimeout(
-            () => rollback(barrier, "failed", "quiesce timeout"),
+            () => rollback(barrier, "quiesce timeout"),
             quiesceTimeoutMs,
         );
-        // Out-of-band cancel (design §5.3): the abort maps to a source-coordinated
-        // rollback. It rides the abort path, not the command queue — a queued
-        // `cancel` would deadlock behind the frozen command lock.
-        if (abortSignal !== undefined) {
-            if (abortSignal.aborted) {
-                queueMicrotask(() => rollback(barrier, "cancelled", "aborted"));
-            } else {
-                const onAbort = () => rollback(barrier, "cancelled", "aborted");
-                abortSignal.addEventListener("abort", onAbort, { once: true });
-                barrier.detachAbort = () =>
-                    abortSignal.removeEventListener("abort", onAbort);
-            }
-        }
 
         for (const host of targets) {
             host.replaceProvider(oldProvider, () => decideAdd(barrier), {
@@ -1082,7 +1045,6 @@ export function createDefaultInstalledAgentSource(
             name: string,
             range: string | undefined,
             issuingHost: AppAgentHost,
-            abortSignal?: AbortSignal,
             onOutcome?: (status: UpdateOutcomeStatus) => void,
         ): Promise<void> {
             if (isBuiltin(name)) {
@@ -1156,10 +1118,9 @@ export function createDefaultInstalledAgentSource(
                 // would collide on that storage. The barrier passes
                 // dropConfig=false so the version bump preserves each session's
                 // per-session enable preference (design §5, Model B). The update
-                // is cancelable (abortSignal) and time-bounded: a straggler that
-                // won't idle or a v1 that won't die ROLLS BACK to v1 (design §5.3)
-                // — v2 is discarded and v1 stays the recorded-current version, as
-                // if it never happened.
+                // is time-bounded: a straggler that won't idle or a v1 that won't
+                // die ROLLS BACK to v1 (design §5.3) — v2 is discarded and v1 stays
+                // the recorded-current version, as if it never happened.
                 const oldEntry = entries.get(name);
                 // Build v2's provider AND structurally validate its
                 // freshly-materialized manifest while v1 is still live (design
@@ -1250,7 +1211,6 @@ export function createDefaultInstalledAgentSource(
                             }
                         },
                         onOutcome,
-                        abortSignal,
                     });
                 } else {
                     // No live old version to tear down: commit v2 directly (write

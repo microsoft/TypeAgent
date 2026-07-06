@@ -77,7 +77,7 @@ export interface InstalledAgentSourceApi {
         onOutcome?: (status: UninstallOutcomeStatus) => void,
     ): Promise<void>;
     // Re-materialize against the recorded source (fail-fast on error), write the
-    // record (commit), then start a coordinated, CANCELABLE, time-bounded swap
+    // record (commit), then start a coordinated, time-bounded swap
     // (global no-coexistence, §5.3, §7.2): the old version is removed across
     // EVERY session before the new one is added to ANY, all under one held command
     // lock per session, so two versions of the name are never loaded at once
@@ -85,17 +85,13 @@ export interface InstalledAgentSourceApi {
     // cannot be shared between versions). The whole swap is enqueued on every
     // session's idle-gated applicator — including the issuing one (§5.4) — so this
     // returns as soon as the record is committed ("update started"); the swap
-    // settles asynchronously and rolls back to v1 on cancel/timeout/failed-start
-    // (§5.3). `abortSignal` (design §5.3): an out-of-band abort maps to a
-    // source-coordinated rollback — it must ride the abort path, NOT a queued
-    // `cancel` (which would deadlock behind the frozen command lock). `onOutcome`
-    // (design §5.4): the terminal async status (updated / cancelled-reverted /
-    // failed-reverted) once the swap settles.
+    // settles asynchronously and rolls back to v1 on timeout/failed-start
+    // (§5.3). `onOutcome` (design §5.4): the terminal async status
+    // (updated / reverted) once the swap settles.
     update(
         name: string,
         range: string | undefined,
         issuingHost: AppAgentHost,
-        abortSignal?: AbortSignal,
         onOutcome?: (status: UpdateOutcomeStatus) => void,
     ): Promise<void>;
     // Host-rendered summaries of installed agents, backing `@package list`.
@@ -357,46 +353,22 @@ class UpdateCommandHandler implements CommandHandler {
         // The source materializes the new version first and only rewrites the
         // record after it succeeds, so a failed update is a no-op (design §4.7,
         // §12 Q13) and that error surfaces here. It then STARTS a coordinated,
-        // cancelable, time-bounded swap (global no-coexistence, §5.3, §7.2) that
+        // time-bounded swap (global no-coexistence, §5.3, §7.2) that
         // is enqueued on every session's idle-gated applicator — including THIS
         // one (§5.4) — so this returns as soon as the record is committed ("update
         // started"); the old version drains and the new one re-adds
-        // asynchronously (or rolls back to v1 on cancel/timeout), surfaced via the
+        // asynchronously (or rolls back to v1 on timeout), surfaced via the
         // `onOutcome` status callback + per-session fan-out notifications.
-        //
-        // Cancel rides the out-of-band interrupt/abort path (`context.abortSignal`
-        // — NOT a queued `cancel` command, which would deadlock behind the frozen
-        // command lock) and maps to a source-coordinated rollback to v1 (design
-        // §5.3). NOTE: `context.abortSignal` is the PER-COMMAND signal, which is
-        // torn down the moment this handler returns "update started" — so today
-        // nothing can fire it once the swap is actually running. The source-side
-        // abort wiring is correct and is exercised by tests with a caller-owned
-        // controller; it is the API-level cancel that the deferred UX will drive.
-        // TODO (update-coordination rework — see
-        // docs/design/connectedProvider/UPDATE_COORDINATION.md): the user-facing
-        // cancel UX (a visible "cancel update" affordance) is still deferred and
-        // must supply a LONGER-LIVED abort source (e.g. a registry of in-flight
-        // update controllers keyed by agent name) rather than the per-command
-        // `context.abortSignal`, which is already detached by the time the swap
-        // freezes.
-        await source.update(
-            name,
-            range,
-            appAgentHost,
-            context.abortSignal,
-            (outcome) => {
-                // Async terminal status for the issuing conversation (design
-                // §5.4). The command already returned "update started"; report the
-                // settled outcome as a follow-up status line.
-                const message =
-                    outcome === "updated"
-                        ? `Agent '${name}' updated.`
-                        : outcome === "cancelled-reverted"
-                          ? `Agent '${name}' update cancelled; reverted to the previous version.`
-                          : `Agent '${name}' update failed; reverted to the previous version.`;
-                displayStatus(message, context);
-            },
-        );
+        await source.update(name, range, appAgentHost, (outcome) => {
+            // Async terminal status for the issuing conversation (design
+            // §5.4). The command already returned "update started"; report the
+            // settled outcome as a follow-up status line.
+            const message =
+                outcome === "updated"
+                    ? `Agent '${name}' updated.`
+                    : `Agent '${name}' update failed; reverted to the previous version.`;
+            displayStatus(message, context);
+        });
         displayResult(
             `Agent '${name}' update started; it will reload in each session shortly.`,
             context,

@@ -551,7 +551,8 @@ hosts`; fan out `removeProvider(P)`. Each host's ack drops it from `pending`;
   > request-slip window — a request to the name mid-swap could miss or misroute.
   > This has been **superseded**: update (and uninstall) now run through a single
   > `commandLock`-held critical section per dispatcher, coordinated by a
-  > source-side barrier and made cancelable + time-bounded with rollback to `v1`.
+  > source-side barrier and made time-bounded with rollback to `v1` on a quiesce
+  > timeout (user-facing cancel is a deferred extension — see §5.3).
   > See [UPDATE_COORDINATION.md](./UPDATE_COORDINATION.md) (Implemented) and the
   > resolved item in DEFERRED_REVIEW_LOG.md.
 - **name reuse during `removing`:** a new user `@package install` **or**
