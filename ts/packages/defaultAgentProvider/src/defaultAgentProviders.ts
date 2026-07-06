@@ -338,12 +338,18 @@ type ReplaceBarrier = {
     // (after release) ⇒ every host finished its swap → run the GC finalizer, so
     // `v1` is never pruned before `v2` is confirmed serving (design §5.3).
     readonly settling: Set<AppAgentHost>;
-    // Sessions that connected AFTER this barrier snapshotted its targets, while
-    // the name was `removing` (design §7.3 connect-during-removing). They are NOT
-    // barrier participants (they never held `v1`, so they neither quiesce nor
-    // count toward verify-0/GC), but they DID miss the swap, so the decided
-    // version is fanned out to them once the outcome is decided.
-    readonly lateJoiners: Set<AppAgentHost>;
+    // Resolves (exactly once, when the outcome is decided) with the version a
+    // session that connected mid-`removing` should install: `v2` on a committed
+    // update, `v1` on a rollback, or nothing (`undefined`) on a committed
+    // uninstall. Such a late joiner is NOT a participant (it never held `v1`, so
+    // it neither quiesces nor counts toward verify-0/GC); the dispatcher instead
+    // blocks its connect on this promise (under the held command lock) and
+    // installs the result inline. Deferring the load past the decision means it
+    // can neither pollute verify-0 nor run a command with the agent absent
+    // (design §7.3 connect-during-removing).
+    readonly whenDecided: Promise<AppAgentProvider | undefined>;
+    // Resolves `whenDecided` (called once in `decide`).
+    readonly resolveDecided: (provider: AppAgentProvider | undefined) => void;
     // Resolves every parked host's `whenReady` so it runs its (decided) add leg.
     readonly release: () => void;
     // Run once when the outcome is decided (at release, before hosts add): flip
@@ -596,33 +602,6 @@ export function createDefaultInstalledAgentSource(
             : barrier.newProvider;
     }
 
-    // Fan the decided version out to any session that connected mid-`removing`
-    // (design §7.3 connect-during-removing). Such a late joiner was not a barrier
-    // participant, so it never received the swap: it gets `v2` on a committed
-    // update, `v1` on a rollback (restoring the version as if the op never
-    // happened), or nothing on a committed uninstall (`old → ∅`). The add rides
-    // the host's own idle-gated applicator FIFO and its failure is isolated so
-    // one gone/failed late joiner never affects the others or the barrier.
-    // `notify: false` — this completes the late joiner's INITIAL connect set
-    // (silent, like the rest of its initial providers), not a live user-visible
-    // change to an established session.
-    function fanOutLateJoiners(barrier: ReplaceBarrier): void {
-        if (barrier.lateJoiners.size === 0) {
-            return;
-        }
-        const provider = decideAdd(barrier);
-        if (provider === undefined) {
-            return; // committed uninstall: the late joiner correctly has nothing
-        }
-        for (const host of barrier.lateJoiners) {
-            host.addProvider(provider, false).catch((e) => {
-                debug(
-                    `late-joiner addProvider failed for '${barrier.name}': ${e}`,
-                );
-            });
-        }
-    }
-
     // Decide the barrier's outcome and advance to phase 3 (design §5.3). Runs
     // exactly once (guarded by `outcome`): flips the entry (+ restores the record
     // on rollback), releases every parked host to run its decided add leg, then
@@ -649,11 +628,12 @@ export function createDefaultInstalledAgentSource(
             );
         }
         barrier.release();
-        // Fan the decided version out to any session that connected mid-`removing`
-        // (it was not a barrier participant, so the parked add-legs above never
-        // reached it). Done AFTER `onDecided` flips the entry so the late joiner
-        // and the participants converge on the same version (design §7.3).
-        fanOutLateJoiners(barrier);
+        // Unblock any session that connected mid-`removing` (design §7.3): it was
+        // not a participant, so the parked add-legs above never reached it.
+        // Resolved AFTER `onDecided` flips the entry, with the decided version to
+        // install (`v2` commit / `v1` rollback / nothing on a committed
+        // uninstall), so late joiner and participants converge on one version.
+        barrier.resolveDecided(decideAdd(barrier));
         // Surface the terminal status to the issuing conversation (design §5.4):
         // a commit is `updated`; a rollback is `cancelled-reverted` (abort) or
         // `failed-reverted` (quiesce timeout).
@@ -812,13 +792,20 @@ export function createDefaultInstalledAgentSource(
         const whenReady = new Promise<void>((resolve) => {
             release = resolve;
         });
+        let resolveDecided!: (provider: AppAgentProvider | undefined) => void;
+        const whenDecided = new Promise<AppAgentProvider | undefined>(
+            (resolve) => {
+                resolveDecided = resolve;
+            },
+        );
         const barrier: ReplaceBarrier = {
             name,
             oldProvider,
             newProvider,
             pending: new Set(targets),
             settling: new Set(targets),
-            lateJoiners: new Set(),
+            whenDecided,
+            resolveDecided,
             release,
             onDecided,
             finalizeGc,
@@ -1370,16 +1357,38 @@ export function createDefaultInstalledAgentSource(
             // above (its post-swap version is still undecided). This host
             // connected AFTER the in-flight barrier snapshotted its targets, so
             // it is NOT a participant and would otherwise never receive the
-            // swapped-in version until it reconnected. Enroll it as a late joiner
-            // so the decided version is fanned out to it when the barrier settles
-            // (design §7.3 connect-during-removing).
+            // swapped-in version until it reconnected. Instead it hands back a
+            // `whenReady` the dispatcher awaits (still holding this session's
+            // command lock) before going live: it resolves to the decided
+            // version(s) once every in-flight barrier has decided, which the
+            // dispatcher then installs inline. Deferring that install past the
+            // decision means this session never loads a doomed version (verify-0
+            // pollution) and never processes a command with the upgrading agent
+            // absent (design §7.3 connect-during-removing).
+            const joinedBarriers: ReplaceBarrier[] = [];
             for (const entry of entries.values()) {
                 if (entry.status === "removing") {
-                    entry.barrier.lateJoiners.add(host);
+                    joinedBarriers.push(entry.barrier);
                 }
             }
+            // `whenReady` resolves once EVERY barrier in flight at connect time
+            // has decided, to the decided version(s) to install (a committed
+            // uninstall contributes nothing). Resolves to `[]` immediately when
+            // nothing was in flight. The barriers decide independently of this
+            // session (bounded by their quiesce timeout), so this never hangs.
+            const whenReady: Promise<AppAgentProvider[]> =
+                joinedBarriers.length === 0
+                    ? Promise.resolve([])
+                    : Promise.all(
+                          joinedBarriers.map((barrier) => barrier.whenDecided),
+                      ).then((decided) =>
+                          decided.filter(
+                              (p): p is AppAgentProvider => p !== undefined,
+                          ),
+                      );
             return {
                 providers,
+                whenReady,
                 dispose() {
                     // Deregister this host from the fan-out registry (design §6).
                     // Does NOT tear down the shared providers — other sessions
@@ -1403,9 +1412,6 @@ export function createDefaultInstalledAgentSource(
                         // disconnect is always safe (design §5.7 close race).
                         const entry = entries.get(name);
                         if (entry?.status === "removing") {
-                            // Drop a disconnected late joiner so the barrier does
-                            // not fan the decided version out to a gone session.
-                            entry.barrier.lateJoiners.delete(host);
                             maybeAdvance(entry.barrier);
                         }
                     }

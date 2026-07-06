@@ -1090,9 +1090,23 @@ export async function initializeCommandHandlerContext(
                 // §7.3). Uses `installAppProvider` directly (not the
                 // add-known-agents path) so `reconcileKnownAgents` below still
                 // sees the true persisted-vs-available diff.
-                const { providers } = connection;
+                const { providers, whenReady } = connection;
                 await context.commandLock(async () => {
                     for (const provider of providers) {
+                        await installAppProvider(context, provider);
+                    }
+                    // If this session connected while a name was mid-`removing`,
+                    // block here — STILL holding the command lock, so no user
+                    // command can slip in — until every such barrier decides, then
+                    // register the decided version(s) inline. Because the load
+                    // happens only after the decision, the session never loads a
+                    // doomed version (verify-0 pollution) nor runs a command with
+                    // the upgrading agent absent (design §7.3). The wait is
+                    // bounded by the barrier's own quiesce-timeout envelope, and
+                    // the barrier decides independently of this session's command
+                    // lock, so holding it here cannot deadlock. Resolves to `[]`
+                    // immediately when nothing was in flight at connect time.
+                    for (const provider of await whenReady) {
                         await installAppProvider(context, provider);
                     }
                 });
@@ -1470,21 +1484,15 @@ export async function closeCommandHandlerContext(
     }
     // Save the session because the token count is in it.
     context.session.save();
-    // Disconnect the dynamic agent sources (design §6): unregister their vended
-    // providers from this manager and deregister this host from each source's
-    // registry. This does NOT tear down the shared provider instances — other
-    // sessions still hold them.
+    // Tear down every loaded agent, including those vended by the dynamic
+    // sources: `close()` unloads each agent instance from its provider and drops
+    // its session context. The shared provider instances themselves are NOT torn
+    // down — other sessions still hold them (design §6).
+    await context.agents.close();
+    // Only after this session's agent instances are unloaded do we disconnect
+    // from the dynamic sources: deregister this host from each source's client
+    // registry so any in-flight barrier stops waiting on it (design §6).
     for (const connection of context.appAgentConnections) {
-        for (const provider of connection.providers) {
-            try {
-                await context.agents.removeProvider(
-                    provider,
-                    context.agentCache.grammarStore,
-                );
-            } catch (e) {
-                debugError(`Failed to unregister source provider: ${e}`);
-            }
-        }
         try {
             connection.dispose();
         } catch (e) {
@@ -1492,7 +1500,6 @@ export async function closeCommandHandlerContext(
         }
     }
     context.appAgentConnections.length = 0;
-    await context.agents.close();
     if (context.instanceDirLock) {
         await context.instanceDirLock();
     }

@@ -183,6 +183,17 @@ export interface AppAgentConnection {
      */
     readonly providers: AppAgentProvider[];
     /**
+     * Resolves once every teardown/swap barrier that was in flight when this
+     * session connected (a name mid-`removing`) has decided, yielding the
+     * decided version(s) to register (design §7.3 connect-during-removing). The
+     * dispatcher awaits this UNDER its held command lock during connect, then
+     * registers the resolved provider(s) inline — so the session neither loads a
+     * doomed version (verify-0 pollution) nor processes a command while the
+     * upgrading agent is absent. Resolves to `[]` immediately when nothing was
+     * in flight at connect time.
+     */
+    readonly whenReady: Promise<AppAgentProvider[]>;
+    /**
      * Deregisters THIS host from the source's fan-out registry. It does NOT tear
      * down the shared providers (other sessions still use them); the dispatcher
      * unregisters them from its own `AppAgentManager` as part of context

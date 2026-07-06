@@ -15,36 +15,36 @@
 
 ## Summary table
 
-| #   | Area                  | Item                                                             | Priority | Recommendation                                  |
-| --- | --------------------- | ---------------------------------------------------------------- | -------- | ----------------------------------------------- |
-| 2   | Security              | Feed cache file symlink safety                                   | P3       | Do not address (optional `lstat` guard)         |
-| 3   | Security              | Transient npm auth file mode on Windows                          | P3       | Do not address                                  |
-| 6   | Concurrency/lifecycle | Load tombstone `withTombstone` kept                              | P2       | Keep (defense-in-depth; #4/#5 landed)           |
-| 7   | Concurrency/lifecycle | Leaf-op invariant enforced by convention                         | P3       | Keep convention (optional assertion)            |
-| 8   | Concurrency/lifecycle | verify-0 park never re-checks self-dropping refcount             | P2       | Add refcount-drop notification (later)          |
-| 9   | Concurrency/lifecycle | Wedged-straggler v2 dir + phase-3 GC backstop                    | P3       | Keep (startup sweep backstop)                   |
-| 10  | Concurrency/lifecycle | Full pre-launch v2 startability probe                            | P3       | Do not address (no forking)                     |
-| 11  | Concurrency/lifecycle | Failed materialize leaves partial root                           | P3       | Do not address (startup sweep)                  |
-| 12  | Config/architecture   | `getProviderConfig` first-config singleton cache                 | P3       | Do not address (single-config invariant)        |
-| 13  | Config/architecture   | Indexing registry skips non-builtin agents                       | P2       | Evaluate: consult installed records             |
-| 14  | Config/architecture   | Source config fail-fast validation                               | P3       | Keep graceful degrade (optional doctor cmd)     |
-| 15  | Tooling/policy        | `agent-keyword` autofix needs 2nd `--fix` pass                   | P3       | Optional in-rule sort                           |
-| 16  | UX                    | Update cancel UX + longer-lived abort source                     | P2       | Build abort registry when update UX prioritized |
-| 17  | Test coverage         | Feed-driven prune via `path`-record stand-in                     | P2       | Add `feedDeps` seam when needed                 |
-| 18  | Test coverage         | Direct (non-drain) prune branches unexercised                    | P3       | Do not address (defensive fallback)             |
-| 19  | Test coverage         | Rollback-prune of REAL distinct v2 root untested                 | P2       | Add with feed materialize harness               |
-| 20  | Test coverage         | source→real-`AppAgentHostApplicator` integration                 | P2       | Add thin smoke test                             |
-| 21  | Test coverage         | `@package` async status STRINGS not asserted                     | P3       | Optional string assertions                      |
-| 22  | Test coverage         | Fake-timer rollback tests (NIT)                                  | P3       | Optional harness cleanup                        |
-| 23  | Test coverage         | execMode propagation end-to-end                                  | P3       | Add if execMode routing changes                 |
-| 24  | Test coverage         | Feed `@update <range>` re-resolve untested                       | P3       | Add if installer gains DI seam                  |
-| 25  | Test coverage         | Catalog renamed-install re-lookup end-to-end                     | P3       | Do not address (covered indirectly)             |
-| 26  | Test coverage         | `UpdateCommandHandler` happy-path call order                     | P3       | Do not address (covered e2e)                    |
-| 27  | Test coverage         | `@source add` duplicate-name error path                          | P3       | Do not address (registry-owned)                 |
-| 28  | Test coverage         | `agent-keyword` policy rule fixture test                         | P3       | Add if a scripts test harness lands             |
-| 29  | Test coverage         | Multi-host boot consistency                                      | P2       | Add smoke-test scenario                         |
-| 30  | Code hygiene          | `displayResult` not awaited in handlers                          | P3       | Do not address (matches pattern)                |
-| 31  | Code hygiene          | connectedProvider M1 cosmetic nits                               | P3       | Do not address (cosmetic)                       |
+| #   | Area                  | Item                                                 | Priority | Recommendation                                  |
+| --- | --------------------- | ---------------------------------------------------- | -------- | ----------------------------------------------- |
+| 2   | Security              | Feed cache file symlink safety                       | P3       | Do not address (optional `lstat` guard)         |
+| 3   | Security              | Transient npm auth file mode on Windows              | P3       | Do not address                                  |
+| 6   | Concurrency/lifecycle | Load tombstone `withTombstone` kept                  | P2       | Keep (defense-in-depth; #4/#5 landed)           |
+| 7   | Concurrency/lifecycle | Leaf-op invariant enforced by convention             | P3       | Keep convention (optional assertion)            |
+| 8   | Concurrency/lifecycle | verify-0 park never re-checks self-dropping refcount | P2       | Add refcount-drop notification (later)          |
+| 9   | Concurrency/lifecycle | Wedged-straggler v2 dir + phase-3 GC backstop        | P3       | Keep (startup sweep backstop)                   |
+| 10  | Concurrency/lifecycle | Full pre-launch v2 startability probe                | P3       | Do not address (no forking)                     |
+| 11  | Concurrency/lifecycle | Failed materialize leaves partial root               | P3       | Do not address (startup sweep)                  |
+| 12  | Config/architecture   | `getProviderConfig` first-config singleton cache     | P3       | Do not address (single-config invariant)        |
+| 13  | Config/architecture   | Indexing registry skips non-builtin agents           | P2       | Evaluate: consult installed records             |
+| 14  | Config/architecture   | Source config fail-fast validation                   | P3       | Keep graceful degrade (optional doctor cmd)     |
+| 15  | Tooling/policy        | `agent-keyword` autofix needs 2nd `--fix` pass       | P3       | Optional in-rule sort                           |
+| 16  | UX                    | Update cancel UX + longer-lived abort source         | P2       | Build abort registry when update UX prioritized |
+| 17  | Test coverage         | Feed-driven prune via `path`-record stand-in         | P2       | Add `feedDeps` seam when needed                 |
+| 18  | Test coverage         | Direct (non-drain) prune branches unexercised        | P3       | Do not address (defensive fallback)             |
+| 19  | Test coverage         | Rollback-prune of REAL distinct v2 root untested     | P2       | Add with feed materialize harness               |
+| 20  | Test coverage         | source→real-`AppAgentHostApplicator` integration     | P2       | Add thin smoke test                             |
+| 21  | Test coverage         | `@package` async status STRINGS not asserted         | P3       | Optional string assertions                      |
+| 22  | Test coverage         | Fake-timer rollback tests (NIT)                      | P3       | Optional harness cleanup                        |
+| 23  | Test coverage         | execMode propagation end-to-end                      | P3       | Add if execMode routing changes                 |
+| 24  | Test coverage         | Feed `@update <range>` re-resolve untested           | P3       | Add if installer gains DI seam                  |
+| 25  | Test coverage         | Catalog renamed-install re-lookup end-to-end         | P3       | Do not address (covered indirectly)             |
+| 26  | Test coverage         | `UpdateCommandHandler` happy-path call order         | P3       | Do not address (covered e2e)                    |
+| 27  | Test coverage         | `@source add` duplicate-name error path              | P3       | Do not address (registry-owned)                 |
+| 28  | Test coverage         | `agent-keyword` policy rule fixture test             | P3       | Add if a scripts test harness lands             |
+| 29  | Test coverage         | Multi-host boot consistency                          | P2       | Add smoke-test scenario                         |
+| 30  | Code hygiene          | `displayResult` not awaited in handlers              | P3       | Do not address (matches pattern)                |
+| 31  | Code hygiene          | connectedProvider M1 cosmetic nits                   | P3       | Do not address (cosmetic)                       |
 
 ---
 
