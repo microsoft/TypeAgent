@@ -38,14 +38,6 @@
 - **Rationale:** The GC prune branches are exercised by seeding a `path` record with a hand-set `installRoot` plus a real on-disk root, then running `update`/`uninstall` (`installSourcesInstalledProvider.spec.ts`: "update prunes the old version's install root after the swap", "uninstall prunes the agent's install root once drained"). Feed-level materialize + distinct-root behavior is covered directly in `installSourcesFeed.spec.ts`. Adding a `feedDeps` injection seam is production surface not needed for M1.
 - **Follow-up:** If a later milestone needs end-to-end feed→update coverage, add a `feedDeps` param to `createDefaultInstalledAgentSource` (or export `pruneAgentRoot` for a direct unit test).
 
-### 2026-07-05 — Failed materialize leaves its partial root for the startup sweep
-
-- **Milestone / gate round:** M1 / review round 1 (NIT)
-- **Finding / gap:** When `feedSource.materialize` throws, the just-created `installDir/agents/<root>` dir survives (empty/partial) until the next startup orphan sweep, rather than being `rmSync`'d eagerly on the error path.
-- **Decision:** Declined eager cleanup.
-- **Rationale:** This matches the logged design intent (decisions log: "the startup orphan sweep is the backstop"). The partial root is never persisted to a record, is never resolved, and is reclaimed on next startup; eager cleanup adds an error-path branch for no correctness gain. The prior root and shared `installDir` are already proven intact by the clean-abort test.
-- **Follow-up:** none.
-
 ### 2026-07-05 — Direct (non-drain) prune branches left unexercised
 
 - **Milestone / gate round:** M1 / test-gap round 2 (LOW)
@@ -53,48 +45,6 @@
 - **Decision:** Deferred.
 - **Rationale:** Reaching an inactive-entry state at prune time requires contriving a record with no live entry, which does not occur in the normal seed→install→op flow; the branch is a trivial defensive fallback (same `pruneAgentRoot` call, best-effort). The primary drained path is fully covered. Low regression risk.
 - **Follow-up:** none.
-
-### 2026-07-05 — DEFERRED: full pre-launch `v2` startability probe
-
-- **Milestone / gate round:** M4 / §5.3
-- **Finding / gap:** The structural check only reads `v2`'s manifest
-  (`getAppAgentManifest`); it does not fork/launch `v2` to prove it actually
-  starts. A `v2` that resolves its manifest but crashes on `instantiate()` still
-  commits, and the crash surfaces later as a normal per-session load failure (not
-  an update rollback).
-- **Decision:** Deferred, and the `verifyStart` seam was REMOVED (TypeAgent never
-  forks a startability probe). The cheap manifest read that used to be the default
-  `verifyStart` moved forward to install/update materialize time (before the
-  barrier, gated to npm-package sources via `record.module !== undefined`), so the
-  common "corrupt/unresolvable `v2`" case fails without ever reaching the swap.
-- **Follow-up:** If forking pre-launch verification is ever wanted, it must be
-  reintroduced as an explicit, opt-in seam — the previous `updateCoordination.verifyStart`
-  hook no longer exists.
-
-### 2026-07-05 — DEFERRED: user-facing cancel UX + longer-lived abort source
-
-- **Milestone / gate round:** M4 / §4.2, §5.3 (surfaced in M4 review round 1)
-- **Finding / gap:** The abort→rollback path is wired and tested with a
-  caller-owned `AbortController`, but `@package update` threads
-  `context.abortSignal` — the PER-COMMAND signal, which is torn down the instant
-  the handler returns "update started". So today nothing can fire it once the swap
-  is actually running; the API-level cancel is reachable only programmatically.
-- **Decision:** Deferred (consistent with the design's §4.2 UX deferral). Source-
-  side abort semantics are complete and locked by tests.
-- **Follow-up:** The cancel UX must supply a LONGER-LIVED abort source — e.g. a
-  registry of in-flight update controllers keyed by agent name that a future
-  "cancel update" affordance aborts — rather than the per-command signal.
-
-### 2026-07-05 — DEFERRED: wedged-straggler `v2` install dir + phase-3 GC backstop
-
-- **Milestone / gate round:** M4 / §5.3, §5.5 (surfaced in M4 review round 1)
-- **Finding / gap:** Phase 3 (`releasing`) has no timer: a host whose add leg
-  hangs forever leaves `settling` non-empty, so `finalizeGc` (the prune) never
-  runs and a superseded install root lingers. The outcome is already committed and
-  every reachable session is serving correctly; only the GC is skipped.
-- **Decision:** Deferred — the Milestone 1 startup orphan sweep is the backstop
-  (it removes any install root not referenced by the current record).
-- **Follow-up:** None required; revisit only if lingering dirs prove costly.
 
 ### 2026-07-05 — DEFERRED: verify-0 park never re-checks a self-dropping refcount
 
@@ -109,26 +59,6 @@
   wait, no coexistence).
 - **Follow-up:** Optionally add a refcount-drop notification from the provider so
   the barrier can advance without waiting out the timeout.
-
-### 2026-07-05 — KEPT (not removed): load tombstone `withTombstone`
-
-- **Milestone / gate round:** M5 / §6 (5.1 step 2)
-- **Finding / gap:** M5 evaluated removing the load tombstone (`withTombstone`),
-  which refuses `loadAppAgent` for a name while its entry is `removing`. Under the
-  single lock-held barrier, each session's remove + unload are atomic under its
-  own command lock, so the per-session removed-but-still-loadable race the
-  tombstone originally guarded is closed.
-- **Decision:** KEPT, not removed. A surviving window remains: a session that
-  `connect()`s mid-`removing` is NOT a barrier target, so the barrier's
-  per-session serialization does not cover its `loadAppAgent` calls. The tombstone
-  is the cheap backstop for exactly that §7.3 connect-during-removing case (see
-  the code comments and the entry's `removing.provider` retention).
-- **Follow-up:** The connect-during-removing races themselves are now CLOSED — the
-  late joiner is enrolled on the in-flight barrier and receives the decided
-  version on completion, and `connect()`'s initial registration runs under the
-  session command lock (source `fanOutLateJoiners` + dispatcher connect loop). The
-  tombstone is retained as defense-in-depth for the load path; reconsider removing
-  it only if that redundancy proves unnecessary.
 
 ### 2026-07-05 — DEFERRED: rollback-prune of a REAL distinct v2 root untested (path-source limit)
 

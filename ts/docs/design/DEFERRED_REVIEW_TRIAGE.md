@@ -17,11 +17,7 @@
 
 | #   | Area                  | Item                                                 | Priority | Recommendation                           |
 | --- | --------------------- | ---------------------------------------------------- | -------- | ---------------------------------------- |
-| 6   | Concurrency/lifecycle | Load tombstone `withTombstone` kept                  | P2       | Keep (defense-in-depth; #4/#5 landed)    |
 | 8   | Concurrency/lifecycle | verify-0 park never re-checks self-dropping refcount | P2       | Add refcount-drop notification (later)   |
-| 9   | Concurrency/lifecycle | Wedged-straggler v2 dir + phase-3 GC backstop        | P3       | Keep (startup sweep backstop)            |
-| 10  | Concurrency/lifecycle | Full pre-launch v2 startability probe                | P3       | Do not address (no forking)              |
-| 11  | Concurrency/lifecycle | Failed materialize leaves partial root               | P3       | Do not address (startup sweep)           |
 | 12  | Config/architecture   | `getProviderConfig` first-config singleton cache     | P3       | Do not address (single-config invariant) |
 | 17  | Test coverage         | Feed-driven prune via `path`-record stand-in         | P2       | Add `feedDeps` seam when needed          |
 | 18  | Test coverage         | Direct (non-drain) prune branches unexercised        | P3       | Do not address (defensive fallback)      |
@@ -41,19 +37,6 @@
 
 ## 1. Concurrency, lifecycle & GC
 
-### 1.3 Load tombstone `withTombstone` kept — **P2, keep for now**
-
-Ref: [UPDATE_COORDINATION_DEFERRED_LOG.md](./connectedProvider/UPDATE_COORDINATION_DEFERRED_LOG.md) → _"KEPT (not removed): load tombstone `withTombstone`"_.
-
-The tombstone refuses `loadAppAgent` for a name while its entry is `removing`. Under the single lock-held barrier, each session's remove+unload are atomic, so the original per-session race is closed. The connect-mid-`removing` races it originally backstopped are now themselves fixed (a late joiner is enrolled on the in-flight barrier and receives the decided version on completion, and `connect()`'s initial registration runs under the session command lock), so the tombstone is retained purely as defense-in-depth for the load path.
-
-**Options**
-
-- **A. Keep the tombstone.** Pros: cheap defense-in-depth for the `loadAppAgent` path even though the connect-mid-`removing` races are closed. Cons: a little extra state that looks redundant once you assume the barrier + late-joiner fan-out cover everything.
-- **B. Remove it now.** Pros: less code. Cons: removes the redundant backstop on the load path.
-
-**Recommendation: A (keep).** The connect-mid-`removing` races are fixed, but the tombstone's `removing.provider` retention is cheap and keeps the load path defensively guarded; reconsider removing it only if that redundancy proves unnecessary.
-
 ### 1.4 verify-0 park never re-checks a self-dropping refcount — **P2, later enhancement**
 
 Ref: [UPDATE_COORDINATION_DEFERRED_LOG.md](./connectedProvider/UPDATE_COORDINATION_DEFERRED_LOG.md) → _"DEFERRED: verify-0 park never re-checks a self-dropping refcount"_.
@@ -68,45 +51,6 @@ When all hosts quiesce but verify-0 sees a non-zero shared refcount, the barrier
   - Cons: new provider→barrier callback; must be idempotent and not re-open coexistence.
 
 **Recommendation: A now, B later.** The rollback-on-timeout is safe and correct; add the notification as an optimization if slow-release stragglers prove to cause visible unnecessary rollbacks in practice.
-
-### 1.5 Wedged-straggler v2 install dir + phase-3 GC backstop — **P3, do not address**
-
-Ref: [UPDATE_COORDINATION_DEFERRED_LOG.md](./connectedProvider/UPDATE_COORDINATION_DEFERRED_LOG.md) → _"DEFERRED: wedged-straggler `v2` install dir + phase-3 GC backstop"_.
-
-Phase 3 (`releasing`) has no timer; a host whose add leg hangs forever leaves `settling` non-empty, so `finalizeGc` never runs and a superseded install root lingers. The outcome is already committed and every reachable session serves correctly — only the GC is skipped.
-
-**Options**
-
-- **A. Leave as-is.** Pros: the Milestone-1 startup orphan sweep already removes any root not referenced by the current record. Cons: a lingering dir until next startup.
-- **B. Add a phase-3 timer that forces `finalizeGc`.** Pros: eager cleanup. Cons: a timer + forced-GC path for a purely cosmetic disk-space concern.
-
-**Recommendation: A (do not address).** The startup sweep is the backstop; revisit only if lingering dirs prove costly.
-
-### 1.6 Full pre-launch v2 startability probe — **P3, do not address**
-
-Ref: [UPDATE_COORDINATION_DEFERRED_LOG.md](./connectedProvider/UPDATE_COORDINATION_DEFERRED_LOG.md) → _"DEFERRED: full pre-launch `v2` startability probe"_.
-
-The structural check only reads v2's manifest; it does not fork/launch v2 to prove it starts. A v2 that resolves its manifest but crashes on `instantiate()` still commits, surfacing later as a normal per-session load failure.
-
-**Options**
-
-- **A. Keep manifest-read only (no fork).** Pros: TypeAgent never forks a startability probe; the cheap manifest read already runs at materialize time (before the barrier) so corrupt/unresolvable v2 fails early. Cons: a manifest-valid-but-crashes-on-instantiate v2 still commits.
-- **B. Reintroduce an opt-in forking `verifyStart` seam.** Pros: catches instantiate-time crashes before commit. Cons: forking a probe is heavy and was deliberately removed; must be explicit/opt-in.
-
-**Recommendation: A (do not address).** Only reintroduce B as an explicit opt-in seam if instantiate-time-only failures become a real operational problem.
-
-### 1.7 Failed materialize leaves its partial root for the startup sweep — **P3, do not address**
-
-Ref: [UPDATE_COORDINATION_DEFERRED_LOG.md](./connectedProvider/UPDATE_COORDINATION_DEFERRED_LOG.md) → _"Failed materialize leaves its partial root for the startup sweep"_.
-
-When `feedSource.materialize` throws, the just-created `installDir/agents/<root>` dir survives until the next startup orphan sweep.
-
-**Options**
-
-- **A. Leave as-is.** Pros: matches design intent (startup sweep is the backstop); the partial root is never recorded/resolved. Cons: a transient partial dir until next startup.
-- **B. `rmSync` eagerly on the error path.** Pros: no partial dir. Cons: adds an error-path branch for no correctness gain.
-
-**Recommendation: A (do not address).** Consistent with 1.5 — the startup sweep reclaims it.
 
 ---
 
