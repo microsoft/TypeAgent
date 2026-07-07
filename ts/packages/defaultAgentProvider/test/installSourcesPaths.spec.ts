@@ -3,7 +3,7 @@
 
 import os from "node:os";
 import path from "node:path";
-import { expandHome } from "../src/installSources/paths.js";
+import { expandHome } from "../src/installSources/addSource.js";
 
 describe("paths.expandHome", () => {
     it("expands a bare '~' to the home directory", () => {

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import {
@@ -15,7 +16,17 @@ import {
     PathSourceConfig,
 } from "./config.js";
 import { DefaultInstallSourceRegistry } from "./registry.js";
-import { expandHome } from "./paths.js";
+
+// Expand a leading "~" to the user's home directory.
+export function expandHome(pathname: string): string {
+    if (pathname === "~") {
+        return os.homedir();
+    }
+    if (pathname.startsWith(`~/`) || pathname.startsWith(`~\\`)) {
+        return path.join(os.homedir(), pathname.substring(2));
+    }
+    return pathname;
+}
 
 // Host-owned `@package source add <kind>` command handlers. The dispatcher core
 // merges these into the `@package source` table (via

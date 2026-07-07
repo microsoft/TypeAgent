@@ -993,33 +993,6 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         ).resolves.toBeDefined();
     });
 
-    it("refuses to load a name while it is removing (tombstone)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir);
-        const issuing = fastHost();
-        const gated = gatedHost();
-        const holder = built.connect(issuing);
-        built.connect(gated.host);
-        await installFoo(built, issuing);
-        // A session connected after install holds the shared provider.
-        const holderConn = built.connect(fastHost());
-        const provider = holderConn.providers.find((p) =>
-            p.getAppAgentNames().includes("foo"),
-        )!;
-
-        const uninstalling = built.testApi.uninstall("foo", issuing);
-        await flush();
-        // Loading a draining name is refused even though the provider is cached.
-        await expect(provider.loadAppAgent("foo")).rejects.toThrow(
-            /being removed/i,
-        );
-
-        gated.release();
-        await uninstalling;
-        holder.dispose();
-        holderConn.dispose();
-    });
-
     it("@package list hides a draining agent (update in progress)", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);

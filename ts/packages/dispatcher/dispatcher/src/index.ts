@@ -18,7 +18,6 @@ export type {
     AppAgentHost,
     AppAgentSource,
     AppAgentConnection,
-    InstallResult,
     InstalledAgentInfo,
     ConstructionProvider,
 } from "./agentProvider/agentProvider.js";

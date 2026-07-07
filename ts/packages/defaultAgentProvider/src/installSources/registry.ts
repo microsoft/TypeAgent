@@ -149,32 +149,26 @@ export function createInstallSourceRegistry(
             caller?.(message);
         };
     }
-    // Wrap a built source so every find/listAgents call routes its warnings
-    // through the combined background+caller callback. Wrapping here, at the one
-    // place sources are built, means every access path - resolve, where,
-    // get()->listAgents - gets the server-log dedup.
+    // Wrap a built source so every warning-bearing call (find / reresolve /
+    // listAgents) routes its warnings through the combined background+caller
+    // callback. Wrapping here, at the one place sources are built, means every
+    // access path - resolve, where, get()->listAgents - gets the server-log
+    // dedup. Optional methods are only re-wrapped when the source provides them.
     function build(config: InstallSourceConfig): InstallSource {
         const source = buildSourceFn(config);
-        return {
+        const wrapped: InstallSource = {
             ...source,
             find: (ref, onWarn) => source.find(ref, composeWarn(onWarn)),
-            ...(source.reresolve !== undefined
-                ? {
-                      reresolve: (candidate, opts, onWarn) =>
-                          source.reresolve!(
-                              candidate,
-                              opts,
-                              composeWarn(onWarn),
-                          ),
-                  }
-                : {}),
-            ...(source.listAgents !== undefined
-                ? {
-                      listAgents: (onWarn) =>
-                          source.listAgents!(composeWarn(onWarn)),
-                  }
-                : {}),
         };
+        if (source.reresolve) {
+            wrapped.reresolve = (candidate, opts, onWarn) =>
+                source.reresolve!(candidate, opts, composeWarn(onWarn));
+        }
+        if (source.listAgents) {
+            wrapped.listAgents = (onWarn) =>
+                source.listAgents!(composeWarn(onWarn));
+        }
+        return wrapped;
     }
 
     for (const config of initialConfigs) {
@@ -226,6 +220,24 @@ export function createInstallSourceRegistry(
         persist();
     }
 
+    // Probe the sources sequentially in resolution (map iteration) order; first
+    // match wins, so a later source is never probed once an earlier one matches.
+    // Shared by the implicit resolve walk and `where` (dry-run).
+    async function walk(
+        ref: string,
+        onWarn?: SourceWarning,
+        onStatus?: SourceStatus,
+    ): Promise<{ source: InstallSource; candidate: ResolvedCandidate } | undefined> {
+        for (const source of resolutionSources()) {
+            onStatus?.(`Trying source '${source.name}'...`);
+            const candidate = await source.find(ref, onWarn);
+            if (candidate !== undefined) {
+                return { source, candidate };
+            }
+        }
+        return undefined;
+    }
+
     async function resolveUnlocked(
         ref: string,
         sourceName?: string,
@@ -253,22 +265,15 @@ export function createInstallSourceRegistry(
             }
             return entry.source.materialize(candidate);
         }
-        // Probe the sources sequentially in resolution (map iteration) order;
-        // first match wins, so a later source is never probed once an
-        // earlier one matches.
-        const ordered = resolutionSources();
-        for (const source of ordered) {
-            onStatus?.(`Trying source '${source.name}'...`);
-            const candidate = await source.find(ref, onWarn);
-            if (candidate !== undefined) {
-                return source.materialize(candidate);
-            }
+        const match = await walk(ref, onWarn, onStatus);
+        if (match === undefined) {
+            throw new Error(
+                `no source could resolve '${ref}'. order: [${resolutionSources()
+                    .map((s) => s.name)
+                    .join(", ")}]`,
+            );
         }
-        throw new Error(
-            `no source could resolve '${ref}'. order: [${ordered
-                .map((s) => s.name)
-                .join(", ")}]`,
-        );
+        return match.source.materialize(match.candidate);
     }
 
     return {
@@ -355,21 +360,12 @@ export function createInstallSourceRegistry(
                 );
                 // The source only sees ResolvedCandidate. Recover the
                 // candidate this source produced at install time from the
-                // record's fields, dropping the persistence-only `name`/`kind`
-                // so they never reach the source.
-                const prior: ResolvedCandidate = { source: record.source };
-                if (record.module !== undefined) {
-                    prior.module = record.module;
-                }
-                if (record.path !== undefined) {
-                    prior.path = record.path;
-                }
-                if (record.ref !== undefined) {
-                    prior.ref = record.ref;
-                }
-                if (record.loaderConfig !== undefined) {
-                    prior.loaderConfig = record.loaderConfig;
-                }
+                // record's fields, dropping the persistence-only
+                // `name`/`kind`/`installRoot` so they never reach the source.
+                const { name, kind, installRoot, ...prior } = record;
+                void name;
+                void kind;
+                void installRoot;
                 const candidate = await entry.source.reresolve(
                     prior,
                     { range: opts?.range },
@@ -396,15 +392,7 @@ export function createInstallSourceRegistry(
             // Dry-run: report which source would win without materializing.
             // Walks the sources sequentially in resolution order, first match
             // wins, so it never probes a later source than the winner.
-            const ordered = resolutionSources();
-            for (const source of ordered) {
-                onStatus?.(`Trying source '${source.name}'...`);
-                const candidate = await source.find(ref, onWarn);
-                if (candidate !== undefined) {
-                    return candidate;
-                }
-            }
-            return undefined;
+            return (await walk(ref, onWarn, onStatus))?.candidate;
         },
     };
 }

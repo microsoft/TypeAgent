@@ -424,52 +424,24 @@ export function createDefaultInstalledAgentSource(
     // dynamic agent set. A name is `active` (vended) or `removing` (draining).
     const entries = new Map<string, DynamicAgentEntry>();
 
-    // Wrap a provider with a load tombstone: while its name is
-    // `removing`, refuse to load it even if a draining session still holds the
-    // instance, so nothing resurrects a name mid-teardown.
-    //
-    // DEFENSE IN DEPTH: this is not reachable on the normal path. Throughout the
-    // `removing` window every participant session holds its command lock (parked
-    // in `replaceProvider` awaiting `whenReady`), and a session that connects
-    // mid-`removing` blocks on `whenDecided` — so no command, and therefore no
-    // `loadAppAgent`, can run against a draining name in production. The tombstone
-    // is retained as a cheap backstop that keeps the invariant (never load a
-    // name mid-teardown) locally enforced even if a future load path is added
-    // that does NOT go through the command lock. The direct-load unit test
-    // ("refuses to load a name while it is removing") exercises it by calling
-    // `loadAppAgent` directly, bypassing the lock.
-    function withTombstone(
-        name: string,
-        provider: AppAgentProvider,
-    ): AppAgentProvider {
-        return {
-            ...provider,
-            loadAppAgent: async (agentName: string) => {
-                if (entries.get(name)?.status === "removing") {
-                    throw new Error(
-                        `Agent '${name}' is being removed; cannot load.`,
-                    );
-                }
-                return provider.loadAppAgent(agentName);
-            },
-        };
-    }
-
-    // Build the shared, tombstoned provider for a record.
+    // Build the shared provider for a record.
     // Installed agents honor their manifest default just like bundled agents
     //: the register-time state derivation uses
     // `config[name] ?? manifestDefault`, and a user's explicit per-session
     // `@config agent` override still wins.
+    //
+    // A draining name is never loaded on the normal path: throughout the
+    // `removing` window every participant session holds its command lock (parked
+    // in `replaceProvider` awaiting `whenReady`), and a session that connects
+    // mid-`removing` blocks on `whenDecided` — so no command, and therefore no
+    // `loadAppAgent`, runs against a draining name.
     function buildAgentProvider(
         name: string,
         record: InstalledAgentRecord,
     ): AppAgentProvider {
         // installDir is guaranteed resolved above (the source throws otherwise);
         // the `!` bridges TS's lack of narrowing across this nested closure.
-        return withTombstone(
-            name,
-            createInstalledAppAgentProvider(name, record, installDir!),
-        );
+        return createInstalledAppAgentProvider(name, record, installDir!);
     }
 
     // Build the shared provider for a freshly-resolved install/update record AND

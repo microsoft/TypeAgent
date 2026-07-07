@@ -1,8 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import fs from "node:fs";
 import path from "node:path";
 import registerDebug from "debug";
+import { NpmAppAgentInfo } from "dispatcher-node-providers";
 import {
     InstallSource,
     CatalogSourceConfig,
@@ -10,9 +12,36 @@ import {
     ResolvedCandidate,
     SourceWarning,
 } from "./config.js";
-import { AgentCatalog, loadCatalog } from "./catalog.js";
 
 const debug = registerDebug("typeagent:dispatcher:installSource:catalog");
+
+// Catalog data model. A catalog is a JSON file listing the available agents:
+// name -> NpmAppAgentInfo. A catalog source resolves an agent short name to a
+// record on explicit `@package install`; nothing in a catalog is installed
+// automatically. Catalogs are referenced by a local filesystem path; remote
+// URLs are not supported.
+type AgentCatalog = {
+    description?: string;
+    agents: Record<string, NpmAppAgentInfo>;
+};
+
+// Read + parse a catalog file, wrapping read/parse failures with the file path
+// so callers get an actionable message instead of a bare JSON/ENOENT error.
+function loadCatalog(file: string): AgentCatalog {
+    let text: string;
+    try {
+        text = fs.readFileSync(file, "utf8");
+    } catch (e: any) {
+        throw new Error(`Could not read catalog '${file}': ${e?.message ?? e}`);
+    }
+    try {
+        return JSON.parse(text) as AgentCatalog;
+    } catch (e: any) {
+        throw new Error(
+            `Catalog '${file}' is not valid JSON: ${e?.message ?? e}`,
+        );
+    }
+}
 
 // `catalog` source.
 //   find        = map lookup in the catalog JSON

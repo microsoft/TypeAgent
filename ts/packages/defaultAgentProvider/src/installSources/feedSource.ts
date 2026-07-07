@@ -86,9 +86,10 @@ export function isSafeVersionRange(range: string): boolean {
     return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(range);
 }
 
-// Sanitize an arbitrary label (dispatcher name / module name) into a filesystem-
-// safe directory-name component so it can never escape the install root.
-function sanitizeRootLabel(label: string): string {
+// Sanitize an arbitrary label (dispatcher name / module name / source name)
+// into a filesystem-safe directory-name component so it can never escape the
+// install root or a cache filename.
+function sanitizeLabel(label: string): string {
     return label.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
@@ -362,7 +363,7 @@ export function createFeedSource(
     const cacheTtlMs = deps.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
     // Sanitize the source name before embedding it in a filename so a stray
     // path separator in config can't escape installDir.
-    const safeName = config.name.replace(/[^A-Za-z0-9._-]/g, "_");
+    const safeName = sanitizeLabel(config.name);
     const cacheFilePath =
         deps.cacheFilePath ??
         path.join(deps.installDir, `.feed-cache-${safeName}.json`);
@@ -548,7 +549,7 @@ export function createFeedSource(
                 deps.installDir,
                 AGENT_INSTALL_ROOTS_SUBDIR,
             );
-            const rootLabel = sanitizeRootLabel(moduleName);
+            const rootLabel = sanitizeLabel(moduleName);
             const installRoot = `${rootLabel}@${version}`;
             const finalRoot = path.join(rootsDir, installRoot);
             const installedPkgJsonUnder = (root: string): string =>

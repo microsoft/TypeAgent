@@ -271,20 +271,6 @@ export interface InstalledAgentInfo {
     ref?: string;
 }
 
-/**
- * The outcome of a successful install: the freshly built provider for the
- * just-installed agent (for live registration) plus the name of the source the
- * ref resolved to, so the core can report which source won.
- */
-export interface InstallResult {
-    provider: AppAgentProvider;
-    source: string;
-    // Non-fatal warnings surfaced while resolving the ref (e.g. a corrupt
-    // catalog file skipped, or a malformed catalog entry dropped) that the core
-    // should show to the user for this command. Absent/empty when clean.
-    warnings?: string[];
-}
-
 export interface ConstructionProvider {
     getBuiltinConstructionConfig(
         explainerName: string,
