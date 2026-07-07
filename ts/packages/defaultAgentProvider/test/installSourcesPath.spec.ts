@@ -11,6 +11,14 @@ function tmpDir(prefix: string): string {
 }
 
 describe("pathSource", () => {
+    it("find expands a home-relative ref", async () => {
+        const source = createPathSource({ kind: "path", name: "path" });
+        const candidate = await source.find("~");
+        expect(candidate).toBeDefined();
+        expect(candidate!.source).toBe("path");
+        expect(candidate!.path).toBe(path.resolve(os.homedir()));
+    });
+
     it("find returns a candidate for an existing absolute path", async () => {
         const dir = tmpDir("ta-path-");
         const source = createPathSource({ kind: "path", name: "path" });
