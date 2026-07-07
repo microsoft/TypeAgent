@@ -40,6 +40,11 @@ variables:
     value: ""
   - name: resolvedPluginVersion
     value: ""
+  - name: channel
+    ${{ if eq(variables['Build.Reason'], 'Manual') }}:
+      value: ${{ parameters.channel }}
+    ${{ if ne(variables['Build.Reason'], 'Manual') }}:
+      value: ci
 
 parameters:
   - name: publishArtifacts
@@ -52,6 +57,13 @@ parameters:
     values:
       - win32-x64
     displayName: "RID (Runtime ID)"
+  - name: channel
+    type: string
+    default: test
+    values:
+      - test
+      - lkg
+    displayName: "Blob channel (manual runs only; automatic runs use 'ci')"
 
 jobs:
   - job: build_sign_msi
@@ -271,17 +283,6 @@ jobs:
         displayName: Upload MSI artifact
         artifact: msi-${{ parameters.rid }}
 
-      # Step 5: Publish to Azure Storage (optional, requires approval)
-      - task: AzureFileCopy@6
-        displayName: Upload to Azure Storage (if publishArtifacts=true)
-        condition: and(succeeded(), eq('${{ parameters.publishArtifacts }}', 'true'))
-        inputs:
-          SourcePath: $(MSI_BUILD_DIR)\**
-          Destination: AzureBlob
-          azureSubscription: $(azureSubscription)
-          storage: $(azureStorageAccountName)
-          ContainerName: $(azureStorageContainerName)
-
   - job: publish_msi_feed
     displayName: Publish MSI Universal Package
     dependsOn: build_sign_msi
@@ -321,6 +322,64 @@ jobs:
               --description "TypeAgent MSI installer for $rid"
         env:
           AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+  # Publish the signed MSI to Azure Blob Storage (alongside the shell installer).
+  # Gated by an environment approval and the publishArtifacts parameter. Reuses
+  # the shell's per-channel environment (typeagent-shell-<channel>) so the MSI
+  # inherits the same approvers/checks. Stages ONLY the signed .msi plus a
+  # latest.json discovery pointer into a clean folder (the raw MSI_BUILD_DIR also
+  # contains extracted agent-server/plugin artifacts and WiX intermediates that
+  # must not be uploaded).
+  - deployment: publish_msi_blob
+    displayName: Publish MSI to Azure Storage
+    dependsOn: build_sign_msi
+    condition: and(succeeded(), eq('${{ parameters.publishArtifacts }}', 'true'))
+    environment: typeagent-shell-$(channel)
+    pool:
+      # AzureFileCopy requires Windows
+      vmImage: windows-latest
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - download: current
+              artifact: msi-${{ parameters.rid }}
+              displayName: Download signed MSI artifact
+
+            - pwsh: |
+                $src  = "$(Pipeline.Workspace)/msi-${{ parameters.rid }}"
+                $dest = "$(Build.ArtifactStagingDirectory)/msi-publish"
+                New-Item -ItemType Directory -Force $dest | Out-Null
+
+                $msi = Get-ChildItem $src -Filter "*.msi" | Select-Object -First 1
+                if ($null -eq $msi) {
+                  Write-Error "No MSI found in $src"
+                  exit 1
+                }
+                Copy-Item $msi.FullName $dest
+
+                # Discovery pointer (mirrors electron-updater yml for the shell).
+                $hash = (Get-FileHash $msi.FullName -Algorithm SHA256).Hash.ToLower()
+                $meta = [ordered]@{
+                  version = "$(packageVersion)"
+                  file    = $msi.Name
+                  sha256  = $hash
+                }
+                $meta | ConvertTo-Json | Set-Content -Path (Join-Path $dest "latest.json") -Encoding utf8
+
+                Write-Host "Staged for blob publish:"
+                Get-ChildItem $dest | ForEach-Object { Write-Host "  $($_.Name)" }
+              displayName: Stage signed MSI + latest.json only
+
+            - task: AzureFileCopy@6
+              displayName: Upload MSI to Azure Storage (msi/$(channel))
+              inputs:
+                SourcePath: $(Build.ArtifactStagingDirectory)/msi-publish/*
+                Destination: AzureBlob
+                azureSubscription: $(azureSubscription)
+                storage: $(azureStorageAccountName)
+                ContainerName: $(azureStorageContainerName)
+                BlobPrefix: msi/$(channel)
 
   # Optional: sign the shell .exe while we're at it (Phase 2)
   - job: sign_shell_exe

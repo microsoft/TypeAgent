@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=302b3f018e8404d2a46fd886094a4d86ed1051f538998ebdc6ce6e60ee06de1a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=ea97ab57f732888fdb146fafcfa76816a3dfe91faa812d88b8bbf5483c870a63 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-shell — AI-generated documentation
@@ -12,29 +12,29 @@
 
 ## Overview
 
-The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, allowing users to interact with TypeAgent conversations directly within the editor. It provides a side panel and editor tabs for managing and participating in conversations hosted by a running TypeAgent agent server.
+The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, enabling users to interact with TypeAgent conversations directly within the editor. It provides a side panel and editor tabs for managing conversations hosted by a running TypeAgent agent server.
 
 ## What it does
 
-The `vscode-shell` package offers a rich set of features to enhance the TypeAgent experience within Visual Studio Code:
+The `vscode-shell` package provides a feature-rich environment for interacting with TypeAgent conversations in Visual Studio Code. Key features include:
 
-- **Chat Integration**:
+- **Chat Interface**:
 
-  - A dedicated **Chat** side panel accessible via the activity bar.
-  - The ability to open multiple chat tabs in the editor, each representing a separate conversation.
+  - A dedicated **Chat** side panel accessible from the activity bar.
+  - Support for multiple chat tabs in the editor, each representing a separate conversation.
 
-- **Command Palette Commands**:
+- **Command Palette Integration**:
 
   - Commands under the "TypeAgent" category, such as `Open Chat in Editor`, `New Chat (Side Panel)`, `Focus Chat`, `New Conversation`, `Switch Conversation`, `Rename Conversation`, `Delete Conversation`, and `Clear Chat View`.
 
 - **Conversation Management**:
 
-  - Users can manage conversations using slash commands (e.g., `@conversation new [name]`) or natural language inputs (e.g., "create a new conversation called Brainstorm").
+  - Manage conversations using slash commands (e.g., `@conversation new [name]`) or natural language inputs (e.g., "create a new conversation called Brainstorm").
   - Conversations are automatically restored on reload, with a default conversation named `"VS Code"` created for new agent server connections.
 
 - **Request Management**:
 
-  - Users can cancel in-progress or queued requests directly from the chat interface, with clear visual indicators for request status (e.g., `queued`, `running`, `cancelled`).
+  - Cancel in-progress or queued requests directly from the chat interface, with clear visual indicators for request status (e.g., `queued`, `running`, `cancelled`).
 
 - **IntelliSense Support**:
 
@@ -174,6 +174,6 @@ External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `ws`
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

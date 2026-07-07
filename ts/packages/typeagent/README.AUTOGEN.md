@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=836213ee01d600092065077416ef836f104d37f2e783c281ea88a0a14dbac854 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c97e0c3404b5430bcb9ddac5763968954fb7bd1703ecc9d277884773ecdb3167 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent — AI-generated documentation
@@ -16,19 +16,19 @@ The `typeagent` package is a sample library designed to support the development 
 
 ## What it does
 
-The `typeagent` package offers a variety of utilities and components that are essential for building and running agents. These include:
+The `typeagent` package provides a wide range of utilities and components that are essential for building and running agents. These include:
 
 - **Async Processing**: Functions like `mapAsync` in [arrayAsync.ts](./src/arrayAsync.ts) and `callWithRetry` in [async.ts](./src/async.ts) enable efficient handling of concurrent and retryable asynchronous operations.
-- **Vectors and Embeddings**: Tools for managing vector operations and embeddings, such as `vectorIndex` and `semanticMap`, are located in the `vector` directory.
-- **Storage**: Components for managing data storage, including `objectFolder`, `objectPage`, and `embeddingFS`, are found in the `storage` directory.
+- **Vectors and Embeddings**: Tools for managing vector operations and embeddings, such as `vectorIndex` and `semanticMap`, are located in the `vector` directory. These utilities are useful for tasks like similarity searches and semantic indexing.
+- **Storage**: Components for managing data storage, including `objectFolder`, `objectPage`, and `embeddingFS`, are found in the `storage` directory. These utilities help manage structured data and embeddings in a file system-like manner.
 - **Text Processing**: Utilities for text-related tasks, such as `createTypeChat` in [chat.ts](./src/chat.ts) for chat interactions and `createTextClassifier` in [textClassifier.ts](./src/classifier/textClassifier.ts) for text classification.
-- **Collections**: A variety of collection utilities, such as `binarySearch` and `isUndefinedOrEmpty`, are provided in [lib/array.ts](./src/lib/array.ts).
+- **Collections**: A variety of collection utilities, such as `binarySearch` and `isUndefinedOrEmpty`, are provided in [lib/array.ts](./src/lib/array.ts). These utilities simplify operations on arrays and collections.
 
 These features are widely used across the TypeAgent project, making `typeagent` a critical component for enabling the functionality of other agents and applications.
 
 ## Setup
 
-The `typeagent` package does not require any special setup beyond installing its dependencies. To get started, simply run the following command in the package directory:
+The `typeagent` package does not require any special setup beyond installing its dependencies. To get started, navigate to the package directory and run:
 
 ```sh
 pnpm install
@@ -49,7 +49,10 @@ The `typeagent` package is organized into several key files and directories, eac
 - **[src/dateTime.ts](./src/dateTime.ts)**: Offers utilities for handling date and time operations, such as `stringifyTimestamped` and `timestampString`.
 - **[src/lib/array.ts](./src/lib/array.ts)**: Includes collection utilities like `binarySearch` and `isUndefinedOrEmpty`.
 
-Additionally, the `vector` and `storage` directories contain specialized utilities for vector operations and data storage, respectively.
+Additionally, the `vector` and `storage` directories contain specialized utilities for vector operations and data storage, respectively:
+
+- **Vector Utilities**: Files such as [vectorIndex.ts](./src/vector/vectorIndex.ts) and [semanticMap.ts](./src/vector/semanticMap.ts) provide tools for managing and querying vector data.
+- **Storage Utilities**: Files like [objectFolder.ts](./src/storage/objectFolder.ts) and [embeddingFS.ts](./src/storage/embeddingFS.ts) handle structured data storage and retrieval.
 
 ## How to extend
 
@@ -108,6 +111,6 @@ External: `async`, `cheerio`, `debug`, `typechat`, `typescript`
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=91455e54c95a6e51f1229e10526203c965fba0dffa4ecfcee80504dbd473d45a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=501e29f709902d55e8bb4121045dbf9657deab054c6c36d85208fa174ec0c4d8 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # knowpro — AI-generated documentation
@@ -12,26 +12,35 @@
 
 ## Overview
 
-The `knowpro` package is a TypeScript library that implements a basic structured Retrieval-Augmented Generation (RAG) system. It is part of the TypeAgent monorepo and serves as an experimental foundation for exploring structured information extraction and various types of memory, such as conversation, document, and image memory.
+The `knowpro` package is a TypeScript library that implements a basic structured Retrieval-Augmented Generation (RAG) system. It is part of the TypeAgent monorepo and serves as an experimental foundation for exploring structured information extraction and various types of memory, such as conversation, document, and image memory. The package is actively developed and primarily tested with GPT-4o, with a focus on integrating structured data with natural language processing.
 
 ## What it does
 
-The `knowpro` package provides tools for implementing Structured RAG, a method for extracting and utilizing structured information from unstructured data sources like conversations, emails, and documents. The package is designed to work with large language models (LLMs) and supports the following key features:
+The `knowpro` package provides tools for implementing Structured RAG, a method for extracting and utilizing structured information from unstructured data sources like conversations, emails, and documents. Its key capabilities include:
 
 - **Natural Language Querying**: Converts user requests into structured query expressions. This includes handling both unstructured data (e.g., conversation text) and structured data (e.g., metadata or relational tables).
-- **Search and Retrieval**: Executes query expressions to retrieve relevant entities, topics, and actions from indexed data. The search process uses scope expressions (e.g., time ranges, topics) and tree-pattern expressions to match specific structures in the data.
-- **Answer Generation**: Generates natural language answers by combining query results with additional context and submitting them to an LLM.
+- **Search and Retrieval**: Executes query expressions to retrieve relevant entities, topics, and actions from indexed data. The search process uses:
+  - **Scope Expressions**: Filters results based on criteria like time ranges, topics, or relationships.
+  - **Tree-Pattern Expressions**: Matches specific structures in the data, such as hierarchical entities or relationships.
+- **Answer Generation**: Combines query results with additional context to generate natural language answers using a language model.
 - **Indexing and Updates**: Manages structured and unstructured data in indexes that support efficient retrieval and incremental updates.
 
-The package is designed to integrate with other components in the TypeAgent ecosystem, such as the `conversation-memory` package, and supports various memory types, including transcripts, documents, emails, and images.
+The package integrates with other components in the TypeAgent ecosystem, such as the `conversation-memory` package, and supports various memory types, including transcripts, documents, emails, and images. It also leverages secondary indexes for efficient matching of tree expressions, related terms, and other search criteria.
 
 ## Setup
 
 To use the `knowpro` package, follow these steps:
 
-1. **Install Dependencies**: Ensure that all required dependencies are installed. The package depends on other internal libraries, such as `@typeagent/aiclient`, `knowledge-processor`, and `typeagent`, as well as external libraries like `async`, `debug`, `fast-levenshtein`, and `typechat`.
-2. **Environment Configuration**: If the hand-written README specifies any environment variables or API keys, configure them as instructed. For example, you may need to set up an API key for the LLM used in the package.
-3. **Integration**: The package is designed to work with other components in the TypeAgent monorepo. Ensure that the relevant dependencies and memory implementations are properly configured.
+1. **Install Dependencies**:
+
+   - Ensure all required dependencies are installed. The package relies on internal libraries like `@typeagent/aiclient`, `knowledge-processor`, and `typeagent`, as well as external libraries such as `async`, `debug`, `fast-levenshtein`, and `typechat`.
+
+2. **Environment Configuration**:
+
+   - If the hand-written README specifies any environment variables or API keys, configure them as instructed. For example, you may need to set up an API key for the LLM used in the package.
+
+3. **Integration**:
+   - The package is designed to work with other components in the TypeAgent monorepo. Ensure that the relevant dependencies and memory implementations are properly configured.
 
 For additional setup details, refer to the hand-written README.
 
@@ -134,6 +143,6 @@ External: `async`, `debug`, `fast-levenshtein`, `typechat`
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowpro docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowpro docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
