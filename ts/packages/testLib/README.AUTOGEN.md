@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ff5d1e3cf82eb2a6f5c78448404f0d6f6f3775f3570646a80a5b6b8d0387d7f8 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b66d186d3fd57284f1198458d6c0fa78e39a344f2516706fe2a6bf69d79551ff -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # test-lib — AI-generated documentation
@@ -12,94 +12,78 @@
 
 ## Overview
 
-The `testLib` package is a shared testing library used across various TypeAgent packages. It provides utility functions and wrappers for common testing scenarios, particularly those involving Jest, file operations, and model handling.
+The `testLib` package is a shared testing library within the TypeAgent monorepo. It provides a collection of utility functions and wrappers designed to simplify and standardize unit testing across various packages. By centralizing common testing patterns and utilities, `testLib` ensures consistency and reduces duplication in test code.
 
 ## What it does
 
-The `testLib` package offers a range of utilities to facilitate unit testing within the TypeAgent monorepo. Key functionalities include:
+The `testLib` package supports a variety of testing needs, with a focus on the following areas:
 
-- **File Operations**: Functions to read, write, and manage test files and directories, such as `readTestFile`, `readTestJsonFile`, and `ensureDir`.
-- **Model Handling**: Utilities to create and manage test models, including chat and embedding models, such as `createTestChatModel` and `createTestEmbeddingModel`.
-- **Argument Parsing**: Functions to parse command-line styled arguments, such as `parseCommandArgs`.
-- **Conditional Testing**: Wrappers to conditionally run tests based on environment settings, such as `testIf` and `describeIf`.
-- **Verification**: Functions to verify test results and data structures, such as `verifyResult` and `verifyStringArray`.
+- **File Operations**: Utilities for handling test files and directories, such as reading files, parsing JSON, and managing test output directories. Examples include `readTestFile`, `readTestJsonFile`, and `ensureOutputDir`.
+- **Model Handling**: Functions to create and manage test models for chat and embedding scenarios. Examples include `createTestChatModel` and `createTestEmbeddingModel`.
+- **Argument Parsing**: A utility to parse command-line styled arguments into structured objects, provided by `parseCommandArgs`.
+- **Conditional Testing**: Wrappers like `testIf` and `describeIf` allow tests or test suites to run conditionally based on environment settings or other criteria.
+- **Verification Utilities**: Functions to validate test results and data structures, such as `verifyResult`, `verifyString`, and `verifyStringArray`.
 
-These utilities are used by several other packages in the monorepo, such as `agent-cache`, `conversation-memory`, `knowpro`, `memory-storage`, and `website-memory`.
+These utilities are widely used by other packages in the monorepo, including `agent-cache`, `conversation-memory`, `knowpro`, `memory-storage`, and `website-memory`.
 
 ## Setup
 
-The `testLib` package requires certain environment variables to be set for model handling. Specifically, it needs:
+To use the `testLib` package, ensure the following environment variables are set:
 
-- `AZURE_OPENAI_API_KEY`
-- `AZURE_OPENAI_API_KEY_EMBEDDING`
+- `AZURE_OPENAI_API_KEY`: Required for testing chat models.
+- `AZURE_OPENAI_API_KEY_EMBEDDING`: Required for testing embedding models.
 
-These keys are used to configure the OpenAI models for testing purposes. Ensure these environment variables are set in your `.env` file.
-
-For detailed setup instructions, see the hand-written README.
+These keys are used to configure OpenAI models for testing purposes. You can set them in a `.env` file or directly in your environment. For more details on obtaining and configuring these keys, refer to the hand-written README.
 
 ## Key Files
 
-The `testLib` package is structured into several key files, each responsible for different aspects of the library:
+The `testLib` package is organized into several key files, each focusing on a specific aspect of testing:
 
-- **[index.ts](./src/index.ts)**: The entry point that exports functions from other modules.
-- **[file.ts](./src/file.ts)**: Contains functions for file operations, such as reading and writing test files.
-- **[models.ts](./src/models.ts)**: Provides utilities for creating and managing test models.
-- **[parse.ts](./src/parse.ts)**: Includes functions to parse command-line styled arguments.
-- **[test.ts](./src/test.ts)**: Offers wrappers for conditional testing based on environment settings.
-- **[verify.ts](./src/verify.ts)**: Contains functions to verify test results and data structures.
+- **[index.ts](./src/index.ts)**: The main entry point that re-exports all utilities from other modules.
+- **[file.ts](./src/file.ts)**: Handles file operations, such as reading, writing, and managing directories.
+- **[models.ts](./src/models.ts)**: Provides utilities for creating and managing test models, including mock models for chat and embedding.
+- **[parse.ts](./src/parse.ts)**: Contains the `parseCommandArgs` function for parsing command-line styled arguments.
+- **[test.ts](./src/test.ts)**: Includes utilities for conditional test execution, such as `testIf` and `describeIf`.
+- **[verify.ts](./src/verify.ts)**: Offers functions for verifying test results and data structures.
 
 ### Detailed File Responsibilities
 
 - **[file.ts](./src/file.ts)**:
 
-  - `getAbsolutePath`: Converts a relative path to an absolute path.
-  - `getRootDataPath`: Returns the root data path for tests.
-  - `getOutputDirPath`: Returns the output directory path for tests.
-  - `readTestFile`: Reads the content of a test file.
-  - `readTestFileLines`: Reads all lines in a test file.
-  - `readTestJsonFile`: Reads and parses a JSON test file.
-  - `ensureDir`: Ensures a directory exists, creating it if necessary.
-  - `ensureOutputDir`: Ensures the output directory exists, optionally cleaning it.
+  - Functions for file and directory management, including `readTestFile`, `readTestJsonFile`, and `ensureOutputDir`.
+  - Utility functions like `getAbsolutePath` and `getRootDataPath` to standardize file path handling.
 
 - **[models.ts](./src/models.ts)**:
 
-  - `hasTestKeys`: Checks if the necessary environment variables for testing are set.
-  - `createTestEmbeddingModel`: Creates a test embedding model.
-  - `createTestChatModel`: Creates a test chat model.
-  - `createTestModels`: Creates both chat and embedding models for testing.
-  - `NullEmbeddingModel`: A mock embedding model for testing purposes.
+  - Functions to create and manage test models, such as `createTestChatModel` and `createTestEmbeddingModel`.
+  - Includes `NullEmbeddingModel`, a mock implementation for testing scenarios without actual model dependencies.
 
 - **[parse.ts](./src/parse.ts)**:
 
-  - `parseCommandArgs`: Parses command-line styled arguments into named and unnamed arguments.
+  - `parseCommandArgs`: Parses command-line styled arguments into named and unnamed arguments for flexible test configuration.
 
 - **[test.ts](./src/test.ts)**:
 
-  - `testIf`: Conditionally runs a test based on a provided function.
-  - `describeIf`: Conditionally runs a test suite based on a provided function.
-  - `shouldSkip`: Determines if tests should be skipped based on environment settings.
+  - Conditional test execution utilities like `testIf` and `describeIf`, which allow tests to run based on environment conditions or other criteria.
 
 - **[verify.ts](./src/verify.ts)**:
-  - `verifyResult`: Verifies the result of a test.
-  - `verifyString`: Verifies a string.
-  - `verifyArray`: Verifies an array.
-  - `verifyStringArray`: Verifies an array of strings.
+  - Functions to validate test results and data structures, such as `verifyResult` and `verifyStringArray`.
 
 ## How to extend
 
 To extend the `testLib` package, follow these steps:
 
-1. **Identify the area to extend**: Determine which aspect of the library you need to enhance or add functionality to. For example, if you need additional file operations, start with [file.ts](./src/file.ts).
+1. **Identify the area to extend**: Determine which aspect of the library you need to enhance. For example, if you need additional file utilities, focus on [file.ts](./src/file.ts).
 
-2. **Add your functionality**: Implement your new functions or enhancements in the appropriate file. Ensure your code follows the existing patterns and conventions.
+2. **Implement your changes**: Add your new functionality to the appropriate file. Follow the existing code style and patterns to maintain consistency.
 
-3. **Export your functions**: Make sure to export your new functions in [index.ts](./src/index.ts) so they are available for use in other packages.
+3. **Export your additions**: Update [index.ts](./src/index.ts) to export your new functions, making them accessible to other packages.
 
-4. **Write tests**: Add unit tests for your new functionality to ensure it works as expected. Use the existing test patterns and utilities provided by the library.
+4. **Write tests**: Add unit tests for your new functionality. Use the existing test utilities provided by `testLib` to ensure consistency.
 
-5. **Run tests**: Execute the tests to verify your changes. Ensure all tests pass before committing your code.
+5. **Run tests**: Execute the test suite to verify that your changes work as expected and do not introduce regressions.
 
-By following these steps, you can effectively extend the `testLib` package to meet your testing needs.
+By adhering to these steps, you can contribute effectively to the `testLib` package and ensure it continues to serve as a reliable foundation for testing across the TypeAgent monorepo.
 
 ## Reference
 
@@ -107,7 +91,7 @@ By following these steps, you can effectively extend the `testLib` package to me
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -132,6 +116,6 @@ External: `typechat`
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter test-lib docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter test-lib docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

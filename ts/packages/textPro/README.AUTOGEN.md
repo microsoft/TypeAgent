@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=2ff69a22686ae45255e14e1535d5006f20edd9c7b5f12862848815e9149446f3 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4b245f567b7a9306d75423f4f2c79a952e601c745445b9e91281f77a64482be2 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # textpro — AI-generated documentation
@@ -12,56 +12,89 @@
 
 ## Overview
 
-The `textpro` package is a TypeScript library designed for parsing, converting, and manipulating text data and documents. It primarily uses markdown as an intermediate format, converting other formats like HTML into markdown for further processing. The library is utilized by other packages such as `conversation-memory` to import HTML and markdown documents.
+The `textpro` package is a TypeScript library for parsing, converting, and manipulating text data and documents. It is designed to use markdown as an intermediate format, enabling the conversion of other formats, such as HTML, into markdown for further processing. The library is used in other parts of the system, such as `conversation-memory`, to import and process HTML and markdown documents.
 
 ## What it does
 
-`textpro` provides functionalities to analyze markdown documents and extract various elements such as headings, lists, tables, links, images, and more. It also infers knowledge like entities, topics, and structured tags from markdown information without relying on large language models (LLMs). The package includes several actions for handling text and document conversion:
+`textpro` provides a set of utilities for working with text and document formats, focusing on converting and analyzing markdown and HTML. Its primary capabilities include:
 
-- `htmlToText`: Extracts text from HTML, cleaning up whitespace and removing unnecessary nodes.
-- `htmlSimplify`: Simplifies HTML by removing nodes not needed for text processing and cleaning up attributes.
-- `htmlToMarkdown`: Converts HTML to markdown format.
-- `markdownTokenize`: Parses markdown into a token DOM using the "marked" library.
-- `splitIntoParagraphs`: Splits markdown text into paragraphs for easier processing.
+- **HTML to Markdown Conversion**: Functions like `htmlToMarkdown` convert HTML documents into markdown format, simplifying the structure and removing unnecessary elements.
+- **HTML Simplification**: The `htmlSimplify` function cleans up HTML by removing extraneous nodes (e.g., scripts, styles) and attributes, flattening nested structures, and normalizing whitespace.
+- **Text Extraction**: The `htmlToText` function extracts raw text from HTML, focusing on useful nodes and cleaning up whitespace.
+- **Markdown Parsing and Tokenization**: The `markdownTokenize` function parses markdown into a tokenized structure using the `marked` library, enabling further analysis and manipulation.
+- **Markdown Chunking**: The `splitIntoParagraphs` function divides markdown text into smaller, manageable chunks such as paragraphs, lists, or tables. This is useful for processing large documents or extracting specific sections.
 
-These actions enable efficient text manipulation and conversion, making `textpro` a versatile tool for handling various text formats.
+These features make `textpro` a versatile tool for handling text data, particularly in workflows that involve converting and analyzing structured documents.
 
 ## Setup
 
-To set up the `textpro` package, ensure you have the necessary dependencies installed. The package relies on external libraries such as `cheerio` and `marked`. You can install these dependencies using `pnpm`:
+To use the `textpro` package, you need to install its dependencies. The package relies on the following external libraries:
+
+- `cheerio`: For parsing and manipulating HTML.
+- `marked`: For parsing and tokenizing markdown.
+
+Install the dependencies using `pnpm`:
 
 ```sh
 pnpm install cheerio marked
 ```
 
-For detailed setup instructions, refer to the hand-written README.
+For additional setup details, refer to the hand-written README.
 
 ## Key Files
 
-The `textpro` package is organized into several key files, each responsible for different aspects of text manipulation:
+The `textpro` package is organized into several key files, each responsible for specific functionality:
 
-- [index.ts](./src/index.ts): Exports the main functionalities from `markdown.ts` and `html.ts`.
-- [common.ts](./src/common.ts): Contains utility functions like `escapeMarkdownText` for escaping special characters in markdown text.
-- [html.ts](./src/html.ts): Provides functions for converting HTML to text, simplifying HTML, and converting HTML to markdown.
-- [markdown.ts](./src/markdown.ts): Handles markdown parsing, tokenization, and chunking.
+- [index.ts](./src/index.ts): Serves as the main entry point, exporting functions from `markdown.ts` and `html.ts`.
+- [common.ts](./src/common.ts): Contains utility functions, such as `escapeMarkdownText`, which escapes special characters in markdown text.
+- [html.ts](./src/html.ts): Focuses on HTML processing, including functions for converting HTML to text (`htmlToText`), simplifying HTML (`htmlSimplify`), and converting HTML to markdown (`htmlToMarkdown`).
+- [markdown.ts](./src/markdown.ts): Handles markdown-specific operations, such as parsing markdown into tokens (`markdownTokenize`) and splitting markdown into smaller chunks (`splitIntoParagraphs`).
 
 ### Key Components
 
-- **HTML Processing**: The [html.ts](./src/html.ts) file includes functions such as `htmlToText`, `htmlSimplify`, and `htmlToMarkdown`. These functions utilize the `cheerio` library to manipulate HTML content, simplify it, and convert it to markdown format.
-- **Markdown Processing**: The [markdown.ts](./src/markdown.ts) file includes functions like `markdownTokenize` and `splitIntoParagraphs`. These functions use the `marked` library to parse markdown content and split it into manageable chunks for further processing.
-- **Utility Functions**: The [common.ts](./src/common.ts) file provides utility functions such as `escapeMarkdownText`, which helps in escaping special characters in markdown text.
+1. **HTML Processing**:
+
+   - The [html.ts](./src/html.ts) file provides functions for working with HTML content:
+     - `htmlToText`: Extracts plain text from HTML while cleaning up unnecessary elements and whitespace.
+     - `htmlSimplify`: Simplifies HTML by removing non-essential nodes and attributes.
+     - `htmlToMarkdown`: Converts HTML content into markdown format for further processing.
+
+2. **Markdown Processing**:
+
+   - The [markdown.ts](./src/markdown.ts) file focuses on markdown parsing and analysis:
+     - `markdownTokenize`: Uses the `marked` library to parse markdown into a tokenized structure.
+     - `splitIntoParagraphs`: Divides markdown text into smaller, logical chunks such as paragraphs, lists, and tables.
+
+3. **Utility Functions**:
+   - The [common.ts](./src/common.ts) file includes helper functions like `escapeMarkdownText`, which ensures that special characters in markdown are properly escaped.
 
 ## How to extend
 
 To extend the `textpro` package, follow these steps:
 
-1. **Identify the functionality to extend**: Determine whether you need to add new text manipulation features or enhance existing ones.
-2. **Open the relevant file**: Depending on the functionality, open either [html.ts](./src/html.ts) or [markdown.ts](./src/markdown.ts).
-3. **Add your code**: Implement the new feature or enhancement. Ensure your code follows the existing patterns and structure.
-4. **Write tests**: Add tests for your new functionality to ensure it works as expected. You can create test files in the `tests` directory.
-5. **Run tests**: Execute the tests to verify your changes. Use a testing framework like Jest or Mocha.
+1. **Identify the area to extend**:
 
-By following these steps, you can effectively extend the `textpro` package and contribute new features or improvements.
+   - Determine whether you need to add new functionality for HTML processing, markdown processing, or utility functions.
+
+2. **Locate the relevant file**:
+
+   - For HTML-related features, work in [html.ts](./src/html.ts).
+   - For markdown-related features, work in [markdown.ts](./src/markdown.ts).
+   - For general-purpose utilities, use [common.ts](./src/common.ts).
+
+3. **Implement your changes**:
+
+   - Follow the existing code patterns and structure to ensure consistency.
+   - For example, if adding a new HTML processing function, consider using the `cheerio` library as demonstrated in [html.ts](./src/html.ts).
+
+4. **Write tests**:
+
+   - Add unit tests for your new functionality. Place these tests in the appropriate test file or create a new one in the `tests` directory.
+
+5. **Run tests**:
+   - Use a testing framework like Jest or Mocha to verify that your changes work as expected and do not introduce regressions.
+
+By adhering to these guidelines, you can effectively contribute to the `textpro` package and enhance its capabilities.
 
 ## Reference
 
@@ -69,7 +102,7 @@ By following these steps, you can effectively extend the `textpro` package and c
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -91,6 +124,6 @@ External: `cheerio`, `marked`
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter textpro docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter textpro docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

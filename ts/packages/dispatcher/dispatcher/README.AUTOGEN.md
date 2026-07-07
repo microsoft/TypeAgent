@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=42833e0c199b4b57aac358cd064a07d4895aefec1b9899d53b1600c04f30ee5a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=1746d2dbd88d0ed150fa1eca321beaee9270a477db2075b2aebbfbd029b3e312 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a core component of the TypeAgent repository, designed to facilitate the creation of personal agents with natural language interfaces. It uses structured prompting and large language models (LLMs) to process user requests and translate them into actionable commands. The Dispatcher can be integrated into various front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for application agents.
+The TypeAgent Dispatcher is a core component of the TypeAgent repository, designed to enable personal agents with natural language interfaces. It processes user requests, translates them into structured actions using schemas, and coordinates interactions between multiple agents. The Dispatcher integrates with various front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for application agents.
 
 ## What it does
 
-The Dispatcher acts as the central hub for processing user requests. It interprets natural language inputs and translates them into structured actions based on schemas provided by application agents. It also manages the interaction between multiple agents, enabling dynamic switching to handle diverse user requests.
+The Dispatcher serves as the central hub for interpreting and executing user requests. It leverages large language models (LLMs) to translate natural language inputs into structured actions defined by application agent schemas. It also manages agent interactions, dynamically switching between them to handle diverse tasks.
 
 ### Natural Language Requests
 
@@ -37,7 +37,7 @@ Other examples of natural language requests include:
 
 ### System Commands
 
-In addition to natural language, the Dispatcher supports system commands prefixed with `@`. These commands allow users to interact directly with the system, such as toggling agents, configuring explainers, or managing conversations.
+In addition to natural language, the Dispatcher supports system commands prefixed with `@`. These commands allow users to directly configure and interact with the system.
 
 #### Examples of System Commands
 
@@ -227,6 +227,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

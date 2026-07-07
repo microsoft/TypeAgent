@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c13d751c2ee0d1c60238905a0b1910029a9ab8e57fcbc4967f34e8afcea774e5 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7ffcd3d46298f951f133b8d826d3d0fc95df87b70f7ac7155e38c948f98ee43c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # settings-agent — AI-generated documentation
@@ -12,35 +12,91 @@
 
 ## Overview
 
-The settings agent is a sample TypeAgent application designed to manipulate system settings on a Windows host. It demonstrates how to use schema to obtain structured responses from a language model and how to integrate response cards into agent responses.
+The settings agent is a sample TypeAgent application designed to explore how a system settings agent could function on a Windows host. It demonstrates the use of structured schemas to interact with a language model, enabling the agent to process system settings actions and generate responses, including HTML-based response cards.
 
 ## What it does
 
-The settings agent accepts actions related to system settings adjustments. Specifically, it can handle actions such as `dimBrightNessAction` and `adjustMultiMonitorLayoutAction`. These actions allow the agent to dim or brighten the screen and adjust the layout of multiple monitors, respectively. The agent processes these actions and generates appropriate responses, which can include HTML display cards.
+The settings agent handles actions related to system settings adjustments. It currently supports the following actions:
+
+- `dimBrightNessAction`: Adjusts the screen brightness, either dimming or brightening it based on user input.
+- `adjustMultiMonitorLayoutAction`: Modifies the layout of multiple monitors, such as rearranging their positions or changing display settings.
+
+The agent processes these actions by interpreting user requests, executing the corresponding logic, and generating structured responses. These responses can include HTML display cards, which provide a visual representation of the changes or options available.
+
+The agent integrates with other components in the TypeAgent ecosystem, such as `@typeagent/agent-sdk` for action handling, `aiclient` for language model interactions, and `telemetry` for logging and monitoring.
 
 ## Setup
 
-To set up the settings agent, ensure you have the necessary dependencies installed. The package relies on several workspace dependencies, including `@typeagent/agent-sdk`, `@typeagent/common-utils`, `agent-dispatcher`, `aiclient`, `chat-agent`, `knowledge-processor`, `telemetry`, and `typeagent`. Additionally, it uses external dependencies such as `debug` and `typechat`.
+To set up the settings agent, follow these steps:
 
-For detailed setup instructions, including environment variables and any required API keys, refer to the hand-written README.
+1. **Install dependencies**: Ensure all required dependencies are installed. The package relies on both workspace dependencies (e.g., `@typeagent/agent-sdk`, `agent-dispatcher`, `chat-agent`) and external dependencies (`debug`, `typechat`).
+
+2. **Environment configuration**: No specific environment variables are mentioned in the hand-written README or source files. If additional configuration is required, refer to the hand-written README for details.
+
+3. **Build the project**: Run the following command from the root of the monorepo to build the package:
+
+   ```bash
+   pnpm build
+   ```
+
+4. **Run the agent**: Use the appropriate TypeAgent runtime or integration to execute the settings agent and test its functionality.
 
 ## Key Files
 
-The settings agent's architecture consists of several key components:
+The settings agent's implementation is organized into several key files:
 
-- **Manifest**: The [settingsManifest.json](./src/settingsManifest.json) file defines the agent's description, emoji character, and schema details.
-- **Schema**: The [settingsActionSchema.ts](./src/settingsActionSchema.ts) file outlines the structure of the actions the agent can handle, such as `DimBrightNessAction` and `AdjustMultiMonitorLayoutAction`.
-- **Handler**: The [settingsCommandHandler.ts](./src/settingsCommandHandler.ts) file contains the logic for executing the actions defined in the schema. It includes functions to instantiate the agent and handle specific actions.
+- **[settingsManifest.json](./src/settingsManifest.json)**: Defines the agent's metadata, including its description, emoji character, and schema details. This file serves as the entry point for the agent's configuration.
+- **[settingsActionSchema.ts](./src/settingsActionSchema.ts)**: Specifies the schema for the actions the agent can handle. It defines the structure and parameters for actions like `dimBrightNessAction` and `adjustMultiMonitorLayoutAction`.
+
+- **[settingsCommandHandler.ts](./src/settingsCommandHandler.ts)**: Contains the core logic for handling actions. This file includes the `executeSettingsAction` function, which routes actions to the appropriate handler, and the `handleSettingsAction` function, which implements the specific logic for each action.
+
+- **HTML templates**: The agent uses HTML files, such as `adjustMultiMonitorLayout.html`, to generate response cards. These files are located in the `settings/cards/` directory and are read dynamically by the handler.
 
 ## How to extend
 
-To extend the settings agent, follow these steps:
+To extend the settings agent, you can add new actions or modify existing ones. Follow these steps:
 
-1. **Add new actions**: Define new actions in the [settingsActionSchema.ts](./src/settingsActionSchema.ts) file. Ensure each action has a unique identifier, name, and parameters.
-2. **Implement action handling**: Update the [settingsCommandHandler.ts](./src/settingsCommandHandler.ts) file to include logic for handling the new actions. Add cases to the `handleSettingsAction` function to process the new actions and generate appropriate responses.
-3. **Test your changes**: Run tests to verify that the new actions are handled correctly and produce the expected results. Ensure that the agent's responses are accurate and formatted as intended.
+1. **Define new actions**:
 
-By following these steps, you can extend the functionality of the settings agent to handle additional system settings adjustments.
+   - Add new action types to the [settingsActionSchema.ts](./src/settingsActionSchema.ts) file.
+   - Define the action's unique identifier (`id`), name (`actionName`), and required parameters.
+
+   Example:
+
+   ```ts
+   export interface NewAction {
+     id: "settings/newAction";
+     actionName: "newAction";
+     parameters: {
+       originalRequest: string;
+       additionalParam: string;
+     };
+   }
+   ```
+
+2. **Implement action handling**:
+
+   - Update the [settingsCommandHandler.ts](./src/settingsCommandHandler.ts) file to include logic for the new action.
+   - Add a case for the new action in the `handleSettingsAction` function. Use helper functions like `createActionResult` or `createActionResultFromHtmlDisplayWithScript` to generate responses.
+
+   Example:
+
+   ```ts
+   case "newAction":
+       const response = `Processed new action with param: ${action.parameters.additionalParam}`;
+       result = createActionResult(response);
+       break;
+   ```
+
+3. **Update the manifest**:
+
+   - Add the new action to the `schema` section of the [settingsManifest.json](./src/settingsManifest.json) file to ensure it is recognized by the agent.
+
+4. **Test your changes**:
+   - Write unit tests to validate the new action's behavior. Ensure the agent processes the action correctly and generates the expected responses.
+   - Use the TypeAgent testing framework or any other testing tools available in the monorepo.
+
+By following these steps, you can expand the settings agent's capabilities to handle additional system settings or other related functionalities.
 
 ## Reference
 
@@ -49,7 +105,7 @@ By following these steps, you can extend the functionality of the settings agent
 ### Entry points
 
 - `./agent/manifest` → [./src/settingsManifest.json](./src/settingsManifest.json)
-- `./agent/handlers` → [./dist/settingsCommandHandler.js](./dist/settingsCommandHandler.js)
+- `./agent/handlers` → `./dist/settingsCommandHandler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -82,6 +138,6 @@ External: `debug`, `typechat`
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter settings-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter settings-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c061bdfba6c98e5d95d5fb8bafa11e8fa22897b1d3ab9b6187a00f1f2399bb24 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=33b99497e917bbf26228c31113fa8aae8babe5505172b8656e5c6b8506f52ea7 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # code-processor — AI-generated documentation
@@ -12,74 +12,102 @@
 
 ## Overview
 
-The `codeProcessor` package is a TypeScript library designed to facilitate the use of AI in working with source code. It leverages structured prompting, large language models (LLMs), and schemas to perform tasks such as code analysis, review, debugging assistance, search, and Q&A.
+The `codeProcessor` package is a TypeScript library designed to integrate AI capabilities into workflows involving source code. It leverages structured prompting, large language models (LLMs), and predefined schemas to perform tasks such as code analysis, debugging assistance, search, Q&A, and documentation generation. This package is part of the TypeAgent monorepo and interacts with other workspace packages like `aiclient` and `knowledge-processor`.
 
 ## What it does
 
-The `codeProcessor` package provides several capabilities for interacting with and processing code using AI:
+The `codeProcessor` package provides a range of functionalities for working with source code using AI:
 
-- **Code Analysis and Review**: Functions like `review`, `debug`, and `breakpoints` in the `CodeReviewer` interface allow for detailed analysis and suggestions for improvements in the code.
-- **LLM Mediated Debugging Assistance**: The `debug` function helps identify issues in the code and suggests breakpoints.
-- **Search and Q&A**: The `answer` function can respond to questions about the code, providing relevant lines and comments.
-- **Code Knowledge**: The `document` function generates documentation for code blocks, enhancing code understanding and maintainability.
+- **Code Analysis and Review**: The `review` and `debug` methods in the `CodeReviewer` interface analyze code for potential issues, suggest improvements, and identify bugs. The `breakpoints` method provides recommendations for setting breakpoints to debug specific issues.
+- **LLM-Assisted Debugging**: By leveraging LLMs, the package can assist in debugging by analyzing code and providing actionable insights.
+- **Search and Q&A**: The `answer` method allows users to query the codebase, returning relevant lines and comments to address specific questions.
+- **Code Documentation**: The `document` method generates structured documentation for code blocks, improving code readability and maintainability.
+- **Code Generation**: The `generate` method in the `CodeGenerator` interface creates new code snippets or functions based on user-defined specifications.
+- **Semantic Indexing**: The `SemanticCodeIndex` interface enables indexing and searching of code blocks, facilitating efficient retrieval of relevant code snippets.
 
-These functionalities are implemented through various schemas and handlers, such as `codeAnswerSchema`, `codeDocSchema`, `codeGenSchema`, and `codeReviewer`.
+These capabilities are implemented through a combination of schemas, handlers, and indexing mechanisms, making the package modular and extensible.
 
 ## Setup
 
-To set up the `codeProcessor` package, ensure you have the necessary dependencies installed. The package relies on other workspace packages like `aiclient`, `knowledge-processor`, and `typeagent`, as well as external packages `typechat` and `typescript`.
+To use the `codeProcessor` package, follow these steps:
 
-1. Install dependencies:
+1. **Install dependencies**:
+   Ensure all required dependencies are installed by running:
 
    ```sh
    pnpm install
    ```
 
-2. Set up environment variables if required (refer to the hand-written README for detailed steps).
+2. **Environment variables**:
+   If the package requires specific environment variables, refer to the hand-written README for details on how to configure them.
+
+3. **Dependencies**:
+   The package depends on the following workspace and external packages:
+   - Workspace: `@typeagent/aiclient`, `knowledge-processor`, `typeagent`
+   - External: `typechat`, `typescript`
+
+No additional setup steps are required unless specified in the hand-written README.
 
 ## Key Files
 
-The `codeProcessor` package is structured into several key files, each responsible for different aspects of code processing:
+The `codeProcessor` package is organized into several key files, each serving a specific purpose:
 
-- **Schemas**: Define the structure of data used in code processing.
+### Schemas
 
-  - [codeAnswerSchema.ts](./src/codeAnswerSchema.ts): Defines the structure for answers related to code questions.
-  - [codeDocSchema.ts](./src/codeDocSchema.ts): Defines the structure for code documentation.
-  - [codeGenSchema.ts](./src/codeGenSchema.ts): Defines the structure for generated code responses.
+Schemas define the structure of data used in various operations:
 
-- **Handlers**: Implement the logic for processing code.
+- [codeAnswerSchema.ts](./src/codeAnswerSchema.ts): Defines the structure for answers to code-related questions, including relevant lines and their comments.
+- [codeDocSchema.ts](./src/codeDocSchema.ts): Specifies the format for code documentation, including line-level comments.
+- [codeGenSchema.ts](./src/codeGenSchema.ts): Outlines the structure for generated code responses, including the generated code and associated test cases.
+- [codeReviewSchema.ts](./src/codeReviewSchema.ts): Describes the structure for code reviews, including comments, bugs, and breakpoint suggestions.
 
-  - [code.ts](./src/code.ts): Contains functions for manipulating and annotating code.
-  - [codeGenerator.ts](./src/codeGenerator.ts): Implements the `CodeGenerator` interface for generating code.
-  - [codeReviewer.ts](./src/codeReviewer.ts): Implements the `CodeReviewer` interface for reviewing and debugging code.
+### Handlers
 
-- **Indexing**: Manages the storage and retrieval of code blocks.
+Handlers implement the logic for processing and interacting with code:
 
-  - [codeIndex.ts](./src/codeIndex.ts): Implements the `SemanticCodeIndex` interface for indexing and searching code.
+- [code.ts](./src/code.ts): Provides utility functions for manipulating and annotating code, such as splitting code into lines and adding line numbers.
+- [codeGenerator.ts](./src/codeGenerator.ts): Implements the `CodeGenerator` interface for generating code snippets or functions based on user input.
+- [codeReviewer.ts](./src/codeReviewer.ts): Implements the `CodeReviewer` interface for reviewing, debugging, and documenting code.
 
-- **Entry Point**: Exports the main functionalities of the package.
-  - [index.ts](./src/index.ts): Aggregates and exports functions and schemas from other files.
+### Indexing
+
+Indexing files manage the storage and retrieval of code blocks:
+
+- [codeIndex.ts](./src/codeIndex.ts): Implements the `SemanticCodeIndex` interface, enabling semantic indexing and searching of code blocks.
+
+### Entry Point
+
+The main entry point aggregates and exports the package's functionalities:
+
+- [index.ts](./src/index.ts): Serves as the central export file, exposing schemas, handlers, and other utilities.
 
 ## How to extend
 
-To extend the `codeProcessor` package, follow these steps:
+The `codeProcessor` package is designed to be extensible. To add new features or modify existing ones, follow these steps:
 
-1. **Identify the area to extend**: Determine whether you need to add new schemas, handlers, or indexing functionalities.
+1. **Identify the area to extend**:
+   Determine whether you need to add new schemas, handlers, or indexing functionalities.
 
 2. **Create or modify files**:
 
-   - For new schemas, create a new TypeScript file in the `src` directory and define the schema.
-   - For new handlers, implement the required functions in a new or existing file in the `src` directory.
-   - For indexing functionalities, modify [codeIndex.ts](./src/codeIndex.ts) or create a new file if necessary.
+   - **Schemas**: If new data structures are required, create a new schema file in the `src` directory and define the structure.
+   - **Handlers**: For new processing logic, implement the required functions in a new or existing file in the `src` directory.
+   - **Indexing**: To enhance or modify indexing capabilities, update [codeIndex.ts](./src/codeIndex.ts) or create a new file.
 
-3. **Export new functionalities**: Ensure that new functions or schemas are exported in [index.ts](./src/index.ts).
+3. **Export new functionalities**:
+   Ensure that any new schemas, handlers, or utilities are exported in [index.ts](./src/index.ts).
 
-4. **Test your changes**: Write tests to verify the new functionalities. Run the tests using:
+4. **Write tests**:
+   Add tests to verify the new functionalities. Place test files in the appropriate directory and run them using:
+
    ```sh
    pnpm test
    ```
 
-By following these steps, you can effectively extend the capabilities of the `codeProcessor` package.
+5. **Document changes**:
+   Update the hand-written README or other relevant documentation to reflect the new features.
+
+By following these steps, you can effectively extend the `codeProcessor` package to meet new requirements or integrate additional AI-driven capabilities.
 
 ## Reference
 
@@ -87,7 +115,7 @@ By following these steps, you can effectively extend the capabilities of the `co
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -111,6 +139,6 @@ External: `typechat`, `typescript`
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-processor docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-processor docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=dda609dc04d2e3cc95566bb5a0a9fab73a72bf17994a76fffd3060d86051b06d -->
+<!-- AUTOGEN:DOCS:HASH:sha256=815c59b52d8627e69b68910db21131a573150675a03d3f911b0632aa24f03b97 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # taskflow-typeagent — AI-generated documentation
@@ -12,44 +12,78 @@
 
 ## Overview
 
-The `taskflow-typeagent` package is a TypeAgent application agent designed to enable users to create and manage task flows. These task flows act as macros, automating sequences of TypeAgent actions based on user-taught examples. This package enhances the automation capabilities of the TypeAgent ecosystem by providing a flexible way to define, execute, and manage these task flows.
+The `taskflow-typeagent` package is a TypeAgent application agent that enables users to create, manage, and execute task flows. These task flows function as user-taught macros, allowing for the automation of sequences of TypeAgent actions. By leveraging this package, users can define reusable workflows that streamline complex tasks and improve efficiency within the TypeAgent ecosystem.
 
 ## What it does
 
-The `taskflow-typeagent` package supports several key actions related to task flows:
+The `taskflow-typeagent` package provides functionality for managing task flows, which are user-defined sequences of actions. It supports the following key actions:
 
-- `listTaskFlows`: Lists all registered task flows.
-- `deleteTaskFlow`: Deletes a specified task flow by name.
+- `listTaskFlows`: Retrieves a list of all registered task flows, allowing users to view the available workflows.
+- `deleteTaskFlow`: Removes a specified task flow by name, enabling users to manage and clean up their task flow library.
 
-These actions allow users to manage their task flows effectively. The package also includes functionality for creating and executing task flows, validating scripts, and generating grammar patterns for natural language processing. By leveraging these capabilities, users can automate complex sequences of actions and streamline their workflows.
+In addition to these actions, the package includes tools for creating, validating, and executing task flows. It integrates with natural language processing (NLP) capabilities to generate grammar patterns, enabling users to define task flows using intuitive, human-readable commands. The package also provides a script execution environment, allowing task flows to be executed programmatically.
+
+This package interacts with other components in the TypeAgent ecosystem, such as `@typeagent/agent-flows` and `@typeagent/agent-sdk`, to provide a cohesive automation framework.
 
 ## Setup
 
-To set up the `taskflow-typeagent` package, you need to configure the necessary environment variables. The package relies on the following environment variable:
+To use the `taskflow-typeagent` package, you need to configure the following environment variable:
 
-- `TASKFLOW_STORE_PATH`: Path to the directory where task flow definitions are stored.
+- `TASKFLOW_STORE_PATH`: Specifies the directory where task flow definitions are stored. Ensure this path is accessible and writable by the application.
 
-Additionally, depending on the specific integrations you plan to use, you may need to set up OAuth or API keys. For detailed setup instructions, refer to the hand-written README.
+If additional setup steps, such as OAuth or API key configuration, are required for specific integrations, refer to the hand-written README for detailed instructions.
 
 ## Key Files
 
-The `taskflow-typeagent` package is organized into several key components:
+The `taskflow-typeagent` package is organized into several key files, each responsible for specific functionality:
 
-- **Schema**: The task flow schema is defined in [taskflowSchema.agr](./src/taskflowSchema.agr) and [userActions.mts](./src/schema/userActions.mts). These files specify the structure and types of task flow actions.
-- **Handlers**: The main action handler is implemented in [actionHandler.mts](./src/actionHandler.mts). This file contains the logic for executing task flow actions and managing the task flow store.
-- **Script Execution**: Task flow scripts are managed and executed using several files, including [taskFlowScriptApi.mts](./src/script/taskFlowScriptApi.mts), [taskFlowScriptExecutor.mts](./src/script/taskFlowScriptExecutor.mts), and [taskFlowScriptValidator.mts](./src/script/taskFlowScriptValidator.mts).
-- **Grammar Generation**: Grammar patterns for task flows are generated using [grammarGenerator.ts](./src/grammarGenerator.ts). This file includes logic for creating natural language patterns based on task flow definitions.
+- **Schema Definition**:
+
+  - [taskflowSchema.agr](./src/taskflowSchema.agr): Defines the grammar for task flow actions, including natural language patterns for actions like `listTaskFlows` and `deleteTaskFlow`.
+  - [userActions.mts](./src/schema/userActions.mts): Specifies the structure and types of task flow actions, such as `ListTaskFlows` and `DeleteTaskFlow`.
+
+- **Action Handlers**:
+
+  - [actionHandler.mts](./src/actionHandler.mts): Implements the logic for executing task flow actions, managing the task flow store, and handling user-taught macros.
+
+- **Script Management**:
+
+  - [taskFlowScriptApi.mts](./src/script/taskFlowScriptApi.mts): Provides an API for interacting with task flow scripts, including calling actions and querying external services.
+  - [taskFlowScriptExecutor.mts](./src/script/taskFlowScriptExecutor.mts): Handles the execution of task flow scripts.
+  - [taskFlowScriptValidator.mts](./src/script/taskFlowScriptValidator.mts): Validates task flow scripts to ensure they conform to the defined schema and grammar.
+
+- **Grammar Generation**:
+
+  - [grammarGenerator.ts](./src/grammarGenerator.ts): Contains logic for generating natural language grammar patterns for task flow actions, optionally using a language model (LLM) for assistance.
+
+- **Sandbox Declarations**:
+  - [sandboxDeclarations.mts](./src/script/sandboxDeclarations.mts): Generates type declarations for the task flow script sandbox environment.
+  - [taskFlowSandbox.d.ts](./src/script/taskFlowSandbox.d.ts): Provides static type declarations for the task flow script sandbox, ensuring type safety during script execution.
 
 ## How to extend
 
-To extend the `taskflow-typeagent` package, follow these steps:
+To extend the functionality of the `taskflow-typeagent` package, follow these steps:
 
-1. **Define New Actions**: Add new action types to [userActions.mts](./src/schema/userActions.mts). Ensure that each action has a unique name and appropriate parameters.
-2. **Update Schema**: Modify [taskflowSchema.agr](./src/taskflowSchema.agr) to include grammar patterns for the new actions. This will enable natural language processing for the new actions.
-3. **Implement Handlers**: Extend the logic in [actionHandler.mts](./src/actionHandler.mts) to handle the new actions. Implement the necessary functions to execute the actions and manage their results.
-4. **Test**: Write tests to validate the new actions and their integration with the existing task flow system. Ensure that the new actions work as expected and do not introduce any regressions.
+1. **Add New Actions**:
 
-By following these steps, you can add new functionality to the `taskflow-typeagent` package and enhance its capabilities.
+   - Define new action types in [userActions.mts](./src/schema/userActions.mts). Each action should have a unique name and clearly defined parameters.
+
+2. **Update the Schema**:
+
+   - Modify [taskflowSchema.agr](./src/taskflowSchema.agr) to include grammar patterns for the new actions. This step ensures that the new actions can be triggered using natural language commands.
+
+3. **Implement Action Handlers**:
+
+   - Extend the logic in [actionHandler.mts](./src/actionHandler.mts) to handle the new actions. Implement the necessary functions to execute the actions and manage their results.
+
+4. **Enhance Script Support**:
+
+   - If the new actions require additional script functionality, update [taskFlowScriptApi.mts](./src/script/taskFlowScriptApi.mts) and [taskFlowScriptExecutor.mts](./src/script/taskFlowScriptExecutor.mts) to support the new behavior.
+
+5. **Test Your Changes**:
+   - Write unit tests to validate the new actions and their integration with the existing task flow system. Ensure that the new functionality works as intended and does not introduce regressions.
+
+By following these steps, you can customize the `taskflow-typeagent` package to meet specific requirements and expand its capabilities.
 
 ## Reference
 
@@ -58,8 +92,8 @@ By following these steps, you can add new functionality to the `taskflow-typeage
 ### Entry points
 
 - `./agent/manifest` → [./manifest.json](./manifest.json)
-- `./agent/handlers` → [./dist/actionHandler.mjs](./dist/actionHandler.mjs)
-- `./recipe` → [./dist/types/recipe.js](./dist/types/recipe.js)
+- `./agent/handlers` → `./dist/actionHandler.mjs` _(not found on disk)_
+- `./recipe` → `./dist/types/recipe.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -96,6 +130,6 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`, `typescript`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:26.515Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter taskflow-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter taskflow-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

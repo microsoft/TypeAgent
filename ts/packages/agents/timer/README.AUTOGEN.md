@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=03ec8bb82f1f59d4612fc9cee4a3700112e72f344091a68120ce184f7ff53795 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=a44ac776fe0364f2ba99c9a80838657a87a796d5d881552343c7a20e20576477 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # timer-agent — AI-generated documentation
@@ -12,69 +12,93 @@
 
 ## Overview
 
-The `timer-agent` package is a TypeAgent application agent designed to manage timers and reminders. It allows users to set, list, and cancel reminders, which fire as agent-initiated messages. This agent is particularly useful for testing agent-initiated message paths and ensuring that reminders are delivered to users without a preceding user request.
+The `timer-agent` package is a TypeAgent application agent designed to manage timers and reminders. It enables users to set, list, and cancel reminders, which are delivered as agent-initiated messages. This agent is also used as a test fixture for validating agent-initiated message flows, such as those triggered by `SessionContext.beginAgentThread` and managed through `startBackgroundTasks` and `stopBackgroundTasks`.
 
 ## What it does
 
-The `timer-agent` package provides four main actions:
+The `timer-agent` provides functionality for managing reminders and timers through four primary actions:
 
-- `setReminder`: Sets a one-time reminder that fires at a specified time. The reminder can be displayed as a bubble, toast, or inline message.
-- `repeatReminder`: Sets a repeating reminder that fires at regular intervals. This action is useful for stress testing rapid-fire agent-initiated messages.
-- `listReminders`: Lists all pending reminders.
-- `cancelReminder`: Cancels a specific reminder by ID or cancels all reminders.
+- **`setReminder`**: Allows users to set a one-time reminder that fires at a specific time. The reminder can be displayed in one of three formats: bubble (default), toast, or inline.
+- **`repeatReminder`**: Sets a recurring reminder that fires at regular intervals. This action supports optional parameters like the number of repetitions (`count`) and the display format (`kind`). It is particularly useful for testing scenarios involving frequent agent-initiated messages.
+- **`listReminders`**: Lists all currently pending reminders, providing an overview of scheduled tasks.
+- **`cancelReminder`**: Cancels a specific reminder by its ID or cancels all reminders.
 
-When a reminder fires, the agent pushes a message to the user via `SessionContext.beginAgentThread`, creating an agent-initiated thread. Reminders can be displayed in different formats depending on the specified `kind`.
+When a reminder is triggered, the agent sends a message to the user via `SessionContext.beginAgentThread`. This creates an agent-initiated thread, which is not tied to any prior user request. The agent also supports natural language inputs for setting reminders, such as "remind me to take a break in 10 minutes" or "remind me to call John every hour."
+
+The agent persists pending reminders in `sessionStorage`, ensuring that reminders are not lost during dispatcher restarts. If a reminder's scheduled time has passed during downtime, it will fire on the next tick after rehydration.
 
 ## Setup
 
-To set up the `timer-agent`, ensure you have the necessary environment configured. The package does not require any external API keys or OAuth setup. Simply install the dependencies using `pnpm install`. For detailed setup instructions, refer to the hand-written README.
+The `timer-agent` does not require any external API keys, OAuth credentials, or additional configuration. To get started, simply install the package dependencies using the following command:
+
+```bash
+pnpm install
+```
+
+For more detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
 
-The `timer-agent` package is structured as follows:
+The `timer-agent` package is organized into several key files that define its functionality:
 
-- [timerManifest.json](./src/timerManifest.json): Defines the agent's manifest, including its description and schema.
-- [timerSchema.ts](./src/timerSchema.ts): Contains the TypeScript definitions for the actions supported by the agent.
-- [timerActionHandler.ts](./src/timerActionHandler.ts): Implements the logic for handling the actions defined in the schema.
-- [timerSchema.agr](./src/timerSchema.agr): Defines the grammar for parsing natural language inputs into actions.
+- **[timerManifest.json](./src/timerManifest.json)**: This file contains the agent's metadata, including its description and the schema it uses.
+- **[timerSchema.ts](./src/timerSchema.ts)**: Defines the TypeScript types for the actions supported by the agent, such as `setReminder`, `repeatReminder`, `listReminders`, and `cancelReminder`.
+- **[timerActionHandler.ts](./src/timerActionHandler.ts)**: Implements the logic for handling the actions defined in the schema. This file is responsible for managing reminders, scheduling their execution, and persisting their state.
+- **[timerSchema.agr](./src/timerSchema.agr)**: Contains the grammar definitions for parsing natural language inputs into structured actions. For example, it maps phrases like "remind me to call John in 10 minutes" to the `setReminder` action with appropriate parameters.
 
-The agent's state, including pending reminders, is persisted to `sessionStorage` to ensure reminders survive dispatcher restarts. A reminder whose fire time has passed during downtime fires on the next tick after rehydration.
+The agent also includes logic for persisting reminders to `sessionStorage/reminders.json`. This ensures that reminders are retained across dispatcher restarts and are rehydrated when the session resumes.
 
 ## How to extend
 
-To extend the `timer-agent`, follow these steps:
+To extend the functionality of the `timer-agent`, follow these steps:
 
-1. **Add new actions**: Define new actions in [timerSchema.ts](./src/timerSchema.ts). Ensure each action has a corresponding handler in [timerActionHandler.ts](./src/timerActionHandler.ts).
-2. **Update the grammar**: Modify [timerSchema.agr](./src/timerSchema.agr) to include patterns for the new actions. This ensures the agent can parse natural language inputs correctly.
-3. **Persist state**: If your new actions require state persistence, update the logic in [timerActionHandler.ts](./src/timerActionHandler.ts) to save and load state from `sessionStorage`.
-4. **Test your changes**: Write tests to verify the new actions and their handlers. Ensure reminders are set, fired, and cancelled correctly.
+1. **Define new actions**:
 
-By following these steps, you can extend the functionality of the `timer-agent` to meet your specific requirements. For detailed instructions and examples, refer to the hand-written README.
+   - Add new action types to [timerSchema.ts](./src/timerSchema.ts). Each action should include a unique `actionName` and a set of parameters.
+   - For example, to add a "snoozeReminder" action, define its type and parameters in the schema.
+
+2. **Implement action handlers**:
+
+   - Add the logic for handling the new action in [timerActionHandler.ts](./src/timerActionHandler.ts). Use the existing handlers for `setReminder` and `repeatReminder` as references.
+
+3. **Update the grammar**:
+
+   - Modify [timerSchema.agr](./src/timerSchema.agr) to include natural language patterns for the new action. This ensures the agent can interpret user inputs and map them to the new action.
+
+4. **Persist state if needed**:
+
+   - If the new action requires state persistence, update the logic in [timerActionHandler.ts](./src/timerActionHandler.ts) to save and load the relevant data from `sessionStorage`.
+
+5. **Test your changes**:
+   - Write unit tests to verify the new action and its handler. Ensure that the action integrates correctly with the agent's existing functionality.
+
+By following these steps, you can extend the `timer-agent` to support additional use cases or custom requirements.
 
 ## Open work / deferred polish
 
-These tasks were intentionally deferred while standing up the agent-initiated message path end to end. Track and pick up as needed:
+The following tasks have been identified as areas for improvement or additional features:
 
 ### Shell
 
-- **Real toast overlay surface**: `kind: "toast"` currently routes through `chatView.addNotificationMessage` (`appendMode: "temporary"` — gets overwritten by the next message). A fixed-position overlay outside `messageDiv` with auto-dismiss, click-to-dismiss, and stacking would give toast its own visual lane separate from the chat scroll. Wire-up in [main.ts setDisplay/appendDisplay](../../shell/src/renderer/src/main.ts).
-- **Distinct inline rendering**: `kind: "inline"` currently shares the same temporary-status path as `kind: "toast"`. A compact non-overwriting one-liner row (similar to the `notification-system-*` join/leave rows auto-created in chatView.ts) would let inline persist in the scroll without bubble chrome.
-- **Auto-scroll / focus / TTS policy**: Agent-initiated messages currently use the same scroll + TTS behavior as response bubbles. Conservative default per the plan: don't auto-speak, don't steal scroll if the user has scrolled up, flash a "new message below" affordance.
+- **Toast overlay surface**: The `kind: "toast"` reminders currently use `chatView.addNotificationMessage` with `appendMode: "temporary"`, which overwrites the previous message. A dedicated toast overlay with auto-dismiss, click-to-dismiss, and stacking behavior would improve the user experience. This can be implemented in [main.ts setDisplay/appendDisplay](../../shell/src/renderer/src/main.ts).
+- **Inline rendering**: The `kind: "inline"` reminders currently share the same temporary path as `kind: "toast"`. A distinct rendering style, such as a compact one-liner row, would allow inline messages to persist in the scroll without bubble chrome.
 
 ### CLI
 
-- **Readline-aware prompt safety**: When no spinner is active and the user is mid-typing at the prompt, `displayContent` writes to stdout and corrupts the readline input line. Needs save-cursor / clear-line / write / restore-cursor handling. Same issue exists today for the `notify` path's non-spinner branch — fix both together. Code path: [enhancedConsole.ts renderAgentMessage](../../cli/src/enhancedConsole.ts).
+- **Readline prompt safety**: When the user is typing at the prompt, `displayContent` can overwrite the input line. This issue requires handling cursor saving, clearing, and restoring. The same issue exists for the `notify` path's non-spinner branch and should be addressed together. Relevant code: [enhancedConsole.ts renderAgentMessage](../../cli/src/enhancedConsole.ts).
 
-### Timer agent (this package)
+### Timer agent
 
-- **`--kind` flag / direct invocation**: Today `kind` is reachable via the anchored grammar patterns ("as a toast", "toast me", "flash"). A command-style flag (`@timer set in 5s "hello" --kind toast`) would match the verbatim test recipe in the plan and avoid the grammar gymnastics.
-- **Richer `when` parsing**: Accept "in 1 hour 30 minutes", "tomorrow at 9am", relative phrases. Currently single-unit only.
+- **Command-line flags for `kind`**: Currently, the `kind` parameter is only accessible through grammar patterns (e.g., "as a toast"). Adding a command-line flag (e.g., `@timer set in 5s "hello" --kind toast`) would simplify direct invocation.
+- **Enhanced `when` parsing**: Expand the `when` parameter to support more complex inputs, such as "in 1 hour 30 minutes" or "tomorrow at 9am." Currently, only single-unit durations or ISO 8601 timestamps are supported.
 
 ### Cross-cutting
 
-- **Pending-interaction policy verification**: Confirm that an agent-initiated message arriving during `requestChoice` / `popupQuestion` / `requestInteraction` renders above the prompt without breaking the interaction. Per the plan: bubble appears in chat, prompt remains interactive. No code change expected — pure manual verification.
-- **Multi-conversation routing verification**: With two clients on different conversations, a reminder set in conversation A must fire only in A. `sessionContext` is bound to a single conversation by `clientIO` injection so this should already work — needs a verification test, no code change expected.
-- **Persistent reminder replay round-trip test**: A bubble reminder that fires during conversation X should re-render in its original slot when a fresh client connects to X. The infrastructure is in place (logged via `setDisplay`, replayed via `replayDisplayHistory`, kind survives serialization) — needs a manual end-to-end test.
+- **Interaction policy verification**: Ensure that agent-initiated messages do not disrupt ongoing user interactions, such as `requestChoice` or `popupQuestion`. This requires manual verification.
+- **Multi-conversation routing**: Verify that reminders set in one conversation only fire in that conversation. This behavior is expected to work due to `sessionContext` being bound to a single conversation, but it requires testing.
+- **Reminder replay testing**: Confirm that reminders replay correctly when a new client connects to a conversation. This includes verifying that the display format (`kind`) is preserved during serialization and deserialization.
+
+These tasks represent opportunities to enhance the `timer-agent` and its integration with other parts of the system.
 
 ## Reference
 
@@ -83,7 +107,7 @@ These tasks were intentionally deferred while standing up the agent-initiated me
 ### Entry points
 
 - `./agent/manifest` → [./src/timerManifest.json](./src/timerManifest.json)
-- `./agent/handlers` → [./dist/timerActionHandler.js](./dist/timerActionHandler.js)
+- `./agent/handlers` → `./dist/timerActionHandler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -123,6 +147,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/timer
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter timer-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter timer-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

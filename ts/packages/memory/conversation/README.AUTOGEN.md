@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=9c1e7a44ce8d89425ade9b78afc17b884f75ebd30aa10810b7aeb7967663a233 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=62ccc2dc93d87b2d23124e2f51803cff574fe7d50fb0e216a67c70839877e744 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # conversation-memory — AI-generated documentation
@@ -12,18 +12,18 @@
 
 ## Overview
 
-The `conversation-memory` package is a TypeScript library that implements various types of conversational memory using Structured Retrieval-Augmented Generation (RAG). It leverages the `KnowPro` package for indexing and searching through structured conversational data, enabling efficient storage, retrieval, and analysis of information from conversations, documents, emails, and other sources.
+The `conversation-memory` package is a TypeScript library designed to implement various types of conversational memory using Structured Retrieval-Augmented Generation (RAG). It integrates with the `KnowPro` package to enable efficient storage, retrieval, and analysis of structured conversational data, such as chats, documents, emails, and transcripts.
 
 ## What it does
 
-The `conversation-memory` package supports the creation, indexing, and querying of different types of conversational memories. These include:
+The `conversation-memory` package provides tools to create, index, and query different types of conversational memories. These include:
 
 - **Conversation Memory**: Tracks interactive chats, agent interaction history, and invocation/response memory. Messages are timestamped and can be incrementally added to the memory.
-- **Document Memory**: Manages collections of document parts, such as meeting transcripts, video transcripts, markdown files, and HTML documents. It supports importing and indexing documents in various formats, including `.vtt`, `.md`, `.html`, and `.txt`.
+- **Document Memory**: Manages collections of document parts, such as meeting transcripts, video transcripts, markdown files, and HTML documents. It supports importing and indexing documents in formats like `.vtt`, `.md`, `.html`, and `.txt`.
 - **Email Memory**: Handles collections of email messages, including parsing and indexing emails in MIME format (e.g., `.eml` files).
 - **Podcast Memory**: Manages podcast transcripts, enabling indexing and retrieval of information from audio content.
 
-The package extracts salient knowledge from the input data, such as entities, actions, and topics, and indexes this knowledge for precise search and retrieval. Users can query the memory using natural language or structured search expressions. The package also supports generating answers, summaries, and analyses based on the indexed data.
+The package extracts key knowledge from input data, such as entities, actions, and topics, and indexes this knowledge for precise search and retrieval. Users can query the memory using natural language or structured search expressions. Additionally, the package supports generating answers, summaries, and analyses based on the indexed data.
 
 Key features include:
 
@@ -116,6 +116,6 @@ External: `async`, `debug`, `mailparser`, `typechat`, `webvtt-parser`
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter conversation-memory docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter conversation-memory docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
