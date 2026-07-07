@@ -292,8 +292,9 @@ type DynamicAgentEntry =
       };
 
 /**
- * A source-coordinated teardown/swap barrier with a timeout/cancel/rollback
- * envelope. Every target host runs `replaceProvider`, tears down the shared old
+ * A source-coordinated teardown/swap barrier that either commits or, on a
+ * timeout or abort, rolls back. Every target host runs `replaceProvider`, tears
+ * down the shared old
  * (`v1`) version, and fills its slot via `quiesce`. Once every slot is filled and
  * verify-0 confirms the shared `v1` refcount is 0, the source commits — releasing
  * the hosts to add `v2` (update) / settle (uninstall). Any stall — a straggler
@@ -686,8 +687,8 @@ export function createDefaultInstalledAgentSource(
         maybeAdvance(entry.barrier);
     }
 
-    // Begin a coordinated teardown/swap across every connected session, wrapped
-    // in the timeout/rollback envelope. Every host
+    // Begin a coordinated teardown/swap across every connected session,
+    // time-bounded so a stall rolls it back. Every host
     // — INCLUDING the issuing one — runs `replaceProvider` on its own idle-gated
     // applicator: under a SINGLE held command lock it removes the old version,
     // quiesces (fills its barrier slot), then awaits the shared `whenReady` before
