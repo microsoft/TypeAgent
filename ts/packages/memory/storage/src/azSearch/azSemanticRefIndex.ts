@@ -63,11 +63,11 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
             matches: azSearch.SearchResult<SemanticRefDoc>[],
         ]
     > {
-        let searchQuery =
+        const searchQuery =
             typeof query === "string"
                 ? query
                 : this.queryCompiler.compileSearchTermGroup(query);
-        let filter = when
+        const filter = when
             ? this.queryCompiler.compileWhenFilter(when)
             : undefined;
         //orderby: "search.score() desc"
@@ -77,7 +77,7 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
         if (filter) {
             searchOptions.filter = filter;
         }
-        let results = await this.getSearchResults(searchQuery, searchOptions);
+        const results = await this.getSearchResults(searchQuery, searchOptions);
         return [{ searchQuery, filter }, results];
     }
 
@@ -89,7 +89,7 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
             matches: azSearch.SearchResult<SemanticRefDoc>[],
         ]
     > {
-        let searchQuery = when.scopeDefiningTerms
+        const searchQuery = when.scopeDefiningTerms
             ? this.queryCompiler.compileSearchTermGroup(when.scopeDefiningTerms)
             : "";
         const filter = this.queryCompiler.compileWhenFilter(when);
@@ -104,7 +104,7 @@ export class AzSemanticRefIndex extends AzSearchIndex<SemanticRefDoc> {
         if (filter) {
             searchOptions.filter = filter;
         }
-        let results = await this.getSearchResults(searchQuery, searchOptions);
+        const results = await this.getSearchResults(searchQuery, searchOptions);
         return [{ searchQuery, filter }, results];
     }
 
@@ -159,7 +159,7 @@ export function semanticRefToHeader(
     timestamp?: string,
 ): SemanticRefHeader {
     const range = kp.normalizeTextRange(sr.range);
-    let header: SemanticRefHeader = {
+    const header: SemanticRefHeader = {
         kType: sr.knowledgeType,
         semanticRefOrdinal: semanticRefOrdinalToKey(sr.semanticRefOrdinal),
         start: range.start,

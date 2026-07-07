@@ -136,7 +136,7 @@ export async function* readLines(
  * @returns array of objects
  */
 export async function readAllObjects<T>(input: Readable | Path): Promise<T[]> {
-    let items: T[] = [];
+    const items: T[] = [];
     for await (const obj of readObjects<T>(input)) {
         items.push(obj);
     }
@@ -152,7 +152,7 @@ async function writeObjectsImpl<T>(
 ): Promise<void> {
     const writer = await createWriteStream(filePath, mode);
     try {
-        for (let obj of objects) {
+        for (const obj of objects) {
             await writeObject(writer, obj);
         }
     } finally {
@@ -369,8 +369,8 @@ export async function writeJsonFiles(
     await ensureDir(destFolderPath);
     const padLength = objects.length.toString().length;
     for (let i = 0; i < objects.length; ++i) {
-        let fileId = (i + 1).toString().padStart(padLength, "0");
-        let turnFilePath = path.join(
+        const fileId = (i + 1).toString().padStart(padLength, "0");
+        const turnFilePath = path.join(
             destFolderPath,
             `${baseFileName}_${fileId}.json`,
         );
@@ -554,7 +554,7 @@ export function toJsonLines(objects: any[]): string {
     }
 
     let json = "";
-    for (let obj of objects) {
+    for (const obj of objects) {
         json += toJsonLine(obj);
     }
     return json;
@@ -566,7 +566,7 @@ export function toJsonLines(objects: any[]): string {
  * @returns
  */
 export function fromJsonLines<T>(lines: string): T[] {
-    let objects: T[] = [];
+    const objects: T[] = [];
     if (lines.length > 0) {
         for (let json in lines.split(/\r?\n/)) {
             json = json.trim();

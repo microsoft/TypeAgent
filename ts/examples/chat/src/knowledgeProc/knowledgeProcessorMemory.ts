@@ -297,7 +297,7 @@ export async function loadConversation(
 
 // This creates both (knowledge-processor) and know-pro commands
 export async function runKnowledgeProcessorCommands(): Promise<void> {
-    let context = await createKnowledgeProcessorContext(captureTokenStats);
+    const context = await createKnowledgeProcessorContext(captureTokenStats);
     let showTokenStats = false;
     let printer = context.printer;
     const commands: Record<string, CommandHandler> = {
@@ -403,13 +403,13 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
         // Split full transcript text into paragraphs
         const blocks = knowLib.conversation.splitTranscriptIntoBlocks(chatText);
         const lengthMinutes = namedArgs.lengthMinutes ?? 60;
-        let lengthMs = lengthMinutes * 60 * 60;
+        const lengthMs = lengthMinutes * 60 * 60;
         const baseLineMs = lengthMs / blocks.length; // Average, these many minutes per block
         const chatDate = new Date(2023, 4, 1, 9);
         if (!addToCurrent) {
             await context.conversation.messages.clear();
         }
-        for (let tBlock of timestampBlocks(
+        for (const tBlock of timestampBlocks(
             blocks,
             chatDate,
             baseLineMs,
@@ -463,7 +463,7 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
         );
         const baseLineMs = 1000 * 60 * 10; // 10 minutes
         await context.conversation.messages.clear();
-        for (let tBlock of timestampBlocks(
+        for (const tBlock of timestampBlocks(
             blocks,
             new Date(1900, 0),
             baseLineMs,
@@ -629,8 +629,7 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
             if (record.speaker) {
                 msg = `${record.speaker}: ${msg}`;
             }
-            let knowledge: knowLib.conversation.KnowledgeResponse | undefined;
-            knowledge = await extractor.extract(msg).catch((err) => {
+            const knowledge = await extractor.extract(msg).catch((err) => {
                 printer.writeError(`Error extracting knowledge: ${err}`);
                 return undefined;
             });
@@ -750,10 +749,9 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
         let aveSimpleLoss = 0.0;
         clock.start();
         for (const record of inData) {
-            let msg = record.message;
+            const msg = record.message;
             const refKnowledge = record.knowledge;
-            let knowledge: knowLib.conversation.KnowledgeResponse | undefined;
-            knowledge = await extractor.extract(msg).catch((err) => {
+            const knowledge = await extractor.extract(msg).catch((err) => {
                 printer.writeError(`Error extracting knowledge: ${err}`);
                 return undefined;
             });
@@ -832,7 +830,7 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
             },
         );
 
-        let [messages, msgCount] = await getMessagesAndCount(
+        const [messages, msgCount] = await getMessagesAndCount(
             context.conversationManager,
             namedArgs.maxTurns,
         );
@@ -881,11 +879,11 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
         const cm = context.conversationManager;
         await cm.clear(false);
 
-        let [messages, msgCount] = await getMessagesAndCount(
+        const [messages, msgCount] = await getMessagesAndCount(
             cm,
             namedArgs.maxTurns,
         );
-        let messageIndex = await context.conversation.getMessageIndex();
+        const messageIndex = await context.conversation.getMessageIndex();
         cm.topicMerger.settings.mergeWindowSize = namedArgs.mergeWindow;
 
         let count = 0;
@@ -1019,7 +1017,7 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
     commands.entities.metadata = entitiesDef();
     async function entities(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, entitiesDef());
-        let query = namedArgs.name ?? namedArgs.type ?? namedArgs.facet;
+        const query = namedArgs.name ?? namedArgs.type ?? namedArgs.facet;
         if (query) {
             const isMultipart =
                 namedArgs.facet || (namedArgs.name && namedArgs.type);
@@ -1281,7 +1279,7 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
     commands.rag.metadata = ragDef();
     async function rag(args: string[]) {
         const namedArgs = parseNamedArguments(args, ragDef());
-        let prevStats = beginCountingTokens();
+        const prevStats = beginCountingTokens();
         try {
             const options: SearchOptions = {
                 maxMatches: namedArgs.maxMessages,
@@ -1413,12 +1411,12 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
     commands.copyConversation.metadata = copyConversationDef();
     async function copyConversation(args: string[]) {
         const namedArgs = parseNamedArguments(args, copyConversationDef());
-        let srcPath = namedArgs.srcPath;
-        let srcName = getFileName(srcPath);
-        let srcDir = path.dirname(srcPath);
-        let destPath = namedArgs.destPath;
-        let destName = getFileName(destPath);
-        let destDir = path.dirname(destPath);
+        const srcPath = namedArgs.srcPath;
+        const srcName = getFileName(srcPath);
+        const srcDir = path.dirname(srcPath);
+        const destPath = namedArgs.destPath;
+        const destName = getFileName(destPath);
+        const destDir = path.dirname(destPath);
         if (namedArgs.clean) {
             await removeDir(destPath);
             await ensureDir(destPath);
@@ -1450,7 +1448,7 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
             const messageInfo = messages[i]!;
             const messageId = messageInfo.name;
             const messageText = messageInfo.value.value;
-            let newMessage: knowLib.conversation.ConversationMessage = {
+            const newMessage: knowLib.conversation.ConversationMessage = {
                 text: messageText,
             };
             if (namedArgs.timestamps) {
@@ -1483,7 +1481,7 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
     ): Promise<conversation.SearchResponse | undefined> {
         const maxMatches = namedArgs.maxMatches;
         const minScore = namedArgs.minScore;
-        let query = namedArgs.query.trim();
+        const query = namedArgs.query.trim();
         if (!query || query.length === 0) {
             return undefined;
         }
@@ -1523,7 +1521,7 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
         }
 
         //searcher.answers.settings.chunking.enable = true;
-        let prevStats = beginCountingTokens();
+        const prevStats = beginCountingTokens();
         const clock = new StopWatch();
         clock.start();
         try {

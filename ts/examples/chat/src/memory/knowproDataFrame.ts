@@ -37,7 +37,7 @@ export async function createKnowproDataFrameCommands(
 
     const basePath = "/data/testChat/knowpro/restaurants";
     const filePath = "/data/testChat/knowpro/restaurants/all/split_011.json";
-    let query = "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
+    const query = "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
 
     let db: RestaurantDb | undefined;
     let restaurantIndex: RestaurantIndex | undefined;
@@ -63,7 +63,7 @@ export async function createKnowproDataFrameCommands(
             //
             // Load some restaurants into a collection
             //
-            let numRestaurants = namedArgs.count ?? 16;
+            const numRestaurants = namedArgs.count ?? 16;
             const restaurantData: Restaurant[] =
                 await loadThings<Restaurant>(dataFramePath);
 
@@ -220,7 +220,7 @@ export async function createKnowproDataFrameCommands(
     }
 
     function ensureIndex(newDb: boolean) {
-        let filePath = "/data/testChat/knowpro/restaurants/restaurants.db";
+        const filePath = "/data/testChat/knowpro/restaurants/restaurants.db";
         if (newDb) {
             db?.close();
             db = new RestaurantDb(filePath, newDb);
@@ -734,7 +734,7 @@ export class RestaurantIndex
 function parseRestaurantFacets(
     restaurant: Restaurant,
 ): RestaurantFacets | undefined {
-    let facets: RestaurantFacets = { rating: 3.0 };
+    const facets: RestaurantFacets = { rating: 3.0 };
     if (restaurant.address) {
         parseAddressFacets(restaurant.address, facets);
     }

@@ -130,7 +130,7 @@ export function textRangesFromMessageOrdinalsMerged(
     }
     // Sort ordinals in ascending order
     messageOrdinals.sort((x, y) => x - y);
-    let ranges: TextRange[] = [];
+    const ranges: TextRange[] = [];
     let rangeStartOrdinal: MessageOrdinal | undefined = messageOrdinals[0];
     let rangeEndOrdinal = rangeStartOrdinal;
     for (let i = 1; i < messageOrdinals.length; ++i) {

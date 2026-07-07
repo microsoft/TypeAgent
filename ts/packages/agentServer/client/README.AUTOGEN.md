@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d431ed8c6e2a113ed693ec920748b03c6b0a6a6278ebe5a58fe1d6e85c4e5102 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4f539b70bf2cc0d73c62ce19b8696a39ddb31cfa2f4a0a580c078b7df86e8811 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-server-client — AI-generated documentation
@@ -12,58 +12,82 @@
 
 ## Overview
 
-The `@typeagent/agent-server-client` package is a TypeScript library designed to facilitate connections to a running agentServer. It is used by various components such as the Shell and CLI to manage conversations and ensure the server is running.
+The `@typeagent/agent-server-client` package is a TypeScript library that provides tools for connecting to and interacting with a running `agentServer`. It is a core component of the TypeAgent ecosystem, enabling clients such as the Shell, CLI, and other integrations to manage conversations and ensure the availability of the server.
 
 ## What it does
 
-This package provides several key functionalities for interacting with an agentServer:
+This package offers a comprehensive set of features for managing connections and conversations with an `agentServer`:
 
-- **Connection Management**: Establishes WebSocket connections to the agentServer using `connectAgentServer`.
-- **Conversation Management**: Supports creating, listing, renaming, and deleting conversations through methods on the `AgentServerConnection` object.
-- **Server Management**: Ensures the agentServer is running, spawns it if necessary, and checks its status using functions like `ensureAgentServer` and `isServerRunning`.
-- **Convenience Wrappers**: Provides simplified methods to ensure the server is running and connect to conversations in one call, such as `ensureAndConnectConversation`.
+- **Connection Management**: The `connectAgentServer` function establishes WebSocket connections to an `agentServer` and returns an `AgentServerConnection` object. This object provides methods for managing conversations and interacting with the server.
+- **Conversation Management**: The `AgentServerConnection` object supports operations such as creating, listing, renaming, and deleting conversations. It also allows clients to join and leave conversations.
+- **Server Management**: Functions like `ensureAgentServer` and `isServerRunning` help ensure that the `agentServer` is running, spawn it if necessary, and check its status.
+- **Convenience Wrappers**: Simplified methods like `ensureAndConnectConversation` combine multiple steps (e.g., ensuring the server is running, connecting, and joining a conversation) into a single call.
+- **Discovery**: The `discovery` module provides tools for locating the dynamically assigned port of an in-process agent, useful for external clients like browser extensions or IDE plugins.
 
 ## Setup
 
-To use this package, you need to install it along with its dependencies. Ensure you have the following environment variables and prerequisites set up:
+To use this package, you need to configure the following:
 
-- **Environment Variables**: None required specifically for this package.
-- **Dependencies**: Install the required dependencies using `pnpm install`. This package depends on other TypeAgent packages such as `@typeagent/agent-rpc`, `@typeagent/agent-server-protocol`, and `@typeagent/dispatcher-rpc`.
+- **Environment Variable**:
 
-For detailed setup instructions, see the hand-written README.
+  - `TYPEAGENT_TUNNEL_TOKEN`: This token is required for certain server interactions. Refer to the hand-written README for details on how to obtain and configure this value.
+
+- **Installation**:
+  Install the package and its dependencies using `pnpm`:
+  ```bash
+  pnpm install
+  ```
+
+Ensure that the `TYPEAGENT_TUNNEL_TOKEN` environment variable is set in your shell or `.env` file before running any code that interacts with the `agentServer`.
 
 ## Key Files
 
-The package is structured into several key files:
+The package is organized into several key files, each responsible for specific functionality:
 
-- **[index.ts](./src/index.ts)**: Exports the main functions and types used by external clients.
-- **[agentServerClient.ts](./src/agentServerClient.ts)**: Contains the core implementation for connecting to the agentServer, managing conversations, and ensuring the server is running.
-- **[discovery.ts](./src/discovery.ts)**: Provides functionality for discovering the dynamically-assigned port of an in-process agent.
-- **[conversation/index.ts](./src/conversation/index.ts)**: Contains shared conversation-lifecycle helpers for clients of the agent server.
-- **[conversation/lifecycle.ts](./src/conversation/lifecycle.ts)**: Implements connection-level lifecycle helpers shared by every client that joins an agent server.
-- **[conversation/manage.ts](./src/conversation/manage.ts)**: Implements the dispatcher's `manage-conversation` client-action surface.
-- **[conversation/naming.ts](./src/conversation/naming.ts)**: Provides conversation name primitives and utilities.
+- **[index.ts](./src/index.ts)**: Serves as the main entry point, exporting the core functions and types for external use.
+- **[agentServerClient.ts](./src/agentServerClient.ts)**: Implements the primary logic for connecting to the `agentServer`, managing conversations, and ensuring the server is running.
+- **[discovery.ts](./src/discovery.ts)**: Provides tools for discovering the dynamically assigned port of an in-process agent, useful for external clients.
+- **[conversation/index.ts](./src/conversation/index.ts)**: Consolidates shared conversation-lifecycle helpers for clients of the `agentServer`.
+- **[conversation/lifecycle.ts](./src/conversation/lifecycle.ts)**: Implements connection-level lifecycle helpers, such as joining or creating conversations safely.
+- **[conversation/manage.ts](./src/conversation/manage.ts)**: Implements the `manage-conversation` client-action surface, including subcommands like `new`, `list`, `rename`, and `delete`.
+- **[conversation/naming.ts](./src/conversation/naming.ts)**: Provides utilities for handling conversation names, including normalization and uniqueness checks.
 
 ### Key Functions and Classes
 
-- **`connectAgentServer(url, onDisconnect?)`**: Opens a WebSocket connection to the agentServer and returns an `AgentServerConnection`.
-- **`AgentServerConnection`**: Manages conversations with methods like `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation`.
-- **`ensureAgentServer(port?, hidden?, idleTimeout?)`**: Ensures the agentServer is running, spawning it if needed.
-- **`isServerRunning(url)`**: Checks if a server is already listening at the given WebSocket URL.
+- **`connectAgentServer(url, onDisconnect?)`**: Establishes a WebSocket connection to the `agentServer` and returns an `AgentServerConnection` object.
+- **`AgentServerConnection`**: Provides methods for managing conversations, such as `joinConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation`.
+- **`ensureAgentServer(port?, hidden?, idleTimeout?)`**: Ensures the `agentServer` is running, spawning it if necessary.
+- **`isServerRunning(url)`**: Checks if a server is already listening at the specified WebSocket URL.
 - **`stopAgentServer(port?)`**: Sends a shutdown RPC to the running server.
-- **`ensureAndConnectConversation(clientIO, port?, options?, onDisconnect?, hidden?, idleTimeout?)`**: Ensures the server is running, connects, and joins a conversation in one call.
+- **`ensureAndConnectConversation(clientIO, port?, options?, onDisconnect?, hidden?, idleTimeout?)`**: Combines server management, connection, and conversation joining into a single call.
 
 ## How to extend
 
 To extend the functionality of this package, follow these steps:
 
-1. **Open the relevant file**: Depending on what you want to extend, start with either [agentServerClient.ts](./src/agentServerClient.ts) for connection and conversation management or [discovery.ts](./src/discovery.ts) for port discovery.
-2. **Add new methods or modify existing ones**: Implement new features or enhance existing functionalities by adding or modifying methods in the appropriate file.
-3. **Update exports**: Ensure that any new functions or types are exported in [index.ts](./src/index.ts) for external use.
-4. **Write tests**: Add tests for your new functionality to ensure it works as expected. Follow the existing test patterns in the repository.
-5. **Run tests**: Execute the test suite to verify your changes. Use `pnpm test` or the equivalent command configured in the project.
+1. **Identify the area to extend**:
 
-By following these steps, you can effectively extend the capabilities of the `@typeagent/agent-server-client` package.
+   - For connection and conversation management, start with [agentServerClient.ts](./src/agentServerClient.ts).
+   - For conversation lifecycle logic, explore [conversation/lifecycle.ts](./src/conversation/lifecycle.ts).
+   - For discovery-related features, modify [discovery.ts](./src/discovery.ts).
+
+2. **Add or modify functionality**:
+
+   - Implement new methods or enhance existing ones in the relevant file.
+   - For example, to add a new conversation management feature, extend the `AgentServerConnection` class in [agentServerClient.ts](./src/agentServerClient.ts).
+
+3. **Update exports**:
+
+   - Ensure that any new functions or types are exported in [index.ts](./src/index.ts) so they are accessible to external clients.
+
+4. **Write tests**:
+
+   - Add tests for your new functionality to ensure it works as expected. Follow the existing test patterns in the repository.
+
+5. **Run tests**:
+   - Execute the test suite to verify your changes. Use `pnpm test` or the equivalent command configured in the project.
+
+By following these steps, you can effectively extend the capabilities of the `@typeagent/agent-server-client` package while maintaining consistency with its existing architecture.
 
 ## Reference
 
@@ -71,9 +95,9 @@ By following these steps, you can effectively extend the capabilities of the `@t
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
-- `./conversation` → [./dist/conversation/index.js](./dist/conversation/index.js)
-- `./discovery` → [./dist/discovery.js](./dist/discovery.js)
+- default → `./dist/index.js` _(not found on disk)_
+- `./conversation` → `./dist/conversation/index.js` _(not found on disk)_
+- `./discovery` → `./dist/discovery.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -96,9 +120,9 @@ External: `debug`, `isomorphic-ws`
 - [browser-typeagent](../../../packages/agents/browser/README.md)
 - [coder-wrapper](../../../packages/coderWrapper/README.md)
 - [command-executor-mcp](../../../packages/commandExecutor/README.md)
+- [remote-client-example](../../../examples/remoteClient/README.md)
 - [studio-service](../../../packages/studio-service/README.md)
-- tools-scripts
-- _…and 4 more workspace consumers._
+- _…and 5 more workspace consumers._
 
 ### Files of interest
 
@@ -111,8 +135,14 @@ External: `debug`, `isomorphic-ws`
 - [./src/discovery.ts](./src/discovery.ts)
 - [./src/tsconfig.json](./src/tsconfig.json)
 
+### Environment variables
+
+_1 environment variable referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+
+- `TYPEAGENT_TUNNEL_TOKEN`
+
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
+_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

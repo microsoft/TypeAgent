@@ -84,7 +84,7 @@ export async function createKnowproEmailCommands(
             return;
         }
         context.printer.writeLine(`Adding ${emailsToAdd.length} messages`);
-        let progress = new ProgressBar(context.printer, 1);
+        const progress = new ProgressBar(context.printer, 1);
         const eventHandler = createIndexingEventHandler(
             context.printer,
             progress,
@@ -140,7 +140,7 @@ export async function createKnowproEmailCommands(
             `OrdinalStartAt: ${ordinalStartAt + 1} / ${countToIndex}`,
         );
 
-        let progress = new ProgressBar(context.printer, countToIndex);
+        const progress = new ProgressBar(context.printer, countToIndex);
         const eventHandler = createIndexingEventHandler(
             context.printer,
             progress,

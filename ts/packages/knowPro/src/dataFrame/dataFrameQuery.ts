@@ -88,7 +88,7 @@ export class DataFrameCompiler {
             return undefined;
         }
         this.validateAndPrepareGroups(dfTermGroups);
-        let termExpressions: MatchDataFrameTermsExpr[] = [];
+        const termExpressions: MatchDataFrameTermsExpr[] = [];
         for (const dfTermGroup of dfTermGroups) {
             termExpressions.push(new MatchDataFrameTermsExpr(dfTermGroup));
         }
@@ -159,7 +159,7 @@ export function getDataFrameTermGroups(
             continue;
         }
         if (qualifiedColumn !== undefined && columnValue) {
-            let dataFrame = qualifiedColumn[0];
+            const dataFrame = qualifiedColumn[0];
             let dfGroup = dfTermGroups.get(dataFrame.name);
             if (dfGroup === undefined) {
                 dfGroup = {
@@ -183,7 +183,7 @@ export function resolveDataFrameColumn(
     dataFrames: DataFrameCollection,
     qualifiedColumnName: string,
 ): [IDataFrame, string] | undefined {
-    let [dfName, columnName] = getDataFrameAndColumnName(qualifiedColumnName);
+    const [dfName, columnName] = getDataFrameAndColumnName(qualifiedColumnName);
     if (dfName) {
         const dataFrame = dataFrames.get(dfName);
         if (dataFrame !== undefined) {

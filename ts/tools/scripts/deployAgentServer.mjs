@@ -173,6 +173,12 @@ function main() {
         path.join(toolsOut, "getKeys.config.json"),
     );
     copyInto(path.join(scriptsDir, "lib"), path.join(toolsOut, "lib"));
+    // Self-host config generator (used by `provision --provider ollama|copilot`
+    // on machines without AI Systems Key Vault access).
+    copyInto(
+        path.join(scriptsDir, "generate-selfhost-config.mjs"),
+        path.join(toolsOut, "generate-selfhost-config.mjs"),
+    );
     const sample = path.join(tsRoot, "config.sample.yaml");
     if (fs.existsSync(sample)) {
         copyInto(sample, path.join(toolsOut, "config.sample.yaml"));

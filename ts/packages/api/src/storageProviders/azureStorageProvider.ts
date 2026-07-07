@@ -121,7 +121,7 @@ export class AzureStorageProvider implements TypeAgentStorageProvider {
         const containerClient: ContainerClient =
             this.blobServiceClient.getContainerClient(this.containerName!!);
 
-        let blobName = fileName.replace(getUserDataDir(), "");
+        const blobName = fileName.replace(getUserDataDir(), "");
         const blockBlobClient: BlockBlobClient =
             containerClient.getBlockBlobClient(blobName!!);
 

@@ -57,7 +57,7 @@ export function indexOfNearest(
     other: Embedding,
     type: SimilarityType,
 ): ScoredItem {
-    let best: ScoredItem = { score: Number.MIN_VALUE, item: -1 };
+    const best: ScoredItem = { score: Number.MIN_VALUE, item: -1 };
     if (type === SimilarityType.Dot) {
         for (let i = 0; i < list.length; ++i) {
             const score: number = vector.dotProduct(list[i], other);

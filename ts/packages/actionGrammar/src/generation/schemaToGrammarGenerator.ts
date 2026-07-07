@@ -308,7 +308,7 @@ export class SchemaToGrammarGenerator {
 
         // Step 3: Generate complete grammar
         console.log(`\nStep 3: Generating complete grammar...`);
-        let grammarText = await this.generateCompleteGrammar(
+        const grammarText = await this.generateCompleteGrammar(
             schemaInfo,
             examplesByAction,
             config,

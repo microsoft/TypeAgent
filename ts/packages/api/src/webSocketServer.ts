@@ -34,7 +34,7 @@ export class TypeAgentAPIWebSocketServer {
                 const params = new URLSearchParams(req.url.split("?")[1]);
                 const clientId = params.get("clientId");
                 if (clientId) {
-                    for (var client of this.server.clients) {
+                    for (const client of this.server.clients) {
                         if ((client as any).clientId) {
                             this.server.clients.delete(client);
                         }

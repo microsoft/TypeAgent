@@ -243,7 +243,7 @@ export async function searchWeb(
     site?: string,
 ): Promise<WebPage[]> {
     deprecated();
-    let options = count ? { count } : undefined;
+    const options = count ? { count } : undefined;
     if (site) {
         query += ` site:${encodeURIComponent(site)}`;
     }
@@ -285,7 +285,7 @@ export function buildQuery(queries: string[], operator: "AND" | "OR"): string {
         return queries[0];
     }
     let query = "";
-    let operatorText = ` ${operator} `;
+    const operatorText = ` ${operator} `;
     for (let i = 0; i < queries.length; ++i) {
         if (i > 0) {
             query += operatorText;

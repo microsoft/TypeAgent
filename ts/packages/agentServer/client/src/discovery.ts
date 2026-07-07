@@ -51,6 +51,8 @@ export type DiscoverPortOptions = {
      * dev-tunnel discovery design.
      */
     remote?: boolean;
+    /** Extra headers for the WebSocket upgrade (e.g. tunnel connect token). */
+    headers?: Record<string, string>;
 };
 
 /** What `discoverPort` returns. */
@@ -114,7 +116,10 @@ export async function discoverPort(
             resolve(result);
         };
 
-        const ws = new WebSocket(url);
+        const ws = new WebSocket(
+            url,
+            options?.headers ? { headers: options.headers } : undefined,
+        );
 
         const timeoutHandle = setTimeout(() => {
             settle({

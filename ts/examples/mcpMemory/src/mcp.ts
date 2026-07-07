@@ -101,7 +101,7 @@ export function addPingTool(server: McpServer) {
         "ping",
         { inputSchema: pingSchema() },
         async (pingRequest: PingRequest) => {
-            let response = pingRequest.message
+            const response = pingRequest.message
                 ? "PONG: " + pingRequest.message
                 : "pong";
             return toolResult(response);

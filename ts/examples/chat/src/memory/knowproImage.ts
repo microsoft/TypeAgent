@@ -91,7 +91,7 @@ export async function createKnowproImageCommands(
             return;
         }
 
-        let progress = new ProgressBar(context.printer, 165);
+        const progress = new ProgressBar(context.printer, 165);
         context.images = await im.importImages(
             namedArgs.filePath,
             namedArgs.cachePath,
@@ -214,7 +214,7 @@ export async function createKnowproImageCommands(
         context.printer.writeLine();
         context.printer.writeLine("Building index");
         const maxMessages = namedArgs.maxMessages ?? messageCount;
-        let progress = new ProgressBar(context.printer, maxMessages);
+        const progress = new ProgressBar(context.printer, maxMessages);
         const indexResult = await context.images?.buildIndex(
             createIndexingEventHandler(context.printer, progress, maxMessages),
         );

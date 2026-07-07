@@ -234,7 +234,7 @@ async function attachAttachments(
     attachments: CachedImageWithDetails[] | undefined,
     promptPreamble?: string | PromptSection[],
 ) {
-    let pp: PromptSection[] = promptPreamble as PromptSection[];
+    const pp: PromptSection[] = promptPreamble as PromptSection[];
 
     if (attachments && attachments.length > 0 && pp) {
         for (let i = 0; i < attachments.length; i++) {

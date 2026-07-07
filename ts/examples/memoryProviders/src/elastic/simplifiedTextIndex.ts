@@ -252,7 +252,7 @@ export async function createTextIndex<
     async function put(text: string, postings?: TSourceId[]): Promise<TTexId> {
         const textId = generateTextId(text);
         const embedding = await generateEmbedding(embeddingModel, text);
-        let convertedEmbedding: number[] = [];
+        const convertedEmbedding: number[] = [];
         embedding.forEach((value) => {
             convertedEmbedding.push(value);
         });
@@ -331,7 +331,7 @@ export async function createTextIndex<
         maxMatches: number,
     ): Promise<ElasticResponse | undefined> {
         const queryEmbedding = await generateEmbedding(embeddingModel, value);
-        let convertedQuery: number[] = [];
+        const convertedQuery: number[] = [];
         queryEmbedding.forEach((value) => {
             convertedQuery.push(value);
         });
@@ -375,7 +375,7 @@ export async function createTextIndex<
         texts: string[],
         k: number,
     ): Promise<TSourceId[]> {
-        let results: TSourceId[][] = [];
+        const results: TSourceId[][] = [];
         texts.forEach(async (text) => {
             results.push(await getNearest(text, k));
         });

@@ -71,7 +71,6 @@ function persistAsync(storage: Storage | undefined, ctx: TimerContext): void {
         reminders: Array.from(ctx.reminders.values()),
     };
     storage.write(STORAGE_FILE, JSON.stringify(state)).catch((e) => {
-        // eslint-disable-next-line no-console
         console.error("timer-agent: failed to persist reminders", e);
     });
 }
@@ -188,7 +187,7 @@ function fireDueReminders(context: SessionContext<TimerContext>) {
             thread.complete();
         } catch (e) {
             // Don't let one bad reminder kill the loop.
-            // eslint-disable-next-line no-console
+
             console.error(
                 `timer-agent: failed to fire reminder ${reminder.id}`,
                 e,

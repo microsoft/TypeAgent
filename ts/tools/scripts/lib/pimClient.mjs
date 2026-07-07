@@ -84,9 +84,9 @@ class AzPIMClient {
         const options = {
             filter,
         };
-        var role;
+        let role;
 
-        for await (let item of client.roleEligibilitySchedules.listForScope(
+        for await (const item of client.roleEligibilitySchedules.listForScope(
             scope,
             options,
         )) {

@@ -2,27 +2,46 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-function download_yml() {
-    info "Downloading $1"
-    az storage blob download --account-name $STORAGE --container-name $CONTAINER --name $1 --file $DEST/$1 --overwrite --auth-mode login > $DEST/install-shell.log 2>&1
+# Download a blob by name into $DEST. Uses an anonymous HTTPS base URL
+# (SHELL_BASE_URL) when set, otherwise the Azure CLI with 'az login'.
+function download_blob() {
+    local name="$1"
+    if [[ -n "$BASE_URL" ]]; then
+        local url="${BASE_URL%/}/$name"
+        info "Downloading $url"
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "$url" -o "$DEST/$name" > $DEST/install-shell.log 2>&1
+        elif command -v wget >/dev/null 2>&1; then
+            wget -q "$url" -O "$DEST/$name" > $DEST/install-shell.log 2>&1
+        else
+            error "Neither curl nor wget is available to download $url"
+            return 1
+        fi
+        if [[ $? != 0 ]]; then
+            error "Failed to download $url"
+            cat $DEST/install-shell.log
+            return 1
+        fi
+        return 0
+    fi
+
+    info "Downloading $name"
+    az storage blob download --account-name $STORAGE --container-name $CONTAINER --name "$name" --file "$DEST/$name" --overwrite --auth-mode login > $DEST/install-shell.log 2>&1
     if [[ $? != 0 ]]; then
-        error "Failed to download $1 from $STORAGE/$CONTAINER"
+        error "Failed to download $name from $STORAGE/$CONTAINER."
         error "Ensure you that you are logged into azure cli with 'az login' and have access to the storage account."
-        cat $DEST/install-shell.log    
+        cat $DEST/install-shell.log
         return 1
     fi
     return 0
 }
 
+function download_yml() {
+    download_blob "$1"
+}
+
 function download_package() {
-    info "Downloading $1"
-    az storage blob download --account-name $STORAGE --container-name $CONTAINER --name "$1" --file "$DEST/$1" --overwrite --auth-mode login > $DEST/install-shell.log 2>&1
-    if [[ $? != 0 ]]; then
-        error "Failed to download $1 from $STORAGE/$CONTAINER."
-        cat $DEST/install-shell.log
-        return 1
-    fi
-    return 0
+    download_blob "$1"
 }
 
 function install_package_linux() {
@@ -58,6 +77,12 @@ function usage() {
     echo \ \ \<storage\>\ \ \ - The name of the storage account to use.
     echo \ \ \<container\> - The name of the container to use. \<storage\> will be used if not specified.
     echo \ \ \<channel\>\ \ \ - The channel to use. Default to 'lkg' if not specified.
+    echo
+    echo Environment variables:
+    echo \ \ SHELL_BASE_URL - Anonymous HTTPS base for a public container, e.g.
+    echo \ \ \ \ https://\<account\>.blob.core.windows.net/\<container\>. When set,
+    echo \ \ \ \ the Azure CLI is not used and \<storage\> is optional.
+    echo \ \ SHELL_CHANNEL\ \ - Fallback channel when not passed positionally.
 }
 
 function info() {
@@ -78,7 +103,9 @@ function cleanup() {
  
 }
 
-if [[ "$1" == "" ]]; then
+BASE_URL="${SHELL_BASE_URL:-}"
+
+if [[ "$1" == "" && -z "$BASE_URL" ]]; then
     error No storage account specified.
     usage
     exit 1
@@ -92,7 +119,7 @@ else
 fi
 
 if [[ "$3" == "" ]]; then
-    CHANNEL=lkg
+    CHANNEL="${SHELL_CHANNEL:-lkg}"
 else
     CHANNEL=$3
 fi
@@ -130,7 +157,13 @@ else
     YML=$CHANNEL-linux.yml
 fi
 
-info "Getting TypeAgent Shell from [30m[96m$CHANNEL[0m channel in [30m[93m$STORAGE/$CONTAINER[0m."
+if [[ -n "$BASE_URL" ]]; then
+    SOURCE_DESC=$BASE_URL
+else
+    SOURCE_DESC=$STORAGE/$CONTAINER
+fi
+
+info "Getting TypeAgent Shell from [30m[96m$CHANNEL[0m channel in [30m[93m$SOURCE_DESC[0m."
 download_yml $YML
 if [[ $? != 0 ]]; then 
     cleanup

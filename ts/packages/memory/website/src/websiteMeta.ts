@@ -344,7 +344,7 @@ export class Website implements kp.IMessage {
     }
 
     public getKnowledge(): kpLib.KnowledgeResponse | undefined {
-        let metaKnowledge = this.metadata.getKnowledge();
+        const metaKnowledge = this.metadata.getKnowledge();
         if (!metaKnowledge) {
             return this.knowledge;
         }

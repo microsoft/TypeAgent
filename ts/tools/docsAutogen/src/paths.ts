@@ -12,7 +12,7 @@ import path from "node:path";
  */
 export function findRepoRoot(start: string): string {
     let cur = path.resolve(start);
-    // eslint-disable-next-line no-constant-condition
+
     while (true) {
         if (fs.existsSync(path.join(cur, ".git"))) {
             return cur;
@@ -33,7 +33,7 @@ export function findRepoRoot(start: string): string {
  */
 export function findMonorepoRoot(start: string): string {
     let cur = path.resolve(start);
-    // eslint-disable-next-line no-constant-condition
+
     while (true) {
         if (fs.existsSync(path.join(cur, "pnpm-workspace.yaml"))) {
             return cur;

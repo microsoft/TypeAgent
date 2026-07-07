@@ -37,7 +37,9 @@ export type ProviderConfig = AppAgentConfig & {
 let providerConfig: ProviderConfig | undefined;
 export function getProviderConfig(configName?: string): ProviderConfig {
     if (providerConfig === undefined) {
-        var fileName = configName ? `config.${configName}.json` : "config.json";
+        const fileName = configName
+            ? `config.${configName}.json`
+            : "config.json";
         providerConfig = JSON.parse(
             fs.readFileSync(getPackageFilePath(`./data/${fileName}`), "utf8"),
         ) as ProviderConfig;

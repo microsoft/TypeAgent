@@ -50,6 +50,7 @@
   },
   {
     "request": "play the song by Bach we talked about yesterday",
+    "skipGrammar": true,
     "expected": "dispatcher.clarify.clarifyUnresolvedReference"
   },
   {

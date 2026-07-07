@@ -194,6 +194,85 @@ msiexec /i "$env:TEMP\typeagent-msi-stage\out\TypeAgent-0.0.1-local-win32-x64.ms
 Get-Item "$env:LOCALAPPDATA\TypeAgent\agent-server" -ErrorAction SilentlyContinue
 ```
 
+## Endpoint provider selection (self-host)
+
+TypeAgent needs an LLM endpoint configuration (`config.local.yaml`) at runtime.
+By default it is downloaded from the AI Systems Key Vault, but machines without
+Key Vault access can instead run against a local **Ollama** server or the
+**Copilot** SDK.
+
+During an **interactive** install the MSI shows a provider-selection dialog
+(after the license page) with radio-button groups for the chat provider
+(AI Systems / Ollama / Copilot), the embedding provider (Local / Ollama / OpenAI
+/ None), and an Ollama host field. The same choices can be driven **silently**
+through public properties:
+
+| Property     | Values                              | Default                  | Notes                                                                           |
+| ------------ | ----------------------------------- | ------------------------ | ------------------------------------------------------------------------------- |
+| `PROVIDER`   | `AISYSTEMS`, `OLLAMA`, `COPILOT`    | `AISYSTEMS`              | `OLLAMA`/`COPILOT` generate `config.local.yaml` during install (no Key Vault).  |
+| `EMBEDDING`  | `LOCAL`, `OLLAMA`, `OPENAI`, `NONE` | `LOCAL`                  | Embedding source for the self-host providers. `LOCAL` = bundled CPU-only model. |
+| `OLLAMAHOST` | any URL                             | `http://localhost:11434` | Ollama base URL (used for `OLLAMA` chat and/or embeddings).                     |
+
+```powershell
+# AI Systems (default) — provisions via az login + getKeys after install
+msiexec /i TypeAgent-<version>-win32-x64.msi
+
+# Local Ollama chat with the bundled local embedding model
+msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=OLLAMA
+
+# Copilot SDK chat (requires an authenticated `copilot` CLI) + local embeddings
+msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=COPILOT
+
+# Fully silent
+msiexec /i TypeAgent-<version>-win32-x64.msi /quiet PROVIDER=OLLAMA EMBEDDING=LOCAL
+```
+
+The UI is a custom scheme (`WixUI_TypeAgent`): WelcomeDlg → LicenseAgreementDlg →
+**ProviderDlg** → VerifyReadyDlg. For `OLLAMA`/`COPILOT`, a deferred, impersonated
+custom action runs `node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider
+[PROVIDER] --embedding [EMBEDDING] --ollama-host [OLLAMAHOST] --force` as the
+installing user, writing `config.local.yaml` to `~/.typeagent`. For `AISYSTEMS`
+(the default), config provisioning remains an interactive post-install step
+(`az login` + `getKeys`), since it requires browser/device authentication that a
+silent installer cannot perform. Fine-grained overrides (chat model, embedding
+endpoint, API keys) are available on the `provision`/`generate-selfhost-config`
+CLI; re-run provisioning post-install to adjust them.
+
+## Optional: install the TypeAgent Shell (desktop app)
+
+The MSI can optionally download and silently install the **TypeAgent Shell**
+(the Electron desktop app) from the same Azure Blob Storage container used by the
+shell's auto-update feed. This is off by default. During an interactive install
+a checkbox on **ProviderDlg** ("Also install the TypeAgent Shell desktop app")
+enables it; silently, set the public properties:
+
+| Property         | Values / example                                      | Default | Notes                                                                        |
+| ---------------- | ----------------------------------------------------- | ------- | ---------------------------------------------------------------------------- |
+| `SHELL`          | `0`, `1`                                              | `0`     | `1` enables the optional shell download + silent install.                    |
+| `SHELLCHANNEL`   | `lkg`, `test`, `ci`                                   | `lkg`   | electron-updater channel to read (`<channel>-<arch>.yml`).                   |
+| `SHELLSTORAGE`   | Azure Storage account name                            | —       | Used with the Azure CLI (`az login`) to read the shell blobs.                |
+| `SHELLCONTAINER` | Azure Storage container name                          | —       | Defaults to `SHELLSTORAGE` if omitted.                                       |
+| `SHELLBASEURL`   | `https://<account>.blob.core.windows.net/<container>` | —       | Anonymous HTTPS base for a **public** container; when set, `az` is not used. |
+
+```powershell
+# Authenticated (az login) blob read from a private container
+msiexec /i TypeAgent-<version>-win32-x64.msi SHELL=1 SHELLSTORAGE=myaccount SHELLCONTAINER=mycontainer SHELLCHANNEL=lkg
+
+# Public container (no az): anonymous HTTPS download
+msiexec /i TypeAgent-<version>-win32-x64.msi SHELL=1 SHELLBASEURL=https://myaccount.blob.core.windows.net/mycontainer
+```
+
+When `SHELL=1`, a deferred, impersonated custom action runs the bundled
+`install-shell.ps1` (`[TYPEAGENTROOT]install-shell.ps1`), which reads the
+channel metadata, downloads `typeagentshell-<version>-win32-x64-setup.exe`, and
+runs it silently (NSIS `/S`). It runs as the installing user so blob auth and
+the per-user shell install target resolve correctly. The action is **non-fatal**
+(`Return="ignore"`): a shell download/install failure is logged to
+`%LOCALAPPDATA%\TypeAgent\logs\msi-install-shell.log` but does not roll back the
+agent-server install. Because the shell shares `~/.typeagent/config.local.yaml`,
+no extra config step is needed. `install-shell.ps1` is the Windows sibling of
+`install-shell.sh` and can also be run standalone.
+
 ## Pipeline Usage
 
 ### Automatic (on `main` branch)

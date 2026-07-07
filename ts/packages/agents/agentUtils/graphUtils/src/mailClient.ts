@@ -198,7 +198,7 @@ export class MailClient extends GraphClient {
         const client = await this.ensureClient();
         try {
             if (sender && sender.length > 0) {
-                let msgs = await client
+                const msgs = await client
                     .api("/me/messages")
                     .filter(`from/emailAddress/address eq '${sender}'`)
                     .select(["from", "id", "receivedDateTime", "subject"])
@@ -207,7 +207,7 @@ export class MailClient extends GraphClient {
 
                 if (msgs && msgs.value && msgs.value.length > 0) {
                     // we take the latest message
-                    let msg = msgs.value[msgs.value.length - 1];
+                    const msg = msgs.value[msgs.value.length - 1];
                     return msg.id;
                 }
             }

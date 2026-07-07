@@ -63,7 +63,7 @@ export class KnowledgeProcessorWriter extends MemoryConsoleWriter {
         total?: number | undefined,
     ): void {
         label = label ? label + " " : "";
-        let text =
+        const text =
             total !== undefined && total > 0
                 ? `[${label}(${batch.startAt + 1} to ${batch.startAt + batch.value.length}) / ${total}]`
                 : `[${label}${batch.startAt + 1} to ${batch.startAt + batch.value.length}]`;
@@ -341,7 +341,7 @@ export class KnowledgeProcessorWriter extends MemoryConsoleWriter {
         fallback: boolean = false,
     ) {
         if (response.answer) {
-            let answer = response.answer;
+            const answer = response.answer;
             this.writeInColor(chalk.green, answer);
         } else if (response.whyNoAnswer) {
             const answer = fallback

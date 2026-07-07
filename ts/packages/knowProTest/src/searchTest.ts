@@ -123,7 +123,7 @@ export async function verifyLangSearchResultsBatch(
         if (response.success) {
             const actual = response.data;
             const error = compareLangSearchResults(actual, expected);
-            let comparisonResult: Comparison<LangSearchResults> = {
+            const comparisonResult: Comparison<LangSearchResults> = {
                 actual,
                 expected,
                 error,
@@ -237,7 +237,7 @@ function compareLangSearchResults(
     lr1: LangSearchResults,
     lr2: LangSearchResults,
 ): string | undefined {
-    let error = compareSearchQuery(lr1.searchQueryExpr, lr2.searchQueryExpr);
+    const error = compareSearchQuery(lr1.searchQueryExpr, lr2.searchQueryExpr);
     if (error !== undefined && error.length > 0) {
         return error;
     }
@@ -421,7 +421,7 @@ function compareEntityTerm(
         return `${label}.name: ${x.name} !== ${y.name}`;
     }
 
-    let error = compareTypes(x.type, y.type, label);
+    const error = compareTypes(x.type, y.type, label);
     if (error !== undefined) {
         return error;
     }
@@ -437,7 +437,7 @@ function compareEntityTerm(
         yType: string[] | undefined,
         label: string,
     ): string | undefined {
-        let error = compareStringArray(xType, yType, label + ".type");
+        const error = compareStringArray(xType, yType, label + ".type");
         if (error === undefined) {
             return undefined;
         }
@@ -558,7 +558,7 @@ export async function compareSearchQueryTranslations(
         return resultScope;
     }
 
-    let cmp: ScopeQueryComparison = {
+    const cmp: ScopeQueryComparison = {
         actual: resultScope.data,
         expected: result.data,
         query,

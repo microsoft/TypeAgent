@@ -85,12 +85,12 @@ export async function createKnowproTestCommands(
     commands.kpTestMdParse.metadata = testMdParseDef();
     async function testMdParse(args: string[]) {
         const namedArgs = parseNamedArguments(args, testMdParseDef());
-        let filePath = namedArgs.filePath;
+        const filePath = namedArgs.filePath;
         if (!filePath) {
             return;
         }
-        let markdown = await readAllText(filePath);
-        let mdDom = tp.markdownTokenize(markdown);
+        const markdown = await readAllText(filePath);
+        const mdDom = tp.markdownTokenize(markdown);
         //context.printer.writeJsonInColor(chalk.gray, mdDom);
         const chunkSize = namedArgs.chunkSize;
         const chunkSizeBuffer = chunkSize + chunkSize * 0.25;
@@ -148,7 +148,7 @@ export async function createKnowproTestCommands(
         if (!filePath) {
             return;
         }
-        let html = await readAllText(filePath);
+        const html = await readAllText(filePath);
         let docParts = cm.docPartsFromHtml(html, false, namedArgs.rootTag);
         for (const part of docParts) {
             context.printer.writeLine("----------------");
@@ -568,7 +568,7 @@ export async function createKnowproTestCommands(
                 context.printer.writeError(results.message);
                 return;
             }
-            let errorResults = results.data.filter(
+            const errorResults = results.data.filter(
                 (r) => r.error !== undefined && r.error.length > 0,
             );
             if (errorResults.length > 0) {

@@ -36,7 +36,7 @@ export class AzSearchIndex<T extends object> {
             searchOptions,
         );
         // Search returns a paging iterator. Collect all results
-        let results: azSearch.SearchResult<T>[] = [];
+        const results: azSearch.SearchResult<T>[] = [];
         for await (const result of searchResults.results) {
             results.push(result);
         }

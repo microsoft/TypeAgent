@@ -1,0 +1,32 @@
+{
+  "name": "remote-client-example",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Example: connect to a remote TypeAgent agent-server via Dev Tunnel",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/remoteClient"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "start": "node dist/main.js",
+    "tsc": "tsc -p src"
+  },
+  "dependencies": {
+    "@typeagent/agent-server-client": "workspace:*",
+    "@typeagent/agent-server-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

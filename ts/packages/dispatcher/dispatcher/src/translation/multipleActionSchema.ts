@@ -82,7 +82,7 @@ export function createMultipleActionSchema(
 
     const actionRequestEntryType = sc.obj(actionRequestEntryFields);
 
-    let requestEntryType = pending
+    const requestEntryType = pending
         ? sc.union(
               actionRequestEntryType,
               sc.obj({

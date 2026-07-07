@@ -37,7 +37,7 @@ export function parseTranscript<TMessage extends ITranscriptMessage>(
         const match = turnParserRegex.exec(line);
         if (match && match.groups) {
             let speaker = match.groups["speaker"];
-            let speech = match.groups["speech"];
+            const speech = match.groups["speech"];
             if (curMsg) {
                 if (speaker) {
                     messages.push(curMsg);
@@ -98,7 +98,7 @@ export function timestampMessages(
     if (ticksLength <= 0) {
         throw new Error(`${startDate} is not < ${endDate}`);
     }
-    let messageLengths = messages.map((m) => messageLength(m));
+    const messageLengths = messages.map((m) => messageLength(m));
     const textLength: number = messageLengths.reduce(
         (total: number, l) => total + l,
         0,

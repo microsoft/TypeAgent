@@ -72,7 +72,7 @@ export class MemoryServer {
     }
 
     public async remember(request: RememberRequest): Promise<CallToolResult> {
-        let memory = await this.getMemory(request.memoryName);
+        const memory = await this.getMemory(request.memoryName);
         if (!memory) {
             return toolResult(`Memory ${request.memoryName} does not exist`);
         }
@@ -89,7 +89,7 @@ export class MemoryServer {
     }
 
     public async recall(request: RecallRequest): Promise<CallToolResult> {
-        let memory = await this.getMemory(request.memoryName);
+        const memory = await this.getMemory(request.memoryName);
         if (!memory) {
             return toolResult(`Memory ${request.memoryName} does not exist`);
         }

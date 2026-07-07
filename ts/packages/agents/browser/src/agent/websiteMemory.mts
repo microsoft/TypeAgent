@@ -878,7 +878,7 @@ export async function importHtmlFolderFromSession(
         const extractionMode = options.mode || "basic";
 
         // Initialize import options for folder processing
-        let importOptions: any = {};
+        const importOptions: any = {};
 
         // For AI-enabled modes, validate AI availability before starting import
         if (extractionMode !== "basic") {
@@ -1368,8 +1368,8 @@ export async function getWebsiteStats(
         const { groupBy = "domain", limit = 10 } = action.parameters || {};
         const websites = websiteCollection.messages.getAll();
 
-        let stats: { [key: string]: number } = {};
-        let totalCount = websites.length;
+        const stats: { [key: string]: number } = {};
+        const totalCount = websites.length;
 
         for (const site of websites) {
             const metadata = site.metadata as website.WebsiteDocPartMeta;

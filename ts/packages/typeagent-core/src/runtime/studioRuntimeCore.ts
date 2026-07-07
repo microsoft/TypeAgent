@@ -1608,7 +1608,7 @@ export function createStudioRuntimeCore(
                                 // that no longer resolves) shouldn't block the
                                 // rest. Log to the extension host console; the
                                 // surviving sandboxes still come back.
-                                // eslint-disable-next-line no-console
+
                                 console.warn(
                                     `[typeagent-studio] Failed to restore sandbox '${entry.id}':`,
                                     err,

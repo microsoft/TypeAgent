@@ -34,7 +34,7 @@ export function getDistinctSemanticRefTopics(
         semanticRefMatches,
         "topic",
     );
-    let mergedTopics = mergeScoredTopics(scoredTopics, false);
+    const mergedTopics = mergeScoredTopics(scoredTopics, false);
     const mergedKnowledge = getTopKnowledge<MergedTopic>(
         mergedTopics.values(),
         "topic",
@@ -54,7 +54,7 @@ export function getDistinctSemanticRefEntities(
         semanticRefMatches,
         "entity",
     );
-    let mergedEntities = mergeScoredConcreteEntities(scoredEntities, false);
+    const mergedEntities = mergeScoredConcreteEntities(scoredEntities, false);
     const mergedKnowledge: ScoredKnowledge[] = getTopKnowledge<MergedEntity>(
         mergedEntities.values(),
         "entity",
@@ -87,8 +87,8 @@ export function mergeScoredTopics(
     scoredTopics: Iterable<Scored<SemanticRef>>,
     mergeOrdinals: boolean,
 ): Map<string, Scored<MergedTopic>> {
-    let mergedTopics = new Map<string, Scored<MergedTopic>>();
-    for (let scoredTopic of scoredTopics) {
+    const mergedTopics = new Map<string, Scored<MergedTopic>>();
+    for (const scoredTopic of scoredTopics) {
         const topic = scoredTopic.item.knowledge as Topic;
         let existing = mergedTopics.get(topic.text);
         if (existing) {
@@ -113,8 +113,8 @@ export function mergeScoredConcreteEntities(
     scoredEntities: Iterable<Scored<SemanticRef>>,
     mergeOrdinals: boolean,
 ): Map<string, Scored<MergedEntity>> {
-    let mergedEntities = new Map<string, Scored<MergedEntity>>();
-    for (let scoredEntity of scoredEntities) {
+    const mergedEntities = new Map<string, Scored<MergedEntity>>();
+    for (const scoredEntity of scoredEntities) {
         const mergedEntity = concreteToMergedEntity(
             scoredEntity.item.knowledge as kpLib.ConcreteEntity,
         );
@@ -144,7 +144,7 @@ export function mergeScoredConcreteEntities(
 export function mergeConcreteEntities(
     entities: kpLib.ConcreteEntity[],
 ): kpLib.ConcreteEntity[] {
-    let mergedEntities = concreteToMergedEntities(entities);
+    const mergedEntities = concreteToMergedEntities(entities);
 
     const mergedConcreteEntities: kpLib.ConcreteEntity[] = [];
     for (const mergedEntity of mergedEntities.values()) {
@@ -161,8 +161,8 @@ function mergeMessageOrdinals(mergedEntity: MergedKnowledge, sr: SemanticRef) {
 export function concreteToMergedEntities(
     entities: kpLib.ConcreteEntity[],
 ): Map<string, MergedEntity> {
-    let mergedEntities = new Map<string, MergedEntity>();
-    for (let entity of entities) {
+    const mergedEntities = new Map<string, MergedEntity>();
+    for (const entity of entities) {
         const mergedEntity = concreteToMergedEntity(entity);
         const existing = mergedEntities.get(mergedEntity.name);
         if (existing) {
@@ -175,7 +175,7 @@ export function concreteToMergedEntities(
 }
 
 function concreteToMergedEntity(entity: kpLib.ConcreteEntity): MergedEntity {
-    let type = [...entity.type];
+    const type = [...entity.type];
     collections.lowerAndSort(type);
     return {
         name: entity.name.toLowerCase(),

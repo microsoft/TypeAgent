@@ -9,7 +9,10 @@ import {
     ScoredItem,
     NameValue,
 } from "typeagent";
-import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
+import {
+    TextEmbeddingModel,
+    tryCreateEmbeddingModel,
+} from "@typeagent/aiclient";
 
 export type EventInfo = {
     eventId: string;
@@ -28,9 +31,11 @@ export interface CalendarDataIndex {
 
 export function createCalendarDataIndex() {
     let eventEmbeddings: Record<string, NormalizedEmbedding> = {};
-    let embeddingModel: TextEmbeddingModel;
-
-    embeddingModel = openai.createEmbeddingModel();
+    // Undefined when no embedding provider is configured (e.g. Copilot /
+    // self-host "none" mode). Semantic event lookup is then disabled and
+    // search returns no matches instead of failing.
+    const embeddingModel: TextEmbeddingModel | undefined =
+        tryCreateEmbeddingModel();
     return {
         addOrUpdate,
         remove,
@@ -39,7 +44,10 @@ export function createCalendarDataIndex() {
     };
 
     async function addOrUpdate(eventInfo: EventInfo) {
-        let embedding = await generateEmbedding(
+        if (embeddingModel === undefined) {
+            return;
+        }
+        const embedding = await generateEmbedding(
             embeddingModel,
             String(eventInfo.eventData),
         );
@@ -60,6 +68,9 @@ export function createCalendarDataIndex() {
         query: string | NormalizedEmbedding,
         maxMatches: number,
     ): Promise<ScoredItem<NameValue<string>>[]> {
+        if (embeddingModel === undefined) {
+            return [];
+        }
         const embeddings = Object.values(eventEmbeddings);
         const eventIds = Object.keys(eventEmbeddings);
 

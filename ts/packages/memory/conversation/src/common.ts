@@ -4,16 +4,23 @@
 import * as kpLib from "knowledge-processor";
 import * as kp from "knowpro";
 import * as ms from "memory-storage";
-import { openai } from "@typeagent/aiclient";
+import { tryCreateEmbeddingModel } from "@typeagent/aiclient";
 import { IndexFileSettings, IndexingState } from "./memory.js";
 
 export function createEmbeddingModelWithCache(
     cacheSize: number,
     getCache?: () => kpLib.TextEmbeddingCache | undefined,
     embeddingSize = 1536,
-): [kpLib.TextEmbeddingModelWithCache, number] {
+): [kpLib.TextEmbeddingModelWithCache | undefined, number] {
+    // May be undefined when no embedding provider is configured (e.g. Copilot
+    // self-host without a local embedder). Memory then indexes/searches with
+    // exact + alias + edit-distance matching and skips embedding-only features.
+    const innerModel = tryCreateEmbeddingModel();
+    if (innerModel === undefined) {
+        return [undefined, embeddingSize];
+    }
     const embeddingModel = kpLib.createEmbeddingCache(
-        openai.createEmbeddingModel(),
+        innerModel,
         cacheSize,
         getCache,
     );

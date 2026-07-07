@@ -98,7 +98,7 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
         } else if (args.includes("-schemagen")) {
             console.log("VSCODE Action Schema generation ...");
 
-            let maxNodestoProcess = parseArg(
+            const maxNodestoProcess = parseArg(
                 "maxNodesToProcess",
                 "number",
                 args,
@@ -184,7 +184,7 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
                     actionreqEmbeddingsFile,
                 );
                 console.log("statGenFilePath: ", statGenFilePath);
-                let zerorankStatsFile = path.join(
+                const zerorankStatsFile = path.join(
                     path.dirname(statGenFilePath),
                     "zero_rank_stats.csv",
                 );

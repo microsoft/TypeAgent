@@ -170,7 +170,7 @@ function* blocksToChunks(
     autoTruncate: boolean = true,
 ): IterableIterator<string> {
     const separator = " ";
-    let blockQueue: TextBlock[] = [];
+    const blockQueue: TextBlock[] = [];
     blockQueue.push(...text);
 
     let i = 0;
@@ -216,7 +216,7 @@ export function* joinTextBlocks(
 ): IterableIterator<TextBlock> {
     separator ??= " ";
     let chunk = emptyTextChunk();
-    for (let chunkPart of chunks) {
+    for (const chunkPart of chunks) {
         if (
             chunk.value.length + (chunkPart.value.length + separator.length) >
             maxCharsPerChunk

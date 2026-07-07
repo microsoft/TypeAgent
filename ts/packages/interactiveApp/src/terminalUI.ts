@@ -1127,7 +1127,7 @@ export class CompletionMenu {
         // Hide cursor during render
         this.stream.write(ANSI.hideCursor);
 
-        let lines: string[] = [];
+        const lines: string[] = [];
 
         // Header
         if (this.header) {

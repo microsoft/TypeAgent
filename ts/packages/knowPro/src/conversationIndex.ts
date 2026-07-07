@@ -348,7 +348,7 @@ async function addBatchToSemanticRefIndex(
     beginIndexing(conversation);
 
     const messages = conversation.messages;
-    let indexingResult: TextIndexingResult = {};
+    const indexingResult: TextIndexingResult = {};
 
     const textBatch = batch.map((tl) => {
         const text = messages.get(tl.messageOrdinal).textChunks[
@@ -572,7 +572,7 @@ export async function addToConversationIndex(
         );
     }
     if (!indexingResult.semanticRefs?.error && conversation.semanticRefIndex) {
-        let relatedTerms = [...termsAdded.values()];
+        const relatedTerms = [...termsAdded.values()];
         termsAdded.clear();
         indexingResult.secondaryIndexResults = await addToSecondaryIndexes(
             conversation,
@@ -674,7 +674,7 @@ export function addMessageKnowledgeToSemanticRefIndex(
     ) {
         const msg = messages.get(messageOrdinal);
         const chunkOrdinal = 0;
-        let knowledge = msg.getKnowledge();
+        const knowledge = msg.getKnowledge();
         if (knowledge !== undefined) {
             addKnowledgeToSemanticRefIndex(
                 conversation,

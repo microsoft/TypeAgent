@@ -57,7 +57,7 @@ export class AzSearchQueryCompiler {
     }
 
     public compileWhenFilter(filter: kp.WhenFilter): string | undefined {
-        let filterExpressions: string[] = [];
+        const filterExpressions: string[] = [];
         if (filter.knowledgeType) {
             filterExpressions.push(
                 filterCompareExpr(
@@ -111,14 +111,14 @@ export class AzSearchQueryCompiler {
     }
 
     private compileSearchTerm(searchTerm: kp.SearchTerm): string {
-        let searchExpr = queryPhraseExpr(searchTerm.term);
+        const searchExpr = queryPhraseExpr(searchTerm.term);
         if (
             searchTerm.relatedTerms === undefined ||
             searchTerm.relatedTerms.length === 0
         ) {
             return searchExpr;
         }
-        let searchExprGroup: string[] = [searchExpr];
+        const searchExprGroup: string[] = [searchExpr];
         for (const relatedTerm of searchTerm.relatedTerms) {
             searchExprGroup.push(queryPhraseExpr(relatedTerm));
         }

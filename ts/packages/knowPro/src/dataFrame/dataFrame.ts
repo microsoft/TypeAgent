@@ -114,7 +114,11 @@ export class DataFrame implements IDataFrame {
         columnValue: DataFrameValue,
         compareOp: ComparisonOp,
     ): DataFrameRow[] | undefined {
-        let ordinals = this.findRowOrdinals(columnName, columnValue, compareOp);
+        const ordinals = this.findRowOrdinals(
+            columnName,
+            columnValue,
+            compareOp,
+        );
         const rows = this.getRows(ordinals);
         return rows.length > 0 ? rows : undefined;
     }
@@ -122,7 +126,7 @@ export class DataFrame implements IDataFrame {
     public findRows(
         searchTerms: DataFrameTermGroup,
     ): DataFrameRow[] | undefined {
-        let ordinalSet = this.searchBoolean(searchTerms);
+        const ordinalSet = this.searchBoolean(searchTerms);
         if (ordinalSet === undefined || ordinalSet.size === 0) {
             return undefined;
         }
@@ -132,7 +136,7 @@ export class DataFrame implements IDataFrame {
     public findSources(
         searchTerms: DataFrameTermGroup,
     ): RowSourceRef[] | undefined {
-        let ordinalSet = this.searchBoolean(searchTerms);
+        const ordinalSet = this.searchBoolean(searchTerms);
         if (ordinalSet === undefined || ordinalSet.size === 0) {
             return undefined;
         }
@@ -234,7 +238,7 @@ export class DataFrame implements IDataFrame {
     private searchOrMax(
         searchTerms: DataFrameTermGroup,
     ): Set<number> | undefined {
-        let matches: MatchAccumulator<number> = new MatchAccumulator();
+        const matches: MatchAccumulator<number> = new MatchAccumulator();
         for (const term of searchTerms.terms) {
             for (const ordinal of this.findRowOrdinals(
                 term.columnName,

@@ -557,7 +557,7 @@ async function executeEmailAction(
         completion_tokens: 0,
         total_tokens: 0,
     };
-    let result = await handleEmailAction(action, context, tokenUsage);
+    const result = await handleEmailAction(action, context, tokenUsage);
     if (result) {
         // If handler already built an ActionResultSuccess, return it directly
         const actionResult =
@@ -609,7 +609,7 @@ async function handleEmailAction(
 
             let genContent: string = "";
             if (action.parameters.genContent.generateBody) {
-                let query = action.parameters.genContent.bodySearchQuery;
+                const query = action.parameters.genContent.bodySearchQuery;
                 if (query) {
                     const chatModel = openai.createChatModel(
                         "GPT_35_TURBO",
@@ -629,7 +629,7 @@ async function handleEmailAction(
                             tokenUsage.total_tokens += usage.total_tokens ?? 0;
                         }
                     };
-                    let result = await generateNotes(
+                    const result = await generateNotes(
                         query,
                         4096,
                         chatModel,
@@ -711,7 +711,7 @@ async function handleForwardOrReplyAction(
     emailProvider: IEmailProvider,
 ) {
     const rawRef = action.parameters.messageRef as MessageReference | string;
-    let msgRef: MessageReference =
+    const msgRef: MessageReference =
         typeof rawRef === "string" ? { content: rawRef } : rawRef;
     if (msgRef) {
         // use the message reference to find the email to reply to
@@ -733,7 +733,7 @@ async function handleForwardOrReplyAction(
                 searchQuery.startDateTime = msgRef.receivedDateTime.startTime;
             if (msgRef.receivedDateTime?.endTime)
                 searchQuery.endDateTime = msgRef.receivedDateTime.endTime;
-            let msg_id = await emailProvider.findEmail(searchQuery);
+            const msg_id = await emailProvider.findEmail(searchQuery);
 
             if (msg_id) {
                 let cc_addrs: string[] | undefined = [];
@@ -1153,7 +1153,7 @@ async function handleFindEmailAction(
         );
         if (answer && answer.chunksUsed > 0) {
             // Post-process: link email subjects in the answer HTML
-            let answerHtml = linkEmailSubjects(answer.answer, messages);
+            const answerHtml = linkEmailSubjects(answer.answer, messages);
 
             // Count linked titles already in the answer body
             const inlineLinks = (answerHtml.match(/<a\s+href=/gi) || []).length;

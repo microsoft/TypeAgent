@@ -48,7 +48,7 @@ async function executePhotoAction(
         completion_tokens: 0,
         total_tokens: 0,
     };
-    let result = await handlePhotoAction(
+    const result = await handlePhotoAction(
         action as ImageAction,
         context,
         tokenUsage,

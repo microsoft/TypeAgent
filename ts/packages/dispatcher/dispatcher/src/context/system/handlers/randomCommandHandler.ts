@@ -99,13 +99,13 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
         //
         // Create Model
         //
-        let chatModel = this.createModel();
+        const chatModel = this.createModel();
         //
         // Create Chat History
         //
-        let maxContextLength = 8196; // characters
-        let maxWindowLength = 30;
-        let chatHistory: PromptSection[] = [];
+        const maxContextLength = 8196; // characters
+        const maxWindowLength = 30;
+        const chatHistory: PromptSection[] = [];
 
         const chat = createTypeChat<UserRequestList>(
             chatModel,
@@ -163,7 +163,7 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
             // Create default model
             apiSettings = openai.apiSettingsFromEnv();
         }
-        let completionSettings: CompletionSettings = {
+        const completionSettings: CompletionSettings = {
             temperature: 1.0,
             max_tokens: 1000, // Max response tokens
             response_format: { type: "json_object" }, // createChatModel will remove it if the model doesn't support it

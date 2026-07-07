@@ -2287,11 +2287,7 @@ function renderStartupBanner(): void {
             i < LOGO_LINES.length ? LOGO_LINES[i] : " ".repeat(LOGO_WIDTH);
         const coloredLogo = chalk.cyan(logo);
         const content = i < contentLines.length ? contentLines[i] : "";
-        const contentVisible = content.replace(
-            // eslint-disable-next-line no-control-regex
-            /\x1b\[[0-9;]*m/g,
-            "",
-        );
+        const contentVisible = content.replace(/\x1b\[[0-9;]*m/g, "");
         const padding = Math.max(
             0,
             innerWidth - LOGO_WIDTH - contentVisible.length,

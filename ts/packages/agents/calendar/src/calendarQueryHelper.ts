@@ -26,7 +26,7 @@ export function generateEventReferenceCriteria(
         );
     }
     if (eventReference.dayRange) {
-        let nlpCriteria = generateNaturalLanguageCriteria(
+        const nlpCriteria = generateNaturalLanguageCriteria(
             eventReference.dayRange,
         );
         if (nlpCriteria) criteria.push(nlpCriteria);

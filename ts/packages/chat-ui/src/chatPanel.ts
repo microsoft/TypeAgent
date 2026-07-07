@@ -28,6 +28,11 @@ import {
     FeedbackWidget,
 } from "./feedbackWidget.js";
 import { ChatContextMenu } from "./contextMenu.js";
+import {
+    renderConnectionStatus,
+    type ConnectionStatus,
+    type ConnectionActionHandler,
+} from "./connectionStatus.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
 // passed in is built from values that, while in practice come from
@@ -668,8 +673,10 @@ export class ChatPanel {
         const wrapper = document.createElement("div");
         wrapper.className = "chat-panel-wrapper";
 
-        // Reconnect banner — hidden by default. Hosts call setReconnectStatus()
-        // to show retry/connecting state to the user instead of a silent UI.
+        // Reconnect banner — hidden by default. Hosts call setConnectionStatus()
+        // (structured: countdown / stopped + Retry/Start links) or the legacy
+        // setReconnectStatus() (plain string) to surface reconnect state instead
+        // of a silent UI.
         this.reconnectBanner = document.createElement("div");
         this.reconnectBanner.className = "chat-reconnect-banner";
         this.reconnectBanner.style.display = "none";
@@ -3811,6 +3818,31 @@ export class ChatPanel {
             this.reconnectBanner.textContent = message;
             this.reconnectBanner.style.display = "";
         }
+    }
+
+    /**
+     * Structured variant of {@link setReconnectStatus}. Renders the shared
+     * connection-status model (reconnect countdown, or the `stopped` state with
+     * clickable Retry / Start links) into the reconnect banner. Pass `undefined`
+     * to hide it. `onAction` receives clicks on the manual-recovery links.
+     */
+    public setConnectionStatus(
+        status: ConnectionStatus | undefined,
+        onAction?: ConnectionActionHandler,
+    ): void {
+        if (this.reconnectBanner === undefined) return;
+        if (status === undefined) {
+            this.reconnectBanner.replaceChildren();
+            this.reconnectBanner.style.display = "none";
+            this.reconnectBanner.classList.remove("stopped");
+            return;
+        }
+        this.reconnectBanner.classList.toggle(
+            "stopped",
+            status.phase === "stopped",
+        );
+        renderConnectionStatus(this.reconnectBanner, status, onAction);
+        this.reconnectBanner.style.display = "";
     }
 
     /**

@@ -151,7 +151,7 @@ export function getDateRelativeToDayV3(relativeDate: string): Date | undefined {
     }
 
     const [, ordinalStr, dayStr, , direction, monthStr] = match;
-    let ordinal = ordinalStr ? parseInt(ordinalStr, 10) : 1;
+    const ordinal = ordinalStr ? parseInt(ordinalStr, 10) : 1;
 
     let targetMonthIndex: number;
     if (direction && direction.toLowerCase() === "next") {
@@ -392,10 +392,10 @@ export async function getNormalizedDateRange(
       }
     | undefined
 > {
-    let currentDate = getShortDate(new Date(inputDate));
+    const currentDate = getShortDate(new Date(inputDate));
     if (currentDate !== undefined) {
         if (startTime != undefined) {
-            let startDateTime = combineDateTime(
+            const startDateTime = combineDateTime(
                 currentDate,
                 parseTimeString(formatTime(startTime)),
             );
@@ -410,7 +410,7 @@ export async function getNormalizedDateRange(
                     fLocaleTime,
                 );
             } else {
-                let endDateTime = combineDateTime(
+                const endDateTime = combineDateTime(
                     currentDate,
                     parseTimeString(formatTime(endTime)),
                 );
@@ -440,9 +440,9 @@ export async function getNormalizedDateTimes(
 
     if (curDay === undefined) return undefined;
 
-    let currentDate = getShortDate(curDay);
+    const currentDate = getShortDate(curDay);
     if (startTime != undefined) {
-        let startDateTime = combineDateTime(
+        const startDateTime = combineDateTime(
             currentDate,
             parseTimeString(formatTime(startTime)),
         );
@@ -457,7 +457,7 @@ export async function getNormalizedDateTimes(
                 fLocaleTime,
             );
         } else {
-            let endDateTime = combineDateTime(
+            const endDateTime = combineDateTime(
                 currentDate,
                 parseTimeString(formatTime(endTime)),
             );

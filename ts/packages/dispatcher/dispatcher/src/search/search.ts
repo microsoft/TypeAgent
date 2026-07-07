@@ -31,7 +31,7 @@ async function getAnswerFromConversationManager(
     if (conversationManager === undefined) {
         throw new Error("Conversation manager is undefined!");
     }
-    let searchResponse = await conversationManager.getSearchResponse(
+    const searchResponse = await conversationManager.getSearchResponse(
         question,
         conversationLookupFilters,
     );
@@ -178,7 +178,7 @@ async function rehydrateImages(
                     name = files[i]!.substring(files[i]!.lastIndexOf("\\") + 1);
                 }
 
-                let a = await context.sessionContext.sessionStorage?.read(
+                const a = await context.sessionContext.sessionStorage?.read(
                     `\\..\\user_files\\${name}`,
                     "base64",
                 );

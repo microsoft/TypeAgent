@@ -447,6 +447,8 @@ export function configToTree(config: Config): ConfigTree {
             c.defaultModel = config.copilot.defaultModel;
         if (config.copilot.cliPath !== undefined)
             c.cliPath = config.copilot.cliPath;
+        if (config.copilot.cliUrl !== undefined)
+            c.cliUrl = config.copilot.cliUrl;
         if (config.copilot.reasoningEffort !== undefined)
             c.reasoningEffort = config.copilot.reasoningEffort;
         if (config.copilot.disableInfiniteSessions !== undefined)
@@ -461,6 +463,17 @@ export function configToTree(config: Config): ConfigTree {
             c.enableModelRequestLogging =
                 config.copilot.enableModelRequestLogging;
         if (Object.keys(c).length > 0) tree.copilot = c;
+    }
+
+    if (config.embedding) {
+        const e: ConfigTree = {};
+        if (config.embedding.provider !== undefined)
+            e.provider = config.embedding.provider;
+        if (config.embedding.model !== undefined)
+            e.model = config.embedding.model;
+        if (config.embedding.cacheDir !== undefined)
+            e.cacheDir = config.embedding.cacheDir;
+        if (Object.keys(e).length > 0) tree.embedding = e;
     }
 
     return tree;
@@ -485,6 +498,7 @@ const TYPED_SECTION_KEYS = new Set([
     "reasoning",
     "copilot",
     "modelProvider",
+    "embedding",
 ]);
 
 export function isTypedSectionKey(key: string): boolean {
@@ -985,6 +999,22 @@ function emitModelProvider(node: unknown, out: FlatEnv): void {
     out.TYPEAGENT_MODEL_PROVIDER = node;
 }
 
+function emitEmbedding(node: unknown, out: FlatEnv): void {
+    const e = asObject(node, "embedding");
+    if (e.provider !== undefined)
+        out.TYPEAGENT_EMBEDDING_PROVIDER = asString(
+            e.provider,
+            "embedding.provider",
+        );
+    if (e.model !== undefined)
+        out.TYPEAGENT_EMBEDDING_MODEL = asString(e.model, "embedding.model");
+    if (e.cacheDir !== undefined)
+        out.TYPEAGENT_EMBEDDING_CACHE_DIR = asString(
+            e.cacheDir,
+            "embedding.cacheDir",
+        );
+}
+
 function emitCopilot(node: unknown, out: FlatEnv): void {
     const c = asObject(node, "copilot");
     if (c.defaultModel !== undefined)
@@ -994,6 +1024,8 @@ function emitCopilot(node: unknown, out: FlatEnv): void {
         );
     if (c.cliPath !== undefined)
         out.COPILOT_CLI_PATH = asString(c.cliPath, "copilot.cliPath");
+    if (c.cliUrl !== undefined)
+        out.COPILOT_CLI_URL = asString(c.cliUrl, "copilot.cliUrl");
     if (c.reasoningEffort !== undefined)
         out.COPILOT_REASONING_EFFORT = asString(
             c.reasoningEffort,
@@ -1082,6 +1114,9 @@ export function typedSectionToFlat(key: string, node: unknown): FlatEnv {
             break;
         case "modelProvider":
             emitModelProvider(node, out);
+            break;
+        case "embedding":
+            emitEmbedding(node, out);
             break;
         default:
             throw new Error(`Not a typed section: '${key}'.`);

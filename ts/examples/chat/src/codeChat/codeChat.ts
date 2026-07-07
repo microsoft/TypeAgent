@@ -315,7 +315,10 @@ export async function runCodeChat(): Promise<void> {
                 let name = tsCode.getStatementName(statement);
                 if (name) {
                     name = `${moduleName}.${name}`;
-                    let code = tsCode.getTextOfStatement(sourceFile, statement);
+                    const code = tsCode.getTextOfStatement(
+                        sourceFile,
+                        statement,
+                    );
                     const docs = await codeIndex.put(
                         { code, language: "typescript" },
                         name,

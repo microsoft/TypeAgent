@@ -130,6 +130,31 @@ export type AgentServerConnection = {
 };
 
 /**
+ * Options for connecting to the agent-server WebSocket. Use `headers` to pass
+ * tunnel authorization tokens when connecting through a private Dev Tunnel.
+ */
+export interface AgentServerConnectOptions {
+    /** Extra headers sent during the WebSocket upgrade handshake. */
+    headers?: Record<string, string>;
+}
+
+/**
+ * Build the connect options (including tunnel token header) from environment
+ * variables. Returns undefined if no tunnel token is configured.
+ *
+ * Reads: `TYPEAGENT_TUNNEL_TOKEN`
+ */
+export function getConnectOptionsFromEnv():
+    | AgentServerConnectOptions
+    | undefined {
+    const token = process.env.TYPEAGENT_TUNNEL_TOKEN;
+    if (!token) return undefined;
+    return {
+        headers: { "X-Tunnel-Authorization": `tunnel ${token}` },
+    };
+}
+
+/**
  * Build an {@link AgentServerConnection} over an already-connected channel
  * adapter. This is the transport-agnostic core shared by both the WebSocket
  * client ({@link connectAgentServer}) and the in-process loopback client used
@@ -327,6 +352,7 @@ export function createAgentServerConnection(
 export async function connectAgentServer(
     url: string | URL,
     onDisconnect?: () => void,
+    connectOptions?: AgentServerConnectOptions,
 ): Promise<AgentServerConnection> {
     // A single logical connection over a transport that can be reopened in
     // place (reconnect()). `currentClose` tracks the live socket's teardown,
@@ -347,7 +373,12 @@ export async function connectAgentServer(
             // is still open can't leak it; its (now superseded) onclose is
             // ignored via the generation guard below.
             currentWs?.close();
-            const ws = new WebSocket(url);
+            const ws = new WebSocket(
+                url,
+                connectOptions?.headers
+                    ? { headers: connectOptions.headers }
+                    : undefined,
+            );
             currentWs = ws;
             let opened = false;
             let settled = false;
@@ -531,9 +562,17 @@ function spawnAgentServer(
                     "'" + s.replace(/'/g, "''") + "'";
                 const psCommand = `& node ${psQuote(serverPath)} --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
                 const psArgs = ["-NoExit", "-Command", psCommand];
+                // The first quoted argument to `start` is the new window's
+                // title. It MUST be non-empty: an empty title leaves the
+                // console window title blank, which trips a libuv bug on
+                // Windows — GetConsoleTitleW returns 0 with GetLastError()==0,
+                // libuv reads that as success but leaves process_title NULL,
+                // and the next process.title read aborts with
+                // "Assertion failed: process_title, file src\\win\\util.c".
+                const windowTitle = `TypeAgent Server (port ${port})`;
                 const child = spawn(
                     "cmd.exe",
-                    ["/c", "start", "", psExe, ...psArgs],
+                    ["/c", "start", windowTitle, psExe, ...psArgs],
                     {
                         detached: true,
                         stdio: "ignore",

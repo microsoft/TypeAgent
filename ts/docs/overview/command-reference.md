@@ -1,6 +1,6 @@
 # TypeAgent Command Reference
 
-The following list of commands are available in the [TypeAgent](https://github.com/microsoft/TypeAgent) system. Some commands may not be available based on the client being used (i.e. @shell commands do not work on the CLI) and or may be dependent on a specific agent (i.e. browser). This information is also available by running `@help` in the client.
+This is the reference for TypeAgent's core **system and dispatcher** commands — those provided by the dispatcher itself rather than by any individual agent. Availability can depend on the client (e.g. `@shell` commands do not work on the CLI). Agent-specific commands are documented with their respective [agents](../agents/index.md). You can also run `@help` in any client to list what is currently available.
 
 ## @action - Execute an action
 
@@ -14,81 +14,6 @@ Usage: `@action [--parameters <json>] <schemaName> <actionName>`
 ### Flags:
 
 - --parameters <json> : Action parameter
-
-## @browser launch hidden - Open a hidden/headless browser instance
-
-Usage: `@browser launch hidden`
-
-## @browser launch standalone - Open a standalone browser instance
-
-Usage: `@browser launch standalone`
-
-## @browser close - Close the new Web Content view
-
-Usage: `@browser close`
-
-## @browser resolver list - List all available URL resolvers
-
-Usage: `@browser resolver list`
-
-## @browser resolver search - Toggle search resolver
-
-Usage: `@browser resolver search`
-
-## @browser resolver keyword - Toggle keyword resolver
-
-Usage: `@browser resolver keyword`
-
-## @browser resolver wikipedia - Toggle Wikipedia resolver
-
-Usage: `@browser resolver wikipedia`
-
-## @browser resolver history - Toggle history resolver
-
-Usage: `@browser resolver history`
-
-## @browser search list - Lists browser agent search providers
-
-Usage: `@browser search list`
-
-## @browser search set - Sets the active search provider
-
-Usage: `@browser search set <provider>`
-Arguments:
-&lt;provider&gt; - The name of the search provider to set as active. (type: string)
-
-## @browser search show - Shows the details of the selected search provider
-
-Usage: `@browser search show <provider>`
-Arguments:
-&lt;provider&gt; - The name of the search provider to show details for. (type: string)
-
-## @browser search add - Adds a new search provider
-
-Usage: `@browser search add <provider> <url>`
-Arguments:
-&lt;provider&gt; - The name of the search provider to add. (type: string)
-&lt;url&gt; - The URL of the search provider to add. '%s' will be replaced with the search parameter. (type: string)
-
-## @browser search remove - Removes the selected search provider
-
-Usage: `@browser search remove <provider>`
-Arguments:
-&lt;provider&gt; - The name of the search provider to remove. (type: string)
-
-## @browser search import - Imports the search providers from the specified browser
-
-Usage: `@browser search import <browser>`
-Arguments:
-&lt;browser&gt; - The name of the browser to import search providers from: [Edge | Chrome]. (type: string)
-
-## @calendar login - Log into MS Graph to access calendar
-
-Usage: `@calendar login`
-
-## @calendar logout - Log out of MS Graph to access calendar
-
-Usage: `@calendar logout`
 
 ## @clear - Clear the console
 
@@ -715,14 +640,6 @@ Usage: `@exit`
 - --type <string> : Display type (default: text)
 - --inline : Display inline (default: false)
 
-## @email login - Log into the MS Graph to access email
-
-Usage: `@email login`
-
-## @email logout - Log out of MS Graph to access email
-
-Usage: `@email logout`
-
 ## @grammar list - List grammar rules learned at runtime (optionally filtered by agent)
 
 Usage: `@grammar list [<agent>]`
@@ -966,14 +883,6 @@ Usage: `@install <name> <agent>`
 - &lt;name&gt; - Name of the agent (type: string)
 - &lt;agent&gt; - Path of agent package directory or tar file to install (type: string)
 
-## @mcpfilesystem server - Set the server arguments
-
-Usage: `@mcpfilesystem server <allowedDirectories>...`
-
-### Arguments:
-
-- &lt;allowedDirectories&gt; - Allowed directories for the file system agent to access (type: string)
-
 ## @oracle request - Send a request to the Oracle
 
 Usage: `@oracle request <question>`
@@ -981,22 +890,6 @@ Usage: `@oracle request <question>`
 ### Arguments:
 
 - &lt;question&gt; - Request for Oracle (type: string)
-
-## @player spotify load - Load spotify user data
-
-Usage: `@player spotify load <file>`
-
-### Arguments:
-
-- &lt;file&gt; - File to load (type: string)
-
-## @player spotify login - Login to Spotify
-
-Usage: `@player spotify login`
-
-## @player spotify logout - Logout from Spotify
-
-Usage: `@player spotify logout`
 
 ## @run - Run a command script file
 

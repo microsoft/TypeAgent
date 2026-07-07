@@ -43,7 +43,7 @@ export class AWSStorageProvider implements TypeAgentStorageProvider {
 
     async listRemoteFiles(prefix?: string): Promise<string[]> {
         const results: string[] = [];
-        let continueToken: string | undefined = undefined;
+        const continueToken: string | undefined = undefined;
 
         do {
             const command = new ListObjectsV2Command({

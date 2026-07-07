@@ -127,7 +127,7 @@ export async function createKnowproKnowledgeCommands(
             progressBar.advance();
             context.printer.writeLine();
 
-            let text = textChunks[i];
+            const text = textChunks[i];
             context.printer.writeLineInColor(
                 chalk.cyan,
                 `${text.length} chars`,
@@ -233,7 +233,7 @@ export async function createKnowproKnowledgeCommands(
         text: string,
         verify?: (k: kpLib.KnowledgeResponse) => boolean,
     ): Promise<[kpLib.KnowledgeResponse | undefined, number]> {
-        let maxAttempts = 2;
+        const maxAttempts = 2;
         let attempts = 1;
         let knowledge: kpLib.KnowledgeResponse | undefined;
         while (true) {
@@ -362,7 +362,7 @@ export class KnowledgeCompiler {
         }
 
         for (const entity of entities) {
-            let entityGroup = kp.createOrTermGroup();
+            const entityGroup = kp.createOrTermGroup();
             this.compileEntity(entity, entityGroup);
             if (entityGroup.terms.length > 0) {
                 termGroup.terms.push(entityGroup);

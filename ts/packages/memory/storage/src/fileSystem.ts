@@ -48,8 +48,7 @@ export function readJsonFile<T>(
     validator?: ((obj: any) => T) | undefined,
 ): T | undefined {
     try {
-        let json;
-        json = fs.readFileSync(filePath, {
+        const json = fs.readFileSync(filePath, {
             encoding: "utf-8",
         });
         if (json.length > 0) {
@@ -79,7 +78,7 @@ export function readAllLines(
     filePath: string,
     trim: boolean = true,
 ): string[] | undefined {
-    let fileText = readAllText(filePath);
+    const fileText = readAllText(filePath);
     if (!fileText) {
         return undefined;
     }

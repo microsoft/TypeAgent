@@ -161,7 +161,7 @@ export async function searchConversationKnowledge(
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
     }
-    let error = validateSearchTermGroup(searchTermGroup);
+    const error = validateSearchTermGroup(searchTermGroup);
     if (error !== undefined) {
         throw new Error(error);
     }
@@ -420,7 +420,7 @@ class QueryCompiler {
         filter?: WhenFilter,
         options?: SearchOptions,
     ) {
-        let query = await this.compileQuery(terms, filter, options);
+        const query = await this.compileQuery(terms, filter, options);
 
         const exactMatch = options?.exactMatch ?? false;
         if (!exactMatch) {
@@ -501,7 +501,7 @@ class QueryCompiler {
         options?: SearchOptions,
     ) {
         // Select is a combination of ordinary search terms and property search terms
-        let [searchTermUsed, selectExpr] = this.compileSearchGroupTerms(
+        const [searchTermUsed, selectExpr] = this.compileSearchGroupTerms(
             termGroup,
             scopeExpr,
         );
@@ -592,7 +592,7 @@ class QueryCompiler {
                 compiledTerms[0].terms.push(term);
             }
         }
-        let boolExpr = createOp(
+        const boolExpr = createOp(
             termExpressions,
             searchGroup.booleanOp,
             scopeExpr,
@@ -651,7 +651,7 @@ class QueryCompiler {
             );
         } else if (termGroup) {
             // Treat any actions as inherently scope selecting.
-            let actionTermsGroup =
+            const actionTermsGroup =
                 this.getActionTermsFromSearchGroup(termGroup);
             if (actionTermsGroup !== undefined) {
                 scopeSelectors ??= [];
@@ -729,7 +729,7 @@ class QueryCompiler {
     }
 
     private compileWhere(filter: WhenFilter): q.IQuerySemanticRefPredicate[] {
-        let predicates: q.IQuerySemanticRefPredicate[] = [];
+        const predicates: q.IQuerySemanticRefPredicate[] = [];
         if (filter.knowledgeType) {
             predicates.push(new q.KnowledgeTypePredicate(filter.knowledgeType));
         }
