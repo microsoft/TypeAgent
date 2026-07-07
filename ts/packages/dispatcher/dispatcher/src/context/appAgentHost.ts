@@ -61,12 +61,9 @@ export type AppAgentHostApplyFns = {
  */
 export class AppAgentHostApplicator implements AppAgentHost {
     private closed = false;
-    // FIFO queue of ops not yet started.
-    private readonly queue: QueuedOp[] = [];
     // All enqueued-but-not-settled ops (including the one currently waiting on
     // or holding the command lock), so dispose can auto-ack them.
     private readonly pending = new Set<QueuedOp>();
-    private pumping = false;
 
     constructor(
         // The session's single-slot command lock; gating each op on it defers
@@ -125,11 +122,10 @@ export class AppAgentHostApplicator implements AppAgentHost {
         // (which defaults dropConfig=true for uninstall) it keeps config by
         // default. The barrier always passes `dropConfig` explicitly regardless.
         const dropConfig = options.dropConfig ?? false;
-        // The whole teardown → quiesce → wait → (add) sequence is ONE queued op,
-        // so `pump` holds the session's command lock across all of it: no user
-        // command interleaves between the remove and the add. Teardown/startup
-        // are leaf ops — they never reacquire the command lock or dispatch a
-        // command.
+        // The whole teardown → quiesce → wait → (add) sequence is ONE command
+        // lock job: no user command interleaves between the remove and the add.
+        // Teardown/startup are leaf ops — they never reacquire the command lock
+        // or dispatch a command.
         const run = async () => {
             // 1. Teardown leg: unload `old` + drop routing (decrement the shared
             //    refcount), exactly like a remove.
@@ -195,9 +191,27 @@ export class AppAgentHostApplicator implements AppAgentHost {
             settled: false,
             running: false,
         };
-        this.queue.push(op);
         this.pending.add(op);
-        void this.pump();
+        void this.commandLock(async () => {
+            if (op.settled) {
+                return;
+            }
+            if (this.closed) {
+                this.settle(op, op.resolve);
+                return;
+            }
+            op.running = true;
+            try {
+                await op.run();
+                this.settle(op, op.resolve);
+            } catch (e) {
+                this.settle(op, () => op.reject(e));
+            }
+        }).catch((e) => {
+            // The command lock itself failed (not op.run) — settle the op so
+            // its ack never hangs.
+            this.settle(op, () => op.reject(e));
+        });
         return promise;
     }
 
@@ -208,52 +222,6 @@ export class AppAgentHostApplicator implements AppAgentHost {
         op.settled = true;
         this.pending.delete(op);
         complete();
-    }
-
-    private async pump(): Promise<void> {
-        if (this.pumping) {
-            return;
-        }
-        this.pumping = true;
-        try {
-            while (this.queue.length > 0) {
-                const op = this.queue.shift()!;
-                if (op.settled) {
-                    continue;
-                }
-                if (this.closed) {
-                    // Auto-ack an op abandoned between enqueue and run.
-                    this.settle(op, op.resolve);
-                    continue;
-                }
-                // Idle-gate: acquire the session's command lock so the op runs
-                // between user commands.
-                try {
-                    await this.commandLock(async () => {
-                        if (op.settled) {
-                            return;
-                        }
-                        if (this.closed) {
-                            this.settle(op, op.resolve);
-                            return;
-                        }
-                        op.running = true;
-                        try {
-                            await op.run();
-                            this.settle(op, op.resolve);
-                        } catch (e) {
-                            this.settle(op, () => op.reject(e));
-                        }
-                    });
-                } catch (e) {
-                    // The command lock itself failed (not op.run) — settle the
-                    // op so its ack never hangs, and keep pumping the rest.
-                    this.settle(op, () => op.reject(e));
-                }
-            }
-        } finally {
-            this.pumping = false;
-        }
     }
 
     /**
