@@ -14,9 +14,9 @@
 //
 // See docs/architecture/collision/collision-rollout.md for the design.
 
-import fs from "node:fs";
 import path from "node:path";
 import registerDebug from "debug";
+import { readJsonFileSafe, writeJsonFileSafe } from "../utils/fsUtils.js";
 
 const debugPref = registerDebug("typeagent:dispatcher:collision:preference");
 
@@ -161,18 +161,13 @@ export class CollisionPreferenceStore {
             return new CollisionPreferenceStore(undefined, []);
         }
         const filePath = path.join(dir, COLLISION_PREFERENCES_FILE);
-        let preferences: CollisionPreference[] = [];
-        try {
-            if (fs.existsSync(filePath)) {
-                const raw = fs.readFileSync(filePath, "utf8");
-                const parsed = JSON.parse(raw) as CollisionPreferencesFile;
-                if (Array.isArray(parsed?.preferences)) {
-                    preferences = parsed.preferences;
-                }
-            }
-        } catch (e) {
-            debugPref(`Failed to load preferences from ${filePath}: ${e}`);
-        }
+        const parsed = readJsonFileSafe(filePath, (e) =>
+            debugPref(`Failed to load preferences from ${filePath}: ${e}`),
+        ) as CollisionPreferencesFile | undefined;
+        const preferences =
+            parsed && Array.isArray(parsed.preferences)
+                ? parsed.preferences
+                : [];
         return new CollisionPreferenceStore(filePath, preferences);
     }
 
@@ -271,15 +266,8 @@ export class CollisionPreferenceStore {
             schemaVersion: COLLISION_PREFERENCES_SCHEMA_VERSION,
             preferences: [...this.byKey.values()],
         };
-        try {
-            fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-            fs.writeFileSync(
-                this.filePath,
-                JSON.stringify(data, null, 2),
-                "utf8",
-            );
-        } catch (e) {
-            debugPref(`Failed to save preferences to ${this.filePath}: ${e}`);
-        }
+        writeJsonFileSafe(this.filePath, data, (e) =>
+            debugPref(`Failed to save preferences to ${this.filePath}: ${e}`),
+        );
     }
 }
