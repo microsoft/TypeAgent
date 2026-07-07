@@ -114,7 +114,7 @@ export function mergeUserDataKind(
 ) {
     let added = 0;
     for (const newItem of newItems) {
-        let info = existing.get(newItem.id);
+        const info = existing.get(newItem.id);
         if (!info) {
             existing.set(newItem.id, newItem);
             added++;

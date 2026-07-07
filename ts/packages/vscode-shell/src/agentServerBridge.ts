@@ -381,7 +381,7 @@ export class AgentServerBridge {
             // Join the session with our ClientIO implementation
             const clientIO = this.createClientIO();
 
-            let joinOpts: any = {
+            const joinOpts: any = {
                 clientType: "extension",
                 // filter: false so multiple tabs sharing the same session all
                 // receive setDisplay/appendDisplay broadcasts. Per-connection

@@ -29,7 +29,7 @@ export function chalkStatus(status: SpotifyApi.CurrentPlaybackResponse) {
         if (status.progress_ms) {
             timePart = `${msToElapsedMinSec(status.progress_ms)}/${timePart}`;
         }
-        let symbol = status.is_playing ? playSymbol : pauseSymbol;
+        const symbol = status.is_playing ? playSymbol : pauseSymbol;
         console.log(
             `${symbol}  ${timePart}  ${chalk.cyanBright(status.item.name)}`,
         );

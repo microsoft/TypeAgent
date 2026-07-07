@@ -68,7 +68,7 @@ export function createSemanticList<T = any>(
     existingValues?: EmbeddedValue<T>[],
     stringify?: (value: T) => string,
 ): SemanticList<T> {
-    let values = existingValues ?? [];
+    const values = existingValues ?? [];
     return {
         values,
         push,
@@ -194,7 +194,7 @@ export function createSemanticList<T = any>(
         other: NormalizedEmbedding,
         type: SimilarityType,
     ): ScoredItem {
-        let best: ScoredItem = { score: Number.MIN_VALUE, item: -1 };
+        const best: ScoredItem = { score: Number.MIN_VALUE, item: -1 };
         for (let i = 0; i < list.length; ++i) {
             const score: number = similarity(list[i].embedding, other, type);
             if (score > best.score) {

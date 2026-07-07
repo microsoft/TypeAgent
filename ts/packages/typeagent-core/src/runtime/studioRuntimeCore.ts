@@ -63,12 +63,17 @@ import {
     ReplayVersionBuildError,
     type ReplayRunError,
     type GrammarReplayTarget,
+    type GrammarReplayResolver,
 } from "../replay/grammarResolver.js";
 import {
     computeWorkingTreeSchemaHash,
     loadConstructionCacheLayer,
     type ConstructionCacheLayer,
 } from "../replay/constructionCacheResolver.js";
+import type {
+    WildcardMatchValidator,
+    WildcardValidationDiagnostic,
+} from "../replay/wildcardValidator.js";
 import type { CollisionDetectedEvent } from "../events/index.js";
 import { getDefaultPhaseInputs } from "./onboardingPhaseInputs.js";
 import {
@@ -233,6 +238,21 @@ export interface PackagingHealthGateResult {
     checkedAgent?: string;
 }
 
+/**
+ * Which deterministic dispatch path replay models:
+ * - `nfa-grammar` (default) — grammar-only matching through the real NFA grammar
+ *   store, symmetric for both versions. The construction cache is NOT consulted
+ *   (faithful to the dispatcher's `grammarSystem: "nfa"` mode, where cache
+ *   validation is intentionally skipped). The cleanest signal for "what did my
+ *   `.agr` edit change", since A and B are equivalent environments.
+ * - `completionBased-cache` — the live working-tree side additionally consults
+ *   the agent's real per-session construction cache before the grammar match
+ *   (faithful to the dispatcher's default `completionBased` mode). Asymmetric:
+ *   only the working-tree side reads the cache, so a cache hit can mask or fake a
+ *   grammar regression. Opt-in for "what would my default dispatcher likely do".
+ */
+export type StudioReplayMode = "nfa-grammar" | "completionBased-cache";
+
 /** Request shape for {@link StudioRuntime.replayCorpus}. Versions and miss
  *  policy default to a deterministic working-tree self-compare. */
 export interface StudioReplayRequest {
@@ -241,6 +261,17 @@ export interface StudioReplayRequest {
     versionA?: VersionSpec;
     versionB?: VersionSpec;
     missPolicy?: ReplayMissPolicy;
+    /** Deterministic dispatch path to model. Defaults to `nfa-grammar`. */
+    mode?: StudioReplayMode;
+    /**
+     * Opt-in: additionally run the agent's real `validateWildcardMatch` over the
+     * working-tree side's wildcard grammar matches (the dispatcher's post-match
+     * validation step). Default off. Only takes effect when the runtime was given
+     * a `resolveWildcardValidator` and the agent's manifest declares it
+     * replay-safe; otherwise it is a no-op. Working-tree side only; fail-open. See
+     * {@link StudioReplayResult.wildcardValidation}.
+     */
+    validateWildcards?: boolean;
 }
 
 /**
@@ -270,6 +301,45 @@ export type StudioReplayMethod =
     | "schema-grammar"
     | "construction-cache";
 
+/**
+ * The deterministic fidelity layers a replay side can exercise, mirroring the
+ * dispatcher's path: grammar match → schema enrichment → construction cache →
+ * wildcard validation → full dispatch. The Impact Report surfaces a per-side
+ * matrix of these so the run is honest about exactly what it ran (and what
+ * building from a ref would add) instead of over-claiming fidelity.
+ */
+export type FidelityLayer =
+    | "grammar"
+    | "schemaEnrichment"
+    | "constructionCache"
+    | "wildcardValidation"
+    | "dispatch";
+
+export type FidelityLayerStatus = "ran" | "skipped" | "unavailable";
+
+export interface FidelityLayerReport {
+    status: FidelityLayerStatus;
+    /** Short human reason (shown as hover detail). */
+    reason: string;
+}
+
+/**
+ * How fully a side's version was realized: `built-live` (the working tree — real
+ * compiled agent code) or `source` (only grammar/schema text materialized at a
+ * git ref via `git show`; no build, so live-only layers can't run).
+ */
+export type FidelityRealization = "built-live" | "source";
+
+export interface FidelityReport {
+    realization: FidelityRealization;
+    layers: Record<FidelityLayer, FidelityLayerReport>;
+}
+
+export interface SideFidelity {
+    A: FidelityReport;
+    B: FidelityReport;
+}
+
 export interface StudioReplayResult {
     runId: string;
     summary: ReplaySummary;
@@ -286,10 +356,215 @@ export interface StudioReplayResult {
     methodA: StudioReplayMethod;
     methodB: StudioReplayMethod;
     /**
-     * Set when a version failed to materialize or compile. The run is aborted
+     * Set when the opt-in wildcard validation actually consulted the agent's
+     * `validateWildcardMatch` (a wildcard match occurred on the working-tree
+     * side). Omitted when validation was off or never reached a wildcard match.
+     */
+    wildcardValidation?: StudioWildcardValidationInfo;
+    /**
+     * Per-side fidelity descriptor: how each version was realized and which
+     * deterministic layers actually ran. Derived purely from signals the replay
+     * already computed (per-side method, mode, version kind, the wildcard
+     * validation pass) so the Impact Report can show an honest "what ran" matrix.
+     */
+    sideFidelity: SideFidelity;
+    /**
      * with an empty summary rather than emitting fabricated regression rows.
      */
     error?: ReplayRunError;
+}
+
+/**
+ * Reports the opt-in wildcard-validation pass. Only present when validation was
+ * enabled AND consulted on at least one wildcard match. `diagnostics` lists fail-open reasons (e.g. the agent's module
+ * couldn't load, or its validator threw), so the UI can show that validation
+ * degraded rather than silently claiming full fidelity.
+ */
+export interface StudioWildcardValidationInfo {
+    applied: boolean;
+    diagnostics: WildcardValidationDiagnostic[];
+}
+
+const FIDELITY_DISPATCH_REASON =
+    "Full dispatcher path (LLM translation + action handlers) is not run — replay is deterministic grammar/cache matching only.";
+
+export interface DeriveSideFidelityInput {
+    versionA: VersionSpec;
+    versionB: VersionSpec;
+    methodA: StudioReplayMethod;
+    methodB: StudioReplayMethod;
+    mode: StudioReplayMode;
+    validateWildcards: boolean;
+    wildcardValidation?: StudioWildcardValidationInfo;
+}
+
+/**
+ * Derive the per-side {@link SideFidelity} from signals the replay already
+ * produced. Pure and deterministic so it is unit-testable and reusable by any
+ * client. Wildcard validation only ever runs on the working-tree side, so the
+ * single `wildcardValidation` info (when present) is interpreted per side.
+ */
+export function deriveSideFidelity(
+    input: DeriveSideFidelityInput,
+): SideFidelity {
+    return {
+        A: deriveFidelityReport(
+            input.versionA,
+            input.methodA,
+            input.mode,
+            input.validateWildcards,
+            input.wildcardValidation,
+        ),
+        B: deriveFidelityReport(
+            input.versionB,
+            input.methodB,
+            input.mode,
+            input.validateWildcards,
+            input.wildcardValidation,
+        ),
+    };
+}
+
+function deriveFidelityReport(
+    version: VersionSpec,
+    method: StudioReplayMethod,
+    mode: StudioReplayMode,
+    validateWildcards: boolean,
+    wildcardValidation: StudioWildcardValidationInfo | undefined,
+): FidelityReport {
+    const isWorkingTree = version.kind === "workingTree";
+    return {
+        realization: isWorkingTree ? "built-live" : "source",
+        layers: {
+            grammar: fidelityGrammarLayer(method),
+            schemaEnrichment: fidelitySchemaEnrichmentLayer(method),
+            constructionCache: fidelityConstructionCacheLayer(
+                method,
+                isWorkingTree,
+                mode,
+            ),
+            wildcardValidation: fidelityWildcardValidationLayer(
+                isWorkingTree,
+                validateWildcards,
+                wildcardValidation,
+            ),
+            dispatch: {
+                status: "unavailable",
+                reason: FIDELITY_DISPATCH_REASON,
+            },
+        },
+    };
+}
+
+function fidelityGrammarLayer(method: StudioReplayMethod): FidelityLayerReport {
+    if (method === "identity") {
+        return {
+            status: "skipped",
+            reason: "Identity baseline — surfaces each entry's captured action without evaluating a grammar.",
+        };
+    }
+    return {
+        status: "ran",
+        reason: "Utterances matched through the real grammar store (NFA + sortMatches), the same engine the dispatcher uses.",
+    };
+}
+
+function fidelitySchemaEnrichmentLayer(
+    method: StudioReplayMethod,
+): FidelityLayerReport {
+    if (method === "schema-grammar" || method === "construction-cache") {
+        return {
+            status: "ran",
+            reason: "Grammar enriched with checked_wildcard metadata from the agent's action schema before compilation.",
+        };
+    }
+    if (method === "static-grammar") {
+        return {
+            status: "skipped",
+            reason: "Agent action-schema not discoverable at this version — matched the bare grammar (still indicative).",
+        };
+    }
+    return {
+        status: "skipped",
+        reason: "Identity baseline — no grammar evaluated.",
+    };
+}
+
+function fidelityConstructionCacheLayer(
+    method: StudioReplayMethod,
+    isWorkingTree: boolean,
+    mode: StudioReplayMode,
+): FidelityLayerReport {
+    if (method === "construction-cache") {
+        return {
+            status: "ran",
+            reason: "Consulted the agent's live construction cache (the dispatcher's first check), hash-gated to the current schema.",
+        };
+    }
+    if (!isWorkingTree) {
+        return {
+            status: "unavailable",
+            reason: "Construction caches are runtime artifacts, never committed — they cannot be read at a git ref.",
+        };
+    }
+    if (mode === "completionBased-cache") {
+        return {
+            status: "skipped",
+            reason: "No live cache was discovered, or it was stale versus the current schema → grammar fallback.",
+        };
+    }
+    return {
+        status: "skipped",
+        reason: "Grammar mode — the construction cache is intentionally not consulted (keeps matches A/B-symmetric).",
+    };
+}
+
+function fidelityWildcardValidationLayer(
+    isWorkingTree: boolean,
+    validateWildcards: boolean,
+    wildcardValidation: StudioWildcardValidationInfo | undefined,
+): FidelityLayerReport {
+    if (!isWorkingTree) {
+        return {
+            status: "unavailable",
+            reason: "The agent's validator code isn't built at a git ref — validation runs on the working-tree side only.",
+        };
+    }
+    if (!validateWildcards) {
+        return {
+            status: "skipped",
+            reason: "Validate toggle is off.",
+        };
+    }
+    if (wildcardValidation?.applied === true) {
+        const diagnostics = wildcardValidation.diagnostics;
+        if (diagnostics.includes("load-failed")) {
+            return {
+                status: "unavailable",
+                reason: "Agent module couldn't be loaded (e.g. a packaged build ships no agent code) — matches fell back to the grammar.",
+            };
+        }
+        if (diagnostics.includes("no-validator")) {
+            return {
+                status: "skipped",
+                reason: "Agent exposes no validateWildcardMatch — validation made no change.",
+            };
+        }
+        if (diagnostics.includes("errored")) {
+            return {
+                status: "ran",
+                reason: "Validator threw on a match; the match was kept fail-open so the run stayed grammar-faithful.",
+            };
+        }
+        return {
+            status: "ran",
+            reason: "Ran the agent's real validateWildcardMatch over its wildcard matches; rejected matches were dropped.",
+        };
+    }
+    return {
+        status: "skipped",
+        reason: "Validation enabled but did not run — no wildcard match occurred, or the agent isn't validatable.",
+    };
 }
 
 export interface StudioCollisionScanRequest {
@@ -446,6 +721,12 @@ export interface StudioRuntime {
      * union of agents loaded across running sandboxes.
      */
     listCorpusAgents(): Promise<string[]>;
+    /**
+     * Whether wildcard validation can actually run for `agent` in replay — the
+     * agent loads and exposes a `validateWildcardMatch`. Lets the Impact Report
+     * disable its validation toggle when there is nothing to run.
+     */
+    canValidateWildcards(agent: string): Promise<boolean>;
     /** Federated corpus entries for an agent (in-repo, captures, external, feedback). */
     listCorpusEntries(agent: string): Promise<CorpusEntry[]>;
     /**
@@ -546,6 +827,39 @@ export interface CreateStudioRuntimeOptions {
      * deterministic identity replay over each entry's captured `expectedAction`.
      */
     replayResolver?: ReplayActionResolver;
+    /**
+     * Resolves the live construction-cache layer for the working-tree side of a
+     * replay. Injected so tests can exercise the mode gating (the default
+     * discovers the dispatcher's live cache from the instance dir, which a test
+     * can't fabricate). Only consulted in `completionBased-cache` mode.
+     */
+    resolveConstructionCache?: (
+        target: GrammarReplayTarget,
+    ) => Promise<ConstructionCacheLayer | undefined>;
+    /**
+     * Builds the agent's wildcard-match validator for an opt-in
+     * (`validateWildcards`) replay run. Returns `undefined` when the host can't
+     * validate this agent (e.g. the agent's manifest doesn't declare it
+     * replay-safe, or no agent loader is available), in which case replay stays
+     * grammar-only. Injected because the production loader pulls the
+     * dispatcher's agent providers, which live outside this dependency-light
+     * package; tests inject a fake-loader-backed validator. The runtime disposes
+     * the returned validator at run end.
+     */
+    resolveWildcardValidator?: (
+        agentName: string,
+    ) =>
+        | WildcardMatchValidator
+        | undefined
+        | Promise<WildcardMatchValidator | undefined>;
+    /**
+     * Reports whether wildcard validation can run for an agent — it loads and
+     * exposes a `validateWildcardMatch` — so `canValidateWildcards` can answer
+     * the Impact Report before a run. Injected for the same reason as
+     * `resolveWildcardValidator`: loading agent modules lives outside this
+     * dependency-light package. Absent ⇒ no agent is treated as validatable.
+     */
+    resolveCanValidateWildcards?: (agentName: string) => Promise<boolean>;
     collisions?: CollisionService;
     /**
      * Scans agents' compiled grammars for collisions. Injected so tests can
@@ -586,6 +900,8 @@ function abortedReplayResult(
     options: Parameters<typeof replayCorpus>[0],
     error: ReplayRunError,
     method: StudioReplayMethod = "static-grammar",
+    mode: StudioReplayMode = "nfa-grammar",
+    validateWildcards = false,
 ): StudioReplayResult {
     const runId = `replay-error-${Date.now().toString(36)}`;
     return {
@@ -597,6 +913,14 @@ function abortedReplayResult(
         method,
         methodA: method,
         methodB: method,
+        sideFidelity: deriveSideFidelity({
+            versionA: options.versionA,
+            versionB: options.versionB,
+            methodA: method,
+            methodB: method,
+            mode,
+            validateWildcards,
+        }),
         summary: {
             runId,
             agent: options.agent,
@@ -613,6 +937,48 @@ function abortedReplayResult(
             missPolicy: options.missPolicy,
         },
     };
+}
+
+/** The most faithful method any side actually used, so a run-level chip never
+ *  claims a cache neither side consulted. */
+function rollupReplayMethod(
+    methodA: StudioReplayMethod,
+    methodB: StudioReplayMethod,
+): StudioReplayMethod {
+    if (methodA === "construction-cache" || methodB === "construction-cache") {
+        return "construction-cache";
+    }
+    if (methodA === "schema-grammar" || methodB === "schema-grammar") {
+        return "schema-grammar";
+    }
+    return "static-grammar";
+}
+
+/** How a grammar-resolved side reports its method. The construction cache is
+ *  live-only, so it counts only when `cacheApplies` (the working-tree side) and
+ *  the cache is hash-valid; otherwise the (enriched) grammar decides. */
+function grammarMethodFor(
+    grammarResolver: GrammarReplayResolver,
+    cacheApplies: boolean,
+): StudioReplayMethod {
+    if (cacheApplies && grammarResolver.constructionCacheStatus === "valid") {
+        return "construction-cache";
+    }
+    return grammarResolver.enriched ? "schema-grammar" : "static-grammar";
+}
+
+/** How `replayCorpus` resolves actions for a run: the chosen resolver, the
+ *  per-side + run-level methods, and the opt-in wildcard validator (kept so its
+ *  diagnostics can be read and the agent unloaded). `aborted` is set instead
+ *  when a version failed to build, so the caller returns it without running. */
+interface ReplayResolution {
+    resolver: ReplayActionResolver | undefined;
+    method: StudioReplayMethod;
+    methodA: StudioReplayMethod;
+    methodB: StudioReplayMethod;
+    wildcardValidator: WildcardMatchValidator | undefined;
+    activeGrammarResolver: GrammarReplayResolver | undefined;
+    aborted?: StudioReplayResult;
 }
 
 export function createStudioRuntimeCore(
@@ -700,6 +1066,119 @@ export function createStudioRuntimeCore(
             }),
         );
         await context.workspaceState.update(PERSISTED_SANDBOXES_KEY, snapshot);
+    };
+
+    // Resolve actions for real via static grammar matching when no resolver is
+    // injected, the deterministic `needs-explanation` policy is in effect, a repo
+    // root is known, and the agent has a single standalone-compilable grammar.
+    // Otherwise fall back to the identity resolver (the all-equal baseline tests
+    // rely on).
+    const resolveReplayActions = async (
+        replayOptions: Parameters<typeof replayCorpus>[0],
+        request: StudioReplayRequest,
+        mode: StudioReplayMode,
+    ): Promise<ReplayResolution> => {
+        const resolution: ReplayResolution = {
+            resolver: options.replayResolver,
+            method: "identity",
+            methodA: "identity",
+            methodB: "identity",
+            wildcardValidator: undefined,
+            activeGrammarResolver: undefined,
+        };
+        if (
+            resolution.resolver !== undefined ||
+            replayOptions.missPolicy !== "needs-explanation" ||
+            repoRoot === undefined
+        ) {
+            return resolution;
+        }
+        const target = await resolveGrammarReplayTarget(
+            agentRoots(),
+            replayOptions.agent,
+            repoRoot,
+        );
+        if (target === undefined) {
+            return resolution;
+        }
+
+        // Best-effort consult of the agent's live per-session construction cache
+        // for the working-tree side — but ONLY in `completionBased-cache` mode. In
+        // the default `nfa-grammar` mode the dispatcher does not consult the cache
+        // (grammar rules alone decide the match), so replay stays grammar-only and
+        // A/B-symmetric. Hash-gated to the current schema exactly as the dispatcher
+        // gates it, so a schema edit invalidates the cached constructions (→ stale
+        // → grammar fallback) rather than reporting a phantom cache hit.
+        const constructionCache =
+            mode === "completionBased-cache"
+                ? await (
+                      options.resolveConstructionCache ??
+                      resolveConstructionCacheLayer
+                  )(target)
+                : undefined;
+
+        // Opt-in: build the agent's wildcard validator so the working-tree side
+        // runs the dispatcher's real post-match `validateWildcardMatch`.
+        // `undefined` when the host has no loader or the agent doesn't opt in —
+        // replay then stays grammar-only (a silent no-op, not an error).
+        const wildcardValidator =
+            request.validateWildcards === true
+                ? await options.resolveWildcardValidator?.(replayOptions.agent)
+                : undefined;
+        resolution.wildcardValidator = wildcardValidator;
+
+        const grammarResolver = createGrammarReplayResolver({
+            target,
+            repoRoot,
+            ...(constructionCache !== undefined ? { constructionCache } : {}),
+            ...(wildcardValidator !== undefined ? { wildcardValidator } : {}),
+        });
+        resolution.activeGrammarResolver = grammarResolver;
+
+        try {
+            // Build both versions up front so a build failure aborts the run
+            // cleanly instead of throwing mid-stream (which would hang the
+            // engine's row channel).
+            await grammarResolver.prepare(
+                replayOptions.versionA,
+                replayOptions.versionB,
+            );
+            resolution.resolver = grammarResolver;
+            resolution.methodA = grammarMethodFor(
+                grammarResolver,
+                replayOptions.versionA.kind === "workingTree",
+            );
+            resolution.methodB = grammarMethodFor(
+                grammarResolver,
+                replayOptions.versionB.kind === "workingTree",
+            );
+            resolution.method = rollupReplayMethod(
+                resolution.methodA,
+                resolution.methodB,
+            );
+        } catch (err) {
+            await wildcardValidator?.dispose();
+            if (err instanceof ReplayVersionBuildError) {
+                resolution.aborted = abortedReplayResult(
+                    replayOptions,
+                    {
+                        kind: "version-build-failed",
+                        side: err.side,
+                        ref:
+                            err.version.kind === "git"
+                                ? err.version.ref
+                                : "workingTree",
+                        message: err.message,
+                    },
+                    grammarMethodFor(grammarResolver, true),
+                    mode,
+                    request.validateWildcards === true,
+                );
+                return resolution;
+            }
+            throw err;
+        }
+        return resolution;
     };
 
     return {
@@ -968,6 +1447,11 @@ export function createStudioRuntimeCore(
             }
             return [...agents].sort((a, b) => a.localeCompare(b));
         },
+        async canValidateWildcards(agent) {
+            return (
+                (await options.resolveCanValidateWildcards?.(agent)) === true
+            );
+        },
         async listCorpusEntries(agent) {
             return corpus.list(agent);
         },
@@ -995,6 +1479,7 @@ export function createStudioRuntimeCore(
             return feedback.list(filter);
         },
         async replayCorpus(request) {
+            const mode: StudioReplayMode = request.mode ?? "nfa-grammar";
             const replayOptions = {
                 agent: request.agent,
                 corpus: request.corpus ?? {},
@@ -1003,114 +1488,44 @@ export function createStudioRuntimeCore(
                 missPolicy: request.missPolicy ?? "needs-explanation",
             } satisfies Parameters<typeof replayCorpus>[0];
 
-            // Resolve actions for real via static grammar matching when no
-            // resolver is injected, the deterministic `needs-explanation` policy
-            // is in effect, a repo root is known, and the agent has a single
-            // standalone-compilable grammar. Otherwise fall back to the identity
-            // resolver (preserves the all-equal baseline used by tests).
-            let resolver = options.replayResolver;
-            let method: StudioReplayMethod = "identity";
-            let methodA: StudioReplayMethod = "identity";
-            let methodB: StudioReplayMethod = "identity";
-            if (
-                resolver === undefined &&
-                replayOptions.missPolicy === "needs-explanation" &&
-                repoRoot !== undefined
-            ) {
-                const target = await resolveGrammarReplayTarget(
-                    agentRoots(),
-                    replayOptions.agent,
-                    repoRoot,
-                );
-                if (target !== undefined) {
-                    // Best-effort consult of the agent's live per-session
-                    // construction cache for the working-tree side. Hash-gated to
-                    // the current schema exactly as the dispatcher gates it, so a
-                    // schema edit invalidates the cached constructions (→ stale →
-                    // grammar fallback) rather than reporting a phantom cache hit.
-                    const constructionCache =
-                        await resolveConstructionCacheLayer(target);
-
-                    const grammarResolver = createGrammarReplayResolver({
-                        target,
-                        repoRoot,
-                        ...(constructionCache !== undefined
-                            ? { constructionCache }
-                            : {}),
-                    });
-                    const labelFor = (): StudioReplayMethod =>
-                        grammarResolver.constructionCacheStatus === "valid"
-                            ? "construction-cache"
-                            : grammarResolver.enriched
-                              ? "schema-grammar"
-                              : "static-grammar";
-                    // Per-side method: the construction cache is live-only, so a
-                    // side resolves through it only when it is the working tree
-                    // and the cache is hash-valid; a git ref always resolves via
-                    // the (enriched) grammar.
-                    const sideMethod = (
-                        version: VersionSpec,
-                    ): StudioReplayMethod =>
-                        version.kind === "workingTree" &&
-                        grammarResolver.constructionCacheStatus === "valid"
-                            ? "construction-cache"
-                            : grammarResolver.enriched
-                              ? "schema-grammar"
-                              : "static-grammar";
-                    try {
-                        // Build both versions up front so a build failure aborts
-                        // the run cleanly instead of throwing mid-stream (which
-                        // would hang the engine's row channel).
-                        await grammarResolver.prepare(
-                            replayOptions.versionA,
-                            replayOptions.versionB,
-                        );
-                        resolver = grammarResolver;
-                        methodA = sideMethod(replayOptions.versionA);
-                        methodB = sideMethod(replayOptions.versionB);
-                        // The run-level chip reflects the most faithful side
-                        // actually used, so a ref-vs-ref compare doesn't claim a
-                        // cache neither side consulted.
-                        method =
-                            methodA === "construction-cache" ||
-                            methodB === "construction-cache"
-                                ? "construction-cache"
-                                : methodA === "schema-grammar" ||
-                                    methodB === "schema-grammar"
-                                  ? "schema-grammar"
-                                  : "static-grammar";
-                    } catch (err) {
-                        if (err instanceof ReplayVersionBuildError) {
-                            return abortedReplayResult(
-                                replayOptions,
-                                {
-                                    kind: "version-build-failed",
-                                    side: err.side,
-                                    ref:
-                                        err.version.kind === "git"
-                                            ? err.version.ref
-                                            : "workingTree",
-                                    message: err.message,
-                                },
-                                labelFor(),
-                            );
-                        }
-                        throw err;
-                    }
-                }
+            const resolution = await resolveReplayActions(
+                replayOptions,
+                request,
+                mode,
+            );
+            if (resolution.aborted !== undefined) {
+                return resolution.aborted;
             }
+            const { method, methodA, methodB, wildcardValidator } = resolution;
 
             const handle = replayCorpus(replayOptions, {
                 corpus: { list: (agent, filter) => corpus.list(agent, filter) },
-                resolver: resolver ?? identityReplayResolver,
+                resolver: resolution.resolver ?? identityReplayResolver,
                 emitter: events,
             });
 
             const rows: ActionDelta[] = [];
-            for await (const row of handle.rows) {
-                rows.push(row);
+            try {
+                for await (const row of handle.rows) {
+                    rows.push(row);
+                }
+            } finally {
+                await wildcardValidator?.dispose();
             }
             const summary = await handle.summary;
+            // Surface the wildcard-validation pass only when it actually ran on a
+            // wildcard match (so a run that never hit a wildcard doesn't claim a
+            // validation it never performed).
+            const wildcardValidation: StudioWildcardValidationInfo | undefined =
+                resolution.activeGrammarResolver?.wildcardValidationApplied ===
+                true
+                    ? {
+                          applied: true,
+                          diagnostics: [
+                              ...(wildcardValidator?.diagnostics ?? []),
+                          ],
+                      }
+                    : undefined;
             return {
                 runId: handle.runId,
                 summary,
@@ -1118,6 +1533,20 @@ export function createStudioRuntimeCore(
                 method,
                 methodA,
                 methodB,
+                sideFidelity: deriveSideFidelity({
+                    versionA: replayOptions.versionA,
+                    versionB: replayOptions.versionB,
+                    methodA,
+                    methodB,
+                    mode,
+                    validateWildcards: request.validateWildcards === true,
+                    ...(wildcardValidation !== undefined
+                        ? { wildcardValidation }
+                        : {}),
+                }),
+                ...(wildcardValidation !== undefined
+                    ? { wildcardValidation }
+                    : {}),
             };
         },
         reportCollision(event) {
@@ -1216,7 +1645,7 @@ export function createStudioRuntimeCore(
                                 // that no longer resolves) shouldn't block the
                                 // rest. Log to the extension host console; the
                                 // surviving sandboxes still come back.
-                                // eslint-disable-next-line no-console
+
                                 console.warn(
                                     `[typeagent-studio] Failed to restore sandbox '${entry.id}':`,
                                     err,

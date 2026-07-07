@@ -37,6 +37,7 @@
   pwsh ./install-typeagent.ps1 -BootstrapPrereqs
   pwsh ./install-typeagent.ps1 -Upgrade     # force fresh download, replacing existing assets
     pwsh ./install-typeagent.ps1 -PluginSource C:\temp\typeagent-plugin   # install plugin from local folder
+  pwsh ./install-typeagent.ps1 -Shell -ShellStorage myacct -ShellContainer mycontainer   # also install the desktop shell
 #>
 
 [CmdletBinding()]
@@ -85,7 +86,21 @@ param(
     [string]$CopilotModel = "",
     [string]$EmbeddingEndpoint = "",
     [string]$EmbeddingModel = "",
-    [string]$OpenAIKey = ""
+    [string]$OpenAIKey = "",
+    # Opt-in: also download and install the TypeAgent Shell (Electron desktop
+    # app) from Azure Blob Storage after the agent-server install, via the
+    # bundled install-shell.ps1.
+    [switch]$Shell,
+    # Azure Storage account holding the shell electron-builder output (used with
+    # az login). Ignored when -ShellBaseUrl is provided.
+    [string]$ShellStorage = "",
+    # Storage container; defaults to -ShellStorage when omitted.
+    [string]$ShellContainer = "",
+    # electron-updater channel to read (<channel>-<arch>.yml).
+    [string]$ShellChannel = "lkg",
+    # Anonymous HTTPS base for a public container, e.g.
+    # https://<account>.blob.core.windows.net/<container>. When set, az is not used.
+    [string]$ShellBaseUrl = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -740,4 +755,33 @@ Write-Host "  Logs:     node `"$serve`" logs"
 Write-Host "  Stop:     node `"$serve`" stop"
 if ($DevTunnel) {
     Write-Host "  Tunnel:   node `"$serve`" tunnel status   (list-tunnels.mjs shows the client URL + token)"
+}
+
+# --- 7. Optional: install the TypeAgent Shell desktop app --------------------
+if ($Shell) {
+    Write-Step "Installing TypeAgent Shell (desktop app)"
+    $installShellScript = Join-Path $PSScriptRoot "install-shell.ps1"
+    if (-not (Test-Path $installShellScript)) {
+        Fail "Shell installer script not found: $installShellScript"
+    }
+    if (-not $ShellBaseUrl -and -not $ShellStorage) {
+        Fail "Installing the shell requires -ShellStorage (with optional -ShellContainer) or -ShellBaseUrl."
+    }
+
+    # Run install-shell.ps1 in a child PowerShell process so its 'exit' calls do
+    # not terminate this installer.
+    $psExe = (Get-Process -Id $PID).Path
+    if (-not $psExe) { $psExe = "powershell.exe" }
+
+    $shellArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $installShellScript, "-Channel", $ShellChannel)
+    if ($ShellStorage) { $shellArgs += @("-Storage", $ShellStorage) }
+    if ($ShellContainer) { $shellArgs += @("-Container", $ShellContainer) }
+    if ($ShellBaseUrl) { $shellArgs += @("-BlobBaseUrl", $ShellBaseUrl) }
+    if ($NoStart) { $shellArgs += "-NoStart" }
+
+    & $psExe @shellArgs
+    if ($LASTEXITCODE -ne 0) {
+        Fail "TypeAgent Shell installation failed."
+    }
+    Write-Host "  TypeAgent Shell installed." -ForegroundColor Green
 }

@@ -753,7 +753,7 @@ function createAzureOpenAIChatModel(
         // image_url content with streaming token usage reporting is currently broken
         // TODO: remove after API endpoint correctly handles this case
         let historyIncludesImages: boolean = false;
-        let isImageProptContent = (c: MultimodalPromptContent) =>
+        const isImageProptContent = (c: MultimodalPromptContent) =>
             (c as ImagePromptContent).type == "image_url";
         messages.map((ps) => {
             if (Array.isArray(ps.content)) {
@@ -878,7 +878,7 @@ function createAzureOpenAIChatModel(
 }
 
 function verifyFilterResults(filterResult: FilterResult) {
-    let filters: string[] = new Array<string>();
+    const filters: string[] = new Array<string>();
     if (filterResult) {
         if (filterResult.hate?.filtered) {
             filters.push("hate");
@@ -900,7 +900,7 @@ function verifyFilterResults(filterResult: FilterResult) {
         }
 
         if (filters.length > 0) {
-            let msg = `A content filter has been triggered by one or more messages. The triggered filters are: ${filters.join(", ")}`;
+            const msg = `A content filter has been triggered by one or more messages. The triggered filters are: ${filters.join(", ")}`;
             throw new Error(`${msg}`);
         }
     }

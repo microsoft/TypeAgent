@@ -181,8 +181,8 @@ export class ConversationMemory
         }
 
         // Now, add the message to memory and index it
-        let messageOrdinalStartAt = this.messages.length;
-        let semanticRefOrdinalStartAt = this.semanticRefs.length;
+        const messageOrdinalStartAt = this.messages.length;
+        const semanticRefOrdinalStartAt = this.semanticRefs.length;
         this.messages.append(message);
 
         try {
@@ -463,7 +463,7 @@ function assignMessageRecipients(
 ) {
     for (const msg of msgs) {
         if (msg.metadata.sender) {
-            let recipients: string[] = [];
+            const recipients: string[] = [];
             for (const p of participants) {
                 if (p !== msg.metadata.sender) {
                     recipients.push(p);

@@ -36,7 +36,7 @@ async function executeAction(
     action: TypeAgentAction<AndroidMobileAction>,
     context: ActionContext<PhotoActionContext>,
 ) {
-    let result = await handlePhotoAction(action, context);
+    const result = await handlePhotoAction(action, context);
     return result;
 }
 
@@ -63,7 +63,7 @@ async function handlePhotoAction(
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
         case "sendSMS": {
-            let smsAction = action as SendSMSAction;
+            const smsAction = action as SendSMSAction;
             result = createActionResult(
                 `Sending SMS to ${smsAction.parameters.phoneNumber} message '${smsAction.parameters.message}'`,
             );
@@ -71,7 +71,7 @@ async function handlePhotoAction(
             break;
         }
         case "callPhoneNumber": {
-            let callAction = action as CallPhoneNumberAction;
+            const callAction = action as CallPhoneNumberAction;
             result = createActionResult(
                 `Calling ${callAction.parameters.phoneNumber}`,
             );
@@ -82,13 +82,13 @@ async function handlePhotoAction(
             break;
         }
         case "setAlarm": {
-            let alarmAction = action as SetAlarmAction;
+            const alarmAction = action as SetAlarmAction;
             result = createActionResult("Setting Alarm");
             context.actionIO.takeAction("set-alarm", alarmAction.parameters);
             break;
         }
         case "searchNearby": {
-            let nearbySearchAction = action as SearchNearbyAction;
+            const nearbySearchAction = action as SearchNearbyAction;
             result = createActionResult("Local search");
             context.actionIO.takeAction(
                 "search-nearby",
@@ -97,7 +97,7 @@ async function handlePhotoAction(
             break;
         }
         case "automateUI": {
-            let automateAction = action as AutomatePhoneUIAction;
+            const automateAction = action as AutomatePhoneUIAction;
             result = createActionResult("Automating phone UI");
             context.actionIO.takeAction(
                 "automate-phone-ui",

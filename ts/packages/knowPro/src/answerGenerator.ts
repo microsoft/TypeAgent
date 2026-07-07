@@ -280,7 +280,7 @@ export async function generateAnswerInChunks(
         return runSingleChunk(chunks[0]);
     }
 
-    let chunkAnswers: answerSchema.AnswerResponse[] = [];
+    const chunkAnswers: answerSchema.AnswerResponse[] = [];
     const knowledgeChunks = getKnowledgeChunks(chunks);
     let hasKnowledgeAnswer = false;
     if (knowledgeChunks.length > 0) {
@@ -425,7 +425,7 @@ export class AnswerGenerator implements IAnswerGenerator {
                 this.settings.maxCharsInBudget,
             );
         }
-        let prompt: string[] = [];
+        const prompt: string[] = [];
         const questionPrompt = createQuestionPrompt(question);
         prompt.push(questionPrompt);
         prompt.push(
@@ -450,7 +450,7 @@ export class AnswerGenerator implements IAnswerGenerator {
         partialAnswers: (answerSchema.AnswerResponse | undefined)[],
     ): Promise<Result<answerSchema.AnswerResponse>> {
         if (partialAnswers.length === 1) {
-            let response = partialAnswers[0];
+            const response = partialAnswers[0];
             if (response) {
                 return success(response);
             }
@@ -516,7 +516,7 @@ export function answerContextFromSearchResult(
     searchResult: ConversationSearchResult,
     options?: AnswerContextOptions,
 ): contextSchema.AnswerContext {
-    let context: contextSchema.AnswerContext = {};
+    const context: contextSchema.AnswerContext = {};
     for (const knowledgeType of searchResult.knowledgeMatches.keys()) {
         switch (knowledgeType) {
             default:
@@ -557,14 +557,14 @@ export function getRelevantTopicsForAnswer(
         searchResult.semanticRefMatches,
         "topic",
     );
-    let mergedTopics = mergeScoredTopics(scoredEntities, true);
+    const mergedTopics = mergeScoredTopics(scoredEntities, true);
     let candidateTopics: Iterable<Scored<MergedTopic>> = mergedTopics.values();
     if (topK !== undefined && topK > 0 && mergedTopics.size > topK) {
         candidateTopics = getTopK(candidateTopics, topK);
     }
     const relevantTopics: contextSchema.RelevantKnowledge[] = [];
     for (const scoredValue of candidateTopics) {
-        let mergedTopic = scoredValue.item;
+        const mergedTopic = scoredValue.item;
         const relevantTopic = createRelevantKnowledge(
             conversation,
             mergedTopic.topic,
@@ -593,7 +593,7 @@ export function getRelevantEntitiesForAnswer(
     }
     const relevantEntities: contextSchema.RelevantKnowledge[] = [];
     for (const scoredValue of candidateEntities) {
-        let mergedEntity = scoredValue.item;
+        const mergedEntity = scoredValue.item;
         const relevantEntity = createRelevantKnowledge(
             conversation,
             mergedToConcreteEntity(mergedEntity),
@@ -684,7 +684,7 @@ function createRelevantKnowledge(
     knowledge: Knowledge,
     sourceMessageOrdinals?: Iterable<MessageOrdinal>,
 ): contextSchema.RelevantKnowledge {
-    let relevantKnowledge: contextSchema.RelevantKnowledge = {
+    const relevantKnowledge: contextSchema.RelevantKnowledge = {
         knowledge,
     };
     if (sourceMessageOrdinals) {
@@ -708,7 +708,7 @@ function createRelevantKnowledge(
 }
 
 function createQuestionPrompt(question: string): string {
-    let prompt: string[] = [
+    const prompt: string[] = [
         "The following is a user question:",
         "===",
         question,

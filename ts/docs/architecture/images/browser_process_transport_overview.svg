@@ -1,0 +1,45 @@
+<svg width="100%" viewBox="0 0 760 300" role="img" xmlns="http://www.w3.org/2000/svg">
+<style>text{font-family:"Anthropic Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}</style>
+<title>Browser agent: processes and transports</title>
+<desc>The browser agent spans four processes connected by three transports: the Node.js browser agent talks to the extension service worker and Electron main process over WebSocket, the service worker reaches per-tab content scripts via chrome.tabs.sendMessage, and Electron main talks to per-tab WebContents over IPC.</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="arrow-lg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+
+<g>
+<rect x="30" y="40" width="170" height="64" rx="8" fill="#444441" stroke="#B4B2A9" stroke-width="0.5"/>
+<text x="115.0" y="62" text-anchor="middle" dominant-baseline="central" fill="#D3D1C7" font-size="14" font-weight="500">Browser Agent</text>
+<text x="115.0" y="82" text-anchor="middle" dominant-baseline="central" fill="#B4B2A9" font-size="12" font-weight="400">(Node.js process)</text>
+</g>
+<g>
+<rect x="300" y="40" width="170" height="64" rx="8" fill="#3C3489" stroke="#AFA9EC" stroke-width="0.5"/>
+<text x="385.0" y="62" text-anchor="middle" dominant-baseline="central" fill="#CECBF6" font-size="14" font-weight="500">Extension</text>
+<text x="385.0" y="82" text-anchor="middle" dominant-baseline="central" fill="#AFA9EC" font-size="12" font-weight="400">Service Worker</text>
+</g>
+<g>
+<rect x="560" y="40" width="170" height="64" rx="8" fill="#3C3489" stroke="#AFA9EC" stroke-width="0.5"/>
+<text x="645.0" y="62" text-anchor="middle" dominant-baseline="central" fill="#CECBF6" font-size="14" font-weight="500">Content Script</text>
+<text x="645.0" y="82" text-anchor="middle" dominant-baseline="central" fill="#AFA9EC" font-size="12" font-weight="400">(per-tab / per-frame)</text>
+</g>
+<g>
+<rect x="300" y="190" width="170" height="64" rx="8" fill="#085041" stroke="#5DCAA5" stroke-width="0.5"/>
+<text x="385.0" y="212" text-anchor="middle" dominant-baseline="central" fill="#9FE1CB" font-size="14" font-weight="500">Electron Main</text>
+<text x="385.0" y="232" text-anchor="middle" dominant-baseline="central" fill="#5DCAA5" font-size="12" font-weight="400">(main process)</text>
+</g>
+<g>
+<rect x="560" y="190" width="170" height="64" rx="8" fill="#085041" stroke="#5DCAA5" stroke-width="0.5"/>
+<text x="645.0" y="212" text-anchor="middle" dominant-baseline="central" fill="#9FE1CB" font-size="14" font-weight="500">WebContents</text>
+<text x="645.0" y="232" text-anchor="middle" dominant-baseline="central" fill="#5DCAA5" font-size="12" font-weight="400">(per-tab renderer)</text>
+</g>
+<line x1="200" y1="72.0" x2="300" y2="72.0" stroke="#9C9A92" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="250.0" y="60.0" text-anchor="middle" dominant-baseline="central" fill="#C2C0B6" font-size="11" font-weight="400">WebSocket :8081</text>
+<line x1="470" y1="72.0" x2="560" y2="72.0" stroke="#9C9A92" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="515.0" y="52.0" text-anchor="middle" dominant-baseline="central" fill="#C2C0B6" font-size="11" font-weight="400">chrome.tabs</text>
+<text x="515.0" y="66.0" text-anchor="middle" dominant-baseline="central" fill="#C2C0B6" font-size="11" font-weight="400">.sendMessage</text>
+<path d="M115.0 104 L115.0 222.0 L300 222.0" fill="none" stroke="#9C9A92" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="181.0" y="210.0" text-anchor="middle" dominant-baseline="central" fill="#C2C0B6" font-size="11" font-weight="400">WebSocket :8081</text>
+<line x1="470" y1="222.0" x2="560" y2="222.0" stroke="#9C9A92" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="515.0" y="202.0" text-anchor="middle" dominant-baseline="central" fill="#C2C0B6" font-size="11" font-weight="400">IPC</text>
+<text x="515.0" y="216.0" text-anchor="middle" dominant-baseline="central" fill="#C2C0B6" font-size="11" font-weight="400">(ipcMain/ipcRenderer)</text>
+</svg>

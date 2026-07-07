@@ -97,6 +97,7 @@ function createRuntimeStub(): {
         },
         queryRecentEvents: async () => [],
         listCorpusAgents: async () => ["player", "calendar"],
+        canValidateWildcards: async (agent: string) => agent === "player",
         listCorpusEntries: async (agent: string) => [
             { utterance: `hello ${agent}`, source: "in-repo" },
         ],
@@ -264,6 +265,17 @@ describe("studio service channel (in-memory rpc)", () => {
         expect(result.summary.agent).toBe("player");
         expect(result.rows).toHaveLength(1);
         expect(result.rows[0].utterance).toBe("play jazz");
+    });
+
+    it("canValidateWildcards round-trips the per-agent capability", async () => {
+        const stub = createRuntimeStub();
+        const { client } = wireClientServer(stub);
+        expect(
+            await client.invoke("canValidateWildcards", undefined, "player"),
+        ).toBe(true);
+        expect(
+            await client.invoke("canValidateWildcards", undefined, "calendar"),
+        ).toBe(false);
     });
 
     it("corpus/feedback methods round-trip", async () => {

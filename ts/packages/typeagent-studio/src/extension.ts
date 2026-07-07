@@ -327,6 +327,11 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const corpusTree = new CorpusTreeProvider(serviceRuntime);
+    // The Corpora tree refreshes only on explicit in-extension actions (seeding
+    // an in-repo file, adding an external source, recording feedback) and the
+    // manual Refresh command -- each of those calls corpusTree.refresh()
+    // directly. We intentionally do not watch the filesystem for out-of-band
+    // edits to *.utterances.jsonl.
     context.subscriptions.push(
         corpusTree,
         vscode.window.registerTreeDataProvider(CORPUS_VIEW_ID, corpusTree),
@@ -629,7 +634,7 @@ export function activate(context: vscode.ExtensionContext): void {
         treeDataProvider: collisions,
     });
 
-    let currentCollisionsSource: CollisionsSource = collisionsChannelSource;
+    const currentCollisionsSource: CollisionsSource = collisionsChannelSource;
 
     // Shared scan flow used by both the manual command and the auto-scan
     // Auto-scan debounce state, declared before the shared scan helper so an

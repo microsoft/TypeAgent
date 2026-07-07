@@ -451,7 +451,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                 ),
             ]);
             entityIdHitTable.roundScores(2);
-            let entityIdHits = entityIdHitTable
+            const entityIdHits = entityIdHitTable
                 .getTopK(determineTopK(options))
                 .sort();
 
@@ -590,7 +590,7 @@ export function mergeCompositeEntities(
     entities: Iterable<CompositeEntity>,
 ): Map<string, WithFrequency<CompositeEntity>> {
     const merged = new Map<string, WithFrequency<CompositeEntity>>();
-    for (let entity of entities) {
+    for (const entity of entities) {
         const existing = merged.get(entity.name);
         if (existing) {
             if (appendCompositeEntity(existing.value, entity)) {
@@ -688,7 +688,7 @@ export function entityFromRecord(
     type: string,
     record: Record<string, any>,
 ): ConcreteEntity {
-    let entity: ConcreteEntity = {
+    const entity: ConcreteEntity = {
         name: `${ns}:${name}`,
         type: [`${ns}:${type}`],
     };

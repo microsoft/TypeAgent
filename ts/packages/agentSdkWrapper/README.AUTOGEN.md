@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=2242735255275df8a8cf85b32506a8d460e680f60a57618c851702af8d2dc201 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=e31d70510b5c0e820d74463bbd1fd04963e455b2acd47ce586131a0b1929aa87 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-sdk-wrapper — AI-generated documentation
@@ -12,61 +12,77 @@
 
 ## Overview
 
-The `agent-sdk-wrapper` package provides direct integration with the Anthropic Agent SDK (`@anthropic-ai/claude-agent-sdk`) and includes intelligent caching support through TypeAgent's cache infrastructure. This package offers a programmatic approach to interacting with the Anthropic Agent SDK, allowing for full control over the request/response cycle in TypeScript.
+The `agent-sdk-wrapper` package provides a TypeScript library for direct integration with the Anthropic Agent SDK (`@anthropic-ai/claude-agent-sdk`) while leveraging TypeAgent's caching infrastructure. It offers a programmatic approach to interacting with the Anthropic Agent SDK, enabling efficient and customizable API calls with support for streaming, tool configuration, and voice input.
+
+This package is designed as an alternative to the `coderWrapper` package, offering a lightweight, API-driven solution without the overhead of pseudo-terminal (PTY) emulation.
 
 ## What it does
 
-The `agent-sdk-wrapper` package enables users to interact with the Anthropic Agent SDK using a CLI tool. It supports various actions such as `query`, `streaming`, and `tool configuration`. The package leverages TypeAgent's caching infrastructure to check for cached responses before making API calls, improving performance and efficiency. Additionally, it supports voice input through multiple transcription options, including Azure Speech Services, Azure OpenAI, OpenAI Whisper API, and a local Whisper service.
+The `agent-sdk-wrapper` package enables developers to interact with the Anthropic Agent SDK through a CLI tool or programmatically in TypeScript. It provides the following key capabilities:
 
-### Key Features
+- **Direct API Integration**: Uses the Anthropic Agent SDK's `query()` function for precise control over API calls.
+- **Caching**: Integrates with TypeAgent's caching infrastructure to check for cached responses before making API calls, improving performance and reducing redundant requests.
+- **Streaming Support**: Leverages the SDK's streaming capabilities to handle real-time responses.
+- **Tool Configuration**: Allows dynamic enabling or disabling of specific tools for each request.
+- **Voice Input**: Supports multiple transcription options, including Azure Speech Services, Azure OpenAI, OpenAI Whisper API, and a local Whisper service.
+- **Interactive CLI**: Provides a readline-based interface for user input, with support for commands like `/voice` for voice input and options to customize behavior (e.g., disabling cache or enabling debug mode).
 
-- **Direct API Integration**: Uses the Agent SDK's `query()` function directly.
-- **Programmatic Control**: Full control over the request/response cycle in TypeScript.
-- **Streaming Support**: Can leverage the SDK's streaming capabilities.
-- **Custom Tool Configuration**: Can specify which tools to enable per request.
-- **Simpler I/O**: Standard readline interface for user input.
-- **Cache-First**: Checks TypeAgent cache before making any API calls.
-- **Voice Input**: Supports multiple transcription options for voice input.
+The package is particularly useful for scenarios requiring high performance, programmatic control, and integration with TypeAgent's broader ecosystem.
 
 ## Setup
 
-To use the `agent-sdk-wrapper` package, you need to set several environment variables. These variables are required for configuring API keys, endpoints, and other settings necessary for the package to function correctly. Below is a summary of the environment variables and how to obtain their values:
+To use the `agent-sdk-wrapper` package, you need to configure several environment variables. These variables are used to set up API keys, endpoints, and other necessary settings. Below is a summary of the required environment variables and how to obtain their values:
 
-- `AUDIO_DEVICE`: Specify the device name or number for the microphone.
-- `AZURE_OPENAI_API_KEY`: Obtain from the Azure portal.
-- `AZURE_OPENAI_DEPLOYMENT_NAME`: Specify the deployment name for Azure OpenAI.
-- `AZURE_OPENAI_ENDPOINT`: Obtain from the Azure portal.
-- `AZURE_SPEECH_KEY`: Obtain from the Azure portal.
-- `AZURE_SPEECH_REGION`: Specify the region for Azure Speech Services (e.g., westus2, eastus).
-- `OPENAI_API_KEY`: Obtain from the OpenAI portal.
-- `SPEECH_SDK_ENDPOINT`: Specify the endpoint for the Speech SDK.
-- `SPEECH_SDK_KEY`: Obtain from the Azure portal.
+- `AUDIO_DEVICE`: Specify the device name or number for the microphone. Use `default` if unsure.
+- `AZURE_OPENAI_API_KEY`: Obtain this key from the Azure portal.
+- `AZURE_OPENAI_DEPLOYMENT_NAME`: Specify the deployment name for Azure OpenAI (e.g., `whisper`).
+- `AZURE_OPENAI_ENDPOINT`: Obtain the endpoint URL from the Azure portal.
+- `AZURE_SPEECH_KEY`: Obtain this key from the Azure portal for Azure Speech Services.
+- `AZURE_SPEECH_REGION`: Specify the region for Azure Speech Services (e.g., `westus2`, `eastus`).
+- `OPENAI_API_KEY`: Obtain this key from the OpenAI portal.
+- `SPEECH_SDK_ENDPOINT`: Specify the endpoint for the Speech SDK (required for managed identity setups).
+- `SPEECH_SDK_KEY`: Obtain this key from the Azure portal for the Speech SDK.
 - `SPEECH_SDK_REGION`: Specify the region for the Speech SDK.
 
-For detailed setup instructions, see the hand-written README.
+These variables can be set in your shell or added to a `.env` file in the project root. For more details on obtaining these values, refer to the hand-written README.
 
 ## Key Files
 
-The `agent-sdk-wrapper` package is structured to provide direct API integration with the Anthropic Agent SDK. Key files and their responsibilities include:
+The `agent-sdk-wrapper` package is organized into several key files, each responsible for specific functionality:
 
-- [index.ts](./src/index.ts): Re-exports utilities and classes from other packages, such as `CacheClient` and `DebugLogger`.
-- [audioCapture.ts](./src/audioCapture.ts): Handles custom audio capture for Windows with device selection support.
-- [cli.ts](./src/cli.ts): Implements the CLI tool for interacting with the Anthropic Agent SDK.
-- [schemaReader.ts](./src/schemaReader.ts): Reads and parses schema information for grammar generation.
-- [schemaToGrammarGenerator.ts](./src/schemaToGrammarGenerator.ts): Generates grammar from schema information.
+- [index.ts](./src/index.ts): Serves as the main entry point, re-exporting utilities and classes such as `CacheClient` and `DebugLogger` for use in other packages.
+- [audioCapture.ts](./src/audioCapture.ts): Handles audio capture for voice input, including support for device selection and volume adjustment.
+- [cli.ts](./src/cli.ts): Implements the interactive CLI tool, providing a readline-based interface for interacting with the Anthropic Agent SDK.
+- [schemaReader.ts](./src/schemaReader.ts): Reads and parses schema information for grammar generation, extracting details about actions and parameters.
+- [schemaToGrammarGenerator.ts](./src/schemaToGrammarGenerator.ts): Generates grammar from schema information, supporting customization and error handling.
+- [generate-grammar-cli.ts](./src/generate-grammar-cli.ts): Provides a CLI for generating grammar files from schema definitions.
+- [mic.d.ts](./src/mic.d.ts) and [node-record-lpcm16.d.ts](./src/node-record-lpcm16.d.ts): Type definitions for audio recording libraries used in the package.
 
-The package uses TypeAgent's cache infrastructure to check for cached responses before making API calls, improving performance and efficiency.
+These files collectively enable the package's core functionalities, from API integration to voice input and grammar generation.
 
 ## How to extend
 
 To extend the `agent-sdk-wrapper` package, follow these steps:
 
-1. Open the [index.ts](./src/index.ts) file to understand the exported utilities and classes.
-2. Review the [cli.ts](./src/cli.ts) file to understand how the CLI tool is implemented and how it interacts with the Anthropic Agent SDK.
-3. Modify or add new functionalities in the relevant files, such as adding new transcription options in [audioCapture.ts](./src/audioCapture.ts) or enhancing schema parsing in [schemaReader.ts](./src/schemaReader.ts).
-4. Test your changes by running the CLI tool and verifying the new functionalities work as expected.
+1. **Understand the Core Structure**:
 
-By following these steps, you can extend the package to include additional features or improve existing ones.
+   - Start with [index.ts](./src/index.ts) to see the main exports and understand how the package integrates with other TypeAgent components.
+   - Review [cli.ts](./src/cli.ts) to understand how the CLI tool is implemented and how it interacts with the Anthropic Agent SDK.
+
+2. **Add New Features**:
+
+   - To add new transcription options, modify [audioCapture.ts](./src/audioCapture.ts) to include the necessary logic for capturing and processing audio.
+   - To enhance schema parsing or grammar generation, update [schemaReader.ts](./src/schemaReader.ts) or [schemaToGrammarGenerator.ts](./src/schemaToGrammarGenerator.ts).
+
+3. **Test Your Changes**:
+
+   - Use the CLI tool to test new functionalities. For example, run `npm start` to test the interactive CLI or use `node dist/cli.js` directly.
+   - Add unit tests for new features to ensure reliability.
+
+4. **Integrate with TypeAgent**:
+   - If your changes involve caching or other TypeAgent-specific features, ensure compatibility with the broader TypeAgent ecosystem by testing with related packages like `coderWrapper` and `agent-cache`.
+
+By following these steps, you can extend the `agent-sdk-wrapper` package to include additional features or improve existing ones.
 
 ## Reference
 
@@ -74,7 +90,7 @@ By following these steps, you can extend the package to include additional featu
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -110,6 +126,6 @@ _10 environment variables referenced from `./src/` (set in `ts/.env` or your she
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-sdk-wrapper docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-sdk-wrapper docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

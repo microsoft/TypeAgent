@@ -54,16 +54,16 @@ const ChatSchema = `export type ChatResponse = {
 
 async function runPlayground(): Promise<void> {
     // Bot instructions
-    let instructions = "You are an AI assistant who helps the user";
+    const instructions = "You are an AI assistant who helps the user";
     //
     // Create Model
     //
-    let [apiSettings, chatModel, completionSettings] = createModel(false);
+    const [apiSettings, chatModel, completionSettings] = createModel(false);
     //
     // Create Chat History
     //
-    let maxContextLength = 8196; // characters
-    let maxWindowLength = 30;
+    const maxContextLength = 8196; // characters
+    const maxWindowLength = 30;
     let chatHistory: PromptSection[] = [];
     //
     // Create TypeChat...
@@ -84,7 +84,7 @@ async function runPlayground(): Promise<void> {
     //
     // Set up playground application
     //
-    let playgroundCommands: Record<string, CommandHandler> = {
+    const playgroundCommands: Record<string, CommandHandler> = {
         clearHistory,
         history,
         saveHistory,
@@ -94,7 +94,7 @@ async function runPlayground(): Promise<void> {
         streamMode,
         help,
     };
-    let interactiveApp: InteractiveAppSettings = {
+    const interactiveApp: InteractiveAppSettings = {
         onStart: onStart,
         inputHandler: nextChatTurn,
         commandHandler: (cmdLine, io) =>
@@ -272,7 +272,7 @@ async function runPlayground(): Promise<void> {
             // Create default model
             apiSettings = openai.apiSettingsFromEnv();
         }
-        let completionSettings: CompletionSettings = {
+        const completionSettings: CompletionSettings = {
             temperature: 0.8,
             max_tokens: 1000, // Max response tokens
             response_format: { type: "json_object" }, // createChatModel will remove it if the model doesn't support it
@@ -362,7 +362,7 @@ async function runPlayground(): Promise<void> {
     }
 
     function printWelcome(io: InteractiveIo): void {
-        let modelName = apiSettings.modelName ?? apiSettings.endpoint;
+        const modelName = apiSettings.modelName ?? apiSettings.endpoint;
         io.writer.writeLine(`💬 🛝\nWelcome to Interactive Chat Playground.\n`);
         io.writer.writeLine(`Model: ${modelName}`);
         io.writer.writeLine(

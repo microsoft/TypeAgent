@@ -79,6 +79,7 @@ class ClearDeepCommandHandler implements CommandHandlerNoParams {
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         systemContext.chatHistory.clear();
+        systemContext.conversationSignal.reset();
         clearClaudeReasoningSession(systemContext);
         clearCopilotReasoningSession(systemContext);
         setActivityContext(DispatcherActivityName, null, systemContext);

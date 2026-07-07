@@ -78,7 +78,7 @@ class WhisperRecognizer {
             body: formData,
         });
 
-        let responseBody = await response.json();
+        const responseBody = await response.json();
         this.awaitingResult = false;
         return responseBody.transcription;
     }

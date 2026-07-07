@@ -73,8 +73,8 @@ export async function verifyQuestionAnswerBatch(
     cb?: BatchCallback<Result<SimilarityComparison<QuestionAnswer>>>,
     stopOnError: boolean = false,
 ): Promise<Result<SimilarityComparison<QuestionAnswer>[]>> {
-    let results: SimilarityComparison<QuestionAnswer>[] = [];
-    let questionAnswers = await readJsonFile<QuestionAnswer[]>(batchFilePath);
+    const results: SimilarityComparison<QuestionAnswer>[] = [];
+    const questionAnswers = await readJsonFile<QuestionAnswer[]>(batchFilePath);
     if (questionAnswers === undefined || questionAnswers.length === 0) {
         return error(`${batchFilePath} does not contain QuestionAnswer[]`);
     }
@@ -159,7 +159,7 @@ async function getQuestionAnswer(
 }
 
 function flattenAnswers(answerResponses: kp.AnswerResponse[]) {
-    let answers: string[] = [];
+    const answers: string[] = [];
     for (const answerResponse of answerResponses) {
         const answer =
             answerResponse.type === "Answered"

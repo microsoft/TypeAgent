@@ -189,9 +189,8 @@ export async function generateTextEmbeddingsForIndex(
     texts: string | string[],
 ): Promise<Result<NormalizedEmbedding[]>> {
     try {
-        let embeddings: NormalizedEmbedding[];
         const textsToEmbed = Array.isArray(texts) ? texts : [texts];
-        embeddings = await generateTextEmbeddingsWithRetry(
+        const embeddings = await generateTextEmbeddingsWithRetry(
             embeddingModel,
             textsToEmbed,
         );
@@ -206,7 +205,7 @@ export async function addTextToEmbeddingIndex(
     embeddingModel: TextEmbeddingModel,
     textToIndex: string[],
 ): Promise<ListIndexingResult> {
-    let result: ListIndexingResult = { numberCompleted: 0 };
+    const result: ListIndexingResult = { numberCompleted: 0 };
     const embeddingResult = await generateTextEmbeddingsForIndex(
         embeddingModel,
         textToIndex,
@@ -227,7 +226,7 @@ export async function addTextBatchToEmbeddingIndex(
     batchSize: number,
     eventHandler?: IndexingEventHandlers,
 ): Promise<ListIndexingResult> {
-    let result: ListIndexingResult = { numberCompleted: 0 };
+    const result: ListIndexingResult = { numberCompleted: 0 };
     for (const batch of getIndexingBatches(textToIndex, batchSize)) {
         if (
             eventHandler?.onEmbeddingsCreated &&

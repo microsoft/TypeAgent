@@ -294,6 +294,11 @@ export async function interpretRequest(
         });
     }
 
+    // Record this completed user turn into the contextSelector signal *after*
+    // resolution, so it never contributes to its own context vector
+    // (history-only, §10). Runs once per user turn at this ungated ingress.
+    systemContext.conversationSignal.recordRequest(request);
+
     return {
         elapsedMs: translateResult.elapsedMs,
         requestAction,

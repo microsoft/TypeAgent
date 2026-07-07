@@ -189,8 +189,8 @@ export async function getTabHTMLFragments(
         extractText &&
         (typeof compressionModeOrFullSize !== "object" ||
             compressionModeOrFullSize !== CompressionMode.KnowledgeExtraction);
-    let htmlFragments: any[] = [];
-    let htmlPromises: Promise<any>[] = [];
+    const htmlFragments: any[] = [];
+    const htmlPromises: Promise<any>[] = [];
 
     htmlPromises.push(
         sendScriptAction(
@@ -287,7 +287,7 @@ export async function getTabHTMLFragments(
 export async function sendScriptActionToAllFrames(body: any, timeout?: number) {
     const frames = [window.top, ...Array.from(window.frames)];
 
-    let htmlPromises: Promise<any>[] = [];
+    const htmlPromises: Promise<any>[] = [];
     frames.forEach((frame, index) => {
         htmlPromises.push(
             sendScriptAction(body, timeout, frame, index.toString()),
@@ -299,7 +299,7 @@ export async function sendScriptActionToAllFrames(body: any, timeout?: number) {
 
 async function runBrowserAction(action: any) {
     let responseObject: any;
-    let confirmationMessage = "OK";
+    const confirmationMessage = "OK";
     const actionName =
         action.actionName ?? action.fullActionName.split(".").at(-1);
     switch (actionName) {
@@ -337,7 +337,7 @@ async function runBrowserAction(action: any) {
 }
 
 async function runSiteAction(schemaName: string, action: any) {
-    let confirmationMessage = "OK";
+    const confirmationMessage = "OK";
     switch (schemaName) {
         case "browser.crossword": {
             sendScriptAction({

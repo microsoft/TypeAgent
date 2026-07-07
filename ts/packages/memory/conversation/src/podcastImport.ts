@@ -111,7 +111,7 @@ function assignMessageListeners(
 ) {
     for (const msg of msgs) {
         if (msg.metadata.speaker) {
-            let listeners: string[] = [];
+            const listeners: string[] = [];
             for (const p of participants) {
                 if (p !== msg.metadata.speaker) {
                     listeners.push(p);

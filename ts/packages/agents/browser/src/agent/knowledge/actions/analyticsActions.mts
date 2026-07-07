@@ -647,7 +647,7 @@ export async function getTopDomains(
 
         // Count sites by domain
         const domainCounts: { [domain: string]: number } = {};
-        let totalCount = websites.length;
+        const totalCount = websites.length;
 
         for (const site of websites) {
             const metadata = site.metadata as any;

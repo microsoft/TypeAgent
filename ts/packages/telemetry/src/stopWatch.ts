@@ -67,8 +67,8 @@ export class StopWatch {
 
     public log(label: string, inSeconds: boolean = true): void {
         import("chalk").then((chalk) => {
-            let elapsed = `[${this.elapsedString(inSeconds)}]`;
-            let text = `${chalk.default.gray(label)} ${chalk.default.green(elapsed)}`;
+            const elapsed = `[${this.elapsedString(inSeconds)}]`;
+            const text = `${chalk.default.gray(label)} ${chalk.default.green(elapsed)}`;
             console.log(text);
         });
     }

@@ -217,10 +217,10 @@ export class ConsoleWriter {
         if (sort) {
             keys.sort();
         }
-        let maxLength = this.getMaxLength(keys);
+        const maxLength = this.getMaxLength(keys);
         for (const key of keys) {
-            let value = record[key];
-            let strValues = stringifyValue ? stringifyValue(value) : value;
+            const value = record[key];
+            const strValues = stringifyValue ? stringifyValue(value) : value;
             if (Array.isArray(strValues) && strValues.length > 0) {
                 this.writeNameValue(
                     key,
@@ -284,7 +284,7 @@ export async function askYesNo(
     io: InteractiveIo,
     question: string,
 ): Promise<boolean> {
-    let answer = await io.readline.question(`${question} (y/n):`);
+    const answer = await io.readline.question(`${question} (y/n):`);
     return answer.trim().toLowerCase() === "y";
 }
 
@@ -305,7 +305,7 @@ export class ProgressBar {
             next = this.total;
         }
         this.count = next;
-        let progressText = `[${this.count} / ${this.total}]`;
+        const progressText = `[${this.count} / ${this.total}]`;
         this.writer.writeInline(progressText, this._lastText);
         this._lastText = progressText;
     }

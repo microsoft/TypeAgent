@@ -289,7 +289,7 @@ function dedupeRelatedTerms(
             searchTerm.relatedTerms !== undefined &&
             searchTerm.relatedTerms.length > 0
         ) {
-            let uniqueRelatedForSearchTerm: Term[] = [];
+            const uniqueRelatedForSearchTerm: Term[] = [];
             for (const candidateRelatedTerm of searchTerm.relatedTerms) {
                 if (allSearchTerms.has(candidateRelatedTerm)) {
                     // This related term is already a search term
@@ -358,7 +358,7 @@ export class TermEmbeddingIndex
         maxMatches?: number,
         minScore?: number,
     ): Promise<Term[]> {
-        let matches = await this.embeddingIndex.getIndexesOfNearest(
+        const matches = await this.embeddingIndex.getIndexesOfNearest(
             text,
             maxMatches,
             minScore,

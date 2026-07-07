@@ -17,9 +17,17 @@ import {
     normalizeGrammarAction,
     resolveGrammarReplayTarget,
     ReplayVersionBuildError,
+    selectValidatedMatchAction,
     type GrammarReplayTarget,
 } from "../src/replay/grammarResolver.js";
 import type { ConstructionCacheLayer } from "../src/replay/constructionCacheResolver.js";
+import {
+    createWildcardMatchValidator,
+    type ReplayAppAgentLoader,
+    type ReplayValidatableAgent,
+    type WildcardMatchValidator,
+} from "../src/replay/wildcardValidator.js";
+import type { MatchResult } from "agent-cache";
 
 const GRAMMAR_V1 = [
     "<Start> = <Pause> | <Resume>;",
@@ -488,5 +496,211 @@ describe("resolveGrammarReplayTarget + schema enrichment (L1)", () => {
             schemaName: "demo",
             actionName: "resume",
         });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Working-tree wildcard validation
+// ---------------------------------------------------------------------------
+
+// A grammar whose <PlayTrack> rule captures a greedy wildcard (so a match has
+// wildcardCharCount > 0 and is subject to validateWildcardMatch), plus a
+// non-wildcard <Pause> rule (validator never consulted).
+const WILDCARD_GRAMMAR = [
+    "<Start> = <PlayTrack> | <Pause>;",
+    '<PlayTrack> = play $(trackName:wildcard) -> { actionName: "playTrack", parameters: { trackName } };',
+    '<Pause> = pause -> { actionName: "pause" };',
+].join("\n");
+
+function wildcardLoader(agent: ReplayValidatableAgent): ReplayAppAgentLoader {
+    return {
+        async loadAppAgent() {
+            return agent;
+        },
+        async unloadAppAgent() {},
+    };
+}
+
+/** A validator (for "demo") that rejects a given track name. */
+function rejectTrackValidator(reject: string): WildcardMatchValidator {
+    const agent: ReplayValidatableAgent = {
+        async validateWildcardMatch(a) {
+            const params = (a as { parameters?: { trackName?: string } })
+                .parameters;
+            return params?.trackName !== reject;
+        },
+    };
+    return createWildcardMatchValidator("demo", {
+        loader: wildcardLoader(agent),
+    });
+}
+
+describe("grammar resolver wildcard validation", () => {
+    let dir: string;
+
+    beforeEach(() => {
+        dir = tempDir();
+    });
+
+    afterEach(() => {
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    function wildcardTarget(): GrammarReplayTarget {
+        const grammarPath = path.join(dir, "demo.agr");
+        writeFileSync(grammarPath, WILDCARD_GRAMMAR, "utf8");
+        return {
+            agent: "demo",
+            schemaName: "demo",
+            grammarFilePath: grammarPath,
+        };
+    }
+
+    it("drops a wildcard match the agent rejects (→ needs-explanation)", async () => {
+        const validator = rejectTrackValidator("despacito");
+        const resolver = createGrammarReplayResolver({
+            target: wildcardTarget(),
+            wildcardValidator: validator,
+        });
+        await resolver.prepare(
+            { kind: "workingTree" },
+            { kind: "workingTree" },
+        );
+        const res = await resolver.resolve(
+            entry("e1", "play despacito"),
+            { kind: "workingTree" },
+            "A",
+        );
+        expect(res.cacheState).toBe("needs-explanation");
+        expect(res.action).toBeUndefined();
+        expect(resolver.wildcardValidationApplied).toBe(true);
+        await validator.dispose();
+    });
+
+    it("keeps a wildcard match the agent accepts", async () => {
+        const validator = rejectTrackValidator("nope");
+        const resolver = createGrammarReplayResolver({
+            target: wildcardTarget(),
+            wildcardValidator: validator,
+        });
+        await resolver.prepare(
+            { kind: "workingTree" },
+            { kind: "workingTree" },
+        );
+        const res = await resolver.resolve(
+            entry("e1", "play despacito"),
+            { kind: "workingTree" },
+            "A",
+        );
+        expect(res.cacheState).toBe("hit");
+        expect(res.action).toMatchObject({
+            schemaName: "demo",
+            actionName: "playTrack",
+            parameters: { trackName: "despacito" },
+        });
+        await validator.dispose();
+    });
+
+    it("does not consult the validator for a non-wildcard match", async () => {
+        const validator = rejectTrackValidator("despacito");
+        const resolver = createGrammarReplayResolver({
+            target: wildcardTarget(),
+            wildcardValidator: validator,
+        });
+        await resolver.prepare(
+            { kind: "workingTree" },
+            { kind: "workingTree" },
+        );
+        const res = await resolver.resolve(
+            entry("e1", "pause"),
+            { kind: "workingTree" },
+            "A",
+        );
+        expect(res.cacheState).toBe("hit");
+        expect(res.action).toEqual({ schemaName: "demo", actionName: "pause" });
+        // No wildcard match occurred, so validation never "applied".
+        expect(resolver.wildcardValidationApplied).toBe(false);
+        await validator.dispose();
+    });
+
+    it("behaves as plain top-match resolution when no validator is supplied", async () => {
+        const resolver = createGrammarReplayResolver({
+            target: wildcardTarget(),
+        });
+        await resolver.prepare(
+            { kind: "workingTree" },
+            { kind: "workingTree" },
+        );
+        const res = await resolver.resolve(
+            entry("e1", "play despacito"),
+            { kind: "workingTree" },
+            "A",
+        );
+        expect(res.cacheState).toBe("hit");
+        expect(res.action).toMatchObject({ actionName: "playTrack" });
+        expect(resolver.wildcardValidationApplied).toBe(false);
+    });
+});
+
+describe("selectValidatedMatchAction (ranked-list contract)", () => {
+    function match(actionName: string, wildcardCharCount: number): MatchResult {
+        return {
+            type: "grammar",
+            match: {
+                actions: [{ action: { schemaName: "demo", actionName } }],
+            },
+            matchedCount: 1,
+            wildcardCharCount,
+            nonOptionalCount: 0,
+            implicitParameterCount: 0,
+            entityWildcardPropertyNames: [],
+        } as unknown as MatchResult;
+    }
+
+    function rejectingValidator(
+        rejectActionNames: string[],
+    ): WildcardMatchValidator {
+        const agent: ReplayValidatableAgent = {
+            async validateWildcardMatch(a) {
+                return !rejectActionNames.includes(
+                    (a as { actionName: string }).actionName,
+                );
+            },
+        };
+        return createWildcardMatchValidator("demo", {
+            loader: wildcardLoader(agent),
+        });
+    }
+
+    it("falls through a rejected top wildcard match to a surviving candidate", async () => {
+        // Top match (wildcard) is rejected; the 2nd wildcard match passes — so
+        // this is NOT a lost match, mirroring the dispatcher's fall-back.
+        const validator = rejectingValidator(["top"]);
+        const result = await selectValidatedMatchAction(
+            [match("top", 5), match("second", 3)],
+            validator,
+        );
+        expect(result.consulted).toBe(true);
+        expect(result.action).toMatchObject({ actionName: "second" });
+    });
+
+    it("returns no action when every wildcard candidate is rejected", async () => {
+        const validator = rejectingValidator(["a", "b"]);
+        const result = await selectValidatedMatchAction(
+            [match("a", 2), match("b", 4)],
+            validator,
+        );
+        expect(result.action).toBeUndefined();
+        expect(result.consulted).toBe(true);
+    });
+
+    it("accepts a non-wildcard match without consulting the validator", async () => {
+        const validator = rejectingValidator(["top"]);
+        const result = await selectValidatedMatchAction(
+            [match("top", 0)],
+            validator,
+        );
+        expect(result.action).toMatchObject({ actionName: "top" });
+        expect(result.consulted).toBe(false);
     });
 });

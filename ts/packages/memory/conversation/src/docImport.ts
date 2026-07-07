@@ -59,7 +59,7 @@ export async function importDocMemoryFromTextFile(
             type = "md";
             break;
     }
-    let memory = await importDocMemoryFromText(
+    const memory = await importDocMemoryFromText(
         docText,
         type,
         maxCharsPerChunk,
@@ -232,7 +232,7 @@ export function docPartsFromMarkdown(
     const parts: DocPart[] = [];
     for (let i = 0; i < textBlocks.length; ++i) {
         const kBlock = knowledgeBlocks[i];
-        let textBlock = textBlocks[i];
+        const textBlock = textBlocks[i];
         if (textBlock.length === 0) {
             // Empty text block
             continue;

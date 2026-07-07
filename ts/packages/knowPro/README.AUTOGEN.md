@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=45b571ba964184feba0fe0fd399272597bdc5493a3c044d34034212cc841bc5e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=501e29f709902d55e8bb4121045dbf9657deab054c6c36d85208fa174ec0c4d8 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # knowpro — AI-generated documentation
@@ -12,45 +12,97 @@
 
 ## Overview
 
-The `knowpro` package is a TypeScript library designed to implement a basic structured Retrieval-Augmented Generation (RAG) system. It is part of the TypeAgent monorepo and is actively developed to explore various types of memory and structured information extraction from conversations and other forms of text.
+The `knowpro` package is a TypeScript library that implements a basic structured Retrieval-Augmented Generation (RAG) system. It is part of the TypeAgent monorepo and serves as an experimental foundation for exploring structured information extraction and various types of memory, such as conversation, document, and image memory. The package is actively developed and primarily tested with GPT-4o, with a focus on integrating structured data with natural language processing.
 
 ## What it does
 
-The `knowpro` package provides functionalities for structured prompting and leveraging large language models (LLMs) to handle natural language queries and generate answers. It supports the following capabilities:
+The `knowpro` package provides tools for implementing Structured RAG, a method for extracting and utilizing structured information from unstructured data sources like conversations, emails, and documents. Its key capabilities include:
 
-- **Natural language queries**: Translating user requests into structured query expressions.
-- **Answer generation**: Using query results to generate natural language answers.
-- **Search**: Converting user requests into query expressions and executing them to retrieve relevant entities, topics, and actions.
-- **Indexing**: Storing and updating information in suitable indexes for efficient retrieval.
+- **Natural Language Querying**: Converts user requests into structured query expressions. This includes handling both unstructured data (e.g., conversation text) and structured data (e.g., metadata or relational tables).
+- **Search and Retrieval**: Executes query expressions to retrieve relevant entities, topics, and actions from indexed data. The search process uses:
+  - **Scope Expressions**: Filters results based on criteria like time ranges, topics, or relationships.
+  - **Tree-Pattern Expressions**: Matches specific structures in the data, such as hierarchical entities or relationships.
+- **Answer Generation**: Combines query results with additional context to generate natural language answers using a language model.
+- **Indexing and Updates**: Manages structured and unstructured data in indexes that support efficient retrieval and incremental updates.
 
-The package interacts with other parts of the system, such as the `conversation-memory` package for agent memory and various memory types including transcripts, documents, emails, and images.
+The package integrates with other components in the TypeAgent ecosystem, such as the `conversation-memory` package, and supports various memory types, including transcripts, documents, emails, and images. It also leverages secondary indexes for efficient matching of tree expressions, related terms, and other search criteria.
 
 ## Setup
 
-To set up the `knowpro` package, ensure you have the necessary dependencies installed. The package relies on several internal and external libraries, including `aiclient`, `knowledge-processor`, `typeagent`, and others.
+To use the `knowpro` package, follow these steps:
 
-For detailed setup instructions, including environment variables and API keys, refer to the hand-written README.
+1. **Install Dependencies**:
+
+   - Ensure all required dependencies are installed. The package relies on internal libraries like `@typeagent/aiclient`, `knowledge-processor`, and `typeagent`, as well as external libraries such as `async`, `debug`, `fast-levenshtein`, and `typechat`.
+
+2. **Environment Configuration**:
+
+   - If the hand-written README specifies any environment variables or API keys, configure them as instructed. For example, you may need to set up an API key for the LLM used in the package.
+
+3. **Integration**:
+   - The package is designed to work with other components in the TypeAgent monorepo. Ensure that the relevant dependencies and memory implementations are properly configured.
+
+For additional setup details, refer to the hand-written README.
 
 ## Key Files
 
-The `knowpro` package is organized into several key components:
+The `knowpro` package is organized into several key files and modules, each responsible for specific functionality:
 
-- **Schemas**: Define the structure of the data used in the package, such as [answerContextSchema.ts](./src/answerContextSchema.ts) and [answerResponseSchema.ts](./src/answerResponseSchema.ts).
-- **Search**: Handles the conversion of natural language queries into structured query expressions and executes them. Key files include [search.ts](./src/search.ts) and [searchLang.ts](./src/searchLang.ts).
-- **Answer Generation**: Generates answers based on the results of executed queries. This is managed by [answerGenerator.ts](./src/answerGenerator.ts).
-- **Indexes**: Store and manage the information extracted from conversations and other text sources. Relevant files include [conversationIndex.ts](./src/conversationIndex.ts) and [secondaryIndexes.ts](./src/secondaryIndexes.ts).
-- **Common Utilities**: Provide shared functionality across the package, such as [common.ts](./src/common.ts).
+- **Schemas**:
+
+  - [answerContextSchema.ts](./src/answerContextSchema.ts): Defines the structure of the data used for answer generation, including entities, topics, and messages.
+  - [answerResponseSchema.ts](./src/answerResponseSchema.ts): Specifies the structure of the answer responses, including the type of answer and its content.
+
+- **Search**:
+
+  - [search.ts](./src/search.ts): Handles the conversion of natural language queries into structured query expressions and executes them.
+  - [searchLang.ts](./src/searchLang.ts): Provides support for natural language querying and query expression generation.
+
+- **Answer Generation**:
+
+  - [answerGenerator.ts](./src/answerGenerator.ts): Implements the logic for generating natural language answers based on query results and context.
+
+- **Indexes**:
+
+  - [conversationIndex.ts](./src/conversationIndex.ts): Manages the indexing of conversation data for efficient retrieval.
+  - [secondaryIndexes.ts](./src/secondaryIndexes.ts): Handles secondary indexes for additional search capabilities, such as related terms and time ranges.
+
+- **Utilities**:
+
+  - [common.ts](./src/common.ts): Contains shared utility functions and types used across the package.
+  - [collections.ts](./src/collections.ts): Provides internal data structures and methods for managing query results and matches.
+
+- **Core Logic**:
+  - [compileLib.ts](./src/compileLib.ts): Implements query operators and processing logic for the library.
+  - [conversation.ts](./src/conversation.ts): Defines settings and utilities for managing conversation data.
 
 ## How to extend
 
-To extend the `knowpro` package, follow these steps:
+To extend the `knowpro` package, follow these guidelines:
 
-1. **Identify the component to extend**: Determine whether you need to add new schemas, enhance search capabilities, or improve answer generation.
-2. **Modify or add files**: Based on the identified component, modify existing files or add new ones. For example, to add a new type of index, you might start with [secondaryIndexes.ts](./src/secondaryIndexes.ts).
-3. **Update interfaces**: Ensure that any new functionality is reflected in the base interfaces and types defined in [interfaces.ts](./src/interfaces.ts).
-4. **Test your changes**: Write tests to validate your changes. The `knowpro-test` package can be used to test the `knowpro` API and memory implementations.
+1. **Understand the Existing Structure**:
 
-For detailed examples and further guidance, refer to the [KnowPro test app](../../examples/chat/README.md) and other related documentation.
+   - Review the key files and their responsibilities as outlined above.
+   - Familiarize yourself with the base interfaces and types defined in [interfaces.ts](./src/interfaces.ts).
+
+2. **Add or Modify Functionality**:
+
+   - To enhance search capabilities, start with [search.ts](./src/search.ts) or [searchLang.ts](./src/searchLang.ts).
+   - To introduce new types of structured data, update or create new schemas in files like [answerContextSchema.ts](./src/answerContextSchema.ts).
+   - To improve answer generation, modify [answerGenerator.ts](./src/answerGenerator.ts) or related files.
+
+3. **Extend Indexing**:
+
+   - If you need to add new indexing capabilities, consider extending [secondaryIndexes.ts](./src/secondaryIndexes.ts) or [conversationIndex.ts](./src/conversationIndex.ts).
+
+4. **Testing**:
+
+   - Write tests to validate your changes. The `knowpro-test` package provides a framework for testing the `knowpro` API and its memory implementations.
+
+5. **Documentation**:
+   - Update the documentation to reflect your changes, including any new files or features.
+
+For practical examples and additional guidance, refer to the [KnowPro test app](../../examples/chat/README.md) and related documentation in the TypeAgent monorepo.
 
 ## Reference
 
@@ -58,7 +110,7 @@ For detailed examples and further guidance, refer to the [KnowPro test app](../.
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -91,6 +143,6 @@ External: `async`, `debug`, `fast-levenshtein`, `typechat`
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowpro docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowpro docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

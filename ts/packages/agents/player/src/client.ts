@@ -888,7 +888,10 @@ async function playPlaylistAction(
             playlist.id,
         );
         const collection = new PlaylistTrackCollection(playlist, tracks);
-        let actionResult = await playTrackCollection(collection, clientContext);
+        const actionResult = await playTrackCollection(
+            collection,
+            clientContext,
+        );
 
         // add the playlist as an entity
         actionResult.entities.push({

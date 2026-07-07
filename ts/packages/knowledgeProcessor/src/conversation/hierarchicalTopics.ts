@@ -56,7 +56,7 @@ export function createHierarchicalTopicExtractor(
             }
 
             // Step 2: Use existing TopicExtractor to find higher-level themes
-            let aggregatedTopics: string[] = [];
+            const aggregatedTopics: string[] = [];
             if (topicExtractor) {
                 const mergeResult = await topicExtractor.mergeTopics(
                     allTopics,

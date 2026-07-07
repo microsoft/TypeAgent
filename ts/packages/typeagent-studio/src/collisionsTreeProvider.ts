@@ -108,15 +108,19 @@ export class CollisionsTreeProvider
 
     async getChildren(row?: CollisionRow): Promise<CollisionRow[]> {
         if (!row) {
-            // Show the native loading bar while connecting; once connected,
-            // render scanned collisions (or the "no collisions" placeholder).
-            await this.whenConnected();
-            if (
-                !this.connected &&
-                this.entries.length === 0 &&
-                this.skipped.length === 0
-            ) {
-                return [];
+            // Render the last known scan immediately so a mid-session
+            // disconnect keeps results visible instead of dropping back to the
+            // loading bar. Only gate on the connection (showing the native
+            // loading bar) during the initial load, before anything is scanned.
+            if (this.entries.length === 0 && this.skipped.length === 0) {
+                await this.whenConnected();
+                if (
+                    !this.connected &&
+                    this.entries.length === 0 &&
+                    this.skipped.length === 0
+                ) {
+                    return [];
+                }
             }
             return buildCollisionRows(this.entries, this.skipped);
         }

@@ -1888,6 +1888,10 @@ export class AppAgentManager implements ActionConfigProvider {
 
         // Clear translator cache to force re-translation with new schema
         context.translatorCache.clear();
+        // Drop cached derived keyword vectors for this agent's schemas so the
+        // contextSelector re-extracts from the reloaded (possibly changed)
+        // schema text instead of scoring against stale keywords.
+        context.contextSelectorKeywords.invalidate(appAgentName);
 
         // Drop construction-cache entries whose schema hash no longer matches
         // the reloaded schema (e.g. constructions for a deleted or edited flow),

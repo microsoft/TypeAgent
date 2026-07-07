@@ -289,7 +289,7 @@ export const slashCommandPreview = $prose(() => {
                     },
                 ];
 
-                let decorations: Decoration[] = [];
+                const decorations: Decoration[] = [];
 
                 for (const cmd of commandPatterns) {
                     const match = lineText.match(cmd.pattern);

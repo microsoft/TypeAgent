@@ -128,7 +128,7 @@ export function* union<T>(
 ): IterableIterator<T> {
     const x: Iterator<T> = Array.isArray(xArray) ? xArray.values() : xArray;
     const y: Iterator<T> = Array.isArray(yArray) ? yArray.values() : yArray;
-    let unionSet = new Set<T>();
+    const unionSet = new Set<T>();
     let xVal = x.next();
     while (!xVal.done) {
         unionSet.add(xVal.value);
@@ -346,8 +346,8 @@ export function intersectSets<T = any>(
 ): Set<T> | undefined {
     if (x && y) {
         // xValue is smaller than yValues in size
-        let xValues = x.size < y.size ? x : y;
-        let yValues = x.size < y.size ? y : x;
+        const xValues = x.size < y.size ? x : y;
+        const yValues = x.size < y.size ? y : x;
         let result: Set<T> | undefined;
         for (const val of xValues) {
             if (yValues.has(val)) {
@@ -365,9 +365,9 @@ export function intersectSets<T = any>(
 export function unionSets<T = any>(x?: Set<T>, y?: Set<T>): Set<T> | undefined {
     if (x && y) {
         // xValue is smaller than yValues in size
-        let xValues = x.size < y.size ? x : y;
-        let yValues = x.size < y.size ? y : x;
-        let result = new Set<T>(yValues);
+        const xValues = x.size < y.size ? x : y;
+        const yValues = x.size < y.size ? y : x;
+        const result = new Set<T>(yValues);
         addToSet(result, xValues);
         return result;
     } else if (x) {
@@ -381,7 +381,7 @@ export function intersectUnionSets<T = any>(
     y?: Set<T>,
 ): Set<T> | undefined {
     // We can to do this more optimally...
-    let combined = createHitTable<T>();
+    const combined = createHitTable<T>();
     if (x) {
         combined.addMultiple(x.values());
     }
@@ -580,7 +580,9 @@ export function createHitTable<T>(
             return [];
         }
         // Descending order
-        let valuesByScore = [...map.values()].sort((x, y) => y.score - x.score);
+        const valuesByScore = [...map.values()].sort(
+            (x, y) => y.score - x.score,
+        );
         return valuesByScore;
     }
 
@@ -593,8 +595,8 @@ export function createHitTable<T>(
         if (map.size === 0) {
             return [];
         }
-        let maxScore = mathLib.max(map.values(), (v) => v.score)!.score;
-        let top: T[] = [];
+        const maxScore = mathLib.max(map.values(), (v) => v.score)!.score;
+        const top: T[] = [];
         for (const value of map.values()) {
             if (value.score === maxScore) {
                 top.push(value.item);
@@ -648,7 +650,7 @@ export function createHitTable<T>(
     }
 
     function roundScores(decimalPlace: number): void {
-        let roundUnit = Math.pow(10, decimalPlace);
+        const roundUnit = Math.pow(10, decimalPlace);
         if (roundUnit > 0) {
             for (const scoredItem of map.values()) {
                 scoredItem.score =

@@ -8,10 +8,10 @@ import {
 } from "@typeagent/agent-sdk";
 import { PaleoBioDbActions } from "./paleobiodbSchema.mjs";
 
-declare var taxaBrowser: any;
-declare var timeScale: any;
-declare var navMap: any;
-declare var map: any;
+declare let taxaBrowser: any;
+declare let timeScale: any;
+declare let navMap: any;
+declare let map: any;
 
 function enablePaleoBioDbFilter(time: string, taxa: string) {
     if (time) {
@@ -100,7 +100,7 @@ function setMapLocation(latitude: number, longitude: number) {
 }
 
 function getPrevalentTaxons() {
-    let taxonNames: string[] = [];
+    const taxonNames: string[] = [];
     const taxonList = document.querySelectorAll<Element>(
         "#graphics > div.col-sm-12.prevalence-row > div > div:nth-child(1) > p",
     );
@@ -241,7 +241,7 @@ export function createPaleoBioDbAgent(): AppAgent {
 }
 
 document.addEventListener("toPaleoDbAutomation", function (e: any) {
-    var message = e.detail;
+    const message = e.detail;
     console.log("received", message);
     const actionName = message.actionName;
     switch (actionName) {

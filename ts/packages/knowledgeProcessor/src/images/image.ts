@@ -639,7 +639,7 @@ export async function loadImageWithKnowledge(
 
     // if the image exceeds the supplied limit we'll resize the image to fit under that threshold
     const fileSize: number = fs.statSync(fileName, {}).size;
-    let buffer: Buffer = fs.readFileSync(fileName);
+    const buffer: Buffer = fs.readFileSync(fileName);
     let smaller_buffer: Buffer | undefined = undefined;
     if (maxSize != -1 && fileSize > maxSize) {
         try {

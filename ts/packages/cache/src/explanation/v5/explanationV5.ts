@@ -507,7 +507,7 @@ function isValueCopiedFromSubPhrase(
     phrase: SubPhrase,
     paramInfo: PropertyValue,
 ) {
-    let ltext = normalizeParamString(phrase.text);
+    const ltext = normalizeParamString(phrase.text);
     const lval = normalizeParamString(paramInfo.propertyValue.toString());
 
     // Try direct match first

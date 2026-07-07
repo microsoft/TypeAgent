@@ -1090,7 +1090,7 @@ abstract class FieldArrayBase extends FieldGroup {
                 const value = this.getArray();
                 if (value) {
                     const editingField = this.data.setEditing(undefined);
-                    let isEditing = editingField?.isAncestor(field);
+                    const isEditing = editingField?.isAncestor(field);
 
                     value.splice(index, 1);
                     this.createChildFields();

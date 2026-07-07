@@ -918,7 +918,7 @@ async function findRequestedImages(
 }
 
 function filterToSearchTerm(filters: string[]): kp.SearchTerm[] {
-    let terms: kp.SearchTerm[] = [];
+    const terms: kp.SearchTerm[] = [];
     filters.forEach((value) => terms.push({ term: { text: value } }));
 
     return terms;

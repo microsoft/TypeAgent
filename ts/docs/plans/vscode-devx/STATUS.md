@@ -4,8 +4,9 @@
 > the **intended** end state), this file tracks what is **actually built today**
 > and what remains. Update it whenever a capability changes state.
 
-Branch: feature work has merged to `main` via PR #2468; ongoing work continues
-on `dev/talzacc/typeagent_studio_part3` (the real replay path).
+Branch: earlier feature work merged to `main` via PR #2468; ongoing work
+continues on the `dev/talzacc/typeagent_studio_part*` stack (currently part5 —
+replay fidelity + Impact Report UX).
 
 ## Capability matrix
 
@@ -13,24 +14,72 @@ Legend: ✅ done · 🟡 partial · ❌ not started.
 "Wired to dispatcher" = backed by the real TypeAgent dispatcher/engine rather
 than an in-memory stand-in.
 
-| Capability                                                     | Core logic                                                                  | UI                                                                 | Wired to dispatcher                                                        | Tested |
-| -------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------- | ------ |
-| Sandboxes (lifecycle, agent load/unload)                       | ✅ in-memory                                                                | ✅ tree view (channel-backed; agent runtime is source of truth)    | ❌ in-memory only (no subprocess/isolated dispatcher)                      | ✅     |
-| Sandbox persistence across reload/restart                      | ✅                                                                          | ✅ (auto-restore)                                                  | n/a                                                                        | ✅     |
-| Corpora (federation: in-repo / captures / external / feedback) | ✅ file-backed                                                              | ✅ tree view                                                       | n/a                                                                        | ✅     |
-| Event Log (structured event stream)                            | 🟡 in-memory ring buffer                                                    | ✅ tree view (+ channel-backed source)                             | ❌ most emit sites unwired                                                 | ✅     |
-| Agent health (status bar + findings)                           | 🟡 heuristic/filesystem checks                                              | ✅ status bar                                                      | ❌ no real schema parse / grammar compile                                  | ✅     |
-| Collisions (cross-schema grammar overlap)                      | ✅ real NFA scanner over compiled `.ag.json`                                | ✅ tree view + Skipped group + auto-scan (+ channel-backed source) | n/a (reads compiled grammars)                                              | ✅     |
-| Feedback (thumbs up/down → corpus)                             | ✅                                                                          | ✅ command                                                         | n/a                                                                        | ✅     |
-| Replay / compare engine                                        | ✅ static-grammar, schema-enriched (L1) & construction-cache (L2) resolvers | ✅ Impact Report webview (`ActionDelta[]`)                         | 🟡 grammar + live construction cache (L1–L2); no two-version build (L3–L4) | ✅     |
-| Onboarding bridge (snapshot/restore, stale detection)          | ✅                                                                          | ✅ commands                                                        | ❌ in-memory bridge                                                        | ✅     |
-| Repo-root detection (find `packages/agents`)                   | ✅                                                                          | ✅ warn toast + status bar                                         | n/a                                                                        | ✅     |
-| Webview infrastructure (`webviewKit`)                          | ✅ CSP/nonce host + typed protocol                                          | ✅ singleton-panel host                                            | —                                                                          | ✅     |
-| Impact Report webview                                          | ✅ `replayCorpus` over channel                                              | ✅ context header, A/B controls, durable state                     | 🟡 grammar + construction-cache replay (L1–L2)                             | ✅     |
-| Player corpus capture                                          | ❌                                                                          | ❌                                                                 | ❌                                                                         | ❌     |
-| Schema Studio                                                  | ❌                                                                          | ❌                                                                 | ❌                                                                         | ❌     |
-| Live Trace                                                     | ❌                                                                          | ❌                                                                 | ❌                                                                         | ❌     |
-| `agr-language` / `vscode-shell` refactor onto core             | 🟡 dependency edge only                                                     | —                                                                  | ❌ no behavioral integration                                               | ❌     |
+| Capability                                                     | Core logic                                                                                                                            | UI                                                                               | Wired to dispatcher                                                                                                           | Tested |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Sandboxes (lifecycle, agent load/unload)                       | ✅ in-memory                                                                                                                          | ✅ tree view (channel-backed; agent runtime is source of truth)                  | ❌ in-memory only (no subprocess/isolated dispatcher)                                                                         | ✅     |
+| Sandbox persistence across reload/restart                      | ✅                                                                                                                                    | ✅ (auto-restore)                                                                | n/a                                                                                                                           | ✅     |
+| Corpora (federation: in-repo / captures / external / feedback) | ✅ file-backed                                                                                                                        | ✅ tree view                                                                     | n/a                                                                                                                           | ✅     |
+| Event Log (structured event stream)                            | 🟡 in-memory ring buffer                                                                                                              | ✅ tree view (+ channel-backed source)                                           | ❌ most emit sites unwired                                                                                                    | ✅     |
+| Agent health (status bar + findings)                           | 🟡 heuristic/filesystem checks                                                                                                        | ✅ status bar                                                                    | ❌ no real schema parse / grammar compile                                                                                     | ✅     |
+| Collisions (cross-schema grammar overlap)                      | ✅ real NFA scanner over compiled `.ag.json`                                                                                          | ✅ tree view + Skipped group + auto-scan (+ channel-backed source)               | n/a (reads compiled grammars)                                                                                                 | ✅     |
+| Feedback (thumbs up/down → corpus)                             | ✅                                                                                                                                    | ✅ command                                                                       | n/a                                                                                                                           | ✅     |
+| Replay / compare engine                                        | ✅ schema-enriched grammar (L1), construction-cache (L2), selectable two-mode (grammar/cache) + opt-in live wildcard validation (L4a) | ✅ Impact Report webview (`ActionDelta[]`)                                       | 🟡 grammar + live construction cache + working-tree wildcard validation; no two-version build-from-ref (L4b, deferred to P-7) | ✅     |
+| Onboarding bridge (snapshot/restore, stale detection)          | ✅                                                                                                                                    | ✅ commands                                                                      | ❌ in-memory bridge                                                                                                           | ✅     |
+| Repo-root detection (find `packages/agents`)                   | ✅                                                                                                                                    | ✅ warn toast + status bar                                                       | n/a                                                                                                                           | ✅     |
+| Webview infrastructure (`webviewKit`)                          | ✅ CSP/nonce host + typed protocol                                                                                                    | ✅ singleton-panel host                                                          | —                                                                                                                             | ✅     |
+| Impact Report webview                                          | ✅ `replayCorpus` over channel                                                                                                        | ✅ context header, A/B controls, Grammar/Cache + Validate toggles, durable state | 🟡 grammar + construction-cache + working-tree wildcard validation (L1–L2, L4a)                                               | ✅     |
+| Corpus capture (real utterances → actions, any agent)          | ❌                                                                                                                                    | ❌                                                                               | ❌                                                                                                                            | ❌     |
+| Schema Studio                                                  | ❌                                                                                                                                    | ❌                                                                               | ❌                                                                                                                            | ❌     |
+| Live Trace                                                     | ❌                                                                                                                                    | ❌                                                                               | ❌                                                                                                                            | ❌     |
+| `agr-language` / `vscode-shell` refactor onto core             | 🟡 dependency edge only                                                                                                               | —                                                                                | ❌ no behavioral integration                                                                                                  | ❌     |
+
+## Roadmap at a glance — gate spine + backlog
+
+This is the single at-a-glance tracker. The MVP is fenced by five acceptance
+gates ([`04-mvp-slice.md` §3](./04-mvp-slice.md)); phase sequencing lives in
+[`05-implementation-plan.md` §11](./05-implementation-plan.md#11-phasing--concrete-sequencing).
+The **gate spine** is the critical path; the **backlog** holds everything
+deliberately off it, each row tagged with its parent gate and precondition so it
+is clear why it waits. There is no second roadmap — depth (L4b) and breadth
+(multi-variant / multi-agent) are backlog rows here, not a parallel plan.
+
+### Gate spine (MVP critical path)
+
+| Gate  | Journey              | Capability                                              | Phase | Status                                                                           |
+| ----- | -------------------- | ------------------------------------------------------- | ----- | -------------------------------------------------------------------------------- |
+| **A** | J1 Stand up an agent | New-Agent Wizard                                        | P-2   | ❌ not started (onboarding bridge ✅)                                            |
+| **B** | J2 Tune schema       | Schema Studio                                           | P-4   | ❌ not started                                                                   |
+| **C** | J4 Find a regression | Impact Report ≥ 80% red/green on hand-labelled `player` | P-3   | 🟡 **long pole** — engine L1–L4a ✅; corpus capture + predicate + measurement ❌ |
+| **D** | J5 Debug a trace     | Trace Viewer                                            | P-3   | ❌ not started                                                                   |
+| **E** | J6 Observe live      | Live Trace + status bar                                 | P-5   | ❌ not started                                                                   |
+
+**Critical path now: close Gate C** — corpus capture (the agent-agnostic capture
+path; `player` is just the anchor set the gate is scored on) → predicate tuning →
+run the ≥ 80% validation. It is the only _tunable_ gate and §7's top risk.
+
+### Backlog (off the critical path — tagged, not a separate plan)
+
+Each item is a child of a gate/journey; **none is required to pass A–E**. Track
+tags: **depth** = how faithfully one replay side is realized (improves Gate C
+accuracy); **breadth** = how many things are compared at once (multiplies cells);
+**infra** = enabling plumbing.
+
+| Item                                                                      | Parent      | Track              | Precondition                        | Status                         |
+| ------------------------------------------------------------------------- | ----------- | ------------------ | ----------------------------------- | ------------------------------ |
+| Per-side fidelity matrix (which layers ran on each side + skip reasons)   | Gate C / J4 | depth              | —                                   | ✅ shipped (L4b Step 1)        |
+| "Sandbox A / Sandbox B" relabel of the A/B columns                        | Gate C / J4 | depth              | —                                   | optional cosmetic (L4b Step 2) |
+| **L4b** build-from-ref sandboxes (real compiled ref side)                 | Gate C / J4 | depth (P-7)        | Gate C banked                       | deferred flagged epic (Step 3) |
+| Multi-variant compare (Baseline vs N variants; bisect / first-divergence) | J4          | breadth — versions | Gate C banked; must preserve Gate C | post-MVP                       |
+| Multi-agent / multi-corpus replay (`code`, 684 utterances)                | J4          | breadth — agents   | Gate C banked                       | post-MVP (§2 exclude)          |
+| Active-sandbox selector + per-sandbox scoping                             | —           | infra              | single-sandbox E2E                  | P-7a                           |
+| Sandbox copy-on-write overlay (true sandbox-local A/B)                    | —           | infra              | P-7a                                | P-7b                           |
+
+Why depth and breadth are distinct dials on the same `replayCorpus` (F4.1)
+primitive: **depth** raises the fidelity of each compared _cell_ (and thus Gate C
+accuracy); the two **breadth** axes raise the _number_ of cells (versions ×
+agents). They compose and are independent. Detailed slice breakdowns live in the
+design docs ([the L4b sandbox-convergence plan](./replay-l4b-design.md) and
+[the multi-variant compare design](./impact-report-multi-variant-design.md)).
 
 ## The long pole
 
@@ -41,7 +90,7 @@ Impact Report) is **progressing but not yet closed**:
   builder, singleton-panel host, typed host↔webview protocol, browser-neutral
   replay view model) and the Impact Report webview are built and tested — the
   foundation Schema Studio, Wizard, Trace, and Live Trace will reuse.
-- **Replay has climbed the fidelity ladder to L2.** Beyond the original identity
+- **Replay has climbed the fidelity ladder to L4a.** Beyond the original identity
   resolver, replay now runs **static-grammar** matching, **schema-enriched
   grammar** matching (L1: the agent's grammar is enriched with checked-variable
   metadata from its action schema and matched through the real `GrammarStore`),
@@ -52,8 +101,12 @@ Impact Report) is **progressing but not yet closed**:
   a phantom hit). The construction cache is consulted for the **working tree
   only** (caches are runtime artifacts, never committed / never read at a git
   ref) and degrades cleanly to L1 when no live cache is found or it has gone
-  stale. Results are still indicative for grammar-resolved rows — **L3–L4**
-  (deterministic dispatch, build-from-git-ref two-version sandboxes) remain, and
+  stale. Two replay **modes** are now selectable in the Impact Report (grammar-only
+  vs. construction-cache), and an opt-in **live wildcard validation** pass (L4a)
+  runs the agent's real `validateWildcardMatch` over working-tree wildcard matches
+  (`timer`/`list`; fail-open + diagnostics). Results are still indicative for
+  grammar-resolved rows — **L4b** (build-from-git-ref two-version sandboxes)
+  remains and is **deferred to P-7** (post-Gate-C, per the implementation plan);
   there is no git-worktree build of two versions yet.
 - **No capture-to-corpus path.** `vscode-shell` depends on core but doesn't use
   it; without capture the Impact Report would have no real labelled corpus.
@@ -167,11 +220,17 @@ Ready to start (smallest → larger):
    Impact Report webview that drives `replayCorpus` over the service channel and
    renders the `ActionDelta[]` contract. The webview never opens a socket
    (webview → extension host → channel → agent runtime).
-3. **Player corpus capture** — wire `vscode-shell` request/feedback IDs into the
-   core corpus.
+3. **Corpus capture** — wire `vscode-shell` request/feedback IDs into the
+   core corpus. Agent-agnostic capture path (works for any agent); `player` is
+   simply the first corpus captured because Gate C is scored on it.
 4. **One real replay path** — one agent, one utterance, working tree vs. HEAD,
    real dispatch; validate the Impact Report `ActionDelta[]` contract (which the
-   agent's `ValidateChange` and the webview both consume).
+   agent's `ValidateChange` and the webview both consume). **Largely done:** the
+   grammar replay path (L1 schema-enriched, L2 construction-cache, two selectable
+   modes, L4a opt-in wildcard validation) is live and validated against the
+   contract. The remaining fidelity rung **L4b** (build-from-ref two-version
+   sandboxes) is **deferred to P-7** (post-Gate-C). **Live priority is now #3
+   (corpus capture) → Gate C measurement** — the headline acceptance bar.
 5. **Active-sandbox selector + per-sandbox scoping** (plan phase **P-7a**;
    sequenced **after** the single-sandbox E2E closes) — collisions and corpora are
    intrinsically per-sandbox (a collision is a function of the co-loaded agent

@@ -97,14 +97,12 @@ function spawnService(repoRoot: string): Promise<ServiceTarget | undefined> {
                 env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
             });
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.warn("[typeagent-studio] failed to spawn service:", err);
             settle(undefined);
             return;
         }
         child.unref();
         child.on("error", (err) => {
-            // eslint-disable-next-line no-console
             console.warn("[typeagent-studio] service spawn error:", err);
             settle(undefined);
         });

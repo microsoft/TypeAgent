@@ -375,7 +375,7 @@ export function parseParams<T extends ParameterDefinitions>(
             }
         }
     }
-    let nextArgs: string[] = [];
+    const nextArgs: string[] = [];
     if (argDefs !== undefined) {
         // Detect missing arguments
         if (argDefIndex !== argDefs.length) {

@@ -154,8 +154,8 @@ export function createMeasurementAgent(): AppAgent {
     }
 
     function measurementsToCsv(measures: Measurement[]) {
-        let csvHeader = "Type, When, Value, Units\n";
-        let rows = measures.map((m) => measurementToCsv(m)).join("\n");
+        const csvHeader = "Type, When, Value, Units\n";
+        const rows = measures.map((m) => measurementToCsv(m)).join("\n");
         return csvHeader + rows;
     }
 
@@ -211,8 +211,8 @@ async function createMeasurementTable(
     function get(filter: MeasurementFilter): Measurement[] {
         const sql = filterToSql(filter);
         const stmt = db.prepare(sql);
-        let rows = stmt.all();
-        let measurements: Measurement[] = [];
+        const rows = stmt.all();
+        const measurements: Measurement[] = [];
         for (const row of rows) {
             const mRow: MeasurementRow = row as MeasurementRow;
             measurements.push({

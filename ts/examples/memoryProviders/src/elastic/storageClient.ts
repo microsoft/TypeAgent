@@ -19,13 +19,13 @@ import { createTextIndex } from "./simplifiedTextIndex.js";
 export async function createStorageIndex(
     createNew: boolean,
 ): Promise<StorageProvider> {
-    let uri = process.env.ELASTIC_URI;
+    const uri = process.env.ELASTIC_URI;
 
     if (!uri) {
         throw new Error("ELASTIC_URI environment variable not set");
     }
 
-    let elasticClient = await createElasicClient(uri, createNew);
+    const elasticClient = await createElasicClient(uri, createNew);
 
     return {
         createObjectFolder: _createObjectFolder,

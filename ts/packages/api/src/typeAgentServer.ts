@@ -164,7 +164,7 @@ export class TypeAgentServer {
                 for (const blob of response.segment.blobItems) {
                     const blobClient = containerClient.getBlobClient(blob.name);
                     const filePath = path.join(getUserDataDir(), blob.name);
-                    let dir = path.dirname(filePath);
+                    const dir = path.dirname(filePath);
 
                     if (!fs.existsSync(dir)) {
                         fs.mkdirSync(dir, { recursive: true });

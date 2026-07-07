@@ -1,0 +1,29 @@
+<svg width="100%" viewBox="0 0 620 360" role="img" xmlns="http://www.w3.org/2000/svg">
+<style>text{font-family:"Anthropic Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}</style>
+<title>PDF interception and viewer flow</title>
+<desc>When the agent is connected, the content script's pdfInterceptor redirects a PDF link click to a custom typeagent-browser://pdfView URL, opening the PDF.js-based viewer that renders the document and supports highlights, annotations and knowledge extraction.</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="arrow-lg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+
+<g>
+<rect x="90" y="24" width="440" height="44" rx="8" fill="#444441" stroke="#B4B2A9" stroke-width="0.5"/>
+<text x="310.0" y="46.0" text-anchor="middle" dominant-baseline="central" fill="#D3D1C7" font-size="14" font-weight="500">PDF link click</text>
+</g>
+<line x1="310.0" y1="68" x2="310.0" y2="92" stroke="#9C9A92" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="380.0" y="80" text-anchor="middle" dominant-baseline="central" fill="#C2C0B6" font-size="11" font-weight="400">pdfInterceptor.ts</text>
+<g>
+<rect x="90" y="92" width="440" height="44" rx="8" fill="#3C3489" stroke="#AFA9EC" stroke-width="0.5"/>
+<text x="310.0" y="114.0" text-anchor="middle" dominant-baseline="central" fill="#CECBF6" font-size="14" font-weight="500">Redirect to typeagent-browser://pdfView?url=&lt;encoded&gt;</text>
+</g>
+<line x1="310.0" y1="136" x2="310.0" y2="160" stroke="#9C9A92" stroke-width="1.5" marker-end="url(#arrow)"/>
+<g>
+<rect x="90" y="160" width="440" height="150" rx="8" fill="#085041" stroke="#5DCAA5" stroke-width="0.5"/>
+<text x="104" y="182" text-anchor="start" dominant-baseline="central" fill="#9FE1CB" font-size="13" font-weight="500">PDF viewer (pdfView.html)</text>
+<text x="104" y="202" text-anchor="start" dominant-baseline="central" fill="#5DCAA5" font-size="12" font-weight="400">PDF.js rendering</text>
+<text x="104" y="220" text-anchor="start" dominant-baseline="central" fill="#5DCAA5" font-size="12" font-weight="400">Text selection -&gt; highlights</text>
+<text x="104" y="238" text-anchor="start" dominant-baseline="central" fill="#5DCAA5" font-size="12" font-weight="400">Annotation management</text>
+<text x="104" y="256" text-anchor="start" dominant-baseline="central" fill="#5DCAA5" font-size="12" font-weight="400">Knowledge extraction</text>
+</g>
+</svg>

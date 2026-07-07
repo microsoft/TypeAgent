@@ -107,6 +107,9 @@ body {
 .codicon-sync::before {
   content: "\ea77";
 }
+.codicon-settings-gear::before {
+  content: "\eb51";
+}
 
 /* --- Action bar (the native editor toolbar) ------------------------------ */
 .action-bar {
@@ -307,6 +310,164 @@ body {
   background: var(--vscode-button-hoverBackground);
 }
 
+/* A lit two-state toggle (e.g. the wildcard-validation switch) when active. */
+.tool-button.is-active {
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+  background: var(--vscode-inputOption-activeBackground);
+  border-color: var(--vscode-inputOption-activeBorder, transparent);
+}
+
+/* --- Replay-options popover + switches ----------------------------------- */
+.settings-group {
+  position: relative;
+}
+
+.settings-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 220px;
+  padding: 12px 14px;
+  background: var(
+    --vscode-editorWidget-background,
+    var(--vscode-menu-background)
+  );
+  color: var(--vscode-editorWidget-foreground, var(--vscode-menu-foreground));
+  border: 1px solid
+    var(
+      --vscode-editorWidget-border,
+      var(--vscode-menu-border, var(--vscode-widget-border))
+    );
+  border-radius: 4px;
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.switch-label {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 11px;
+  cursor: pointer;
+  background: var(--vscode-input-background, rgba(128, 128, 128, 0.25));
+  box-shadow: inset 0 0 0 1px
+    var(--vscode-checkbox-border, var(--vscode-input-border, transparent));
+  transition: background 0.15s ease;
+}
+
+.switch.is-on {
+  background: var(--vscode-button-background);
+  box-shadow: none;
+}
+
+.switch:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.switch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--vscode-input-foreground, #fff);
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+
+.switch.is-on .switch-knob {
+  transform: translateX(30px);
+  background: var(--vscode-button-foreground, #fff);
+}
+
+.switch-text {
+  position: absolute;
+  top: 0;
+  height: 22px;
+  line-height: 22px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.switch-on {
+  left: 8px;
+  color: var(--vscode-button-foreground, #fff);
+  opacity: 0;
+}
+
+.switch-off {
+  right: 7px;
+  color: var(--vscode-descriptionForeground);
+  opacity: 1;
+}
+
+.switch.is-on .switch-on {
+  opacity: 1;
+}
+
+.switch.is-on .switch-off {
+  opacity: 0;
+}
+
+/* A switch and its explanatory caption grouped as one popover item. */
+.switch-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Caption under the wildcard-validation switch: states whether the scoped agent
+   is replay-safe so the toggle's effect is clear before a run. */
+.switch-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 240px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--vscode-descriptionForeground);
+}
+
+.switch-note.is-caution {
+  color: var(
+    --vscode-notificationsWarningIcon-foreground,
+    var(--vscode-editorWarning-foreground)
+  );
+}
+
+.switch-note .codicon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 /* --- Sub-bar: provenance + run status ------------------------------------ */
 .sub-bar {
   display: flex;
@@ -348,6 +509,24 @@ body {
   text-overflow: ellipsis;
 }
 
+/* The wildcard-validation outcome of the last run; sits next to provenance.
+   Tinted by severity: a clean pass is neutral, a degraded/unavailable pass
+   warns so the report never silently claims a fidelity it didn't reach. */
+.validation-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  color: var(--vscode-descriptionForeground);
+}
+
+.validation-note.is-degraded {
+  color: var(
+    --vscode-editorWarning-foreground,
+    var(--vscode-descriptionForeground)
+  );
+}
+
 /* --- Inline notification (errors) ---------------------------------------- */
 .notification {
   display: flex;
@@ -373,6 +552,85 @@ body {
 .notification .codicon {
   color: var(--vscode-errorForeground);
   flex: 0 0 auto;
+}
+
+/* --- Per-side fidelity matrix -------------------------------------------- */
+.fidelity-panel {
+  margin: 8px 12px 0;
+}
+
+.fidelity-panel[hidden] {
+  display: none;
+}
+
+.fidelity-details {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: var(--ta-radius);
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  padding: 0 10px;
+}
+
+.fidelity-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 0;
+  cursor: pointer;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  user-select: none;
+}
+
+.fidelity-summary::-webkit-details-marker {
+  display: none;
+}
+
+.fidelity-grid {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 4px 14px;
+  padding: 4px 0 10px;
+  font-size: 12px;
+}
+
+.fidelity-head {
+  color: var(--vscode-descriptionForeground);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.fidelity-grid .fidelity-head:not(:first-child),
+.fidelity-grid .fidelity-cell {
+  justify-self: center;
+  text-align: center;
+}
+
+.fidelity-layer {
+  color: var(--vscode-foreground);
+}
+
+.fidelity-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.fidelity-cell.is-ran {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green, #3fb950));
+}
+
+.fidelity-cell.is-skipped {
+  color: var(--vscode-descriptionForeground);
+}
+
+.fidelity-cell.is-unavailable {
+  color: var(
+    --vscode-editorWarning-foreground,
+    var(--vscode-descriptionForeground)
+  );
 }
 
 /* --- Scrolling content area ---------------------------------------------- */

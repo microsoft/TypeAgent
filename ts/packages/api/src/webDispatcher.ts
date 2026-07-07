@@ -93,7 +93,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         // TODO: expose executeAction so we can call that directly instead of running it through a command
         // TODO: bubble back any action results along with the command result
 
-        var paramStr =
+        const paramStr =
             action.parameters && Object.keys(action.parameters).length
                 ? `--parameters '${JSON.stringify(action.parameters).replaceAll("'", "\\'")}'`
                 : "";
