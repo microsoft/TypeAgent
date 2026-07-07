@@ -241,51 +241,7 @@ graph TB
 
 **Detailed component layout:**
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      TypeAgent Dispatcher                           │
-│                      (Node.js process)                              │
-│  ┌───────────────────────────────────────────────────────────────┐  │
-│  │  Browser Agent (browserActionHandler.mts)                     │  │
-│  │  ├─ Action router: executeBrowserAction()                     │  │
-│  │  ├─ AgentWebSocketServer (port 8081)                          │  │
-│  │  ├─ ExternalBrowserClient (RPC proxy to extension)            │  │
-│  │  ├─ Knowledge subsystem (extraction, indexing, search)        │  │
-│  │  ├─ WebFlow store (recording, generation, execution)          │  │
-│  │  └─ Discovery subsystem (page analysis, dynamic agents)       │  │
-│  └───────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │ WebSocket (port 8081)
-                               │ Channel-multiplexed RPC
-                ┌──────────────┴──────────────┐
-                │                             │
-┌───────────────▼───────────────┐  ┌──────────▼──────────────────────┐
-│  Chrome Extension             │  │  Electron Shell                  │
-│  (service worker process)     │  │  (main process)                  │
-│  ┌─────────────────────────┐  │  │  ┌──────────────────────────┐   │
-│  │ WebSocket client        │  │  │  │ BrowserViewManager       │   │
-│  │ ExternalBrowserServer   │  │  │  │ BrowserAgentIpc          │   │
-│  │ RPC handler pool (100+) │  │  │  │ InlineBrowserControl     │   │
-│  │ Tab/recording manager   │  │  │  │ CDP fingerprint masking  │   │
-│  └────────────┬────────────┘  │  │  └──────────┬───────────────┘   │
-│               │               │  │             │                    │
-│  ┌────────────▼────────────┐  │  │  ┌──────────▼───────────────┐   │
-│  │ Content Scripts         │  │  │  │ WebContentsView tabs     │   │
-│  │ (per-tab, per-frame)    │  │  │  │ (per-tab renderer)       │   │
-│  │ ├─ DOM interaction      │  │  │  │ ├─ Content scripts       │   │
-│  │ ├─ Recording capture    │  │  │  │ ├─ WebAgent instances    │   │
-│  │ ├─ Schema extraction    │  │  │  │ └─ Site agent activation │   │
-│  │ ├─ Auto-indexing        │  │  │  └──────────────────────────┘   │
-│  │ └─ WebAgent runtime     │  │  └─────────────────────────────────┘
-│  └─────────────────────────┘  │
-│                               │
-│  Side Panel UI                │
-│  ├─ Chat interface            │
-│  ├─ Knowledge library         │
-│  ├─ Macros library            │
-│  └─ Graph visualizations      │
-└───────────────────────────────┘
-```
+![Browser agent component layout](../images/browser_component_layout.svg)
 
 ### Process model
 
@@ -616,33 +572,7 @@ ephemeral in-memory maps to permanent file system storage. Understanding
 where state lives is critical for debugging — a stale cache in one tier
 can cause confusing behavior in another.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Tier 1: In-Memory (ephemeral, lost on process restart)         │
-│  ├─ Agent process: extraction cache, retry counters, RPC maps   │
-│  ├─ Service worker: RPC map, navigation dedup, callbacks        │
-│  ├─ Content script: recording state, DOM element IDs            │
-│  └─ Electron: BrowserViewManager tab map                        │
-├─────────────────────────────────────────────────────────────────┤
-│  Tier 2: Chrome Storage Session (survives SW restart, not       │
-│          browser restart)                                       │
-│  └─ Recording state: actions, HTML, screenshots, index          │
-├─────────────────────────────────────────────────────────────────┤
-│  Tier 3: Chrome Storage Sync/Local (permanent, synced across    │
-│          devices for sync)                                      │
-│  └─ Settings: websocketHost, autoIndexing, extractionMode       │
-│  └─ Search history                                              │
-├─────────────────────────────────────────────────────────────────┤
-│  Tier 4: File System — User Data (~/.typeagent/)                │
-│  ├─ Knowledge index: entity/topic graphs, website collection    │
-│  ├─ WebFlow store: flow definitions, scripts, registry index    │
-│  ├─ Shell settings: window state, user preferences              │
-│  └─ PDF storage: annotations, URL mappings                      │
-├─────────────────────────────────────────────────────────────────┤
-│  Tier 5: File System — Instance Storage (agent context)         │
-│  └─ Per-agent session data managed via agent SDK                │
-└─────────────────────────────────────────────────────────────────┘
-```
+![Browser agent state and storage tiers](../images/browser_state_storage_tiers.svg)
 
 ### Key in-memory state (Tier 1)
 
@@ -737,20 +667,7 @@ page variations and make decisions in real-time.
 
 **Architecture:**
 
-```
-User goal: "Find the cheapest flight from Seattle to NYC next week"
-    ↓
-BrowserReasoningAgent (Anthropic Claude SDK)
-    ↓ Iterative reasoning loop
-┌─────────────────────────────────────────────┐
-│  1. Observe current page state (HTML/screenshot)
-│  2. Reason about next action to achieve goal
-│  3. Execute action via WebFlowBrowserAPI
-│  4. Check if goal achieved or continue
-└─────────────────────────────────────────────┘
-    ↓
-BrowserReasoningTrace (recorded steps for debugging/replay)
-```
+![BrowserReasoningAgent iterative reasoning loop](../images/browser_reasoning_loop.svg)
 
 **Key components:**
 | File | Purpose |
