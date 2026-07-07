@@ -554,14 +554,20 @@ function spawnAgentServer(
             } else {
                 const pwsh7 = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
                 const psExe = fs.existsSync(pwsh7) ? pwsh7 : "powershell.exe";
-                // Single-quote and double any internal single quotes so a
-                // path containing quotes or PowerShell metacharacters can't
-                // break out of the -Command string. port/idleTimeout are
-                // numeric so they need no escaping.
-                const psQuote = (s: string) =>
-                    "'" + s.replace(/'/g, "''") + "'";
-                const psCommand = `& node ${psQuote(serverPath)} --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
-                const psArgs = ["-NoExit", "-Command", psCommand];
+                // Pass serverPath to the child through the environment rather
+                // than the command line so it never reaches cmd.exe or the
+                // PowerShell parser as text. The command itself is a constant
+                // that reads $env:TYPEAGENT_SERVER_PATH, and it is handed to
+                // PowerShell as a base64 -EncodedCommand blob, whose alphabet
+                // is inert to both cmd.exe and PowerShell.
+                const psCommand =
+                    `& node $env:TYPEAGENT_SERVER_PATH --port ${port}` +
+                    (idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : "");
+                const encodedCommand = Buffer.from(
+                    psCommand,
+                    "utf16le",
+                ).toString("base64");
+                const psArgs = ["-NoExit", "-EncodedCommand", encodedCommand];
                 // The first quoted argument to `start` is the new window's
                 // title. It MUST be non-empty: an empty title leaves the
                 // console window title blank, which trips a libuv bug on
@@ -576,6 +582,10 @@ function spawnAgentServer(
                     {
                         detached: true,
                         stdio: "ignore",
+                        env: {
+                            ...process.env,
+                            TYPEAGENT_SERVER_PATH: serverPath,
+                        },
                     },
                 );
                 child.unref();
