@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import path from "path";
-import { ChatModel, openai } from "@typeagent/aiclient";
+import {
+    ChatModel,
+    openai,
+    tryCreateEmbeddingModel,
+} from "@typeagent/aiclient";
 import {
     ObjectFolderSettings,
     SearchOptions,
@@ -406,16 +410,17 @@ export async function createConversationManager(
         if (existingConversation) {
             return existingConversation.settings;
         }
-        const embeddingModel = createEmbeddingCache(
-            openai.createEmbeddingModel(),
-            64,
-        );
+        const innerModel = tryCreateEmbeddingModel();
+        const embeddingModel =
+            innerModel === undefined
+                ? undefined
+                : createEmbeddingCache(innerModel, 64);
         return {
             indexSettings: {
                 caseSensitive: false,
                 concurrency: 2,
                 embeddingModel,
-                semanticIndex: true,
+                semanticIndex: embeddingModel !== undefined,
             },
         };
     }

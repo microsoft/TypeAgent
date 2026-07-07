@@ -783,8 +783,8 @@ Interfaces land in `agent-dispatcher` core; the feed/npm/Azure **implementation*
 
 ### Final-gate outcome
 
-> Review r1/r2 + test-gap r1/r2 complete. One MAJOR fixed — `catalogSource.find` now fails fast on an
+> Review r1/r2 + test-gap r1/r2 complete. One MAJOR fixed - `catalogSource.find` now fails fast on an
 > entry with neither `path` nor `name` (§4.2/Q17) instead of persisting a handle-less record. Added a
 > registry reload round-trip test (sources + order survive a restart), a catalog malformed-entry test,
 > and an `order()`-drops-on-remove assertion. Full build green, `defaultAgentProvider` suite 3844
-> passing, policy checks green. See [DEFERRED_REVIEW_LOG.md](./DEFERRED_REVIEW_LOG.md).
+> passing, policy checks green. Remaining feed-materialize coverage follow-up: microsoft/TypeAgent#2614.

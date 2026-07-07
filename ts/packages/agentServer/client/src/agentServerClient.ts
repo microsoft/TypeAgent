@@ -562,9 +562,17 @@ function spawnAgentServer(
                     "'" + s.replace(/'/g, "''") + "'";
                 const psCommand = `& node ${psQuote(serverPath)} --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
                 const psArgs = ["-NoExit", "-Command", psCommand];
+                // The first quoted argument to `start` is the new window's
+                // title. It MUST be non-empty: an empty title leaves the
+                // console window title blank, which trips a libuv bug on
+                // Windows — GetConsoleTitleW returns 0 with GetLastError()==0,
+                // libuv reads that as success but leaves process_title NULL,
+                // and the next process.title read aborts with
+                // "Assertion failed: process_title, file src\\win\\util.c".
+                const windowTitle = `TypeAgent Server (port ${port})`;
                 const child = spawn(
                     "cmd.exe",
-                    ["/c", "start", "", psExe, ...psArgs],
+                    ["/c", "start", windowTitle, psExe, ...psArgs],
                     {
                         detached: true,
                         stdio: "ignore",

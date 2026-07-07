@@ -2,9 +2,8 @@
 
 > **Status: Implemented.** Shipped across Milestones 1–5. See the _Implementation reference_
 > appendix below for the file map and test coverage (migrated from the retired execution plan).
-> Resolves the open item "request-slip in the update absence window" in
-> [DEFERRED_REVIEW_LOG.md](./DEFERRED_REVIEW_LOG.md) and supersedes the disruptive
-> global drain-then-add previously described in [DESIGN.md](./DESIGN.md) §7.2.
+> Resolves the open item "request-slip in the update absence window" and supersedes
+> the disruptive global drain-then-add previously described in [DESIGN.md](./DESIGN.md) §7.2.
 > Update/uninstall now run through a single per-dispatcher `commandLock`-held
 > critical section coordinated by a source-side barrier, made cancelable and
 > time-bounded with rollback to `v1`.

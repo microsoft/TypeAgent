@@ -149,6 +149,35 @@ export function ensureCommandResult(
     return context.commandResult;
 }
 
+/** Progress update emitted once per session during a Copilot import. */
+export type CopilotImportProgress = {
+    /** 1-based index of the session currently being processed. */
+    current: number;
+    /** Total sessions being processed in this run. */
+    total: number;
+    /** Display name of the session currently being processed. */
+    name: string;
+};
+
+/** Summary returned when a Copilot import completes. */
+export type CopilotImportSummary = {
+    total: number;
+    imported: number;
+    skipped: number;
+    /** Existing mirrors whose name was reconciled to the current VS Code title. */
+    renamed: number;
+    failed: number;
+};
+
+/**
+ * Host capability that imports GitHub Copilot Chat sessions as conversation
+ * mirrors, invoking `onProgress` once per session so the caller can stream
+ * status to the user.
+ */
+export type CopilotImporter = (
+    onProgress?: (progress: CopilotImportProgress) => void,
+) => Promise<CopilotImportSummary>;
+
 // Command Handler Context definition.
 export type CommandHandlerContext = {
     readonly agents: AppAgentManager;
@@ -176,6 +205,22 @@ export type CommandHandlerContext = {
     activityContext?: ActivityContext | undefined;
     conversationManager?: Conversation.ConversationManager | undefined;
     conversationMemory?: ConversationMemory | undefined;
+    /**
+     * Host-provided enumeration of sibling conversations (id + name), used to
+     * offer `@conversation switch/rename/delete` name completions. Undefined
+     * for standalone hosts that don't manage multiple conversations.
+     */
+    readonly getConversationList?:
+        | (() => { conversationId: string; name: string }[])
+        | undefined;
+    /**
+     * Host-provided capability to import GitHub Copilot Chat sessions as
+     * conversation mirrors, streaming per-session progress. Injected by the
+     * agent-server (which owns the ConversationManager + session-store
+     * reader); undefined for hosts that can't import (e.g. standalone local
+     * mode).
+     */
+    readonly copilotImport?: CopilotImporter | undefined;
     // Per activation configs
     developerMode?: boolean;
     explanationAsynchronousMode: boolean;
@@ -367,6 +412,24 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
         actionResultEntityStorage?: boolean;
         actionResultKnowledgeExtraction?: boolean;
     };
+
+    /**
+     * Optional callback letting the host (e.g. agentServer's
+     * ConversationManager) expose the set of sibling conversations to the
+     * dispatcher — used to offer name completions for `@conversation
+     * switch/rename/delete`. Omitted by standalone hosts that have a single
+     * conversation.
+     */
+    getConversationList?:
+        | (() => { conversationId: string; name: string }[])
+        | undefined;
+
+    /**
+     * Optional capability letting the host import GitHub Copilot Chat sessions
+     * as conversation mirrors, streaming per-session progress. Injected by the
+     * agent-server; omitted by hosts without a ConversationManager.
+     */
+    copilotImport?: CopilotImporter | undefined;
 };
 
 async function getSession(
@@ -923,6 +986,8 @@ export async function initializeCommandHandlerContext(
             explanationAsynchronousMode,
             dblogging: options?.dblogging ?? true,
             clientIO,
+            getConversationList: options?.getConversationList,
+            copilotImport: options?.copilotImport,
 
             // Runtime context
             commandLock: createLimiter(1), // Make sure we process one command at a time.

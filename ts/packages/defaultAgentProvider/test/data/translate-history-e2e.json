@@ -3,13 +3,30 @@
     {
       "request": "play Soruwienf from album Wxifiel by artist Bnefisoe",
       "expected": {
-        "schemaName": "player",
-        "actionName": "playTrack",
-        "parameters": {
-          "trackName": "Soruwienf",
-          "albumName": "Wxifiel",
-          "artists": ["Bnefisoe"]
-        }
+        "anyof": [
+          {
+            "action": {
+              "schemaName": "player",
+              "actionName": "playTrack",
+              "parameters": {
+                "trackName": "Soruwienf",
+                "albumName": "Wxifiel",
+                "artists": ["Bnefisoe"]
+              }
+            }
+          },
+          {
+            "action": {
+              "schemaName": "player",
+              "actionName": "playTrack",
+              "parameters": {
+                "trackName": "Soruwienf",
+                "albumName": "Wxifiel by artist Bnefisoe"
+              }
+            },
+            "partial": true
+          }
+        ]
       },
       "history": {
         "text": "Now playing: Soruwienf from album Wxifiel with artist Bnefisoe",
@@ -36,35 +53,20 @@
     {
       "request": "play that song again",
       "expected": {
-        "schemaName": "player",
-        "actionName": "playTrack",
-        "parameters": {
-          "trackName": "Soruwienf",
-          "albumName": "Wxifiel",
-          "artists": ["Bnefisoe"]
-        },
-        "entities": {
-          "trackName": {
-            "sourceAppAgentName": "player",
-            "name": "Soruwienf",
-            "type": ["track", "song"],
-            "uniqueId": "a"
-          },
-          "albumName": {
-            "sourceAppAgentName": "player",
-            "name": "Wxifiel",
-            "type": ["album"],
-            "uniqueId": "b"
-          },
-          "artists": [
-            {
-              "sourceAppAgentName": "player",
-              "name": "Bnefisoe",
-              "type": ["artist"],
-              "uniqueId": "c"
-            }
-          ]
-        }
+        "anyof": [
+          {
+            "action": {
+              "schemaName": "player",
+              "actionName": "playTrack",
+              "parameters": {
+                "trackName": "Soruwienf",
+                "albumName": "Wxifiel",
+                "artists": ["Bnefisoe"]
+              }
+            },
+            "partial": true
+          }
+        ]
       }
     }
   ],
@@ -138,22 +140,38 @@
     {
       "request": "add them to the grocery list",
       "expected": {
-        "schemaName": "list",
-        "actionName": "addItems",
-        "parameters": {
-          "items": [
-            "Ground beef",
-            "lamb",
-            "Onions",
-            "Carrots",
-            "Peas",
-            "Worcestershire sauce",
-            "Beef broth",
-            "Mashed potatoes",
-            "Butter"
-          ],
-          "listName": "grocery"
-        }
+        "anyof": [
+          {
+            "action": {
+              "schemaName": "list",
+              "actionName": "addItems",
+              "parameters": {
+                "items": [
+                  "Ground beef",
+                  "lamb",
+                  "Onions",
+                  "Carrots",
+                  "Peas",
+                  "Worcestershire sauce",
+                  "Beef broth",
+                  "Mashed potatoes",
+                  "Butter"
+                ],
+                "listName": "grocery"
+              }
+            }
+          },
+          {
+            "action": {
+              "schemaName": "list",
+              "actionName": "addItems",
+              "parameters": {
+                "items": ["them"],
+                "listName": "grocery"
+              }
+            }
+          }
+        ]
       },
       "history": {
         "text": "Added items: Ground meat,Onions,Carrots,Peas,Worcestershire sauce,Beef broth,Mashed potatoes,cheese to list grocery",

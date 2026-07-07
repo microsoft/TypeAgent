@@ -107,7 +107,10 @@ export class DocMemory
         tags?: string[],
     ) {
         settings ??= createDocMemorySettings();
-        if (!settings.embeddingModel.getPersistentCache) {
+        if (
+            settings.embeddingModel !== undefined &&
+            !settings.embeddingModel.getPersistentCache
+        ) {
             settings.embeddingModel.getPersistentCache = () =>
                 this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
         }

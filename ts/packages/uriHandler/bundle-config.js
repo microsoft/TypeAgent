@@ -39,6 +39,12 @@ const require = createRequire(import.meta.url);
         "https",
         "zlib",
         "buffer",
+        // Optional local-embedding native stack. Loaded lazily via dynamic
+        // import only when the embedding provider is "local"; keep it out of
+        // the bundle so esbuild never tries to load onnxruntime's .node files.
+        "@huggingface/transformers",
+        "onnxruntime-node",
+        "sharp",
     ],
 };
 

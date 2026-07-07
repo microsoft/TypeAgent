@@ -553,9 +553,9 @@ hosts`; fan out `removeProvider(P)`. Each host's ack drops it from `pending`;
   > This has been **superseded**: update (and uninstall) now run through a single
   > `commandLock`-held critical section per dispatcher, coordinated by a
   > source-side barrier and made time-bounded with rollback to `v1` on a quiesce
-  > timeout (user-facing cancel is a deferred extension — see §5.3).
+  > timeout (user-facing cancel is a deferred extension - see §5.3).
   > See [UPDATE_COORDINATION.md](./UPDATE_COORDINATION.md) (Implemented) and the
-  > resolved item in DEFERRED_REVIEW_LOG.md.
+  > follow-up smoke-test coverage tracked in microsoft/TypeAgent#2613.
 - **name reuse during `removing`:** a new user `@package install` **or**
   `@package update` on a name that is still `removing` is **rejected** with a
   clear "still being removed, retry shortly" error. `then` is used only for the
