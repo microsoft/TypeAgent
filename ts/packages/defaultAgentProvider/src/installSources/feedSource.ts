@@ -91,6 +91,30 @@ export function isSafeVersionRange(range: string): boolean {
     return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(range);
 }
 
+// Mirrors npm package.json `os` semantics: omitted means compatible, `linux`
+// style entries allow only those platforms, and `!win32` style entries deny.
+// @internal Exported for focused tests; runtime use is inside this module.
+export function isCompatiblePlatform(
+    packageOs: unknown,
+    platform: NodeJS.Platform = process.platform,
+): boolean {
+    if (packageOs === undefined) {
+        return true;
+    }
+    const osEntries = Array.isArray(packageOs) ? packageOs : [packageOs];
+    const values = osEntries.filter(
+        (entry): entry is string => typeof entry === "string",
+    );
+    if (values.length === 0) {
+        return true;
+    }
+    if (values.includes(`!${platform}`)) {
+        return false;
+    }
+    const allowed = values.filter((entry) => !entry.startsWith("!"));
+    return allowed.length === 0 || allowed.includes(platform);
+}
+
 // Sanitize an arbitrary label (dispatcher name / module name / source name)
 // into a filesystem-safe directory-name component so it can never escape the
 // install root or a cache filename.
@@ -333,6 +357,27 @@ function resolveConcreteVersion(
     return undefined;
 }
 
+function packageManifestForVersion(packument: any, version: string): any {
+    const versions =
+        packument && typeof packument.versions === "object"
+            ? packument.versions
+            : undefined;
+    const manifest = versions?.[version];
+    return manifest && typeof manifest === "object" ? manifest : undefined;
+}
+
+function hasAgentKeywordForVersion(packument: any, version: string): boolean {
+    const keywords: unknown = packageManifestForVersion(
+        packument,
+        version,
+    )?.keywords;
+    return Array.isArray(keywords) && keywords.includes(AGENT_KEYWORD);
+}
+
+function packageOsForVersion(packument: any, version: string): unknown {
+    return packageManifestForVersion(packument, version)?.os;
+}
+
 // Full enumeration: scoped package list narrowed to packages carrying the
 // agent keyword.
 // @internal Exported for focused tests; runtime use is inside this module.
@@ -472,6 +517,20 @@ export function createFeedSource(
                 );
                 if (packument !== undefined) {
                     version = resolveConcreteVersion(ref, packument);
+                    if (
+                        version !== undefined &&
+                        !hasAgentKeywordForVersion(packument, version)
+                    ) {
+                        return undefined;
+                    }
+                    if (
+                        version !== undefined &&
+                        !isCompatiblePlatform(
+                            packageOsForVersion(packument, version),
+                        )
+                    ) {
+                        return undefined;
+                    }
                 }
             } catch {
                 // offline / auth failure -> leave version unresolved

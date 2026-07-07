@@ -7,6 +7,7 @@ import path from "node:path";
 import {
     createFeedSource,
     enumerateFeedAgents,
+    isCompatiblePlatform,
     isConcreteVersion,
     isSafeModuleName,
     isSafeVersionRange,
@@ -59,7 +60,11 @@ function fakeFetch(opts: {
         const keywords = opts.keywords[decoded] ?? [];
         return okJson({
             keywords,
-            versions: { "1.0.0": {}, "1.4.0": {}, "2.0.0": {} },
+            versions: {
+                "1.0.0": { keywords },
+                "1.4.0": { keywords },
+                "2.0.0": { keywords },
+            },
             "dist-tags": { latest: "2.0.0" },
         });
     }) as unknown as typeof fetch;
@@ -78,16 +83,22 @@ function packumentFetch(opts?: {
     versions?: string[];
     distTags?: Record<string, string>;
     keywords?: string[];
+    versionKeywords?: Record<string, string[]>;
+    os?: Record<string, unknown>;
 }): typeof fetch {
     const versions = opts?.versions ?? ["1.0.0", "2.0.0"];
+    const keywords = opts?.keywords ?? ["typeagent-agent"];
     const versionsMap: Record<string, unknown> = {};
     for (const v of versions) {
-        versionsMap[v] = { version: v };
+        versionsMap[v] = {
+            version: v,
+            keywords: opts?.versionKeywords?.[v] ?? keywords,
+            os: opts?.os?.[v],
+        };
     }
     const distTags =
         opts?.distTags ??
         (versions.length > 0 ? { latest: versions[versions.length - 1] } : {});
-    const keywords = opts?.keywords ?? ["typeagent-agent"];
     return (async () =>
         okJson({
             keywords,
@@ -133,6 +144,20 @@ describe("moduleNameFromSpec", () => {
     });
     it("strips a version from an unscoped spec", () => {
         expect(moduleNameFromSpec("foo@^1")).toBe("foo");
+    });
+});
+
+describe("isCompatiblePlatform", () => {
+    it("treats missing or malformed os metadata as compatible", () => {
+        expect(isCompatiblePlatform(undefined, "linux")).toBe(true);
+        expect(isCompatiblePlatform(123, "linux")).toBe(true);
+    });
+
+    it("honors npm-style os allow and deny entries", () => {
+        expect(isCompatiblePlatform(["linux", "darwin"], "linux")).toBe(true);
+        expect(isCompatiblePlatform(["darwin"], "linux")).toBe(false);
+        expect(isCompatiblePlatform(["!win32"], "linux")).toBe(true);
+        expect(isCompatiblePlatform(["!win32"], "win32")).toBe(false);
     });
 });
 
@@ -260,6 +285,57 @@ describe("feedSource.find", () => {
         });
         // No cache + REST error => feed is skipped (non-match), not a failure.
         expect(await source.find("@typeagent/anything")).toBeUndefined();
+    });
+
+    it("returns undefined when the resolved version lacks the agent keyword", async () => {
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        const cacheFilePath = path.join(installDir, "cache.json");
+        fs.writeFileSync(
+            cacheFilePath,
+            JSON.stringify({
+                fetchedAt: 1000,
+                packages: ["@typeagent/foo-agent"],
+            }),
+        );
+        const source = createFeedSource(CONFIG, {
+            installDir,
+            cacheFilePath,
+            now: () => 1000,
+            tokenRunner: goodToken,
+            fetchFn: packumentFetch({
+                versions: ["1.0.0", "2.0.0"],
+                distTags: { latest: "2.0.0" },
+                keywords: ["typeagent-agent"],
+                versionKeywords: { "2.0.0": ["library"] },
+            }),
+        });
+
+        expect(await source.find("@typeagent/foo-agent")).toBeUndefined();
+    });
+
+    it("returns undefined when the resolved version excludes the current OS", async () => {
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        const cacheFilePath = path.join(installDir, "cache.json");
+        fs.writeFileSync(
+            cacheFilePath,
+            JSON.stringify({
+                fetchedAt: 1000,
+                packages: ["@typeagent/foo-agent"],
+            }),
+        );
+        const source = createFeedSource(CONFIG, {
+            installDir,
+            cacheFilePath,
+            now: () => 1000,
+            tokenRunner: goodToken,
+            fetchFn: packumentFetch({
+                versions: ["1.0.0", "2.0.0"],
+                distTags: { latest: "2.0.0" },
+                os: { "2.0.0": [`!${process.platform}`] },
+            }),
+        });
+
+        expect(await source.find("@typeagent/foo-agent")).toBeUndefined();
     });
 });
 
