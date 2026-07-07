@@ -208,15 +208,7 @@ flowchart LR
 
 **Component layout:**
 
-```
-┌──────────────────────┐     ┌──────────────────────┐
-│  Content Script       │     │  Browser Agent        │
-│  ├─ Auto-indexing     │────▶│  ├─ Knowledge handler │
-│  ├─ HTML capture      │     │  ├─ website-memory    │
-│  └─ Text extraction   │     │  ├─ AI model (GPT-4o) │
-│                       │     │  └─ Knowledge index   │
-└──────────────────────┘     └──────────────────────┘
-```
+![Knowledge extraction component layout](../images/browser_knowledge_extraction_layout.svg)
 
 ### Extraction pipeline
 
@@ -360,18 +352,7 @@ flowchart TB
 
 **Component layout:**
 
-```
-┌────────────────────────┐    ┌───────────────────────────┐
-│  Content Script         │    │  Browser Agent             │
-│  recording/             │    │  webFlows/                 │
-│  ├─ actions.ts          │    │  ├─ recordingNormalizer    │
-│  ├─ capture.ts          │    │  ├─ scriptGenerator        │
-│  └─ index.ts            │    │  ├─ scriptValidator        │
-│                         │    │  ├─ scriptExecutor         │
-│  (captures DOM events)  │───▶│  ├─ grammarGenerator       │
-│                         │    │  └─ webFlowStore            │
-└────────────────────────┘    └───────────────────────────┘
-```
+![WebFlow recording component layout](../images/browser_webflow_recording_layout.svg)
 
 ### Recording system
 
@@ -552,15 +533,7 @@ interactions and register them as actions.
 
 ### Architecture
 
-```
-┌──────────────────────┐     ┌──────────────────────────┐
-│  Content Script       │     │  Browser Agent             │
-│  ├─ HTML capture      │────▶│  discovery/                │
-│  └─ Screenshot        │     │  ├─ translator.mts (LLM)   │
-│                       │     │  ├─ actionHandler.mts       │
-│                       │     │  └─ schema/ (action types)  │
-└──────────────────────┘     └──────────────────────────┘
-```
+![Action discovery component layout](../images/browser_action_discovery_layout.svg)
 
 ### Detection process
 
@@ -753,17 +726,7 @@ capabilities and knowledge integration.
 
 For detailed architecture, see `browserPdf.md`.
 
-```
-PDF Link Click
-    ↓ pdfInterceptor.ts
-Redirect to typeagent-browser://pdfView?url=<encoded>
-    ↓
-PDF Viewer (pdfView.html)
-    ├─ PDF.js rendering
-    ├─ Text selection → Highlights
-    ├─ Annotation management
-    └─ Knowledge extraction
-```
+![PDF interception and viewer flow](../images/browser_pdf_interception_flow.svg)
 
 ### PDF interception
 
@@ -844,50 +807,7 @@ query intent, rank results, and generate enhanced answers with follow-ups.
 
 ### Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  User Query: "What did I read about climate change?"                 │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  QueryAnalyzer (queryAnalyzer.mts)                                   │
-│  ├─ Intent detection (find_latest, summarize, find_specific, etc.)  │
-│  └─ Query decomposition (entities, topics, temporal filters)        │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  Search Strategies (searchWebMemories.mts)                           │
-│  ├─ Keyword search — Full-text matching                              │
-│  ├─ Entity search — Find pages mentioning specific entities          │
-│  ├─ Topic search — Find pages classified under topics                │
-│  └─ Hybrid search — Combines all strategies for best recall          │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  MetadataRanker (metadataRanker.mts)                                 │
-│  └─ Ranks by relevance (high), recency (medium), quality (medium)   │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  ContextBuilder (contextBuilder.mts)                                 │
-│  └─ Builds SearchContext: dominant domains, time range, top topics  │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  AnswerGenerator (answerGenerator.mts)                               │
-│  └─ Single LLM call via TypeChat → AnswerEnhancement                │
-└───────────────────────────────────┬─────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  ActionResult: summary + source links + follow-up suggestions        │
-└─────────────────────────────────────────────────────────────────────┘
-```
+![Search and answer generation pipeline](../images/browser_search_answer_pipeline.svg)
 
 ### Query intent detection
 

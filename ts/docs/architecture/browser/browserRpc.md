@@ -14,21 +14,7 @@ transports. The `@typeagent/agent-rpc` package provides the foundation:
 channel multiplexing over a shared transport, typed request-response RPC,
 and fire-and-forget messaging.
 
-```
-┌─────────────┐  WebSocket   ┌──────────────┐  chrome.tabs   ┌──────────────┐
-│ Browser     │◄────────────▶│  Extension    │  .sendMessage  │  Content     │
-│ Agent       │  (port 8081) │  Service      │◄──────────────▶│  Script     │
-│ (Node.js)  │              │  Worker       │  (per-tab)     │  (per-tab)  │
-└──────┬──────┘              └──────────────┘               └──────────────┘
-       │
-       │  WebSocket (port 8081)
-       │
-┌──────▼──────┐  IPC          ┌──────────────┐
-│ Electron    │  (ipcMain/    │  WebContents  │
-│ Main        │  ipcRenderer) │  (per-tab)    │
-│ Process     │◄─────────────▶│              │
-└─────────────┘               └──────────────┘
-```
+![Browser agent processes and transports](../images/browser_process_transport_overview.svg)
 
 ---
 
@@ -496,33 +482,22 @@ regardless of which backend is active.
 
 ### Extension WebSocket connection
 
-```
-┌─────────────┐                    ┌─────────────────┐
-│  Extension   │                    │  Agent Server    │
-│  (SW)        │                    │  (port 8081)     │
-└──────┬───────┘                    └────────┬────────┘
-       │                                      │
-       │──── WebSocket CONNECT ──────────────▶│
-       │     ?channel=browser&role=client      │
-       │     &clientId=<extensionId>          │
-       │                                      │
-       │◀─── welcome { connected: true } ─────│
-       │                                      │
-       │──── Channel setup ──────────────────▶│
-       │     browserControl channel            │
-       │     agentService channel              │
-       │                                      │
-       │◀──▶ RPC messages (multiplexed) ◀────▶│
-       │                                      │
-       │──── keepAlive (every 20s) ──────────▶│
-       │                                      │
-       │◀─── WebSocket CLOSE ─────────────────│
-       │     reason: "duplicate" → no retry   │
-       │     other → reconnect (5s interval)  │
-       │                                      │
-       │──── Reconnect attempt ──────────────▶│
-       │     (repeat until success)           │
-       └──────────────────────────────────────┘
+```mermaid
+sequenceDiagram
+    participant SW as Extension (SW)
+    participant AS as Agent Server (:8081)
+
+    SW->>AS: WebSocket CONNECT<br/>?channel=browser&role=client&clientId=<extensionId>
+    AS-->>SW: welcome { connected: true }
+    SW->>AS: Channel setup (browserControl, agentService)
+    loop While connected
+        SW-->>AS: RPC messages (multiplexed)
+        AS-->>SW: RPC messages (multiplexed)
+        SW->>AS: keepAlive (every 20s)
+    end
+    AS-->>SW: WebSocket CLOSE
+    Note over SW: reason "duplicate" → no retry<br/>other → reconnect (5s interval)
+    SW->>AS: Reconnect attempt (repeat until success)
 ```
 
 ### State management

@@ -1,0 +1,33 @@
+<svg width="100%" viewBox="0 0 640 420" role="img" xmlns="http://www.w3.org/2000/svg">
+<style>text{font-family:"Anthropic Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}</style>
+<title>BrowserReasoningAgent iterative reasoning loop</title>
+<desc>A user goal drives the BrowserReasoningAgent, which runs an iterative loop that observes page state, reasons about the next action, executes it via the WebFlow browser API and checks whether the goal is achieved, recording each step in a BrowserReasoningTrace.</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="arrow-lg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+
+<g>
+<rect x="60" y="24" width="520" height="44" rx="8" fill="#444441" stroke="#B4B2A9" stroke-width="0.5"/>
+<text x="320.0" y="46.0" text-anchor="middle" dominant-baseline="central" fill="#D3D1C7" font-size="14" font-weight="500">User goal: "Find the cheapest flight from Seattle to NYC"</text>
+</g>
+<line x1="320.0" y1="68" x2="320.0" y2="92" stroke="#9C9A92" stroke-width="1.5" marker-end="url(#arrow)"/>
+<g>
+<rect x="60" y="92" width="520" height="44" rx="8" fill="#3C3489" stroke="#AFA9EC" stroke-width="0.5"/>
+<text x="320.0" y="114.0" text-anchor="middle" dominant-baseline="central" fill="#CECBF6" font-size="14" font-weight="500">BrowserReasoningAgent (Anthropic Claude SDK)</text>
+</g>
+<line x1="320.0" y1="136" x2="320.0" y2="160" stroke="#9C9A92" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="410.0" y="148" text-anchor="middle" dominant-baseline="central" fill="#C2C0B6" font-size="11" font-weight="400">iterative reasoning loop</text>
+<rect x="60" y="160" width="520" height="170" rx="10" fill="none" stroke="#AFA9EC" stroke-width="0.8" stroke-dasharray="4 3"/>
+<text x="74" y="178" text-anchor="start" fill="#CECBF6" font-size="12" font-weight="600">Reasoning loop</text>
+<text x="90" y="202" text-anchor="start" dominant-baseline="central" fill="#AFA9EC" font-size="12" font-weight="400">1.  Observe current page state (HTML / screenshot)</text>
+<text x="90" y="228" text-anchor="start" dominant-baseline="central" fill="#AFA9EC" font-size="12" font-weight="400">2.  Reason about the next action to achieve the goal</text>
+<text x="90" y="254" text-anchor="start" dominant-baseline="central" fill="#AFA9EC" font-size="12" font-weight="400">3.  Execute action via WebFlowBrowserAPI</text>
+<text x="90" y="280" text-anchor="start" dominant-baseline="central" fill="#AFA9EC" font-size="12" font-weight="400">4.  Check if goal achieved, else continue</text>
+<path d="M560 312 L574 312 L574 180 L560 180" fill="none" stroke="#D85A30" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+<line x1="320.0" y1="330" x2="320.0" y2="354" stroke="#9C9A92" stroke-width="1.5" marker-end="url(#arrow)"/>
+<g>
+<rect x="60" y="354" width="520" height="44" rx="8" fill="#085041" stroke="#5DCAA5" stroke-width="0.5"/>
+<text x="320.0" y="376.0" text-anchor="middle" dominant-baseline="central" fill="#9FE1CB" font-size="14" font-weight="500">BrowserReasoningTrace (recorded steps for debugging / replay)</text>
+</g>
+</svg>
