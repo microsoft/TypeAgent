@@ -321,17 +321,18 @@ type ReplaceBarrier = {
     // Phase 1: hosts that have not yet quiesced (torn `v1` down). Empty ⇒ every
     // host removed `v1`.
     readonly pending: Set<AppAgentHost>;
-    // Resolves (exactly once, when the outcome is decided) with the version a
-    // session that connected mid-`removing` should install: `v2` on a committed
-    // update, `v1` on a rollback, or nothing (`undefined`) on a committed
-    // uninstall. Such a late joiner is NOT a participant (it never held `v1`, so
-    // it neither quiesces nor counts toward verify-0/GC); the dispatcher instead
-    // blocks its connect on this promise (under the held command lock) and
-    // installs the result inline. Deferring the load past the decision means it
-    // can neither pollute verify-0 nor run a command with the agent absent.
-    readonly whenDecided: Promise<AppAgentProvider | undefined>;
-    // Resolves `whenDecided` (called once in `decide`).
-    readonly resolveDecided: (provider: AppAgentProvider | undefined) => void;
+    // Resolves (exactly once) when the barrier's outcome is decided (commit or
+    // rollback), as a pure signal. A session that connects mid-`removing` is NOT
+    // a participant (it never held `v1`, so it neither quiesces nor counts toward
+    // verify-0/GC); instead its `connect` parks on this signal until every
+    // in-flight barrier has settled, then joins the fan-out set and snapshots the
+    // now-quiet active set — which already reflects the decided outcome
+    // (`v2`/absent/`v1`), so no separate decided-version fold is needed. Parking
+    // past the decision means it can neither pollute verify-0 nor run a command
+    // with the agent mid-swap.
+    readonly whenSettled: Promise<void>;
+    // Resolves `whenSettled` (called once in `decide`).
+    readonly resolveSettled: () => void;
     // Resolves every parked host's `whenReady` so it runs its (decided) add leg.
     readonly release: () => void;
     // Run once when the outcome is decided: flip the entry to active(`v2`)/absent
@@ -433,8 +434,8 @@ export function createDefaultInstalledAgentSource(
     // A draining name is never loaded on the normal path: throughout the
     // `removing` window every participant session holds its command lock (parked
     // in `replaceProvider` awaiting `whenReady`), and a session that connects
-    // mid-`removing` blocks on `whenDecided` — so no command, and therefore no
-    // `loadAppAgent`, runs against a draining name.
+    // mid-`removing` parks on `whenSettled` before joining fan-out — so no
+    // command, and therefore no `loadAppAgent`, runs against a draining name.
     function buildAgentProvider(
         name: string,
         record: InstalledAgentRecord,
@@ -588,10 +589,11 @@ export function createDefaultInstalledAgentSource(
         barrier.release();
         // Unblock any session that connected mid-`removing`: it was
         // not a participant, so the parked add-legs above never reached it.
-        // Resolved AFTER `onDecided` flips the entry, with the decided version to
-        // install (`v2` commit / `v1` rollback / nothing on a committed
-        // uninstall), so late joiner and participants converge on one version.
-        barrier.resolveDecided(decideAdd(barrier));
+        // Signalled AFTER `onDecided` flips the entry, so when the parked joiner
+        // wakes and re-snapshots the active set it already reflects the decided
+        // version (`v2` commit / `v1` rollback / absent on a committed
+        // uninstall) — late joiner and participants converge on one version.
+        barrier.resolveSettled();
         // Report the final status to the issuing conversation:
         // a commit is `updated`; a rollback is `reverted` (the quiesce timeout
         // abandoned a straggler and restored `v1`).
@@ -731,19 +733,17 @@ export function createDefaultInstalledAgentSource(
         const whenReady = new Promise<void>((resolve) => {
             release = resolve;
         });
-        let resolveDecided!: (provider: AppAgentProvider | undefined) => void;
-        const whenDecided = new Promise<AppAgentProvider | undefined>(
-            (resolve) => {
-                resolveDecided = resolve;
-            },
-        );
+        let resolveSettled!: () => void;
+        const whenSettled = new Promise<void>((resolve) => {
+            resolveSettled = resolve;
+        });
         const barrier: ReplaceBarrier = {
             name,
             oldProvider,
             newProvider,
             pending: new Set(targets),
-            whenDecided,
-            resolveDecided,
+            whenSettled,
+            resolveSettled,
             release,
             onDecided,
             finalizeGc,
@@ -1256,64 +1256,77 @@ export function createDefaultInstalledAgentSource(
     return {
         testApi: source,
         connect(host: AppAgentHost): AppAgentConnection {
-            clients.add(host);
             // The package agent is per-connection (its agentContext carries this
-            // session's AppAgentHost); the installed providers are shared. A
-            // connecting session registers only from `active` entries — never a
-            // draining name.
+            // session's AppAgentHost); the installed providers are shared.
             const packageProvider = createPackageAppAgentProvider({
                 appAgentHost: host,
                 source,
             });
-            const providers: AppAgentProvider[] = [
-                packageProvider,
-                ...activeProviders(),
-            ];
-            // A name that is `removing` right now was excluded from `providers`
-            // above (its post-swap version is still undecided). This host
-            // connected AFTER the in-flight barrier snapshotted its targets, so
-            // it is NOT a participant and would otherwise never receive the
-            // swapped-in version until it reconnected. Instead it hands back a
-            // `whenReady` the dispatcher awaits (still holding this session's
-            // command lock) before going live: it resolves to the decided
-            // version(s) once every in-flight barrier has decided, which the
-            // dispatcher then installs inline. Deferring that install past the
-            // decision means this session never loads a doomed version (verify-0
-            // pollution) and never processes a command with the upgrading agent
-            // absent.
-            const joinedBarriers: ReplaceBarrier[] = [];
-            for (const entry of entries.values()) {
-                if (entry.status === "removing") {
-                    joinedBarriers.push(entry.barrier);
+            // Torn down before the initial set resolved: a connection disposed
+            // while still parked on an in-flight barrier must NOT join the
+            // fan-out set when it finally wakes.
+            let disposed = false;
+            // Resolve this session's initial provider set: park until no
+            // teardown/swap barrier is in flight, THEN — in ONE synchronous
+            // step — join the fan-out client set and snapshot the active
+            // providers. Joining at a quiet moment means this session is
+            // never a participant in a swap it raced, and the snapshot already
+            // reflects every decided outcome (`v2` on a committed update, absent
+            // on an uninstall, `v1` on a rollback) with no separate late-joiner
+            // fold. The dispatcher awaits this UNDER its held command lock during
+            // connect, so it neither loads a doomed version (verify-0 pollution)
+            // nor runs a command while an agent is mid-swap; any fan-out that
+            // arrives once we join is queued behind the initial install (FIFO).
+            // The barriers decide independently (bounded by their quiesce
+            // timeout), so this never hangs.
+            const resolveProviders = async (): Promise<AppAgentProvider[]> => {
+                // Loop rather than snapshot-once: a fresh drain can start (on
+                // another name) while we park, so re-check after each wait and
+                // only join+snapshot once the set is quiet.
+                while (true) {
+                    if (disposed) {
+                        return [];
+                    }
+                    const inFlight: ReplaceBarrier[] = [];
+                    for (const entry of entries.values()) {
+                        if (entry.status === "removing") {
+                            inFlight.push(entry.barrier);
+                        }
+                    }
+                    if (inFlight.length === 0) {
+                        // Atomic (synchronous) join + snapshot: no barrier can
+                        // start between these two statements, so client
+                        // membership and the snapshot agree exactly. A session
+                        // that installs an agent while we parked lands it in this
+                        // snapshot; one that installs after we join gets it via
+                        // fan-out — exactly once either way.
+                        clients.add(host);
+                        return [packageProvider, ...activeProviders()];
+                    }
+                    await Promise.all(
+                        inFlight.map((barrier) => barrier.whenSettled),
+                    );
                 }
-            }
-            // `whenReady` resolves once EVERY barrier in flight at connect time
-            // has decided, to the decided version(s) to install (a committed
-            // uninstall contributes nothing). Resolves to `[]` immediately when
-            // nothing was in flight. The barriers decide independently of this
-            // session (bounded by their quiesce timeout), so this never hangs.
-            const whenReady: Promise<AppAgentProvider[]> =
-                joinedBarriers.length === 0
-                    ? Promise.resolve([])
-                    : Promise.all(
-                          joinedBarriers.map((barrier) => barrier.whenDecided),
-                      ).then((decided) =>
-                          decided.filter(
-                              (p): p is AppAgentProvider => p !== undefined,
-                          ),
-                      );
+            };
+            const providers = resolveProviders();
             return {
                 providers,
-                whenReady,
                 dispose() {
-                    // Deregister this host from the fan-out registry.
-                    // Does NOT tear down the shared providers — other sessions
-                    // still hold them; the dispatcher unregisters them from its
-                    // own manager at teardown.
+                    // Abandon a still-parked join so a late wake never adds this
+                    // host to the fan-out set after teardown.
+                    disposed = true;
+                    // Deregister this host from the fan-out registry (a no-op if
+                    // it never finished joining). Does NOT tear down the shared
+                    // providers — other sessions still hold them; the dispatcher
+                    // unregisters them from its own manager at teardown.
                     clients.delete(host);
                     // Disconnect while a teardown/swap is in flight: a gone
                     // session has removed everything, so drop it
                     // from every barrier's pending set (which may complete one).
+                    // Only relevant for a barrier this host actually joined as a
+                    // participant (it was in `clients` before that barrier
+                    // started); a barrier it merely parked on never listed it in
+                    // `pending`, so the `quiesce` there is a no-op.
                     for (const name of [...entries.keys()]) {
                         quiesce(name, host);
                         // Re-poll verify-0 even when this host had already left

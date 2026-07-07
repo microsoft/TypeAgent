@@ -217,37 +217,43 @@ export interface AppAgentSource {
 }
 
 /**
- * The result of {@link AppAgentSource.connect}: the provider(s) to register into
- * the connecting dispatcher plus a teardown handle.
+ * The result of {@link AppAgentSource.connect}: a promise of the provider(s) to
+ * register into the connecting dispatcher plus a teardown handle.
  *
  * Implementor requirements:
- * - `providers` must be the source's SHARED singletons, not per-session copies.
- * - `whenReady` must always resolve — to the decided provider(s) once any
- *   in-flight teardown/swap barrier settles, or to `[]` immediately when nothing
- *   is in flight — and must not outlive that barrier.
+ * - `providers` must resolve with the source's SHARED singletons, not
+ *   per-session copies.
+ * - `providers` must always resolve — immediately with the active set when
+ *   nothing is in flight, or, when a teardown/swap is in flight, once every such
+ *   barrier has settled and the source can snapshot a quiet active set — and
+ *   must not outlive those barriers.
  * - `dispose()` must be idempotent and must only deregister THIS host from
  *   fan-out; it must never tear down the shared providers other sessions hold.
  */
 export interface AppAgentConnection {
     /**
-     * The provider instance(s) to register into the connecting dispatcher via
-     * the normal addProvider path. These are SHARED singletons owned by the
-     * source: every `connect()` returns the same instance(s), so a loaded
-     * `AppAgent` is shared (refcounted) across all connected sessions rather
-     * than cloned per session.
+     * Resolves with the provider instance(s) to register into the connecting
+     * dispatcher via the normal addProvider path. These are SHARED singletons
+     * owned by the source: every `connect()` returns the same instance(s), so a
+     * loaded `AppAgent` is shared (refcounted) across all connected sessions
+     * rather than cloned per session.
+     *
+     * Resolves immediately with the active set when nothing is in flight. When
+     * this session connects while one or more teardown/swap barriers are in
+     * flight (a name mid-`removing`), the source parks until every such barrier
+     * has settled, then snapshots the now-quiet active set — which already
+     * reflects each decided outcome (`v2` on a committed update, absent on an
+     * uninstall, `v1` on a rollback), so there is no separate decided-version
+     * fold. The dispatcher awaits this UNDER its held command lock during
+     * connect, then registers the resolved provider(s) — so the session neither
+     * loads a doomed version (verify-0 pollution) nor processes a command while
+     * an agent is mid-swap. Because the dispatcher holds the command lock across
+     * the await, any fan-out add/remove the source drives at this host is queued
+     * behind it (FIFO) and applied only after the initial set lands. The
+     * barriers decide independently of this session (bounded by their quiesce
+     * timeout), so this never hangs.
      */
-    readonly providers: AppAgentProvider[];
-    /**
-     * Resolves once every teardown/swap barrier that was in flight when this
-     * session connected (a name mid-`removing`) has decided, yielding the
-     * decided version(s) to register (connect-during-removing). The
-     * dispatcher awaits this UNDER its held command lock during connect, then
-     * registers the resolved provider(s) inline — so the session neither loads a
-     * doomed version (verify-0 pollution) nor processes a command while the
-     * upgrading agent is absent. Resolves to `[]` immediately when nothing was
-     * in flight at connect time.
-     */
-    readonly whenReady: Promise<AppAgentProvider[]>;
+    readonly providers: Promise<AppAgentProvider[]>;
     /**
      * Deregisters THIS host from the source's fan-out registry. It does NOT tear
      * down the shared providers (other sessions still use them); the dispatcher

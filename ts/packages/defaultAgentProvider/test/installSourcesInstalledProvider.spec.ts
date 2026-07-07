@@ -350,14 +350,15 @@ describe("getDefaultAppAgentSource", () => {
             removeProvider: async () => {},
         });
         const connection = built.connect(fakeHost);
+        const connProviders = await connection.providers;
         const names = new Set(
-            connection.providers.flatMap((p) => p.getAppAgentNames()),
+            connProviders.flatMap((p) => p.getAppAgentNames()),
         );
         // The host-owned @package agent is always vended.
         expect(names.has("package")).toBe(true);
         // Each installed agent is its own single-root provider.
         expect(names.has("namedOnly")).toBe(true);
-        const installedProvider = connection.providers.find((p) =>
+        const installedProvider = connProviders.find((p) =>
             p.getAppAgentNames().includes("namedOnly"),
         )!;
         expect(installedProvider.getAppAgentNames()).toEqual(["namedOnly"]);
@@ -374,9 +375,9 @@ describe("getDefaultAppAgentSource", () => {
         // First connection: nothing installed yet.
         const first = built.connect(fakeHost);
         expect(
-            new Set(first.providers.flatMap((p) => p.getAppAgentNames())).has(
-                "later",
-            ),
+            new Set(
+                (await first.providers).flatMap((p) => p.getAppAgentNames()),
+            ).has("later"),
         ).toBe(false);
         // Install, then connect a second session — it must see the new agent
         // in its initial vended set (6 note).
@@ -388,9 +389,9 @@ describe("getDefaultAppAgentSource", () => {
         );
         const second = built.connect(fakeHost);
         expect(
-            new Set(second.providers.flatMap((p) => p.getAppAgentNames())).has(
-                "later",
-            ),
+            new Set(
+                (await second.providers).flatMap((p) => p.getAppAgentNames()),
+            ).has("later"),
         ).toBe(true);
         first.dispose();
         second.dispose();
@@ -420,9 +421,9 @@ describe("getDefaultAppAgentSource", () => {
         // session's dispose must not tear it down (6).
         const connB = built.connect(hostB);
         expect(
-            new Set(connB.providers.flatMap((p) => p.getAppAgentNames())).has(
-                "shared",
-            ),
+            new Set(
+                (await connB.providers).flatMap((p) => p.getAppAgentNames()),
+            ).has("shared"),
         ).toBe(true);
         connB.dispose();
     });
@@ -443,9 +444,9 @@ describe("getDefaultAppAgentSource", () => {
         });
         const conn = built.connect(host);
         expect(
-            new Set(conn.providers.flatMap((p) => p.getAppAgentNames())).has(
-                "temp",
-            ),
+            new Set(
+                (await conn.providers).flatMap((p) => p.getAppAgentNames()),
+            ).has("temp"),
         ).toBe(false);
         conn.dispose();
     });
@@ -699,7 +700,7 @@ describe("AppAgentSource fan-out (4, )", () => {
                 removeProvider: async () => {},
             }),
         );
-        const provider = conn.providers.find((p) =>
+        const provider = (await conn.providers).find((p) =>
             p.getAppAgentNames().includes("foo"),
         )!;
         const manifest = await provider.getAppAgentManifest("foo");
@@ -909,20 +910,24 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         const uninstalling = built.testApi.uninstall("foo", issuing);
         await flush();
 
-        // A new session must NOT pick up the draining name (7.3).
+        // A new session connecting now parks on the in-flight drain: its
+        // `providers` promise stays pending until the barrier settles, then
+        // resolves from a snapshot of the quiet active set — WITHOUT the draining
+        // name (a committed uninstall leaves nothing behind) (7.3).
         const late = built.connect(fastHost());
-        expect(
-            new Set(late.providers.flatMap((p) => p.getAppAgentNames())).has(
-                "foo",
-            ),
-        ).toBe(false);
-        late.dispose();
+        const lateProviders = late.providers;
 
         gated.release();
         await uninstalling;
+        expect(
+            new Set(
+                (await lateProviders).flatMap((p) => p.getAppAgentNames()),
+            ).has("foo"),
+        ).toBe(false);
+        late.dispose();
     });
 
-    it("blocks a late joiner on whenReady until the barrier decides", async () => {
+    it("blocks a late joiner until the barrier decides", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = fastHost();
@@ -935,37 +940,167 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         const updating = built.testApi.update("foo", undefined, issuing);
         await flush();
 
-        // A session connecting now is excluded from the draining name in its
-        // initial set, and its `whenReady` stays pending: the dispatcher blocks
-        // on it (under the held command lock) instead of going live, so no
+        // A session connecting now parks on the in-flight drain: its `providers`
+        // promise stays pending (the dispatcher blocks on it under the held
+        // command lock instead of going live) until the barrier settles, so no
         // command runs with `foo` in an undecided state (7.3).
         const lateConn = built.connect(fastHost());
-        expect(
-            new Set(
-                lateConn.providers.flatMap((p) => p.getAppAgentNames()),
-            ).has("foo"),
-        ).toBe(false);
 
         let ready = false;
-        const readyProviders = lateConn.whenReady.then((ps) => {
+        const lateProviders = lateConn.providers.then((ps) => {
             ready = true;
             return ps;
         });
         await flush();
         // The barrier is still `removing` (the gated sibling holds it), so the
-        // late joiner is still blocked.
+        // late joiner's providers promise stays pending.
         expect(ready).toBe(false);
 
-        // Commit the update: `whenReady` resolves with the decided v2 so the
-        // dispatcher installs it inline and the late joiner converges on the same
-        // version as the participants (7.3).
+        // Commit the update: the barrier settles, the parked join wakes and
+        // snapshots the quiet active set (now holding v2), so the late joiner
+        // converges on the same version as the participants (7.3).
         gated.release();
         await updating;
-        const decided = await readyProviders;
+        const decided = await lateProviders;
         expect(ready).toBe(true);
-        expect(decided.flatMap((p) => p.getAppAgentNames())).toEqual(["foo"]);
+        expect(
+            new Set(decided.flatMap((p) => p.getAppAgentNames())).has("foo"),
+        ).toBe(true);
 
         lateConn.dispose();
+    });
+
+    it("stays parked when a fresh drain starts on another name mid-park (re-check loop)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = fastHost();
+
+        // A sibling that gates each agent's teardown independently BY NAME, so we
+        // can settle foo's drain while bar's is still in flight — the setup the
+        // connect re-check loop must survive.
+        const gates = new Map<
+            string,
+            { promise: Promise<void>; release: () => void }
+        >();
+        const gateFor = (name: string) => {
+            let g = gates.get(name);
+            if (g === undefined) {
+                let release!: () => void;
+                const promise = new Promise<void>((r) => (release = r));
+                g = { promise, release };
+                gates.set(name, g);
+            }
+            return g;
+        };
+        const sibling = withReplace({
+            addProvider: async () => {},
+            removeProvider: async (p) => {
+                await gateFor(p.getAppAgentNames()[0]).promise;
+            },
+        });
+
+        built.connect(issuing);
+        built.connect(sibling);
+        await built.testApi.install(
+            "foo",
+            makePathAgentDir(),
+            undefined,
+            issuing,
+        );
+        await built.testApi.install(
+            "bar",
+            makePathAgentDir(),
+            undefined,
+            issuing,
+        );
+        await flush();
+
+        const listed = () =>
+            new Set(built.testApi.listInstalled().map((a) => a.name));
+
+        // Start foo's drain; the sibling holds it `removing`.
+        const updatingFoo = built.testApi.update("foo", undefined, issuing);
+        await waitFor(() => !listed().has("foo"), "foo removing");
+
+        // A session connects and parks on foo's barrier (bar is still active, so
+        // its first scan sees only foo).
+        const late = built.connect(fastHost());
+        let ready = false;
+        const lateProviders = late.providers.then((ps) => {
+            ready = true;
+            return ps;
+        });
+        await flush();
+        expect(ready).toBe(false);
+
+        // While parked, a SECOND drain starts on bar.
+        const uninstallingBar = built.testApi.uninstall("bar", issuing);
+        await waitFor(() => !listed().has("bar"), "bar removing");
+
+        // Settle foo. The late session wakes, RE-CHECKS, finds bar still
+        // draining, and must stay parked rather than going live.
+        gateFor("foo").release();
+        await updatingFoo;
+        await flush();
+        expect(ready).toBe(false);
+
+        // Settle bar. Now the set is quiet: the late session joins and resolves
+        // to the converged set — foo (updated v2) present, bar (uninstalled)
+        // absent.
+        gateFor("bar").release();
+        await uninstallingBar;
+        const decided = await lateProviders;
+        expect(ready).toBe(true);
+        const names = new Set(decided.flatMap((p) => p.getAppAgentNames()));
+        expect(names.has("foo")).toBe(true);
+        expect(names.has("bar")).toBe(false);
+
+        late.dispose();
+    });
+
+    it("dispose while parked abandons the join (no late add to the client set)", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir);
+        const issuing = fastHost();
+        const gated = gatedHost();
+        built.connect(issuing);
+        built.connect(gated.host);
+        await installFoo(built, issuing);
+
+        const uninstalling = built.testApi.uninstall("foo", issuing);
+        await flush();
+
+        // A session connects mid-drain and parks. Its host records any fan-out.
+        const lateCalls: string[] = [];
+        const lateHost = withReplace({
+            addProvider: async (p) => {
+                lateCalls.push(`add:${p.getAppAgentNames()[0]}`);
+            },
+            removeProvider: async () => {},
+        });
+        const late = built.connect(lateHost);
+        let resolved: AppAgentProvider[] | undefined;
+        const lateProviders = late.providers.then((ps) => (resolved = ps));
+        await flush();
+        expect(resolved).toBeUndefined(); // still parked
+
+        // Dispose before the barrier decides.
+        late.dispose();
+
+        // Let the drain finish, then install a new agent: the disposed session
+        // must have resolved to [] (abandoned the join) and must NOT be in the
+        // fan-out client set, so it receives no add.
+        gated.release();
+        await uninstalling;
+        expect(await lateProviders).toEqual([]);
+        await built.testApi.install(
+            "bar",
+            makePathAgentDir(),
+            undefined,
+            issuing,
+        );
+        await flush();
+        expect(lateCalls).toEqual([]);
     });
 
     it("disconnect while pending completes the drain (auto-ack)", async () => {
@@ -1228,9 +1363,9 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         // the old provider — the failed update is a true no-op.
         const conn = built.connect(fastHost());
         expect(
-            new Set(conn.providers.flatMap((p) => p.getAppAgentNames())).has(
-                "foo",
-            ),
+            new Set(
+                (await conn.providers).flatMap((p) => p.getAppAgentNames()),
+            ).has("foo"),
         ).toBe(true);
         conn.dispose();
     });
@@ -2003,7 +2138,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
         await new Promise((r) => setTimeout(r, 0));
         // The freshly materialized provider is vended on the next connect.
         const conn = built.connect(host);
-        const provider = conn.providers.find((p) =>
+        const provider = (await conn.providers).find((p) =>
             p.getAppAgentNames().includes("p"),
         )!;
         const manifest = await provider.getAppAgentManifest("p");

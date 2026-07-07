@@ -1073,38 +1073,37 @@ export async function initializeCommandHandlerContext(
             for (const source of options.appAgentSources) {
                 const connection = source.connect(context.appAgentHost);
                 context.appAgentConnections.push(connection);
-                // Register the vended initial providers under a SINGLE held
-                // command lock, acquired synchronously in the same tick as the
-                // `connect()` above (which joined this session to the source's
-                // client registry). The applicator's fan-out add/remove legs
+                // Register the vended providers under a SINGLE held command
+                // lock, acquired synchronously in the same tick as the
+                // `connect()` above. The applicator's fan-out add/remove legs
                 // acquire the SAME command lock (FIFO), and the lock is free
-                // here, so this section grabs it first and holds it across every
-                // initial add. Any concurrent uninstall/update barrier that
-                // observed this newly-connected host therefore enqueues its op
-                // strictly AFTER this section runs. That closes the
-                // connect-vs-drain race where a sibling drain could remove an
-                // agent on this session before its initial add had landed —
-                // leaking it here while it is gone everywhere else. Uses
-                // `installAppProvider` directly (not the
-                // add-known-agents path) so `reconcileKnownAgents` below still
-                // sees the true persisted-vs-available diff.
-                const { providers, whenReady } = connection;
+                // here, so this section grabs it first and holds it across the
+                // whole install. Any concurrent uninstall/update barrier that
+                // targets this session therefore enqueues its op strictly AFTER
+                // this section runs. That closes the connect-vs-drain race where
+                // a sibling drain could remove an agent on this session before
+                // its add had landed — leaking it here while it is gone
+                // everywhere else.
+                //
+                // `connection.providers` is a single promise. When nothing is in
+                // flight it resolves immediately with the active set (the source
+                // joins this session to its fan-out registry in the same tick).
+                // When this session connects while a name is mid-`removing`, the
+                // source instead PARKS it OUT of the fan-out registry until every
+                // in-flight barrier settles, then snapshots the now-quiet active
+                // set (already reflecting each decided outcome) and joins. Either
+                // way, awaiting it here — STILL holding the command lock, so no
+                // user command can slip in — means the session never loads a
+                // doomed version (verify-0 pollution) nor runs a command with an
+                // agent mid-swap. The wait is bounded by the barriers' quiesce
+                // timeout, and they decide independently of this session's
+                // command lock, so holding it here cannot deadlock.
+                // Uses `installAppProvider` directly (not the add-known-agents
+                // path) so `reconcileKnownAgents` below still sees the true
+                // persisted-vs-available diff.
+                const { providers } = connection;
                 await context.commandLock(async () => {
-                    for (const provider of providers) {
-                        await installAppProvider(context, provider);
-                    }
-                    // If this session connected while a name was mid-`removing`,
-                    // block here — STILL holding the command lock, so no user
-                    // command can slip in — until every such barrier decides, then
-                    // register the decided version(s) inline. Because the load
-                    // happens only after the decision, the session never loads a
-                    // doomed version (verify-0 pollution) nor runs a command with
-                    // the upgrading agent absent. The wait is
-                    // bounded by the barrier's own quiesce-timeout envelope, and
-                    // the barrier decides independently of this session's command
-                    // lock, so holding it here cannot deadlock. Resolves to `[]`
-                    // immediately when nothing was in flight at connect time.
-                    for (const provider of await whenReady) {
+                    for (const provider of await providers) {
                         await installAppProvider(context, provider);
                     }
                 });
