@@ -45,7 +45,10 @@ import {
     readAgentsJson,
     writeAgentsJson,
 } from "./installSources/installedAgents.js";
-import { createInstallSourceRegistry } from "./installSources/registry.js";
+import {
+    createInstallSourceRegistry,
+    type InstallSourceFactory,
+} from "./installSources/registry.js";
 import { getSourceCommands } from "./installSources/sourceCommands.js";
 import { createLimiter } from "@typeagent/common-utils";
 import registerDebug from "debug";
@@ -250,31 +253,14 @@ export type DefaultAppAgentSourceOptions = InstallSourcesResolveOptions & {
     updateCoordination?: UpdateCoordinationOptions | undefined;
 };
 
+type InstalledAgentSourceForTest = AppAgentSource & {
+    readonly testApi: InstalledAgentSourceApi;
+};
+
 // Conservative default for the update-coordination barrier: a
 // short quiesce window (abandon a straggler fast). A wall-clock backstop, not a
 // hot path.
 const DEFAULT_QUIESCE_TIMEOUT_MS = 15_000;
-
-/**
- * Build the registry-backed {@link AppAgentSource} for the default host. Thin
- * wrapper over {@link createDefaultInstalledAgentSource} that
- * **strips the test-only `testApi`** via destructuring, returning a runtime
- * object with only `connect()` — so a host can never reach the write surface,
- * not even by casting.
- */
-export function getDefaultAppAgentSource(
-    instanceDir: string,
-    options?: DefaultAppAgentSourceOptions,
-): AppAgentSource {
-    // Object rest drops `testApi` from the runtime object (not just the type),
-    // so the write surface is unreachable through the host-facing handle.
-    const { testApi, ...source } = createDefaultInstalledAgentSource(
-        instanceDir,
-        options,
-    );
-    void testApi;
-    return source;
-}
 
 /**
  * Per-name lifecycle entry for a dynamic (installed) agent. A name
@@ -350,18 +336,32 @@ type ReplaceBarrier = {
 };
 
 /**
- * The concrete installed-agent source. Besides the dispatcher-
- * facing `connect()`, it also carries the write/command surface (`testApi`).
- * The `@package` agent reaches that surface through the per-session closure set
- * up in `connect()`, so the dispatcher is handed only the narrow
- * `AppAgentSource` view (see {@link getDefaultAppAgentSource}); `testApi` is a
- * direct handle for unit tests to drive install/uninstall/update without the
- * command layer.
+ * Public runtime entry point for the installed-agent source. Returns only the
+ * dispatcher-facing {@link AppAgentSource}; the test-only handle is stripped
+ * from the runtime object before handing it to hosts.
+ */
+export function getDefaultAppAgentSource(
+    instanceDir: string,
+    options?: DefaultAppAgentSourceOptions,
+): AppAgentSource {
+    const { testApi, ...source } = createDefaultInstalledAgentSource(
+        instanceDir,
+        options,
+    );
+    void testApi;
+    return source;
+}
+
+/**
+ * @internal Exported for focused unit tests only. Runtime callers must use
+ * {@link getDefaultAppAgentSource}, which strips the test-only handle before
+ * handing the source to hosts.
  */
 export function createDefaultInstalledAgentSource(
     instanceDir: string,
     options?: DefaultAppAgentSourceOptions,
-): AppAgentSource & { readonly testApi: InstalledAgentSourceApi } {
+    sourceFactory?: InstallSourceFactory,
+): InstalledAgentSourceForTest {
     const instanceConfigs = getInstanceConfigProvider(instanceDir);
     const installDir = getInstallDir(instanceConfigs);
     // The installer always has a concrete instanceDir, so installDir is
@@ -403,14 +403,18 @@ export function createDefaultInstalledAgentSource(
         instanceConfigs.setInstanceConfig(next);
     }
 
-    const registry = createInstallSourceRegistry(sources, {
-        installDir,
-        limiter,
-        persist: persistSources,
-        ...(options?.excludePathSources !== undefined
-            ? { excludePathSources: options.excludePathSources }
-            : {}),
-    });
+    const registry = createInstallSourceRegistry(
+        sources,
+        {
+            installDir,
+            limiter,
+            persist: persistSources,
+            ...(options?.excludePathSources !== undefined
+                ? { excludePathSources: options.excludePathSources }
+                : {}),
+        },
+        sourceFactory,
+    );
 
     // Builtins are the app's shipped bundled agents (their own static
     // provider), so they can never be installed-over, uninstalled, or updated.
@@ -1233,12 +1237,11 @@ export function createDefaultInstalledAgentSource(
         },
     };
 
-    // The dispatcher-facing AppAgentSource surface: connect() is
-    // the only view the dispatcher gets, so it can never drive an install. The
-    // concrete object also carries `testApi` (the write/command surface) as a
-    // direct handle for unit tests; the `@package` agent gets the same surface
-    // through the per-session closure below, not via `testApi`.
-    return {
+    // The dispatcher-facing AppAgentSource surface is connect(); the write
+    // surface is captured by the per-session `@package` agent below. The
+    // concrete object keeps an unadvertised test handle for focused unit tests,
+    // but the exported constructor returns only AppAgentSource.
+    const appAgentSource: InstalledAgentSourceForTest = {
         testApi: source,
         connect(host: AppAgentHost): AppAgentConnection {
             // The package agent is per-connection (its agentContext carries this
@@ -1333,6 +1336,7 @@ export function createDefaultInstalledAgentSource(
             };
         },
     };
+    return appAgentSource;
 }
 
 /**

@@ -318,8 +318,6 @@ describe("InstallSourceRegistry serializes concurrent install ops", () => {
         const registry = createInstallSourceRegistry(
             [feedConfig],
             { installDir },
-            // Inject a feed source with a stubbed npm install via the builder
-            // seam, so no test-only dependency field is needed on RegistryDeps.
             (config) =>
                 createFeedSource(config as FeedSourceConfig, {
                     installDir,
@@ -350,7 +348,10 @@ describe("InstallSourceRegistry serializes concurrent install ops", () => {
                         fs.mkdirSync(dir, { recursive: true });
                         fs.writeFileSync(
                             path.join(dir, "package.json"),
-                            JSON.stringify({ name: mod, version: "1.0.0" }),
+                            JSON.stringify({
+                                name: mod,
+                                version: "1.0.0",
+                            }),
                         );
                         concurrent--;
                     },

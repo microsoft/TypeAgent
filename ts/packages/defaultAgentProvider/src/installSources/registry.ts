@@ -93,6 +93,10 @@ export interface RegistryDeps {
     excludePathSources?: boolean;
 }
 
+export type InstallSourceFactory = (
+    config: InstallSourceConfig,
+) => InstallSource;
+
 function buildSource(
     config: InstallSourceConfig,
     deps: RegistryDeps,
@@ -118,13 +122,7 @@ function buildSource(
 export function createInstallSourceRegistry(
     initialConfigs: InstallSourceConfig[],
     deps: RegistryDeps,
-    // Test-only hook: how a config is turned into a live source. Production
-    // never passes this - it defaults to the real per-kind builder. Tests
-    // override it to inject a source with mocked dependencies (e.g. a feed
-    // source with a stubbed npm install) without any test-only field leaking
-    // onto the production {@link RegistryDeps} interface.
-    buildSourceFn: (config: InstallSourceConfig) => InstallSource = (config) =>
-        buildSource(config, deps),
+    sourceFactory: InstallSourceFactory = (config) => buildSource(config, deps),
 ): DefaultInstallSourceRegistry {
     const limiter = deps.limiter ?? createLimiter(1);
     type Entry = { config: InstallSourceConfig; source: InstallSource };
@@ -158,8 +156,8 @@ export function createInstallSourceRegistry(
     // access path - resolve, where, get()->listAgents - gets the server-log
     // dedup. Optional methods are only re-wrapped when the source provides them.
     function build(config: InstallSourceConfig): InstallSource {
-        const source = buildSourceFn(config);
-        const { find, update, load, listAgents, ...rest } = source;
+        const { find, update, load, listAgents, ...rest } =
+            sourceFactory(config);
         const wrapped: InstallSource = {
             ...rest,
             find: (ref, onWarn) => find(ref, composeWarn(onWarn)),
@@ -377,7 +375,8 @@ export function createInstallSourceRegistry(
                 }
                 if (entry.source.update === undefined) {
                     throw new Error(
-                        `Source '${record.source}' does not support updating agent '${record.name}'.`,
+                        `Source '${record.source}' does not support updating agent '${record.name}'. ` +
+                            `Only feed-sourced agents can be updated; uninstall and reinstall this agent to pick up changes.`,
                     );
                 }
                 onStatus?.(

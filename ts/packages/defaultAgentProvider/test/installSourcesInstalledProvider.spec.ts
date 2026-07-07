@@ -17,7 +17,11 @@ import {
     createDefaultInstalledAgentSource,
     getDefaultAppAgentProviders,
 } from "../src/defaultAgentProviders.js";
-import { InstalledAgentRecord } from "../src/installSources/config.js";
+import {
+    InstallSource,
+    InstallSourceConfig,
+    InstalledAgentRecord,
+} from "../src/installSources/config.js";
 import { AppAgentProvider, AppAgentHost } from "agent-dispatcher";
 import { createLimiter } from "@typeagent/common-utils";
 
@@ -103,6 +107,92 @@ function pathOnlyInstanceDir(): string {
         }),
     );
     return dir;
+}
+
+// Seed an instance dir with a test-only source that supports update. Production
+// path/catalog sources intentionally do NOT update; this fake source exists only
+// to drive the update-coordination barrier without network/npm dependencies.
+const testUpdateableSourceConfig: InstallSourceConfig = {
+    kind: "feed",
+    name: "test-updateable",
+};
+
+function updateableTestInstanceDir(): string {
+    const dir = tmpDir("ta-updateable-installer-");
+    fs.writeFileSync(
+        path.join(dir, "config.json"),
+        JSON.stringify({
+            installSources: {
+                sources: [testUpdateableSourceConfig],
+            },
+        }),
+    );
+    return dir;
+}
+
+function createTestUpdateableSource(
+    config: InstallSourceConfig,
+): InstallSource {
+    if (config.name !== "test-updateable") {
+        throw new Error(
+            "test updateable source requires test-updateable config",
+        );
+    }
+    const find = async (ref: string) => {
+        const full = path.resolve(ref);
+        try {
+            await fs.promises.stat(full);
+        } catch {
+            return undefined;
+        }
+        return { source: config.name, path: full };
+    };
+    const materialize: InstallSource["materialize"] = async (candidate) => {
+        if (candidate.path === undefined) {
+            throw new Error(
+                `test updateable source '${config.name}' got a candidate without a path`,
+            );
+        }
+        return {
+            kind: "npm",
+            source: config.name,
+            path: candidate.path,
+        };
+    };
+    return {
+        name: config.name,
+        kind: "test-updateable",
+        find,
+        materialize,
+        async update(record) {
+            if (record.path === undefined) {
+                throw new Error(
+                    `test updateable record for agent '${record.name}' is missing its 'path' (corrupt record).`,
+                );
+            }
+            const candidate = await find(record.path);
+            if (candidate === undefined) {
+                throw new Error(
+                    `agent '${record.name}' is no longer resolvable from source '${record.source}'.`,
+                );
+            }
+            return {
+                status: "updated" as const,
+                record: await materialize(candidate),
+            };
+        },
+    };
+}
+
+function createTestUpdateableInstalledAgentSource(
+    instanceDir: string,
+    options?: Parameters<typeof createDefaultInstalledAgentSource>[1],
+) {
+    return createDefaultInstalledAgentSource(
+        instanceDir,
+        options,
+        createTestUpdateableSource,
+    );
 }
 
 // Build a standalone loadable agent directory (package.json exports +
@@ -617,8 +707,8 @@ describe("AppAgentSource fan-out (4, )", () => {
                 removeCalls.push({ dropConfig: dropConfig ?? false });
             },
         });
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir);
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir);
         built.connect(rec);
         await built.testApi.install(
             "foo",
@@ -682,8 +772,8 @@ describe("AppAgentSource fan-out (4, )", () => {
     });
 
     it("update fans out remove-then-add per client (issuing + sibling)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir);
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir);
         const issuing = recordingHost();
         const sibling = recordingHost();
         built.connect(issuing.host);
@@ -773,8 +863,8 @@ describe("AppAgentSource fan-out (4, )", () => {
                 }),
         });
 
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir);
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir);
         built.connect(issuing);
 
         // Occupy the command lock's only slot to simulate the `@package` command
@@ -958,8 +1048,8 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
     });
 
     it("blocks a late joiner until the barrier decides", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir);
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir);
         const issuing = fastHost();
         const gated = gatedHost();
         built.connect(issuing);
@@ -1001,8 +1091,8 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
     });
 
     it("stays parked when a fresh drain starts on another name mid-park (re-check loop)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir);
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir);
         const issuing = fastHost();
 
         // A sibling that gates each agent's teardown independently BY NAME, so we
@@ -1159,8 +1249,8 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
     });
 
     it("@package list hides a draining agent (update in progress)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir);
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir);
         const issuing = fastHost();
         const gated = gatedHost();
         built.connect(issuing);
@@ -1202,8 +1292,8 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
     });
 
     it("update adds the new version only after the old drains everywhere (no coexistence)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir);
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir);
         const issuing = recordingHostForLifecycle();
         const gated = gatedHost();
         built.connect(issuing.host);
@@ -1231,8 +1321,8 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
     });
 
     it("update re-adds exactly once even when a sibling throws mid-drain", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir);
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir);
         const issuing = recordingHostForLifecycle();
         // A sibling whose removeProvider always rejects: its barrier slot must
         // still be filled (the per-host catch → quiesce, 5.7) so the
@@ -1267,8 +1357,8 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
     });
 
     it("update re-adds exactly once even when a sibling throws in its ADD leg (post-quiesce)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir);
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir);
         const issuing = recordingHostForLifecycle();
         // A sibling whose REMOVE succeeds (it quiesces, filling its barrier slot)
         // but whose ADD leg then throws. The source's per-host catch calls
@@ -1303,8 +1393,8 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
     });
 
     it("update adds v2 on every session only after the LAST session quiesces (staggered)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir);
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir);
         const fast = recordingHostForLifecycle();
         const gated = gatedRecordingHost();
         built.connect(fast.host);
@@ -1375,8 +1465,8 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
     }
 
     it("a failed update leaves the agent active + vended everywhere ()", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir);
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir);
         const issuing = fastHost();
         built.connect(issuing);
         const agentDir = makePathAgentDir("🧪");
@@ -1464,10 +1554,10 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         };
     }
 
-    // Install foo (v1) from a path dir and retro-fit a version-scoped install
+    // Install foo (v1) from an agent dir and retro-fit a version-scoped install
     // root onto its record (as if a feed had installed it), so a rollback
-    // (record restored → installRoot kept) is distinguishable from a commit (path
-    // re-resolve → installRoot dropped).
+    // (record restored → installRoot kept) is distinguishable from a commit
+    // (test-source re-resolve → installRoot dropped).
     async function installFooV1(
         built: ReturnType<typeof createDefaultInstalledAgentSource>,
         instanceDir: string,
@@ -1495,8 +1585,8 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
     }
 
     it("a straggler that won't idle hits the quiesce timeout and rolls back ()", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir, {
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir, {
             updateCoordination: {
                 quiesceTimeoutMs: 20,
             },
@@ -1534,8 +1624,8 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
     });
 
     it("a lingering verify-0 refcount parks the barrier until the quiesce timeout rolls back ()", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir, {
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir, {
             updateCoordination: {
                 quiesceTimeoutMs: 20,
                 // The shared v1 provider never drops to 0 refs (a wedged loader):
@@ -1568,11 +1658,11 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
     });
 
     it("a session disconnecting as the last barrier slot re-polls verify-0 and commits (no timeout stall)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
+        const instanceDir = updateableTestInstanceDir();
         // The shared v1 ref is still held while the barrier fills its last slot,
         // then dropped by the disconnecting session's teardown.
         let refHeld = true;
-        const built = createDefaultInstalledAgentSource(instanceDir, {
+        const built = createTestUpdateableInstalledAgentSource(instanceDir, {
             updateCoordination: {
                 // Long timeout: only a correct verify-0 RE-POLL (not the
                 // backstop) can commit within the test window.
@@ -1622,8 +1712,8 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
     });
 
     it("reports `updated` and drops the old install root on a clean commit ()", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir);
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir);
         const issuing = recordingHost();
         built.connect(issuing.host);
         await installFooV1(built, instanceDir, issuing.host);
@@ -1636,7 +1726,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         await settle();
 
         expect(outcomes).toEqual(["updated"]);
-        // Commit: the path re-resolve dropped installRoot (v2 record swapped in).
+        // Commit: the test-source re-resolve dropped installRoot (v2 record swapped in).
         expect(
             readAgentsJson(instanceDir)!.agents.foo.installRoot,
         ).toBeUndefined();
@@ -1644,8 +1734,8 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
     });
 
     it("a disconnect during a rollback is safe (name stays active on v1) ()", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir, {
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir, {
             updateCoordination: {
                 quiesceTimeoutMs: 20,
             },
@@ -1681,8 +1771,8 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
     });
 
     it("a rolled-back update leaves v1 durable for an immediately-following op (record never overwritten)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir, {
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir, {
             updateCoordination: {
                 quiesceTimeoutMs: 20,
             },
@@ -1735,8 +1825,8 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
     });
 
     it("a host closed before the swap fills its slot from the success path (no quiesce-timeout stall)", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir, {
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir, {
             // A long quiesce timeout: if the closed host stalled phase 1, the
             // update would (wrongly) roll back with `reverted` after 5 s.
             updateCoordination: {
@@ -1822,8 +1912,8 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
     });
 
     it("a host closed before the swap does not trip a premature commit before the last live session quiesces", async () => {
-        const instanceDir = pathOnlyInstanceDir();
-        const built = createDefaultInstalledAgentSource(instanceDir, {
+        const instanceDir = updateableTestInstanceDir();
+        const built = createTestUpdateableInstalledAgentSource(instanceDir, {
             updateCoordination: {
                 quiesceTimeoutMs: 5_000,
             },
@@ -1986,27 +2076,27 @@ describe("installed agent source api (install/uninstall/update)", () => {
         );
     });
 
-    it("update re-materializes a path agent and keeps the record", async () => {
+    it("rejects updating a path-sourced agent with an actionable error", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = makePathAgentDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("p", agentDir, undefined, host);
+        const before = readAgentsJson(instanceDir)!.agents.p;
 
-        await installer.update("p", undefined, host);
-        const record = readAgentsJson(instanceDir)!.agents.p;
-        expect(record.path).toBe(path.resolve(agentDir));
-        expect(record.source).toBe("path");
+        await expect(installer.update("p", undefined, host)).rejects.toThrow(
+            /only feed-sourced agents can be updated/i,
+        );
+        expect(readAgentsJson(instanceDir)!.agents.p).toEqual(before);
     });
 
     // GC (5.5): a superseded version-scoped install root is pruned once
     // the swap completes. A path re-resolve produces a record with no
     // installRoot, so seeding the pre-update record with an installRoot + a real
     // on-disk root exercises the `oldRoot !== record.installRoot` prune branch.
-    it("update prunes the old version's install root after the swap", async () => {
+    it("unsupported path update leaves a retro-fitted install root untouched", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = makePathAgentDir();
-        // The prune runs in the GC finalizer after every host has swapped.
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("p", agentDir, undefined, host);
@@ -2025,16 +2115,11 @@ describe("installed agent source api (install/uninstall/update)", () => {
         fs.writeFileSync(agentsJsonPath, JSON.stringify(cur));
         expect(fs.existsSync(oldRootDir)).toBe(true);
 
-        await installer.update("p", undefined, host);
-        // The swap drains + re-adds asynchronously (uniform enqueue, ); the
-        // old-root prune runs in the GC finalizer once every host has swapped, so
-        // let it settle.
-        await new Promise((r) => setTimeout(r, 0));
-        await new Promise((r) => setTimeout(r, 0));
-
-        // The swap dropped installRoot (path re-resolve), so the old root is a
-        // genuine orphan and must have been pruned.
-        expect(fs.existsSync(oldRootDir)).toBe(false);
+        await expect(installer.update("p", undefined, host)).rejects.toThrow(
+            /only feed-sourced agents can be updated/i,
+        );
+        expect(fs.existsSync(oldRootDir)).toBe(true);
+        expect(readAgentsJson(instanceDir)!.agents.p.installRoot).toBe(oldRoot);
     });
 
     // GC (5.5): uninstall prunes the agent's version-scoped root once the
@@ -2103,7 +2188,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
         expect(fs.existsSync(sharedDir)).toBe(false);
     });
 
-    it("update does not prune the old root while a sibling still references it", async () => {
+    it("unsupported path update does not prune a shared root", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const installer =
             createDefaultInstalledAgentSource(instanceDir).testApi;
@@ -2122,17 +2207,15 @@ describe("installed agent source api (install/uninstall/update)", () => {
             JSON.stringify(cur),
         );
 
-        // Updating `a` re-resolves via the path source (dropping a's installRoot),
-        // so a's old shared root becomes a swap-superseded root — but `b` still
-        // references it, so the refcount-guarded prune must leave it intact.
-        await installer.update("a", undefined, host);
-        await new Promise((r) => setTimeout(r, 0));
-        await new Promise((r) => setTimeout(r, 0));
+        await expect(installer.update("a", undefined, host)).rejects.toThrow(
+            /only feed-sourced agents can be updated/i,
+        );
         expect(fs.existsSync(sharedDir)).toBe(true);
+        expect(readAgentsJson(instanceDir)!.agents.a.installRoot).toBe(shared);
         expect(readAgentsJson(instanceDir)!.agents.b.installRoot).toBe(shared);
     });
 
-    it("path re-resolution uses the record's `path` handle (no `ref` needed)", async () => {
+    it("path records have no update re-resolution handle", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = makePathAgentDir();
         const installer =
@@ -2145,13 +2228,13 @@ describe("installed agent source api (install/uninstall/update)", () => {
         const afterInstall = readAgentsJson(instanceDir)!.agents.p;
         expect(afterInstall.ref).toBeUndefined();
 
-        await installer.update("p", undefined, host);
-        const afterUpdate = readAgentsJson(instanceDir)!.agents.p;
-        expect(afterUpdate.path).toBe(path.resolve(agentDir));
-        expect(afterUpdate.source).toBe("path");
+        await expect(installer.update("p", undefined, host)).rejects.toThrow(
+            /only feed-sourced agents can be updated/i,
+        );
+        expect(readAgentsJson(instanceDir)!.agents.p).toEqual(afterInstall);
     });
 
-    it("update picks up a changed manifest from the recorded path", async () => {
+    it("path-sourced agents must be reinstalled to pick up changed manifests", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const agentDir = makePathAgentDir("🧪");
         const built = createDefaultInstalledAgentSource(instanceDir);
@@ -2162,18 +2245,9 @@ describe("installed agent source api (install/uninstall/update)", () => {
             path.join(agentDir, "manifest.json"),
             JSON.stringify({ emojiChar: "🚀" }),
         );
-        await built.testApi.update("p", undefined, host);
-        // The swap drains + re-adds asynchronously (uniform enqueue, ); let
-        // it settle so the new version is active before we vend a connection.
-        await new Promise((r) => setTimeout(r, 0));
-        // The freshly materialized provider is vended on the next connect.
-        const conn = built.connect(host);
-        const provider = (await conn.providers).find((p) =>
-            p.getAppAgentNames().includes("p"),
-        )!;
-        const manifest = await provider.getAppAgentManifest("p");
-        expect(manifest.emojiChar).toBe("🚀");
-        conn.dispose();
+        await expect(
+            built.testApi.update("p", undefined, host),
+        ).rejects.toThrow(/uninstall and reinstall/i);
     });
 
     it("a failed update leaves the old record intact (no-op)", async () => {
@@ -2346,11 +2420,10 @@ describe("startup orphan sweep (5.5 GC)", () => {
     });
 });
 
-// Structural manifest check (5.3): every install/update — feed, catalog
-// `module`, AND local `path` — validates the freshly-materialized manifest at
-// install/update time, so a corrupt/unreadable agent fails BEFORE anything is
-// recorded (or, on update, before `v1` is torn down) rather than committing a
-// broken agent.
+// Structural manifest check (5.3): installs from feed/catalog/path validate the
+// freshly-materialized manifest before anything is recorded. Successful updates
+// are feed-only; catalog/path update attempts fail as unsupported before any v2
+// manifest validation or teardown.
 describe("structural manifest check on install/update (5.3)", () => {
     it("install of an npm-package source fails and records nothing when the manifest is unreadable", async () => {
         const instanceDir = catalogModuleInstanceDir("cat", "cat-mod", false);
@@ -2370,7 +2443,7 @@ describe("structural manifest check on install/update (5.3)", () => {
         expect(readAgentsJson(instanceDir)!.agents.x.module).toBe("cat-mod");
     });
 
-    it("update rejects and leaves v1 intact when v2's manifest is unreadable", async () => {
+    it("catalog update is unsupported and leaves v1 intact", async () => {
         const instanceDir = catalogModuleInstanceDir("cat", "cat-mod", true);
         const built = createDefaultInstalledAgentSource(instanceDir).testApi;
         await built.install("x", "cat", "cat", noopHost);
@@ -2384,7 +2457,9 @@ describe("structural manifest check on install/update (5.3)", () => {
             path.join(instanceDir, "catalog.json"),
             JSON.stringify({ agents: { cat: { name: "cat-mod-absent" } } }),
         );
-        await expect(built.update("x", undefined, noopHost)).rejects.toThrow();
+        await expect(built.update("x", undefined, noopHost)).rejects.toThrow(
+            /only feed-sourced agents can be updated/i,
+        );
         // v1's record is untouched and the name is still installed.
         expect(readAgentsJson(instanceDir)!.agents.x.module).toBe("cat-mod");
         expect(built.listInstalled().map((i) => i.name)).toContain("x");

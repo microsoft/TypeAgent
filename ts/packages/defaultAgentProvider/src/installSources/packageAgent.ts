@@ -335,7 +335,7 @@ class UpdateCommandHandler implements CommandHandler {
             },
             range: {
                 description:
-                    "Optional version range for feed agents (e.g. ^1.4, ~2.0, '>=3 <4'). Ignored for path/catalog agents.",
+                    "Optional version range for feed agents (e.g. ^1.4, ~2.0, '>=3 <4'). Updates are supported only for feed-sourced agents.",
                 type: "string",
                 optional: true,
             },
