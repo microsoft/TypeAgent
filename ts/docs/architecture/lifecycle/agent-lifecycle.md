@@ -73,10 +73,11 @@ The interfaces live in
 connect(host: AppAgentHost): AppAgentConnection;
 ```
 
-`connect()` returns the **shared** provider instances to register plus a teardown
-handle (`AppAgentConnection` — `{ providers, whenReady, dispose }`). Providers are
-shared singletons: every `connect()` returns the same instance, so a loaded
-`AppAgent` is refcounted across all sessions rather than cloned per session.
+`connect()` returns a teardown handle plus a promise of the **shared** provider
+instances to register (`AppAgentConnection` — `{ providers, dispose }`).
+Providers are shared singletons: every `connect()` resolves with the same
+instance, so a loaded `AppAgent` is refcounted across all sessions rather than
+cloned per session.
 
 **`AppAgentHost`** is the dispatcher-side callback the source uses to mutate one
 session's live agent set. It is the _only_ interface the source touches — it never
@@ -84,7 +85,7 @@ reaches into grammars, collision detection, or the embedding cache:
 
 - `addProvider(provider, notify?)` — register an agent into this session.
 - `removeProvider(provider, notify?, dropConfig?)` — unload and drop an agent.
-- `replaceProvider(old, newThunk, options)` — the coordinated teardown/swap
+- `replaceProvider(oldProvider, resolveReplacement)` — the coordinated teardown/swap
   primitive both `@update` and `@uninstall` fan out through (see
   [Update coordination](#update-coordination)).
 
@@ -99,13 +100,13 @@ implements `AppAgentHost`, the source implements `AppAgentSource` /
 custom source (an embedder not using `default-agent-provider`) must uphold the
 right-hand column; the dispatcher upholds the left.
 
-| Stage                | The dispatcher (`AppAgentHost`) guarantees                                                                                                                    | The source (`AppAgentSource` / `AppAgentConnection`) must                                                                                                                              |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Connect**          | calls `connect(host)` once per session, registers the returned `providers`, and awaits `whenReady` under its held command lock before serving                 | return **shared singleton** providers (the same instances on every connect) and an idempotent `dispose()`; record `host` for later fan-out                                             |
-| **Mutate**           | applies `addProvider` / `removeProvider` / `replaceProvider` in **FIFO** order, gated on session idle, resolving each promise only once the op is **applied** | mutate a session **only** through its `AppAgentHost`; never reach into grammars, collision detection, or the dispatcher's context                                                      |
-| **Coordinated swap** | runs `replaceProvider` as **one command-lock-held section** (remove → park on `whenReady` → add) so no request interleaves the swap                           | resolve `replaceProvider`'s `whenReady` only after every host has quiesced **and** the old version's shared refcount is verified `0` (see [Update coordination](#update-coordination)) |
-| **Leaf ops**         | runs the teardown and startup legs under the held command lock                                                                                                | keep those legs **leaf ops** — process teardown/launch only, never dispatching a command or reacquiring the lock                                                                       |
-| **Teardown**         | unregisters the providers from its own `AppAgentManager` and calls `dispose()`                                                                                | stop fanning out to a host once its connection is disposed; a fan-out that raced `dispose()` must no-op                                                                                |
+| Stage                | The dispatcher (`AppAgentHost`) guarantees                                                                                                                    | The source (`AppAgentSource` / `AppAgentConnection`) must                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Connect**          | calls `connect(host)` once per session, awaits the returned connection's `providers` under its held command lock, then registers them before serving          | return **shared singleton** providers (the same instances on every connect) through `providers: Promise<...>` and an idempotent `dispose()`; record `host` for later fan-out                   |
+| **Mutate**           | applies `addProvider` / `removeProvider` / `replaceProvider` in **FIFO** order, gated on session idle, resolving each promise only once the op is **applied** | mutate a session **only** through its `AppAgentHost`; never reach into grammars, collision detection, or the dispatcher's context                                                              |
+| **Coordinated swap** | runs `replaceProvider` as **one command-lock-held section** (remove → park on the replacement promise → add) so no request interleaves the swap               | resolve `replaceProvider`'s replacement promise only after every host has quiesced **and** the old version's shared refcount is verified `0` (see [Update coordination](#update-coordination)) |
+| **Leaf ops**         | runs the teardown and startup legs under the held command lock                                                                                                | keep those legs **leaf ops** — process teardown/launch only, never dispatching a command or reacquiring the lock                                                                               |
+| **Teardown**         | unregisters the providers from its own `AppAgentManager` and calls `dispose()`                                                                                | stop fanning out to a host once its connection is disposed; a fan-out that raced `dispose()` must no-op                                                                                        |
 
 The interface definitions in
 [`agentProvider.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/agentProvider/agentProvider.ts)
@@ -190,9 +191,9 @@ Dispatchers are created and torn down dynamically (per conversation, with grace
 timers). The source must never fan out to a disposed dispatcher.
 
 - **Connect** at context init: the dispatcher calls `source.connect(host)` for
-  each injected `AppAgentSource`, registers `connection.providers`, and awaits
-  `connection.whenReady` under its held command lock so it neither loads a doomed
-  version nor processes a command while an upgrading agent is mid-swap.
+  each injected `AppAgentSource`, awaits `connection.providers` under its held
+  command lock, and registers the resolved providers so it neither loads a
+  doomed version nor processes a command while an upgrading agent is mid-swap.
 - **Disconnect** at teardown: the dispatcher unregisters those providers from its
   own manager and calls `connection.dispose()`, which removes this host from the
   fan-out registry. `dispose()` never tears down the shared providers — other
@@ -244,9 +245,8 @@ dispatcher already holds does the work.
 Structurally the held section is **`uninstall(v1)` immediately followed by
 `install(v2)`** under one lock, so update reuses the uninstall/install primitives
 rather than a custom state machine. Both `@update` and `@uninstall` fan out
-through the one `replaceProvider(old, newThunk, { onQuiesced, whenReady })`
-primitive — one op is one lock acquisition, so the whole freeze is a single
-awaitable unit.
+through the one `replaceProvider(oldProvider, resolveReplacement)` primitive —
+one op is one lock acquisition, so the whole freeze is a single awaitable unit.
 
 ### Sequence
 

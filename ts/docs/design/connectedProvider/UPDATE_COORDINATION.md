@@ -362,22 +362,22 @@ are a clean handoff — no shared refcount to disentangle.
 ### 5.7 Coordination — a single coordinated op + source barrier
 
 The per-dispatcher swap is driven by **one coordinated `AppAgentHost` op** (e.g.
-`replaceProvider(oldProvider, newProviderThunk, { onQuiesced, whenReady })`) — one
-op = one lock acquisition, so the whole freeze is a single awaitable unit (clean
-for the §5.3 timeout/cancel). Its body: remove v1 artifacts + `unloadAppAgent(v1)`
-→ call `onQuiesced()` → `await whenReady` → build/add v2 artifacts → release. The
-source supplies `onQuiesced` (fills a barrier slot) and `whenReady` (a shared
-promise it resolves once §5.6's verify-0 passes and v2 is up). Rejected: a
-`prepare`/`commit` pair that holds the lock _between_ two host calls (fragile
-cross-call lock ownership, partial states).
+`replaceProvider(oldProvider, resolveReplacement)`) — one op = one lock
+acquisition, so the whole freeze is a single awaitable unit (clean for the §5.3
+timeout/cancel). Its body: remove v1 artifacts + `unloadAppAgent(v1)` → call
+`resolveReplacement()` so the source can fill this host's barrier slot and wait
+for verify-0 → build/add the returned v2 provider, or skip the add when the
+thunk returns `undefined`. Rejected: a `prepare`/`commit` pair that holds the
+lock _between_ two host calls (fragile cross-call lock ownership, partial
+states).
 
 The barrier is **source-coordinated** — each op awaits the source's signal, never
 another dispatcher — so there is no dispatcher-to-dispatcher cycle. A host that
 **disconnects** mid-barrier is dropped from it (like today's `drainDrop`). A host
 that was **already closed at enqueue time** auto-acks its op without ever running
-`onQuiesced`; the source settles it from the op's success continuation (a second,
-idempotent quiesce) so it fills its barrier slot immediately instead of wedging
-the barrier until the quiesce timeout.
+`resolveReplacement`; the source settles it from the op's success continuation
+(a second, idempotent quiesce) so it fills its barrier slot immediately instead
+of wedging the barrier until the quiesce timeout.
 
 **Liveness (no unavoidable deadlock):**
 
@@ -407,8 +407,8 @@ them from its own manager at teardown.
 
 1. `appAgentHost.dispose()` — auto-acks every _not-yet-running_ queued op
    (resolves it); a _running_ op (e.g. a barrier `replaceProvider` parked at
-   `await whenReady`) is left to finish and, on resume, sees `closed` and skips
-   the v2-add leg.
+   `await resolveReplacement()`) is left to finish and, on resume, sees `closed`
+   and skips the v2-add leg.
 2. `requestQueue.drainAndStop()`.
 3. Per connection: `agents.removeProvider(provider)` — **unloads the agents,
    dropping the shared `v1` refcount** — _then_ `connection.dispose()` (the
@@ -504,14 +504,15 @@ commits (no timeout stall)` — parks on a held ref, then a disconnect (ref
 The connected-provider layering rule is unchanged and **must hold**: nothing in
 `agent-dispatcher` may `import` from `default-agent-provider`. The **coordination interfaces**
 (`AppAgentHost.replaceProvider`, refcount-visibility on the provider contract) land in `agent-dispatcher`
-core; the **barrier coordination** (verify-0, `whenReady`, timeout/rollback policy) lands in
-`default-agent-provider` as part of the source.
+core; the **barrier coordination** (verify-0, replacement promise,
+timeout/rollback policy) lands in `default-agent-provider` as part of the
+source.
 
-| Package (npm name)          | Role                         | What it adds                                                                                                                                                                                             |
-| --------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `agent-dispatcher`          | dispatcher core; hosting API | `AppAgentHost.replaceProvider(old, new?)` (single lock-held teardown/swap — `new` omitted = uninstall); refcount visibility on the host apply path.                                                      |
-| `dispatcher-node-providers` | npm agent provider           | expose loaded/refcount state (`isLoaded` / `getRefCount`) on `createNpmAppAgentProvider`.                                                                                                                |
-| `default-agent-provider`    | reference host wiring        | per-agent version-scoped install roots + GC; source-side barrier (verify-0, `whenReady`, timeout/rollback); `uninstall` and `update` run through the one `replaceProvider` barrier; async update status. |
+| Package (npm name)          | Role                         | What it adds                                                                                                                                                                                                     |
+| --------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agent-dispatcher`          | dispatcher core; hosting API | `AppAgentHost.replaceProvider(oldProvider, resolveReplacement)` (single lock-held teardown/swap — `undefined` replacement = uninstall); refcount visibility on the host apply path.                              |
+| `dispatcher-node-providers` | npm agent provider           | expose loaded/refcount state (`isLoaded` / `getRefCount`) on `createNpmAppAgentProvider`.                                                                                                                        |
+| `default-agent-provider`    | reference host wiring        | per-agent version-scoped install roots + GC; source-side barrier (verify-0, replacement promise, timeout/rollback); `uninstall` and `update` run through the one `replaceProvider` barrier; async update status. |
 
 ### Test coverage map (by milestone)
 

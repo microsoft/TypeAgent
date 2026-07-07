@@ -141,7 +141,7 @@ import { createDispatcher, type AppAgentSource } from "agent-dispatcher";
 
 const mySource: AppAgentSource = {
   connect(host) {
-    // return { providers, whenReady, dispose } — see AppAgentConnection
+    // return { providers: Promise.resolve([...]), dispose } — see AppAgentConnection
   },
 };
 

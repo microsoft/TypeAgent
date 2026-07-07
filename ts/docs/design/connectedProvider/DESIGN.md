@@ -255,11 +255,12 @@ export interface AppAgentSource {
 }
 
 export interface AppAgentConnection {
-  // The provider instance(s) to register into the connecting dispatcher via the
-  // normal addProvider path. These are SHARED singletons owned by the source:
-  // every connect() returns the same instance(s), so a loaded AppAgent is shared
-  // (refcounted) across all connected sessions rather than cloned per session.
-  readonly providers: AppAgentProvider[];
+  // Resolves with the provider instance(s) to register into the connecting
+  // dispatcher via the normal addProvider path. These are SHARED singletons
+  // owned by the source: every connect() resolves with the same instance(s), so
+  // a loaded AppAgent is shared (refcounted) across all connected sessions
+  // rather than cloned per session.
+  readonly providers: Promise<AppAgentProvider[]>;
   // Deregisters THIS host from the source's fan-out registry. It does NOT tear
   // down the shared providers (other sessions still use them); the dispatcher
   // unregisters them from its own AppAgentManager as part of context teardown.
