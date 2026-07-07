@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=8c860a567260033be51b4e20b4a6d7c901861639a480e4aa9ca4136b6d40b8e0 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=213b9a616dc8788ea6ac1de09c8a57ad1cad0de81c8014f810fbdc6031b8f375 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # kp — AI-generated documentation
@@ -12,57 +12,65 @@
 
 ## Overview
 
-The `kp` package is a lightweight knowledge processor designed for keyword indexing with dictionary enrichment. It builds an inverted index from text chunks and enriches the vocabulary using a language model (LLM). This package is part of the TypeAgent monorepo and is implemented in TypeScript.
+The `kp` package is a lightweight knowledge processor designed for keyword-based text indexing and dictionary enrichment. It is part of the TypeAgent monorepo and is implemented in TypeScript. The package provides a comprehensive pipeline for processing text data, from extracting keywords to building enriched, searchable indexes using a language model (LLM).
 
 ## What it does
 
-The `kp` package provides several key functionalities:
+The `kp` package offers a range of functionalities to process and index text data efficiently:
 
-- **Keyword Extraction**: Extracts significant keywords from text chunks using heuristics without LLM calls.
-- **Dictionary Enrichment**: Enriches the extracted vocabulary with lemmas, related terms, entity types, and parent types using an LLM.
-- **Inverted Index**: Builds an in-memory inverted index for efficient keyword-based search.
-- **Metadata Index**: Manages metadata indexing for text chunks, allowing for case-insensitive matching and substring searches.
-- **Group Index**: Manages chunk groups (e.g., threads, sections, episodes) and resolves temporal queries to groups and chunk ranges.
-- **Query Engine**: Executes search queries against the built indexes and retrieves relevant text chunks.
-- **Answer Generation**: Generates grounded natural-language answers from scored chunks using an LLM.
+- **Keyword Extraction**: Extracts significant keywords from text chunks using heuristic methods, such as tokenization, stopword removal, and proper noun detection, without relying on LLMs.
+- **Dictionary Enrichment**: Enhances the extracted vocabulary by generating lemmas, related terms, entity types, and parent types using an LLM. This step is performed in batches and is synchronous to ensure the enriched vocabulary is ready for indexing.
+- **Inverted Index**: Builds an in-memory inverted index that maps normalized terms (e.g., lemmas) to the text chunks in which they appear. This enables efficient keyword-based search.
+- **Metadata Indexing**: Supports metadata indexing for text chunks, allowing for case-insensitive matching and substring searches.
+- **Group Indexing**: Manages chunk groups (e.g., threads, sections, episodes) and resolves temporal queries to groups and chunk ranges.
+- **Query Engine**: Executes search queries against the indexes and retrieves relevant text chunks based on keyword matches and metadata filters.
+- **Answer Generation**: Uses an LLM to generate grounded, natural-language answers from the search results, combining user queries with relevant text chunks.
+
+This package is used by other components in the TypeAgent monorepo, such as the `email` agent, to provide advanced text processing and search capabilities.
 
 ## Setup
 
-To set up the `kp` package, you need to configure the following environment variable:
+To use the `kp` package, you need to configure the following environment variable:
 
-- `KP_MODEL`: Specifies the model to be used for LLM enrichment. Obtain the appropriate model identifier from your LLM provider.
+- `KP_MODEL`: This specifies the LLM model to be used for dictionary enrichment. The value should be a valid model identifier provided by your LLM service provider. Refer to the hand-written README for detailed instructions on obtaining and setting this value.
 
-For detailed setup instructions, see the hand-written README.
+Ensure that the environment variable is set in your shell or in the `ts/.env` file before running the package.
 
 ## Key Files
 
-The `kp` package is organized into several modules, each responsible for different aspects of the knowledge processing pipeline:
+The `kp` package is modular, with each file handling a specific aspect of the knowledge processing pipeline. Below is an overview of the key files and their responsibilities:
 
-- **[index.ts](./src/index.ts)**: The main entry point that exports core types and functionalities.
-- **[keywordExtractor.ts](./src/keywordExtractor.ts)**: Extracts significant keywords from text chunks using heuristics.
-- **[llmEnrichment.ts](./src/llmEnrichment.ts)**: Enriches the extracted vocabulary using an LLM.
-- **[invertedIndex.ts](./src/invertedIndex.ts)**: Builds and manages the in-memory inverted index.
-- **[metadataIndex.ts](./src/metadataIndex.ts)**: Manages metadata indexing for text chunks.
-- **[groupIndex.ts](./src/groupIndex.ts)**: Manages chunk groups and resolves temporal queries.
-- **[queryEngine.ts](./src/queryEngine.ts)**: Executes search queries against the built indexes.
-- **[answerGenerator.ts](./src/answerGenerator.ts)**: Generates grounded natural-language answers from scored chunks.
-- **[indexBuilder.ts](./src/indexBuilder.ts)**: Orchestrates the full pipeline from text chunks to searchable indexes.
+- **[index.ts](./src/index.ts)**: The main entry point of the package, exporting core types and functionalities.
+- **[keywordExtractor.ts](./src/keywordExtractor.ts)**: Implements heuristic-based keyword extraction, including tokenization, stopword removal, and proper noun detection.
+- **[llmEnrichment.ts](./src/llmEnrichment.ts)**: Handles the enrichment of the extracted vocabulary using an LLM. This includes generating lemmas, related terms, and entity types.
+- **[invertedIndex.ts](./src/invertedIndex.ts)**: Manages the in-memory inverted index, which maps normalized terms to the text chunks they appear in.
+- **[metadataIndex.ts](./src/metadataIndex.ts)**: Provides functionality for indexing and searching metadata associated with text chunks.
+- **[groupIndex.ts](./src/groupIndex.ts)**: Manages chunk groups and resolves temporal queries to groups and chunk ranges.
+- **[queryEngine.ts](./src/queryEngine.ts)**: Executes search queries against the indexes and retrieves relevant text chunks.
+- **[answerGenerator.ts](./src/answerGenerator.ts)**: Generates natural-language answers to user queries by combining LLM-generated responses with relevant text chunks.
+- **[indexBuilder.ts](./src/indexBuilder.ts)**: Orchestrates the entire pipeline, from keyword extraction to the creation of searchable indexes.
 
 ## How to extend
 
 To extend the `kp` package, follow these steps:
 
-1. **Identify the module to extend**: Determine which part of the pipeline you need to modify or enhance. For example, if you need to improve keyword extraction, start with [keywordExtractor.ts](./src/keywordExtractor.ts).
+1. **Understand the architecture**: Familiarize yourself with the overall structure of the package by reviewing the `## Key Files` section and the comments in the source code.
 
-2. **Open the relevant file**: Open the file corresponding to the module you identified. Each file contains detailed comments explaining its purpose and functionality.
+2. **Identify the target module**: Determine which part of the pipeline you want to modify or enhance. For example:
 
-3. **Follow the existing patterns**: Implement your changes following the existing code patterns and conventions. Ensure that your modifications are consistent with the overall architecture.
+   - To improve keyword extraction, start with [keywordExtractor.ts](./src/keywordExtractor.ts).
+   - To modify the LLM enrichment process, explore [llmEnrichment.ts](./src/llmEnrichment.ts).
+   - To add new indexing capabilities, consider [invertedIndex.ts](./src/invertedIndex.ts) or [metadataIndex.ts](./src/metadataIndex.ts).
 
-4. **Add tests**: Write tests for your changes to ensure they work as expected. Place your tests in the appropriate test files or create new ones if necessary.
+3. **Follow existing patterns**: The codebase is designed with modularity and consistency in mind. Use the existing patterns and conventions as a guide for your changes.
 
-5. **Run tests**: Execute the tests to verify your changes. Ensure that all tests pass before committing your modifications.
+4. **Update the pipeline**: If your changes affect the overall processing pipeline, update [indexBuilder.ts](./src/indexBuilder.ts) to integrate your modifications.
 
-By following these steps, you can effectively extend the `kp` package and contribute to its development.
+5. **Write tests**: Add tests for your changes to ensure they work as expected. Tests should cover edge cases and validate the correctness of your implementation.
+
+6. **Run tests**: Use the existing test suite to verify that your changes do not introduce regressions. Ensure all tests pass before submitting your changes.
+
+By following these steps, you can effectively contribute to the `kp` package and enhance its functionality.
 
 ## Reference
 
@@ -70,7 +78,7 @@ By following these steps, you can effectively extend the `kp` package and contri
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -97,6 +105,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter kp docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter kp docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

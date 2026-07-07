@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=3c94d842df1fb2e958a0d4cbdaf3a7ec82b9a0933c80a35d13564b98fe7adfbe -->
+<!-- AUTOGEN:DOCS:HASH:sha256=67b81a07c4cd8f7e7e4bbde48f0d4364e9e5162aac7b2f347f8ca3764b130b98 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # telemetry — AI-generated documentation
@@ -12,63 +12,115 @@
 
 ## Overview
 
-The `telemetry` package is a telemetry provider for the TypeAgent project. It facilitates logging and monitoring by providing various logger sinks that can be used to record events and metrics to different storage backends such as MongoDB and Azure Cosmos DB.
+The `telemetry` package is a TypeScript library designed to provide logging and monitoring capabilities for the TypeAgent project. It enables the collection and storage of telemetry data, such as events, logs, and performance metrics, by offering a variety of logger sinks that integrate with different storage backends, including MongoDB and Azure Cosmos DB.
+
+This package is a core dependency for many other packages and examples within the TypeAgent monorepo, making it a critical component for tracking and analyzing system behavior.
 
 ## What it does
 
-The `telemetry` package offers several logger sinks that can be used to log events to different storage systems. The main capabilities include:
+The `telemetry` package provides a flexible and extensible logging framework. Its primary functionality revolves around logger sinks, which are responsible for handling and storing log events. The package includes the following key features:
 
-- `createMongoDBLoggerSink`: Logs events to a MongoDB collection.
-- `createCosmosDBLoggerSink`: Logs events to an Azure Cosmos DB container.
-- `createDatabaseLoggerSink`: Automatically selects between MongoDB and Cosmos DB based on environment variables.
-- `createDebugLoggerSink`: Logs events to the console using the `debug` library.
-- `createPromptLogger`: Specialized logger for logging LLM prompts.
-- `createProfileLogger`: Logs profiling data for performance measurement.
+- **Database Logging**:
 
-These logger sinks can be combined using the `MultiSinkLogger` to log events to multiple destinations simultaneously.
+  - `createMongoDBLoggerSink`: Logs events to a MongoDB collection.
+  - `createCosmosDBLoggerSink`: Logs events to an Azure Cosmos DB container.
+  - `createDatabaseLoggerSink`: Dynamically selects between MongoDB and Cosmos DB based on the availability of environment variables.
+
+- **Console Logging**:
+
+  - `createDebugLoggerSink`: Logs events to the console using the `debug` library.
+
+- **Specialized Loggers**:
+
+  - `createPromptLogger`: Logs LLM (Large Language Model) prompts and related data.
+  - `createProfileLogger`: Captures and logs profiling data for performance analysis.
+
+- **Multi-Sink Logging**:
+  - `MultiSinkLogger`: Combines multiple logger sinks, enabling simultaneous logging to different destinations.
+
+These features allow the `telemetry` package to support a wide range of use cases, from debugging during development to monitoring production systems.
 
 ## Setup
 
-To use the `telemetry` package, you need to set up the following environment variables:
+To use the `telemetry` package, you need to configure the following environment variables:
 
-- `COSMOSDB_CONNECTION_STRING`: Connection string for Azure Cosmos DB.
-- `MONGODB_CONNECTION_STRING`: Connection string for MongoDB.
+- `COSMOSDB_CONNECTION_STRING`: The connection string for Azure Cosmos DB. This is required if you plan to use the `createCosmosDBLoggerSink` or `createDatabaseLoggerSink` with Cosmos DB as the backend.
+- `MONGODB_CONNECTION_STRING`: The connection string for MongoDB. This is required if you plan to use the `createMongoDBLoggerSink` or `createDatabaseLoggerSink` with MongoDB as the backend.
 
-These environment variables are required for the respective logger sinks to function correctly. For detailed setup instructions, see the hand-written README.
+Ensure these environment variables are set in your environment or in a `.env` file at the root of the project. For more details on obtaining these values, refer to the hand-written README.
 
 ## Key Files
 
-The `telemetry` package is structured into several key components:
+The `telemetry` package is organized into several key files, each responsible for specific functionality:
 
-- [indexNode.ts](./src/indexNode.ts): The main entry point that exports various logger sinks and utilities.
-- [logger/cosmosDBLoggerSink.ts](./src/logger/cosmosDBLoggerSink.ts): Implements the `CosmosDBLoggerSink` for logging events to Azure Cosmos DB.
-- [logger/databaseLoggerSink.ts](./src/logger/databaseLoggerSink.ts): Implements the `DatabaseLoggerSink` that selects between MongoDB and Cosmos DB based on environment variables.
-- [logger/debugLoggerSink.ts](./src/logger/debugLoggerSink.ts): Implements the `DebugLoggerSink` for logging events to the console.
-- [logger/logger.ts](./src/logger/logger.ts): Defines the core logging interfaces and classes such as `Logger`, `LoggerSink`, `ChildLogger`, and `MultiSinkLogger`.
-- [logger/mongoLoggerSink.ts](./src/logger/mongoLoggerSink.ts): Implements the `MongoDBLoggerSink` for logging events to MongoDB.
-- [logger/promptLogger.ts](./src/logger/promptLogger.ts): Implements the `PromptLogger` for logging LLM prompts.
-- [profiler/profileLogger.ts](./src/profiler/profileLogger.ts): Implements the `ProfileLogger` for logging profiling data.
+- [indexNode.ts](./src/indexNode.ts): The main entry point of the package. It exports all the logger sinks, utilities, and core components.
+- [logger/logger.ts](./src/logger/logger.ts): Defines the core logging interfaces and classes, such as `Logger`, `LoggerSink`, `ChildLogger`, and `MultiSinkLogger`.
+- [logger/cosmosDBLoggerSink.ts](./src/logger/cosmosDBLoggerSink.ts): Implements the `CosmosDBLoggerSink`, which logs events to an Azure Cosmos DB container.
+- [logger/mongoLoggerSink.ts](./src/logger/mongoLoggerSink.ts): Implements the `MongoDBLoggerSink`, which logs events to a MongoDB collection.
+- [logger/databaseLoggerSink.ts](./src/logger/databaseLoggerSink.ts): Implements the `DatabaseLoggerSink`, which dynamically selects between MongoDB and Cosmos DB based on the configured environment variables.
+- [logger/debugLoggerSink.ts](./src/logger/debugLoggerSink.ts): Implements the `DebugLoggerSink`, which logs events to the console using the `debug` library.
+- [logger/promptLogger.ts](./src/logger/promptLogger.ts): Implements the `PromptLogger`, a specialized logger for capturing and logging LLM prompts.
+- [profiler/profileLogger.ts](./src/profiler/profileLogger.ts): Implements the `ProfileLogger`, which captures and logs profiling data for performance analysis.
 
 ## How to extend
 
-To extend the `telemetry` package, follow these steps:
+The `telemetry` package is designed to be extensible, allowing contributors to add new functionality or modify existing components. Here are some guidelines for extending the package:
 
-1. **Add a new logger sink**:
+### Adding a New Logger Sink
 
-   - Create a new file in the `logger` directory, e.g., `customLoggerSink.ts`.
-   - Implement the `LoggerSink` interface in your new file.
-   - Export your new logger sink from [indexNode.ts](./src/indexNode.ts).
+1. **Create a New File**:
 
-2. **Modify existing logger sinks**:
+   - Add a new file in the `logger` directory, e.g., `customLoggerSink.ts`.
 
-   - Locate the relevant file in the `logger` directory.
-   - Make your changes and ensure they conform to the `LoggerSink` interface.
+2. **Implement the `LoggerSink` Interface**:
 
-3. **Testing**:
-   - Add unit tests for your new or modified logger sink in the `tests` directory.
-   - Run the tests using the project's test runner to ensure your changes work as expected.
+   - Define a new class that implements the `LoggerSink` interface. This interface requires a `logEvent` method to handle logging events.
 
-By following these steps, you can extend the `telemetry` package to support additional logging backends or modify existing functionality to better suit your needs.
+   ```ts
+   import { LoggerSink, LogEvent } from "./logger.js";
+
+   class CustomLoggerSink implements LoggerSink {
+     public logEvent(event: LogEvent) {
+       // Implement your custom logging logic here
+       console.log("Custom log event:", event);
+     }
+   }
+
+   export function createCustomLoggerSink(): LoggerSink {
+     return new CustomLoggerSink();
+   }
+   ```
+
+3. **Export the New Logger Sink**:
+   - Add an export statement for your new logger sink in [indexNode.ts](./src/indexNode.ts).
+
+### Modifying Existing Logger Sinks
+
+1. **Locate the Relevant File**:
+
+   - Identify the file corresponding to the logger sink you want to modify (e.g., [cosmosDBLoggerSink.ts](./src/logger/cosmosDBLoggerSink.ts) for the Cosmos DB logger).
+
+2. **Make Your Changes**:
+
+   - Modify the implementation as needed, ensuring that it still adheres to the `LoggerSink` interface.
+
+3. **Test Your Changes**:
+   - Add or update unit tests in the `tests` directory to verify the functionality of your changes.
+
+### Adding New Features
+
+1. **Identify the Entry Point**:
+
+   - Start by reviewing [indexNode.ts](./src/indexNode.ts) to understand how the package's components are exported and used.
+
+2. **Follow Existing Patterns**:
+
+   - Use the existing logger sinks and utilities as a reference for implementing new features.
+
+3. **Write Tests**:
+   - Ensure your new feature is thoroughly tested by adding unit tests in the `tests` directory.
+
+By following these guidelines, you can extend the `telemetry` package to meet new requirements or improve its existing functionality.
 
 ## Reference
 
@@ -76,7 +128,7 @@ By following these steps, you can extend the `telemetry` package to support addi
 
 ### Entry points
 
-- default → [./dist/indexNode.js](./dist/indexNode.js)
+- default → `./dist/indexNode.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -111,6 +163,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter telemetry docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter telemetry docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

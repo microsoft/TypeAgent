@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=b7cd1dce77abd3b1156d5e23d9ab61ea8ff19bd554c866d4249a22657b5292b2 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d1517772d8ca463903dd5399018883acd8c7ba20da7a63a8b4c92710e6e5df02 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # graph-utils — AI-generated documentation
@@ -12,49 +12,51 @@
 
 ## Overview
 
-The `graph-utils` package provides utility functions for accessing Microsoft Graph APIs, enabling integration with Microsoft services such as calendars and email. It simplifies the process of interacting with these APIs by offering a unified interface for common operations.
+The `graph-utils` package provides utility functions for accessing Microsoft Graph APIs and integrating with Microsoft services such as calendars and email. It abstracts common operations, making it easier to interact with these APIs in a consistent and efficient manner.
 
 ## What it does
 
-The `graph-utils` package supports a range of actions related to calendar and email management. It provides utilities for creating, updating, retrieving, and deleting calendar events and emails. The package also includes abstractions for working with multiple providers, such as Microsoft Graph and Google Calendar, allowing for flexible integration with different services.
+The `graph-utils` package supports a variety of actions related to calendar and email management. It provides functionality for creating, updating, retrieving, and deleting calendar events and emails. Additionally, it includes abstractions for working with multiple providers, such as Microsoft Graph and Google Calendar, enabling integration with different services.
 
-Key actions include:
+Key capabilities include:
 
-- Calendar-related actions: `createCalendarEvent`, `deleteCalendarEvent`, `getCalendarEvents`, and `updateCalendarEvent`.
-- Email-related actions: `createEmail`, `deleteEmail`, `getEmails`, and `updateEmail`.
+- **Calendar Management**: Actions like `createCalendarEvent`, `deleteCalendarEvent`, `getCalendarEvents`, and `updateCalendarEvent` allow for comprehensive calendar event handling.
+- **Email Management**: Actions such as `createEmail`, `deleteEmail`, `getEmails`, and `updateEmail` facilitate email operations.
+- **Data Indexing and Search**: The package includes tools for managing and searching calendar event embeddings, enabling efficient semantic search.
+- **Provider Abstraction**: Unified interfaces for interacting with different calendar and email providers, including Microsoft Graph and Google APIs.
 
-The package also includes utilities for date range calculations and embedding-based data indexing for efficient search and retrieval of calendar events.
+This package is used by other agents, such as the `calendar` and `email` agents, to provide higher-level functionality.
 
 ## Setup
 
 To use the `graph-utils` package, you need to configure the following environment variables:
 
-- `GOOGLE_CALENDAR_CLIENT_ID`: The client ID for Google Calendar API.
-- `GOOGLE_CALENDAR_CLIENT_SECRET`: The client secret for Google Calendar API.
-- `MSGRAPH_APP_CLIENTID`: The client ID for Microsoft Graph API.
-- `MSGRAPH_APP_TENANTID`: The tenant ID for Microsoft Graph API.
+- `GOOGLE_CALENDAR_CLIENT_ID`: The client ID for the Google Calendar API. Obtain this from the Google Cloud Console by creating a project and enabling the Calendar API.
+- `GOOGLE_CALENDAR_CLIENT_SECRET`: The client secret for the Google Calendar API. This is provided alongside the client ID in the Google Cloud Console.
+- `MSGRAPH_APP_CLIENTID`: The client ID for the Microsoft Graph API. You can obtain this by registering an application in the Azure portal.
+- `MSGRAPH_APP_TENANTID`: The tenant ID for the Microsoft Graph API. This is also available in the Azure portal when registering your application.
 
-These variables are required for authenticating with the respective APIs. Refer to the hand-written README for detailed instructions on how to obtain these values. Ensure they are set in your environment before using the package.
+Ensure these environment variables are set in your environment (e.g., in a `.env` file or directly in your shell) before using the package. For more detailed instructions on obtaining these values, refer to the hand-written README.
 
 ## Key Files
 
-The `graph-utils` package is organized into several key modules, each responsible for specific functionalities:
+The `graph-utils` package is structured into several key modules, each responsible for specific functionalities:
 
-- [index.ts](./src/index.ts): The main entry point, exporting utility functions and client creation methods for calendar and email services.
-- [calendarClient.ts](./src/calendarClient.ts): Implements the `CalendarClient` class, which manages interactions with the calendar API, including login and data synchronization.
-- [calendarDataIndex.ts](./src/calendarDataIndex.ts): Provides methods for managing and searching calendar event embeddings, enabling efficient semantic search.
-- [calendarProvider.ts](./src/calendarProvider.ts): Defines interfaces and types for calendar events, attendees, date range queries, and user information.
-- [calendarProviderFactory.ts](./src/calendarProviderFactory.ts): Factory functions for creating calendar providers based on the detected configuration.
-- [dateUtils.ts](./src/dateUtils.ts): Contains utility functions for date range calculations, such as determining the current week or month.
-- [emailProvider.ts](./src/emailProvider.ts): Defines interfaces and types for email messages, addresses, search queries, and user information.
-- [emailProviderFactory.ts](./src/emailProviderFactory.ts): Factory functions for creating email providers based on the detected configuration.
+- [index.ts](./src/index.ts): The main entry point of the package, exporting utility functions and client creation methods for calendar and email services.
+- [calendarClient.ts](./src/calendarClient.ts): Implements the `CalendarClient` class, which handles interactions with the calendar API, including authentication and data synchronization.
+- [calendarDataIndex.ts](./src/calendarDataIndex.ts): Provides methods for managing and searching calendar event embeddings, enabling semantic search capabilities.
+- [calendarProvider.ts](./src/calendarProvider.ts): Defines interfaces and types for calendar-related entities, such as events, attendees, and date range queries.
+- [calendarProviderFactory.ts](./src/calendarProviderFactory.ts): Contains logic for detecting and creating the appropriate calendar provider based on the environment configuration.
+- [dateUtils.ts](./src/dateUtils.ts): Includes utility functions for date calculations, such as determining the current week or month.
+- [emailProvider.ts](./src/emailProvider.ts): Defines interfaces and types for email-related entities, such as messages, addresses, and search queries.
+- [emailProviderFactory.ts](./src/emailProviderFactory.ts): Contains logic for detecting and creating the appropriate email provider based on the environment configuration.
 - [googleCalendarClient.ts](./src/googleCalendarClient.ts): Implements the Google Calendar provider, including OAuth authentication and token management.
 
 ## How to extend
 
 To extend the `graph-utils` package, follow these steps:
 
-1. **Determine the area to extend**: Identify whether your extension involves calendar functionalities, email functionalities, or general utilities.
+1. **Identify the area to extend**: Determine whether your changes involve calendar functionalities, email functionalities, or general utilities.
 2. **Locate the relevant file**:
    - For calendar-related extensions, start with [calendarClient.ts](./src/calendarClient.ts), [calendarProvider.ts](./src/calendarProvider.ts), or [calendarProviderFactory.ts](./src/calendarProviderFactory.ts).
    - For email-related extensions, start with [emailProvider.ts](./src/emailProvider.ts) or [emailProviderFactory.ts](./src/emailProviderFactory.ts).
@@ -63,7 +65,7 @@ To extend the `graph-utils` package, follow these steps:
 4. **Add new actions**: If your extension requires new actions, define them in the appropriate module and ensure they are exported in [index.ts](./src/index.ts).
 5. **Test your changes**: Write tests to validate your new functionality. Ensure that your changes do not introduce regressions or break existing features.
 
-By adhering to these guidelines, you can effectively contribute to and extend the functionality of the `graph-utils` package.
+By following these steps, you can effectively contribute to and expand the functionality of the `graph-utils` package.
 
 ## Reference
 
@@ -104,6 +106,6 @@ _4 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter graph-utils docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter graph-utils docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

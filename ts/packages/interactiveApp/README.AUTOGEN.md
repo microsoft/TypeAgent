@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=f6baae4283fcd31afbadcda07fd42a0e606bdf995e850cf2c8068a012acedcf4 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=583b72ed4f29705d8ce0f43932d5b055194784d53b11e22ad33cc1da4639deae -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # interactive-app — AI-generated documentation
@@ -12,45 +12,94 @@
 
 ## Overview
 
-The `interactiveApp` package is a TypeScript library designed for writing console applications with terminal UI features. It is primarily used as sample code within the TypeAgent examples and is not intended for other uses.
+The `interactiveApp` package is a TypeScript library for building console applications with terminal UI features. It is primarily used as sample code in the TypeAgent examples and is not intended for general-purpose use. The library provides utilities for handling command-line inputs, managing IO streams, and enhancing terminal interfaces with features like spinners, separators, and structured layouts.
 
 ## What it does
 
-The `interactiveApp` package provides a set of tools and utilities to create interactive console applications. It includes features for handling command-line inputs, managing IO streams, and enhancing terminal UI with elements like spinners, separators, and structured layouts. The package supports actions such as `createMessage`, `deleteMessage`, `updateMessage`, and `listMessages`, which facilitate various interactive functionalities within the console applications.
+The `interactiveApp` package enables the creation of interactive console applications by providing:
+
+- **Input Handling**: Tools for managing command-line inputs, including support for commands, multi-line input, and custom input handlers.
+- **Interactive IO Management**: Utilities for managing standard input/output streams and providing a higher-level interface for console interactions.
+- **Terminal UI Enhancements**: Features for improving the user experience in terminal-based applications, such as spinners, separators, and formatted text output.
+- **Performance Measurement**: A `StopWatch` utility for tracking and displaying elapsed time during application execution.
+
+These features are implemented across several modules, which are re-exported through the main entry point, [index.ts](./src/index.ts).
 
 ## Setup
 
-This package does not require any special setup beyond installing its dependencies. Simply run `pnpm install` to install the necessary packages. For detailed setup instructions, refer to the hand-written README.
+No special setup is required for this package. To get started, simply install the package dependencies using:
+
+```bash
+pnpm install
+```
+
+For additional details, refer to the hand-written README.
 
 ## Key Files
 
-The `interactiveApp` package is structured into several key modules:
+The `interactiveApp` package is organized into several key files, each responsible for specific functionality:
 
-- **[index.ts](./src/index.ts)**: The entry point of the package, exporting functionalities from other modules.
-- **[core.ts](./src/core.ts)**: Contains core utilities such as the `StopWatch` class for performance measurements.
-- **[interactiveApp.ts](./src/interactiveApp.ts)**: Defines the main interactive application settings and input handling mechanisms.
-- **[InteractiveIo.ts](./src/InteractiveIo.ts)**: Manages standard IO streams and provides utility functions for interactive IO operations.
-- **[terminalUI.ts](./src/terminalUI.ts)**: Enhances terminal UI with features like spinners, separators, and structured layouts.
+- **[index.ts](./src/index.ts)**: The main entry point of the library, re-exporting all core functionalities.
+- **[core.ts](./src/core.ts)**: Provides core utilities, including the `StopWatch` class for performance measurement.
+- **[interactiveApp.ts](./src/interactiveApp.ts)**: Defines the main settings and input handling mechanisms for interactive applications.
+- **[InteractiveIo.ts](./src/InteractiveIo.ts)**: Manages standard IO streams and provides utility functions for interactive input and output.
+- **[terminalUI.ts](./src/terminalUI.ts)**: Contains utilities for enhancing terminal UI, such as spinners, separators, and text formatting.
 
 ### Detailed File Responsibilities
 
-- **[index.ts](./src/index.ts)**: This file serves as the main entry point, re-exporting functionalities from other modules to provide a unified interface.
-- **[core.ts](./src/core.ts)**: Implements core utilities, including the `StopWatch` class, which is used for performance measurements and timing operations within the console applications.
-- **[interactiveApp.ts](./src/interactiveApp.ts)**: Contains the main settings and input handling mechanisms for interactive applications. It defines types such as `InputHandler` and `InteractiveAppSettings` to manage command-line inputs and application behavior.
-- **[InteractiveIo.ts](./src/InteractiveIo.ts)**: Manages standard IO streams and provides utility functions for interactive IO operations. It includes the `InteractiveIo` type and functions like `getInteractiveIO` and `createInteractiveIO` to initialize and manage IO streams.
-- **[terminalUI.ts](./src/terminalUI.ts)**: Enhances terminal UI with features like spinners, separators, and structured layouts. It includes utilities for handling ANSI escape codes and functions like `getDisplayWidth` and `padEndDisplay` to manage terminal output formatting.
+1. **[index.ts](./src/index.ts)**:
+
+   - Serves as the main entry point for the library.
+   - Re-exports functionalities from other modules to provide a unified interface.
+
+2. **[core.ts](./src/core.ts)**:
+
+   - Implements the `StopWatch` class for measuring and displaying elapsed time.
+   - Includes utility functions like `millisecondsToString` for formatting time.
+
+3. **[interactiveApp.ts](./src/interactiveApp.ts)**:
+
+   - Defines the `InteractiveAppSettings` type, which allows customization of application behavior, such as input handling, command prefixes, and stop commands.
+   - Provides the `InputHandler` type for managing command-line inputs.
+
+4. **[InteractiveIo.ts](./src/InteractiveIo.ts)**:
+
+   - Manages standard IO streams through the `InteractiveIo` type.
+   - Includes functions like `getInteractiveIO` and `createInteractiveIO` for initializing and managing IO streams.
+   - Implements the `ConsoleWriter` class for simplified console output operations.
+
+5. **[terminalUI.ts](./src/terminalUI.ts)**:
+   - Enhances terminal UI with utilities for handling ANSI escape codes, managing display widths, and formatting text.
+   - Provides features like spinners, separators, and structured layouts for terminal-based applications.
 
 ## How to extend
 
 To extend the `interactiveApp` package, follow these steps:
 
-1. **Start with the entry point**: Open the [index.ts](./src/index.ts) file to understand the exported functionalities.
-2. **Explore core utilities**: Check the [core.ts](./src/core.ts) file for essential utilities like the `StopWatch` class.
-3. **Modify interactive settings**: Look into the [interactiveApp.ts](./src/interactiveApp.ts) file to customize the interactive application settings and input handlers.
-4. **Enhance IO operations**: Review the [InteractiveIo.ts](./src/InteractiveIo.ts) file to manage IO streams and add new IO functionalities.
-5. **Improve terminal UI**: Examine the [terminalUI.ts](./src/terminalUI.ts) file to add or modify terminal UI features.
+1. **Understand the entry point**:
 
-To test your changes, run the existing tests or add new ones to ensure the extended functionalities work as expected.
+   - Start with [index.ts](./src/index.ts) to see the exported functionalities and how the modules are integrated.
+
+2. **Explore core utilities**:
+
+   - Review [core.ts](./src/core.ts) for foundational utilities like the `StopWatch` class, which can be extended or reused in your application.
+
+3. **Customize interactive settings**:
+
+   - Modify [interactiveApp.ts](./src/interactiveApp.ts) to adjust application settings, such as input handlers, command prefixes, and stop commands. You can also add new types or handlers to extend the application's capabilities.
+
+4. **Enhance IO operations**:
+
+   - Use [InteractiveIo.ts](./src/InteractiveIo.ts) to manage IO streams. You can extend the `InteractiveIo` type or add new methods to the `ConsoleWriter` class for custom output formatting.
+
+5. **Improve terminal UI**:
+
+   - Extend [terminalUI.ts](./src/terminalUI.ts) to add new terminal UI features or customize existing ones. For example, you can create new utilities for advanced text formatting or additional UI elements.
+
+6. **Test your changes**:
+   - Ensure your extensions work as expected by running the existing test suite or adding new tests. This will help maintain the reliability of the library.
+
+By following these steps, you can effectively extend the `interactiveApp` package to meet your specific requirements.
 
 ## Reference
 
@@ -58,7 +107,7 @@ To test your changes, run the existing tests or add new ones to ensure the exten
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -75,7 +124,7 @@ External: `string-width`
 - [knowpro-test](../../packages/knowProTest/README.md)
 - [memory-mcp](../../examples/mcpMemory/README.md)
 - [playground](../../examples/playground/README.md)
-- [schema-studio](../../examples/schemaStudio/README.md)
+- schema-studio
 - [search-action-test](../../examples/searchActionTest/README.md)
 - [telemetry-query-example](../../examples/commandHistogram/README.md)
 
@@ -85,6 +134,6 @@ External: `string-width`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.903Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter interactive-app docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter interactive-app docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

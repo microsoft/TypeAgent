@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=80bf197faca449d4d1ccde7575d473ee445d511c679506d8b2698d8715002773 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=8b5f836daf6daab994a7408f3320f719c9bc835e8ca7a2b9ba954001cbc7c766 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # azure-ai-foundry — AI-generated documentation
@@ -12,62 +12,76 @@
 
 ## Overview
 
-The `azure-ai-foundry` package is a TypeScript library designed to interface with Azure AI Foundry agents, projects, and tools. It is primarily used for sample agents and examples within the TypeAgent project. This package provides functionalities to manage Azure AI Foundry agents, agent conversations, and agent tools.
+The `azure-ai-foundry` package is a TypeScript library designed to interface with Azure AI Foundry agents, projects, and tools. It is primarily intended for use in sample agents and examples within the TypeAgent project. The library provides a set of utilities and abstractions to manage Azure AI Foundry agents, handle agent conversations, and integrate with tools like BingWithGrounding and Logic Apps.
 
 ## What it does
 
-The `azure-ai-foundry` package offers a range of functionalities to manage Azure AI Foundry agents, agent conversations, and agent tools. It supports actions such as creating, updating, and deleting agents, managing threads, and handling tools like BingWithGrounding and Logic Apps. The package retrieves necessary settings from environment variables to facilitate these operations.
+This package provides a range of functionalities to interact with Azure AI Foundry services. It supports the management of agents, conversations, and tools, enabling developers to create, update, and delete agents, manage threads, and work with specific tools. The library also includes utilities for handling environment-specific configurations required to interact with these services.
 
-Key actions supported by this package include:
+### Key Capabilities
 
-- `createAgent`: Create a new agent with specified configurations.
-- `ensureAgent`: Retrieve an existing agent or create it if it does not exist.
-- `flushAgent`: Clear agent data.
-- `ensureOpenPhraseGeneratorAgent`: Manage the Open Phrase Generator agent.
-- `ensureKeywordExtractorAgent`: Manage the Keyword Extractor agent.
+- **Agent Management**: Actions like `createAgent`, `ensureAgent`, and `flushAgent` allow for creating, updating, and managing agents in the Azure AI Foundry ecosystem.
+- **Tool Integration**: The package supports tools such as BingWithGrounding, Logic Apps, and others. For example:
+  - `ensureOpenPhraseGeneratorAgent` manages the Open Phrase Generator agent.
+  - `ensureKeywordExtractorAgent` manages the Keyword Extractor agent.
+- **Conversation Management**: The package includes utilities for managing agent conversations, such as creating and deleting threads.
+- **URL Resolution and Caching**: The `urlResolver` and `urlResolverCache` modules provide functionality for resolving URLs and caching results for efficient reuse.
+
+The package relies on environment variables to configure access to Azure AI Foundry services and tools. These variables include API endpoints, agent IDs, and connection IDs.
 
 ## Setup
 
-To use the `azure-ai-foundry` package, certain environment variables need to be set. These variables provide the necessary settings for the Bing with Grounding API and other tools. The required environment variables include:
+To use the `azure-ai-foundry` package, you need to configure several environment variables. These variables provide the necessary settings for interacting with Azure AI Foundry services and tools. Below is a list of required environment variables:
 
-- `BING_WITH_GROUNDING_ENDPOINT`
-- `BING_WITH_GROUNDING_AGENT_ID`
-- `BING_WITH_GROUNDING_URL_RESOLUTION_AGENT_ID`
-- `BING_WITH_GROUNDING_URL_RESOLUTION_CONNECTION_ID`
-- `AZURE_FOUNDRY_AGENT_ID_VALIDATOR`
-- `LOGIC_APP_CONNECTION_ID_GET_HTTP_ENDPOINT`
-- `AZURE_FOUNDRY_AGENT_ID_ALIAS_KEYWORD_EXTRACTOR`
-- `AZURE_FOUNDRY_AGENT_ID_OPEN_PHRASE_GENERATOR`
+- `BING_WITH_GROUNDING_ENDPOINT`: The endpoint for the Bing with Grounding API.
+- `BING_WITH_GROUNDING_AGENT_ID`: The ID of the Bing with Grounding agent.
+- `BING_WITH_GROUNDING_URL_RESOLUTION_AGENT_ID`: The ID of the URL resolution agent for Bing with Grounding.
+- `BING_WITH_GROUNDING_URL_RESOLUTION_CONNECTION_ID`: The connection ID for the URL resolution agent.
+- `AZURE_FOUNDRY_AGENT_ID_VALIDATOR`: The ID of the agent used for validation.
+- `LOGIC_APP_CONNECTION_ID_GET_HTTP_ENDPOINT`: The connection ID for the Logic App HTTP endpoint.
+- `AZURE_FOUNDRY_AGENT_ID_ALIAS_KEYWORD_EXTRACTOR`: The ID of the Keyword Extractor agent.
+- `AZURE_FOUNDRY_AGENT_ID_OPEN_PHRASE_GENERATOR`: The ID of the Open Phrase Generator agent.
 
-For detailed setup instructions, including how to obtain these values, refer to the hand-written README.
+To obtain these values, refer to the hand-written README, which provides detailed instructions for setting up the environment and acquiring the necessary credentials.
 
 ## Key Files
 
-The `azure-ai-foundry` package is organized into several key files, each responsible for different aspects of the library:
+The `azure-ai-foundry` package is organized into several key files, each responsible for specific functionalities:
 
-- [index.ts](./src/index.ts): Exports various modules including `bingWithGrounding`, `urlResolver`, `urlResolverCache`, `agents`, `websiteAliasExtraction`, and `openPhraseGeneratorAgent`.
-- [agents.ts](./src/agents.ts): Contains functions to manage agents, including `createAgent` and `ensureAgent`.
-- [bingWithGrounding.ts](./src/bingWithGrounding.ts): Manages settings and environment variables for the Bing with Grounding API.
-- [openPhraseGeneratorAgent.ts](./src/openPhraseGeneratorAgent.ts): Manages the Open Phrase Generator agent.
-- [urlResolver.ts](./src/urlResolver.ts): Handles URL resolution and related actions.
-- [urlResolverCache.ts](./src/urlResolverCache.ts): Manages caching for URL resolution.
-- [websiteAliasExtraction.ts](./src/websiteAliasExtraction.ts): Manages the Keyword Extractor agent.
+- **[index.ts](./src/index.ts)**: Serves as the main entry point for the package. It exports modules for agents, tools, and utilities, including `bingWithGrounding`, `urlResolver`, `urlResolverCache`, `agents`, `websiteAliasExtraction`, and `openPhraseGeneratorAgent`.
+
+- **[agents.ts](./src/agents.ts)**: Contains core functions for managing agents, such as `createAgent`, `ensureAgent`, and `flushAgent`. It also provides utilities for creating AI project clients and defining tools like Bing Grounding.
+
+- **[bingWithGrounding.ts](./src/bingWithGrounding.ts)**: Manages settings and environment variables for the Bing with Grounding API. It includes utilities to retrieve API settings from environment variables.
+
+- **[openPhraseGeneratorAgent.ts](./src/openPhraseGeneratorAgent.ts)**: Handles the Open Phrase Generator agent, including the `ensureOpenPhraseGeneratorAgent` function for managing its lifecycle.
+
+- **[urlResolver.ts](./src/urlResolver.ts)**: Provides functionality for resolving URLs and managing related actions, such as `flushAgent` and `deleteThreads`.
+
+- **[urlResolverCache.ts](./src/urlResolverCache.ts)**: Implements a caching mechanism for URL resolution, including support for domain, URL, and phrase caching.
+
+- **[websiteAliasExtraction.ts](./src/websiteAliasExtraction.ts)**: Manages the Keyword Extractor agent and includes the `ensureKeywordExtractorAgent` function for its lifecycle management.
 
 ## How to extend
 
 To extend the `azure-ai-foundry` package, follow these steps:
 
-1. **Identify the module to extend**: Determine which module or functionality you need to enhance. For example, if you need to add a new agent, start with [agents.ts](./src/agents.ts).
+1. **Understand the existing structure**: Familiarize yourself with the key files and their responsibilities. For example, if you want to add a new agent, start by reviewing [agents.ts](./src/agents.ts).
 
-2. **Add new functionality**: Implement the new feature or enhancement in the appropriate file. Follow the existing patterns and structures used in the package.
+2. **Add new functionality**:
 
-3. **Update exports**: Ensure that your new functionality is exported in [index.ts](./src/index.ts) if it needs to be accessible from other parts of the package.
+   - If you're adding a new agent, define its configuration and lifecycle management functions in [agents.ts](./src/agents.ts) or a new file.
+   - For new tools or APIs, create a dedicated module similar to [bingWithGrounding.ts](./src/bingWithGrounding.ts).
 
-4. **Test your changes**: Write tests to verify your new functionality. Ensure that all existing tests pass and that your new tests cover the added features.
+3. **Update exports**: Add your new module or functionality to [index.ts](./src/index.ts) to make it accessible to other parts of the package.
 
-5. **Document your changes**: Update the documentation to reflect the new functionality. Include any new environment variables or setup steps if applicable.
+4. **Write tests**: Ensure your changes are well-tested. Add unit tests for new functions and verify that existing tests still pass.
 
-By following these steps, you can effectively extend the `azure-ai-foundry` package to meet your specific needs.
+5. **Update documentation**: Document your changes, including any new environment variables or setup steps, in the appropriate sections of the documentation.
+
+6. **Follow coding standards**: Maintain consistency with the existing codebase by adhering to its patterns and conventions.
+
+By following these steps, you can effectively extend the `azure-ai-foundry` package to support additional agents, tools, or functionalities.
 
 ## Reference
 
@@ -75,7 +89,7 @@ By following these steps, you can effectively extend the `azure-ai-foundry` pack
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -93,7 +107,7 @@ External: `@azure/ai-projects`, `@azure/identity`, `async`, `debug`, `openai`, `
 
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [browser-typeagent](../../packages/agents/browser/README.md)
-- [schema-studio](../../examples/schemaStudio/README.md)
+- schema-studio
 - [website-aliases](../../examples/websiteAliases/README.md)
 
 ### Files of interest
@@ -102,6 +116,6 @@ External: `@azure/ai-projects`, `@azure/identity`, `async`, `debug`, `openai`, `
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter azure-ai-foundry docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter azure-ai-foundry docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
