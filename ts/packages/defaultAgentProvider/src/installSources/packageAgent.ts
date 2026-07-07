@@ -155,13 +155,14 @@ class ListInstalledCommandHandler implements CommandHandler {
         }
 
         // Sources listed alphabetically; one table per source, with a heading.
-        for (const source of [...groups.keys()].sort()) {
+        const sortedSources = [...groups.keys()].sort();
+        sortedSources.forEach((source, index) => {
             const groupRecords = groups
                 .get(source)!
                 .sort((a, b) => a.name.localeCompare(b.name));
             context.actionIO.appendDisplay({
                 type: "text",
-                content: chalk.yellow(source),
+                content: chalk.yellow(`${index === 0 ? "" : "\n"}${source}\n`),
             });
             const text: string[][] = [["Agent", "Reference"]];
             for (const record of groupRecords) {
@@ -176,12 +177,12 @@ class ListInstalledCommandHandler implements CommandHandler {
                 type: "text",
                 content: text,
             });
-        }
+        });
 
         context.actionIO.appendDisplay({
             type: "text",
             content: chalk.gray(
-                "Showing installable installed agents only. Use '@config agent' to see all available agents and their status.",
+                "\nShowing installable installed agents only. Use '@config agent' to see all available agents and their status.",
             ),
         });
     }

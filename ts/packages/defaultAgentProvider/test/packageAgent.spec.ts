@@ -96,9 +96,36 @@ function capturingActionContext(agentContext: PackageAgentContext) {
     return { context, output: () => captured.join("\n") };
 }
 
+function tightlyCapturingActionContext(agentContext: PackageAgentContext) {
+    const captured: string[] = [];
+    const stripAnsi = (text: string) =>
+        text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+    const context = {
+        sessionContext: { agentContext },
+        actionIO: {
+            appendDisplay: (content: any) => {
+                const text =
+                    typeof content === "string"
+                        ? content
+                        : Array.isArray(content?.content)
+                          ? content.content
+                                .map((row: string[]) => row.join(" "))
+                                .join("\n")
+                          : (content?.content ?? JSON.stringify(content));
+                captured.push(
+                    typeof text === "string" ? stripAnsi(text) : text,
+                );
+            },
+            setDisplay: () => {},
+            takeAction: () => {},
+        },
+    } as any;
+    return { context, output: () => captured.join("") };
+}
+
 function getHandler(
     source: InstalledAgentSourceApi,
-    name: "install" | "uninstall" | "update" | "available",
+    name: "install" | "uninstall" | "update" | "available" | "list",
 ): CommandHandler {
     const table = buildPackageCommandTable(source.sourceCommands());
     return table.commands[name] as CommandHandler;
@@ -393,5 +420,27 @@ describe("@package available", () => {
             result.groups.map((g) => [g.name, g.completions]),
         );
         expect(byName.get("--source")).toEqual(["catalog", "feed"]);
+    });
+});
+
+describe("@package list", () => {
+    it("renders headings, tables, and footer with explicit line breaks", async () => {
+        const { api } = makeSource({
+            listInstalled: () => [
+                { name: "beta", source: "feed", ref: "pkg-beta" },
+                { name: "alpha", source: "catalog", ref: "pkg-alpha" },
+            ],
+        });
+        const handler = getHandler(api, "list");
+        const { context, output } = tightlyCapturingActionContext({
+            appAgentHost: noopHost,
+            source: api,
+        });
+
+        await handler.run(context, { args: {} } as any);
+
+        expect(output()).toContain(
+            "catalog\nAgent Reference\nalpha pkg-alpha\nfeed\nAgent Reference\nbeta pkg-beta\nShowing installable installed agents only.",
+        );
     });
 });
