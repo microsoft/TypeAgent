@@ -8,8 +8,10 @@ import {
     createBundledAppAgentProvider,
     createInstalledAppAgentProvider,
     createInstalledAppAgentProviders,
+    loadInstalledRecords,
     readAgentsJson,
     recordRequirePath,
+    writeAgentsJson,
 } from "../src/installSources/installedAgents.js";
 import {
     createDefaultInstalledAgentSource,
@@ -327,6 +329,40 @@ describe("getDefaultAppAgentProviders", () => {
 });
 
 describe("getDefaultAppAgentSource", () => {
+    it("uses configName when reserving bundled agent names", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const built = createDefaultInstalledAgentSource(instanceDir, {
+            configName: "test",
+        });
+
+        await built.testApi.install(
+            "player",
+            makePathAgentDir(),
+            undefined,
+            noopHost,
+        );
+
+        expect(readAgentsJson(instanceDir)?.agents.player?.name).toBe("player");
+    });
+
+    it("filters installed records against the selected bundled config", () => {
+        const instanceDir = pathOnlyInstanceDir();
+        const record: InstalledAgentRecord = {
+            name: "player",
+            kind: "npm",
+            source: "path",
+            path: makePathAgentDir(),
+        };
+        writeAgentsJson(instanceDir, { agents: { player: record } });
+
+        expect(loadInstalledRecords(instanceDir).player).toBeUndefined();
+
+        writeAgentsJson(instanceDir, { agents: { player: record } });
+        expect(loadInstalledRecords(instanceDir, "test").player).toEqual(
+            record,
+        );
+    });
+
     it("connect() vends the @package agent plus a per-agent provider per install", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);

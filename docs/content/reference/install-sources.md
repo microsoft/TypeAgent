@@ -139,6 +139,17 @@ A source that is configured but not listed in the order is still usable via
 Source definitions and the resolution order persist to the instance configuration, so
 they survive a restart.
 
+## Host limitations
+
+- Remote hosts can disable path resolution with `excludePathSources`. The `path`
+  source still appears in `@package source list` and remains persisted, but it is
+  skipped during resolution so a user path is not interpreted against the remote
+  server's filesystem.
+- Indexing-service discovery is currently a startup snapshot. Installed feed/path
+  agents that declare indexing services keep loading as agents, but their indexing
+  services are not registered dynamically on install, update, or uninstall until the
+  host restarts.
+
 ## Uninstalling
 
 ```

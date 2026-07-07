@@ -219,8 +219,9 @@ export function createInstalledAppAgentProviders(
  */
 export function loadInstalledRecords(
     instanceDir: string,
+    configName?: string,
 ): Record<string, InstalledAgentRecord> {
-    const bundledNames = getBundledAgentNames();
+    const bundledNames = getBundledAgentNames(configName);
     const existing = readAgentsJson(instanceDir);
     const installs: Record<string, InstalledAgentRecord> = {};
     if (existing !== undefined) {

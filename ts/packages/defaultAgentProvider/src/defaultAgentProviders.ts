@@ -188,6 +188,7 @@ export function getDefaultAppAgentProviders(
  */
 function getInstalledAppAgentProviders(
     instanceConfigs: InstanceConfigProvider | undefined,
+    configName?: string,
 ): AppAgentProvider[] {
     const instanceDir = instanceConfigs?.getInstanceDir();
     if (instanceDir === undefined) {
@@ -197,7 +198,7 @@ function getInstalledAppAgentProviders(
     if (installDir === undefined) {
         return [];
     }
-    const records = loadInstalledRecords(instanceDir);
+    const records = loadInstalledRecords(instanceDir, configName);
     return createInstalledAppAgentProviders(records, installDir);
 }
 
@@ -243,6 +244,8 @@ export type UpdateCoordinationOptions = {
  * whose refs would otherwise resolve against the server's own filesystem.
  */
 export type DefaultAppAgentSourceOptions = InstallSourcesResolveOptions & {
+    // Provider config name whose bundled agents are reserved from install names.
+    configName?: string | undefined;
     // Tunables for the coordinated update/uninstall barrier.
     updateCoordination?: UpdateCoordinationOptions | undefined;
 };
@@ -412,7 +415,7 @@ export function createDefaultInstalledAgentSource(
     // Builtins are the app's shipped bundled agents (their own static
     // provider), so they can never be installed-over, uninstalled, or updated.
     function isBuiltin(name: string): boolean {
-        return getBundledAgentNames().has(name);
+        return getBundledAgentNames(options?.configName).has(name);
     }
 
     // Per-name lifecycle tracker: the current state of the
@@ -463,7 +466,10 @@ export function createDefaultInstalledAgentSource(
     // Seed active entries from agents.json. One single-agent,
     // single-root provider per record; shared (the same instance) across every
     // connected session.
-    const installedRecords = loadInstalledRecords(instanceDir);
+    const installedRecords = loadInstalledRecords(
+        instanceDir,
+        options?.configName,
+    );
     for (const [name, record] of Object.entries(installedRecords)) {
         entries.set(name, {
             status: "active",
@@ -1359,7 +1365,9 @@ export async function getIndexingServiceRegistry(
         typeof instanceDirOrConfigProvider === "string"
             ? getInstanceConfigProvider(instanceDirOrConfigProvider)
             : instanceDirOrConfigProvider;
-    providers.push(...getInstalledAppAgentProviders(instanceConfigs));
+    providers.push(
+        ...getInstalledAppAgentProviders(instanceConfigs, configName),
+    );
     const registry = new DefaultIndexingServiceRegistry();
 
     for (const provider of providers) {

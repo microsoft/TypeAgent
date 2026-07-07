@@ -511,7 +511,9 @@ async function initializeDispatcher(
                         browser: browserControl.control,
                     },
                     portRegistrar,
-                    appAgentSources: [getDefaultAppAgentSource(instanceDir)],
+                    appAgentSources: [
+                        getDefaultAppAgentSource(instanceDir, { configName }),
+                    ],
                     persistSession: true,
                     storageProvider: getFsStorageProvider(),
                     metrics: true,

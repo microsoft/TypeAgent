@@ -868,6 +868,7 @@ export async function initializeCommandHandlerContext(
     const instanceDirLock = persistDir
         ? await lockInstanceDir(persistDir)
         : undefined;
+    let contextForCleanup: CommandHandlerContext | undefined;
 
     try {
         const session = await getSession(
@@ -985,6 +986,7 @@ export async function initializeCommandHandlerContext(
             // available so it can route through `context.clientIO`.
             requestQueue: undefined as unknown as RequestQueue,
         };
+        contextForCleanup = context;
 
         const snapshotCoalescer = createSnapshotCoalescer((snapshot) => {
             context.clientIO.queueStateChanged?.(snapshot);
@@ -1133,8 +1135,31 @@ export async function initializeCommandHandlerContext(
         debug("Context initialized");
         return context;
     } catch (e) {
+        if (contextForCleanup !== undefined) {
+            contextForCleanup.appAgentHost?.dispose();
+            try {
+                await contextForCleanup.requestQueue?.drainAndStop();
+            } catch {
+                // best-effort
+            }
+            try {
+                await contextForCleanup.agents.close();
+            } catch {
+                // best-effort
+            }
+            for (const connection of contextForCleanup.appAgentConnections) {
+                try {
+                    connection.dispose();
+                } catch (disposeError) {
+                    debugError(
+                        `Failed to dispose source connection after init failure: ${disposeError}`,
+                    );
+                }
+            }
+            contextForCleanup.appAgentConnections.length = 0;
+        }
         if (instanceDirLock) {
-            instanceDirLock();
+            await instanceDirLock();
         }
         throw e;
     }

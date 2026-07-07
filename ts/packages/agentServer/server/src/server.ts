@@ -167,7 +167,9 @@ async function main() {
                     instanceDir,
                     configName,
                 ),
-                appAgentSources: [getDefaultAppAgentSource(instanceDir)],
+                appAgentSources: [
+                    getDefaultAppAgentSource(instanceDir, { configName }),
+                ],
                 persistSession: true,
                 storageProvider: getFsStorageProvider(),
                 metrics: true,

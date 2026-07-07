@@ -129,6 +129,16 @@ appAgentSources: [
 ],
 ```
 
+Current limitations for default installed sources:
+
+- `excludePathSources` is a runtime resolution filter. It keeps `path` sources in
+  the configured source list, but skips them during install resolution so a
+  remote host does not interpret a user's path against the server's filesystem.
+- Indexing-service discovery is a startup snapshot. Installed feed/path agents
+  that declare `indexingServices` are not registered dynamically on
+  `@package install`, and uninstall/update does not update the indexing-service
+  registry until the host restarts.
+
 ### 3. Your own source, without `default-agent-provider`
 
 If you want installable agents but not the Azure and npm feed code, implement
