@@ -141,6 +141,12 @@ openAI:
 # modelProvider: copilot
 # copilot:
 #   defaultModel: claude-sonnet-4.5   # requires an authenticated `copilot` CLI
+#   # Optional: connect to an already-running Copilot CLI server over TCP
+#   # instead of spawning a CLI child per host. Eliminates the one-time
+#   # (multi-second) CLI startup latency. Format: "host:port" / "port".
+#   # Mutually exclusive with cliPath. Start the server with the Copilot CLI's
+#   # server/headless mode first, then point cliUrl at it.
+#   # cliUrl: 127.0.0.1:8123
 # embedding:
 #   provider: local
 #   model: Xenova/all-MiniLM-L6-v2

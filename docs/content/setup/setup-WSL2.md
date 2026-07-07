@@ -13,10 +13,12 @@ This is a list of step-by-step instructions to set up a WSL2 environment from _s
   - Setup WSL Username/password
 - Setup NodeJS using NVM ([Full Instructions](https://nodejs.org/en/download))
   - Setup [NVM](https://github.com/nvm-sh/nvm)
-    - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash`
+    - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.5/install.sh | bash`
     - `\. "$HOME/.nvm/nvm.sh"`
   - Install Node
     - `nvm install --lts`
+- Enable Corepack (required for pnpm)
+  - `corepack enable`
 - Setup Node native module build tools:
   - `sudo apt install -y make build-essential`
 - Clone and build:
