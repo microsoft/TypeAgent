@@ -29,8 +29,10 @@ export class FeedAuthError extends Error {
 type CachedToken = { token: string; expiresAt: number };
 let cachedToken: CachedToken | undefined;
 
-// Test hook: an optional command runner returning the raw JSON
-// output of `az account get-access-token`.
+/**
+ * @internal Test-only hook: an optional command runner returning the raw JSON
+ * output of `az account get-access-token`.
+ */
 export type AzTokenRunner = () => Promise<string>;
 
 async function defaultAzRunner(): Promise<string> {
@@ -63,6 +65,7 @@ async function defaultAzRunner(): Promise<string> {
  * actionable `az login` hint when `az` is missing or logged out.
  */
 export async function getFeedAccessToken(
+    /** @internal Test-only override for Azure CLI execution. */
     runner: AzTokenRunner = defaultAzRunner,
 ): Promise<string> {
     const now = Date.now();
@@ -102,6 +105,7 @@ export async function getFeedAccessToken(
  */
 export async function writeTransientNpmAuth(
     registry: string,
+    /** @internal Test-only override for Azure CLI execution. */
     runner: AzTokenRunner = defaultAzRunner,
 ): Promise<string> {
     const token = await getFeedAccessToken(runner);
@@ -127,7 +131,7 @@ export function removeTransientNpmAuth(file: string): void {
     }
 }
 
-// For tests: clear the in-memory token cache.
+/** @internal Test-only: clear the in-memory token cache. */
 export function clearTokenCacheForTest(): void {
     cachedToken = undefined;
 }

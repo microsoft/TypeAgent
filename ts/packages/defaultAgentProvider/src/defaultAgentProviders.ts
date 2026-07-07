@@ -255,6 +255,7 @@ export type DefaultAppAgentSourceOptions = InstallSourcesResolveOptions & {
 };
 
 type InstalledAgentSourceForTest = AppAgentSource & {
+    /** @internal Test-only handle for driving installed-agent source mutations directly. */
     readonly testApi: InstalledAgentSourceApi;
 };
 
@@ -361,6 +362,7 @@ export function getDefaultAppAgentSource(
 export function createDefaultInstalledAgentSource(
     instanceDir: string,
     options?: DefaultAppAgentSourceOptions,
+    /** Host extension point for supplying alternate install sources. */
     sourceFactory?: InstallSourceFactory,
 ): InstalledAgentSourceForTest {
     const instanceConfigs = getInstanceConfigProvider(instanceDir);

@@ -53,6 +53,7 @@ function resolveFeedScopes(config: FeedSourceConfig): string[] {
 
 // Strip a trailing version/range from an npm specifier to get the module name.
 // "@scope/name@1.2.3" -> "@scope/name"; "name@^1" -> "name".
+// @internal Exported for focused tests; runtime use is inside this module.
 export function moduleNameFromSpec(spec: string): string {
     const at = spec.lastIndexOf("@");
     return at > 0 ? spec.slice(0, at) : spec;
@@ -61,6 +62,7 @@ export function moduleNameFromSpec(spec: string): string {
 // A syntactically valid npm package name (optionally scoped). Used to reject a
 // corrupt record that would otherwise inject shell metacharacters into the
 // install spec on the Windows `.cmd` path.
+// @internal Exported for focused tests; runtime use is inside this module.
 export function isSafeModuleName(name: string): boolean {
     return /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/.test(name);
 }
@@ -68,6 +70,7 @@ export function isSafeModuleName(name: string): boolean {
 // A concrete, published npm version (no range operators) -- the only version
 // shape ever handed to `npm install`. Ranges/tags are resolved to one of these
 // by `resolveConcreteVersion` BEFORE materialize.
+// @internal Exported for focused tests; runtime use is inside this module.
 export function isConcreteVersion(version: string): boolean {
     return semver.valid(version) !== null;
 }
@@ -77,6 +80,7 @@ export function isConcreteVersion(version: string): boolean {
 // else is rejected early (defense in depth) rather than flowing toward npm; a
 // naive metacharacter blocklist would wrongly reject valid `||` OR-ranges, so we
 // validate against the real semver-range grammar instead.
+// @internal Exported for focused tests; runtime use is inside this module.
 export function isSafeVersionRange(range: string): boolean {
     if (range.length === 0) {
         return false;
@@ -106,6 +110,7 @@ function makeInstallId(): string {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** @internal Arguments passed to the test-only npm installer override. */
 export interface NpmInstallArgs {
     spec: string;
     cwd: string;
@@ -117,6 +122,8 @@ export interface FeedSourceDeps {
     // npm root all feed installs land in. Holds a
     // private package.json marker; packages go under its node_modules/.
     installDir: string;
+    // Test-only overrides used by feed source specs; production callers rely on
+    // the default Azure CLI, fetch, npm install, clock, TTL, and cache path.
     tokenRunner?: AzTokenRunner;
     fetchFn?: typeof fetch;
     npmInstall?: (args: NpmInstallArgs) => Promise<void>;
@@ -328,6 +335,7 @@ function resolveConcreteVersion(
 
 // Full enumeration: scoped package list narrowed to packages carrying the
 // agent keyword.
+// @internal Exported for focused tests; runtime use is inside this module.
 export async function enumerateFeedAgents(
     config: FeedSourceConfig,
     token: string,

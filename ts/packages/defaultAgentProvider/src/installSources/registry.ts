@@ -140,6 +140,7 @@ function buildSource(
 export function createInstallSourceRegistry(
     initialConfigs: InstallSourceConfig[],
     deps: RegistryDeps,
+    /** Host extension point for supplying alternate source implementations. */
     sourceFactory: InstallSourceFactory = (config) => buildSource(config, deps),
 ): DefaultInstallSourceRegistry {
     const limiter = deps.limiter ?? createLimiter(1);

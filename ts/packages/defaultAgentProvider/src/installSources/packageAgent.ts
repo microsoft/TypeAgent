@@ -411,6 +411,8 @@ export const PACKAGE_AGENT_NAME = "package";
 /**
  * Build the full `@package` command table: install / uninstall /
  * update / list, plus the host's source command table nested under `source`.
+ * @internal Exported for focused command-table tests; runtime callers should
+ * use {@link createPackageAppAgentProvider}.
  */
 export function buildPackageCommandTable(
     sourceCommands: CommandHandlerTable,

@@ -18,6 +18,7 @@ import {
 import { DefaultInstallSourceRegistry } from "./registry.js";
 
 // Expand a leading "~" to the user's home directory.
+// @internal Exported for focused tests; runtime use is inside this module.
 export function expandHome(pathname: string): string {
     if (pathname === "~") {
         return os.homedir();
