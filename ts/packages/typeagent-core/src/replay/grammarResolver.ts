@@ -62,6 +62,7 @@ import type {
     ConstructionCacheLayer,
     ConstructionCacheStatus,
 } from "./constructionCacheResolver.js";
+import type { WildcardMatchValidator } from "./wildcardValidator.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -177,6 +178,17 @@ export interface CreateGrammarReplayResolverOptions {
      * a git ref. A `stale`/`absent` layer leaves behavior at the grammar match.
      */
     constructionCache?: ConstructionCacheLayer;
+    /**
+     * Runs the agent's real `validateWildcardMatch` over each candidate grammar
+     * match that captured a wildcard, mirroring the dispatcher's post-match
+     * `getValidatedMatches`. When provided, the **working-tree** side validates
+     * the ranked match list and resolves the first match the agent accepts (a
+     * rejected wildcard match falls through, exactly as the dispatcher falls back
+     * to a lower match / the LLM). Working-tree only; never run at a git ref
+     * (loading arbitrary-ref agent code is out of scope). Fail-open: only an
+     * explicit `false` drops a match.
+     */
+    wildcardValidator?: WildcardMatchValidator;
 }
 
 /**
@@ -204,6 +216,13 @@ export interface GrammarReplayResolver extends ReplayActionResolver {
      * label; `"stale"`/`"absent"` fall back to the grammar method label.
      */
     readonly constructionCacheStatus: ConstructionCacheStatus | undefined;
+    /**
+     * Whether the wildcard validator actually ran on at least one match this run
+     * (i.e. a wildcard match occurred on the working-tree side and the validator
+     * was consulted). Drives the run's "+ wildcard validation" reporting. Always
+     * `false` when no validator was supplied.
+     */
+    readonly wildcardValidationApplied: boolean;
 }
 
 let entitiesRegistered = false;
@@ -388,6 +407,41 @@ function topMatchAction(results: MatchResult[]): unknown {
 }
 
 /**
+ * Mirror the dispatcher's `getValidatedMatches` for the wildcard step: walk the
+ * heuristically-ranked matches and return the action of the first one the agent
+ * accepts. A match with no wildcard capture (`wildcardCharCount === 0`) is
+ * accepted without consulting the validator (exactly as the dispatcher
+ * short-circuits); a wildcard match is dropped only on an explicit `false`
+ * verdict, and the walk continues to the next candidate (the dispatcher's
+ * fall-back-to-a-lower-match behavior). Returns `action: undefined` when every
+ * candidate was rejected — the row then becomes `needs-explanation`, the
+ * deterministic stand-in for the dispatcher falling back to the LLM.
+ *
+ * Exported for unit testing the ranked-selection contract.
+ */
+export async function selectValidatedMatchAction(
+    results: MatchResult[],
+    validator: WildcardMatchValidator,
+): Promise<{ action: unknown; consulted: boolean }> {
+    let consulted = false;
+    for (const result of results) {
+        const actions = result.match.actions;
+        if (actions.length === 0) {
+            continue;
+        }
+        if (result.wildcardCharCount === 0) {
+            return { action: actions[0].action, consulted };
+        }
+        consulted = true;
+        const outcome = await validator.validateMatch(actions);
+        if (!outcome.rejected) {
+            return { action: actions[0].action, consulted };
+        }
+    }
+    return { action: undefined, consulted };
+}
+
+/**
  * Build a {@link GrammarReplayResolver}. Construct ONE per replay run so the
  * per-side grammar store never outlives a single `(versionA, versionB)` pair.
  */
@@ -397,6 +451,8 @@ export function createGrammarReplayResolver(
     const { target } = opts;
     const now = opts.now ?? (() => Date.now());
     const constructionCache = opts.constructionCache;
+    const wildcardValidator = opts.wildcardValidator;
+    let wildcardValidationApplied = false;
     // Construction-cache consult is faithful to the dispatcher only for the live
     // working tree, and only when the cache's namespace hash still matches.
     const constructionActive =
@@ -429,6 +485,10 @@ export function createGrammarReplayResolver(
 
         get constructionCacheStatus(): ConstructionCacheStatus | undefined {
             return constructionCache?.status;
+        },
+
+        get wildcardValidationApplied(): boolean {
+            return wildcardValidationApplied;
         },
 
         async prepare(versionA, versionB): Promise<void> {
@@ -483,13 +543,35 @@ export function createGrammarReplayResolver(
             }
 
             const results = g.store.match(entry.utterance);
+
+            // Wildcard validation: on the working-tree side, run the
+            // agent's real `validateWildcardMatch` over the ranked candidates and
+            // resolve the first accepted match — mirroring the dispatcher's
+            // post-match `getValidatedMatches`. Never on a git ref (we can't load
+            // arbitrary-ref agent code). When no validator is supplied this is a
+            // plain top-match resolution (unchanged behavior).
+            const validateHere =
+                wildcardValidator !== undefined &&
+                version.kind === "workingTree";
+            let rawAction: unknown;
+            if (validateHere) {
+                const validated = await selectValidatedMatchAction(
+                    results,
+                    wildcardValidator!,
+                );
+                rawAction = validated.action;
+                if (validated.consulted) {
+                    wildcardValidationApplied = true;
+                }
+            } else {
+                rawAction =
+                    results.length > 0 ? topMatchAction(results) : undefined;
+            }
+
             const latencyMs = now() - t0;
             const action =
-                results.length > 0
-                    ? normalizeAction(
-                          target.schemaName,
-                          topMatchAction(results),
-                      )
+                rawAction !== undefined
+                    ? normalizeAction(target.schemaName, rawAction)
                     : undefined;
 
             if (action === undefined) {

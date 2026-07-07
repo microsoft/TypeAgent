@@ -327,6 +327,11 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const corpusTree = new CorpusTreeProvider(serviceRuntime);
+    // The Corpora tree refreshes only on explicit in-extension actions (seeding
+    // an in-repo file, adding an external source, recording feedback) and the
+    // manual Refresh command -- each of those calls corpusTree.refresh()
+    // directly. We intentionally do not watch the filesystem for out-of-band
+    // edits to *.utterances.jsonl.
     context.subscriptions.push(
         corpusTree,
         vscode.window.registerTreeDataProvider(CORPUS_VIEW_ID, corpusTree),
