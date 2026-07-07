@@ -75,11 +75,15 @@ export class EventLogTreeProvider
         if (row) {
             return [];
         }
-        // Show the native loading bar while connecting; once connected, render
-        // buffered events (or the "no events yet" placeholder).
-        await this.whenConnected();
-        if (!this.connected && this.entries.length === 0) {
-            return [];
+        // Render buffered events immediately so a mid-session disconnect keeps
+        // the ring visible instead of dropping back to the loading bar. Only
+        // gate on the connection (showing the native loading bar) during the
+        // initial load, when nothing has been buffered yet.
+        if (this.entries.length === 0) {
+            await this.whenConnected();
+            if (!this.connected && this.entries.length === 0) {
+                return [];
+            }
         }
         return buildEventLogRows(this.entries);
     }

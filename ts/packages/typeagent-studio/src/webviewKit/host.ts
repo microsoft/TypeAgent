@@ -15,6 +15,15 @@ export interface WebviewKitPanelOptions {
      */
     instanceKey?: string;
     title: string;
+    /**
+     * Keep the webview's context (DOM + script state + live messaging channel)
+     * alive while the panel is hidden instead of tearing it down and reloading
+     * on reveal. Defaults to `false`. Set `true` for panels that hold live
+     * state (an open connection, a rendered result) so navigating away and back
+     * doesn't drop the agent/connection context and strand a one-shot reveal
+     * handshake. Costs memory while hidden.
+     */
+    retainContextWhenHidden?: boolean;
     /** Path segments (from the extension root) to the client script bundle. */
     scriptPath: string[];
     /** Path segments (from the extension root) to the stylesheet. */
@@ -31,8 +40,8 @@ export interface WebviewKitPanelOptions {
  * existing one instead of opening a second — builds a locked-down CSP'd HTML
  * shell with a per-load nonce, restricts `localResourceRoots` to the bundle +
  * media dirs, and exposes typed `post`/`dispose`. State restore is left to the
- * webview via `setState` — the panel intentionally does not
- * `retainContextWhenHidden`.
+ * webview via `setState`; panels that hold live state can opt into
+ * `retainContextWhenHidden` so a reveal doesn't tear down and reload them.
  */
 export class WebviewKitPanel {
     private static readonly live = new Map<string, WebviewKitPanel>();
@@ -81,7 +90,8 @@ export class WebviewKitPanel {
             vscode.ViewColumn.Active,
             {
                 enableScripts: true,
-                retainContextWhenHidden: false,
+                retainContextWhenHidden:
+                    options.retainContextWhenHidden ?? false,
                 localResourceRoots: [scriptRoot, styleRoot],
             },
         );
