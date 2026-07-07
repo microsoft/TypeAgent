@@ -17,10 +17,21 @@ import { ActionSchemaTypeDefinition } from "@typeagent/action-schema";
 import { KeywordVector, applyKeywordDelta } from "./keywordVector.js";
 import { buildExtractionInput, extractKeywords } from "./keywordExtractor.js";
 import { KeywordSidecar, keywordId } from "./keywordSidecar.js";
+import {
+    KeywordFile,
+    loadKeywordFile,
+    keywordFilePathFor,
+} from "./keywordFile.js";
 
-// Read-only access to the live schema text an action derives its keywords from.
-// The seam that keeps the index decoupled from the AppAgentManager.
+// Read-only access to the keyword data an action derives its vector from — the
+// committed keyword file (§5 Source 1, preferred) and the live schema text (the
+// lexical floor fallback). The seam that keeps the index decoupled from the
+// AppAgentManager.
 export interface ActionSchemaSource {
+    // The committed keyword file for a schema, if one exists (§5 Source 1).
+    // Optional: a source that doesn't provide committed files (tests, minimal
+    // hosts) simply falls back to the live lexical floor.
+    getKeywordFile?(schemaName: string): KeywordFile | undefined;
     getSchemaDescription(schemaName: string): string | undefined;
     getActionDefinition(
         schemaName: string,
@@ -29,11 +40,16 @@ export interface ActionSchemaSource {
 }
 
 // Structural view of the AppAgentManager methods the production source needs —
-// avoids importing the concrete manager type here.
+// avoids importing the concrete manager type here. The schema file paths are the
+// (already-absolute) locations the per-agent keyword file sits beside.
 export interface AgentSchemaProvider {
-    tryGetActionConfig(
-        schemaName: string,
-    ): { description?: string } | undefined;
+    tryGetActionConfig(schemaName: string):
+        | {
+              description?: string;
+              originalSchemaFilePath?: string | undefined;
+              schemaFilePath?: string | undefined;
+          }
+        | undefined;
     tryGetActionSchemaFile(schemaName: string):
         | {
               parsedActionSchema: {
@@ -50,6 +66,19 @@ export function agentSchemaSource(
     agents: AgentSchemaProvider,
 ): ActionSchemaSource {
     return {
+        getKeywordFile(schemaName: string): KeywordFile | undefined {
+            try {
+                // Per-agent file: a sibling of this schema's source (§5).
+                const config = agents.tryGetActionConfig(schemaName);
+                const filePath = keywordFilePathFor(
+                    config?.originalSchemaFilePath,
+                    config?.schemaFilePath,
+                );
+                return loadKeywordFile(filePath, schemaName);
+            } catch {
+                return undefined;
+            }
+        },
         getSchemaDescription(schemaName: string): string | undefined {
             try {
                 return agents.tryGetActionConfig(schemaName)?.description;
@@ -78,19 +107,42 @@ export class KeywordIndex {
     // `@collision keywords` edits take effect without invalidating this.
     private readonly derivedMemo = new Map<string, KeywordVector>();
 
+    // Committed keyword file per schema (§5 Source 1), memoized so it is read
+    // once per schema rather than once per action. `null` records "looked, none
+    // present" so a missing file isn't re-read on every action.
+    private readonly keywordFileMemo = new Map<string, KeywordFile | null>();
+
     constructor(
         private readonly source: ActionSchemaSource,
         private readonly getSidecar: () => KeywordSidecar,
     ) {}
 
-    // Lexical-floor keywords for one action (memoized). A missing definition
-    // (schema not loaded yet / freshly-learned action) is NOT memoized, so it is
-    // re-read once the schema is available rather than cached empty forever.
+    private keywordFile(schemaName: string): KeywordFile | null {
+        const cached = this.keywordFileMemo.get(schemaName);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const file = this.source.getKeywordFile?.(schemaName) ?? null;
+        this.keywordFileMemo.set(schemaName, file);
+        return file;
+    }
+
+    // Baseline keywords for one action (memoized). Prefers the committed keyword
+    // file (§5 Source 1, LLM-distilled or lexical); falls back to live lexical
+    // extraction (§6.1 floor) when the file is absent or doesn't cover the
+    // action. A missing schema definition is NOT memoized, so it is re-read once
+    // the schema is available rather than cached empty forever.
     public derived(schemaName: string, actionName: string): KeywordVector {
         const id = keywordId(schemaName, actionName);
         const cached = this.derivedMemo.get(id);
         if (cached !== undefined) {
             return cached;
+        }
+        const fromFile = this.keywordFile(schemaName)?.actions[actionName];
+        if (fromFile !== undefined && fromFile.length > 0) {
+            const vector = new Set(fromFile);
+            this.derivedMemo.set(id, vector);
+            return vector;
         }
         const definition = this.source.getActionDefinition(
             schemaName,
@@ -117,14 +169,23 @@ export class KeywordIndex {
         return applyKeywordDelta(derived, delta);
     }
 
-    // Drop cached derived vectors when a schema may have changed (agent
-    // add/remove/reload). Clears all when no schema is given.
+    // Drop cached vectors + keyword file when a schema may have changed (agent
+    // add/remove/reload, or a fresh backfill). Clears all when no schema given.
+    // Agent reload passes the agent name, which is the prefix of its sub-schema
+    // names, so both memos are cleared by prefix for symmetry.
     public invalidate(schemaName?: string): void {
         if (schemaName === undefined) {
             this.derivedMemo.clear();
+            this.keywordFileMemo.clear();
             return;
         }
         const prefix = `${schemaName}.`;
+        this.keywordFileMemo.delete(schemaName);
+        for (const key of [...this.keywordFileMemo.keys()]) {
+            if (key.startsWith(prefix)) {
+                this.keywordFileMemo.delete(key);
+            }
+        }
         for (const id of [...this.derivedMemo.keys()]) {
             if (id.startsWith(prefix)) {
                 this.derivedMemo.delete(id);
