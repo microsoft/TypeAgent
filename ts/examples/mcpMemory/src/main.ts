@@ -107,7 +107,7 @@ async function addMcpCommands(
     return;
 }
 
-let commandHandlers: Record<string, CommandHandler> = {};
+const commandHandlers: Record<string, CommandHandler> = {};
 addStandardHandlers(commandHandlers);
 
 function onStart(io: InteractiveIo): void {}

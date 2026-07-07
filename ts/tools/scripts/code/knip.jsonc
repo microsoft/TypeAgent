@@ -1,0 +1,14 @@
+{
+  // Starter knip config for the dead-code report (tools/scripts/code/deadCodeReport.ts).
+  //
+  // knip auto-detects the pnpm workspaces and infers each package's entry
+  // points from package.json (main / bin / exports). The repo-wide ignores
+  // below just drop generated output. The real accuracy work — and the reason
+  // the raw counts overcount "unused" code — is declaring the entry points
+  // knip cannot infer: agent action handlers loaded at runtime via manifest,
+  // webpack/CLI entries, and benchmark/test harnesses. Add `entry` patterns
+  // (per workspace via the `workspaces` key) as hotspots are triaged.
+  "$schema": "https://unpkg.com/knip@6/schema.jsonc",
+  "ignore": ["**/dist/**", "**/*.d.ts", "**/bundle/**", "**/*.min.js"],
+  "ignoreBinaries": ["fluid-build", "shx", "rimraf"],
+}

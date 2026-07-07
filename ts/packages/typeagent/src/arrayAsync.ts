@@ -63,8 +63,8 @@ export async function mapAsync<T, TResult>(
             if (progress) {
                 let stop = false;
                 for (let s = 0; s < sliceResults.length; ++s) {
-                    let index = s + i;
-                    let r = progress(array[index], index, results[index]);
+                    const index = s + i;
+                    const r = progress(array[index], index, results[index]);
                     if (shouldStop(r)) {
                         stop = true;
                     }
@@ -125,8 +125,8 @@ export async function forEachAsync<T>(
             if (progress) {
                 let stop = false;
                 for (let s = 0; s < slice.length; ++s) {
-                    let index = s + i;
-                    let r = progress(array[index], index);
+                    const index = s + i;
+                    const r = progress(array[index], index);
                     if (shouldStop(r)) {
                         stop = true;
                     }

@@ -177,7 +177,7 @@ export async function createKnowproPodcastCommands(
         // Build index
         context.printer.writeLine();
         const maxMessages = namedArgs.maxMessages ?? messageCount;
-        let originalMessages = context.podcast.messages;
+        const originalMessages = context.podcast.messages;
         try {
             if (maxMessages < messageCount) {
                 context.podcast.messages =
@@ -186,7 +186,7 @@ export async function createKnowproPodcastCommands(
                     );
             }
             context.printer.writeLine(`Building Index`);
-            let progress = new ProgressBar(context.printer, maxMessages);
+            const progress = new ProgressBar(context.printer, maxMessages);
             const eventHandler = createIndexingEventHandler(
                 context.printer,
                 progress,
@@ -235,7 +235,10 @@ export async function createKnowproPodcastCommands(
             ...context.podcast!.settings.messageTextIndexSettings,
         };
         settings.embeddingIndexSettings.batchSize = namedArgs.batchSize;
-        let progress = new ProgressBar(context.printer, namedArgs.maxMessages);
+        const progress = new ProgressBar(
+            context.printer,
+            namedArgs.maxMessages,
+        );
         podcast.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
             settings,
         );

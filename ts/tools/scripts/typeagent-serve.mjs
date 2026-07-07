@@ -39,6 +39,11 @@ import { fileURLToPath } from "node:url";
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 const serverEntry = path.join(artifactDir, "dist", "server.js");
 const getKeysEntry = path.join(artifactDir, "tools", "getKeys.mjs");
+const generateConfigEntry = path.join(
+    artifactDir,
+    "tools",
+    "generate-selfhost-config.mjs",
+);
 
 // Profile recorded by deployAgentServer when the artifact was profile-pruned.
 function readProfileMarker() {
@@ -201,7 +206,21 @@ async function cmdStart() {
         return 0;
     }
     if (!fs.existsSync(serverEntry)) {
-        console.error(`Server entry not found at ${serverEntry}.`);
+        // Detect running from the repo source tree (not a deployed artifact).
+        const inRepo = fs.existsSync(
+            path.join(artifactDir, "..", "..", "package.json"),
+        );
+        if (inRepo) {
+            console.error(
+                `typeagent-serve.mjs 'start' is for the deployed artifact only.\n` +
+                    `In development, start the agent-server with:\n` +
+                    `  cd packages/agentServer/server && pnpm start\n` +
+                    `  (or: pnpm run start:tunnel   — to also bring up the dev tunnel)\n\n` +
+                    `Tunnel host commands (tunnel start/stop/status) work from here.`,
+            );
+        } else {
+            console.error(`Server entry not found at ${serverEntry}.`);
+        }
         return 1;
     }
     console.log(`Starting agent server (port ${port})...`);
@@ -229,6 +248,35 @@ async function cmdStart() {
 }
 
 async function cmdProvision() {
+    // Chat endpoint provider. Default 'aisystems' preserves today's behavior
+    // (Key Vault download via getKeys). 'ollama'/'copilot' synthesize a
+    // config.local.yaml locally with generate-selfhost-config (no Key Vault).
+    const provider = (arg("--provider") ?? "aisystems").toLowerCase();
+
+    if (provider === "ollama" || provider === "copilot") {
+        if (!fs.existsSync(generateConfigEntry)) {
+            console.error(
+                `Self-host config generator not found at ${generateConfigEntry}.`,
+            );
+            return 1;
+        }
+        const dir = process.env.TYPEAGENT_CONFIG_DIR;
+        console.log(
+            `Generating config.local.yaml for '${provider}' provider into ${dir}...`,
+        );
+        // Forward provider + all generator options; drop launcher-only flags.
+        const drop = new Set(["--port"]);
+        const passthrough = process.argv.slice(3).filter((a) => !drop.has(a));
+        return runInline(generateConfigEntry, passthrough);
+    }
+
+    if (provider !== "aisystems") {
+        console.error(
+            `Unknown --provider '${provider}'. Use aisystems, ollama, or copilot.`,
+        );
+        return 1;
+    }
+
     if (!fs.existsSync(getKeysEntry)) {
         console.error(`getKeys not found at ${getKeysEntry}.`);
         return 1;
@@ -238,7 +286,17 @@ async function cmdProvision() {
         `Provisioning config.local.yaml into ${dir} (browser login)...`,
     );
     // Pass through any extra args after the subcommand (e.g. --vault, --verbose).
-    const passthrough = process.argv.slice(3).filter((a) => a !== "--port");
+    // Strip --provider/--port which getKeys does not understand.
+    const passthrough = [];
+    const rest = process.argv.slice(3);
+    for (let i = 0; i < rest.length; i++) {
+        if (rest[i] === "--provider") {
+            i++; // skip its value
+            continue;
+        }
+        if (rest[i] === "--port") continue;
+        passthrough.push(rest[i]);
+    }
     return runInline(getKeysEntry, passthrough);
 }
 

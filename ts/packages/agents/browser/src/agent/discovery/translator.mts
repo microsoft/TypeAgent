@@ -42,7 +42,7 @@ export enum CommercePageType {
 }
 
 function getPrefixPromptSection() {
-    let prefixSection = [];
+    const prefixSection = [];
     prefixSection.push({
         type: "text",
         text: "You are a virtual assistant that can help users to complete requests by interacting with the UI of a webpage.",
@@ -51,7 +51,7 @@ function getPrefixPromptSection() {
 }
 
 function getSuffixPromptSection() {
-    let suffixSection = [];
+    const suffixSection = [];
     suffixSection.push({
         type: "text",
         text: `
@@ -62,7 +62,7 @@ The following is the COMPLETE JSON response object with 2 spaces of indentation 
 }
 
 function getHtmlPromptSection(fragments: HtmlFragments[] | undefined) {
-    let htmlSection = [];
+    const htmlSection = [];
     if (fragments) {
         const contentFragments = fragments.map((a) => a.content);
         htmlSection.push({
@@ -82,7 +82,7 @@ function getScreenshotPromptSection(
     screenshots: string[] | undefined,
     fragments: HtmlFragments[] | undefined,
 ) {
-    let screenshotSection = [];
+    const screenshotSection = [];
     if (
         screenshots !== undefined &&
         Array.isArray(screenshots) &&
@@ -194,7 +194,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         const prefixSection = getPrefixPromptSection();
         const suffixSection = getSuffixPromptSection();
 
-        let requestSection = [];
+        const requestSection = [];
         if (userRequest) {
             requestSection.push({
                 type: "text",
@@ -415,7 +415,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         const htmlSection = getHtmlPromptSection(fragments);
         const prefixSection = getPrefixPromptSection();
         const suffixSection = getSuffixPromptSection();
-        let requestSection = [];
+        const requestSection = [];
         if (userRequest) {
             requestSection.push({
                 type: "text",
@@ -477,7 +477,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         const htmlSection = getHtmlPromptSection(fragments);
         const prefixSection = getPrefixPromptSection();
         const suffixSection = getSuffixPromptSection();
-        let requestSection = [];
+        const requestSection = [];
         requestSection.push({
             type: "text",
             text: `
@@ -570,7 +570,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         const htmlSection = getHtmlPromptSection(fragments);
         const prefixSection = getPrefixPromptSection();
         const suffixSection = getSuffixPromptSection();
-        let requestSection = [];
+        const requestSection = [];
         requestSection.push({
             type: "text",
             text: `

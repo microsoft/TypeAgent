@@ -39,8 +39,8 @@ export async function searchBatchFile(
             `${getFileName(filePath)}_result.json`,
         );
     }
-    let lines = await readAllLines(filePath, undefined, true, true);
-    let results = await searchBatch(cm, lines, concurrency, progress);
+    const lines = await readAllLines(filePath, undefined, true, true);
+    const results = await searchBatch(cm, lines, concurrency, progress);
     await writeJsonFile(destPath, results);
 }
 
@@ -50,7 +50,7 @@ export async function searchBatch(
     concurrency: number,
     progress?: BatchProgress,
 ): Promise<QueryAnswer[]> {
-    let results = await asyncArray.mapAsync(
+    const results = await asyncArray.mapAsync(
         queries,
         concurrency,
         async (query, index) => {
@@ -94,7 +94,7 @@ export async function compareQueryBatch(
     concurrency: number,
     progress?: BatchProgress,
 ): Promise<QueryAnswerCompare[]> {
-    let comparisons = await asyncArray.mapAsync(
+    const comparisons = await asyncArray.mapAsync(
         baseLine,
         concurrency,
         async (item, index) => {

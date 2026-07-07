@@ -180,7 +180,7 @@ export async function importChromeBookmarks(
             },
         ];
 
-        let processedRef = { count: 0 };
+        const processedRef = { count: 0 };
         const totalEstimate = 1000; // Rough estimate, will be updated
 
         for (const { folder, folderPath } of rootFolders) {

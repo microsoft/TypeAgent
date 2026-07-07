@@ -122,8 +122,8 @@ export function createImageCommands(
 
     async function importImage(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, importImageDef());
-        let sourcePath: string = namedArgs.sourcePath;
-        let isDir = isDirectoryPath(sourcePath);
+        const sourcePath: string = namedArgs.sourcePath;
+        const isDir = isDirectoryPath(sourcePath);
 
         if (!fs.existsSync(sourcePath)) {
             console.log(
@@ -169,7 +169,7 @@ export function createImageCommands(
 
     async function buildImageCountHistogram(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, importImageDef());
-        let sourcePath: string = namedArgs.sourcePath;
+        const sourcePath: string = namedArgs.sourcePath;
 
         knowLib.image.buildImageCountHistogram(sourcePath);
     }

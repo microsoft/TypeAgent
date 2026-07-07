@@ -1040,7 +1040,7 @@ const POWERSHELL_BUILTIN_ACTIONS = new Set([
 ]);
 
 export function instantiate(): AppAgent {
-    let agentContext: PowerShellAgentContext = {};
+    const agentContext: PowerShellAgentContext = {};
 
     return {
         async initializeAgentContext() {

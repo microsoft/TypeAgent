@@ -138,7 +138,7 @@ export async function findNearbyPointsOfInterest(
 
             // get the result
             const response = await fetch(nearby, options);
-            let responseBody = await response.json();
+            const responseBody = await response.json();
 
             // summarize results
             // TODO: update any once @azure-rest/maps-search incorporates V1 return types
@@ -189,7 +189,7 @@ export async function reverseGeocode(
             return [];
         }
 
-        let reverseGeocode = `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_ENDPOINT)}reverseGeocode?api-version=2023-06-01&coordinates=${position.longitude},${position.latitude}`;
+        const reverseGeocode = `${getEnvSetting(env, openai.EnvVars.AZURE_MAPS_ENDPOINT)}reverseGeocode?api-version=2023-06-01&coordinates=${position.longitude},${position.latitude}`;
 
         const options: RequestInit = {
             method: "GET",
@@ -201,7 +201,7 @@ export async function reverseGeocode(
 
         // get the result
         const response = await fetch(reverseGeocode, options);
-        let responseBody = await response.json();
+        const responseBody = await response.json();
 
         // summarize results
         // TODO: update any once @azure-rest/maps-search incorporates V1 return types

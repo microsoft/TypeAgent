@@ -13,6 +13,7 @@ import type {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import type { CompletionState } from "agent-dispatcher/helpers/completion";
+import type { ConnectionActionId } from "chat-ui";
 
 /**
  * Messages from extension host → webview
@@ -87,13 +88,16 @@ export type BridgeToWebviewMessage =
           // Single in-place reconnect status shown in the connection
           // ribbon. `phase: "waiting"` means a backoff timer is running
           // and `secondsRemaining` is the live countdown. `connecting`
-          // means an attempt is in progress. `cleared` means we're back
-          // online and any reconnect UI should disappear.
+          // means an attempt is in progress. `stopped` means auto-reconnect
+          // gave up and `actions` lists the manual-recovery links to offer.
+          // `cleared` means we're back online and any reconnect UI should
+          // disappear.
           type: "reconnectStatus";
-          phase: "waiting" | "connecting" | "cleared";
+          phase: "waiting" | "connecting" | "stopped" | "cleared";
           attempt?: number;
           secondsRemaining?: number;
           error?: string;
+          actions?: ConnectionActionId[];
       }
     | {
           type: "switching";
@@ -180,6 +184,7 @@ export type BridgeToWebviewMessage =
               name: string;
               clientCount: number;
               createdAt?: string; // ISO 8601
+              source?: "copilot"; // origin: absent = native TypeAgent
           }>;
           currentSessionId?: string;
       }
@@ -199,6 +204,9 @@ export type BridgeFromWebviewMessage =
     | { type: "connect" }
     | { type: "disconnect" }
     | { type: "getStatus" }
+    // Manual connection recovery from the "stopped" reconnect ribbon.
+    | { type: "retryConnection" }
+    | { type: "startServer" }
     | { type: "requestSessions" }
     | { type: "createSession"; name: string }
     | { type: "switchSession"; sessionId: string }

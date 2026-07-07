@@ -298,7 +298,7 @@ async function getAnswerFromSearchResult(
         context.answerGenerator.settings.fastStop = request.fastStop;
     }
     try {
-        let question = searchResult.rawSearchQuery ?? request.query;
+        const question = searchResult.rawSearchQuery ?? request.query;
         //
         // Generate an answer from search results
         //
@@ -349,7 +349,7 @@ function createLangFilter(
 }
 
 export function createSearchOptions(request: SearchRequest): kp.SearchOptions {
-    let options = kp.createSearchOptions();
+    const options = kp.createSearchOptions();
     options.exactMatch = request.exact;
     options.maxMessageMatches = request.messageTopK;
     options.maxCharsInBudget = request.charBudget;
@@ -359,7 +359,7 @@ export function createSearchOptions(request: SearchRequest): kp.SearchOptions {
 function createAnswerOptions(
     namedArgs: GetAnswerRequest,
 ): kp.AnswerContextOptions {
-    let topK = namedArgs.knowledgeTopK;
+    const topK = namedArgs.knowledgeTopK;
     if (topK === undefined) {
         return {};
     }

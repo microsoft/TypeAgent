@@ -23,7 +23,7 @@ export function* timestampBlocks(
         minMsOffset,
         maxMsOffset,
     );
-    for (let value of blocks) {
+    for (const value of blocks) {
         const timestamp = timestampGenerator.next().value;
         yield {
             timestamp,
@@ -67,7 +67,7 @@ export async function runImportQueue(
     let attempts = 1;
     const timing = new StopWatch();
     const maxAttempts = 2;
-    let stats = await loadIndexingStats(statsFilePath, clean);
+    const stats = await loadIndexingStats(statsFilePath, clean);
     let grandTotal = stats.itemStats.length;
     while (attempts <= maxAttempts) {
         const successCount = await queue.drain(

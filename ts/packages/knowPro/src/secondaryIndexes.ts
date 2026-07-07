@@ -43,7 +43,7 @@ export async function buildSecondaryIndexes(
     conversation.secondaryIndexes ??= new ConversationSecondaryIndexes(
         conversationSettings,
     );
-    let result: SecondaryIndexingResults = buildTransientSecondaryIndexes(
+    const result: SecondaryIndexingResults = buildTransientSecondaryIndexes(
         conversation,
         conversationSettings,
     );
@@ -74,7 +74,7 @@ export async function addToSecondaryIndexes(
     conversation.secondaryIndexes ??= new ConversationSecondaryIndexes(
         conversationSettings,
     );
-    let result: SecondaryIndexingResults = addToTransientSecondaryIndexes(
+    const result: SecondaryIndexingResults = addToTransientSecondaryIndexes(
         conversation,
         conversationSettings,
         messageOrdinalStartAt,

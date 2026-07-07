@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=6ed71f8e665806eef369f1c14a975a12b6552704b2c85ad1bca8298a0d73680c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2118e1b43c469efd3e6d488b13f46b0d476d3fc73a11b9b3816953c1cd36baea -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # desktop-automation — AI-generated documentation
@@ -12,80 +12,83 @@
 
 ## Overview
 
-The `desktop-automation` package is a TypeAgent application agent designed to manage and control desktop environments on Windows systems. It integrates with Windows shell APIs to perform various actions such as launching programs, managing windows, adjusting display settings, and more.
+The `desktop-automation` package is a TypeAgent application agent designed to automate and manage desktop environments on Windows systems. It integrates with Windows shell APIs via a .NET component to perform a variety of desktop-related actions, such as managing windows, launching applications, and controlling system settings.
+
+This package is part of the TypeAgent ecosystem and works in conjunction with the TypeAgent Shell or CLI to execute user commands for desktop automation.
 
 ## What it does
 
-This package provides a wide range of actions to control and automate desktop tasks. Some of the key actions include:
+The `desktop-automation` package enables a wide range of desktop automation tasks by providing a set of predefined actions. These actions are defined in the [actionsSchema.ts](./src/actionsSchema.ts) file and are processed by the [actionHandler.ts](./src/actionHandler.ts) file. The package communicates with a .NET component (`autoShell.exe`) to interact with Windows shell APIs.
 
-- `LaunchProgram`: Launches a specified program.
-- `CloseProgram`: Closes a specified program.
-- `TileWindows`: Arranges windows in a specified layout.
-- `MaximizeWindow`: Maximizes a specified window.
-- `MinimizeWindow`: Minimizes a specified window.
-- `SetVolume`: Adjusts the system volume.
-- `SetWallpaper`: Changes the desktop wallpaper.
-- `ConnectWifi`: Connects to a specified Wi-Fi network.
-- `ToggleAirplaneMode`: Toggles the airplane mode on or off.
+Some of the key actions include:
 
-These actions are defined in the [actionsSchema.ts](./src/actionsSchema.ts) file and are handled by the [actionHandler.ts](./src/actionHandler.ts) file.
+- **Program Management**: Actions like `LaunchProgram`, `CloseProgram`, and `SwitchToWindow` allow users to control application windows.
+- **Window Layout**: Actions such as `TileWindows`, `MaximizeWindow`, and `MinimizeWindow` help manage window arrangements.
+- **System Settings**: Actions like `SetVolume`, `SetWallpaper`, and `SetScreenResolution` allow users to adjust system settings.
+- **Network Management**: Actions such as `ConnectWifi`, `DisconnectWifi`, and `ToggleAirplaneMode` enable control over network settings.
+- **Desktop Customization**: Actions like `SetTextSize`, `ChangeThemeMode`, and `ApplyTheme` allow users to personalize their desktop environment.
+
+These actions are designed to provide a comprehensive set of tools for managing and automating tasks on a Windows desktop.
 
 ## Setup
 
-To set up the `desktop-automation` package, you need to configure the following environment variable:
+To use the `desktop-automation` package, you need to complete the following setup steps:
 
-- `AUTOSHELL_PATH`: Path to the `autoShell.exe` binary. This binary is built from the .NET code located in the `dotnet/autoShell` directory.
-
-### Steps to build and configure
-
-1. **Build the .NET component**:
+1. **Build the .NET Component**:
 
    - Open Visual Studio.
-   - Navigate to the `dotnet/autoShell` directory.
+   - Navigate to the `dotnet/autoShell` directory in the repository.
    - Build the project to generate the `autoShell.exe` binary.
 
-2. **Build the TypeAgent component**:
+2. **Build the TypeAgent Component**:
 
-   - Navigate to the `ts/packages/agents/desktop` directory.
-   - Run `pnpm run build` to build the TypeAgent application agent.
+   - Navigate to the `ts/packages/agents/desktop` directory (this package's root).
+   - Run the following command to build the TypeAgent application agent:
+     ```sh
+     pnpm run build
+     ```
 
-3. **Set the environment variable**:
-   - Ensure the `AUTOSHELL_PATH` environment variable points to the location of the `autoShell.exe` binary.
+3. **Set the Environment Variable**:
+   - Define the `AUTOSHELL_PATH` environment variable to point to the location of the `autoShell.exe` binary generated in step 1.
 
-For detailed setup instructions, see the hand-written README.
+For additional details, refer to the hand-written README.
 
 ## Key Files
 
-The `desktop-automation` package is structured as follows:
+The `desktop-automation` package is organized into several key files, each responsible for specific functionality:
 
-- **Manifest**: The agent's manifest is defined in [manifest.json](./src/manifest.json), which includes descriptions and schema files for the agent and its sub-actions.
-- **Schema**: The actions schema is defined in [actionsSchema.ts](./src/actionsSchema.ts), which lists all possible actions the agent can perform.
-- **Grammar**: The grammar for parsing user commands is defined in [desktopSchema.agr](./src/desktopSchema.agr).
-- **Handler**: The main action handler is implemented in [actionHandler.ts](./src/actionHandler.ts), which processes incoming actions and interacts with the .NET component.
-- **Connector**: The [connector.ts](./src/connector.ts) file manages the connection between the TypeAgent and the .NET component, handling the execution of desktop actions.
+- **[manifest.json](./src/manifest.json)**: Defines the agent's metadata, including its description, default settings, and references to schema and grammar files.
+- **[actionsSchema.ts](./src/actionsSchema.ts)**: Contains the TypeScript definitions for all supported actions, such as `LaunchProgram`, `SetVolume`, and `TileWindows`.
+- **[desktopSchema.agr](./src/desktopSchema.agr)**: Defines the grammar for parsing user commands into structured actions.
+- **[actionHandler.ts](./src/actionHandler.ts)**: Implements the logic for handling actions. This is where the agent processes incoming requests and interacts with the .NET component.
+- **[connector.ts](./src/connector.ts)**: Manages the connection between the TypeAgent runtime and the `autoShell.exe` binary, facilitating the execution of desktop actions.
+- **[readiness.ts](./src/readiness.ts)**: Contains utility functions to check the readiness of the `autoShell.exe` binary and ensure the environment is correctly configured.
 
 ## How to extend
 
-To extend the `desktop-automation` package, follow these steps:
+To add new functionality to the `desktop-automation` package, follow these steps:
 
-1. **Add new actions**:
+1. **Define New Actions**:
 
-   - Define new action types in [actionsSchema.ts](./src/actionsSchema.ts).
-   - Update the grammar in [desktopSchema.agr](./src/desktopSchema.agr) to include the new actions.
+   - Add new action types to [actionsSchema.ts](./src/actionsSchema.ts). For example, you can define a new action type with its name and parameters.
 
-2. **Implement action handlers**:
+2. **Update the Grammar**:
 
-   - Add the logic for handling new actions in [actionHandler.ts](./src/actionHandler.ts).
+   - Modify [desktopSchema.agr](./src/desktopSchema.agr) to include the new actions. This ensures that user commands can be correctly parsed into the new action types.
 
-3. **Update the manifest**:
+3. **Implement Action Handlers**:
 
-   - Modify [manifest.json](./src/manifest.json) to include descriptions and schema files for the new actions.
+   - Add the logic for the new actions in [actionHandler.ts](./src/actionHandler.ts). This is where you define how the agent should process the new actions and interact with the .NET component.
 
-4. **Test your changes**:
-   - Write unit tests for the new actions and handlers.
-   - Run the tests to ensure everything works as expected.
+4. **Update the Manifest**:
 
-By following these steps, you can extend the functionality of the `desktop-automation` package to support additional desktop automation tasks.
+   - Add descriptions and schema references for the new actions in [manifest.json](./src/manifest.json).
+
+5. **Test Your Changes**:
+   - Write unit tests for the new actions and their handlers.
+   - Run the tests to verify that the new functionality works as expected.
+
+By following these steps, you can extend the `desktop-automation` package to support additional desktop automation tasks. This modular design allows for easy integration of new features while maintaining the existing functionality.
 
 ## Reference
 
@@ -94,7 +97,7 @@ By following these steps, you can extend the functionality of the `desktop-autom
 ### Entry points
 
 - `./agent/manifest` → [./src/manifest.json](./src/manifest.json)
-- `./agent/handlers` → [./dist/actionHandler.js](./dist/actionHandler.js)
+- `./agent/handlers` → `./dist/actionHandler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -137,6 +140,6 @@ _31 actions declared in the schema, none yet implemented in [`./src/actionHandle
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter desktop-automation docs:verify-links` to spot-check._
+_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter desktop-automation docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -136,7 +136,7 @@ export function getInRange(
     compareFn: (x: any, y: any) => number,
 ): any[]
 {
-    let startIndex = binarySearchFirst(
+    const startIndex = binarySearchFirst(
         values,
         startAt,
         compareFn,
@@ -192,7 +192,7 @@ export function removeItemFromArray<T>(array: T[], items: T | T[]): T[] {
 }
 
 export function mapAndFilter<T=any, R=any>(array: T[], callbackfn: (value: T, index: number, array: T[]) => R | undefined, predicate?: (value: R, index: number, array: T[]) => boolean): R[] {
-    let results: R[] = [];
+    const results: R[] = [];
     for (let i = 0; i < array.length; ++i) {
         const result = callbackfn(array[i], i, array);
         if (!result || (predicate && !predicate(result, i, array))) {

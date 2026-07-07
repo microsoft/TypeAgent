@@ -130,7 +130,7 @@ export function createStringTable(
             const inClause = sql_makeInClause(values);
             const sql = `SELECT stringId from ${tableName} WHERE value IN (${inClause})`;
             const stmt = db.prepare(sql);
-            let rows = stmt.all();
+            const rows = stmt.all();
             for (const row of rows) {
                 yield (row as StringTableRow).stringId;
             }
@@ -147,7 +147,7 @@ export function createStringTable(
             const stmt = db.prepare(
                 `SELECT value from ${tableName} WHERE stringId IN (${ids})`,
             );
-            let rows = stmt.iterate();
+            const rows = stmt.iterate();
             for (const row of rows) {
                 yield (row as StringTableRow).value;
             }
@@ -236,7 +236,7 @@ export async function createTextIndex<
          WHERE value = ?`,
     );
 
-    let [vectorStore, semanticIndex] =
+    const [vectorStore, semanticIndex] =
         settings.semanticIndex !== undefined && settings.semanticIndex
             ? createVectorIndex()
             : [undefined, undefined];
@@ -353,7 +353,7 @@ export async function createTextIndex<
     }
 
     async function put(text: string, postings?: TSourceId[]): Promise<TTextId> {
-        let assignedId = textTable.add(text);
+        const assignedId = textTable.add(text);
         if (postings && postings.length > 0) {
             postingsTable.putSync(postings, assignedId.id);
         }
@@ -418,7 +418,7 @@ export async function createTextIndex<
         minScore?: number,
     ): Promise<TSourceId[]> {
         maxMatches ??= 1;
-        let matchedTextIds = await getExactAndNearestTextIds(
+        const matchedTextIds = await getExactAndNearestTextIds(
             value,
             maxMatches,
             minScore,
@@ -484,7 +484,7 @@ export async function createTextIndex<
         scoreBoost?: number,
         aliases?: knowLib.TextMatcher<TTextId>,
     ): Promise<void> {
-        let matchedTextIds = await asyncArray.mapAsync(
+        const matchedTextIds = await asyncArray.mapAsync(
             values,
             settings.concurrency,
             (value) =>
@@ -570,7 +570,7 @@ export async function createTextIndex<
         if (!semanticIndex) {
             return [];
         }
-        let matches = await nearestNeighborsTextIds(
+        const matches = await nearestNeighborsTextIds(
             value,
             maxMatches,
             minScore,
@@ -593,13 +593,13 @@ export async function createTextIndex<
         if (!semanticIndex) {
             return [];
         }
-        let matches = await semanticIndex.nearestNeighbors(
+        const matches = await semanticIndex.nearestNeighbors(
             value,
             maxMatches,
             minScore,
         );
         // Also do an exact match
-        let textId = textTable.getId(value);
+        const textId = textTable.getId(value);
         if (textId) {
             // Remove prior match
             const pos = matches.findIndex((m) => m.item === textId);
@@ -644,7 +644,7 @@ export async function createTextIndex<
         if (!existingPostings || existingPostings.length === 0) {
             return;
         }
-        let updatedPostings = collections.removeItemFromArray(
+        const updatedPostings = collections.removeItemFromArray(
             existingPostings,
             postings,
         );
@@ -673,7 +673,7 @@ export async function createTextIndex<
         // Check exact match first
         let matchedIds: TextId[] | undefined;
 
-        let exactId = textTable.getId(value);
+        const exactId = textTable.getId(value);
         if (exactId) {
             matchedIds = [exactId];
         }
@@ -710,7 +710,7 @@ export async function createTextIndex<
         maxMatches ??= 1;
         // Check exact match first
         let matchedIds: ScoredItem<TextId>[] | undefined;
-        let exactId = textTable.getId(value);
+        const exactId = textTable.getId(value);
         if (exactId) {
             matchedIds = [
                 {

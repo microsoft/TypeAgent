@@ -63,12 +63,12 @@ export class SchemaParser {
     constructor() {}
 
     public loadSchema(fileName: string): void {
-        let options: ts.CompilerOptions = {
+        const options: ts.CompilerOptions = {
             target: ts.ScriptTarget.ES5,
             module: ts.ModuleKind.CommonJS,
         };
 
-        let program = ts.createProgram([fileName], options);
+        const program = ts.createProgram([fileName], options);
         this.checker = program.getTypeChecker();
 
         for (const sourceFile of program.getSourceFiles()) {
@@ -152,7 +152,7 @@ export class SchemaParser {
         symNode: SymbolNode | undefined,
     ): SymbolNode | undefined {
         if (ts.isTypeLiteralNode(node)) {
-            let typeLiteralNode = new SymbolNode(
+            const typeLiteralNode = new SymbolNode(
                 nodeName,
                 node.getText(),
                 NodeType.Object,
@@ -161,7 +161,7 @@ export class SchemaParser {
             );
             typeLiteralNode.symbol.optional = this.isNodeOptional(node);
             symNode?.children.push(typeLiteralNode);
-            let typeLiteralMembers = node.members;
+            const typeLiteralMembers = node.members;
             typeLiteralMembers.forEach((typeLiteralMember) => {
                 this.parseTypeElement(
                     typeLiteralMember.name?.getText(),
@@ -203,13 +203,13 @@ export class SchemaParser {
 
             symNode?.children.push(typeReferenceNode);
             if (node.pos >= 0) {
-                let typeArguments = node.getChildAt(0);
+                const typeArguments = node.getChildAt(0);
                 const identifierType =
                     this.checker?.getTypeAtLocation(typeArguments);
                 const typeSymbols = identifierType?.symbol;
 
                 if (typeSymbols) {
-                    let typeRefMembers = typeSymbols.members;
+                    const typeRefMembers = typeSymbols.members;
                     typeRefMembers?.forEach((typeRefMember: ts.Symbol) => {
                         this.parseTypeSymbol(
                             typeRefMember.escapedName.toString(),
@@ -225,13 +225,13 @@ export class SchemaParser {
                     ts.isTypeReferenceNode(node) &&
                     ts.isIdentifier(node.typeName)
                 ) {
-                    let typeArguments = nodeDecl.getChildAt(0);
+                    const typeArguments = nodeDecl.getChildAt(0);
                     const identifierType =
                         this.checker?.getTypeAtLocation(typeArguments);
                     const typeSymbols = identifierType?.symbol;
 
                     if (typeSymbols) {
-                        let typeRefMembers = typeSymbols.members;
+                        const typeRefMembers = typeSymbols.members;
                         typeRefMembers?.forEach((typeRefMember: ts.Symbol) => {
                             this.parseTypeSymbol(
                                 typeRefMember.escapedName.toString(),
@@ -246,7 +246,7 @@ export class SchemaParser {
             return typeReferenceNode;
         } else if (ts.isArrayTypeNode(node)) {
             if (ts.isTypeLiteralNode(node.elementType)) {
-                let arrayNode = new SymbolNode(
+                const arrayNode = new SymbolNode(
                     nodeName,
                     node.getText(),
                     NodeType.ObjectArray,
@@ -254,7 +254,7 @@ export class SchemaParser {
                     symNode,
                 );
                 arrayNode.symbol.optional = this.isNodeOptional(node);
-                let typeLiteralMembers = node.elementType.members;
+                const typeLiteralMembers = node.elementType.members;
                 typeLiteralMembers.forEach((typeLiteralMember) => {
                     this.parseTypeElement(
                         typeLiteralMember.name?.getText(),
@@ -266,7 +266,7 @@ export class SchemaParser {
                 symNode?.children.push(arrayNode);
                 return arrayNode;
             } else {
-                let arrayNode = new SymbolNode(
+                const arrayNode = new SymbolNode(
                     nodeName,
                     node.pos >= 0
                         ? node.getText()
@@ -288,10 +288,10 @@ export class SchemaParser {
             }
         } else if (ts.isUnionTypeNode(node)) {
             // TBD: Only handling union of strings for now.
-            let values: string = node.types
+            const values: string = node.types
                 .map((type) => type.getText())
                 .join(" | ");
-            let unionNode = new SymbolNode(
+            const unionNode = new SymbolNode(
                 nodeName,
                 values,
                 NodeType.Union,
@@ -304,7 +304,7 @@ export class SchemaParser {
             return unionNode;
         } else if (ts.isPropertySignature(node)) {
             debug(`${indentation}Property: ${nodeName}`);
-            let literalNode = new SymbolNode(
+            const literalNode = new SymbolNode(
                 nodeName,
                 node.type?.getText() ?? "",
                 NodeType.Property,
@@ -318,8 +318,8 @@ export class SchemaParser {
             return literalNode;
         } else if (ts.isLiteralTypeNode(node)) {
             debug(`${indentation}Literal: ${nodeName}`);
-            let literalValue = node.literal;
-            let literalNode = new SymbolNode(
+            const literalValue = node.literal;
+            const literalNode = new SymbolNode(
                 nodeName,
                 literalValue.getText(),
                 NodeType.Literal,
@@ -453,12 +453,12 @@ export class SchemaParser {
 
         if (ts.isTypeAliasDeclaration(node) && node.name) {
             debug(`Type alias declaration:${node.name.text}`);
-            let symbol = this.checker?.getSymbolAtLocation(node.name);
+            const symbol = this.checker?.getSymbolAtLocation(node.name);
             if (symbol) {
                 debug(`  Symbol:${symbol.name}`);
             }
 
-            let type = this.checker?.getTypeAtLocation(node);
+            const type = this.checker?.getTypeAtLocation(node);
             if (type) {
                 debug(`  Type:${this.checker?.typeToString(type)}`);
                 const symNode = this.parseTypeNode(
@@ -477,21 +477,21 @@ export class SchemaParser {
                 }
             }
 
-            let unionTypes = node
+            const unionTypes = node
                 .getChildren()
                 .filter((child) => ts.isUnionTypeNode(child));
             unionTypes.forEach((unionType) => {
                 debug(`  UnionType:${unionType.getText()}`);
             });
 
-            let interfaces = node
+            const interfaces = node
                 .getChildren()
                 .filter((child) => ts.isInterfaceDeclaration(child));
             interfaces.forEach((interfaceNode) => {
                 debug(`  Interface:${interfaceNode.getText()}`);
             });
 
-            let typeReferences = node
+            const typeReferences = node
                 .getChildren()
                 .filter((child) => ts.isTypeReferenceNode(child));
             typeReferences.forEach((typeReference) => {
@@ -515,7 +515,7 @@ export class SchemaParser {
                 this.nodeMap[node.name.text] = symNode;
             }
 
-            let members = node.members;
+            const members = node.members;
             members.forEach((member) => {
                 this.parserInterfaceMembers(member, symNode);
             });

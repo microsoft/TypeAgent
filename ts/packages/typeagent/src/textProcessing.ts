@@ -163,7 +163,7 @@ export function* buildChunks(
     separator: string | undefined = " ",
 ): IterableIterator<string> {
     let chunk = "";
-    for (let str of strings) {
+    for (const str of strings) {
         if (chunk.length + str.length > maxCharsPerChunk) {
             yield chunk;
             chunk = "";
@@ -193,7 +193,7 @@ export function getTextChunks(
     }
     let subStrings = splitIntoSentences(text);
     if (subStrings.some((s) => s.length > maxCharsPerChunk)) {
-        let phrases: string[] = [];
+        const phrases: string[] = [];
         for (const sentence of subStrings) {
             if (sentence.length > maxCharsPerChunk) {
                 for (let i = 0; i < sentence.length; i += maxCharsPerChunk) {
@@ -226,7 +226,7 @@ export async function getCompletionOnLargeText(
     instruction: string | ((chunk: string) => string),
     progress?: Progress<string>,
 ): Promise<Result<string[]>> {
-    let completions: string[] = [];
+    const completions: string[] = [];
     for (const chunk of getTextChunks(text, maxCharsPerChunk)) {
         const result = await complete(chunk);
         if (!result.success) {
@@ -455,7 +455,7 @@ export function generateAnswer(
         //
         // First, split text into chunks at sentence boundaries
         //
-        let chunks = getTextChunks(text, maxCharsPerChunk);
+        const chunks = getTextChunks(text, maxCharsPerChunk);
         for (let i = 0; i < chunks.length; i += concurrency) {
             //
             // Then run concurrency number of chunks simultaneously
@@ -641,7 +641,7 @@ export async function generateAnswerFromWebPages(
     return answer;
 
     function toChunkResponse(answer: AnswerResponse): ChunkChatResponse {
-        let response: ChunkChatResponse = {
+        const response: ChunkChatResponse = {
             generatedText: answer.answer ?? "",
             entities: [],
             urls: [],
@@ -912,9 +912,9 @@ export async function lookupAnswersOnWebPages(
     context?: PromptSection[],
     progress?: ProcessProgress<WebLookup, AnswerResponse>,
 ): Promise<WebLookupAnswer> {
-    let partialAnswer: WebLookupAnswer = emptyWebLookupAnswer();
+    const partialAnswer: WebLookupAnswer = emptyWebLookupAnswer();
     for (const webPageUrl of webPageUrls) {
-        let lookup: WebLookup = { query, webPageUrl };
+        const lookup: WebLookup = { query, webPageUrl };
         const answer = await lookupAnswerOnWebPage(
             model,
             lookup,
@@ -1408,8 +1408,8 @@ export async function generateVariationsRecursive(
 
     // Breadth first recursion
     const uniqueVariations = new Set<string>();
-    let pendingPhrases: string[] = [];
-    let newPhrases: string[] = [];
+    const pendingPhrases: string[] = [];
+    const newPhrases: string[] = [];
     let currentDepth = 0;
     let phrase;
     newPhrases.push(seedPhrase);

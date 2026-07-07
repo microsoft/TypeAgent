@@ -12,7 +12,7 @@ async function elevate(startDateTime) {
 
     for (element of config) {
         console.log(`>> Elevating ${element.roleName}`);
-        var v = await client.elevate({
+        const v = await client.elevate({
             requestType: element.properties.RequestType,
             roleName: element.roleName,
             expirationType: element.properties.ScheduleInfo.Expiration.Type,

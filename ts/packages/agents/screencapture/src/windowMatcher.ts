@@ -10,7 +10,11 @@ import {
     ScoredItem,
     NameValue,
 } from "typeagent";
-import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
+import {
+    TextEmbeddingModel,
+    openai,
+    isEmbeddingAvailable,
+} from "@typeagent/aiclient";
 import registerDebug from "debug";
 import type { WindowInfo } from "./platform/windowEnumerator.js";
 
@@ -31,15 +35,17 @@ export function createProgramNameIndex(
 ): ProgramNameIndex {
     let programEmbeddings: Record<string, NormalizedEmbedding> = {};
 
-    const embeddingModel: TextEmbeddingModel =
+    const embeddingModel: TextEmbeddingModel | undefined =
         modelOverride ??
-        (() => {
-            const aiSettings = openai.apiSettingsFromEnv(
-                openai.ModelType.Embedding,
-                vals,
-            );
-            return openai.createEmbeddingModel(aiSettings);
-        })();
+        (isEmbeddingAvailable()
+            ? (() => {
+                  const aiSettings = openai.apiSettingsFromEnv(
+                      openai.ModelType.Embedding,
+                      vals,
+                  );
+                  return openai.createEmbeddingModel(aiSettings);
+              })()
+            : undefined);
 
     return {
         addOrUpdate,
@@ -48,6 +54,9 @@ export function createProgramNameIndex(
     };
 
     async function addOrUpdate(programName: string) {
+        if (embeddingModel === undefined) {
+            return;
+        }
         if (programEmbeddings[programName] !== undefined) {
             return;
         }
@@ -75,7 +84,7 @@ export function createProgramNameIndex(
         const embeddings = Object.values(programEmbeddings);
         const programNames = Object.keys(programEmbeddings);
 
-        if (embeddings.length === 0) {
+        if (embeddingModel === undefined || embeddings.length === 0) {
             return [];
         }
 

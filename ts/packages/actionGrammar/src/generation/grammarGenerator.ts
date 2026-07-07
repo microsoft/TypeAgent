@@ -484,7 +484,7 @@ Generate a corrected rule now.`;
         // Extract JSON from response - find matching braces
         let jsonText = "";
         let braceCount = 0;
-        let startIndex = jsonStart;
+        const startIndex = jsonStart;
 
         for (let i = jsonStart; i < text.length; i++) {
             if (text[i] === "{") {

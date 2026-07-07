@@ -47,7 +47,7 @@ export function createTextEmbeddingModelWithCache(
     return modelWithCache;
 
     async function generateEmbedding(input: string): Promise<Result<number[]>> {
-        let embedding = cache.getEmbedding(input);
+        const embedding = cache.getEmbedding(input);
         if (embedding) {
             return success(embedding);
         }
@@ -65,8 +65,8 @@ export function createTextEmbeddingModelWithCache(
         let inputBatch: string[] | undefined;
         // First, grab any embeddings we already have
         for (let i = 0; i < inputs.length; ++i) {
-            let input = inputs[i];
-            let embedding = cache.getEmbedding(input);
+            const input = inputs[i];
+            const embedding = cache.getEmbedding(input);
             if (embedding === undefined) {
                 // This one needs embeddings
                 inputBatch ??= [];

@@ -251,7 +251,7 @@ export async function extractKnowledgeFromBlock(
     if (message.value.length === 0) {
         return undefined;
     }
-    let knowledge = await extractor.extract(messageText);
+    const knowledge = await extractor.extract(messageText);
     if (!knowledge) {
         return undefined;
     }
@@ -317,8 +317,8 @@ export function mergeKnowledge(
         mergeEntities(y.entities, merged);
     }
 
-    let topics = y ? collections.concatArrays(x.topics, y.topics) : x.topics;
-    let actions = y
+    const topics = y ? collections.concatArrays(x.topics, y.topics) : x.topics;
+    const actions = y
         ? collections.concatArrays(x.actions, y.actions)
         : x.actions;
     return {

@@ -25,7 +25,7 @@ export function detachListNode<T>(node: ListNode): void {
 export function appendListNode(node: ListNode, appendNode: ListNode): void {
     assert(isSingleton(node));
 
-    var next = node.next;
+    const next = node.next;
     if (next) {
         next.prev = appendNode;
         appendNode.next = next;
@@ -46,7 +46,7 @@ export function isTail(node: ListNode): boolean {
 export function prependListNode(node: ListNode, prependNode: ListNode): void {
     assert(isSingleton(prependNode));
 
-    var prev = node.prev;
+    const prev = node.prev;
     if (prev) {
         prev.next = prependNode;
         prependNode.prev = prev;

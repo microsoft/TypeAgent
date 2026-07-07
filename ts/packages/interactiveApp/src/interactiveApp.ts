@@ -400,7 +400,7 @@ export function makeArg(
     type: ArgType,
     defaultValue?: any | undefined,
 ): ArgDef {
-    let arg: ArgDef = {
+    const arg: ArgDef = {
         type,
     };
     if (description) {
@@ -480,7 +480,7 @@ export function createNamedArgs(): NamedArgs {
         type: ArgType,
         required?: boolean,
     ): any | undefined {
-        let value = namedArgs[key];
+        const value = namedArgs[key];
         if (value === undefined) {
             if (required) {
                 throw Error(
@@ -494,8 +494,8 @@ export function createNamedArgs(): NamedArgs {
 
     function bind(argDefs: Record<string, ArgDef>, required: boolean): void {
         for (const key in argDefs) {
-            let def = argDefs[key];
-            let type = def.type ?? "string";
+            const def = argDefs[key];
+            const type = def.type ?? "string";
             let arg = value(key, type, required); // This will do type conversions
             if (arg === undefined) {
                 if (def.defaultValue !== undefined) {
@@ -570,14 +570,14 @@ export function parseNamedArguments(
         return args;
     }
     const rawArgs = typeof args === "string" ? parseCommandLine(args) : args;
-    let namedArgs = createNamedArgs();
+    const namedArgs = createNamedArgs();
     if (!rawArgs) {
         return namedArgs;
     }
     // First, collect all name, value pairs on the command line
     let name: string | undefined;
     for (const rawArg of rawArgs) {
-        var value = rawArg.trim();
+        const value = rawArg.trim();
         //
         // Names of arguments have a prefix
         //
@@ -657,7 +657,7 @@ export function namedArgsToArgs(
     namedArgs: NamedArgs,
     keyPrefix: string = "--",
 ): string[] {
-    let args: string[] = [];
+    const args: string[] = [];
     for (const key in namedArgs) {
         const value = namedArgs[key];
         if (
@@ -731,7 +731,7 @@ export async function dispatchCommand(
     caseSensitive: boolean = false,
     helpFlags?: string[],
 ): Promise<void> {
-    let args = parseCommandLine(cmdLine);
+    const args = parseCommandLine(cmdLine);
     if (args) {
         let commandName = getArg(args, 0);
         if (commandName === undefined) {
@@ -853,7 +853,7 @@ export function searchCommands(
     handlers: Record<string, CommandHandler>,
     io: InteractiveIo,
 ): boolean {
-    let name = getArg(args, 0);
+    const name = getArg(args, 0);
     if (!name) {
         return false;
     }
@@ -1085,7 +1085,7 @@ function displayArgs(
         args,
         true,
         (v: ArgDef) => {
-            let text = v.description;
+            const text = v.description;
             if (v.defaultValue !== undefined) {
                 const defText = `(default): ${v.defaultValue}`;
                 return text ? [text, defText] : defText;
@@ -1171,7 +1171,7 @@ function filterCommandsByName(
         name = name.slice(1);
     }
     let matchCount = 0;
-    let matches: Record<string, CommandHandler> = {};
+    const matches: Record<string, CommandHandler> = {};
     for (const key in handlers) {
         const handlerName = key.toLowerCase();
         if (

@@ -51,7 +51,7 @@ export function markdownToTextBlocks(
 ): string[] {
     const markdownTokens =
         typeof markdown === "string" ? markdownTokenize(markdown) : markdown;
-    let textBlocks: string[] = [];
+    const textBlocks: string[] = [];
     let curTextBlock = "";
     let prevBlockName: string = "";
     let prevTokenName: string = "";
@@ -631,7 +631,7 @@ function splitList(
     let curListStartAt = 0;
     let curListLength = 0;
     for (let i = 0; i < listItems.length; ++i) {
-        let itemLength = listItems[i].raw.length;
+        const itemLength = listItems[i].raw.length;
         if (curListLength + itemLength > maxCharsPerChunk) {
             lists.push(
                 listItemsToList(list, listItems.slice(curListStartAt, i)),

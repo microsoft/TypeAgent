@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7bce0714b8e70b7b5ff6cfa7ed4c6a6f1b936fa8869aa1d5ac2da3702b240d0a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=f414f7f3297989f2faa68c29d4288fabd4da292c35af00dd404f91a5aba7ed92 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # image-memory — AI-generated documentation
@@ -16,60 +16,61 @@ The `image-memory` package is an experimental TypeScript library designed to imp
 
 ## What it does
 
-The `image-memory` package provides the capability to index and query images using natural language. It supports actions such as `importImages` to index images from a specified path and `indexingService` to start an indexing service for images. The package allows images to be searched based on their content and metadata, making it possible to ask questions and get answers about the images in natural language.
+The `image-memory` package enables indexing and querying of images using natural language. It supports actions such as `importImages` to index images from a specified path and `indexingService` to start an indexing service for images. These capabilities allow users to create and manage a searchable image collection, where images can be queried based on their content and metadata.
 
 Key actions include:
 
-- `importImages`: Indexes images from a specified path.
-- `indexingService`: Starts an indexing service for images.
+- `importImages`: Indexes images from a specified path, creating an `ImageCollection` that can be queried.
+- `indexingService`: Starts a service to index images and monitor changes in the indexed folder.
 
-These actions enable users to build and maintain a searchable image collection, leveraging natural language processing to enhance the querying capabilities.
+By combining these features with the `KnowPro` library, the package allows users to ask natural language questions about the images and retrieve relevant results based on the knowledge extracted from the images and their metadata.
 
 ## Setup
 
-To set up the `image-memory` package, ensure you have the necessary dependencies installed. The package relies on several internal and external dependencies, including `@azure-rest/maps-search`, `better-sqlite3`, `debug`, `get-folder-size`, and `typechat`.
+To use the `image-memory` package, ensure the following setup steps are completed:
 
-Environment variables:
+1. **Install dependencies**: The package relies on several internal and external dependencies, including `@azure-rest/maps-search`, `better-sqlite3`, `debug`, `get-folder-size`, and `typechat`. These dependencies will be installed automatically when you run `pnpm install` in the monorepo.
 
-- `DEBUG`: Set this variable to enable debug logging.
+2. **Environment variables**:
+   - `DEBUG`: Set this variable to enable debug logging for development and troubleshooting purposes.
 
-For detailed setup instructions, including how to obtain API keys and configure environment variables, refer to the hand-written README.
+For additional setup details, including any required API keys or external service configurations, refer to the hand-written README.
 
 ## Key Files
 
-The `image-memory` package is structured into several key files, each responsible for different aspects of the functionality:
+The `image-memory` package is organized into several key files, each responsible for specific functionality:
 
-- [index.ts](./src/index.ts): The entry point that exports various modules.
+- [index.ts](./src/index.ts): The main entry point of the package, exporting all public modules and functions.
 - [imageCollection.ts](./src/imageCollection.ts): Defines the `ImageCollection` class, which represents a collection of images and provides methods for indexing and querying.
-- [imageMeta.ts](./src/imageMeta.ts): Defines the `Image` and `ImageMeta` classes, which represent individual images and their metadata.
-- [importImages.ts](./src/importImages.ts): Provides the `importImages` function to index images from a specified path.
-- [indexingService.ts](./src/indexingService.ts): Starts an indexing service for images.
-- [tables.ts](./src/tables.ts): Defines database tables for storing image metadata.
+- [imageMeta.ts](./src/imageMeta.ts): Contains the `Image` and `ImageMeta` classes, which represent individual images and their associated metadata.
+- [importImages.ts](./src/importImages.ts): Implements the `importImages` function, which indexes images from a specified path and returns an `ImageCollection`.
+- [indexingService.ts](./src/indexingService.ts): Provides functionality to start and manage an indexing service for images, including monitoring changes in the indexed folder.
+- [tables.ts](./src/tables.ts): Defines database tables for storing image metadata, such as geographic and exposure information.
 
 ### Detailed File Responsibilities
 
-- **[index.ts](./src/index.ts)**: Serves as the main entry point, exporting functions and classes from other modules.
-- **[imageCollection.ts](./src/imageCollection.ts)**: Contains the `ImageCollection` class, which manages a collection of images, including methods for adding images and querying them.
-- **[imageMeta.ts](./src/imageMeta.ts)**: Defines the structure for image metadata and individual image objects, including methods for extracting knowledge from images.
-- **[importImages.ts](./src/importImages.ts)**: Implements the `importImages` function, which indexes images from a specified path and returns an `ImageCollection`.
-- **[indexingService.ts](./src/indexingService.ts)**: Provides functionality to start and manage an indexing service for images, including monitoring changes in the indexed folder.
-- **[tables.ts](./src/tables.ts)**: Defines the `GeoTable` and `ExposureTable` classes for storing geographic and exposure metadata of images in a SQLite database.
+- **[index.ts](./src/index.ts)**: Serves as the central export point for the package, aggregating and exposing functionality from other modules.
+- **[imageCollection.ts](./src/imageCollection.ts)**: Implements the `ImageCollection` class, which manages a collection of images. It includes methods for adding images, querying them, and integrating with the `KnowPro` library for knowledge extraction.
+- **[imageMeta.ts](./src/imageMeta.ts)**: Defines the structure for image metadata and individual image objects. The `ImageMeta` class includes methods for extracting knowledge from images, while the `Image` class represents an individual image with associated metadata.
+- **[importImages.ts](./src/importImages.ts)**: Provides the `importImages` function, which allows users to index images from a specified directory or file path. This function supports recursive indexing and can handle callbacks for progress updates.
+- **[indexingService.ts](./src/indexingService.ts)**: Implements an indexing service that can monitor a folder for changes and update the image collection dynamically. It also tracks metadata about the indexing process, such as progress and state.
+- **[tables.ts](./src/tables.ts)**: Defines the `GeoTable` and `ExposureTable` classes, which are used to store geographic and exposure metadata for images in a SQLite database.
 
 ## How to extend
 
 To extend the `image-memory` package, follow these steps:
 
-1. **Open the relevant file**: Depending on the functionality you want to add or modify, open the appropriate file. For example, to add new indexing capabilities, start with [indexingService.ts](./src/indexingService.ts).
+1. **Identify the area to extend**: Determine which functionality you want to add or modify. For example, if you want to enhance the indexing process, you might start with [indexingService.ts](./src/indexingService.ts).
 
-2. **Follow existing patterns**: Review the existing code to understand the patterns used for indexing and querying images. For example, the `ImageCollection` class in [imageCollection.ts](./src/imageCollection.ts) provides a good example of how to structure a collection of images.
+2. **Review existing patterns**: Study the existing codebase to understand the structure and patterns used. For instance, the `ImageCollection` class in [imageCollection.ts](./src/imageCollection.ts) provides a clear example of how to manage and query image collections.
 
-3. **Add new functionality**: Implement the new functionality by extending the existing classes or adding new ones. Ensure that your code integrates well with the existing structure and follows the established patterns.
+3. **Implement new features**: Add your new functionality by extending existing classes or creating new ones. Ensure your changes align with the existing architecture and coding standards.
 
-4. **Test your changes**: Write tests to verify your changes. Ensure that your new functionality works as expected and does not break existing features.
+4. **Update tests**: Write new tests or update existing ones to cover your changes. This ensures that your modifications work as intended and do not introduce regressions.
 
-5. **Run tests**: Execute the tests to validate your changes. Make sure all tests pass before submitting your changes.
+5. **Run tests**: Execute the test suite to validate your changes. Ensure all tests pass before submitting your work.
 
-By following these steps, you can effectively extend the `image-memory` package to add new features or improve existing ones.
+By following these steps, you can effectively contribute to the `image-memory` package and expand its capabilities.
 
 ## Reference
 
@@ -77,7 +78,7 @@ By following these steps, you can effectively extend the `image-memory` package 
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -106,6 +107,6 @@ External: `@azure-rest/maps-search`, `better-sqlite3`, `debug`, `get-folder-size
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-memory docs:verify-links` to spot-check._
+_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-memory docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

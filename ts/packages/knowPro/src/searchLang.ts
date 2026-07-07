@@ -96,7 +96,7 @@ export async function searchConversationWithLanguage(
         );
         debugContext.usedSimilarityFallback.fill(false);
     }
-    let fallbackQueryExpr = compileFallbackQuery(
+    const fallbackQueryExpr = compileFallbackQuery(
         langQueryResult.data.query,
         options.compileOptions,
         langSearchFilter,
@@ -427,8 +427,8 @@ class SearchQueryCompiler {
     public compileSearchFilter(
         filter: querySchema.SearchFilter,
     ): SearchSelectExpr {
-        let searchTermGroup = this.compileTermGroup(filter);
-        let when = this.compileWhen(filter);
+        const searchTermGroup = this.compileTermGroup(filter);
+        const when = this.compileWhen(filter);
         return {
             searchTermGroup,
             when,
@@ -645,7 +645,11 @@ class SearchQueryCompiler {
         const dedupe = this.dedupe;
         this.dedupe = false;
 
-        let termGroup = this.compileActionTerm(actionTerm, true, includeVerbs);
+        const termGroup = this.compileActionTerm(
+            actionTerm,
+            true,
+            includeVerbs,
+        );
         if (
             includeAdditionalEntities &&
             isEntityTermArray(actionTerm.additionalEntities)
@@ -963,7 +967,7 @@ class SearchQueryCompiler {
     public compileSearchFilter2(
         filter: querySchema2.SearchFilter,
     ): SearchSelectExpr {
-        let searchTermGroup = this.compileTermGroup(filter);
+        const searchTermGroup = this.compileTermGroup(filter);
         let when = this.compileWhen(filter);
         if (filter.scopeSubQuery !== undefined) {
             when = this.compileScopeFilter(filter.scopeSubQuery, when);
@@ -987,7 +991,7 @@ class SearchQueryCompiler {
             filter.entitySearchTerms.length > 0
         ) {
             // Compile entity terms to search structured tags
-            let termGroup = this.compileEntityTermsForScope(
+            const termGroup = this.compileEntityTermsForScope(
                 filter.entitySearchTerms,
             );
             when.tagMatchingTerms = termGroup;
@@ -1012,7 +1016,7 @@ class SearchQueryCompiler {
     private compileEntityTermsForScope(
         entityTerms: querySchema.EntityTerm[],
     ): SearchTermGroup {
-        let termGroup = createAndTermGroup();
+        const termGroup = createAndTermGroup();
         const dedupe = this.dedupe;
         this.dedupe = false;
         for (const term of entityTerms) {
@@ -1132,7 +1136,7 @@ export async function searchConversationWithLanguage2(
         );
         debugContext.usedSimilarityFallback.fill(false);
     }
-    let fallbackQueryExpr = compileFallbackQuery(
+    const fallbackQueryExpr = compileFallbackQuery(
         langQueryResult.data.query,
         options.compileOptions,
         langSearchFilter,

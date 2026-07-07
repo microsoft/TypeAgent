@@ -404,7 +404,7 @@ export class topNDomainsExtractor {
 
         let avgPhraseCount: number = 0;
         let maxCollisions: number = 0;
-        let mCollision: string[] = [];
+        const mCollision: string[] = [];
         let lastCollision: string[] = [];
         let lastCollisionPhrase: string = "";
         for (const [phrase, sites] of Object.entries(this.processed.phrases)) {

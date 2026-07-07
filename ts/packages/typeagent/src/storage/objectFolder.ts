@@ -165,7 +165,7 @@ export async function createObjectFolder<T>(
 
     async function* all(): AsyncIterableIterator<NameValue<T>> {
         const names = await fileNames.get();
-        for (let name of names) {
+        for (const name of names) {
             const value = await get(name);
             if (value) {
                 yield { name: name, value: value };
@@ -193,7 +193,7 @@ export async function createObjectFolder<T>(
 
         // Could not rmdir. Manually delete each object
         const names = await fileNames.get();
-        for (let name of names) {
+        for (const name of names) {
             await remove(name);
         }
     }
@@ -316,7 +316,7 @@ export function generateMonotonicName(
 ): { name: string | undefined; lastCounter: number } {
     let counter = counterStartAt;
     let name: string | undefined;
-    let maxCounter = 10 ^ maxDigits;
+    const maxCounter = 10 ^ maxDigits;
 
     for (; counter < maxCounter; ++counter) {
         name = baseName + intString(counter, maxDigits);

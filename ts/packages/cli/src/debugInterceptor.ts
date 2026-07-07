@@ -9,7 +9,7 @@ const DEBUG_GUTTER_LAST = chalk.dim("  … ");
 const FRAMED_GUTTER = chalk.dim("  │ ");
 const GUTTER_WIDTH = 4; // "  │ " visible chars
 const CONT_INDENT = 6; // "  │   " visible chars
-// eslint-disable-next-line no-control-regex
+
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
 
 // Namespace color palette for framed panel display

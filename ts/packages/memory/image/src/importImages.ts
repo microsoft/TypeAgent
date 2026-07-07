@@ -30,7 +30,7 @@ export async function importImages(
     recursive: boolean = true,
     callback?: (text: string, count: number, max: number) => void,
 ): Promise<ImageCollection> {
-    let isDir = isDirectoryPath(imagePath);
+    const isDir = isDirectoryPath(imagePath);
 
     if (!fs.existsSync(imagePath)) {
         throw Error(

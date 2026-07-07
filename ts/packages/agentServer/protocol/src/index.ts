@@ -13,6 +13,7 @@ export {
     createDiscoveryHandlers,
     CreateConversationOptions,
     ConversationInfo,
+    ConversationSource,
     ConversationNameCollisionOptions,
     ConversationNameCollisionBehavior,
     JoinConversationResult,

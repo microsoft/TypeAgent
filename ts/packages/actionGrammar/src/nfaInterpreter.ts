@@ -714,7 +714,7 @@ function tryTransition(
         case "wildcard": {
             // Match token and write to slot (variables compile to slot indices)
             let slotValue: SlotValue = token;
-            let skipCount = 0;
+            const skipCount = 0;
 
             // Check type constraints and validate/convert token
             if (trans.typeName) {

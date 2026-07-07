@@ -41,7 +41,7 @@ export async function loadCodeWithLineNumbers(
     filePath: string,
     basePath?: string,
 ): Promise<string> {
-    let codeText: string = await readAllText(filePath, basePath);
+    const codeText: string = await readAllText(filePath, basePath);
     return annotateCodeWithLineNumbers(codeText);
 }
 
@@ -101,7 +101,7 @@ export function createCodeSection(
     language: string = "typescript",
 ): PromptSection {
     code = annotateCodeWithLineNumbers(code);
-    let content = `${language} code prefixed with line numbers:\n"""\n${code}\n"""\n`;
+    const content = `${language} code prefixed with line numbers:\n"""\n${code}\n"""\n`;
     return {
         role: MessageSourceRole.user,
         content,
@@ -114,7 +114,7 @@ export type Api = {
 };
 
 export function createApiSection(api: Api): PromptSection {
-    let content = api.callConditions
+    const content = api.callConditions
         ? `Call this Api when the following conditions are met:\n${api.callConditions}\n\n${api.apiSignatures}`
         : api.apiSignatures;
     return {

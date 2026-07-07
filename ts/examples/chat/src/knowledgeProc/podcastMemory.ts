@@ -149,7 +149,7 @@ export function createPodcastCommands(
     commands.importPodcast.metadata = importPodcastDef();
     async function importPodcast(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, importPodcastDef());
-        let sourcePath: string = namedArgs.sourcePath;
+        const sourcePath: string = namedArgs.sourcePath;
         if (!isFilePath(sourcePath)) {
             context.printer.writeError(`${sourcePath} is not a file`);
             return;
@@ -205,7 +205,7 @@ export function createPodcastCommands(
                 range.startDate,
                 range.stopDate,
             );
-            let threadRange: kp.TextRange = {
+            const threadRange: kp.TextRange = {
                 start: {
                     messageOrdinal: podcastMessages.length,
                 },
@@ -277,7 +277,7 @@ export function createPodcastCommands(
     commands.podcastExport.metadata = podcastExportDef();
     async function podcastExport(args: string[]) {
         const namedArgs = parseNamedArguments(args, podcastExportDef());
-        let destDirPath =
+        const destDirPath =
             namedArgs.destDirPath ??
             path.join(context.storePath, "conversations/export");
 
@@ -285,7 +285,7 @@ export function createPodcastCommands(
             await removeDir(destDirPath);
         }
         await ensureDir(destDirPath);
-        let name = namedArgs.name ?? context.podcastMemory.conversationName;
+        const name = namedArgs.name ?? context.podcastMemory.conversationName;
         const destCm = await conversation.createConversationManager(
             {},
             name,
@@ -314,7 +314,7 @@ export function createPodcastCommands(
             context.podcastMemory,
             messageIds,
         )) {
-            let newMessage: conversation.ConversationMessage =
+            const newMessage: conversation.ConversationMessage =
                 conversationMessageFromEmailText(message.value.value);
             newMessage.timestamp = message.timestamp;
             newMessage.knowledge = knowledge;
@@ -454,7 +454,7 @@ export function createPodcastCommands(
     // Same as @entities but for the podcast index.
     async function podcastEntities(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, podcastEntitiesDef());
-        let query = namedArgs.name ?? namedArgs.type ?? namedArgs.facet;
+        const query = namedArgs.name ?? namedArgs.type ?? namedArgs.facet;
         if (query) {
             const isMultipart =
                 namedArgs.facet || (namedArgs.name && namedArgs.type);
@@ -486,7 +486,7 @@ export function createPodcastCommands(
         const entityArray = await asyncArray.toArray(index.entities());
         const entities = [...conversation.toCompositeEntities(entityArray)];
         entities.sort((x, y) => x.name.localeCompare(y.name));
-        let printer = context.printer;
+        const printer = context.printer;
         printer.writeCompositeEntities(entities);
     }
 
@@ -523,7 +523,7 @@ export function createPodcastCommands(
     ): Promise<conversation.SearchResponse | undefined> {
         const maxMatches = namedArgs.maxMatches;
         const minScore = namedArgs.minScore;
-        let query = namedArgs.query.trim();
+        const query = namedArgs.query.trim();
         if (!query || query.length === 0) {
             return undefined;
         }
@@ -683,8 +683,8 @@ export function createPodcastCommands(
     commands.podcastIndex.metadata = podcastIndexDef();
     async function podcastIndex(args: string[] | NamedArgs) {
         const namedArgs = parseNamedArguments(args, podcastIndexDef());
-        let sourcePath: string = namedArgs.sourcePath;
-        let isDir = isDirectoryPath(sourcePath);
+        const sourcePath: string = namedArgs.sourcePath;
+        const isDir = isDirectoryPath(sourcePath);
         if (isDir) {
             await indexTurns(
                 sourcePath,
@@ -983,8 +983,8 @@ export function createPodcastCommands(
 function podcastMessageFromEmailText(text: string) {
     let messageText = "";
     let speaker: string | undefined;
-    let lines = knowLib.splitIntoLines(text);
-    for (let line of lines) {
+    const lines = knowLib.splitIntoLines(text);
+    for (const line of lines) {
         if (line.startsWith("From: ")) {
             speaker = line.replace("From: ", "");
         } else if (line.startsWith(`"From: `)) {
@@ -1005,7 +1005,7 @@ function conversationMessageFromEmailText(
 ): conversation.ConversationMessage {
     let sender: string | undefined;
     let recipients: string[] | undefined;
-    let lines = knowLib.splitIntoLines(text);
+    const lines = knowLib.splitIntoLines(text);
     for (let line of lines) {
         if (line.startsWith("From: ")) {
             sender = line.replace("From: ", "");

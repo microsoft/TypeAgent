@@ -219,7 +219,7 @@ export function createAnswerGenerator(
         if (trim && contextContent.length > getMaxContextLength()) {
             contextContent = trimContext(contextContent, getMaxContextLength());
         }
-        let preamble: PromptSection[] = [];
+        const preamble: PromptSection[] = [];
         if (settings.contextProvider) {
             preamble.push(
                 ...(await settings.contextProvider.getSections(question)),

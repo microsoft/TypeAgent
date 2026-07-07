@@ -152,7 +152,7 @@ export function createSearchProcessor(
         if (!actionResult.success) {
             return undefined;
         }
-        let action = actionResult.data;
+        const action = actionResult.data;
         if (options.progress) {
             options.progress(action);
         }

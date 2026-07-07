@@ -251,6 +251,16 @@ export function configToEnv(config: Config): EnvOutput {
                 f.httpEndpointLogicAppConnectionId;
     }
 
+    // Embedding provider selection.
+    if (config.embedding) {
+        if (config.embedding.provider !== undefined)
+            out.TYPEAGENT_EMBEDDING_PROVIDER = config.embedding.provider;
+        if (config.embedding.model !== undefined)
+            out.TYPEAGENT_EMBEDDING_MODEL = config.embedding.model;
+        if (config.embedding.cacheDir !== undefined)
+            out.TYPEAGENT_EMBEDDING_CACHE_DIR = config.embedding.cacheDir;
+    }
+
     // Extra: untyped passthrough. Last so it can override typed values
     // for keys we haven't migrated yet (the user wrote them explicitly).
     for (const [k, v] of config.extra) {

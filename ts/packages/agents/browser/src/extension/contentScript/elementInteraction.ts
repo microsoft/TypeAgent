@@ -10,12 +10,12 @@ import { getFullSelector, isVisible } from "./domUtils";
  */
 export function getInteractiveElementsBoundingBoxes(): ElementBoundingBoxes {
     const allElements = Array.from(document.getElementsByTagName("*"));
-    let textInputBounds: any[] = [];
-    let clickBounds: any[] = [];
-    let scrollBounds: any[] = [];
-    let tableRowBounds: any[] = [];
-    let tableColBounds: any[] = [];
-    let tableCellBounds: any[] = [];
+    const textInputBounds: any[] = [];
+    const clickBounds: any[] = [];
+    const scrollBounds: any[] = [];
+    const tableRowBounds: any[] = [];
+    const tableColBounds: any[] = [];
+    const tableCellBounds: any[] = [];
     let index = 0;
     let rowIndex = 0;
     let colIndex = 0;
