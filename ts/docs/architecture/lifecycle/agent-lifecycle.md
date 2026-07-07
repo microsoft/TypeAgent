@@ -7,7 +7,7 @@
 > acquired in the first place (sources, the registry, `agents.json`, feeds), see
 > [Agent sources](./agent-sources.md). For the user-facing `@package` commands,
 > see the
-> [Agent Install Sources reference](https://github.com/microsoft/TypeAgent/blob/main/docs/content/reference/install-sources.md).
+> [TypeAgent command reference](../../overview/command-reference.md#package-list---list-installed-agents).
 
 ## Overview
 
@@ -232,6 +232,15 @@ things true on every dispatcher at once:
    mismatch. Every update is therefore treated as potentially schema-changing and
    freezes all dispatchers together across the swap.
 
+The slip happens if update is applied as two separate applicator operations:
+`removeProvider(v1)` acquires and releases the command lock, then
+`addProvider(v2)` acquires it later after the shared process has drained. Any
+request that arrives in that released gap sees the name and schemas as absent.
+Commands bind through `isAppAgentName` / `isCommandEnabled`; natural-language
+requests bind through active schema candidacy before execution. Both routing
+seams must therefore continue to see a consistent agent set during the swap, and
+only the local execution/instance handoff may be parked.
+
 ### The design: one command-lock-held section
 
 Both guarantees fall out of running the entire local swap as a **single
@@ -241,6 +250,13 @@ swap is mutually exclusive with request processing: no request can observe the
 name mid-swap, and every dispatcher is frozen for the duration. Nothing extra is
 needed — no per-name gate, no park machinery, no tombstone; the lock the
 dispatcher already holds does the work.
+
+This is deliberately a session-wide hold, not a lighter per-name gate. Natural
+language routing does not know its target until translation, and translation uses
+the agent grammars being swapped, so a per-name gate would still have to hold NL
+traffic. The command lock is the existing request boundary and keeps the routing
+seams (`isAppAgentName`, active schemas, and execution) consistent through one
+atomic local swap.
 
 Structurally the held section is **`uninstall(v1)` immediately followed by
 `install(v2)`** under one lock, so update reuses the uninstall/install primitives
@@ -294,6 +310,21 @@ runs v2 on a rolled-back update. The `agents.json` record is mutated only on
 commit (write v2 / delete on uninstall), never before — so a crash mid-swap
 recovers cleanly to v1 and the orphaned v2 root is reclaimed by the startup sweep.
 
+The only structural startability check happens **before** the barrier, while v1
+is still serving: install/update materialization validates that the new record's
+manifest can be resolved and read, regardless of source kind. A corrupt feed,
+catalog, or path candidate fails there and leaves v1 untouched. The barrier does
+not fork a start probe for v2; after verify-0 passes it commits directly. A v2
+that reads a manifest but later throws during `instantiate()` surfaces as the
+ordinary per-session load failure path rather than rolling back.
+
+Rollback is currently timeout-driven. A future user-facing cancel must use an
+out-of-band abort path, not a queued command, because the command lock is held
+during the freeze and a typed cancel command would wait behind the operation it
+is trying to cancel. It also needs a long-lived abort source keyed by the
+in-flight agent update rather than the issuing command's short-lived abort
+signal.
+
 ### Version-scoped install roots
 
 Non-destructive materialize requires v2 to land without touching v1. `path` and
@@ -324,7 +355,7 @@ block the command lock waiting on it. The issuing session enqueues the op like a
 sibling and returns _"update started"_; the terminal outcome is delivered later
 through a one-shot `onOutcome(status)` callback (`updated`/`reverted` for update,
 `uninstalled`/`reverted` for uninstall) that the `@package` handler maps to a
-follow-up status line. This deletes the old inline "immediate" apply path — every
+follow-up status line. This removes the inline "immediate" apply path; every
 op on every dispatcher now flows through the one idle-gated queue.
 
 ### Failure semantics and edge cases
@@ -341,6 +372,12 @@ op on every dispatcher now flows through the one idle-gated queue.
 - **Disconnect mid-barrier:** the host is dropped from the barrier and its op
   auto-acks; a `dispose()` re-polls the verify-0 check so a clean disconnect
   commits instead of stalling to the timeout.
+- **Close ordering matters:** dispatcher teardown first disposes the local
+  applicator so queued operations auto-ack, then removes the connected providers
+  from the local manager (dropping the shared v1 refcount), and only then disposes
+  the source connection. That final source-side dispose re-polls verify-0, which
+  closes the race where an auto-ack emptied the pending set before the local
+  unload decremented the last v1 ref.
 - **Name reuse during teardown:** a name that is mid-`removing` is off-limits to a
   new user op until the barrier completes.
 

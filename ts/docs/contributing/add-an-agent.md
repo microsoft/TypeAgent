@@ -120,5 +120,5 @@ explicit `registry`/`scopes`, the `TYPEAGENT_FEED_REGISTRY` /
 `TYPEAGENT_FEED_SCOPES` environment values. See
 [Agent sources › the feed source](../architecture/lifecycle/agent-sources.md#the-feed-source)
 for how auth and enumeration work, and the
-[Agent Install Sources reference](https://github.com/microsoft/TypeAgent/blob/main/docs/content/reference/install-sources.md)
+[TypeAgent command reference](../overview/command-reference.md#package-source-list--order--where--add--remove---manage-install-sources)
 for the `@package source` commands that configure and order sources.

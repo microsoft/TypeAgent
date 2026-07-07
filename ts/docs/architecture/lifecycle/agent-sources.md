@@ -6,7 +6,7 @@
 > agent is registered into a live session, propagated across dispatchers, and
 > updated, see [Agent lifecycle](./agent-lifecycle.md). For the user-facing
 > `@package` command syntax, see the
-> [Agent Install Sources reference](https://github.com/microsoft/TypeAgent/blob/main/docs/content/reference/install-sources.md).
+> [TypeAgent command reference](../../overview/command-reference.md#package-list---list-installed-agents).
 
 ## Overview
 
