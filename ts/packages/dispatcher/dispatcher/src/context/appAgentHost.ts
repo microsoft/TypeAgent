@@ -6,7 +6,6 @@ import registerDebug from "debug";
 import {
     AppAgentHost,
     AppAgentProvider,
-    ReplaceProviderOptions,
 } from "../agentProvider/agentProvider.js";
 
 const debug = registerDebug("typeagent:dispatcher:agentHost");
@@ -103,8 +102,9 @@ export class AppAgentHostApplicator implements AppAgentHost {
 
     public replaceProvider(
         oldProvider: AppAgentProvider,
-        newProviderThunk: (() => AppAgentProvider | undefined) | undefined,
-        options: ReplaceProviderOptions,
+        resolveReplacement: () => Promise<AppAgentProvider | undefined>,
+        notify: boolean = false,
+        dropConfig: boolean = false,
     ): Promise<void> {
         // Assert the single-agent invariant on the old provider at the boundary;
         // the new provider is asserted below when it is built.
@@ -116,12 +116,10 @@ export class AppAgentHostApplicator implements AppAgentHost {
                 ),
             );
         }
-        const notify = options.notify ?? false;
         // Default to preserving the enable preference: a bare
         // `replaceProvider` is a swap, not a removal, so unlike `removeProvider`
         // (which defaults dropConfig=true for uninstall) it keeps config by
         // default. The barrier always passes `dropConfig` explicitly regardless.
-        const dropConfig = options.dropConfig ?? false;
         // The whole teardown → quiesce → wait → (add) sequence is ONE command
         // lock job: no user command interleaves between the remove and the add.
         // Teardown/startup are leaf ops — they never reacquire the command lock
@@ -130,11 +128,9 @@ export class AppAgentHostApplicator implements AppAgentHost {
             // 1. Teardown leg: unload `old` + drop routing (decrement the shared
             //    refcount), exactly like a remove.
             await this.apply.applyRemove(oldProvider, notify, dropConfig);
-            // 2. Signal this host has quiesced — fills its barrier slot.
-            options.onQuiesced();
-            // 3. Park (still holding the command lock) until the source has every
-            //    host's quiesce ACK and has verified the shared old refcount is 0.
-            await options.whenReady;
+            // 2. Let the source fill this host's barrier slot, park (still
+            //    holding the command lock), and decide what should be added.
+            const newProvider = await resolveReplacement();
             // The session may have been torn down while parked (dispose leaves a
             // running op to finish): skip the startup leg rather than add the
             // new version into a closing session. The source already dropped this
@@ -142,22 +138,18 @@ export class AppAgentHostApplicator implements AppAgentHost {
             if (this.closed) {
                 return;
             }
-            // 4. Startup leg: call the thunk AFTER the barrier releases and add
-            //    whatever it returns. The source decides post-barrier: the NEW
-            //    version on a committed update, the OLD version on a
+            // 3. Startup leg: add whatever the source returned. The source
+            //    decides post-barrier: the NEW version on a committed update, the OLD version on a
             //    cancelled/timed-out update that ROLLS BACK (v1 restored), or
             //    `undefined` (no add) on a committed uninstall (`old → ∅`).
-            if (newProviderThunk !== undefined) {
-                const newProvider = newProviderThunk();
-                if (newProvider !== undefined) {
-                    const newNames = newProvider.getAppAgentNames();
-                    if (newNames.length !== 1) {
-                        throw new Error(
-                            `AppAgentHost.replaceProvider requires a single-agent new provider; got ${newNames.length} name(s): [${newNames.join(", ")}]`,
-                        );
-                    }
-                    await this.apply.applyAdd(newProvider, notify);
+            if (newProvider !== undefined) {
+                const newNames = newProvider.getAppAgentNames();
+                if (newNames.length !== 1) {
+                    throw new Error(
+                        `AppAgentHost.replaceProvider requires a single-agent new provider; got ${newNames.length} name(s): [${newNames.join(", ")}]`,
+                    );
                 }
+                await this.apply.applyAdd(newProvider, notify);
             }
         };
         return this.enqueue("replace", run);

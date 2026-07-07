@@ -20,35 +20,29 @@ import { AppAgentProvider, AppAgentHost } from "agent-dispatcher";
 import { createLimiter } from "@typeagent/common-utils";
 
 // Compose a faithful `replaceProvider` for a test host from its own add/remove,
-// modelling the applicator's single-lock section (5.7): remove the old
-// version, quiesce (fill the barrier slot), await the shared `whenReady`, then
-// add the new version (update) or settle (uninstall). This preserves both the
-// recorded remove-then-add op order AND the barrier gating (a host that blocks
-// its removeProvider keeps the barrier pending until released).
+// modelling the applicator's single-lock section (5.7): remove the old version,
+// then call the async thunk that quiesces, awaits the shared barrier, and
+// decides what to add. This preserves both the recorded remove-then-add op order
+// AND the barrier gating (a host that blocks its removeProvider keeps the
+// barrier pending until released).
 function withReplace(
     host: Pick<AppAgentHost, "addProvider" | "removeProvider">,
 ): AppAgentHost {
     return {
         addProvider: host.addProvider,
         removeProvider: host.removeProvider,
-        replaceProvider: async (oldProvider, newProviderThunk, options) => {
-            await host.removeProvider(
-                oldProvider,
-                options.notify ?? false,
-                options.dropConfig ?? false,
-            );
-            options.onQuiesced();
-            await options.whenReady;
-            // The source decides post-barrier what to add: v2 (commit update), v1
-            // (rollback), or nothing (commit uninstall / no thunk).
-            if (newProviderThunk !== undefined) {
-                const newProvider = newProviderThunk();
-                if (newProvider !== undefined) {
-                    await host.addProvider(
-                        newProvider,
-                        options.notify ?? false,
-                    );
-                }
+        replaceProvider: async (
+            oldProvider,
+            resolveReplacement,
+            notify = false,
+            dropConfig = false,
+        ) => {
+            await host.removeProvider(oldProvider, notify, dropConfig);
+            // The source decides post-barrier what to add: v2 (commit update),
+            // v1 (rollback), or nothing (commit uninstall).
+            const newProvider = await resolveReplacement();
+            if (newProvider !== undefined) {
+                await host.addProvider(newProvider, notify);
             }
         },
     };
@@ -1551,7 +1545,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
             },
         });
         const issuing = recordingHost();
-        // A session whose `replaceProvider` auto-acks WITHOUT `onQuiesced`
+        // A session whose `replaceProvider` auto-acks WITHOUT running its thunk
         // (models its barrier op queued-not-started at close): it fills its
         // phase-1 slot from the success continuation, which can empty `pending`
         // BEFORE its teardown has dropped the shared v1 ref.
@@ -1715,7 +1709,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         });
         const issuing = recordingHost();
         // A closed/disposed host: its `replaceProvider` auto-acks immediately
-        // WITHOUT ever calling `onQuiesced` or awaiting `whenReady` (models an
+        // WITHOUT ever running its thunk or awaiting `whenDecided` (models an
         // applicator closed at enqueue time). The barrier must still fill its
         // phase-1 slot for it via the success continuation.
         const closedHost: AppAgentHost = {

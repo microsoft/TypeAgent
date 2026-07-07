@@ -417,12 +417,10 @@ describe("AppAgentHostApplicator", () => {
         let quiesced = false;
         const replaceAck = host.replaceProvider(
             fakeProvider("v1"),
-            () => fakeProvider("v2"),
-            {
-                onQuiesced: () => {
-                    quiesced = true;
-                },
-                whenReady: ready.promise,
+            async () => {
+                quiesced = true;
+                await ready.promise;
+                return fakeProvider("v2");
             },
         );
 
@@ -456,15 +454,15 @@ describe("AppAgentHostApplicator", () => {
             },
         });
 
-        // Uninstall passes no new-provider thunk and dropConfig=true.
-        const ack = host.replaceProvider(fakeProvider("gone"), undefined, {
-            onQuiesced: () => {
+        const ack = host.replaceProvider(
+            fakeProvider("gone"),
+            async () => {
                 quiesced = true;
+                return undefined;
             },
-            whenReady: Promise.resolve(),
-            notify: true,
-            dropConfig: true,
-        });
+            true,
+            true,
+        );
         await ack;
 
         // Only the teardown leg ran (with dropConfig threaded); no add.
@@ -490,15 +488,11 @@ describe("AppAgentHostApplicator", () => {
         let thunkCalls = 0;
         const ack = host.replaceProvider(
             fakeProvider("v1"),
-            () => {
+            async () => {
                 thunkCalls++;
                 return undefined;
             },
-            {
-                onQuiesced: () => {},
-                whenReady: Promise.resolve(),
-                notify: true,
-            },
+            true,
         );
         await ack;
 
@@ -517,13 +511,8 @@ describe("AppAgentHostApplicator", () => {
             },
         });
         await expect(
-            host.replaceProvider(
-                fakeMultiProvider("a", "b"),
-                () => fakeProvider("v2"),
-                {
-                    onQuiesced: () => {},
-                    whenReady: Promise.resolve(),
-                },
+            host.replaceProvider(fakeMultiProvider("a", "b"), async () =>
+                fakeProvider("v2"),
             ),
         ).rejects.toThrow(/single-agent old provider/i);
         expect(calls).toBe(0);
@@ -540,13 +529,8 @@ describe("AppAgentHostApplicator", () => {
             },
         });
         await expect(
-            host.replaceProvider(
-                fakeProvider("v1"),
-                () => fakeMultiProvider("a", "b"),
-                {
-                    onQuiesced: () => {},
-                    whenReady: Promise.resolve(),
-                },
+            host.replaceProvider(fakeProvider("v1"), async () =>
+                fakeMultiProvider("a", "b"),
             ),
         ).rejects.toThrow(/single-agent new provider/i);
         // The teardown leg still ran (the old version is down); only the add is
@@ -573,16 +557,10 @@ describe("AppAgentHostApplicator", () => {
         });
 
         let quiesced = false;
-        const ack = host.replaceProvider(
-            fakeProvider("v1"),
-            () => fakeProvider("v2"),
-            {
-                onQuiesced: () => {
-                    quiesced = true;
-                },
-                whenReady: Promise.resolve(),
-            },
-        );
+        const ack = host.replaceProvider(fakeProvider("v1"), async () => {
+            quiesced = true;
+            return fakeProvider("v2");
+        });
         await tick();
 
         host.dispose();
@@ -596,7 +574,7 @@ describe("AppAgentHostApplicator", () => {
         expect(calls).toBe(0);
     });
 
-    it("a replace parked on whenReady skips the add after dispose (closed re-check)", async () => {
+    it("a replace parked in its replacement resolver skips the add after dispose (closed re-check)", async () => {
         const order: string[] = [];
         const host = new AppAgentHostApplicator(createLimiter(1), {
             applyAdd: async (p) => {
@@ -609,20 +587,15 @@ describe("AppAgentHostApplicator", () => {
 
         const ready = deferred();
         let quiesced = false;
-        const ack = host.replaceProvider(
-            fakeProvider("v1"),
-            () => fakeProvider("v2"),
-            {
-                onQuiesced: () => {
-                    quiesced = true;
-                },
-                whenReady: ready.promise,
-            },
-        );
+        const ack = host.replaceProvider(fakeProvider("v1"), async () => {
+            quiesced = true;
+            await ready.promise;
+            return fakeProvider("v2");
+        });
 
         await tick();
         // The teardown leg ran and the host quiesced; the op is parked mid-run
-        // on whenReady (running, so dispose leaves it to finish, ).
+        // in the replacement resolver (running, so dispose leaves it to finish).
         expect(order).toEqual(["remove:v1"]);
         expect(quiesced).toBe(true);
 
@@ -654,18 +627,13 @@ describe("AppAgentHostApplicator", () => {
 
         const ack = host.replaceProvider(
             fakeProvider("v1"),
-            () => {
+            async () => {
+                quiesced = true;
                 thunkCalls++;
                 return fakeProvider("v2");
             },
-            {
-                onQuiesced: () => {
-                    quiesced = true;
-                },
-                whenReady: Promise.resolve(),
-                notify: true,
-                dropConfig: false,
-            },
+            true,
+            false,
         );
         await expect(ack).resolves.toBeUndefined();
         expect(calls).toBe(0);
@@ -673,7 +641,7 @@ describe("AppAgentHostApplicator", () => {
         expect(thunkCalls).toBe(0);
     });
 
-    it("replaceProvider calls the thunk exactly once, only after whenReady resolves", async () => {
+    it("replaceProvider calls the replacement resolver exactly once", async () => {
         const order: string[] = [];
         let thunkCalls = 0;
         const host = new AppAgentHostApplicator(createLimiter(1), {
@@ -686,17 +654,11 @@ describe("AppAgentHostApplicator", () => {
         });
 
         const ready = deferred();
-        const ack = host.replaceProvider(
-            fakeProvider("v1"),
-            () => {
-                thunkCalls++;
-                return fakeProvider("v2");
-            },
-            {
-                onQuiesced: () => {},
-                whenReady: ready.promise,
-            },
-        );
+        const ack = host.replaceProvider(fakeProvider("v1"), async () => {
+            await ready.promise;
+            thunkCalls++;
+            return fakeProvider("v2");
+        });
 
         await tick();
         // Parked on the barrier: the teardown ran but the thunk is NOT called
@@ -723,18 +685,10 @@ describe("AppAgentHostApplicator", () => {
             },
         });
 
-        const ack = host.replaceProvider(
-            fakeProvider("v1"),
-            () => {
-                throw new Error("build v2 failed");
-            },
-            {
-                onQuiesced: () => {
-                    quiesced = true;
-                },
-                whenReady: Promise.resolve(),
-            },
-        );
+        const ack = host.replaceProvider(fakeProvider("v1"), async () => {
+            quiesced = true;
+            throw new Error("build v2 failed");
+        });
         await expect(ack).rejects.toThrow(/build v2 failed/);
         // The teardown leg ran + quiesced (irreversible); the add is skipped.
         expect(order).toEqual(["remove:v1"]);
@@ -764,12 +718,8 @@ describe("AppAgentHostApplicator", () => {
         // enable preference across a version bump) must thread `false`.
         await host.replaceProvider(
             fakeProvider("v1"),
-            () => fakeProvider("v2"),
-            {
-                onQuiesced: () => {},
-                whenReady: Promise.resolve(),
-                notify: true,
-            },
+            async () => fakeProvider("v2"),
+            true,
         );
         expect(seen).toEqual({
             addNotify: true,

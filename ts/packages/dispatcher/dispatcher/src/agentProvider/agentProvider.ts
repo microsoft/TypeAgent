@@ -129,19 +129,13 @@ export interface AppAgentHost {
      *   1. remove `oldProvider` (unload its agent — decrement the SHARED
      *      refcount — and drop its routing artifacts), exactly like
      *      {@link removeProvider};
-     *   2. call `onQuiesced()` to fill this host's slot in the source's barrier;
-     *   3. `await whenReady` — park (still holding the lock) until the source has
-     *      every host's quiesce ACK AND has VERIFIED the shared old refcount is 0,
-     *      so the old version is confirmed terminated everywhere
-     *      before anything new starts;
-     *   4. if `newProviderThunk` is given, call it AFTER the barrier releases and
-     *      add whatever it returns, exactly like {@link addProvider}. The source
-     *      decides post-barrier what to add: the NEW version on a
+     *   2. call `resolveReplacement` so the source can fill this host's barrier
+     *      slot, park on its coordinated release promise, and decide what to add;
+     *   3. if `resolveReplacement` returns a provider, add it exactly like
+     *      {@link addProvider}. The source decides post-barrier what to add: the NEW version on a
      *      committed `@package update`, the OLD version on a cancelled/timed-out update
      *      that ROLLS BACK (`v1` restored), or `undefined` (no add) on a
-     *      committed `@package uninstall` (`old → ∅`). A `newProviderThunk` of `undefined`
-     *      at call time is an unconditional no-add (uninstall that can never roll
-     *      back).
+     *      committed `@package uninstall` (`old → ∅`). `undefined` means no add.
      *
      * No two versions of the name ever coexist, and no session observes the name
      * absent across the swap. **Leaf-op invariant:** the teardown and
@@ -156,34 +150,10 @@ export interface AppAgentHost {
      */
     replaceProvider(
         oldProvider: AppAgentProvider,
-        newProviderThunk: (() => AppAgentProvider | undefined) | undefined,
-        options: ReplaceProviderOptions,
+        resolveReplacement: () => Promise<AppAgentProvider | undefined>,
+        notify?: boolean,
+        dropConfig?: boolean,
     ): Promise<void>;
-}
-
-/**
- * The source-coordinated barrier hooks passed to {@link AppAgentHost.replaceProvider}.
- */
-export interface ReplaceProviderOptions {
-    /**
-     * Called by the host once it has torn down `oldProvider` (its leg of the
-     * teardown is done) — fills this host's slot in the source's barrier.
-     */
-    onQuiesced: () => void;
-    /**
-     * Resolved by the SOURCE once every host has quiesced AND verify-0 passes
-     * (the shared old refcount is confirmed 0). Each host parks on
-     * it — under its held command lock — before starting the new version / being
-     * released, so the old version is confirmed gone everywhere first.
-     */
-    whenReady: Promise<void>;
-    /** Forwarded to the remove/add legs (sibling fan-out message). */
-    notify?: boolean;
-    /**
-     * Forwarded to the remove leg: `true` for an uninstall
-     * (clear the enable preference), `false` for an update (preserve it).
-     */
-    dropConfig?: boolean;
 }
 
 /**
@@ -204,8 +174,8 @@ export interface ReplaceProviderOptions {
  *   {@link AppAgentConnection.dispose} has been called; a fan-out that raced
  *   disposal must no-op.
  * - **Honor the swap barrier.** When driving {@link AppAgentHost.replaceProvider},
- *   resolve its `whenReady` only after every host has quiesced and the old
- *   version's shared refcount is verified 0.
+ *   its async new-provider thunk should not resolve until every host has
+ *   quiesced and the old version's shared refcount is verified 0.
  */
 export interface AppAgentSource {
     /**

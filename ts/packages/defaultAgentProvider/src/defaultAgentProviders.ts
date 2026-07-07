@@ -285,8 +285,6 @@ type DynamicAgentEntry =
     | { status: "active"; provider: AppAgentProvider }
     | {
           status: "removing";
-          // The provider being torn down (kept for the load tombstone).
-          provider: AppAgentProvider;
           // The in-flight teardown/swap barrier.
           barrier: ReplaceBarrier;
       };
@@ -296,21 +294,19 @@ type DynamicAgentEntry =
  * timeout or abort, rolls back. Every target host runs `replaceProvider`, tears
  * down the shared old
  * (`v1`) version, and fills its slot via `quiesce`. Once every slot is filled and
- * verify-0 confirms the shared `v1` refcount is 0, the source commits — releasing
- * the hosts to add `v2` (update) / settle (uninstall). Any stall — a straggler
+ * verify-0 confirms the shared `v1` refcount is 0, the source commits — each
+ * host then adds `v2` (update) or nothing (uninstall). Any stall — a straggler
  * that won't idle or a `v1` that won't terminate — or an out-of-band abort
  * resolves to rollback instead: `v1` is restored in every session and `v2` is
- * discarded, as if the op never happened. The outcome is decided before the
- * hosts are released, so a host only ever adds one version (`v2` on commit, `v1`
- * on rollback) — never a second swap round.
+ * discarded, as if the op never happened. The outcome is decided before hosts
+ * resume, so a host only ever adds one version (`v2` on commit, `v1` on
+ * rollback) — never a second swap round.
  */
 type ReplaceOutcome = "committed" | "rolledback";
 
-// Barrier lifecycle: collect quiesces → (verify-0 passes) → release hosts with
-// the decided outcome → GC the superseded root (verify-0 already confirmed the
-// old version is fully unloaded).
-type ReplacePhase = "quiescing" | "releasing";
-
+// Barrier lifecycle: collect quiesces → (verify-0 passes) → decide the outcome
+// → unblock hosts/late joiners → GC the superseded root (verify-0 already
+// confirmed the old version is fully unloaded).
 type ReplaceBarrier = {
     readonly name: string;
     // The shared old (`v1`) provider: verify-0 checks its refcount, and it is
@@ -326,16 +322,14 @@ type ReplaceBarrier = {
     // rollback), as a pure signal. A session that connects mid-`removing` is NOT
     // a participant (it never held `v1`, so it neither quiesces nor counts toward
     // verify-0/GC); instead its `connect` parks on this signal until every
-    // in-flight barrier has settled, then joins the fan-out set and snapshots the
-    // now-quiet active set — which already reflects the decided outcome
+    // in-flight barrier has been decided, then joins the fan-out set and
+    // snapshots the now-quiet active set — which already reflects the decided outcome
     // (`v2`/absent/`v1`), so no separate decided-version fold is needed. Parking
     // past the decision means it can neither pollute verify-0 nor run a command
     // with the agent mid-swap.
-    readonly whenSettled: Promise<void>;
-    // Resolves `whenSettled` (called once in `decide`).
-    readonly resolveSettled: () => void;
-    // Resolves every parked host's `whenReady` so it runs its (decided) add leg.
-    readonly release: () => void;
+    readonly whenDecided: Promise<void>;
+    // Resolves `whenDecided` (called once in `decide`).
+    readonly resolveDecided: () => void;
     // Run once when the outcome is decided: flip the entry to active(`v2`)/absent
     // on commit, or restore active(`v1`) + the record on rollback.
     readonly onDecided: (outcome: ReplaceOutcome) => void;
@@ -346,7 +340,6 @@ type ReplaceBarrier = {
     readonly finalizeGc: (outcome: ReplaceOutcome) => void;
     // Report the terminal outcome to the issuing conversation.
     readonly onOutcome: ((status: UpdateOutcomeStatus) => void) | undefined;
-    phase: ReplacePhase;
     // undefined until decided; set exactly once (commit XOR rollback).
     outcome: ReplaceOutcome | undefined;
     // Phase-1 backstop timer (straggler / `v1` won't die → rollback).
@@ -434,8 +427,8 @@ export function createDefaultInstalledAgentSource(
     //
     // A draining name is never loaded on the normal path: throughout the
     // `removing` window every participant session holds its command lock (parked
-    // in `replaceProvider` awaiting `whenReady`), and a session that connects
-    // mid-`removing` parks on `whenSettled` before joining fan-out — so no
+    // in `replaceProvider` awaiting `whenDecided`), and a session that connects
+    // mid-`removing` parks on `whenDecided` before joining fan-out — so no
     // command, and therefore no `loadAppAgent`, runs against a draining name.
     function buildAgentProvider(
         name: string,
@@ -543,7 +536,7 @@ export function createDefaultInstalledAgentSource(
         return isLoadedProbe(barrier.oldProvider, barrier.name) !== true;
     }
 
-    // Cancel any live phase timer. Idempotent.
+    // Cancel the live quiesce backstop timer. Idempotent.
     function clearBarrierTimers(barrier: ReplaceBarrier): void {
         if (barrier.quiesceTimer !== undefined) {
             clearTimeout(barrier.quiesceTimer);
@@ -551,7 +544,7 @@ export function createDefaultInstalledAgentSource(
         }
     }
 
-    // The provider each host adds AFTER the barrier releases. The
+    // The provider each host adds AFTER the barrier is decided. The
     // source decides post-barrier: `v1` (the old provider) on a rollback so every
     // session restores the exact version it had, `v2` (the new provider) on a
     // committed update, or nothing (undefined) on a committed uninstall.
@@ -561,25 +554,24 @@ export function createDefaultInstalledAgentSource(
             : barrier.newProvider;
     }
 
-    // Decide the barrier's outcome and release the parked hosts.
+    // Decide the barrier's outcome and unblock parked hosts / late joiners.
     // Runs exactly once (guarded by `outcome`): flips the entry (+ restores the
-    // record on rollback), releases every parked host to run its decided add
-    // leg, then GCs the superseded root (verify-0 already confirmed the old
-    // version is fully unloaded).
+    // record on rollback), unblocks parked hosts / late joiners, then GCs the
+    // superseded root (verify-0 already confirmed the old version is fully
+    // unloaded).
     function decide(barrier: ReplaceBarrier, outcome: ReplaceOutcome): void {
         if (barrier.outcome !== undefined) {
             return;
         }
         barrier.outcome = outcome;
-        barrier.phase = "releasing";
         clearBarrierTimers(barrier);
-        // Flip source state BEFORE releasing hosts (name active(v2)/absent on
+        // Flip source state BEFORE unblocking hosts (name active(v2)/absent on
         // commit; active(v1) + record restored on rollback). A throw here (e.g. a
         // synchronous agents.json write error during a rollback restore) must NOT
-        // skip `release()` — the parked hosts would deadlock. They add the decided
-        // provider off `barrier.outcome` (via `decideAdd`), independent of the
-        // entry flip, so releasing after a partial `onDecided` still restores the
-        // right version everywhere.
+        // skip `resolveDecided()` — the parked hosts would deadlock. They add the
+        // decided provider off `barrier.outcome` (via `decideAdd`), independent
+        // of the entry flip, so unblocking after a partial `onDecided` still
+        // restores the right version everywhere.
         try {
             barrier.onDecided(outcome);
         } catch (e) {
@@ -587,14 +579,11 @@ export function createDefaultInstalledAgentSource(
                 `barrier '${barrier.name}': onDecided(${outcome}) threw: ${e}`,
             );
         }
-        barrier.release();
-        // Unblock any session that connected mid-`removing`: it was
-        // not a participant, so the parked add-legs above never reached it.
-        // Signalled AFTER `onDecided` flips the entry, so when the parked joiner
-        // wakes and re-snapshots the active set it already reflects the decided
-        // version (`v2` commit / `v1` rollback / absent on a committed
-        // uninstall) — late joiner and participants converge on one version.
-        barrier.resolveSettled();
+        // Unblock participant hosts parked in `replaceProvider` and late joiners
+        // parked in `connect()`. `onDecided` already flipped the entry, so late
+        // joiners re-snapshot the decided version (`v2` commit / `v1` rollback /
+        // absent on committed uninstall).
+        barrier.resolveDecided();
         // Report the final status to the issuing conversation:
         // a commit is `updated`; a rollback is `reverted` (the quiesce timeout
         // abandoned a straggler and restored `v1`).
@@ -646,7 +635,7 @@ export function createDefaultInstalledAgentSource(
     // rolls back on expiry, so the no-coexistence guarantee holds without an
     // unbounded wait.
     function maybeAdvance(barrier: ReplaceBarrier): void {
-        if (barrier.outcome !== undefined || barrier.phase !== "quiescing") {
+        if (barrier.outcome !== undefined) {
             return;
         }
         if (barrier.pending.size > 0) {
@@ -691,13 +680,14 @@ export function createDefaultInstalledAgentSource(
     // time-bounded so a stall rolls it back. Every host
     // — INCLUDING the issuing one — runs `replaceProvider` on its own idle-gated
     // applicator: under a SINGLE held command lock it removes the old version,
-    // quiesces (fills its barrier slot), then awaits the shared `whenReady` before
-    // adding whatever the barrier decides — so no request interleaves the swap on
-    // any session and no two versions coexist. Returns immediately once the
-    // barrier is wired; the swap resolves to COMMIT (`v2`/free the name) once the
-    // last host quiesces and verify-0 confirms the shared old refcount is 0 — or
-    // to ROLLBACK (`v1` restored, `v2` discarded) on a quiesce timeout. A per-host failure is treated as a quiesce so a failed/gone session
-    // never wedges it.
+    // quiesces (fills its barrier slot), then awaits the shared `whenDecided`
+    // before adding whatever the barrier decides — so no request interleaves the
+    // swap on any session and no two versions coexist. Returns immediately once
+    // the barrier is wired; the swap resolves to COMMIT (`v2`/free the name) once
+    // the last host quiesces and verify-0 confirms the shared old refcount is 0 —
+    // or to ROLLBACK (`v1` restored, `v2` discarded) on a quiesce timeout. A
+    // per-host failure is treated as a quiesce so a failed/gone session never
+    // wedges it.
     //
     // `dropConfig`: forwarded to every remove leg — `true`
     // for uninstall (clear the enable preference), `false` for update (preserve
@@ -730,32 +720,25 @@ export function createDefaultInstalledAgentSource(
         // formally connected (defensive); it is otherwise treated as a sibling.
         const targets = new Set<AppAgentHost>(clients);
         targets.add(issuingHost);
-        let release!: () => void;
-        const whenReady = new Promise<void>((resolve) => {
-            release = resolve;
-        });
-        let resolveSettled!: () => void;
-        const whenSettled = new Promise<void>((resolve) => {
-            resolveSettled = resolve;
+        let resolveDecided!: () => void;
+        const whenDecided = new Promise<void>((resolve) => {
+            resolveDecided = resolve;
         });
         const barrier: ReplaceBarrier = {
             name,
             oldProvider,
             newProvider,
             pending: new Set(targets),
-            whenSettled,
-            resolveSettled,
-            release,
+            whenDecided,
+            resolveDecided,
             onDecided,
             finalizeGc,
             onOutcome,
-            phase: "quiescing",
             outcome: undefined,
             quiesceTimer: undefined,
         };
         entries.set(name, {
             status: "removing",
-            provider: oldProvider,
             barrier,
         });
 
@@ -767,15 +750,19 @@ export function createDefaultInstalledAgentSource(
         );
 
         for (const host of targets) {
-            host.replaceProvider(oldProvider, () => decideAdd(barrier), {
-                onQuiesced: () => quiesce(name, host),
-                whenReady,
-                notify: true,
+            host.replaceProvider(
+                oldProvider,
+                async () => {
+                    quiesce(name, host);
+                    await whenDecided;
+                    return decideAdd(barrier);
+                },
+                true,
                 dropConfig,
-            }).then(
+            ).then(
                 () => {
                     // A host that was already closed at enqueue time auto-acks
-                    // its op WITHOUT running `onQuiesced`. Quiesce here too
+                    // without running the replacement resolver. Quiesce here too
                     // (idempotent — `pending.delete` guards it) so such a host
                     // fills its phase-1 slot from the success path and never
                     // wedges the barrier until the quiesce timeout.
@@ -1305,7 +1292,7 @@ export function createDefaultInstalledAgentSource(
                         return [packageProvider, ...activeProviders()];
                     }
                     await Promise.all(
-                        inFlight.map((barrier) => barrier.whenSettled),
+                        inFlight.map((barrier) => barrier.whenDecided),
                     );
                 }
             };
