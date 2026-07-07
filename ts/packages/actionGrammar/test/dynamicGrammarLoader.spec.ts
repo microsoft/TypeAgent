@@ -420,8 +420,7 @@ describe("Dynamic Grammar Loader", () => {
             );
         });
 
-        // TODO: Re-enable after grammar imports and type declarations for converters are complete
-        it.skip("should load rules with CalendarDate symbol", () => {
+        it("should load rules with CalendarDate symbol", () => {
             const loader = new DynamicGrammarLoader();
 
             const generatedRule = `@ import { CalendarDate } from "types.ts"
