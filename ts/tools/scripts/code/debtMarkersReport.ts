@@ -8,8 +8,9 @@
  * candidates) for debt markers that the heavier engines do not cover:
  *   - TODO / FIXME / HACK / XXX comments
  *   - @deprecated annotations (APIs kept alive past their use-by date)
- *   - Skipped tests: .skip( / xit( / xdescribe(
- *   - Focused tests: .only( / fit( / fdescribe(  (should never be committed)
+ *   - Skipped tests: .skip( / .skip.each( / xit( / xdescribe(  (empty-body
+ *     "() => {}" stubs are conditional/placeholder skips, not disabled tests)
+ *   - Focused tests: .only( / .only.each( / fit( / fdescribe(  (never committed)
  *
  * Unlike lint and circular deps (large problems -> ratchet), skipped/focused
  * tests are a small, fixable problem, so this ships a *hard gate* rather than a
@@ -96,21 +97,29 @@ const MARKERS: {
     { type: "@deprecated", re: /@deprecated\b/g, gate: "none" },
     {
         type: "skipped-test",
-        re: /\b(?:it|test|describe)\.skip\s*\(|\bxit\s*\(|\bxdescribe\s*\(/g,
+        re: /\b(?:it|test|describe)\.skip(?:\.each)?\s*[(`]|\bxit\s*\(|\bxdescribe\s*\(/g,
         gate: "skip",
     },
     {
         type: "focused-test",
-        re: /\b(?:it|test|describe)\.only\s*\(|\bfit\s*\(|\bfdescribe\s*\(/g,
+        re: /\b(?:it|test|describe)\.only(?:\.each)?\s*[(`]|\bfit\s*\(|\bfdescribe\s*\(/g,
         gate: "focused",
     },
 ];
 
 // Focused/skipped test markers are only meaningful in test files.
 const FOCUSED_RE =
-    /\b(?:it|test|describe)\.only\s*\(|\bfit\s*\(|\bfdescribe\s*\(/g;
+    /\b(?:it|test|describe)\.only(?:\.each)?\s*[(`]|\bfit\s*\(|\bfdescribe\s*\(/g;
 const SKIP_RE =
-    /\b(?:it|test|describe)\.skip\s*\(|\bxit\s*\(|\bxdescribe\s*\(/g;
+    /\b(?:it|test|describe)\.skip(?:\.each)?\s*[(`]|\bxit\s*\(|\bxdescribe\s*\(/g;
+
+// A skip whose callback is an empty arrow body `() => {}` on the same line is a
+// *conditional* or *placeholder* skip -- the key-gated `testIf`/`describeIf`
+// helpers, or data-driven `if (fixture === undefined) it.skip(name, () => {})`
+// placeholders -- not a genuinely disabled test. A real disabled test keeps its
+// body, so its `.skip(` opener is not an empty stub. Excluding the empty stubs
+// makes the count reflect tests that are actually turned off.
+const EMPTY_SKIP_STUB_RE = /=>\s*\{\s*\}/;
 
 // ---------------------------------------------------------------------------
 // Argument parsing
@@ -285,6 +294,10 @@ function scanContent(rel: string, content: string, isTest: boolean): Marker[] {
             if ((m.gate === "skip" || m.gate === "focused") && !isTest) {
                 continue;
             }
+            // Conditional/placeholder skips (empty `() => {}` bodies) aren't debt.
+            if (m.gate === "skip" && EMPTY_SKIP_STUB_RE.test(line)) {
+                continue;
+            }
             m.re.lastIndex = 0;
             const hits = line.match(m.re);
             if (hits) {
@@ -302,11 +315,17 @@ function scanContent(rel: string, content: string, isTest: boolean): Marker[] {
     return markers;
 }
 
-function countMatches(content: string, re: RegExp): number {
+// Count genuinely disabled skipped tests in a file, excluding conditional /
+// placeholder stubs (empty `() => {}` bodies) so the gate only trips on real
+// newly-disabled tests, not on key-gated or data-driven runtime skips.
+function countSkips(content: string): number {
     let n = 0;
     for (const line of content.split(/\r?\n/)) {
-        re.lastIndex = 0;
-        const hits = line.match(re);
+        if (EMPTY_SKIP_STUB_RE.test(line)) {
+            continue;
+        }
+        SKIP_RE.lastIndex = 0;
+        const hits = line.match(SKIP_RE);
         if (hits) {
             n += hits.length;
         }
@@ -611,7 +630,7 @@ function runGate(opts: Options): number {
                     );
                 }
             }
-            headSkips += countMatches(content, SKIP_RE);
+            headSkips += countSkips(content);
         }
         if (e.base && isTestFile(e.base)) {
             try {
@@ -619,7 +638,7 @@ function runGate(opts: Options): number {
                     ["show", `${mergeBase}:${e.base}`],
                     repoRoot,
                 );
-                baseSkips += countMatches(baseContent, SKIP_RE);
+                baseSkips += countSkips(baseContent);
             } catch {
                 /* file did not exist at base */
             }
