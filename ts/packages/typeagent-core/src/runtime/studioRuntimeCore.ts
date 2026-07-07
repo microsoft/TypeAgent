@@ -939,6 +939,48 @@ function abortedReplayResult(
     };
 }
 
+/** The most faithful method any side actually used, so a run-level chip never
+ *  claims a cache neither side consulted. */
+function rollupReplayMethod(
+    methodA: StudioReplayMethod,
+    methodB: StudioReplayMethod,
+): StudioReplayMethod {
+    if (methodA === "construction-cache" || methodB === "construction-cache") {
+        return "construction-cache";
+    }
+    if (methodA === "schema-grammar" || methodB === "schema-grammar") {
+        return "schema-grammar";
+    }
+    return "static-grammar";
+}
+
+/** How a grammar-resolved side reports its method. The construction cache is
+ *  live-only, so it counts only when `cacheApplies` (the working-tree side) and
+ *  the cache is hash-valid; otherwise the (enriched) grammar decides. */
+function grammarMethodFor(
+    grammarResolver: GrammarReplayResolver,
+    cacheApplies: boolean,
+): StudioReplayMethod {
+    if (cacheApplies && grammarResolver.constructionCacheStatus === "valid") {
+        return "construction-cache";
+    }
+    return grammarResolver.enriched ? "schema-grammar" : "static-grammar";
+}
+
+/** How `replayCorpus` resolves actions for a run: the chosen resolver, the
+ *  per-side + run-level methods, and the opt-in wildcard validator (kept so its
+ *  diagnostics can be read and the agent unloaded). `aborted` is set instead
+ *  when a version failed to build, so the caller returns it without running. */
+interface ReplayResolution {
+    resolver: ReplayActionResolver | undefined;
+    method: StudioReplayMethod;
+    methodA: StudioReplayMethod;
+    methodB: StudioReplayMethod;
+    wildcardValidator: WildcardMatchValidator | undefined;
+    activeGrammarResolver: GrammarReplayResolver | undefined;
+    aborted?: StudioReplayResult;
+}
+
 export function createStudioRuntimeCore(
     context: StudioRuntimeContext,
     options: CreateStudioRuntimeOptions = {},
@@ -1024,6 +1066,119 @@ export function createStudioRuntimeCore(
             }),
         );
         await context.workspaceState.update(PERSISTED_SANDBOXES_KEY, snapshot);
+    };
+
+    // Resolve actions for real via static grammar matching when no resolver is
+    // injected, the deterministic `needs-explanation` policy is in effect, a repo
+    // root is known, and the agent has a single standalone-compilable grammar.
+    // Otherwise fall back to the identity resolver (the all-equal baseline tests
+    // rely on).
+    const resolveReplayActions = async (
+        replayOptions: Parameters<typeof replayCorpus>[0],
+        request: StudioReplayRequest,
+        mode: StudioReplayMode,
+    ): Promise<ReplayResolution> => {
+        const resolution: ReplayResolution = {
+            resolver: options.replayResolver,
+            method: "identity",
+            methodA: "identity",
+            methodB: "identity",
+            wildcardValidator: undefined,
+            activeGrammarResolver: undefined,
+        };
+        if (
+            resolution.resolver !== undefined ||
+            replayOptions.missPolicy !== "needs-explanation" ||
+            repoRoot === undefined
+        ) {
+            return resolution;
+        }
+        const target = await resolveGrammarReplayTarget(
+            agentRoots(),
+            replayOptions.agent,
+            repoRoot,
+        );
+        if (target === undefined) {
+            return resolution;
+        }
+
+        // Best-effort consult of the agent's live per-session construction cache
+        // for the working-tree side — but ONLY in `completionBased-cache` mode. In
+        // the default `nfa-grammar` mode the dispatcher does not consult the cache
+        // (grammar rules alone decide the match), so replay stays grammar-only and
+        // A/B-symmetric. Hash-gated to the current schema exactly as the dispatcher
+        // gates it, so a schema edit invalidates the cached constructions (→ stale
+        // → grammar fallback) rather than reporting a phantom cache hit.
+        const constructionCache =
+            mode === "completionBased-cache"
+                ? await (
+                      options.resolveConstructionCache ??
+                      resolveConstructionCacheLayer
+                  )(target)
+                : undefined;
+
+        // Opt-in: build the agent's wildcard validator so the working-tree side
+        // runs the dispatcher's real post-match `validateWildcardMatch`.
+        // `undefined` when the host has no loader or the agent doesn't opt in —
+        // replay then stays grammar-only (a silent no-op, not an error).
+        const wildcardValidator =
+            request.validateWildcards === true
+                ? await options.resolveWildcardValidator?.(replayOptions.agent)
+                : undefined;
+        resolution.wildcardValidator = wildcardValidator;
+
+        const grammarResolver = createGrammarReplayResolver({
+            target,
+            repoRoot,
+            ...(constructionCache !== undefined ? { constructionCache } : {}),
+            ...(wildcardValidator !== undefined ? { wildcardValidator } : {}),
+        });
+        resolution.activeGrammarResolver = grammarResolver;
+
+        try {
+            // Build both versions up front so a build failure aborts the run
+            // cleanly instead of throwing mid-stream (which would hang the
+            // engine's row channel).
+            await grammarResolver.prepare(
+                replayOptions.versionA,
+                replayOptions.versionB,
+            );
+            resolution.resolver = grammarResolver;
+            resolution.methodA = grammarMethodFor(
+                grammarResolver,
+                replayOptions.versionA.kind === "workingTree",
+            );
+            resolution.methodB = grammarMethodFor(
+                grammarResolver,
+                replayOptions.versionB.kind === "workingTree",
+            );
+            resolution.method = rollupReplayMethod(
+                resolution.methodA,
+                resolution.methodB,
+            );
+        } catch (err) {
+            await wildcardValidator?.dispose();
+            if (err instanceof ReplayVersionBuildError) {
+                resolution.aborted = abortedReplayResult(
+                    replayOptions,
+                    {
+                        kind: "version-build-failed",
+                        side: err.side,
+                        ref:
+                            err.version.kind === "git"
+                                ? err.version.ref
+                                : "workingTree",
+                        message: err.message,
+                    },
+                    grammarMethodFor(grammarResolver, true),
+                    mode,
+                    request.validateWildcards === true,
+                );
+                return resolution;
+            }
+            throw err;
+        }
+        return resolution;
     };
 
     return {
@@ -1333,138 +1488,19 @@ export function createStudioRuntimeCore(
                 missPolicy: request.missPolicy ?? "needs-explanation",
             } satisfies Parameters<typeof replayCorpus>[0];
 
-            // Resolve actions for real via static grammar matching when no
-            // resolver is injected, the deterministic `needs-explanation` policy
-            // is in effect, a repo root is known, and the agent has a single
-            // standalone-compilable grammar. Otherwise fall back to the identity
-            // resolver (preserves the all-equal baseline used by tests).
-            let resolver = options.replayResolver;
-            let method: StudioReplayMethod = "identity";
-            let methodA: StudioReplayMethod = "identity";
-            let methodB: StudioReplayMethod = "identity";
-            // Opt-in wildcard validator; kept in scope so its diagnostics
-            // can be read after the run and it can be disposed (unload the agent).
-            let wildcardValidator: WildcardMatchValidator | undefined;
-            let activeGrammarResolver: GrammarReplayResolver | undefined;
-            if (
-                resolver === undefined &&
-                replayOptions.missPolicy === "needs-explanation" &&
-                repoRoot !== undefined
-            ) {
-                const target = await resolveGrammarReplayTarget(
-                    agentRoots(),
-                    replayOptions.agent,
-                    repoRoot,
-                );
-                if (target !== undefined) {
-                    // Best-effort consult of the agent's live per-session
-                    // construction cache for the working-tree side — but ONLY in
-                    // `completionBased-cache` mode. In the default `nfa-grammar`
-                    // mode the dispatcher does not consult the cache (grammar
-                    // rules alone decide the match), so replay stays grammar-only
-                    // and A/B-symmetric. Hash-gated to the current schema exactly
-                    // as the dispatcher gates it, so a schema edit invalidates the
-                    // cached constructions (→ stale → grammar fallback) rather
-                    // than reporting a phantom cache hit.
-                    const constructionCache =
-                        mode === "completionBased-cache"
-                            ? await (
-                                  options.resolveConstructionCache ??
-                                  resolveConstructionCacheLayer
-                              )(target)
-                            : undefined;
-
-                    // Opt-in: build the agent's wildcard validator so the
-                    // working-tree side runs the dispatcher's real post-match
-                    // `validateWildcardMatch`. `undefined` when the host has no
-                    // loader or the agent doesn't opt in — replay then stays
-                    // grammar-only (a silent no-op, not an error).
-                    wildcardValidator =
-                        request.validateWildcards === true
-                            ? await options.resolveWildcardValidator?.(
-                                  replayOptions.agent,
-                              )
-                            : undefined;
-
-                    const grammarResolver = createGrammarReplayResolver({
-                        target,
-                        repoRoot,
-                        ...(constructionCache !== undefined
-                            ? { constructionCache }
-                            : {}),
-                        ...(wildcardValidator !== undefined
-                            ? { wildcardValidator }
-                            : {}),
-                    });
-                    activeGrammarResolver = grammarResolver;
-                    const labelFor = (): StudioReplayMethod =>
-                        grammarResolver.constructionCacheStatus === "valid"
-                            ? "construction-cache"
-                            : grammarResolver.enriched
-                              ? "schema-grammar"
-                              : "static-grammar";
-                    // Per-side method: the construction cache is live-only, so a
-                    // side resolves through it only when it is the working tree
-                    // and the cache is hash-valid; a git ref always resolves via
-                    // the (enriched) grammar.
-                    const sideMethod = (
-                        version: VersionSpec,
-                    ): StudioReplayMethod =>
-                        version.kind === "workingTree" &&
-                        grammarResolver.constructionCacheStatus === "valid"
-                            ? "construction-cache"
-                            : grammarResolver.enriched
-                              ? "schema-grammar"
-                              : "static-grammar";
-                    try {
-                        // Build both versions up front so a build failure aborts
-                        // the run cleanly instead of throwing mid-stream (which
-                        // would hang the engine's row channel).
-                        await grammarResolver.prepare(
-                            replayOptions.versionA,
-                            replayOptions.versionB,
-                        );
-                        resolver = grammarResolver;
-                        methodA = sideMethod(replayOptions.versionA);
-                        methodB = sideMethod(replayOptions.versionB);
-                        // The run-level chip reflects the most faithful side
-                        // actually used, so a ref-vs-ref compare doesn't claim a
-                        // cache neither side consulted.
-                        method =
-                            methodA === "construction-cache" ||
-                            methodB === "construction-cache"
-                                ? "construction-cache"
-                                : methodA === "schema-grammar" ||
-                                    methodB === "schema-grammar"
-                                  ? "schema-grammar"
-                                  : "static-grammar";
-                    } catch (err) {
-                        await wildcardValidator?.dispose();
-                        if (err instanceof ReplayVersionBuildError) {
-                            return abortedReplayResult(
-                                replayOptions,
-                                {
-                                    kind: "version-build-failed",
-                                    side: err.side,
-                                    ref:
-                                        err.version.kind === "git"
-                                            ? err.version.ref
-                                            : "workingTree",
-                                    message: err.message,
-                                },
-                                labelFor(),
-                                mode,
-                                request.validateWildcards === true,
-                            );
-                        }
-                        throw err;
-                    }
-                }
+            const resolution = await resolveReplayActions(
+                replayOptions,
+                request,
+                mode,
+            );
+            if (resolution.aborted !== undefined) {
+                return resolution.aborted;
             }
+            const { method, methodA, methodB, wildcardValidator } = resolution;
 
             const handle = replayCorpus(replayOptions, {
                 corpus: { list: (agent, filter) => corpus.list(agent, filter) },
-                resolver: resolver ?? identityReplayResolver,
+                resolver: resolution.resolver ?? identityReplayResolver,
                 emitter: events,
             });
 
@@ -1481,7 +1517,8 @@ export function createStudioRuntimeCore(
             // wildcard match (so a run that never hit a wildcard doesn't claim a
             // validation it never performed).
             const wildcardValidation: StudioWildcardValidationInfo | undefined =
-                activeGrammarResolver?.wildcardValidationApplied === true
+                resolution.activeGrammarResolver?.wildcardValidationApplied ===
+                true
                     ? {
                           applied: true,
                           diagnostics: [

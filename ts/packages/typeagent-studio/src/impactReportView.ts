@@ -239,47 +239,79 @@ export function openImpactReport(
     // (invalidated on each run); remote-tracking refs are enumerated lazily and
     // appended only when the user asks for them. An empty selection (Esc) leaves
     // the webview's current choice untouched — no message is posted.
-    const pickVersion = async (side: ReplaySide): Promise<void> => {
-        const exec =
-            repoRoot !== undefined ? defaultGitExec(repoRoot) : undefined;
-        if (localRefsCache === undefined) {
-            if (exec) {
-                try {
-                    localRefsCache = await listVersionRefs(exec);
-                } catch {
-                    localRefsCache = [WORKING_TREE_REF];
-                }
-            } else {
-                localRefsCache = [WORKING_TREE_REF];
+    const ensureLocalRefs = async (
+        exec: ReturnType<typeof defaultGitExec> | undefined,
+    ): Promise<ResolvedVersion[]> => {
+        if (localRefsCache !== undefined) {
+            return localRefsCache;
+        }
+        if (!exec) {
+            localRefsCache = [WORKING_TREE_REF];
+            return localRefsCache;
+        }
+        try {
+            localRefsCache = await listVersionRefs(exec);
+        } catch {
+            localRefsCache = [WORKING_TREE_REF];
+        }
+        return localRefsCache;
+    };
+
+    // Enumerate remote-tracking refs on first request; returns whether any exist.
+    const loadRemoteRefs = async (
+        exec: ReturnType<typeof defaultGitExec>,
+    ): Promise<boolean> => {
+        if (remoteRefsCache === undefined) {
+            try {
+                remoteRefsCache = await listRemoteRefs(exec);
+            } catch {
+                remoteRefsCache = [];
             }
         }
+        return remoteRefsCache.length > 0;
+    };
 
-        const title = `Impact Report — ${side === "a" ? "base (A)" : "compare (B)"} version`;
-        const toItems = (refs: ResolvedVersion[]): VersionItem[] =>
-            refs.map((r) => ({
+    // The QuickPick item list: local refs, then the enter-ref and show-remotes
+    // affordances (only with a git exec), then remotes once the user reveals them.
+    const buildVersionItems = (
+        refs: ResolvedVersion[],
+        exec: ReturnType<typeof defaultGitExec> | undefined,
+        showRemotes: boolean,
+    ): VersionItem[] => {
+        const toItems = (rs: ResolvedVersion[]): VersionItem[] =>
+            rs.map((r) => ({
                 label: r.label,
                 description: r.tooltip,
                 resolved: r,
             }));
+        const items: VersionItem[] = toItems(refs);
+        if (exec) {
+            items.push(ENTER_REF_ITEM);
+        }
+        if (!showRemotes && exec) {
+            items.push(SHOW_REMOTES_ITEM);
+        }
+        if (showRemotes && remoteRefsCache && remoteRefsCache.length > 0) {
+            items.push({
+                label: "remote branches",
+                kind: vscode.QuickPickItemKind.Separator,
+            });
+            items.push(...toItems(remoteRefsCache));
+        }
+        return items;
+    };
+
+    const pickVersion = async (side: ReplaySide): Promise<void> => {
+        const exec =
+            repoRoot !== undefined ? defaultGitExec(repoRoot) : undefined;
+        const refs = await ensureLocalRefs(exec);
+        const title = `Impact Report — ${side === "a" ? "base (A)" : "compare (B)"} version`;
 
         // Re-open loop: selecting the sentinel enumerates remotes and re-renders
         // with them appended; any other choice resolves (or Esc cancels).
         let showRemotes = remoteRefsCache !== undefined;
         for (;;) {
-            const items: VersionItem[] = toItems(localRefsCache);
-            if (exec) {
-                items.push(ENTER_REF_ITEM);
-            }
-            if (!showRemotes && exec) {
-                items.push(SHOW_REMOTES_ITEM);
-            }
-            if (showRemotes && remoteRefsCache && remoteRefsCache.length > 0) {
-                items.push({
-                    label: "remote branches",
-                    kind: vscode.QuickPickItemKind.Separator,
-                });
-                items.push(...toItems(remoteRefsCache));
-            }
+            const items = buildVersionItems(refs, exec, showRemotes);
             const choice = await vscode.window.showQuickPick(items, {
                 title,
                 placeHolder: "Select a version to compare",
@@ -297,22 +329,15 @@ export function openImpactReport(
                 // Cancelled the input box — fall back to the version list.
                 continue;
             }
-            if (choice === SHOW_REMOTES_ITEM) {
-                if (remoteRefsCache === undefined && exec) {
-                    try {
-                        remoteRefsCache = await listRemoteRefs(exec);
-                    } catch {
-                        remoteRefsCache = [];
-                    }
-                }
-                if (!remoteRefsCache || remoteRefsCache.length === 0) {
+            if (choice === SHOW_REMOTES_ITEM && exec) {
+                if (await loadRemoteRefs(exec)) {
+                    showRemotes = true;
+                } else {
                     void vscode.window.showInformationMessage(
                         "No remote-tracking branches were found.",
                     );
                     showRemotes = false;
-                    continue;
                 }
-                showRemotes = true;
                 continue;
             }
             if (choice.resolved) {
