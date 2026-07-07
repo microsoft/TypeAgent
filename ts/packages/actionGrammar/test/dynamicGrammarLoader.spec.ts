@@ -423,8 +423,7 @@ describe("Dynamic Grammar Loader", () => {
         it("should load rules with CalendarDate symbol", () => {
             const loader = new DynamicGrammarLoader();
 
-            const generatedRule = `@ import { CalendarDate } from "types.ts"
-<Start> = <scheduleEvent>;
+            const generatedRule = `<Start> = <scheduleEvent>;
 <scheduleEvent> = schedule $(event:string) on $(date:CalendarDate) -> {
     actionName: "scheduleEvent",
     parameters: {
@@ -445,9 +444,12 @@ describe("Dynamic Grammar Loader", () => {
             ]);
             expect(matchResult.matched).toBe(true);
             expect(matchResult.actionValue?.parameters?.event).toBe("meeting");
-            expect(matchResult.actionValue?.parameters?.date).toBeInstanceOf(
-                Date,
-            );
+            // CalendarDate preserves the user's original text (resolved to a
+            // Date lazily via CalendarDateValue.asDate()), so the slot value
+            // carries { text } rather than a raw Date.
+            expect(matchResult.actionValue?.parameters?.date).toMatchObject({
+                text: "tomorrow",
+            });
         });
     });
 });
