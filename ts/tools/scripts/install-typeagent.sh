@@ -21,6 +21,11 @@ COPILOT_MODEL=""
 EMBEDDING_ENDPOINT=""
 EMBEDDING_MODEL=""
 OPENAI_KEY=""
+SHELL_INSTALL=0
+SHELL_STORAGE=""
+SHELL_CONTAINER=""
+SHELL_CHANNEL="lkg"
+SHELL_BASE_URL=""
 
 usage() {
   cat <<'EOF'
@@ -50,6 +55,13 @@ Options:
   --embedding-endpoint <url>         Embedding endpoint (openai embedding mode; full path)
   --embedding-model <name>           Embedding model name
   --openai-key <key>                 API key for openai embedding mode
+  --shell                            Also install the TypeAgent Shell (desktop app) after the agent-server
+  --shell-storage <account>          Azure Storage account with the shell build (used with az login)
+  --shell-container <name>           Storage container (default: same as --shell-storage)
+  --shell-channel <name>             Shell electron-updater channel (default: lkg)
+  --shell-base-url <url>             Anonymous HTTPS base URL for a public shell container
+                                     (e.g. https://<account>.blob.core.windows.net/<container>);
+                                     when set, Azure CLI is not used and --shell-storage is optional
   --help                             Show this help
 EOF
 }
@@ -148,6 +160,11 @@ while [[ $# -gt 0 ]]; do
     --embedding-endpoint) EMBEDDING_ENDPOINT="$2"; shift 2 ;;
     --embedding-model) EMBEDDING_MODEL="$2"; shift 2 ;;
     --openai-key) OPENAI_KEY="$2"; shift 2 ;;
+    --shell) SHELL_INSTALL=1; shift ;;
+    --shell-storage) SHELL_STORAGE="$2"; shift 2 ;;
+    --shell-container) SHELL_CONTAINER="$2"; shift 2 ;;
+    --shell-channel) SHELL_CHANNEL="$2"; shift 2 ;;
+    --shell-base-url) SHELL_BASE_URL="$2"; shift 2 ;;
     --help) usage; exit 0 ;;
     *) fail "Unknown option: $1" ;;
   esac
@@ -317,3 +334,20 @@ echo "  Start:  node \"$SERVE\" start"
 echo "  Status: node \"$SERVE\" status"
 echo "  Logs:   node \"$SERVE\" logs"
 echo "  Stop:   node \"$SERVE\" stop"
+
+if [[ "$SHELL_INSTALL" -eq 1 ]]; then
+  log_step "Installing TypeAgent Shell (desktop app)"
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  INSTALL_SHELL="$SCRIPT_DIR/install-shell.sh"
+  [[ -f "$INSTALL_SHELL" ]] || fail "Shell installer not found: $INSTALL_SHELL"
+  if [[ -n "$SHELL_BASE_URL" ]]; then
+    SHELL_BASE_URL="$SHELL_BASE_URL" bash "$INSTALL_SHELL" "" "" "$SHELL_CHANNEL" \
+      || fail "TypeAgent Shell installation failed."
+  else
+    [[ -n "$SHELL_STORAGE" ]] || fail "Installing the shell requires --shell-storage or --shell-base-url."
+    shell_container="${SHELL_CONTAINER:-$SHELL_STORAGE}"
+    bash "$INSTALL_SHELL" "$SHELL_STORAGE" "$shell_container" "$SHELL_CHANNEL" \
+      || fail "TypeAgent Shell installation failed."
+  fi
+  echo "  TypeAgent Shell installed."
+fi

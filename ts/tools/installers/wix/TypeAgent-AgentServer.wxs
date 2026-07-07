@@ -52,6 +52,20 @@
     <Property Id="OLLAMAHOST" Value="http://localhost:11434" Secure="yes" />
 
     <!-- ═══════════════════════════════════════════════
+         Optional TypeAgent Shell install (Electron app)
+         SHELL=1 downloads and silently installs the shell's NSIS installer
+         from Azure Blob Storage (same container as the shell auto-update feed)
+         via a deferred custom action. SHELLBASEURL enables anonymous HTTPS
+         download for a public container; otherwise SHELLSTORAGE/SHELLCONTAINER
+         are used with the Azure CLI (az login).
+         ═══════════════════════════════════════════════ -->
+    <Property Id="SHELL" Value="0" Secure="yes" />
+    <Property Id="SHELLSTORAGE" Secure="yes" />
+    <Property Id="SHELLCONTAINER" Secure="yes" />
+    <Property Id="SHELLCHANNEL" Value="lkg" Secure="yes" />
+    <Property Id="SHELLBASEURL" Secure="yes" />
+
+    <!-- ═══════════════════════════════════════════════
          Directory layout
          ═══════════════════════════════════════════════ -->
     <Directory Id="TARGETDIR" Name="SourceDir">
@@ -77,6 +91,7 @@
       <ComponentRef Id="MarketplaceJsonComponent" />
       <ComponentRef Id="RegisterPluginPs1Component" />
       <ComponentRef Id="RegisterPluginMjsComponent" />
+      <ComponentRef Id="InstallShellPs1Component" />
       <ComponentRef Id="RegistryComponent" />
     </Feature>
 
@@ -104,6 +119,10 @@
       <Component Id="RegisterPluginMjsComponent" Guid="*">
         <File Id="RegisterPluginMjs" Name="register-plugin.mjs"
               Source="$(var.InstallerSourceDir)\..\common\register-plugin.mjs" />
+      </Component>
+      <Component Id="InstallShellPs1Component" Guid="*">
+        <File Id="InstallShellPs1" Name="install-shell.ps1"
+              Source="$(var.InstallerSourceDir)\..\..\scripts\install-shell.ps1" />
       </Component>
     </DirectoryRef>
 
@@ -171,9 +190,30 @@
                   Return="ignore"
                   Impersonate="yes" />
 
+    <!-- ═══════════════════════════════════════════════
+         Custom action — optional TypeAgent Shell install
+         For SHELL=1, download + silently install the shell's NSIS installer
+         from Azure Blob Storage via the bundled install-shell.ps1. Runs as the
+         installing user (impersonated) so blob auth (az login) and the per-user
+         shell install target resolve correctly. Non-fatal (Return="ignore") so
+         a shell hiccup does not roll back the agent-server install.
+         ═══════════════════════════════════════════════ -->
+    <SetProperty Id="InstallTypeAgentShell"
+           Before="InstallTypeAgentShell"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-shell.ps1&quot; -Storage &quot;[SHELLSTORAGE]&quot; -Container &quot;[SHELLCONTAINER]&quot; -Channel &quot;[SHELLCHANNEL]&quot; -BlobBaseUrl &quot;[SHELLBASEURL]&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-shell.log&quot;" />
+
+    <CustomAction Id="InstallTypeAgentShell"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
     <InstallExecuteSequence>
       <Custom Action="RegisterCopilotPlugin"   After="InstallFiles">NOT REMOVE~="ALL"</Custom>
       <Custom Action="ProvisionSelfHostConfig" After="RegisterCopilotPlugin">(NOT REMOVE~="ALL") AND (PROVIDER&lt;&gt;"AISYSTEMS")</Custom>
+      <Custom Action="InstallTypeAgentShell"   After="ProvisionSelfHostConfig">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
       <Custom Action="UnregisterCopilotPlugin" Before="RemoveFiles">REMOVE~="ALL"</Custom>
     </InstallExecuteSequence>
 
@@ -256,6 +296,10 @@
                  Transparent="yes" NoPrefix="yes" Text="Ollama host:" />
         <Control Id="OllamaHostEdit" Type="Edit" X="92" Y="203" Width="258" Height="16"
                  Property="OLLAMAHOST" Text="{80}" />
+
+        <Control Id="ShellCheckBox" Type="CheckBox" X="20" Y="221" Width="340" Height="12"
+                 Property="SHELL" CheckBoxValue="1"
+                 Text="Also install the TypeAgent Shell desktop app (needs SHELLSTORAGE or SHELLBASEURL)" />
 
         <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
         <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17"
