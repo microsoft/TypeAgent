@@ -97,7 +97,7 @@ export interface InstalledAgentSourceApi {
     // Source names in resolution order (for `@package install --source`).
     listSources(): string[];
     // Enumerable agent refs across the configured sources (for `@package install`).
-    listAvailable(): Promise<string[]>;
+    listAvailableAgents(): Promise<string[]>;
     // The host-owned source command table, nested under `@package source`.
     sourceCommands(): CommandHandlerTable;
 }
@@ -259,7 +259,7 @@ class InstallCommandHandler implements CommandHandler {
             if (name === "ref") {
                 completions.push({
                     name,
-                    completions: await source.listAvailable(),
+                    completions: await source.listAvailableAgents(),
                 });
             } else if (name === "--source") {
                 completions.push({

@@ -75,6 +75,24 @@ export interface DefaultInstallSourceRegistry {
     ): Promise<ResolvedCandidate | undefined>;
 }
 
+export async function listAvailableAgents(
+    registry: DefaultInstallSourceRegistry,
+    onError?: (sourceName: string, error: unknown) => void,
+): Promise<string[]> {
+    const lists = await Promise.all(
+        registry.list().map(async (info) => {
+            const source = registry.get(info.name);
+            try {
+                return (await source?.listAgents?.()) ?? [];
+            } catch (error) {
+                onError?.(info.name, error);
+                return [];
+            }
+        }),
+    );
+    return [...new Set(lists.flat())];
+}
+
 export interface RegistryDeps {
     // Shared npm root all feed sources install into.
     installDir: string;

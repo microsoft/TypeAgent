@@ -30,8 +30,15 @@ function makeRegistry(overrides: any = {}) {
         setOrder: (names: string[]) => calls.setOrder.push(names),
         remove: (name: string) => calls.remove.push(name),
         get: (name: string) =>
-            overrides.agents
-                ? { listAgents: async () => overrides.agents[name] ?? [] }
+            overrides.agents || overrides.throwingSources?.includes(name)
+                ? {
+                      listAgents: async () => {
+                          if (overrides.throwingSources?.includes(name)) {
+                              throw new Error(`list failed for ${name}`);
+                          }
+                          return overrides.agents[name] ?? [];
+                      },
+                  }
                 : undefined,
         add: () => {},
         resolve: async () => undefined,
@@ -248,6 +255,24 @@ describe("getSourceCommands", () => {
             const result = await where.getCompletion({}, {}, ["ref"]);
             expect(result.groups).toEqual([
                 { name: "ref", completions: ["foo", "bar", "baz"] },
+            ]);
+        });
+
+        it("keeps ref completions from healthy sources when another source fails", async () => {
+            const registry = makeRegistry({
+                infos: [
+                    { name: "feed", kind: "feed", detail: "<feed>" },
+                    { name: "broken", kind: "feed", detail: "<broken>" },
+                    { name: "builtin", kind: "catalog", detail: "<bundled>" },
+                ],
+                agents: { feed: ["foo"], builtin: ["bar"] },
+                throwingSources: ["broken"],
+            });
+            const where = getSourceCommands(makeDeps(registry)).commands
+                .where as any;
+            const result = await where.getCompletion({}, {}, ["ref"]);
+            expect(result.groups).toEqual([
+                { name: "ref", completions: ["foo", "bar"] },
             ]);
         });
     });

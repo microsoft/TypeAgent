@@ -375,11 +375,22 @@ export function createFeedSource(
 
     let memoryCache: FeedCache | undefined;
 
+    function isFeedCache(value: unknown): value is FeedCache {
+        if (typeof value !== "object" || value === null) {
+            return false;
+        }
+        const cache = value as Partial<FeedCache>;
+        return (
+            typeof cache.fetchedAt === "number" &&
+            Array.isArray(cache.packages) &&
+            cache.packages.every((name) => typeof name === "string")
+        );
+    }
+
     function readDiskCache(): FeedCache | undefined {
         try {
-            return JSON.parse(
-                fs.readFileSync(cacheFilePath, "utf8"),
-            ) as FeedCache;
+            const parsed = JSON.parse(fs.readFileSync(cacheFilePath, "utf8"));
+            return isFeedCache(parsed) ? parsed : undefined;
         } catch {
             return undefined;
         }

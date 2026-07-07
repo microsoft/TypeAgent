@@ -197,6 +197,29 @@ describe("feedSource.find", () => {
         expect(await source.listAgents!()).toContain("@typeagent/foo-agent");
     });
 
+    it("ignores a malformed fresh cache and refreshes from the network", async () => {
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        const cacheFilePath = path.join(installDir, "cache.json");
+        fs.writeFileSync(
+            cacheFilePath,
+            JSON.stringify({ fetchedAt: 1000, packages: [123] }),
+        );
+        const source = createFeedSource(CONFIG, {
+            installDir,
+            cacheFilePath,
+            now: () => 1000,
+            tokenRunner: goodToken,
+            fetchFn: fakeFetch({
+                packages: ["@typeagent/fresh-agent"],
+                keywords: {
+                    "@typeagent/fresh-agent": ["typeagent-agent"],
+                },
+            }),
+        });
+
+        expect(await source.listAgents!()).toEqual(["@typeagent/fresh-agent"]);
+    });
+
     it("serves a stale cache when offline (skips refresh failure)", async () => {
         const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
         const cacheFilePath = path.join(installDir, "cache.json");

@@ -18,7 +18,10 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import chalk from "chalk";
-import { DefaultInstallSourceRegistry } from "./registry.js";
+import {
+    DefaultInstallSourceRegistry,
+    listAvailableAgents,
+} from "./registry.js";
 import { getAddSourceCommandHandlers } from "./addSource.js";
 
 // The host owns the entire `@package source` command surface. The dispatcher
@@ -184,15 +187,9 @@ class SourceWhereCommandHandler implements CommandHandler {
             if (name === "ref") {
                 // Enumerable sources (catalog/feed) advertise their agents;
                 // path sources don't, so refs there stay freeform.
-                const lists = await Promise.all(
-                    this.deps.registry
-                        .list()
-                        .map((info) => this.deps.registry.get(info.name))
-                        .map((source) => source?.listAgents?.() ?? []),
-                );
                 completions.push({
                     name,
-                    completions: [...new Set(lists.flat())],
+                    completions: await listAvailableAgents(this.deps.registry),
                 });
             }
         }

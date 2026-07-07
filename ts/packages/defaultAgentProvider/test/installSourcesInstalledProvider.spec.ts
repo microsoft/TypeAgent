@@ -453,6 +453,44 @@ describe("getDefaultAppAgentSource", () => {
         );
     });
 
+    it("listAvailableAgents keeps agents from healthy sources when another source fails", async () => {
+        const instanceDir = tmpDir("ta-installer-");
+        fs.writeFileSync(
+            path.join(instanceDir, "config.json"),
+            JSON.stringify({
+                installSources: {
+                    sources: [
+                        { kind: "feed", name: "healthy" },
+                        { kind: "feed", name: "broken" },
+                    ],
+                },
+            }),
+        );
+        const built = createDefaultInstalledAgentSource(
+            instanceDir,
+            undefined,
+            (config): InstallSource => ({
+                name: config.name,
+                kind: config.kind,
+                find: async () => undefined,
+                materialize: async () => {
+                    throw new Error("not used");
+                },
+                listAgents: async () => {
+                    if (config.name === "broken") {
+                        throw new Error("source unavailable");
+                    }
+                    return ["foo", "bar"];
+                },
+            }),
+        );
+
+        await expect(built.testApi.listAvailableAgents()).resolves.toEqual([
+            "foo",
+            "bar",
+        ]);
+    });
+
     it("connect() vends the @package agent plus a per-agent provider per install", async () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);

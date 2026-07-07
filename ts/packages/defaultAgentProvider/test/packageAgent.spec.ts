@@ -47,7 +47,7 @@ function makeSource(overrides: Partial<InstalledAgentSourceApi> = {}): {
         },
         listInstalled: () => [],
         listSources: () => [],
-        listAvailable: async () => [],
+        listAvailableAgents: async () => [],
         sourceCommands: () => ({ description: "sources", commands: {} }),
         ...overrides,
     };
@@ -220,9 +220,9 @@ describe("@package handler error handling", () => {
 });
 
 describe("@package handler completions", () => {
-    it("install completes ref from listAvailable and --source from listSources", async () => {
+    it("install completes ref from listAvailableAgents and --source from listSources", async () => {
         const { api } = makeSource({
-            listAvailable: async () => ["catalog-agent", "feed-agent"],
+            listAvailableAgents: async () => ["catalog-agent", "feed-agent"],
             listSources: () => ["catalog", "feed"],
         });
         const handler = getHandler(api, "install");

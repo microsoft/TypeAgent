@@ -47,6 +47,7 @@ import {
 } from "./installSources/installedAgents.js";
 import {
     createInstallSourceRegistry,
+    listAvailableAgents as listAvailableAgentsFromRegistry,
     type InstallSourceFactory,
 } from "./installSources/registry.js";
 import { getSourceCommands } from "./installSources/sourceCommands.js";
@@ -1223,17 +1224,16 @@ export function createDefaultInstalledAgentSource(
             // completion.
             return registry.list().map((info) => info.name);
         },
-        async listAvailable(): Promise<string[]> {
+        async listAvailableAgents(): Promise<string[]> {
             // Enumerable agent refs across the sources (catalog/feed advertise
             // theirs; path sources don't), de-duplicated, for `@package install`
             // ref completion.
-            const lists = await Promise.all(
-                registry
-                    .list()
-                    .map((info) => registry.get(info.name))
-                    .map((entry) => entry?.listAgents?.() ?? []),
+            return listAvailableAgentsFromRegistry(
+                registry,
+                (sourceName, e) => {
+                    debug(`listAgents failed for source '${sourceName}': ${e}`);
+                },
             );
-            return [...new Set(lists.flat())];
         },
     };
 
