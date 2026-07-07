@@ -47,7 +47,6 @@ import {
 } from "./installSources/installedAgents.js";
 import {
     createInstallSourceRegistry,
-    listAvailableAgents as listAvailableAgentsFromRegistry,
     type InstallSourceFactory,
 } from "./installSources/registry.js";
 import { getSourceCommands } from "./installSources/sourceCommands.js";
@@ -1226,16 +1225,36 @@ export function createDefaultInstalledAgentSource(
             // completion.
             return registry.list().map((info) => info.name);
         },
-        async listAvailableAgents(): Promise<string[]> {
-            // Enumerable agent refs across the sources (catalog/feed advertise
-            // theirs; path sources don't), de-duplicated, for `@package install`
-            // ref completion.
-            return listAvailableAgentsFromRegistry(
-                registry,
-                (sourceName, e) => {
-                    debug(`listAgents failed for source '${sourceName}': ${e}`);
-                },
-            );
+        async listAvailableAgents(opts?: { sourceName?: string }): Promise<
+            {
+                ref: string;
+                source: string;
+            }[]
+        > {
+            // Source-aware refs for `@package available` and filtered
+            // completion in `@package install`.
+            const rows: { ref: string; source: string }[] = [];
+            for (const info of registry.list()) {
+                if (
+                    opts?.sourceName !== undefined &&
+                    info.name !== opts.sourceName
+                ) {
+                    continue;
+                }
+                const source = registry.get(info.name);
+                if (source?.listAgents === undefined) {
+                    continue;
+                }
+                try {
+                    const refs = await source.listAgents();
+                    for (const ref of refs) {
+                        rows.push({ ref, source: info.name });
+                    }
+                } catch (e) {
+                    debug(`listAgents failed for source '${info.name}': ${e}`);
+                }
+            }
+            return rows;
         },
     };
 

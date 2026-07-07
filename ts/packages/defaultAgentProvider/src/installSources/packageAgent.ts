@@ -96,8 +96,14 @@ export interface InstalledAgentSourceApi {
     listInstalled(): InstalledAgentInfo[];
     // Source names in resolution order (for `@package install --source`).
     listSources(): string[];
-    // Enumerable agent refs across the configured sources (for `@package install`).
-    listAvailableAgents(): Promise<string[]>;
+    // Enumerable agent refs with source names. Optional source filter narrows
+    // results to one source.
+    listAvailableAgents(opts?: { sourceName?: string }): Promise<
+        {
+            ref: string;
+            source: string;
+        }[]
+    >;
     // The host-owned source command table, nested under `@package source`.
     sourceCommands(): CommandHandlerTable;
 }
@@ -181,6 +187,67 @@ class ListInstalledCommandHandler implements CommandHandler {
     }
 }
 
+class ListAvailableCommandHandler implements CommandHandler {
+    public readonly description =
+        "List available agent refs from configured install sources";
+    public readonly parameters = {
+        flags: {
+            source: {
+                description: "Optional source name to filter by",
+                char: "s",
+                type: "string",
+                optional: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: PackageActionContext,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const { source } = context.sessionContext.agentContext;
+        const sourceName = params.flags?.source ?? undefined;
+        const refs = (
+            await source.listAvailableAgents(
+                sourceName !== undefined ? { sourceName } : undefined,
+            )
+        ).sort(
+            (a, b) =>
+                a.ref.localeCompare(b.ref) || a.source.localeCompare(b.source),
+        );
+        if (refs.length === 0) {
+            displayResult("No installable agent refs found.", context);
+            return;
+        }
+
+        const text: string[][] = [["Ref", "Source"]];
+        for (const ref of refs) {
+            text.push([chalk.cyanBright(ref.ref), chalk.gray(ref.source)]);
+        }
+        context.actionIO.appendDisplay({
+            type: "text",
+            content: text,
+        });
+    }
+
+    public async getCompletion(
+        context: PackageSessionContext,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<{ groups: CompletionGroup[] }> {
+        const { source } = context.agentContext;
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "--source") {
+                completions.push({
+                    name,
+                    completions: source.listSources(),
+                });
+            }
+        }
+        return { groups: completions };
+    }
+}
+
 class InstallCommandHandler implements CommandHandler {
     public readonly description = "Install an agent";
     public readonly parameters = {
@@ -250,16 +317,20 @@ class InstallCommandHandler implements CommandHandler {
 
     public async getCompletion(
         context: PackageSessionContext,
-        _params: PartialParsedCommandParams<typeof this.parameters>,
+        params: PartialParsedCommandParams<typeof this.parameters>,
         names: string[],
     ): Promise<{ groups: CompletionGroup[] }> {
         const { source } = context.agentContext;
         const completions: CompletionGroup[] = [];
         for (const name of names) {
             if (name === "ref") {
+                const sourceName = params.flags?.source as string | undefined;
+                const refs = await source.listAvailableAgents(
+                    sourceName !== undefined ? { sourceName } : undefined,
+                );
                 completions.push({
                     name,
-                    completions: await source.listAvailableAgents(),
+                    completions: [...new Set(refs.map((r) => r.ref))],
                 });
             } else if (name === "--source") {
                 completions.push({
@@ -422,6 +493,7 @@ export function buildPackageCommandTable(
         defaultSubCommand: "list",
         commands: {
             list: new ListInstalledCommandHandler(),
+            available: new ListAvailableCommandHandler(),
             install: new InstallCommandHandler(),
             update: new UpdateCommandHandler(),
             uninstall: new UninstallCommandHandler(),

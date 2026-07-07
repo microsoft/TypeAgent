@@ -69,9 +69,36 @@ function fakeSessionContext(agentContext: PackageAgentContext) {
     return { agentContext } as any;
 }
 
+function capturingActionContext(agentContext: PackageAgentContext) {
+    const captured: string[] = [];
+    const stripAnsi = (text: string) =>
+        text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+    const context = {
+        sessionContext: { agentContext },
+        actionIO: {
+            appendDisplay: (content: any) => {
+                const text =
+                    typeof content === "string"
+                        ? content
+                        : Array.isArray(content?.content)
+                          ? content.content
+                                .map((row: string[]) => row.join(" "))
+                                .join("\n")
+                          : (content?.content ?? JSON.stringify(content));
+                captured.push(
+                    typeof text === "string" ? stripAnsi(text) : text,
+                );
+            },
+            setDisplay: () => {},
+            takeAction: () => {},
+        },
+    } as any;
+    return { context, output: () => captured.join("\n") };
+}
+
 function getHandler(
     source: InstalledAgentSourceApi,
-    name: "install" | "uninstall" | "update",
+    name: "install" | "uninstall" | "update" | "available",
 ): CommandHandler {
     const table = buildPackageCommandTable(source.sourceCommands());
     return table.commands[name] as CommandHandler;
@@ -160,6 +187,7 @@ describe("@package command table", () => {
         };
         const table = buildPackageCommandTable(sourceTable as any);
         expect(Object.keys(table.commands).sort()).toEqual([
+            "available",
             "install",
             "list",
             "source",
@@ -222,7 +250,10 @@ describe("@package handler error handling", () => {
 describe("@package handler completions", () => {
     it("install completes ref from listAvailableAgents and --source from listSources", async () => {
         const { api } = makeSource({
-            listAvailableAgents: async () => ["catalog-agent", "feed-agent"],
+            listAvailableAgents: async () => [
+                { ref: "catalog-agent", source: "catalog" },
+                { ref: "feed-agent", source: "feed" },
+            ],
             listSources: () => ["catalog", "feed"],
         });
         const handler = getHandler(api, "install");
@@ -236,6 +267,31 @@ describe("@package handler completions", () => {
         );
         expect(byName.get("ref")).toEqual(["catalog-agent", "feed-agent"]);
         expect(byName.get("--source")).toEqual(["catalog", "feed"]);
+    });
+
+    it("install ref completion narrows by --source when selected", async () => {
+        const { api } = makeSource({
+            listAvailableAgents: async ({ sourceName }: any = {}) => {
+                if (sourceName === "catalog") {
+                    return [{ ref: "catalog-agent", source: "catalog" }];
+                }
+                return [
+                    { ref: "catalog-agent", source: "catalog" },
+                    { ref: "feed-agent", source: "feed" },
+                ];
+            },
+            listSources: () => ["catalog", "feed"],
+        });
+        const handler = getHandler(api, "install");
+        const result = await handler.getCompletion!(
+            fakeSessionContext({ appAgentHost: noopHost, source: api }),
+            { flags: { source: "catalog" } } as any,
+            ["ref"],
+        );
+        const byName = new Map(
+            result.groups.map((g) => [g.name, g.completions]),
+        );
+        expect(byName.get("ref")).toEqual(["catalog-agent"]);
     });
 
     it("uninstall/update complete the managed agent names", async () => {
@@ -257,5 +313,85 @@ describe("@package handler completions", () => {
             );
             expect(byName.get("name")).toEqual(["a", "b"]);
         }
+    });
+});
+
+describe("@package available", () => {
+    it("renders available refs with source in sorted order", async () => {
+        const { api } = makeSource({
+            listAvailableAgents: async () => [
+                { ref: "zeta", source: "feed" },
+                { ref: "alpha", source: "catalog" },
+                { ref: "beta", source: "feed" },
+            ],
+        });
+        const handler = getHandler(api, "available");
+        const { context, output } = capturingActionContext({
+            appAgentHost: noopHost,
+            source: api,
+        });
+        await handler.run(context, { args: {} } as any);
+        const text = output();
+        expect(text).toContain("Ref Source");
+        expect(text).toContain("alpha catalog");
+        expect(text).toContain("beta feed");
+        expect(text).toContain("zeta feed");
+        expect(text).toContain("alpha");
+        expect(text).toContain("beta");
+        expect(text).toContain("zeta");
+        expect(text.indexOf("alpha")).toBeLessThan(text.indexOf("beta"));
+        expect(text.indexOf("beta")).toBeLessThan(text.indexOf("zeta"));
+    });
+
+    it("reports empty state when no refs are available", async () => {
+        const { api } = makeSource({
+            listAvailableAgents: async () => [],
+        });
+        const handler = getHandler(api, "available");
+        const { context, output } = capturingActionContext({
+            appAgentHost: noopHost,
+            source: api,
+        });
+        await handler.run(context, { args: {} } as any);
+        expect(output()).toContain("No installable agent refs found.");
+    });
+
+    it("supports filtering by --source", async () => {
+        const { api } = makeSource({
+            listAvailableAgents: async ({ sourceName }: any = {}) => {
+                if (sourceName === "catalog") {
+                    return [{ ref: "alpha", source: "catalog" }];
+                }
+                return [
+                    { ref: "alpha", source: "catalog" },
+                    { ref: "beta", source: "feed" },
+                ];
+            },
+        });
+        const handler = getHandler(api, "available");
+        const { context, output } = capturingActionContext({
+            appAgentHost: noopHost,
+            source: api,
+        });
+        await handler.run(context, { flags: { source: "catalog" } } as any);
+        const text = output();
+        expect(text).toContain("alpha catalog");
+        expect(text).not.toContain("beta feed");
+    });
+
+    it("completes --source from listSources", async () => {
+        const { api } = makeSource({
+            listSources: () => ["catalog", "feed"],
+        });
+        const handler = getHandler(api, "available");
+        const result = await handler.getCompletion!(
+            fakeSessionContext({ appAgentHost: noopHost, source: api }),
+            {} as any,
+            ["--source"],
+        );
+        const byName = new Map(
+            result.groups.map((g) => [g.name, g.completions]),
+        );
+        expect(byName.get("--source")).toEqual(["catalog", "feed"]);
     });
 });
