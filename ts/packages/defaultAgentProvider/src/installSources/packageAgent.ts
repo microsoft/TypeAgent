@@ -110,8 +110,8 @@ export interface InstalledAgentSourceApi {
 
 /**
  * The host-owned `agentContext` of the `@package` app agent. It is not the
- * dispatcher's `CommandHandlerContext`: the only dispatcher capability it
- * exposes is the narrow {@link AppAgentHost} (to register/tear down agents in
+ * dispatcher's `CommandHandlerContext`: the only dispatcher access it exposes
+ * is the narrow {@link AppAgentHost} (to register/tear down agents in
  * the issuing session), plus the host's own {@link InstalledAgentSourceApi}
  * closures. So a handler can never reach back into dispatcher internals.
  */
@@ -476,7 +476,7 @@ export const packageManifest: AppAgentManifest = {
 };
 
 /**
- * The dispatcher agent name the `@package` surface registers under.
+ * The dispatcher agent name the `@package` command set registers under.
  */
 export const PACKAGE_AGENT_NAME = "package";
 

@@ -20,8 +20,8 @@ import { expandHome } from "./paths.js";
 // Host-owned `@package source add <kind>` command handlers. The dispatcher core
 // merges these into the `@package source` table (via
 // `InstalledAgentSourceApi.sourceCommands`) so the core never learns the kind
-// taxonomy or the per-kind flags. This is where a host would hook in richer
-// prompting / auth UI for adding a source.
+// taxonomy or the per-kind flags. This is where a host would hook in token
+// prompts or feed-specific auth UI for adding a source.
 //
 // Each handler is fully typed (args + flags), so the dispatcher gives the user
 // intellisense, completion, and usage for `@package source add feed/catalog/path` -

@@ -134,7 +134,7 @@ putting a `path`/`catalog` source ahead of a `feed` makes a
 local agent shadow the published one automatically.
 
 **Status and degrade reporting.** The walk names each source as it is probed
-(surfaced through `@package install` and `@package source where`). A source that
+(shown by `@package install` and `@package source where`). A source that
 cannot read its own backing store **degrades to a non-match** rather than
 aborting the walk — an offline feed is skipped, a corrupt catalog file (or a
 single malformed entry) is dropped. Every degrade is _reported_: once per process
@@ -218,7 +218,7 @@ is unchanged from bundled agents. Each installed record becomes its **own
 single-agent provider**, resolved to a single module-resolution root — feed
 modules resolve from `installDir`, bundled-catalog modules from the app bundle,
 and `path` records from their explicit `path`. Building providers per record
-avoids a routing facade and lets the lifecycle layer move agents one provider at
+avoids a combined router and lets the lifecycle layer move agents one provider at
 a time (see [Agent lifecycle](./agent-lifecycle.md)).
 
 Module resolution reads from **runtime roots, not the live source registry**, so

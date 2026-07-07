@@ -186,8 +186,8 @@ export function getDefaultAppAgentProviders(
  * enumeration (e.g. the indexing-service registry) where the live connection
  * lifecycle is not involved. The dispatcher runtime instead gets installed
  * agents from {@link getDefaultAppAgentSource}. Returns a per-root-group list
- * (possibly spanning installDir + app bundle) so no combined routing facade is
- * needed; empty when no instance dir is available.
+ * (possibly spanning installDir + app bundle) so no combined router is needed;
+ * empty when no instance dir is available.
  */
 function getInstalledAppAgentProviders(
     instanceConfigs: InstanceConfigProvider | undefined,
@@ -457,7 +457,7 @@ export function createDefaultInstalledAgentSource(
     // untouched — instead of committing a broken agent that then fails per
     // session (with `v1` already pruned). Cheap and non-forking: the real agent
     // process only launches when a host loads it, so a manifest that reads but
-    // throws on `instantiate()` still surfaces as an ordinary per-session load
+    // throws on `instantiate()` still uses the ordinary per-session load
     // error (TypeAgent never forks a probe, by design). NOT used for startup
     // seeding — an already-committed record must load lazily and must never fail
     // the whole source construction on a since-corrupted on-disk manifest.
@@ -1185,7 +1185,7 @@ export function createDefaultInstalledAgentSource(
             }
         },
         sourceCommands() {
-            // The host owns the entire `@package source` surface (list/order/
+            // The host owns the entire `@package source` command set (list/order/
             // where/remove/add): the kind taxonomy, typed flags, validation, and
             // any auth UI. The dispatcher core merges this table in under
             // `@package` as `source`.
@@ -1258,8 +1258,8 @@ export function createDefaultInstalledAgentSource(
         },
     };
 
-    // The dispatcher-facing AppAgentSource surface is connect(); the write
-    // surface is captured by the per-session `@package` agent below. The
+    // The dispatcher-facing AppAgentSource API is connect(); the write API is
+    // captured by the per-session `@package` agent below. The
     // concrete object keeps an unadvertised test handle for focused unit tests,
     // but the exported constructor returns only AppAgentSource.
     const appAgentSource: InstalledAgentSourceForTest = {

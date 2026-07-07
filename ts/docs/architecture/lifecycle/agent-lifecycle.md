@@ -1,8 +1,8 @@
-# Agent lifecycle — going live, propagating, and updating
+# Agent lifecycle: registration, session updates, and replacement
 
 > **Scope:** This document describes how an _acquired_ agent becomes runnable in
 > a live dispatcher session: the `AppAgentSource` connection model, live
-> registration, cross-session propagation, per-session enable policy, and the
+> registration, cross-session updates, per-session enable policy, and the
 > coordinated update/uninstall restart. For how an agent is discovered and
 > acquired in the first place (sources, the registry, `agents.json`, feeds), see
 > [Agent sources](./agent-sources.md). For the user-facing `@package` commands,
@@ -34,7 +34,7 @@ flowchart TB
 | Package                                                                                                              | Role                                                                                                                                                                                              |
 | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`agent-dispatcher`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher)             | Defines `AppAgentSource`, `AppAgentConnection`, `AppAgentHost`; implements the dispatcher-side host (the idle-gated applicator) and the low-level `AppAgentManager.addProvider`/`removeProvider`. |
-| [`default-agent-provider`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider)        | Implements `AppAgentSource`: record store, per-name lifecycle tracker, fan-out registry, the `@package` app agent, and the update/uninstall barrier.                                              |
+| [`default-agent-provider`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider)        | Implements `AppAgentSource`: record store, per-name tracker, fan-out registry, the `@package` app agent, and the update/uninstall barrier.                                                        |
 | [`dispatcher-node-providers`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/nodeProviders) | Refcounted npm provider (`createNpmAppAgentProvider`) whose `isLoaded` the barrier reads to verify a version is fully released.                                                                   |
 
 ## Design goals and non-goals
@@ -52,7 +52,7 @@ flowchart TB
 **Non-goals**
 
 - **No cross-process fan-out.** An instance dir (and its `agents.json`) is held
-  by a single process at a time; propagation is in-process only.
+  by a single process at a time; updates are in-process only.
 - **No multi-version coexistence.** Agent storage is keyed by name, so an update
   is a _restart_ of one shared process, not an overlapping swap.
 - **The dispatcher cannot drive an install.** It is handed only the narrow
@@ -121,10 +121,10 @@ a subtree of the built-in `system` agent
 
 This isolates host handlers from dispatcher internals. Command routing binds every command to its
 owning agent's context: `@package …` resolves to the package agent, so its
-`ActionContext.sessionContext.agentContext` is the **host's own** context — never
+`ActionContext.sessionContext.agentContext` is the **host's own** context: never
 the dispatcher's `CommandHandlerContext`. A host handler therefore cannot cast
-its way into dispatcher internals. The one dispatcher capability these handlers
-legitimately need — mutating the live session — arrives through the narrow
+its way into dispatcher internals. The one dispatcher access these handlers
+legitimately need, mutating the live session, arrives through the narrow
 `AppAgentHost` on the package agent's own `agentContext`, which is per-dispatcher
 by construction, so a handler automatically reaches _its_ session with no lookup.
 
@@ -141,7 +141,7 @@ out to every connected dispatcher:
    `InstalledAgentRecord` to `agents.json`. Name uniqueness is a property of the
    store, validated here — before materialize.
 2. The **issuing** dispatcher's op is awaited, so a registration error (e.g. a
-   collision) surfaces synchronously to the user who ran the command.
+   collision) is reported synchronously to the user who ran the command.
 3. **Sibling** dispatchers are notified best-effort and asynchronously (applied at
    each session's next idle); a per-client failure is logged, never failing the
    command. Collision detection degrades to a warning so an install can never
@@ -159,9 +159,9 @@ disabled-by-default wrapper — an agent whose manifest ships enabled is on
 everywhere unless a user turned it off in that session, and a per-session
 `@config agent` override always wins.
 
-"No surprise" is delivered by **notification**, not by forcing state:
+Users are notified instead of having state forced:
 
-| Recipient                         | State on add                 | How it surfaces                                      |
+| Recipient                         | State on add                 | User-visible result                                  |
 | --------------------------------- | ---------------------------- | ---------------------------------------------------- |
 | **Issuing** conversation          | `config ?? manifest default` | inline command result                                |
 | **Sibling** conversation open now | `config ?? manifest default` | system message: _"Agent 'foo' was added — enabled."_ |
@@ -272,11 +272,11 @@ Source (v1 still serving):
      a corrupt v2 fails here, cleanly aborting with v1 intact)
 
 Quiesce + restart (each dispatcher holds its command lock across this):
-  2. each dispatcher: drain in-flight v1, remove v1 artifacts,
+  2. each dispatcher: drain in-flight v1, remove v1 routing state,
      unloadAppAgent(v1) → decrement the shared refcount, ACK quiesced
   3. once all ACKs are in AND the shared v1 refcount is VERIFIED 0:
      start v2 (never overlap — shared name-keyed storage)
-  4. each dispatcher (still holding its lock) swaps in v2 artifacts, releases
+  4. each dispatcher (still holding its lock) swaps in v2 routing state, releases
 
 Result: foo routes to v2 everywhere; no request ever observed foo absent.
 Prune v1 from disk only after success.
@@ -299,7 +299,7 @@ start" are a clean handoff.
 The held wait spans a process restart, so it is **time-bounded** (a short quiesce
 timeout, default 15s, configurable). Ordering keeps rollback clean: v1 stays
 fully intact and restartable until v2 is confirmed serving. If the timeout fires
-first, the barrier restarts v1, swaps v1 artifacts back in, releases the lock,
+first, the barrier restarts v1, swaps v1 routing state back in, releases the lock,
 and discards v2 — as if the update never happened.
 
 The outcome is decided **before** the parked hosts release: each host does exactly
@@ -315,7 +315,7 @@ is still serving: install/update materialization validates that the new record's
 manifest can be resolved and read, regardless of source kind. A corrupt feed,
 catalog, or path candidate fails there and leaves v1 untouched. The barrier does
 not fork a start probe for v2; after verify-0 passes it commits directly. A v2
-that reads a manifest but later throws during `instantiate()` surfaces as the
+that reads a manifest but later throws during `instantiate()` uses the
 ordinary per-session load failure path rather than rolling back.
 
 Rollback is currently timeout-driven. A future user-facing cancel must use an
@@ -390,7 +390,7 @@ op on every dispatcher now flows through the one idle-gated queue.
 | Applicator wiring, `commandLock`, connect/teardown                  | [`context/commandHandlerContext.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts)          |
 | `addProvider` / `removeProvider` / lazy load                        | [`context/appAgentManager.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts)                      |
 | Refcounted npm provider (`isLoaded`, `close()`)                     | [`nodeProviders/.../npmAgentProvider.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/nodeProviders/src/agentProvider/npmAgentProvider.ts) |
-| Per-name lifecycle tracker + install/uninstall/update + barrier     | [`defaultAgentProviders.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/src/defaultAgentProviders.ts)                           |
+| Per-name tracker + install/uninstall/update + barrier               | [`defaultAgentProviders.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/src/defaultAgentProviders.ts)                           |
 | `@package` app agent handlers                                       | [`installSources/packageAgent.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/src/installSources/packageAgent.ts)               |
 | Installed-agent provider building + `agents.json` store             | [`installSources/installedAgents.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/src/installSources/installedAgents.ts)         |
 
