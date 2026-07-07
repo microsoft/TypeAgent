@@ -556,10 +556,11 @@ function spawnAgentServer(
                 const psExe = fs.existsSync(pwsh7) ? pwsh7 : "powershell.exe";
                 // Pass serverPath to the child through the environment rather
                 // than the command line so it never reaches cmd.exe or the
-                // PowerShell parser as text. The command itself is a constant
-                // that reads $env:TYPEAGENT_SERVER_PATH, and it is handed to
-                // PowerShell as a base64 -EncodedCommand blob, whose alphabet
-                // is inert to both cmd.exe and PowerShell.
+                // PowerShell parser as text. Only the numeric port and
+                // idleTimeout are interpolated into the command; the path is
+                // read from $env:TYPEAGENT_SERVER_PATH at runtime. The command
+                // is handed to PowerShell as a base64 -EncodedCommand blob,
+                // whose alphabet is inert to both cmd.exe and PowerShell.
                 const psCommand =
                     `& node $env:TYPEAGENT_SERVER_PATH --port ${port}` +
                     (idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : "");
