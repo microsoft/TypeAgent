@@ -240,12 +240,26 @@ describe("feedSource.find", () => {
     });
 });
 
-describe("feedSource.reresolve", () => {
+describe("feedSource.update", () => {
     function sourceWith(packages: string[]) {
         const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
         return createFeedSource(CONFIG, {
             installDir,
             tokenRunner: goodToken,
+            npmInstall: async ({ cwd, spec }) => {
+                const at = spec.lastIndexOf("@");
+                const moduleName = at > 0 ? spec.slice(0, at) : spec;
+                const pkgDir = path.join(
+                    cwd,
+                    "node_modules",
+                    ...moduleName.split("/"),
+                );
+                fs.mkdirSync(pkgDir, { recursive: true });
+                fs.writeFileSync(
+                    path.join(pkgDir, "package.json"),
+                    JSON.stringify({ name: moduleName }),
+                );
+            },
             fetchFn: fakeFetch({
                 packages,
                 keywords: Object.fromEntries(
@@ -255,38 +269,50 @@ describe("feedSource.reresolve", () => {
         });
     }
 
-    it("re-resolves off the candidate's `module`, latest when no range", async () => {
+    it("honors the originally requested ref when no new range is supplied", async () => {
         const source = sourceWith(["@typeagent/foo-agent"]);
-        const candidate = await source.reresolve!({
+        const result = await source.update!({
+            name: "foo",
+            kind: "npm",
             source: "typeagent",
             module: "@typeagent/foo-agent",
-            ref: "@typeagent/foo-agent@1.0.0",
+            ref: "@typeagent/foo-agent@^1.0.0",
+            installRoot: "_typeagent_foo-agent@1.0.0",
         });
-        expect(candidate).toBeDefined();
-        expect(candidate!.module).toBe("@typeagent/foo-agent");
-        // No range -> target the bare module (latest).
-        expect(candidate!.ref).toBe("@typeagent/foo-agent");
+        expect(result.status).toBe("updated");
+        expect(result.record.module).toBe("@typeagent/foo-agent");
+        expect(result.record.ref).toBe("@typeagent/foo-agent@^1.0.0");
+        expect(result.record.installRoot).toBe("_typeagent_foo-agent@1.4.0");
     });
 
     it("applies a version range to the module", async () => {
         const source = sourceWith(["@typeagent/foo-agent"]);
-        const candidate = await source.reresolve!(
+        const result = await source.update!(
             {
+                name: "foo",
+                kind: "npm",
                 source: "typeagent",
                 module: "@typeagent/foo-agent",
+                ref: "@typeagent/foo-agent@^1.0.0",
+                installRoot: "_typeagent_foo-agent@1.0.0",
             },
             { range: "^2.0.0" },
         );
-        expect(candidate!.ref).toBe("@typeagent/foo-agent@^2.0.0");
+        expect(result.status).toBe("updated");
+        expect(result.record.ref).toBe("@typeagent/foo-agent@^2.0.0");
+        expect(result.record.installRoot).toBe("_typeagent_foo-agent@2.0.0");
     });
 
     it("rejects a shell-injection range before it reaches npm", async () => {
         const source = sourceWith(["@typeagent/foo-agent"]);
         await expect(
-            source.reresolve!(
+            source.update!(
                 {
+                    name: "foo",
+                    kind: "npm",
                     source: "typeagent",
                     module: "@typeagent/foo-agent",
+                    ref: "@typeagent/foo-agent@^1.0.0",
                 },
                 { range: "1.0.0 & calc.exe" },
             ),
@@ -295,19 +321,49 @@ describe("feedSource.reresolve", () => {
 
     it("returns undefined when the package left the feed", async () => {
         const source = sourceWith(["@typeagent/other-agent"]);
-        expect(
-            await source.reresolve!({
+        await expect(
+            source.update!({
+                name: "foo",
+                kind: "npm",
+                source: "typeagent",
+                module: "@typeagent/foo-agent",
+                ref: "@typeagent/foo-agent",
+            }),
+        ).rejects.toThrow(/no longer resolvable/i);
+    });
+
+    it("throws on a corrupt record with no module", async () => {
+        const source = sourceWith(["@typeagent/foo-agent"]);
+        await expect(
+            source.update!({ name: "foo", kind: "npm", source: "typeagent" }),
+        ).rejects.toThrow(/missing its 'module'/i);
+    });
+
+    it("throws on a corrupt record with no ref", async () => {
+        const source = sourceWith(["@typeagent/foo-agent"]);
+        await expect(
+            source.update!({
+                name: "foo",
+                kind: "npm",
                 source: "typeagent",
                 module: "@typeagent/foo-agent",
             }),
-        ).toBeUndefined();
+        ).rejects.toThrow(/missing its 'ref'/i);
     });
 
-    it("throws on a corrupt candidate with no module", async () => {
+    it("returns no-op when the resolved version is already installed", async () => {
         const source = sourceWith(["@typeagent/foo-agent"]);
-        await expect(
-            source.reresolve!({ source: "typeagent" }),
-        ).rejects.toThrow(/missing its 'module'/i);
+        const result = await source.update!({
+            name: "foo",
+            kind: "npm",
+            source: "typeagent",
+            module: "@typeagent/foo-agent",
+            ref: "@typeagent/foo-agent@^1.0.0",
+            installRoot: "_typeagent_foo-agent@1.4.0",
+        });
+        expect(result.status).toBe("no-op");
+        expect(result.record.ref).toBe("@typeagent/foo-agent@^1.0.0");
+        expect(result.record.installRoot).toBe("_typeagent_foo-agent@1.4.0");
     });
 });
 
@@ -787,5 +843,25 @@ describe("feedSource install-spec hardening", () => {
                 version: "1.0.0 & calc.exe",
             }),
         ).rejects.toThrow(/unsafe spec/i);
+    });
+
+    it("materialize refuses a candidate without a ref", async () => {
+        clearTokenCacheForTest();
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        const source = createFeedSource(CONFIG, {
+            installDir,
+            tokenRunner: goodToken,
+            npmInstall: async () => {
+                throw new Error("npm should never be invoked");
+            },
+            fetchFn: packumentFetch(),
+        });
+        await expect(
+            source.materialize({
+                source: "typeagent",
+                module: "@typeagent/a-agent",
+                version: "1.0.0",
+            }),
+        ).rejects.toThrow(/without a module\/ref\/version/i);
     });
 });

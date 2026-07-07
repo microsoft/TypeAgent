@@ -5,6 +5,7 @@ import {
     InstallSource,
     InstallSourceConfig,
     InstallSourceInfo,
+    InstallSourceUpdateResult,
     InstalledAgentRecord,
     MaterializedInstallRecord,
     ResolvedCandidate,
@@ -35,6 +36,12 @@ export interface DefaultInstallSourceRegistry {
     setOrder(names: string[]): void;
     add(config: InstallSourceConfig): void;
     remove(name: string): void;
+    // Give the recorded source a chance to refresh a persisted record before
+    // provider construction. Sources without a load hook use the record as-is.
+    load(
+        record: InstalledAgentRecord,
+        onWarn?: SourceWarning,
+    ): InstalledAgentRecord;
     // resolve a ref: explicit source, else walk the configured order
     // sequentially, first match wins. `onWarn`, when supplied, receives
     // non-fatal source problem messages (e.g. a corrupt catalog) for the caller
@@ -47,22 +54,18 @@ export interface DefaultInstallSourceRegistry {
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
     ): Promise<MaterializedInstallRecord>;
-    // Re-resolve + re-materialize a previously-installed record against its
-    // recorded source, for `@package update`. The source that
-    // produced the record decides everything (which handle to read, how a
-    // version `range` applies, corrupt-record validation) via
-    // {@link InstallSource.reresolve}; the registry runs it + materialize
-    // under the shared limiter and carries the source's re-resolution handle
-    // (`ref`) through so the next update still works. Throws when the source is
-    // gone, does not support update, or no longer resolves the record.
-    reresolve(
+    // Update a previously-installed record via its recorded source. The source
+    // owns whether update is supported and how its persisted record is
+    // interpreted; the registry only performs source lookup and limiter
+    // coordination.
+    update(
         record: InstalledAgentRecord,
         opts?: {
             range?: string | undefined;
         },
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
-    ): Promise<MaterializedInstallRecord>;
+    ): Promise<InstallSourceUpdateResult>;
     // dry-run: report which source would win without materializing. Walks the
     // configured order sequentially like resolve().
     where(
@@ -149,24 +152,28 @@ export function createInstallSourceRegistry(
             caller?.(message);
         };
     }
-    // Wrap a built source so every warning-bearing call (find / reresolve /
+    // Wrap a built source so every warning-bearing call (find / update /
     // listAgents) routes its warnings through the combined background+caller
     // callback. Wrapping here, at the one place sources are built, means every
     // access path - resolve, where, get()->listAgents - gets the server-log
     // dedup. Optional methods are only re-wrapped when the source provides them.
     function build(config: InstallSourceConfig): InstallSource {
         const source = buildSourceFn(config);
+        const { find, update, load, listAgents, ...rest } = source;
         const wrapped: InstallSource = {
-            ...source,
-            find: (ref, onWarn) => source.find(ref, composeWarn(onWarn)),
+            ...rest,
+            find: (ref, onWarn) => find(ref, composeWarn(onWarn)),
         };
-        if (source.reresolve) {
-            wrapped.reresolve = (candidate, opts, onWarn) =>
-                source.reresolve!(candidate, opts, composeWarn(onWarn));
+        if (update !== undefined) {
+            wrapped.update = (record, opts, onWarn) =>
+                update(record, opts, composeWarn(onWarn));
         }
-        if (source.listAgents) {
-            wrapped.listAgents = (onWarn) =>
-                source.listAgents!(composeWarn(onWarn));
+        if (load !== undefined) {
+            wrapped.load = (record, onWarn) =>
+                load(record, composeWarn(onWarn));
+        }
+        if (listAgents !== undefined) {
+            wrapped.listAgents = (onWarn) => listAgents(composeWarn(onWarn));
         }
         return wrapped;
     }
@@ -227,7 +234,9 @@ export function createInstallSourceRegistry(
         ref: string,
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
-    ): Promise<{ source: InstallSource; candidate: ResolvedCandidate } | undefined> {
+    ): Promise<
+        { source: InstallSource; candidate: ResolvedCandidate } | undefined
+    > {
         for (const source of resolutionSources()) {
             onStatus?.(`Trying source '${source.name}'...`);
             const candidate = await source.find(ref, onWarn);
@@ -318,6 +327,22 @@ export function createInstallSourceRegistry(
             entries.delete(name);
             persist();
         },
+        load(
+            record: InstalledAgentRecord,
+            onWarn?: SourceWarning,
+        ): InstalledAgentRecord {
+            const entry = entries.get(record.source);
+            if (entry?.source.load === undefined) {
+                return record;
+            }
+            const loaded = entry.source.load(record, onWarn);
+            if (loaded === undefined) {
+                throw new Error(
+                    `agent '${record.name}' is no longer resolvable from source '${record.source}'.`,
+                );
+            }
+            return { ...loaded, name: record.name };
+        },
         async resolve(
             ref: string,
             sourceName?: string,
@@ -331,16 +356,16 @@ export function createInstallSourceRegistry(
                 resolveUnlocked(ref, sourceName, onWarn, onStatus),
             );
         },
-        async reresolve(
+        async update(
             record: InstalledAgentRecord,
             opts?: {
                 range?: string | undefined;
             },
             onWarn?: SourceWarning,
             onStatus?: SourceStatus,
-        ): Promise<MaterializedInstallRecord> {
-            // Mirror resolve(): the whole re-resolve -> materialize runs under
-            // the shared limiter.
+        ): Promise<InstallSourceUpdateResult> {
+            // Mirror resolve(): the whole source-owned update runs under the
+            // shared limiter.
             return limiter(async () => {
                 const entry = entries.get(record.source);
                 if (entry === undefined) {
@@ -350,38 +375,19 @@ export function createInstallSourceRegistry(
                             `re-add it with '@package source add' to update, or '@package uninstall ${record.name}'.`,
                     );
                 }
-                if (entry.source.reresolve === undefined) {
+                if (entry.source.update === undefined) {
                     throw new Error(
                         `Source '${record.source}' does not support updating agent '${record.name}'.`,
                     );
                 }
                 onStatus?.(
-                    `Re-resolving '${record.name}' from source '${record.source}'...`,
+                    `Updating '${record.name}' from source '${record.source}'...`,
                 );
-                // The source only sees ResolvedCandidate. Recover the
-                // candidate this source produced at install time from the
-                // record's fields, dropping the persistence-only
-                // `name`/`kind`/`installRoot` so they never reach the source.
-                const { name, kind, installRoot, ...prior } = record;
-                void name;
-                void kind;
-                void installRoot;
-                const candidate = await entry.source.reresolve(
-                    prior,
+                return entry.source.update(
+                    record,
                     { range: opts?.range },
                     onWarn,
                 );
-                if (candidate === undefined) {
-                    throw new Error(
-                        `agent '${record.name}' is no longer resolvable from source '${record.source}'.`,
-                    );
-                }
-                // The source's `materialize` persists its own re-resolution
-                // handle (feed: spec; catalog: key; path: path), so the
-                // re-materialized record is ready for the next update - the host
-                // does not need to carry anything. It builds a fresh
-                // version-scoped root named by the package name.
-                return entry.source.materialize(candidate);
             });
         },
         async where(

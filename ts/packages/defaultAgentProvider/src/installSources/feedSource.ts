@@ -9,6 +9,7 @@ import semver from "semver";
 import {
     InstallSource,
     FeedSourceConfig,
+    InstalledAgentRecord,
     MaterializedInstallRecord,
     ResolvedCandidate,
     AGENT_INSTALL_ROOTS_SUBDIR,
@@ -91,6 +92,10 @@ export function isSafeVersionRange(range: string): boolean {
 // install root or a cache filename.
 function sanitizeLabel(label: string): string {
     return label.replace(/[^A-Za-z0-9._-]/g, "_");
+}
+
+function installRootFor(moduleName: string, version: string): string {
+    return `${sanitizeLabel(moduleName)}@${version}`;
 }
 
 // A short, unique, filesystem-safe install-id. Used to
@@ -420,67 +425,71 @@ export function createFeedSource(
         }
     }
 
+    async function find(ref: string): Promise<ResolvedCandidate | undefined> {
+        const moduleName = moduleNameFromSpec(ref);
+        const packages = await getPackageList();
+        if (!packages.includes(moduleName)) {
+            return undefined; // non-match (or skipped when offline+empty)
+        }
+        // Membership matched: resolve the concrete version so
+        // every candidate carries a pinned `version`. `materialize` names the
+        // content-addressed install root (`module@version`) from it and skips
+        // the npm install entirely when that root already exists (dedup
+        // across agents / same-version update no-op). Resolving requires a
+        // live registry round-trip (an access token + the packument); if we
+        // can't pin a concrete published version -- offline, auth failure, or
+        // no published version satisfies the ref -- the agent is not
+        // installable, so we fail the find (the host reports it unresolved).
+        let version: string | undefined;
+        const registry = resolveFeedRegistry(config);
+        if (registry !== undefined) {
+            try {
+                const token = await getFeedAccessToken(tokenRunner);
+                const packument = await fetchPackument(
+                    registry,
+                    moduleName,
+                    token,
+                    fetchFn,
+                );
+                if (packument !== undefined) {
+                    version = resolveConcreteVersion(ref, packument);
+                }
+            } catch {
+                // offline / auth failure -> leave version unresolved
+            }
+        }
+        if (version === undefined) {
+            return undefined;
+        }
+        return {
+            source: config.name,
+            module: moduleName,
+            // Retain the user-specified spec/range in `ref` as the durable
+            // update selector; the concrete resolved version is carried
+            // separately in `version`.
+            ref,
+            version,
+            loaderConfig: { execMode: "separate" },
+        };
+    }
+
     return {
         name: config.name,
         kind: "feed",
-        async find(ref: string): Promise<ResolvedCandidate | undefined> {
-            const moduleName = moduleNameFromSpec(ref);
-            const packages = await getPackageList();
-            if (!packages.includes(moduleName)) {
-                return undefined; // non-match (or skipped when offline+empty)
-            }
-            // Membership matched: resolve the concrete version so
-            // every candidate carries a pinned `version`. `materialize` names the
-            // content-addressed install root (`module@version`) from it and skips
-            // the npm install entirely when that root already exists (dedup
-            // across agents / same-version update no-op). Resolving requires a
-            // live registry round-trip (an access token + the packument); if we
-            // can't pin a concrete published version -- offline, auth failure, or
-            // no published version satisfies the ref -- the agent is not
-            // installable, so we fail the find (the host reports it unresolved).
-            let version: string | undefined;
-            const registry = resolveFeedRegistry(config);
-            if (registry !== undefined) {
-                try {
-                    const token = await getFeedAccessToken(tokenRunner);
-                    const packument = await fetchPackument(
-                        registry,
-                        moduleName,
-                        token,
-                        fetchFn,
-                    );
-                    if (packument !== undefined) {
-                        version = resolveConcreteVersion(ref, packument);
-                    }
-                } catch {
-                    // offline / auth failure -> leave version unresolved
-                }
-            }
-            if (version === undefined) {
-                return undefined;
-            }
-            return {
-                source: config.name,
-                module: moduleName,
-                // Retain the user-specified spec/range in `ref` so `reresolve`
-                // can re-look-up against it; the concrete resolved version is
-                // carried separately in `version`.
-                ref,
-                version,
-                loaderConfig: { execMode: "separate" },
-            };
-        },
-        async reresolve(
-            candidate: ResolvedCandidate,
+        find,
+        async update(
+            record: InstalledAgentRecord,
             opts?: { range?: string | undefined },
-        ): Promise<ResolvedCandidate | undefined> {
-            // The package name (`module`) is the handle; a version `range`
-            // narrows the target, omitting it takes the latest available
-            // version. A candidate without a module is corrupt.
-            const moduleName = candidate.module;
+        ) {
+            const moduleName = record.module;
             if (moduleName === undefined) {
                 throw new Error(
-                    `feed candidate is missing its 'module' (corrupt record).`,
+                    `feed record for agent '${record.name}' is missing its 'module' (corrupt record).`,
+                );
+            }
+            if (record.ref === undefined) {
+                throw new Error(
+                    `feed record for agent '${record.name}' is missing its 'ref' (corrupt record).`,
                 );
             }
             // Validate the user-supplied range against the real semver-range
@@ -495,10 +504,37 @@ export function createFeedSource(
             const ref =
                 opts?.range !== undefined
                     ? `${moduleName}@${opts.range}`
-                    : moduleName;
-            // Re-run the membership check: a package pulled from the feed
-            // returns undefined -> host reports it is no longer resolvable.
-            return this.find(ref);
+                    : record.ref;
+            const candidate = await find(ref);
+            if (candidate === undefined) {
+                throw new Error(
+                    `agent '${record.name}' is no longer resolvable from source '${record.source}'.`,
+                );
+            }
+            if (
+                candidate.version !== undefined &&
+                record.installRoot ===
+                    installRootFor(moduleName, candidate.version)
+            ) {
+                const noOpRecord: MaterializedInstallRecord = {
+                    kind: record.kind,
+                    module: moduleName,
+                    source: record.source,
+                    ref,
+                    installRoot: record.installRoot,
+                };
+                if (record.loaderConfig !== undefined) {
+                    noOpRecord.loaderConfig = record.loaderConfig;
+                }
+                return {
+                    status: "no-op" as const,
+                    record: noOpRecord,
+                };
+            }
+            return {
+                status: "updated" as const,
+                record: await this.materialize(candidate),
+            };
         },
         async materialize(
             candidate: ResolvedCandidate,
@@ -510,10 +546,10 @@ export function createFeedSource(
                 );
             }
             const moduleName = candidate.module;
-            // The user-facing ref (tag/range/version) is retained for re-resolve;
-            // fall back to the bare module name.
-            const ref = candidate.ref ?? moduleName;
-            // `find`/`reresolve` always pin a concrete version, so a candidate
+            // The user-facing ref (tag/range/version) is retained as the
+            // default update selector.
+            const ref = candidate.ref;
+            // `find`/`update` always pin a concrete version, so a candidate
             // reaching materialize must carry one (it names the content-addressed
             // root and the exact install spec).
             const version = candidate.version;
@@ -549,8 +585,7 @@ export function createFeedSource(
                 deps.installDir,
                 AGENT_INSTALL_ROOTS_SUBDIR,
             );
-            const rootLabel = sanitizeLabel(moduleName);
-            const installRoot = `${rootLabel}@${version}`;
+            const installRoot = installRootFor(moduleName, version);
             const finalRoot = path.join(rootsDir, installRoot);
             const installedPkgJsonUnder = (root: string): string =>
                 path.join(

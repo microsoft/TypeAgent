@@ -25,7 +25,7 @@ export interface ResolvedCandidate {
     ref?: string; // feed specifier/version
     path?: string; // catalog / path result
     // The concrete package version this candidate resolves to, when the source
-    // can determine it cheaply during `find`/`reresolve`: the feed
+    // can determine it cheaply during `find`/`update`: the feed
     // source reads the packument during the membership check and pins the
     // dist-tag/range to an exact version here. It lets `materialize` name the
     // content-addressed install root (`module@version`) up front and skip the
@@ -82,6 +82,16 @@ export interface InstalledAgentRecord {
  * dispatcher name.
  */
 export type MaterializedInstallRecord = Omit<InstalledAgentRecord, "name">;
+
+/**
+ * A source-owned update result. `updated` returns a freshly materialized record
+ * that must be swapped in; `no-op` returns the record to persist without a
+ * provider swap (e.g. a feed range that resolves to the currently installed
+ * concrete version).
+ */
+export type InstallSourceUpdateResult =
+    | { status: "updated"; record: MaterializedInstallRecord }
+    | { status: "no-op"; record: MaterializedInstallRecord };
 
 /**
  * A per-command callback a source calls to report a non-fatal problem (e.g. a
@@ -207,30 +217,25 @@ export interface InstallSource {
         ref: string,
         onWarn?: SourceWarning,
     ): Promise<ResolvedCandidate | undefined>;
-    /**
-     * The inverse of {@link find}: given the `ResolvedCandidate` this source
-     * produced for an agent at install time (recovered by the host from the
-     * persisted record), produce a new candidate for the current version. This
-     * way `@package update` never has to know which candidate field is this
-     * source's re-resolution handle, or how a version `range` applies. The
-     * source decides: which handle it reads (`module` / `path` / the catalog key
-     * in `ref`), how `opts.range` narrows the target, and how to validate a
-     * corrupt candidate. The source only sees `ref` / `ResolvedCandidate`; the
-     * host maps between the record and the candidate, so the persisted
-     * `InstalledAgentRecord` (its dispatcher `name`, loader `kind`) never reaches
-     * the source.
-     *
-     * Like `find`, this is cheap and side-effect free, and the returned
-     * candidate must `materialize`. Returns `undefined` when the agent no longer
-     * resolves (path deleted, catalog key gone, feed package removed) so the host
-     * can report a clear "no longer resolvable" error. Optional so a test-double
-     * source can omit it (its agents are then not updatable).
-     */
-    reresolve?(
-        candidate: ResolvedCandidate,
+    /** Optional source-owned update capability. The common layer only performs
+     * source lookup, locking, persistence, and provider swap/no-op orchestration;
+     * the source decides whether records it owns are updateable, how `range`
+     * applies, what persisted ref should drive future updates, and what counts
+     * as an update no-op. */
+    update?(
+        record: InstalledAgentRecord,
         opts?: { range?: string | undefined },
         onWarn?: SourceWarning,
-    ): Promise<ResolvedCandidate | undefined>;
+    ): Promise<InstallSourceUpdateResult>;
+    /** Optional source-owned load refresh. A source whose persisted record is a
+     * live pointer (for example, a catalog key) can re-read its current source
+     * data before the provider is built. Returning `undefined` means the record
+     * no longer resolves. Sources with fully materialized records omit this and
+     * the common layer loads the persisted record as-is. */
+    load?(
+        record: InstalledAgentRecord,
+        onWarn?: SourceWarning,
+    ): MaterializedInstallRecord | undefined;
     /** Performs the install (npm install / copy / record data). A source that
      * needs a per-agent, version-scoped install root names it from the
      * candidate's package name. Sources whose materialize is already

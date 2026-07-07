@@ -13,7 +13,6 @@ import {
 // `path` source.
 //   find        = fs.stat against the resolved path (cheap, side-effect free)
 //   materialize = record data { path, source }, omitting `module` and `name`
-//   reresolve   = re-stat the record's absolute `path` (its handle)
 // `ref` is a filesystem path: absolute or (only when a baseDir is configured)
 // relative to that baseDir.
 export function createPathSource(config: PathSourceConfig): InstallSource {
@@ -55,20 +54,6 @@ export function createPathSource(config: PathSourceConfig): InstallSource {
         name: config.name,
         kind: "path",
         find,
-        async reresolve(
-            candidate: ResolvedCandidate,
-        ): Promise<ResolvedCandidate | undefined> {
-            // The absolute `path` IS the handle; `range` is meaningless for a
-            // path install and ignored. A candidate without a path is corrupt.
-            if (candidate.path === undefined) {
-                throw new Error(
-                    `path candidate has no recorded path to refresh (corrupt record).`,
-                );
-            }
-            // Re-stat: a deleted path returns undefined -> host reports it is no
-            // longer resolvable, leaving the old agent intact.
-            return find(candidate.path);
-        },
         async materialize(
             candidate: ResolvedCandidate,
         ): Promise<MaterializedInstallRecord> {

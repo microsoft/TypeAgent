@@ -437,9 +437,10 @@ export function createDefaultInstalledAgentSource(
         name: string,
         record: InstalledAgentRecord,
     ): AppAgentProvider {
+        const loadRecord = registry.load(record);
         // installDir is guaranteed resolved above (the source throws otherwise);
         // the `!` bridges TS's lack of narrowing across this nested closure.
-        return createInstalledAppAgentProvider(name, record, installDir!);
+        return createInstalledAppAgentProvider(name, loadRecord, installDir!);
     }
 
     // Build the shared provider for a freshly-resolved install/update record AND
@@ -833,10 +834,9 @@ export function createDefaultInstalledAgentSource(
                     onStatus,
                 );
                 // The source assigns the authoritative dispatcher name. The
-                // source's `materialize` already persists its own re-resolution
-                // handle (feed: the spec; catalog: the key; path: the path), so
-                // `@package update` can reconstruct the candidate later - no
-                // host-side key backfill needed.
+                // source's `materialize` persists its own load/update handle
+                // (feed: the requested spec; catalog: the key; path: the path),
+                // so the host does not need source-specific key backfill.
                 const record: InstalledAgentRecord = { ...resolved, name };
                 // Build the shared per-agent provider AND structurally validate
                 // its freshly-materialized manifest BEFORE persisting: a
@@ -1008,24 +1008,18 @@ export function createDefaultInstalledAgentSource(
             assertNameFree(name);
             busy.add(name);
             try {
-                // Look up the recorded provenance and re-resolve against its
-                // recorded source. The whole materialize runs
-                // first; the old record is overwritten only after it succeeds,
-                // so a failed update is a no-op.
+                // Look up the recorded provenance and ask its source to update
+                // it. The source-owned update runs first; the old record is
+                // overwritten only after it succeeds, so a failed update is a
+                // no-op.
                 const existing = readAgentsJson(instanceDir)?.agents[name];
                 if (existing === undefined) {
                     throw new Error(`Agent '${name}' not found`);
                 }
-                // Re-resolve + materialize against the recorded source. The
-                // source that produced the record handles the whole re-resolution
-                // (which handle to read, how `range` applies, and
-                // corrupt-record validation) via InstallSource.reresolve; the
-                // registry runs it + materialize under the shared limiter and
-                // preserves the re-resolution handle so a later update still
-                // works.
-                const resolved = await registry.reresolve(existing, {
+                const updateResult = await registry.update(existing, {
                     range,
                 });
+                const resolved = updateResult.record;
                 const record: InstalledAgentRecord = { ...resolved, name };
                 // Persist the v2 record only at the barrier COMMIT (in
                 // `onDecided` below), NOT here: while the swap is in flight the
@@ -1041,8 +1035,8 @@ export function createDefaultInstalledAgentSource(
                     current.agents[name] = record;
                     writeAgentsJson(instanceDir, current);
                 };
-                // Same-version no-op: a content-addressed feed
-                // re-resolution that lands on a byte-identical install root means
+                // Same-version no-op: a source-owned update that lands on a
+                // byte-identical content-addressed install root means
                 // the exact same package+version is already installed and serving
                 // — the disruptive barrier swap would tear the live agent down
                 // and bring the identical version back up for nothing. Skip it:
@@ -1051,10 +1045,7 @@ export function createDefaultInstalledAgentSource(
                 // provider or GC. Gated on `installRoot` being DEFINED so
                 // path/catalog/legacy records (no root) always re-swap and still
                 // pick up an in-place manifest edit.
-                if (
-                    record.installRoot !== undefined &&
-                    record.installRoot === existing.installRoot
-                ) {
+                if (updateResult.status === "no-op") {
                     writeInstalledRecord();
                     onOutcome?.("updated");
                     return;

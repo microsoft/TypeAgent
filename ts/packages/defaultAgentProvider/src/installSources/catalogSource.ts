@@ -47,8 +47,8 @@ function loadCatalog(file: string): AgentCatalog {
 //   find        = map lookup in the catalog JSON
 //   materialize = record data `path` (relative paths resolve against the
 //                 catalog dir) or `module`; carries execMode; stores the key
-//                 in `ref` (its re-resolution handle)
-//   reresolve   = re-look-up the catalog key carried in the candidate's `ref`
+//                 in `ref` so load can follow the current catalog entry
+//   load        = re-look-up the catalog key carried in the record's `ref`
 // `ref` is an agent short name (the catalog key).
 //
 // A catalog entry with a `path` becomes a path-resolved record (omits
@@ -129,8 +129,8 @@ export function createCatalogSource(
             if (handle === undefined) {
                 return undefined; // malformed entry dropped -> non-match
             }
-            // `ref` carries the matched catalog key for installer-level
-            // naming/re-resolution decisions (catalog records have no `ref`).
+            // `ref` carries the matched catalog key for installer-level naming
+            // and load refresh decisions.
             const candidate: ResolvedCandidate = { source: config.name, ref };
             if (handle.path !== undefined) {
                 candidate.path = handle.path;
@@ -142,22 +142,37 @@ export function createCatalogSource(
             }
             return candidate;
         },
-        async reresolve(
-            candidate: ResolvedCandidate,
-            _opts: { range?: string | undefined } | undefined,
+        load(
+            record: { ref?: string },
             onWarn?: SourceWarning,
-        ): Promise<ResolvedCandidate | undefined> {
-            // The catalog key is the handle, carried in the candidate's `ref`
-            // (set by find at install and preserved on the record). `range` is
-            // meaningless for a catalog and ignored. A candidate without a key
-            // is corrupt; a dropped/removed key re-looks-up to undefined -> host
-            // reports it is no longer resolvable.
-            if (candidate.ref === undefined) {
+        ): MaterializedInstallRecord | undefined {
+            if (record.ref === undefined) {
                 throw new Error(
-                    `catalog candidate has no key to re-resolve (corrupt record).`,
+                    `catalog record has no key to load from (corrupt record).`,
                 );
             }
-            return this.find(candidate.ref, onWarn);
+            const entry = read(onWarn).agents[record.ref];
+            if (entry === undefined) {
+                return undefined;
+            }
+            const handle = entryHandle(record.ref, entry, onWarn);
+            if (handle === undefined) {
+                return undefined;
+            }
+            const loaded: MaterializedInstallRecord = {
+                kind: "npm",
+                source: config.name,
+                ref: record.ref,
+            };
+            if (entry.execMode !== undefined) {
+                loaded.loaderConfig = { execMode: entry.execMode };
+            }
+            if (handle.path !== undefined) {
+                loaded.path = handle.path;
+            } else if (handle.module !== undefined) {
+                loaded.module = handle.module;
+            }
+            return loaded;
         },
         async materialize(
             candidate: ResolvedCandidate,
@@ -169,8 +184,8 @@ export function createCatalogSource(
             if (candidate.loaderConfig !== undefined) {
                 record.loaderConfig = candidate.loaderConfig;
             }
-            // The catalog key is this source's re-resolution handle: `find`
-            // (and `reresolve`, which calls it) always set it, so a candidate
+            // The catalog key is this source's load handle: `find` always sets
+            // it, so a candidate
             // without one is an invariant violation - fail fast rather than
             // persist a record `@package update` can never re-look-up. Stored even when
             // the agent was installed under a different dispatcher name than its
