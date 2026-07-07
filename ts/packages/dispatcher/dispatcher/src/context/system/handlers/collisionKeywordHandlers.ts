@@ -20,7 +20,7 @@ import {
     displayResult,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { KeywordVector } from "../../contextSelector/keywordVector.js";
 
 type Target = { schemaName: string; actionName: string; id: string };

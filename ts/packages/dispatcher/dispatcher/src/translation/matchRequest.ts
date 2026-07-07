@@ -24,6 +24,7 @@ import {
     isCollision,
     resolveGrammarCollision,
     resolveGrammarRegistryFirst,
+    toCandidate,
 } from "./matchCollision.js";
 import { resolveContextSelector } from "./matchContextSelector.js";
 import { displayInfo } from "@typeagent/agent-sdk/helpers/display";
@@ -308,6 +309,7 @@ export async function matchRequest(
                 validated,
                 systemContext,
                 request,
+                toCandidate(validated[0], systemContext),
             );
             if (outcome.kind === "resolve") {
                 decision = { kind: "match", match: outcome.match };

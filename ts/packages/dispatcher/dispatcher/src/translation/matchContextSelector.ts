@@ -10,13 +10,13 @@
 // telemetry.
 
 import { MatchResult } from "agent-cache";
-import { CommandHandlerContext } from "../context/commandHandlerContext.js";
+import type { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import {
     CollisionCandidate,
     emitCollisionEvent,
 } from "../context/collisionTelemetry.js";
 import { getAppAgentName } from "./agentTranslators.js";
-import { toCandidate, getPrimary } from "./matchCollision.js";
+import { getPrimary } from "./matchResultUtils.js";
 import {
     CandidateScore,
     ScorerCandidate,
@@ -72,11 +72,14 @@ function toTelemetryCandidates(scores: CandidateScore[]): CollisionCandidate[] {
 
 // Resolve a grammar-path collision by topical proximity, abstain, or skip.
 // Assumes the caller confirmed `isCollision` and that `contextSelector.detect`
-// is on.
+// is on. `firstMatchCandidate` (what first-match would have picked, i.e.
+// validated[0]) is supplied by the caller — it owns `toCandidate`, keeping this
+// orchestrator off the command-context dependency cycle.
 export function resolveContextSelector(
     validated: MatchResult[],
     ctx: CommandHandlerContext,
     request: string,
+    firstMatchCandidate: CollisionCandidate,
 ): ContextSelectorOutcome {
     const cfg = ctx.session.getConfig().collision;
     const startedAt = performance.now();
@@ -123,10 +126,9 @@ export function resolveContextSelector(
     );
 
     const telemetryCandidates = toTelemetryCandidates(decision.ranked);
-    // What first-match would have picked — preserved so the rollout can compare
-    // treatment vs control even when contextSelector short-circuits the strategy
-    // (§13). validated[0] is the cache's heuristic-best.
-    const firstMatchCandidate = toCandidate(validated[0], ctx);
+    // `firstMatchCandidate` (what first-match would have picked) is passed in by
+    // the caller — preserved so the rollout can compare treatment vs control even
+    // when contextSelector short-circuits the strategy (§13).
     const elapsedMs = performance.now() - startedAt;
 
     if (decision.kind === "abstain") {

@@ -14,6 +14,7 @@ import {
     emitCollisionEvent,
 } from "../context/collisionTelemetry.js";
 import { getAppAgentName } from "./agentTranslators.js";
+import { getPrimary } from "./matchResultUtils.js";
 import { ClarifyMultipleAgentMatches } from "../context/dispatcher/schema/clarifyActionSchema.js";
 import { buildClarifyMultipleAgentMatches } from "./clarifyHelpers.js";
 import {
@@ -34,17 +35,6 @@ export type GrammarCollisionDecision =
      * `pickInitialSchema` pins the schema to the chosen candidate.
      */
     | { kind: "fallthrough" };
-
-export function getPrimary(match: MatchResult): {
-    schemaName: string;
-    actionName: string;
-} {
-    const first = match.match.actions[0]?.action;
-    return {
-        schemaName: first?.schemaName ?? "",
-        actionName: first?.actionName ?? "",
-    };
-}
 
 /**
  * Build a `CollisionCandidate` from a cache `MatchResult`, propagating

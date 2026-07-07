@@ -4,6 +4,7 @@
 import { MatchResult } from "agent-cache";
 import type { CommandHandlerContext } from "../src/context/commandHandlerContext.js";
 import { resolveContextSelector } from "../src/translation/matchContextSelector.js";
+import { toCandidate } from "../src/translation/matchCollision.js";
 import { ContextVector } from "../src/context/contextSelector/conversationSignal.js";
 import { CollisionEvent } from "../src/context/collisionTelemetry.js";
 
@@ -68,6 +69,21 @@ function vector(entries: Record<string, number>): ContextVector {
     return new Map(Object.entries(entries));
 }
 
+// Mirror matchRequest: it computes firstMatchCandidate from validated[0] via
+// toCandidate and passes it into resolveContextSelector.
+function callResolve(
+    matches: MatchResult[],
+    ctx: CommandHandlerContext,
+    request: string,
+) {
+    return resolveContextSelector(
+        matches,
+        ctx,
+        request,
+        toCandidate(matches[0], ctx),
+    );
+}
+
 describe("resolveContextSelector", () => {
     it("resolves to the topical winner and emits a context-weight event", () => {
         const { ctx, events } = makeCtx({
@@ -77,11 +93,7 @@ describe("resolveContextSelector", () => {
                 "list.addItems": new Set(["grocery", "shopping"]),
             },
         });
-        const res = resolveContextSelector(
-            [excelMatch, listMatch],
-            ctx,
-            "add a row",
-        );
+        const res = callResolve([excelMatch, listMatch], ctx, "add a row");
         expect(res.kind).toBe("resolve");
         if (res.kind === "resolve") {
             expect(res.match).toBe(excelMatch);
@@ -123,11 +135,7 @@ describe("resolveContextSelector", () => {
             wildcardCharCount: 0,
         } as unknown as MatchResult;
         // weak first, strong second — dedup must keep the stronger one.
-        const res = resolveContextSelector(
-            [weak, strong, listMatch],
-            ctx,
-            "add a row",
-        );
+        const res = callResolve([weak, strong, listMatch], ctx, "add a row");
         expect(res.kind).toBe("resolve");
         if (res.kind === "resolve") {
             expect(res.match).toBe(strong);
@@ -142,11 +150,7 @@ describe("resolveContextSelector", () => {
                 "list.addItems": new Set(),
             },
         });
-        const res = resolveContextSelector(
-            [excelMatch, listMatch],
-            ctx,
-            "add a row",
-        );
+        const res = callResolve([excelMatch, listMatch], ctx, "add a row");
         expect(res.kind).toBe("abstain");
         expect(events[0].note).toBe("abstain:coverage");
     });
@@ -164,11 +168,7 @@ describe("resolveContextSelector", () => {
                 "list.addItems": new Set(["grocery", "shopping"]),
             },
         });
-        const res = resolveContextSelector(
-            [excelMatch, listMatch],
-            ctx,
-            "add a row",
-        );
+        const res = callResolve([excelMatch, listMatch], ctx, "add a row");
         expect(res.kind).toBe("abstain");
         expect(events[0].note).toBe("abstain:margin");
     });
@@ -181,11 +181,7 @@ describe("resolveContextSelector", () => {
                 "list.addItems": new Set(["grocery", "shopping"]),
             },
         });
-        const res = resolveContextSelector(
-            [excelMatch, listMatch],
-            ctx,
-            "add a row",
-        );
+        const res = callResolve([excelMatch, listMatch], ctx, "add a row");
         expect(res.kind).toBe("abstain");
         expect(events[0].note).toBe("abstain:no-signal");
     });
@@ -195,7 +191,7 @@ describe("resolveContextSelector", () => {
             contextVector: vector({ spreadsheet: 5 }),
             keywords: { "excel.addRow": new Set(["spreadsheet"]) },
         });
-        const res = resolveContextSelector(
+        const res = callResolve(
             [excelMatch, fakeMatch("excel", "addRow")],
             ctx,
             "add a row",
