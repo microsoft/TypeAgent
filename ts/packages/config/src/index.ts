@@ -49,7 +49,10 @@ export {
 } from "./runtime/regions.js";
 export {
     IDENTITY,
+    DEFAULT_API_TYPE,
     authModeFromString,
+    apiTypeFromString,
+    type ApiType,
     type AuthMode,
     type AzureOpenAIConfig,
     type AzureStorageConfig,

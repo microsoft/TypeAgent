@@ -169,6 +169,13 @@ export function azureApiSettingsFromConfig(
             ? { enableModelRequestLogging: true }
             : {}),
         ...(auth.tokenProvider ? { tokenProvider: auth.tokenProvider } : {}),
+        // Surface the endpoint's wire protocol so the model layer can
+        // pick the right ProviderAdapter. Omitted when the endpoint uses
+        // the default (chat_completions) so the settings object stays
+        // identical to today for back-compat configs.
+        ...(endpoint.apiType !== undefined
+            ? { apiType: endpoint.apiType }
+            : {}),
     };
     return settings;
 }

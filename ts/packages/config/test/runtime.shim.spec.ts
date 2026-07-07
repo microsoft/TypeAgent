@@ -24,6 +24,47 @@ describe("configToEnv: shim projection", () => {
         }
     });
 
+    test("round-trips a non-default apiType through the POOL override", () => {
+        // A non-default apiType must survive buildConfig -> configToEnv so
+        // that an unmigrated consumer reading the flat env sees it. The
+        // POOL override is the only channel that can express apiType.
+        const flat: FlatEnv = {
+            AZURE_OPENAI_ENDPOINT_GPT_5_CODEX_EASTUS: "https://codex-eastus",
+            AZURE_OPENAI_API_KEY_GPT_5_CODEX_EASTUS: "identity",
+            AZURE_OPENAI_POOL_GPT_5_CODEX:
+                "[{suffix:GPT_5_CODEX_EASTUS,region:eastus,mode:PAYG,priority:2,apiType:openai_responses}]",
+        };
+        const projected = configToEnv(buildConfig(flat));
+        expect(projected.AZURE_OPENAI_ENDPOINT_GPT_5_CODEX_EASTUS).toBe(
+            "https://codex-eastus",
+        );
+        // The emitted POOL override carries the apiType back out.
+        expect(projected.AZURE_OPENAI_POOL_GPT_5_CODEX).toContain(
+            "apiType:openai_responses",
+        );
+        // And feeding the projection back in yields the same apiType.
+        const reparsed = buildConfig(projected);
+        const ep = reparsed.azureOpenAI.deployments
+            .get("gpt_5_codex")!
+            .endpoints.find((e) => e.region === "eastus")!;
+        expect(ep.apiType).toBe("openai_responses");
+    });
+
+    test("default (omitted) apiType is not emitted into the POOL override", () => {
+        // Back-compat: a plain chat_completions endpoint must project to the
+        // exact same env it came from, with no POOL override introduced.
+        const flat: FlatEnv = {
+            AZURE_OPENAI_API_KEY: "identity",
+            AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://4o-east",
+            AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS: "identity",
+        };
+        const projected = configToEnv(buildConfig(flat));
+        for (const [k, v] of Object.entries(flat)) {
+            expect(projected[k]).toBe(v);
+        }
+        expect(projected.AZURE_OPENAI_POOL_GPT_4_O).toBeUndefined();
+    });
+
     test("emits tuning knobs as strings, response_format as 1/0", () => {
         const config = buildConfig({
             AZURE_OPENAI_RESPONSE_FORMAT: "1",

@@ -29,6 +29,9 @@ import {
     DeploymentMode,
     IDENTITY,
     authModeFromString,
+    apiTypeFromString,
+    DEFAULT_API_TYPE,
+    type ApiType,
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -76,6 +79,11 @@ function endpointToYaml(
     // (PTU=1, PAYG=2). Keeps the YAML quiet for the common case.
     const defaultPriority = ep.mode === "PTU" ? 1 : 2;
     if (ep.priority !== defaultPriority) out.priority = ep.priority;
+    // Only emit apiType when it differs from the default so back-compat
+    // configs (chat_completions) stay byte-identical.
+    if (ep.apiType !== undefined && ep.apiType !== DEFAULT_API_TYPE) {
+        out.apiType = ep.apiType;
+    }
     return out;
 }
 
@@ -580,6 +588,7 @@ function readEndpointEntry(
     capacity?: number | null;
     region?: string;
     tpm?: number;
+    apiType?: ApiType;
 } {
     const obj = asObject(node, where);
     const out: ReturnType<typeof readEndpointEntry> = {
@@ -607,6 +616,17 @@ function readEndpointEntry(
         out.capacity = asNumber(obj.capacity, `${where}.capacity`);
     }
     if (obj.tpm !== undefined) out.tpm = asNumber(obj.tpm, `${where}.tpm`);
+    if (obj.apiType !== undefined) {
+        const raw = asString(obj.apiType, `${where}.apiType`);
+        const at = apiTypeFromString(raw);
+        if (at === undefined) {
+            throw new Error(
+                `Invalid apiType at '${where}.apiType': expected ` +
+                    `chat_completions, openai_responses, or anthropic_messages.`,
+            );
+        }
+        out.apiType = at;
+    }
     return out;
 }
 
@@ -754,7 +774,9 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
                 if (
                     capacity !== undefined ||
                     ep.tpm !== undefined ||
-                    priority !== defPriority
+                    priority !== defPriority ||
+                    (ep.apiType !== undefined &&
+                        ep.apiType !== DEFAULT_API_TYPE)
                 ) {
                     const o: Record<string, unknown> = {
                         suffix,
@@ -764,6 +786,12 @@ function emitAzureOpenAI(node: unknown, out: FlatEnv): void {
                     if (capacity !== undefined) o.capacity = capacity;
                     if (ep.tpm !== undefined) o.tpm = ep.tpm;
                     o.priority = priority;
+                    if (
+                        ep.apiType !== undefined &&
+                        ep.apiType !== DEFAULT_API_TYPE
+                    ) {
+                        o.apiType = ep.apiType;
+                    }
                     overrides.push(o);
                 }
             }

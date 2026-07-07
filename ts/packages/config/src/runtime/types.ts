@@ -38,6 +38,39 @@ export function authModeFromString(s: string | undefined): AuthMode {
 /** Whether a deployment is pay-as-you-go or provisioned-throughput. */
 export type DeploymentMode = "PAYG" | "PTU";
 
+/**
+ * Wire protocol / request-response shape a deployment endpoint speaks.
+ * The pool routing layer is unaffected by this — it picks *which*
+ * endpoint to call; `apiType` then selects the `ProviderAdapter` that
+ * encodes the request body/headers and decodes the response.
+ *
+ * - `chat_completions` (default): the OpenAI / Azure OpenAI
+ *   `/chat/completions` shape TypeAgent has always spoken. Omitting
+ *   `apiType` is exactly equivalent to this value, so existing configs
+ *   are byte-for-byte unchanged.
+ * - `openai_responses`: the OpenAI `/responses` shape.
+ * - `anthropic_messages`: the Anthropic `/v1/messages` shape.
+ */
+export type ApiType =
+    | "chat_completions"
+    | "openai_responses"
+    | "anthropic_messages";
+
+/** The api-type assumed when a deployment/endpoint omits `apiType`. */
+export const DEFAULT_API_TYPE: ApiType = "chat_completions";
+
+/** Narrow an arbitrary string to a known `ApiType`, else `undefined`. */
+export function apiTypeFromString(s: string | undefined): ApiType | undefined {
+    if (
+        s === "chat_completions" ||
+        s === "openai_responses" ||
+        s === "anthropic_messages"
+    ) {
+        return s;
+    }
+    return undefined;
+}
+
 /** A single regional endpoint of an Azure OpenAI deployment. */
 export interface DeploymentEndpoint {
     /** Full chat/completions/embeddings/images URL. */
@@ -57,6 +90,13 @@ export interface DeploymentEndpoint {
     readonly capacity?: number | undefined;
     /** Declared TPM (for pool routing weight); from legacy POOL override JSON. */
     readonly tpm?: number | undefined;
+    /**
+     * Wire protocol this endpoint speaks. Absent ⇒ `chat_completions`
+     * (see {@link DEFAULT_API_TYPE}); the builder never fabricates this
+     * field for a default endpoint, so the round-trip stays lossless and
+     * pre-existing configs project back to identical env vars.
+     */
+    readonly apiType?: ApiType | undefined;
 }
 
 /**

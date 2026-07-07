@@ -30,10 +30,12 @@ import {
 import {
     AuthMode,
     authModeFromString,
+    apiTypeFromString,
     Config,
     Deployment,
     DeploymentEndpoint,
     DeploymentMode,
+    type ApiType,
     type AzureOpenAIConfig,
     type EmbeddingConfig,
     type EmbeddingProviderMode,
@@ -100,6 +102,7 @@ function makeEndpoint(
     capacity?: number,
     priority?: number,
     tpm?: number,
+    apiType?: ApiType,
 ): DeploymentEndpoint {
     const ep: DeploymentEndpoint = {
         endpoint,
@@ -109,6 +112,7 @@ function makeEndpoint(
         priority: priority ?? defaultPriority(mode),
         ...(capacity !== undefined ? { capacity } : {}),
         ...(tpm !== undefined ? { tpm } : {}),
+        ...(apiType !== undefined ? { apiType } : {}),
     };
     return ep;
 }
@@ -326,6 +330,7 @@ interface PartialEndpoint {
     capacity?: number;
     priority?: number;
     tpm?: number;
+    apiType?: ApiType;
 }
 
 /** Per-suffix overrides parsed from `AZURE_OPENAI_POOL_<DEPLOYMENT>` JSON. */
@@ -336,6 +341,7 @@ interface PoolOverride {
     capacity?: number;
     priority?: number;
     tpm?: number;
+    apiType?: ApiType;
 }
 
 /**
@@ -378,6 +384,10 @@ function parsePoolOverride(
             if (typeof o.capacity === "number") ov.capacity = o.capacity;
             if (typeof o.priority === "number") ov.priority = o.priority;
             if (typeof o.tpm === "number") ov.tpm = o.tpm;
+            if (typeof o.apiType === "string") {
+                const at = apiTypeFromString(o.apiType);
+                if (at !== undefined) ov.apiType = at;
+            }
             out.push(ov);
         }
     }
@@ -458,6 +468,7 @@ function collectDeployments(
                 if (ov.capacity !== undefined) partial.capacity = ov.capacity;
                 if (ov.priority !== undefined) partial.priority = ov.priority;
                 if (ov.tpm !== undefined) partial.tpm = ov.tpm;
+                if (ov.apiType !== undefined) partial.apiType = ov.apiType;
             }
         }
     }
@@ -508,6 +519,7 @@ function collectDeployments(
                     partial.capacity,
                     partial.priority,
                     partial.tpm,
+                    partial.apiType,
                 ),
             );
         }
