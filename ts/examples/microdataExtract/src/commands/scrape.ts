@@ -244,7 +244,7 @@ export default class Scrape extends Command {
         outputFile: string,
     ): Promise<void> {
         const page = await browser.newPage();
-        let allRestaurantData: any[] = [];
+        const allRestaurantData: any[] = [];
 
         let currentPage = 1;
         let nextPageUrl: string | null = baseUrl;

@@ -21,15 +21,18 @@ export function activate(context: vscode.ExtensionContext) {
     // The command has been defined in the package.json file
     // Now provide the implemeninitializeWStation of the command with registerCommand
     // The commandId parameter must match the command field in package.json
-    let disposable = vscode.commands.registerCommand("coda-shell.start", () => {
-        // The code you place here will be executed every time your command is executed
-        // Display a message box to the user
-        vscode.window.showInformationMessage("Hello World from Coda!");
-    });
+    const disposable = vscode.commands.registerCommand(
+        "coda-shell.start",
+        () => {
+            // The code you place here will be executed every time your command is executed
+            // Display a message box to the user
+            vscode.window.showInformationMessage("Hello World from Coda!");
+        },
+    );
 
     context.subscriptions.push(disposable);
     // make a command to list to console all of the commands available
-    let listCommands = vscode.commands.registerCommand(
+    const listCommands = vscode.commands.registerCommand(
         "coda-shell.listCommands",
         () => {
             vscode.commands.getCommands().then((commands) => {

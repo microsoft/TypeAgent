@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Entity Graph Visualizer - Cytoscape.js integration for entity visualization
-declare var cytoscape: any;
+declare let cytoscape: any;
 
 interface EntityData {
     name: string;
@@ -90,7 +90,7 @@ export class EntityGraphVisualizer {
             const nodeCount = this.cy ? this.cy.nodes().length : 0;
 
             // Configure WebGL settings based on graph size
-            let webglConfig = {
+            const webglConfig = {
                 name: "canvas",
                 webgl: true,
                 webglTexSize: 2048,

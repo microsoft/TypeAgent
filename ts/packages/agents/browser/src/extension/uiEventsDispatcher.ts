@@ -296,7 +296,7 @@ window.addEventListener("message", async (event: any) => {
         const { requestId, payload } = data;
 
         try {
-            var message = payload;
+            const message = payload;
             console.log("received", message);
             const actionName =
                 message.actionName ?? message.fullActionName.split(".").at(-1);

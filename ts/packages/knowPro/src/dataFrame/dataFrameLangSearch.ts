@@ -140,8 +140,8 @@ function facetTermsToSearchTerms(
 
 function typeDefForDataFrames(dataFrames: DataFrameCollection): string {
     let text = "export type KnownFacet = ";
-    let types: string[] = [];
-    for (let [dfName, df] of dataFrames) {
+    const types: string[] = [];
+    for (const [dfName, df] of dataFrames) {
         for (const colName of df.columns.keys()) {
             types.push(`"${dfName}.${colName}"`);
         }

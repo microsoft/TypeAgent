@@ -52,7 +52,6 @@ export function createPropertySearchTerm(
     exactMatchValue: boolean = false,
 ): PropertySearchTerm {
     let propertyName: KnowledgePropertyName | SearchTerm;
-    let propertyValue: SearchTerm;
     // Check if this is one of our well known predefined values
     switch (name) {
         default:
@@ -69,7 +68,7 @@ export function createPropertySearchTerm(
             propertyName = name;
             break;
     }
-    propertyValue = createSearchTerm(value);
+    const propertyValue: SearchTerm = createSearchTerm(value);
     if (exactMatchValue) {
         // No related terms should be matched for this term
         propertyValue.relatedTerms = [];
@@ -270,7 +269,7 @@ export function isSearchGroupTerm(
 }
 
 function splitTermValues(term: string, splitChar: string): string[] {
-    let allTermStrings = kpLib.split(term, splitChar, {
+    const allTermStrings = kpLib.split(term, splitChar, {
         trim: true,
         removeEmpty: true,
     });

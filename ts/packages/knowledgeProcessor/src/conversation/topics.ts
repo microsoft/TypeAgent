@@ -272,7 +272,9 @@ export async function createTopicMerger<TTopicId = string>(
 ): Promise<TopicMerger<TTopicId>> {
     const topicExtractor = createTopicExtractor(model);
     let childSize: number = await childIndex.sequence.size();
-    let recentTopics = createRecentItemsWindow<Topic>(settings.mergeWindowSize);
+    const recentTopics = createRecentItemsWindow<Topic>(
+        settings.mergeWindowSize,
+    );
     return {
         settings,
         next,
@@ -328,7 +330,7 @@ export async function createTopicMerger<TTopicId = string>(
         if (topics.length === 0) {
             return undefined;
         }
-        let topicsResponse = await topicExtractor.mergeTopics(
+        const topicsResponse = await topicExtractor.mergeTopics(
             topics,
             settings.trackRecent ? recentTopics.getUnique() : undefined,
         );
@@ -595,7 +597,11 @@ export async function createTopicIndexOnStorage<
         }
         const topicIds: TopicId[] = [];
         for (let i = 0; i < topics.length; ++i) {
-            let id = await add(topics[i], sourceName, ids ? ids[i] : undefined);
+            const id = await add(
+                topics[i],
+                sourceName,
+                ids ? ids[i] : undefined,
+            );
             topicIds.push(id);
         }
 
@@ -654,7 +660,7 @@ export async function createTopicIndexOnStorage<
         rawTerms?: string[] | undefined,
         possibleIds?: TopicId[] | undefined,
     ): Promise<TopicSearchResult<TopicId>> {
-        let results = createSearchResults<TopicId>();
+        const results = createSearchResults<TopicId>();
         if (filter.timeRange) {
             results.temporalSequence = await sequence.getEntriesInRange(
                 toStartDate(filter.timeRange.startDate),

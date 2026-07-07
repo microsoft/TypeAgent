@@ -42,13 +42,13 @@ export async function searchConversationWithJoin(
         rawQuery,
     );
     // Also match any messages with matching data frame columns
-    let dataFrameMatches = searchDataFrames(
+    const dataFrameMatches = searchDataFrames(
         dfConversation.dataFrames,
         searchTermGroup,
         options,
     );
 
-    let joinedMatches = intersectScoredMessageOrdinals(
+    const joinedMatches = intersectScoredMessageOrdinals(
         conversationMatches?.messageMatches,
         dataFrameMatches,
     );

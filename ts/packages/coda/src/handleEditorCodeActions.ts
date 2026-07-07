@@ -573,7 +573,7 @@ export async function handleCreateCodeBlockAction(
             };
         }
 
-        let insertPos = resolvePosition(editor, position);
+        const insertPos = resolvePosition(editor, position);
         if (!insertPos) {
             return {
                 handled: false,
@@ -895,7 +895,7 @@ export async function handleUpsertLinesAction(
         }
 
         const pos = resolvePosition(editor, position);
-        let targetLine = pos.line;
+        const targetLine = pos.line;
 
         await editor.edit((editBuilder) => {
             if (operation === "insert") {

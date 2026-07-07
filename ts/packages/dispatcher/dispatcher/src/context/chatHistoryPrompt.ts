@@ -32,7 +32,7 @@ export function serializeEntityForPrompt(
         if (duplicate) {
             // Last-write-wins on duplicate facet names. Surface via debug so we can tell
             // whether the flat shape is silently losing data in practice.
-            // eslint-disable-next-line no-console
+
             console.warn(
                 `serializeEntityForPrompt: duplicate facet name in entity '${entity.name}' — last-write-wins`,
             );

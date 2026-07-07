@@ -41,7 +41,7 @@ export default class Merge extends Command {
         return urls.map((rawUrl) => {
             try {
                 const url = new URL(rawUrl);
-                let allowedHosts = ["tripadvisor.com", "www.tripadvisor.com"];
+                const allowedHosts = ["tripadvisor.com", "www.tripadvisor.com"];
 
                 if (allowedHosts.includes(url.hostname)) {
                     return `https://www.tripadvisor.com${url.pathname}${url.search}`;

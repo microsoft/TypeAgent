@@ -67,7 +67,7 @@ export async function captureAnnotatedScreenshot(
 
                     ctx.fillStyle = "red";
                     ctx.font = "bold 14px Arial";
-                    var textWidth = ctx.measureText(
+                    const textWidth = ctx.measureText(
                         action.cssSelector ?? "",
                     ).width;
 

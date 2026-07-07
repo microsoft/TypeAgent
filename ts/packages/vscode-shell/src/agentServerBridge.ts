@@ -52,6 +52,12 @@ export type {
     BridgeFromWebviewMessage,
 } from "./bridge/messages.js";
 
+// Auto-reconnect gives up after this many failed attempts and surfaces a
+// "stopped" ribbon with manual Retry / Start links instead of retrying
+// forever. With the 2s→30s backoff this is roughly a 5-minute window; a
+// manual retry resets the counter and resumes from here.
+const MAX_RECONNECT_ATTEMPTS = 12;
+
 /** HTML-escape untrusted strings (names, ids, errors) for inline notification HTML. */
 function escapeHtml(str: string): string {
     return str
@@ -146,6 +152,14 @@ export class AgentServerBridge {
     });
     private reconnectRemainingSec: number | undefined;
     private lastConnectError: string | undefined;
+    // Set once auto-reconnect has exhausted MAX_RECONNECT_ATTEMPTS. While true,
+    // scheduleReconnect() is a no-op (the ribbon shows a "stopped" state with
+    // manual Retry / Start links). A manual retry clears it.
+    private reconnectStopped = false;
+    // Integrated terminal used by the "Start server" recovery action; reused
+    // across clicks and cleared when the user closes it.
+    private serverTerminal: vscode.Terminal | undefined;
+    private serverTerminalCloseSub: vscode.Disposable | undefined;
     // Suppress disconnect handler during intentional reconnects
     private isSwitching = false;
     // Track which session we've already replayed history for, so we
@@ -367,7 +381,7 @@ export class AgentServerBridge {
             // Join the session with our ClientIO implementation
             const clientIO = this.createClientIO();
 
-            let joinOpts: any = {
+            const joinOpts: any = {
                 clientType: "extension",
                 // filter: false so multiple tabs sharing the same session all
                 // receive setDisplay/appendDisplay broadcasts. Per-connection
@@ -478,6 +492,7 @@ export class AgentServerBridge {
             this.reconnectCountdown = undefined;
         }
         this.reconnectRemainingSec = undefined;
+        this.reconnectStopped = false;
         this.broadcastReconnect("cleared");
         // Tear down the per-session completion controller so a future
         // connect() rebuilds it against the new dispatcher.
@@ -513,6 +528,8 @@ export class AgentServerBridge {
             clearInterval(this.reconnectCountdown);
             this.reconnectCountdown = undefined;
         }
+        this.serverTerminalCloseSub?.dispose();
+        this.serverTerminalCloseSub = undefined;
         if (this.session) {
             AgentServerBridge.unregisterForSession(
                 this.session.sessionId,
@@ -595,6 +612,7 @@ export class AgentServerBridge {
                     name: s.name || s.sessionId.substring(0, 8),
                     clientCount: s.clientCount,
                     createdAt: s.createdAt,
+                    source: s.source,
                 })),
                 currentSessionId: this.session?.sessionId,
             });
@@ -1248,6 +1266,12 @@ export class AgentServerBridge {
                 break;
             case "disconnect":
                 await this.disconnect();
+                break;
+            case "retryConnection":
+                await this.retryConnection();
+                break;
+            case "startServer":
+                await this.startServer();
                 break;
             case "getStatus":
                 this.broadcastToWebviews({
@@ -2667,7 +2691,21 @@ export class AgentServerBridge {
     }
 
     private scheduleReconnect(): void {
-        if (this.reconnectTimer) {
+        if (this.reconnectTimer || this.reconnectStopped) {
+            return;
+        }
+        if (this.reconnectBackoff.attempt >= MAX_RECONNECT_ATTEMPTS) {
+            // Give up automatic retries after a bounded window rather than
+            // hammering a server that's clearly down. Surface a "stopped"
+            // ribbon with manual Retry / Start links; a manual retry resets
+            // the backoff and resumes from here.
+            this.reconnectStopped = true;
+            if (this.reconnectCountdown) {
+                clearInterval(this.reconnectCountdown);
+                this.reconnectCountdown = undefined;
+            }
+            this.reconnectRemainingSec = undefined;
+            this.broadcastReconnect("stopped");
             return;
         }
         // Seconds the shared exponential backoff says to wait before the next
@@ -2699,7 +2737,7 @@ export class AgentServerBridge {
     }
 
     private broadcastReconnect(
-        phase: "waiting" | "connecting" | "cleared",
+        phase: "waiting" | "connecting" | "stopped" | "cleared",
     ): void {
         this.broadcastToWebviews({
             type: "reconnectStatus",
@@ -2708,6 +2746,10 @@ export class AgentServerBridge {
             secondsRemaining:
                 phase === "waiting" ? this.reconnectRemainingSec : undefined,
             error: this.lastConnectError,
+            // Offer both manual-recovery links once we've stopped retrying.
+            // "start" is best-effort (runs typeagent.serverStartCommand); the
+            // handler guides the user to configure it when unset.
+            actions: phase === "stopped" ? ["retry", "start"] : undefined,
         });
     }
 
@@ -2721,8 +2763,82 @@ export class AgentServerBridge {
             this.reconnectCountdown = undefined;
         }
         this.reconnectRemainingSec = undefined;
+        this.reconnectStopped = false;
         this.reconnectBackoff.reset();
         this.lastConnectError = undefined;
         this.broadcastReconnect("cleared");
+    }
+
+    /**
+     * Manual retry from the "stopped" ribbon: clear the give-up state, reset
+     * the backoff so we start fresh, and attempt to connect now. Used by both
+     * the explicit Retry action and after the Start-server action launches the
+     * server (the connect retries on backoff until the server is up).
+     */
+    private async retryConnection(): Promise<void> {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = undefined;
+        }
+        if (this.reconnectCountdown) {
+            clearInterval(this.reconnectCountdown);
+            this.reconnectCountdown = undefined;
+        }
+        this.reconnectRemainingSec = undefined;
+        this.reconnectStopped = false;
+        this.reconnectBackoff.reset();
+        this.broadcastReconnect("connecting");
+        await this.connect();
+    }
+
+    /**
+     * Manual "Start server" recovery. Runs the user-configured
+     * `typeagent.serverStartCommand` in a dedicated integrated terminal, then
+     * resumes reconnect attempts. When no command is configured, guides the
+     * user to set one (the bundled extension can't locate the server binary
+     * on its own).
+     */
+    private async startServer(): Promise<void> {
+        const config = vscode.workspace.getConfiguration("typeagent");
+        const startCommand = config
+            .get<string>("serverStartCommand", "")
+            .trim();
+        if (!startCommand) {
+            const choice = await vscode.window.showInformationMessage(
+                "No agent-server start command is configured. Set " +
+                    "'typeagent.serverStartCommand' to launch the server from here.",
+                "Open Settings",
+            );
+            if (choice === "Open Settings") {
+                await vscode.commands.executeCommand(
+                    "workbench.action.openSettings",
+                    "typeagent.serverStartCommand",
+                );
+            }
+            return;
+        }
+        const terminal = this.getServerTerminal();
+        terminal.show(true);
+        terminal.sendText(startCommand, true);
+        // The server needs a moment to come up; retryConnection resets the
+        // backoff and the normal reconnect loop keeps trying until it's ready.
+        await this.retryConnection();
+    }
+
+    /** Reuse a single "TypeAgent Agent Server" terminal across Start clicks. */
+    private getServerTerminal(): vscode.Terminal {
+        if (this.serverTerminal) {
+            return this.serverTerminal;
+        }
+        const terminal = vscode.window.createTerminal("TypeAgent Agent Server");
+        this.serverTerminal = terminal;
+        this.serverTerminalCloseSub = vscode.window.onDidCloseTerminal((t) => {
+            if (t === this.serverTerminal) {
+                this.serverTerminal = undefined;
+                this.serverTerminalCloseSub?.dispose();
+                this.serverTerminalCloseSub = undefined;
+            }
+        });
+        return terminal;
     }
 }

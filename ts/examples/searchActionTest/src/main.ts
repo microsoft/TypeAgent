@@ -453,7 +453,7 @@ function createSyntheticLabel(syntheticResult: CalResult): string {
 export async function runTest(): Promise<void> {
     // Create Model
     //
-    let [_apiSettings, chatModel] = createModel(false);
+    const [_apiSettings, chatModel] = createModel(false);
 
     const chatTranslator = createChatTranslator<CalendarSearchAction>(
         chatModel,

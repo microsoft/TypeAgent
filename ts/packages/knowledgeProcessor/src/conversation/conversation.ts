@@ -708,8 +708,8 @@ export async function createConversation(
             getActionIndex(),
         ]);
         const results = createSearchResults();
-        for (let filter of filters) {
-            let topLevelTopicMatches =
+        for (const filter of filters) {
+            const topLevelTopicMatches =
                 options.topic &&
                 options.topic.useHighLevel &&
                 options.topicLevel === 1

@@ -104,7 +104,7 @@ function parseArgs(argv: string[]): Args {
                     'Usage: node azure-tts.mjs --text "..." [--voice NAME] [--style NAME] [--rate +0%] [--region R] [--resource RID] [--out FILE] [--no-play]',
                 );
                 process.exit(0);
-            // eslint-disable-next-line no-fallthrough
+
             default:
                 throw new Error(`Unknown argument: ${a}`);
         }

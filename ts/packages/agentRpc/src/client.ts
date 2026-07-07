@@ -83,8 +83,8 @@ type ObjectMap<T = unknown> = {
 };
 function createObjectMap<T = unknown>(): ObjectMap<T> {
     let nextObjectId = 0;
-    let objectIdMap = new Map<T, number>();
-    let objectMap = new Map<number, T>();
+    const objectIdMap = new Map<T, number>();
+    const objectMap = new Map<number, T>();
 
     function getId(obj: T) {
         let objectId = objectIdMap.get(obj);

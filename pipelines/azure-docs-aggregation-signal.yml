@@ -1,0 +1,54 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Signal pipeline for the docs-aggregation pipeline that lives in the Azure Repos
+# `docs` repo (msctoproj/AI_Systems). Its only purpose is to RUN (and therefore
+# complete) whenever TypeAgent's documentation sources change, so that the
+# docs-aggregation pipeline can chain off its completion via a
+# `resources.pipelines` trigger.
+#
+# WHY A SEPARATE PIPELINE
+#   Azure Pipelines does not fire `resources.repositories` triggers for GitHub
+#   repos, so docs-aggregation (whose source repo is the Azure Repos `docs` repo)
+#   cannot be triggered directly by a push to microsoft/TypeAgent. This pipeline's
+#   OWN source repo is microsoft/TypeAgent, so its CI `trigger` below DOES fire on
+#   push -- the same GitHub-App mechanism the smoke-tests pipeline uses to report
+#   status back to GitHub. Pipeline-completion triggers then reach across to
+#   docs-aggregation regardless of this pipeline's source-repo type, keeping the
+#   whole path secret-free (no PAT / REST call), which the org's no-stored-secrets
+#   policy requires.
+#
+# ONE-TIME SETUP (Azure DevOps project msctoproj/AI_Systems)
+#   Create a new pipeline from this file with source = microsoft/TypeAgent GitHub
+#   repo (reuse the smoke-tests GitHub service connection) and name it exactly
+#   "TypeAgent Docs Aggregation Signal" so docs-aggregation's
+#   resources.pipelines[].source matches.
+
+name: docs-aggregation-signal-$(Date:yyyyMMdd)$(Rev:.r)
+
+# CI only: fire on pushes to main that touch TypeAgent's documentation sources
+# (the DocFX docset under ts/docs and the package READMEs staged into it). Path
+# filters are prefix-based, so plain directory prefixes are used (no wildcards).
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - ts/docs
+      - ts/packages
+      - pipelines/azure-docs-aggregation-signal.yml
+
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  # The completion event -- not any produced output -- is the signal, so there is
+  # nothing to check out. `checkout: none` keeps each run to a few seconds.
+  - checkout: none
+  - script: |
+      echo "TypeAgent $(Build.SourceBranchName)@$(Build.SourceVersion) changed."
+      echo "Signaling the docs-aggregation pipeline to refresh the docset."
+    displayName: Signal docs aggregation

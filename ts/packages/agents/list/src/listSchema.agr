@@ -6,6 +6,14 @@
 // Types: wildcard = 1+ words, word = exactly 1 word
 
 // addItems - add one or more items to a list
+//
+// TODO: these rules bind a bare determiner as the list name — "add ham to the
+// list" / "add ham to that list" match here and yield listName="the" / "that"
+// instead of letting the LLM clarify which list. As a stopgap the translate
+// stability test marks that case with "skipGrammar" (see translate-e2e.json and
+// translateTestCommon.ts) so it bypasses grammar matching. Proper fix: constrain
+// $(listName:...) to reject bare determiners (the/a/an/this/that/these/those/
+// my/your/... + "list") via a registered entity type, then drop skipGrammar.
 <AddItems> = add $(item:wildcard) to (the)? (my)? $(listName:wildcard) list -> {
     actionName: "addItems",
     parameters: {

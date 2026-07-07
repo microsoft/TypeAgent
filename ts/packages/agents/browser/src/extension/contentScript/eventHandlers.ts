@@ -225,7 +225,7 @@ async function handleCrosswordChanged(url: string): Promise<void> {
 function setupPageEventListeners(): void {
     // Listen for custom events from PaleoDb
     document.addEventListener("fromPaleoDbAutomation", function (e: any) {
-        var message = e.detail;
+        const message = e.detail;
         console.log("received from PaleoDb:", message);
     });
 
@@ -233,7 +233,7 @@ function setupPageEventListeners(): void {
     document.addEventListener(
         "fromUIEventsDispatcher",
         async function (e: any) {
-            var message = e.detail;
+            const message = e.detail;
             console.log("received from UI Events:", message);
         },
     );

@@ -67,7 +67,7 @@ export function getLastResponseInEmailThread(emailText: string): string {
 
     let firstDelimiterAt = -1;
     for (const delimiter of delimiters) {
-        let index = emailText.indexOf(delimiter);
+        const index = emailText.indexOf(delimiter);
         if (
             index >= 0 &&
             (firstDelimiterAt == -1 || index < firstDelimiterAt)

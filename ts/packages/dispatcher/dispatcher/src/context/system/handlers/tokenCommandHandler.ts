@@ -37,7 +37,7 @@ class TokenDetailsCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Gets detailed LLM usage statistics.";
 
     public async run(context: ActionContext<CommandHandlerContext>) {
-        let retValue: string[] = [];
+        const retValue: string[] = [];
         for (const [t, tokens] of TokenCounter.getInstance().counters) {
             retValue.push(
                 `#${t}\n------------------\nPrompt: ${tokens.total.prompt_tokens}\nCompletion: ${tokens.total.completion_tokens}\nTotal: ${tokens.total.total_tokens}\n`,

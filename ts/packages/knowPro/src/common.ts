@@ -42,7 +42,7 @@ export type Scored<T = any> = {
  */
 
 export function compareTextLocation(x: TextLocation, y: TextLocation): number {
-    let cmp = x.messageOrdinal - y.messageOrdinal;
+    const cmp = x.messageOrdinal - y.messageOrdinal;
     if (cmp !== 0) {
         return cmp;
     }
@@ -67,13 +67,13 @@ export function isInTextRange(
 ): boolean {
     // outer start must be <= inner start
     // inner end must be < outerEnd (which is exclusive)
-    let cmpStart = compareTextLocation(outerRange.start, innerRange.start);
+    const cmpStart = compareTextLocation(outerRange.start, innerRange.start);
     if (outerRange.end === undefined && innerRange.end === undefined) {
         // Since both ends are undefined, we have an point location, not a range.
         // Points must be equal
         return cmpStart == 0;
     }
-    let cmpEnd = compareTextLocation(
+    const cmpEnd = compareTextLocation(
         // innerRange.end must be < outerRange end
         innerRange.end ?? innerRange.start,
         outerRange.end ?? outerRange.start,
@@ -97,8 +97,8 @@ export function compareDates(x: Date, y: Date): number {
 export function isInDateRange(outerRange: DateRange, date: Date): boolean {
     // outer start must be <= date
     // date must be <= outer end
-    let cmpStart = compareDates(outerRange.start, date);
-    let cmpEnd =
+    const cmpStart = compareDates(outerRange.start, date);
+    const cmpEnd =
         outerRange.end !== undefined ? compareDates(date, outerRange.end) : -1;
     return cmpStart <= 0 && cmpEnd <= 0;
 }
@@ -113,7 +113,7 @@ export function isPromptSection(value: any): value is PromptSection {
 }
 
 export function flattenResultsArray<T>(results: Result<T>[]): Result<T[]> {
-    let data: T[] = [];
+    const data: T[] = [];
     for (const result of results) {
         if (!result.success) {
             return error(result.message);

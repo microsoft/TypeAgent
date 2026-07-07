@@ -59,7 +59,7 @@ export class TST<TData extends BaseTSTData> {
         if (key.length === 0) {
             throw new Error("key must have length >= 1");
         }
-        let x = this.getRadix(this.root, key, 0);
+        const x = this.getRadix(this.root, key, 0);
         if (x === undefined) {
             return undefined;
         }
@@ -77,7 +77,7 @@ export class TST<TData extends BaseTSTData> {
         if (key.length === 0) {
             throw new Error("key must have length >= 1");
         }
-        let c = key.charAt(d);
+        const c = key.charAt(d);
         if (c < x.c) {
             return this.getRadix(x.left, key, d);
         } else if (c > x.c) {
@@ -108,7 +108,7 @@ export class TST<TData extends BaseTSTData> {
         d: number,
         isNewKey: boolean,
     ): TSTNode<TData> {
-        let c = key.charAt(d);
+        const c = key.charAt(d);
         if (x === undefined) {
             x = new TSTNode<TData>(c);
         }
@@ -154,7 +154,7 @@ export class TST<TData extends BaseTSTData> {
             x.count--;
             x.data = undefined;
         } else {
-            let c = key.charAt(d);
+            const c = key.charAt(d);
             if (c < x.c) {
                 x.left = this.deleteRadix(x.left, key, d);
             } else if (c > x.c) {

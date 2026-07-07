@@ -108,7 +108,7 @@ export class CollisionDetector {
     private patternToExamples(pattern: string): string[] {
         const examples: string[] = [];
 
-        let example = pattern.replace(/\$\([^)]+\)/g, (match) => {
+        const example = pattern.replace(/\$\([^)]+\)/g, (match) => {
             const parts = match.match(/\$\((\w+):(\w+)\)/);
             if (parts) {
                 const [, paramName, paramType] = parts;
@@ -119,7 +119,7 @@ export class CollisionDetector {
 
         examples.push(example);
 
-        let exampleWithArticle = pattern.replace(/\$\([^)]+\)/g, (match) => {
+        const exampleWithArticle = pattern.replace(/\$\([^)]+\)/g, (match) => {
             const parts = match.match(/\$\((\w+):(\w+)\)/);
             if (parts) {
                 const [, paramName, paramType] = parts;

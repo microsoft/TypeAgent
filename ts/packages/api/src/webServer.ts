@@ -60,7 +60,7 @@ export class TypeAgentAPIWebServer {
 
     serve(config: TypeAgentAPIServerConfig, request: any, response: any) {
         // serve up the requested file if we have it
-        let root: string = path.resolve(config.wwwroot);
+        const root: string = path.resolve(config.wwwroot);
         let requestedFile: string =
             request.url == "/" || request.url === undefined
                 ? "index.html"
@@ -72,7 +72,7 @@ export class TypeAgentAPIWebServer {
         }
 
         // process POST requests
-        let url = new URL(request.url, "http://localhost");
+        const url = new URL(request.url, "http://localhost");
         if (
             url.pathname == "/action/" &&
             (request.method === "PUT" || request.method === "GET")
@@ -85,13 +85,13 @@ export class TypeAgentAPIWebServer {
             }
 
             try {
-                var action: any = JSON.parse(data?.toString() ?? "");
+                const action: any = JSON.parse(data?.toString() ?? "");
                 console.log(
                     "Received action request: ",
                     JSON.stringify(action, null, 2),
                 );
 
-                var actionResult = this.actionHandler(action);
+                const actionResult = this.actionHandler(action);
 
                 response.writeHead(200, { "Content-Type": "application/json" });
                 response.end(JSON.stringify(actionResult));

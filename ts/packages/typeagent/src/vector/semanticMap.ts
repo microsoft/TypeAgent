@@ -1,15 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
+import {
+    TextEmbeddingModel,
+    tryCreateEmbeddingModel,
+} from "@typeagent/aiclient";
 import { EmbeddedValue } from "./vectorIndex.js";
 import { NormalizedEmbedding } from "./embeddings.js";
 import { ScoredItem } from "../memory.js";
-import { createSemanticList } from "./semanticList.js";
+import { createSemanticList, SemanticList } from "./semanticList.js";
 
 export interface SemanticMap<T> {
     readonly size: number;
-    readonly model: TextEmbeddingModel;
+    /**
+     * The embedding model backing semantic (nearest-neighbor) lookups, or
+     * `undefined` when embeddings are unavailable. In that case the map
+     * operates in exact-match-only mode.
+     */
+    readonly model: TextEmbeddingModel | undefined;
 
     keys(): IterableIterator<EmbeddedValue<string>>;
     values(): IterableIterator<T>;
@@ -42,9 +50,12 @@ export async function createSemanticMap<T = any>(
     model?: TextEmbeddingModel,
     existingValues?: [EmbeddedValue<string>, T][],
 ): Promise<SemanticMap<T>> {
-    model ??= openai.createEmbeddingModel();
+    // Fall back to the configured embedding provider. When none is
+    // available, the map runs in exact-match-only mode (no semanticIndex).
+    model ??= tryCreateEmbeddingModel();
     const map = new Map<string, T>();
-    const semanticIndex = createSemanticList<string>(model);
+    const semanticIndex: SemanticList<string> | undefined =
+        model !== undefined ? createSemanticList<string>(model) : undefined;
     if (existingValues) {
         init(existingValues);
     }
@@ -65,13 +76,20 @@ export async function createSemanticMap<T = any>(
     };
 
     function* keys(): IterableIterator<EmbeddedValue<string>> {
-        for (const key of semanticIndex.values) {
-            yield key;
+        if (semanticIndex !== undefined) {
+            for (const key of semanticIndex.values) {
+                yield key;
+            }
+        } else {
+            // Exact-match-only mode: no embeddings are available.
+            for (const key of map.keys()) {
+                yield { value: key, embedding: new Float32Array() };
+            }
         }
     }
 
     function* entries(): IterableIterator<[EmbeddedValue<string>, T]> {
-        for (const key of semanticIndex.values) {
+        for (const key of keys()) {
             yield [key, map.get(key.value)!];
         }
     }
@@ -87,7 +105,7 @@ export async function createSemanticMap<T = any>(
         retryPauseMs?: number,
     ): Promise<void> {
         // If new item, have to embed.
-        if (!map.has(text)) {
+        if (semanticIndex !== undefined && !map.has(text)) {
             // New item. Must embed
             await semanticIndex.push(
                 text,
@@ -107,14 +125,14 @@ export async function createSemanticMap<T = any>(
     ): Promise<void> {
         let newItems: string[] | undefined;
         for (const item of items) {
-            let [text, value] = item;
-            if (!map.has(text)) {
+            const [text, value] = item;
+            if (semanticIndex !== undefined && !map.has(text)) {
                 newItems ??= [];
                 newItems.push(text);
             }
             map.set(text, value);
         }
-        if (newItems) {
+        if (semanticIndex !== undefined && newItems) {
             await semanticIndex.pushMultiple(
                 newItems,
                 retryMaxAttempts,
@@ -137,6 +155,10 @@ export async function createSemanticMap<T = any>(
                 };
             }
         }
+        // Without an embedding model we can only do exact matches.
+        if (semanticIndex === undefined) {
+            return undefined;
+        }
         const key = await semanticIndex.nearestNeighbor(text);
         if (key !== undefined) {
             return valueFromScoredKey(key);
@@ -150,6 +172,16 @@ export async function createSemanticMap<T = any>(
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<T>[]> {
+        // Without an embedding model we can only do exact matches.
+        if (semanticIndex === undefined) {
+            if (typeof value === "string") {
+                const exactMatch = map.get(value);
+                if (exactMatch) {
+                    return [{ score: 1, item: exactMatch }];
+                }
+            }
+            return [];
+        }
         const keys = await semanticIndex.nearestNeighbors(
             value,
             maxMatches,
@@ -168,7 +200,7 @@ export async function createSemanticMap<T = any>(
     function init(entries: [EmbeddedValue<string>, T][]): void {
         for (const [key, value] of entries) {
             map.set(key.value, value);
-            semanticIndex.pushValue(key);
+            semanticIndex?.pushValue(key);
         }
     }
 }

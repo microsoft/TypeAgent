@@ -52,7 +52,7 @@ export class UnifiedHtmlProcessor {
         const startTime = Date.now();
         const originalSize = html.length;
         let processedHtml = html;
-        let elementsRemoved = 0;
+        const elementsRemoved = 0;
 
         try {
             // Apply Readability filter if requested

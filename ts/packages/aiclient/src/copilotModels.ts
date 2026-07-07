@@ -25,10 +25,76 @@ import {
     CompleteUsageStatsCallback,
 } from "./models.js";
 import { CompletionUsageStats } from "./openai.js";
-import { CopilotApiSettings } from "./copilotSettings.js";
+import {
+    CopilotApiSettings,
+    copilotApiSettingsFromConfig,
+} from "./copilotSettings.js";
 import { TokenCounter } from "./tokenCounter.js";
 
 const debug = registerDebug("typeagent:aiclient:copilot");
+// Per-phase latency breakdown (client start / session create / send / total)
+// and real model time vs. SDK/session overhead. Enable with
+// DEBUG=typeagent:aiclient:copilot:timing.
+const debugTiming = registerDebug("typeagent:aiclient:copilot:timing");
+// The final, transformed prompt the CLI actually sends to the model (shows
+// any XML wrapping / augmentation bloat added on top of our prompt). Enable
+// with DEBUG=typeagent:aiclient:copilot:prompt.
+const debugPrompt = registerDebug("typeagent:aiclient:copilot:prompt");
+
+type CopilotSdkLogLevel =
+    | "none"
+    | "error"
+    | "warning"
+    | "info"
+    | "debug"
+    | "all";
+
+// Optional passthrough to the SDK's own stderr timing logs. Set
+// TYPEAGENT_COPILOT_SDK_LOG_LEVEL=debug (or all) to surface CLI-side timing.
+function sdkLogLevel(): CopilotSdkLogLevel | undefined {
+    const v = process.env.TYPEAGENT_COPILOT_SDK_LOG_LEVEL?.trim().toLowerCase();
+    const valid = ["none", "error", "warning", "info", "debug", "all"];
+    return v && valid.includes(v) ? (v as CopilotSdkLogLevel) : undefined;
+}
+
+// Subscribe to the SDK's usage / final-prompt events so we can attribute the
+// wall-clock time of a request to model latency vs. our own session overhead.
+// Listeners are only attached when a diagnostic namespace is enabled, so this
+// is a no-op on the hot path in production.
+function attachDiagnostics(session: CopilotSession): {
+    getApiDurationMs: () => number | undefined;
+    dispose: () => void;
+} {
+    let apiDurationMs: number | undefined;
+    if (!debugTiming.enabled && !debugPrompt.enabled) {
+        return { getApiDurationMs: () => undefined, dispose: () => {} };
+    }
+    const offUsage = session.on("assistant.usage", (event: any) => {
+        const d = event?.data;
+        apiDurationMs = d?.duration;
+        debugTiming(
+            `assistant.usage model=${d?.model} api=${d?.duration}ms ` +
+                `in=${d?.inputTokens} out=${d?.outputTokens} ` +
+                `cacheRead=${d?.cacheReadTokens} providerCallId=${d?.providerCallId}`,
+        );
+    });
+    const offUser = session.on("user.message", (event: any) => {
+        if (!debugPrompt.enabled) return;
+        const tc = event?.data?.transformedContent;
+        if (typeof tc === "string") {
+            debugPrompt(
+                `final transformedContent (${tc.length} chars):\n${tc}`,
+            );
+        }
+    });
+    return {
+        getApiDurationMs: () => apiDurationMs,
+        dispose: () => {
+            offUsage();
+            offUser();
+        },
+    };
+}
 
 // Replaces the Copilot CLI's default "terminal coding assistant" system
 // prompt. In "append" mode the runtime still ships its full base persona
@@ -42,7 +108,19 @@ const TRANSLATION_SYSTEM_PROMPT =
 let cachedClient: CopilotClient | undefined;
 let startPromise: Promise<CopilotClient> | undefined;
 let cachedCliPath: string | undefined;
+let cachedCliUrl: string | undefined;
 let exitHandlerInstalled = false;
+
+export interface CopilotClientOptions {
+    /** Path to the copilot CLI binary. Ignored when `cliUrl` is set. */
+    cliPath?: string | undefined;
+    /**
+     * URL of an already-running Copilot CLI server ("host:port"). When set,
+     * the SDK connects over TCP instead of spawning a CLI child, avoiding
+     * process startup latency. Mutually exclusive with `cliPath`.
+     */
+    cliUrl?: string | undefined;
+}
 
 function findCopilotPath(): string {
     try {
@@ -58,26 +136,43 @@ function findCopilotPath(): string {
     }
 }
 
-async function getClient(cliPathOverride?: string): Promise<CopilotClient> {
+async function getClient(
+    options?: CopilotClientOptions,
+): Promise<CopilotClient> {
     if (cachedClient) return cachedClient;
     if (startPromise) return startPromise;
 
-    const cliPath = cliPathOverride ?? cachedCliPath ?? findCopilotPath();
+    const cliUrl = options?.cliUrl ?? cachedCliUrl;
+    cachedCliUrl = cliUrl;
+    // When connecting to an external CLI server, cliPath is ignored (the two
+    // are mutually exclusive in the SDK).
+    const cliPath = cliUrl
+        ? undefined
+        : (options?.cliPath ?? cachedCliPath ?? findCopilotPath());
     cachedCliPath = cliPath;
 
     startPromise = (async () => {
-        debug(`Starting CopilotClient at ${cliPath}`);
-        const client = new CopilotClient({ cliPath });
+        const target = cliUrl ? `server ${cliUrl}` : `CLI ${cliPath}`;
+        debug(`Starting CopilotClient (${target})`);
+        const tStart = Date.now();
+        const level = sdkLogLevel();
+        const client = new CopilotClient({
+            ...(cliUrl ? { cliUrl } : { cliPath: cliPath! }),
+            ...(level ? { logLevel: level } : {}),
+        });
         try {
             await client.start();
         } catch (err) {
             startPromise = undefined;
             throw new Error(
-                `Failed to start GitHub Copilot CLI client at '${cliPath}'. ` +
-                    `Ensure 'copilot' is installed and authenticated (try 'copilot auth login').\n` +
+                `Failed to start GitHub Copilot CLI client (${target}). ` +
+                    (cliUrl
+                        ? `Ensure a Copilot CLI server is running and reachable at '${cliUrl}'.\n`
+                        : `Ensure 'copilot' is installed and authenticated (try 'copilot auth login').\n`) +
                     `Underlying error: ${err instanceof Error ? err.message : String(err)}`,
             );
         }
+        debugTiming(`client.start ${Date.now() - tStart}ms`);
         cachedClient = client;
         if (!exitHandlerInstalled) {
             exitHandlerInstalled = true;
@@ -97,9 +192,70 @@ async function getClient(cliPathOverride?: string): Promise<CopilotClient> {
  * spawn two CLI children.
  */
 export async function getCopilotClient(
-    cliPathOverride?: string,
+    options?: CopilotClientOptions | string,
 ): Promise<CopilotClient> {
-    return getClient(cliPathOverride);
+    return getClient(
+        typeof options === "string" ? { cliPath: options } : options,
+    );
+}
+
+/**
+ * Eagerly start (or connect to) the Copilot CLI so the first user-visible
+ * request doesn't pay the one-time spawn/startup cost (measured at several
+ * seconds cold). Safe to call multiple times — it reuses the singleton and
+ * swallows errors (a failed pre-warm just means the first real request will
+ * retry and surface the error normally).
+ */
+export async function warmupCopilotClient(
+    options?: CopilotClientOptions,
+    sessionConfig?: SessionConfig,
+): Promise<void> {
+    let client: CopilotClient;
+    try {
+        client = await getClient(options);
+        debug("Copilot client pre-warmed");
+    } catch (err) {
+        debug(
+            `Copilot client pre-warm failed (will retry on first request): ${
+                err instanceof Error ? err.message : String(err)
+            }`,
+        );
+        return;
+    }
+    // Warm the CLI-side session subsystem with a throwaway session so the
+    // first real request doesn't pay the cold createSession cost (~1s+ on the
+    // first session of a process). Best-effort: session creation is auth-free
+    // (only sendAndWait needs auth), so this succeeds even when unauthenticated
+    // or pointed at an external server.
+    if (sessionConfig) {
+        try {
+            const t = Date.now();
+            const session = await client.createSession(sessionConfig);
+            await session.disconnect().catch(() => {});
+            debugTiming(`warm session ${Date.now() - t}ms`);
+            debug("Copilot session subsystem pre-warmed");
+        } catch (err) {
+            debug(
+                `Copilot session pre-warm skipped: ${
+                    err instanceof Error ? err.message : String(err)
+                }`,
+            );
+        }
+    }
+}
+
+/**
+ * Pre-warm the Copilot client and session subsystem using the values from the
+ * active runtime config. Called at host startup (from runtimeConfig) when the
+ * provider is Copilot so the first user request avoids both the CLI spawn and
+ * the cold session-creation cost.
+ */
+export async function warmupCopilotFromConfig(): Promise<void> {
+    const settings = copilotApiSettingsFromConfig();
+    await warmupCopilotClient(
+        { cliPath: settings.cliPath, cliUrl: settings.cliUrl },
+        buildSessionConfig(settings, {}, false),
+    );
 }
 
 function withAbortSignal<T>(
@@ -240,15 +396,28 @@ export function createCopilotChatModel(
                 ? [{ role: "user", content: prompt }]
                 : prompt;
         const promptText = renderPrompt(messages);
+        if (debugPrompt.enabled) {
+            debugPrompt(
+                `prompt to Copilot: ${promptText.length} chars ` +
+                    `(~${estimateTokens(promptText)} tokens), model=${settings.modelName}`,
+            );
+        }
 
+        const tTotal = Date.now();
         let client: CopilotClient;
+        const tClient = Date.now();
         try {
-            client = await getClient(settings.cliPath);
+            client = await getClient({
+                cliPath: settings.cliPath,
+                cliUrl: settings.cliUrl,
+            });
         } catch (err) {
             return error(err instanceof Error ? err.message : String(err));
         }
+        debugTiming(`getClient ${Date.now() - tClient}ms`);
 
         let session: CopilotSession;
+        const tCreate = Date.now();
         try {
             session = await client.createSession(
                 buildSessionConfig(settings, completionSettings!, false),
@@ -258,13 +427,23 @@ export function createCopilotChatModel(
                 `Failed to create Copilot session: ${err instanceof Error ? err.message : String(err)}`,
             );
         }
+        debugTiming(`createSession ${Date.now() - tCreate}ms`);
 
+        const diag = attachDiagnostics(session);
         try {
+            const tSend = Date.now();
             const response: AssistantMessageEvent | undefined =
                 await withAbortSignal(
                     session.sendAndWait({ prompt: promptText }),
                     signal,
                 );
+            const sendMs = Date.now() - tSend;
+            const apiMs = diag.getApiDurationMs();
+            debugTiming(
+                `sendAndWait ${sendMs}ms ` +
+                    `(model≈${apiMs ?? "?"}ms, ` +
+                    `sdk/session overhead≈${apiMs !== undefined ? sendMs - apiMs : "?"}ms)`,
+            );
             const text = response?.data?.content ?? "";
             if (model.completionCallback) {
                 model.completionCallback(
@@ -286,7 +465,9 @@ export function createCopilotChatModel(
         } catch (err) {
             return error(err instanceof Error ? err.message : String(err));
         } finally {
+            diag.dispose();
             session.disconnect().catch(() => {});
+            debugTiming(`complete total ${Date.now() - tTotal}ms`);
         }
     }
 
@@ -302,15 +483,28 @@ export function createCopilotChatModel(
                 ? [{ role: "user", content: prompt }]
                 : prompt;
         const promptText = renderPrompt(messages);
+        if (debugPrompt.enabled) {
+            debugPrompt(
+                `stream prompt to Copilot: ${promptText.length} chars ` +
+                    `(~${estimateTokens(promptText)} tokens), model=${settings.modelName}`,
+            );
+        }
 
+        const tTotal = Date.now();
         let client: CopilotClient;
+        const tClient = Date.now();
         try {
-            client = await getClient(settings.cliPath);
+            client = await getClient({
+                cliPath: settings.cliPath,
+                cliUrl: settings.cliUrl,
+            });
         } catch (err) {
             return error(err instanceof Error ? err.message : String(err));
         }
+        debugTiming(`getClient ${Date.now() - tClient}ms`);
 
         let session: CopilotSession;
+        const tCreate = Date.now();
         try {
             session = await client.createSession(
                 buildSessionConfig(settings, completionSettings!, true),
@@ -320,7 +514,9 @@ export function createCopilotChatModel(
                 `Failed to create Copilot session: ${err instanceof Error ? err.message : String(err)}`,
             );
         }
+        debugTiming(`createSession ${Date.now() - tCreate}ms`);
 
+        const diag = attachDiagnostics(session);
         // Buffer streaming deltas; the consumer pulls from a queue.
         const queue: Array<{ value?: string; done?: boolean; err?: Error }> =
             [];
@@ -361,11 +557,19 @@ export function createCopilotChatModel(
             },
         );
 
+        const tSend = Date.now();
         const completion = withAbortSignal(
             session.sendAndWait({ prompt: promptText }),
             signal,
         )
             .then((response) => {
+                const sendMs = Date.now() - tSend;
+                const apiMs = diag.getApiDurationMs();
+                debugTiming(
+                    `sendAndWait(stream) ${sendMs}ms ` +
+                        `(model≈${apiMs ?? "?"}ms, ` +
+                        `sdk/session overhead≈${apiMs !== undefined ? sendMs - apiMs : "?"}ms)`,
+                );
                 if (model.completionCallback) {
                     model.completionCallback(
                         { prompt: promptText, model: settings.modelName },
@@ -427,8 +631,10 @@ export function createCopilotChatModel(
             cleaned = true;
             unsubscribeDelta();
             unsubscribeMessage();
+            diag.dispose();
             await completion.catch(() => {});
             await session.disconnect().catch(() => {});
+            debugTiming(`completeStream total ${Date.now() - tTotal}ms`);
         }
 
         return success(iterator);

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=62f86b02c1df683318b68803868dbc307b7cfe608c6a614df9f0063e32f6a7eb -->
+<!-- AUTOGEN:DOCS:HASH:sha256=578d806e77aca9db610efea718fe695ac18498bf2972c45344db69e47f8fe641 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/config — AI-generated documentation
@@ -12,42 +12,55 @@
 
 ## Overview
 
-The `@typeagent/config` package is a TypeScript library designed to provide a layered YAML configuration loader for the TypeAgent ecosystem. It enables the loading and merging of configuration settings from multiple sources, such as default YAML files, local overrides, environment variables, and Azure Key Vault. The package ensures that configuration settings are applied in a defined order of precedence and includes schema validation to maintain data integrity.
+The `@typeagent/config` package is a TypeScript library that provides a layered YAML configuration loader for the TypeAgent ecosystem. It supports loading configuration from multiple sources, merging them in a defined order of precedence, and flattening nested structures into flat key-value pairs compatible with existing `process.env` consumers. The package also includes schema validation, CLI utilities, and integration with Azure Key Vault for secure configuration management.
 
 ## What it does
 
-The `@typeagent/config` package provides the following functionality:
+The `@typeagent/config` package offers the following capabilities:
 
-1. **Layered Configuration Loading**: The package supports loading configuration from multiple sources, including:
+1. **Layered Configuration Loading**:
 
-   - `ts/config.defaults.yaml`: A committed default configuration file.
-   - `ts/config.local.yaml`: A local, gitignored configuration file for overrides.
-   - `.env`: A legacy fallback for backward compatibility.
-   - Environment variables: These take the highest precedence and allow runtime overrides.
-   - Azure Key Vault: Future phases will include fetching configuration from Key Vault and caching it locally in an encrypted format.
+   - Reads configuration from multiple sources, including:
+     - `ts/config.defaults.yaml`: A committed default configuration file.
+     - `ts/config.local.yaml`: A local, gitignored file for overrides.
+     - `.env`: A legacy fallback for backward compatibility.
+     - Environment variables: Runtime overrides with the highest precedence.
+     - Azure Key Vault: Planned for future phases, with encrypted local caching.
 
-2. **Configuration Flattening**: Nested YAML configuration trees are flattened into flat key-value pairs that align with the `EnvVars` convention used by other TypeAgent packages. This ensures compatibility with existing code that relies on `process.env`.
+2. **Merge Precedence**:
+   Configuration values are merged in the following order (lowest to highest precedence):
 
-3. **Schema Validation**: The package uses `zod` to validate configuration settings, ensuring they conform to expected schemas.
+   1. `.env` (legacy fallback)
+   2. `ts/config.defaults.yaml`
+   3. _Future_: Key Vault YAML blob or encrypted cache
+   4. `ts/config.local.yaml`
+   5. `process.env` (runtime overrides)
 
-4. **CLI Commands**: A CLI is included for tasks such as importing `.env` files into YAML format and displaying the merged configuration.
+3. **Flattening Rules**:
+   Nested YAML structures are flattened into flat key-value pairs that align with the `EnvVars` convention. For example:
 
-5. **Merge Precedence**: Configuration values are merged in the following order (lowest to highest precedence):
+   - `azure.openai.api_key` → `AZURE_OPENAI_API_KEY`
+   - `azure.openai.deployments[].endpoint` (suffix=foo) → `AZURE_OPENAI_ENDPOINT_FOO`
+   - `extra.<KEY>` → `<KEY>` (passthrough for unknown keys)
 
-   - `.env` (legacy fallback)
-   - `ts/config.defaults.yaml`
-   - _Future_: Key Vault YAML blob or encrypted cache
-   - `ts/config.local.yaml`
-   - `process.env` (runtime overrides)
+4. **Schema Validation**:
+   Uses `zod` to validate configuration settings, ensuring they conform to expected schemas.
 
-6. **Redaction of Sensitive Data**: The package includes functionality to identify and redact sensitive values in configuration data, such as API keys and secrets.
+5. **CLI Utilities**:
+   Includes commands for importing `.env` files into YAML format and displaying the merged configuration.
+
+6. **Sensitive Data Redaction**:
+   Identifies and redacts sensitive values (e.g., API keys, secrets) in configuration data.
+
+7. **Backward Compatibility**:
+   Ensures existing TypeAgent packages relying on `process.env` continue to function without modification.
 
 ## Setup
 
 To use the `@typeagent/config` package, ensure the following environment variables are set:
 
 - `AZURE_OPENAI_`: Used for Azure OpenAI configuration.
-- `JEST_WORKER_ID`: Used during Jest testing.
+- `JEST_WORKER_ID`: Utilized during Jest testing.
 - `TYPEAGENT_ALLOW_KEYVAULT_IN_TESTS`: Enables Key Vault integration during tests.
 - `TYPEAGENT_CONFIG_DEFAULTS`: Path to the default configuration YAML file.
 - `TYPEAGENT_CONFIG_DIR`: Directory where configuration files are located.
@@ -61,11 +74,11 @@ Refer to the hand-written README for detailed instructions on obtaining these va
 
 ## Key Files
 
-The package's source code is organized into the following key files:
+The package's functionality is implemented across several key files:
 
 - [index.ts](./src/index.ts): Exports the main functions and types, such as `loadConfig`, `flatten`, and `fetchKeyVaultConfig`.
 - [loader.ts](./src/loader.ts): Implements the core logic for loading and merging configuration settings from various sources.
-- [flatten.ts](./src/flatten.ts): Handles the flattening of nested YAML configuration trees into flat key-value pairs.
+- [flatten.ts](./src/flatten.ts): Handles the flattening of nested YAML structures into flat key-value pairs.
 - [keyVault.ts](./src/keyVault.ts): Provides functions for fetching configuration settings from Azure Key Vault.
 - [cli.ts](./src/cli.ts): Implements CLI commands for importing `.env` files and displaying the merged configuration.
 - [import.ts](./src/import.ts): Manages the conversion of `.env` files into YAML format and ensures compatibility with the existing configuration structure.
@@ -74,19 +87,34 @@ The package's source code is organized into the following key files:
 
 ## How to extend
 
-To extend the functionality of the `@typeagent/config` package, consider the following approaches:
+To extend the `@typeagent/config` package, follow these guidelines:
 
-1. **Adding New Configuration Sources**: To include additional configuration sources, modify [loader.ts](./src/loader.ts) to incorporate the new source and update the merging logic.
+1. **Adding New Configuration Sources**:
 
-2. **Customizing Flattening Rules**: If you need to adjust how configuration settings are flattened, update the logic in [flatten.ts](./src/flatten.ts). Ensure the changes align with the `EnvVars` convention.
+   - Modify [loader.ts](./src/loader.ts) to include the new source and update the merging logic.
 
-3. **Enhancing Schema Validation**: To add or modify validation rules, update [schema.ts](./src/schema.ts). Use `zod` to define the new schema and validation logic.
+2. **Customizing Flattening Rules**:
 
-4. **Extending CLI Functionality**: To add new CLI commands, modify [cli.ts](./src/cli.ts). Implement the new commands and ensure they integrate with the existing configuration logic.
+   - Update [flatten.ts](./src/flatten.ts) to adjust how nested YAML structures are flattened into flat key-value pairs.
 
-5. **Improving Azure Key Vault Integration**: To enhance the integration with Azure Key Vault, update [keyVault.ts](./src/keyVault.ts). You can add new methods for fetching, caching, or managing secrets.
+3. **Enhancing Schema Validation**:
 
-6. **Redacting Additional Sensitive Data**: If new sensitive data types need to be redacted, update the logic in [redact.ts](./src/redact.ts). Ensure the new patterns are comprehensive and tested.
+   - Add or modify validation rules in [schema.ts](./src/schema.ts) using `zod`.
+
+4. **Extending CLI Functionality**:
+
+   - Add new commands to [cli.ts](./src/cli.ts) and ensure they integrate with the existing configuration logic.
+
+5. **Improving Azure Key Vault Integration**:
+
+   - Enhance the integration in [keyVault.ts](./src/keyVault.ts) by adding new methods for fetching, caching, or managing secrets.
+
+6. **Redacting Additional Sensitive Data**:
+
+   - Update [redact.ts](./src/redact.ts) to include new patterns for identifying sensitive data.
+
+7. **Typed Configuration Enhancements**:
+   - Modify [runtime/build.ts](./src/runtime/build.ts) to support additional typed configuration structures or conventions.
 
 When extending the package, ensure that new functionality adheres to the existing patterns and conventions to maintain consistency and compatibility across the TypeAgent ecosystem.
 
@@ -140,6 +168,6 @@ _10 environment variables referenced from `./src/` (set in `ts/.env` or your she
 
 ---
 
-_Auto-generated against commit `ff379b098decfab4eb45f78b6fa318358d7fbd75` on `2026-07-01T09:05:58.471Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/config docs:verify-links` to spot-check._
+_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/config docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

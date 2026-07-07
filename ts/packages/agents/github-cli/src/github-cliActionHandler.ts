@@ -787,7 +787,7 @@ function buildArgs(
         }
         case "dependabotAlerts": {
             // gh api /repos/{owner}/{repo}/dependabot/alerts
-            let repo = p.repo ? String(p.repo) : "";
+            const repo = p.repo ? String(p.repo) : "";
             if (!repo) return undefined;
             let endpoint = `/repos/${repo}/dependabot/alerts`;
             const params: string[] = [];

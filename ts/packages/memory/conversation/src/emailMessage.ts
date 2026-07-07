@@ -108,7 +108,7 @@ export async function loadEmailMessagesFromDir(
     dirPath: string,
 ): Promise<EmailMessage[]> {
     const filePaths = ms.getFilePathsInDir(dirPath);
-    let emails: EmailMessage[] = [];
+    const emails: EmailMessage[] = [];
     for (const filePath of filePaths) {
         const email = await loadEmailMessageFromFile(filePath);
         if (email) {

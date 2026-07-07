@@ -413,7 +413,7 @@ function handleSearchFiles(service: LocalPlayerService, query: string) {
         .map((f, i) => `<li>${i + 1}. ${f.name}</li>`)
         .join("");
 
-    let html = `<h3>🔍 Search Results for "${query}" (${files.length} found)</h3><ol>${fileListHtml}</ol>`;
+    const html = `<h3>🔍 Search Results for "${query}" (${files.length} found)</h3><ol>${fileListHtml}</ol>`;
 
     return createActionResultFromHtmlDisplay(html);
 }

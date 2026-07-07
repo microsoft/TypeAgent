@@ -30,7 +30,7 @@ async function executeSettingsAction(
     action: TypeAgentAction<SettingsAction>,
     context: ActionContext<SettingsAgentContext>,
 ) {
-    let result = await handleSettingsAction(action, context);
+    const result = await handleSettingsAction(action, context);
     return result;
 }
 

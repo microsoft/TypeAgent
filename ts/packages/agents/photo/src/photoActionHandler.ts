@@ -29,7 +29,7 @@ async function executePhotoAction(
     action: TypeAgentAction<PhotoAction>,
     context: ActionContext<PhotoActionContext>,
 ) {
-    let result = await handlePhotoAction(action, context);
+    const result = await handlePhotoAction(action, context);
     return result;
 }
 

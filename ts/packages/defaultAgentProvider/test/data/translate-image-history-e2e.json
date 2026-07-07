@@ -13,7 +13,10 @@
                 "question": "What images are in our chat history?"
               }
             },
-            "partial": true
+            "partial": true,
+            "alternates": {
+              "question": "What images are present in our chat history?"
+            }
           }
         ]      
       },

@@ -235,7 +235,7 @@ export function whenFilterFromNamedArgs(
     conversation: kp.IConversation,
     namedArgs: NamedArgs,
 ): kp.WhenFilter {
-    let filter: kp.WhenFilter = {
+    const filter: kp.WhenFilter = {
         knowledgeType: namedArgs.ktype,
     };
     const dateRange = kp.getTimeRangeForConversation(conversation!);
@@ -274,8 +274,8 @@ export function whenFilterFromNamedArgs(
 export function dateRangeFromNamedArgs(
     namedArgs: NamedArgs,
 ): kp.DateRange | undefined {
-    let startDate = argToDate(namedArgs.startDate);
-    let endDate = argToDate(namedArgs.endDate);
+    const startDate = argToDate(namedArgs.startDate);
+    const endDate = argToDate(namedArgs.endDate);
     if (startDate) {
         return {
             start: startDate,

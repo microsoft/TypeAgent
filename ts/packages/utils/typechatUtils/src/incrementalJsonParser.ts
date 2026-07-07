@@ -69,10 +69,10 @@ export function createIncrementalJsonParser(
     let expectedKeywordValue: boolean | null = null;
 
     // Nested object/arrays property names
-    let props: (string | number)[] = [];
+    const props: (string | number)[] = [];
 
     // For full mode
-    let nested: any[] = [];
+    const nested: any[] = [];
     let currentNested: any = undefined;
 
     function parseLiteralKeyword(c: string) {

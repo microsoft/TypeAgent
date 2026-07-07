@@ -629,7 +629,7 @@ export function activate(context: vscode.ExtensionContext): void {
         treeDataProvider: collisions,
     });
 
-    let currentCollisionsSource: CollisionsSource = collisionsChannelSource;
+    const currentCollisionsSource: CollisionsSource = collisionsChannelSource;
 
     // Shared scan flow used by both the manual command and the auto-scan
     // Auto-scan debounce state, declared before the shared scan helper so an

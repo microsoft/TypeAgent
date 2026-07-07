@@ -36,6 +36,21 @@ describe("flatten", () => {
         });
     });
 
+    test("flattens the typed embedding section to TYPEAGENT_EMBEDDING_* vars", () => {
+        const out = flatten({
+            embedding: {
+                provider: "local",
+                model: "Xenova/all-MiniLM-L6-v2",
+                cacheDir: "/models",
+            },
+        });
+        expect(out).toEqual({
+            TYPEAGENT_EMBEDDING_PROVIDER: "local",
+            TYPEAGENT_EMBEDDING_MODEL: "Xenova/all-MiniLM-L6-v2",
+            TYPEAGENT_EMBEDDING_CACHE_DIR: "/models",
+        });
+    });
+
     test("env: top-level passthrough leaves keys verbatim", () => {
         const out = flatten({
             env: {

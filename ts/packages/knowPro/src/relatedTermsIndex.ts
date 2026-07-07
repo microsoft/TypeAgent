@@ -89,13 +89,25 @@ export type RelatedTermIndexSettings = {
 export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
     private aliasMap: TermToRelatedTermsMap;
     private embeddingIndex: TermEmbeddingIndex | undefined;
+    private fuzzyTermIndex:
+        | TermEmbeddingIndex
+        | TermEditDistanceIndex
+        | undefined;
 
     constructor(public settings: RelatedTermIndexSettings) {
         this.aliasMap = new TermToRelatedTermsMap();
         if (settings.embeddingIndexSettings) {
-            this.embeddingIndex = new TermEmbeddingIndex(
-                settings.embeddingIndexSettings,
-            );
+            if (settings.embeddingIndexSettings.embeddingModel !== undefined) {
+                this.embeddingIndex = new TermEmbeddingIndex(
+                    settings.embeddingIndexSettings,
+                );
+                this.fuzzyTermIndex = this.embeddingIndex;
+            } else {
+                // No embedding provider: fall back to Levenshtein edit-distance
+                // fuzzy matching so related-term expansion still works (with
+                // reduced recall) instead of being disabled entirely.
+                this.fuzzyTermIndex = new TermEditDistanceIndex();
+            }
         }
     }
 
@@ -103,8 +115,11 @@ export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
         return this.aliasMap;
     }
 
-    public get fuzzyIndex() {
-        return this.embeddingIndex;
+    public get fuzzyIndex():
+        | TermEmbeddingIndex
+        | TermEditDistanceIndex
+        | undefined {
+        return this.fuzzyTermIndex;
     }
 
     public serialize(): ITermsToRelatedTermsIndexData {
@@ -122,12 +137,15 @@ export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
             }
             if (
                 data.textEmbeddingData &&
-                this.settings.embeddingIndexSettings
+                this.settings.embeddingIndexSettings &&
+                this.settings.embeddingIndexSettings.embeddingModel !==
+                    undefined
             ) {
                 this.embeddingIndex = new TermEmbeddingIndex(
                     this.settings.embeddingIndexSettings,
                 );
                 this.embeddingIndex.deserialize(data.textEmbeddingData);
+                this.fuzzyTermIndex = this.embeddingIndex;
             }
         }
     }
@@ -271,7 +289,7 @@ function dedupeRelatedTerms(
             searchTerm.relatedTerms !== undefined &&
             searchTerm.relatedTerms.length > 0
         ) {
-            let uniqueRelatedForSearchTerm: Term[] = [];
+            const uniqueRelatedForSearchTerm: Term[] = [];
             for (const candidateRelatedTerm of searchTerm.relatedTerms) {
                 if (allSearchTerms.has(candidateRelatedTerm)) {
                     // This related term is already a search term
@@ -340,7 +358,7 @@ export class TermEmbeddingIndex
         maxMatches?: number,
         minScore?: number,
     ): Promise<Term[]> {
-        let matches = await this.embeddingIndex.getIndexesOfNearest(
+        const matches = await this.embeddingIndex.getIndexesOfNearest(
             text,
             maxMatches,
             minScore,
@@ -413,10 +431,18 @@ export class TermEmbeddingIndex
 
 export class TermEditDistanceIndex
     extends TextEditDistanceIndex
-    implements ITermToRelatedTermsFuzzy
+    implements ITermToRelatedTermsFuzzy, TextEmbeddingCache
 {
     constructor(textArray: string[] = []) {
         super(textArray);
+    }
+
+    /**
+     * Edit-distance matching keeps no embeddings, so there is nothing to cache.
+     * Implemented to satisfy TextEmbeddingCache consumers of fuzzyIndex.
+     */
+    public getEmbedding(_text: string): number[] | undefined {
+        return undefined;
     }
 
     public async addTerms(terms: string[]): Promise<ListIndexingResult> {

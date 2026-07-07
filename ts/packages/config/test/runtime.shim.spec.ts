@@ -36,6 +36,31 @@ describe("configToEnv: shim projection", () => {
         expect(out.AZURE_OPENAI_MAX_RETRYATTEMPTS).toBe("3");
     });
 
+    test("round-trips the embedding provider section", () => {
+        const flat: FlatEnv = {
+            TYPEAGENT_EMBEDDING_PROVIDER: "local",
+            TYPEAGENT_EMBEDDING_MODEL: "Xenova/all-MiniLM-L6-v2",
+            TYPEAGENT_EMBEDDING_CACHE_DIR: "/var/lib/typeagent/models",
+        };
+        const config = buildConfig(flat);
+        expect(config.embedding).toEqual({
+            provider: "local",
+            model: "Xenova/all-MiniLM-L6-v2",
+            cacheDir: "/var/lib/typeagent/models",
+        });
+        const out = configToEnv(config);
+        for (const [k, v] of Object.entries(flat)) {
+            expect(out[k]).toBe(v);
+        }
+    });
+
+    test("leaves an unknown embedding provider value in extras", () => {
+        const out = configToEnv(
+            buildConfig({ TYPEAGENT_EMBEDDING_PROVIDER: "bogus" }),
+        );
+        expect(out.TYPEAGENT_EMBEDDING_PROVIDER).toBe("bogus");
+    });
+
     test("preserves extras verbatim", () => {
         const flat: FlatEnv = {
             AZURE_FOUNDRY_AGENT_ID_FOO: "asst_xyz",

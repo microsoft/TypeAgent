@@ -10,11 +10,31 @@ export type DispatcherConnectOptions = {
     conversationId?: string; // join a specific conversation by UUID. If omitted, connects to the default conversation.
 };
 
+/**
+ * Origin of a conversation. Absent (undefined) means a native TypeAgent
+ * conversation. `"copilot"` marks a read-only mirror imported from GitHub
+ * Copilot Chat's session store.
+ */
+export type ConversationSource = "copilot";
+
 export type ConversationInfo = {
     conversationId: string;
     name: string;
     clientCount: number;
     createdAt: string; // ISO 8601
+    /**
+     * Where this conversation came from. Omitted for native TypeAgent
+     * conversations; set to `"copilot"` for imported mirrors. Clients use it to
+     * badge the conversation and (together with {@link readOnly}) decide whether
+     * to allow input.
+     */
+    source?: ConversationSource;
+    /**
+     * When true, the conversation is a read-only view (e.g. a Copilot mirror)
+     * and clients should disable the input box. Omitted/false for normal
+     * conversations.
+     */
+    readOnly?: boolean;
 };
 
 export type ConversationNameCollisionBehavior = "error" | "appendNumber";
