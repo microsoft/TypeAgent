@@ -165,6 +165,11 @@ export type CommandHandlerContext = {
     conversationMemory?: ConversationMemory | undefined;
     // Per activation configs
     developerMode?: boolean;
+    // When true, each translated request is confirmed via the client
+    // (clientIO.proposeAction) before it runs. Independent of developerMode
+    // so recording conversation data does not force an interactive prompt.
+    // Enabled with `@config dev on --confirm`; reset on restart.
+    confirmActions?: boolean;
     explanationAsynchronousMode: boolean;
     dblogging: boolean;
     clientIO: ClientIO;
@@ -692,6 +697,7 @@ export async function initializeCommandHandlerContext(
             explanationAsynchronousMode,
             dblogging: options?.dblogging ?? true,
             developerMode: options?.developerMode ?? false,
+            confirmActions: false,
             clientIO,
 
             // Runtime context

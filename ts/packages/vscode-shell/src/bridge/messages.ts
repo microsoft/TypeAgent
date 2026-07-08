@@ -3,6 +3,8 @@
 
 import type {
     IAgentMessage,
+    PendingInteractionRequest,
+    PendingInteractionResponse,
     QueuedRequest,
     QueueCancelReason,
     QueueSnapshot,
@@ -184,6 +186,27 @@ export type BridgeToWebviewMessage =
           currentSessionId?: string;
       }
     | { type: "developerMode"; enabled: boolean }
+    | {
+          // Server-driven interactive prompt: dev-mode action confirmation
+          // (`@config dev on --confirm`) or an agent question. The webview
+          // renders it (proposeActionEdit / choice prompt) and replies with
+          // an `interactionResponse` message.
+          type: "requestInteraction";
+          interaction: PendingInteractionRequest;
+      }
+    // Another client answered / the server cancelled the interaction; the
+    // webview should tear down its in-progress prompt (identified by id).
+    | { type: "interactionResolved"; interactionId: string }
+    | { type: "interactionCancelled"; interactionId: string }
+    | {
+          // Response to a webview-issued `bridgeRpcRequest` (template editor
+          // schema / completion lookups routed through the host to the
+          // dispatcher). Correlated by `id`.
+          type: "bridgeRpcResponse";
+          id: number;
+          result?: unknown;
+          error?: string;
+      }
     | { type: "sessionError"; message: string };
 
 /**
@@ -222,4 +245,16 @@ export type BridgeFromWebviewMessage =
     | { type: "pcHide" }
     | { type: "pcDispose" }
     | { type: "demoCommand"; action: "continue" | "cancel" }
-    | { type: "demoLineCancelled"; requestId: string };
+    | { type: "demoLineCancelled"; requestId: string }
+    // Reply to a `requestInteraction` prompt. Forwarded to the dispatcher
+    // via respondToInteraction.
+    | { type: "interactionResponse"; response: PendingInteractionResponse }
+    | {
+          // Template-editor service call (getTemplateSchema /
+          // getTemplateCompletion) routed through the host to the dispatcher.
+          // Correlated by `id`; answered with a `bridgeRpcResponse`.
+          type: "bridgeRpcRequest";
+          id: number;
+          method: "getTemplateSchema" | "getTemplateCompletion";
+          args: unknown[];
+      };

@@ -232,9 +232,23 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
             });
         },
         requestChoice: () => {},
-        requestInteraction: (_interaction: PendingInteractionRequest) => {},
-        interactionResolved: () => {},
-        interactionCancelled: () => {},
+        // Forward server-driven interactive prompts (dev-mode action
+        // confirmation via `@config dev on --confirm`, or agent questions) to
+        // the webview, which renders them and replies with an
+        // `interactionResponse` (handled in agentServerBridge ->
+        // dispatcher.respondToInteraction). Without this the request blocks on
+        // the server until the 10-min proposeAction timeout.
+        requestInteraction: (interaction: PendingInteractionRequest) => {
+            ctx.broadcast({ type: "requestInteraction", interaction });
+        },
+        // Another connected client answered, or the server cancelled/timed
+        // out the interaction — tell the webview to tear down its prompt.
+        interactionResolved: (interactionId: string) => {
+            ctx.broadcast({ type: "interactionResolved", interactionId });
+        },
+        interactionCancelled: (interactionId: string) => {
+            ctx.broadcast({ type: "interactionCancelled", interactionId });
+        },
         takeAction: (requestId, action, data) => {
             if (action === "vscode-shell-action") {
                 ctx.handleShellAction(requestId, data).catch((e: any) => {

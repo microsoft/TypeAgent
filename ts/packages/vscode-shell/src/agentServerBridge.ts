@@ -1022,6 +1022,19 @@ export class AgentServerBridge {
         // delete button) reflects a server started with `--dev` on connect
         // and session switches, without waiting for a `@config dev` toggle.
         await this.pushDeveloperMode();
+
+        // TODO(reconnect-mid-confirmation): re-render pending interactions on
+        // rejoin. When `@config dev on --confirm` is active, a request can be
+        // blocked on a `proposeAction`/`question` (SharedDispatcher deferred
+        // promise, 10-min timeout). If the webview reconnects or switches to a
+        // session while that prompt is outstanding, the interaction is NOT
+        // replayed here, so the user sees a "working" request with no way to
+        // answer it until the server times out. The agent-server already
+        // tracks these (DisplayLog.logPendingInteraction, included in the
+        // join/JoinSessionResult) — surface them (e.g. a getPendingInteractions
+        // RPC or a field on the join result) and re-broadcast each as a
+        // `requestInteraction` after the history replay so the confirmation UI
+        // reappears and `respondToInteraction` can complete the request.
     }
 
     /**
@@ -1199,6 +1212,53 @@ export class AgentServerBridge {
             case "sendCommand":
                 await this.sendCommand(msg.command, msg.requestId);
                 break;
+            case "interactionResponse":
+                // Reply to a server-driven interactive prompt (dev-mode
+                // action confirmation / agent question). Resolves the
+                // dispatcher's pending proposeAction/question so the request
+                // can finish instead of blocking to the 10-min timeout.
+                try {
+                    await this.session?.dispatcher.respondToInteraction(
+                        msg.response,
+                    );
+                } catch (e) {
+                    console.warn(
+                        "[agentServerBridge] respondToInteraction failed:",
+                        e,
+                    );
+                }
+                break;
+            case "bridgeRpcRequest": {
+                // Template-editor service call routed from the webview to the
+                // dispatcher (used by the proposeAction edit flow). Correlated
+                // by `id`; always answered so the webview promise settles.
+                const dispatcher = this.session?.dispatcher;
+                try {
+                    if (dispatcher === undefined) {
+                        throw new Error("No active session");
+                    }
+                    const result =
+                        msg.method === "getTemplateSchema"
+                            ? await (dispatcher.getTemplateSchema as any)(
+                                  ...msg.args,
+                              )
+                            : await (dispatcher.getTemplateCompletion as any)(
+                                  ...msg.args,
+                              );
+                    this.postToWebview(webview, {
+                        type: "bridgeRpcResponse",
+                        id: msg.id,
+                        result,
+                    });
+                } catch (e: any) {
+                    this.postToWebview(webview, {
+                        type: "bridgeRpcResponse",
+                        id: msg.id,
+                        error: e?.message ?? String(e),
+                    });
+                }
+                break;
+            }
             case "deleteMessage":
                 // Developer-mode per-message delete. Reuse the feedback
                 // "hide" RPC: permanent=true is a non-recoverable hard delete;

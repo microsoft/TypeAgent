@@ -8,11 +8,17 @@
 // Renders the shared `chat-ui` ChatPanel plus the host-managed session bar.
 
 import { ChatPanel, ConversationBar, HistoryEntry } from "chat-ui";
+import type { TemplateEditServices } from "chat-ui";
 import chatPanelStyles from "chat-ui/styles";
 import completionUiStyles from "@typeagent/completion-ui/styles.css";
 import vscodeThemeStyles from "./vscode-theme.css";
 import { QueueStateMirror } from "@typeagent/dispatcher-types";
-import type { QueuedRequest, QueueSnapshot } from "@typeagent/dispatcher-types";
+import type {
+    PendingInteractionRequest,
+    PendingInteractionResponse,
+    QueuedRequest,
+    QueueSnapshot,
+} from "@typeagent/dispatcher-types";
 
 // Inject the chat-ui base styles first, then the completion-ui dropdown
 // styles, then the VS Code theme overlay so it can override defaults via
@@ -116,6 +122,103 @@ chatPanel.onDemoAction = (action: "continue" | "cancel") => {
 // pcUpdate / pcAccept / pcDismiss / pcHide / pcDispose; the host
 // answers with `pcState` (handled in the message switch below).
 chatPanel.attachCompletion((msg) => vscode.postMessage(msg));
+
+// ─── Server-driven interactions (dev-mode action confirmation / questions) ───
+// The dispatcher (via the agent-server) can block a request on an interactive
+// prompt: `@config dev on --confirm` confirms each translated action before it
+// runs, and agents can ask questions. The host forwards these as
+// `requestInteraction`; we render them with chat-ui and reply via
+// `interactionResponse`. Without this the request blocks on the server until
+// the 10-minute proposeAction timeout. In-flight prompts are tracked by
+// interactionId so `interactionResolved` / `interactionCancelled` (another
+// client answered, or a server timeout) can tear the local UI down.
+const activeInteractions = new Map<string, AbortController>();
+
+// Template-editor services (schema refresh + per-field completion) for the
+// proposeAction edit flow. chat-ui is framework-free, so these are injected;
+// each call is routed through the host to the dispatcher and correlated by id.
+let nextBridgeRpcId = 1;
+const pendingBridgeRpc = new Map<
+    number,
+    { resolve: (v: unknown) => void; reject: (e: unknown) => void }
+>();
+function bridgeRpc(
+    method: "getTemplateSchema" | "getTemplateCompletion",
+    args: unknown[],
+): Promise<unknown> {
+    const id = nextBridgeRpcId++;
+    return new Promise<unknown>((resolve, reject) => {
+        pendingBridgeRpc.set(id, { resolve, reject });
+        vscode.postMessage({ type: "bridgeRpcRequest", id, method, args });
+    });
+}
+const templateServices: TemplateEditServices = {
+    getTemplateSchema: (templateAgentName, templateName, data) =>
+        bridgeRpc("getTemplateSchema", [
+            templateAgentName,
+            templateName,
+            data,
+        ]) as Promise<any>,
+    getTemplateCompletion: (
+        templateAgentName,
+        templateName,
+        data,
+        propertyName,
+    ) =>
+        bridgeRpc("getTemplateCompletion", [
+            templateAgentName,
+            templateName,
+            data,
+            propertyName,
+        ]) as Promise<any>,
+};
+
+// Render a server-driven interaction and reply with the user's response.
+// Mirrors the Electron shell (chatPanelBridge.ts requestInteraction).
+function handleRequestInteraction(
+    interaction: PendingInteractionRequest,
+): void {
+    const ac = new AbortController();
+    activeInteractions.set(interaction.interactionId, ac);
+    void (async () => {
+        let response: PendingInteractionResponse;
+        try {
+            if (interaction.type === "question") {
+                const value = await chatPanel.addChoicePrompt<number>(
+                    interaction.message,
+                    interaction.choices.map((label, index) => ({
+                        label,
+                        value: index,
+                    })),
+                    { defaultValue: interaction.defaultId, signal: ac.signal },
+                );
+                response = {
+                    interactionId: interaction.interactionId,
+                    type: "question",
+                    value,
+                };
+            } else {
+                const value = await chatPanel.proposeActionEdit(
+                    interaction.actionTemplates,
+                    interaction.source,
+                    templateServices,
+                );
+                response = {
+                    interactionId: interaction.interactionId,
+                    type: "proposeAction",
+                    value,
+                };
+            }
+        } catch {
+            // Aborted (resolved/cancelled by another client or server
+            // timeout) — nothing to send.
+            activeInteractions.delete(interaction.interactionId);
+            return;
+        }
+        activeInteractions.delete(interaction.interactionId);
+        vscode.postMessage({ type: "interactionResponse", response });
+    })();
+}
 
 // Mirror of dispatcher's queue lifecycle (requestQueued / requestStarted
 // / requestCancelled / queueStateChanged) so we can dedupe "⚠ Cancelled"
@@ -856,6 +959,32 @@ window.addEventListener("message", (event) => {
             const result = queueMirror.applyQueueStateChanged(msg.snapshot);
             if (!result.admitted) break;
             reconcileQueueChips(result.previous, msg.snapshot);
+            break;
+        }
+        case "requestInteraction":
+            handleRequestInteraction(msg.interaction);
+            break;
+        case "interactionResolved":
+        case "interactionCancelled": {
+            // Another client answered, or the server cancelled/timed out the
+            // interaction — abort our local prompt so it stops waiting.
+            const ac = activeInteractions.get(msg.interactionId);
+            if (ac) {
+                activeInteractions.delete(msg.interactionId);
+                ac.abort();
+            }
+            break;
+        }
+        case "bridgeRpcResponse": {
+            const pending = pendingBridgeRpc.get(msg.id);
+            if (pending) {
+                pendingBridgeRpc.delete(msg.id);
+                if (msg.error !== undefined) {
+                    pending.reject(new Error(msg.error));
+                } else {
+                    pending.resolve(msg.result);
+                }
+            }
             break;
         }
     }
