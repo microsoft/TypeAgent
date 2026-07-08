@@ -1,15 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Measures the default likely-regression predicate against a set of blind
-// human labels over real replay deltas. The deltas are produced by running the
-// actual grammar replay resolver over the committed player corpus for a set of
-// hand-authored grammar variants (see the fixtures under
-// `test/fixtures/regression-variants/`), so every row is a genuine action delta
-// the matcher can reproduce — not a hand-written comparison. The committed
-// `player.regression-benchmark.jsonl` carries each delta plus a human label
-// judged only from the utterance and the two actions; the predicate never sees
-// the label, and the label is not derived from the predicate.
+// Grades the default likely-regression predicate as a detector: it measures how
+// often the predicate's verdict agrees with a blind human label, over a set of
+// action deltas produced by running the actual grammar replay resolver over the
+// committed player corpus for a set of hand-authored grammar variants (see the
+// fixtures under `test/fixtures/regression-variants/`). The variant grammars are
+// test fixtures, not shipped grammar; they exist only to manufacture genuine
+// A→B deltas the matcher can reproduce, rather than hand-written comparisons.
+// The committed `player.regression-benchmark.jsonl` carries each delta plus a
+// human label judged only from the utterance and the two actions; the predicate
+// never sees the label, and the label is not derived from the predicate. The
+// resulting agreement says nothing about the regression rate of any real change.
 
 import { readFileSync } from "node:fs";
 import { likelyRegression } from "../src/replay/predicate.js";
@@ -90,14 +92,24 @@ describe("regression predicate benchmark", () => {
     });
 
     it("agrees with the blind labels on at least the threshold share", () => {
-        const agree = rows.filter(
-            (r) => isRed(predict(r)) === isRed(r.label),
-        ).length;
+        const disagreements = rows.filter(
+            (r) => isRed(predict(r)) !== isRed(r.label),
+        );
+        const agree = rows.length - disagreements.length;
         const agreement = agree / rows.length;
         // eslint-disable-next-line no-console
         console.log(
             `predicate agreement: ${agree}/${rows.length} = ${(agreement * 100).toFixed(1)}%`,
         );
+        // Surface exactly which rows the predicate got wrong, so a drop in
+        // agreement points straight at the offending deltas instead of hiding
+        // behind the aggregate.
+        for (const r of disagreements) {
+            // eslint-disable-next-line no-console
+            console.log(
+                `  disagree [${r.rowId}] "${r.utterance}": label=${r.label} verdict=${predict(r)}`,
+            );
+        }
         expect(agreement).toBeGreaterThanOrEqual(AGREEMENT_THRESHOLD);
     });
 
