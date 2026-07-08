@@ -103,6 +103,26 @@ export function displayLogToCorpusEntries(
     const now = opts.now ?? Date.now;
     const accept = opts.agentFilter ?? ((agent: string) => agent.length > 0);
 
+    const byRequest = accumulateRequests(entries);
+    const result = new Map<string, CorpusEntry>();
+    const requests = [...byRequest.entries()].sort(
+        (a, b) => a[1].order - b[1].order,
+    );
+
+    for (const [requestId, acc] of requests) {
+        const entry = buildCorpusEntry(requestId, acc, opts, now, accept);
+        if (entry !== undefined) {
+            mergeLatestWins(result, entry);
+        }
+    }
+
+    return [...result.values()];
+}
+
+/** Group raw log entries by requestId, folding each into an accumulator. */
+function accumulateRequests(
+    entries: CaptureLogEntry[],
+): Map<string, RequestAccumulator> {
     const byRequest = new Map<string, RequestAccumulator>();
     let order = 0;
     for (const entry of entries) {
@@ -112,134 +132,169 @@ export function displayLogToCorpusEntries(
         }
         let acc = byRequest.get(requestId);
         if (acc === undefined) {
-            acc = { order: order, actions: [] };
+            acc = { order, actions: [] };
             byRequest.set(requestId, acc);
         }
-        const entryOrder = order++;
+        accumulateEntry(acc, entry, order++);
+    }
+    return byRequest;
+}
 
-        switch (entry.type) {
-            case "user-request":
-                if (
-                    typeof entry.command === "string" &&
-                    acc.utterance === undefined
-                ) {
-                    acc.utterance = entry.command;
-                }
-                break;
-            case "set-display-info":
-                // Only a structured action (a `TypeAgentAction` object) counts.
-                // Framework sources like `dispatcher`/`system` emit `string[]`
-                // display actions (e.g. `["request"]`); those carry no expected
-                // action and must not define the request's agent.
-                if (isStructuredAction(entry.action)) {
-                    if (
-                        acc.agent === undefined &&
-                        typeof entry.source === "string" &&
-                        entry.source.length > 0
-                    ) {
-                        acc.agent = entry.source;
-                    }
-                    acc.actions.push({
-                        index: entry.actionIndex,
-                        seq: entry.seq,
-                        order: entryOrder,
-                        action: entry.action,
-                    });
-                }
-                break;
-            case "user-feedback": {
-                if (entry.rating === undefined) {
-                    break;
-                }
-                const candidate = {
-                    seq: entry.seq,
-                    order: entryOrder,
-                    rating: entry.rating,
-                    category: entry.category,
-                    comment: entry.comment,
-                    recordedAt: entry.timestamp,
-                };
-                if (
-                    acc.feedback === undefined ||
-                    laterThan(candidate, acc.feedback)
-                ) {
-                    acc.feedback = candidate;
-                }
-                break;
+/** Fold one log entry into its request accumulator by entry type. */
+function accumulateEntry(
+    acc: RequestAccumulator,
+    entry: CaptureLogEntry,
+    entryOrder: number,
+): void {
+    switch (entry.type) {
+        case "user-request":
+            if (
+                typeof entry.command === "string" &&
+                acc.utterance === undefined
+            ) {
+                acc.utterance = entry.command;
             }
-            default:
-                break;
-        }
+            break;
+        case "set-display-info":
+            accumulateAction(acc, entry, entryOrder);
+            break;
+        case "user-feedback":
+            accumulateFeedback(acc, entry, entryOrder);
+            break;
+        default:
+            break;
+    }
+}
+
+/**
+ * Record a structured action and, if not yet known, the request's agent. Only
+ * a structured action (a `TypeAgentAction` object) counts. Framework sources
+ * like `dispatcher`/`system` emit `string[]` display actions (e.g.
+ * `["request"]`); those carry no expected action and must not define the
+ * request's agent.
+ */
+function accumulateAction(
+    acc: RequestAccumulator,
+    entry: CaptureLogEntry,
+    entryOrder: number,
+): void {
+    if (!isStructuredAction(entry.action)) {
+        return;
+    }
+    if (
+        acc.agent === undefined &&
+        typeof entry.source === "string" &&
+        entry.source.length > 0
+    ) {
+        acc.agent = entry.source;
+    }
+    acc.actions.push({
+        index: entry.actionIndex,
+        seq: entry.seq,
+        order: entryOrder,
+        action: entry.action,
+    });
+}
+
+/** Keep the latest non-cleared feedback for the request. */
+function accumulateFeedback(
+    acc: RequestAccumulator,
+    entry: CaptureLogEntry,
+    entryOrder: number,
+): void {
+    if (entry.rating === undefined) {
+        return;
+    }
+    const candidate = {
+        seq: entry.seq,
+        order: entryOrder,
+        rating: entry.rating,
+        category: entry.category,
+        comment: entry.comment,
+        recordedAt: entry.timestamp,
+    };
+    if (acc.feedback === undefined || laterThan(candidate, acc.feedback)) {
+        acc.feedback = candidate;
+    }
+}
+
+/**
+ * Build a corpus entry from one accumulated request, or `undefined` when the
+ * request lacks an utterance, a resolvable agent, or any resolved action, or
+ * when the agent is filtered out.
+ */
+function buildCorpusEntry(
+    requestId: string,
+    acc: RequestAccumulator,
+    opts: CaptureTransformOptions,
+    now: () => number,
+    accept: (agent: string) => boolean,
+): CorpusEntry | undefined {
+    if (
+        acc.utterance === undefined ||
+        acc.agent === undefined ||
+        acc.actions.length === 0 ||
+        !accept(acc.agent)
+    ) {
+        return undefined;
     }
 
-    const result = new Map<string, CorpusEntry>();
-    const requests = [...byRequest.entries()].sort(
-        (a, b) => a[1].order - b[1].order,
-    );
+    const ordered = [...acc.actions].sort(compareActions).map((a) => a.action);
+    const expectedAction = ordered.length === 1 ? ordered[0] : ordered;
 
-    for (const [requestId, acc] of requests) {
-        if (acc.utterance === undefined || acc.agent === undefined) {
-            continue;
-        }
-        if (acc.actions.length === 0) {
-            continue;
-        }
-        if (!accept(acc.agent)) {
-            continue;
-        }
+    const entry: CorpusEntry = {
+        id: computeEntryId(acc.utterance, acc.agent),
+        utterance: acc.utterance,
+        agent: acc.agent,
+        source: "captures",
+        provenance: {
+            sourceUri: opts.sourceUri,
+            rawSourceUri: opts.sourceUri,
+            capturedAt: now(),
+            requestId,
+            ...(opts.sessionId !== undefined
+                ? { sessionId: opts.sessionId }
+                : {}),
+        },
+        expectedAction,
+    };
 
-        const ordered = [...acc.actions]
-            .sort(compareActions)
-            .map((a) => a.action);
-        const expectedAction = ordered.length === 1 ? ordered[0] : ordered;
-
-        const entry: CorpusEntry = {
-            id: computeEntryId(acc.utterance, acc.agent),
-            utterance: acc.utterance,
-            agent: acc.agent,
-            source: "captures",
-            provenance: {
-                sourceUri: opts.sourceUri,
-                rawSourceUri: opts.sourceUri,
-                capturedAt: now(),
-                requestId,
-                ...(opts.sessionId !== undefined
-                    ? { sessionId: opts.sessionId }
-                    : {}),
-            },
-            expectedAction,
+    if (acc.feedback !== undefined && acc.feedback.rating !== null) {
+        const label: FeedbackLabel = {
+            rating: acc.feedback.rating,
+            recordedAt: acc.feedback.recordedAt ?? now(),
+            ...(acc.feedback.category !== undefined
+                ? { category: acc.feedback.category }
+                : {}),
+            ...(acc.feedback.comment !== undefined
+                ? { comment: acc.feedback.comment }
+                : {}),
         };
-
-        if (acc.feedback !== undefined && acc.feedback.rating !== null) {
-            const label: FeedbackLabel = {
-                rating: acc.feedback.rating,
-                recordedAt: acc.feedback.recordedAt ?? now(),
-                ...(acc.feedback.category !== undefined
-                    ? { category: acc.feedback.category }
-                    : {}),
-                ...(acc.feedback.comment !== undefined
-                    ? { comment: acc.feedback.comment }
-                    : {}),
-            };
-            entry.feedback = label;
-        }
-
-        // Latest wins on a logical-id collision; the Map keeps the first
-        // occurrence's position so output order stays stable.
-        const existing = result.get(entry.id);
-        if (existing !== undefined) {
-            entry.provenance = {
-                ...entry.provenance,
-                ...(existing.provenance.sessionId !== undefined &&
-                entry.provenance.sessionId === undefined
-                    ? { sessionId: existing.provenance.sessionId }
-                    : {}),
-            };
-        }
-        result.set(entry.id, entry);
+        entry.feedback = label;
     }
 
-    return [...result.values()];
+    return entry;
+}
+
+/**
+ * Insert `entry`, letting the latest occurrence of a logical id win while the
+ * Map keeps the first occurrence's position so output order stays stable.
+ */
+function mergeLatestWins(
+    result: Map<string, CorpusEntry>,
+    entry: CorpusEntry,
+): void {
+    const existing = result.get(entry.id);
+    if (existing !== undefined) {
+        entry.provenance = {
+            ...entry.provenance,
+            ...(existing.provenance.sessionId !== undefined &&
+            entry.provenance.sessionId === undefined
+                ? { sessionId: existing.provenance.sessionId }
+                : {}),
+        };
+    }
+    result.set(entry.id, entry);
 }
 
 function isStructuredAction(action: unknown): boolean {
@@ -262,10 +317,10 @@ function compareActions(
     a: { index: number | undefined; seq: number | undefined; order: number },
     b: { index: number | undefined; seq: number | undefined; order: number },
 ): number {
-    if (a.index !== undefined && b.index !== undefined) {
+    if (a.index !== undefined && b.index !== undefined && a.index !== b.index) {
         return a.index - b.index;
     }
-    if (a.seq !== undefined && b.seq !== undefined) {
+    if (a.seq !== undefined && b.seq !== undefined && a.seq !== b.seq) {
         return a.seq - b.seq;
     }
     return a.order - b.order;

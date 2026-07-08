@@ -77,8 +77,9 @@ export type HostToWebviewMessage =
     | { type: "error"; requestId?: number; message: string }
     /** Result of a host version QuickPick (omitted message ⇒ user cancelled). */
     | { type: "versionPicked"; side: ReplaySide; resolved: ResolvedVersion }
-    /** The utterance filter the user entered in the host input box (empty ⇒
-     *  cleared). Only sent when the user confirmed; a cancel sends nothing. */
+    /** The utterance filter from the host input box, posted live on every
+     *  keystroke (empty string ⇒ cleared). Closing the box (accept or cancel)
+     *  sends nothing and leaves the last value applied. */
     | { type: "utteranceSearch"; query: string };
 
 /** Messages the webview posts to the extension host. */

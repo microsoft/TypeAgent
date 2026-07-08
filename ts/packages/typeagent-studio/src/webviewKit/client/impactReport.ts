@@ -1003,13 +1003,35 @@ function renderTable(): void {
     const table = document.createElement("table");
     const thead = document.createElement("thead");
     const head = document.createElement("tr");
-    const headers: {
-        label: string;
-        title: string;
-        ariaLabel?: string;
-        sort?: ImpactSortColumn;
-        filter?: boolean;
-    }[] = [
+    for (const h of tableHeaders()) {
+        head.appendChild(buildHeaderCell(h));
+    }
+    thead.appendChild(head);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    for (const row of rows) {
+        tbody.appendChild(buildTableRow(row));
+    }
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+
+    appendTableNotes(rows);
+}
+
+interface HeaderSpec {
+    label: string;
+    title: string;
+    ariaLabel?: string;
+    sort?: ImpactSortColumn;
+    filter?: boolean;
+}
+
+// Built lazily as a function (not a module-level const) so it can reference
+// `LATENCY_TOOLTIP`, which is declared later in the file; a six-item literal
+// adds no meaningful cost per render.
+function tableHeaders(): HeaderSpec[] {
+    return [
         {
             label: "Utterance",
             title: "The corpus utterance that was replayed.",
@@ -1043,110 +1065,112 @@ function renderTable(): void {
             sort: "latency",
         },
     ];
-    for (const h of headers) {
-        const th = document.createElement("th");
-        if (h.ariaLabel) th.setAttribute("aria-label", h.ariaLabel);
-        if (h.sort) {
-            const column = h.sort;
-            const active = sortState?.column === column;
-            th.className = active ? "col-sortable is-sorted" : "col-sortable";
-            th.tabIndex = 0;
-            th.setAttribute("role", "button");
-            const dir = active ? sortState!.direction : undefined;
-            th.title =
-                `${h.title} Click to sort` +
-                (active
-                    ? dir === "asc"
-                        ? " (ascending; click for descending)."
-                        : " (descending; click for ascending)."
-                    : ".");
-            const inner = el("div", "th-inner");
-            const labelEl = el("span", "th-label");
-            labelEl.textContent = h.label || "Latency";
-            inner.appendChild(labelEl);
-            // The filter funnel sits right after the title, away from the sort
-            // chevron so the two controls don't crowd each other.
-            if (h.filter) {
-                inner.appendChild(buildUtteranceFilterButton());
-            }
-            const controls = el("div", "th-controls");
-            const arrow = codicon(
-                active && dir === "asc" ? "chevron-up" : "chevron-down",
-            );
-            arrow.classList.add("sort-arrow");
-            if (!active) arrow.classList.add("sort-arrow-idle");
-            controls.appendChild(arrow);
-            inner.appendChild(controls);
-            th.appendChild(inner);
-            const onSort = () => toggleSort(column);
-            th.addEventListener("click", onSort);
-            th.addEventListener("keydown", (e: KeyboardEvent) => {
-                if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onSort();
-                }
-            });
-        } else {
-            th.textContent = h.label || "Latency";
-            th.title = h.title;
-        }
-        head.appendChild(th);
-    }
-    thead.appendChild(head);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
+}
 
-    for (const row of rows) {
-        const tr = document.createElement("tr");
-        tr.appendChild(cell(row.utterance));
-        tr.appendChild(statusCell(row));
-        tr.appendChild(impactCell(row));
-        tr.appendChild(
-            cell(
-                row.resolutionA,
-                "resolution",
-                resolutionTooltip(row.resolutionA),
-            ),
-        );
-        tr.appendChild(
-            cell(
-                row.resolutionB,
-                "resolution",
-                resolutionTooltip(row.resolutionB),
-            ),
-        );
-        tr.appendChild(latencyCell(row));
-        // Every row is clickable. Difference rows drill into an action A/B diff;
-        // equal rows have nothing to compare, so a click just clears any open
-        // detail pane.
-        if (currentRawById.has(row.utteranceId)) {
-            const isDiff = row.status !== "equal";
-            tr.classList.add("row-clickable");
-            if (row.utteranceId === selectedId) {
-                tr.classList.add("row-open");
-            }
-            tr.tabIndex = 0;
-            tr.setAttribute("role", "button");
-            tr.title = isDiff
-                ? "Show the action A/B diff for this utterance."
-                : "Equal row — click to close the detail diff.";
-            const activate = () =>
-                isDiff
-                    ? openDetail(row.utteranceId)
-                    : selectEqualRow(row.utteranceId);
-            tr.addEventListener("click", activate);
-            tr.addEventListener("keydown", (e: KeyboardEvent) => {
-                if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    activate();
-                }
-            });
-        }
-        tbody.appendChild(tr);
+/** Tooltip suffix describing the sort affordance for a column header. */
+function sortHint(
+    active: boolean,
+    dir: ImpactSort["direction"] | undefined,
+): string {
+    if (!active) {
+        return " Click to sort.";
     }
-    table.appendChild(tbody);
-    tableWrap.appendChild(table);
+    return dir === "asc"
+        ? " Click to sort (ascending; click for descending)."
+        : " Click to sort (descending; click for ascending).";
+}
 
+/** Build one `<th>`, wiring sort + filter affordances for sortable columns. */
+function buildHeaderCell(h: HeaderSpec): HTMLTableCellElement {
+    const th = document.createElement("th");
+    if (h.ariaLabel) th.setAttribute("aria-label", h.ariaLabel);
+    if (!h.sort) {
+        th.textContent = h.label || "Latency";
+        th.title = h.title;
+        return th;
+    }
+
+    const column = h.sort;
+    const active = sortState?.column === column;
+    const dir = active ? sortState!.direction : undefined;
+    th.className = active ? "col-sortable is-sorted" : "col-sortable";
+    th.tabIndex = 0;
+    th.setAttribute("role", "button");
+    th.title = h.title + sortHint(active, dir);
+
+    const inner = el("div", "th-inner");
+    const labelEl = el("span", "th-label");
+    labelEl.textContent = h.label || "Latency";
+    inner.appendChild(labelEl);
+    // The filter funnel sits right after the title, away from the sort chevron
+    // so the two controls don't crowd each other.
+    if (h.filter) {
+        inner.appendChild(buildUtteranceFilterButton());
+    }
+    const controls = el("div", "th-controls");
+    const arrow = codicon(
+        active && dir === "asc" ? "chevron-up" : "chevron-down",
+    );
+    arrow.classList.add("sort-arrow");
+    if (!active) arrow.classList.add("sort-arrow-idle");
+    controls.appendChild(arrow);
+    inner.appendChild(controls);
+    th.appendChild(inner);
+
+    const onSort = () => toggleSort(column);
+    th.addEventListener("click", onSort);
+    th.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSort();
+        }
+    });
+    return th;
+}
+
+/** Build one data `<tr>`, making it clickable when a raw delta backs the row. */
+function buildTableRow(row: ImpactRow): HTMLTableRowElement {
+    const tr = document.createElement("tr");
+    tr.appendChild(cell(row.utterance));
+    tr.appendChild(statusCell(row));
+    tr.appendChild(impactCell(row));
+    tr.appendChild(
+        cell(row.resolutionA, "resolution", resolutionTooltip(row.resolutionA)),
+    );
+    tr.appendChild(
+        cell(row.resolutionB, "resolution", resolutionTooltip(row.resolutionB)),
+    );
+    tr.appendChild(latencyCell(row));
+    // Every row is clickable. Difference rows drill into an action A/B diff;
+    // equal rows have nothing to compare, so a click just clears any open
+    // detail pane.
+    if (!currentRawById.has(row.utteranceId)) {
+        return tr;
+    }
+    const isDiff = row.status !== "equal";
+    tr.classList.add("row-clickable");
+    if (row.utteranceId === selectedId) {
+        tr.classList.add("row-open");
+    }
+    tr.tabIndex = 0;
+    tr.setAttribute("role", "button");
+    tr.title = isDiff
+        ? "Show the action A/B diff for this utterance."
+        : "Equal row — click to close the detail diff.";
+    const activate = () =>
+        isDiff ? openDetail(row.utteranceId) : selectEqualRow(row.utteranceId);
+    tr.addEventListener("click", activate);
+    tr.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            activate();
+        }
+    });
+    return tr;
+}
+
+/** Append the empty-state message and any truncation notes below the table. */
+function appendTableNotes(rows: ImpactRow[]): void {
     if (rows.length === 0) {
         // Distinguish "filtered everything out" from a genuinely all-equal run
         // (nothing changed between the two versions).

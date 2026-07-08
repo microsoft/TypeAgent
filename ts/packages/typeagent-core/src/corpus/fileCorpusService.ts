@@ -83,7 +83,7 @@ export class FileCorpusService implements CorpusService {
     async append(agent: string, entries: CorpusEntry[]): Promise<string> {
         const dir = this.capturesDir(agent);
         await fs.mkdir(dir, { recursive: true });
-        const file = await this.uniqueCaptureFile(dir);
+        const file = await this.reserveCaptureFile(dir);
         const stamped = entries.map((e) => ({
             ...e,
             source: "captures" as const,
@@ -98,22 +98,28 @@ export class FileCorpusService implements CorpusService {
     }
 
     /**
-     * Pick a capture file path that does not already exist. The base name is a
-     * timestamp, so two appends within the same millisecond would otherwise
-     * collide and overwrite each other; a numeric suffix disambiguates.
+     * Atomically reserve a capture file that does not already exist and return
+     * its path. The base name is a timestamp, so two appends within the same
+     * millisecond would otherwise collide; the empty file is created with the
+     * exclusive `wx` flag and a numeric suffix is tried on `EEXIST`, so two
+     * concurrent appends can never reserve the same path. The caller then writes
+     * its contents into the reserved file.
      */
-    private async uniqueCaptureFile(dir: string): Promise<string> {
+    private async reserveCaptureFile(dir: string): Promise<string> {
         const stamp = captureFileStamp(this.now());
         let file = path.join(dir, `${stamp}.jsonl`);
         let n = 1;
         for (;;) {
             try {
-                await fs.access(file);
-            } catch {
+                await fs.writeFile(file, "", { flag: "wx" });
                 return file;
+            } catch (e) {
+                if ((e as NodeJS.ErrnoException).code !== "EEXIST") {
+                    throw e;
+                }
+                file = path.join(dir, `${stamp}-${n}.jsonl`);
+                n++;
             }
-            file = path.join(dir, `${stamp}-${n}.jsonl`);
-            n++;
         }
     }
 
