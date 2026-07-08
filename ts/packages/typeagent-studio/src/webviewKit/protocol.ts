@@ -11,7 +11,10 @@
  * touches a socket (the security boundary).
  */
 
-import type { StudioReplayResult } from "@typeagent/core/runtime";
+import type {
+    StudioReplayResult,
+    StudioReplayMode,
+} from "@typeagent/core/runtime";
 import type { VersionSpec } from "@typeagent/core/replay";
 import {
     coerceVersionSpec,
@@ -39,6 +42,11 @@ export type HostToWebviewMessage =
           /** Whether `agent` has a corpus available to replay (channel
            *  `listCorpusAgents`). */
           available: boolean;
+          /** Whether wildcard validation can run for `agent` — it exposes a
+           *  `validateWildcardMatch` and its module loads. Drives the validation
+           *  toggle: enabled when there is a validator to run, disabled (a no-op)
+           *  otherwise. */
+          canValidateWildcards: boolean;
       }
     /** A connection/loading status line for the webview to surface. */
     | { type: "status"; text: string }
@@ -71,12 +79,29 @@ export type WebviewToHostMessage =
           versionA: VersionSpec;
           /** Validated compare (B) version spec. */
           versionB: VersionSpec;
+          /** Which deterministic dispatch path to model. */
+          mode: StudioReplayMode;
+          /**
+           * Opt-in: additionally run the agent's real `validateWildcardMatch`
+           * over the working-tree side's wildcard matches. Off unless the user
+           * lit the validation toggle.
+           */
+          validateWildcards: boolean;
       }
     /** Ask the host to open a native version QuickPick for one side. */
     | { type: "pickVersion"; side: ReplaySide };
 
 function narrowSide(value: unknown): ReplaySide | undefined {
     return value === "a" || value === "b" ? value : undefined;
+}
+
+/**
+ * Narrow an untrusted mode into a {@link StudioReplayMode}, defaulting unknown
+ * or missing values to the grammar-only `nfa-grammar` baseline (the safer,
+ * cache-free default the runtime also falls back to).
+ */
+function narrowMode(value: unknown): StudioReplayMode {
+    return value === "completionBased-cache" ? value : "nfa-grammar";
 }
 
 /** Narrow an untrusted value into a {@link WebviewToHostMessage}. */
@@ -100,6 +125,8 @@ export function parseWebviewMessage(
                 agent?: unknown;
                 versionA?: unknown;
                 versionB?: unknown;
+                mode?: unknown;
+                validateWildcards?: unknown;
             };
             if (
                 typeof m.requestId === "number" &&
@@ -116,6 +143,9 @@ export function parseWebviewMessage(
                     agent: m.agent,
                     versionA: coerceVersionSpec(m.versionA),
                     versionB: coerceVersionSpec(m.versionB),
+                    mode: narrowMode(m.mode),
+                    // Opt-in and conservative: only an explicit `true` enables it.
+                    validateWildcards: m.validateWildcards === true,
                 };
             }
             return undefined;

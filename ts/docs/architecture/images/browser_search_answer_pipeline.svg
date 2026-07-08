@@ -1,0 +1,52 @@
+<svg width="100%" viewBox="0 0 660 598" role="img" xmlns="http://www.w3.org/2000/svg">
+<style>text{font-family:"Anthropic Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}</style>
+<title>Search and answer generation pipeline</title>
+<desc>A user query flows through the QueryAnalyzer, search strategies, MetadataRanker, ContextBuilder and AnswerGenerator stages to produce an ActionResult with a summary, source links and follow-up suggestions.</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="arrow-lg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+
+<line x1="330.0" y1="74" x2="330.0" y2="100" stroke="#9C9A92" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="330.0" y1="172" x2="330.0" y2="198" stroke="#9C9A92" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="330.0" y1="252" x2="330.0" y2="278" stroke="#9C9A92" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="330.0" y1="332" x2="330.0" y2="358" stroke="#9C9A92" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="330.0" y1="412" x2="330.0" y2="438" stroke="#9C9A92" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="330.0" y1="492" x2="330.0" y2="518" stroke="#9C9A92" stroke-width="1.5" marker-end="url(#arrow)"/>
+<g>
+<rect x="40" y="20" width="580" height="54" rx="8" fill="#444441" stroke="#B4B2A9" stroke-width="0.5"/>
+<text x="54" y="42" text-anchor="start" dominant-baseline="central" fill="#D3D1C7" font-size="13" font-weight="500">User query</text>
+<text x="54" y="62" text-anchor="start" dominant-baseline="central" fill="#B4B2A9" font-size="11" font-weight="400">"What did I read about climate change?"</text>
+</g>
+<g>
+<rect x="40" y="100" width="580" height="72" rx="8" fill="#3C3489" stroke="#AFA9EC" stroke-width="0.5"/>
+<text x="54" y="122" text-anchor="start" dominant-baseline="central" fill="#CECBF6" font-size="13" font-weight="500">QueryAnalyzer (queryAnalyzer.mts)</text>
+<text x="54" y="142" text-anchor="start" dominant-baseline="central" fill="#AFA9EC" font-size="11" font-weight="400">Intent detection (find_latest, summarize, ...)</text>
+<text x="54" y="160" text-anchor="start" dominant-baseline="central" fill="#AFA9EC" font-size="11" font-weight="400">Query decomposition: entities, topics, temporal filters</text>
+</g>
+<g>
+<rect x="40" y="198" width="580" height="54" rx="8" fill="#3C3489" stroke="#AFA9EC" stroke-width="0.5"/>
+<text x="54" y="220" text-anchor="start" dominant-baseline="central" fill="#CECBF6" font-size="13" font-weight="500">Search strategies (searchWebMemories.mts)</text>
+<text x="54" y="240" text-anchor="start" dominant-baseline="central" fill="#AFA9EC" font-size="11" font-weight="400">Keyword · Entity · Topic · Hybrid search</text>
+</g>
+<g>
+<rect x="40" y="278" width="580" height="54" rx="8" fill="#3C3489" stroke="#AFA9EC" stroke-width="0.5"/>
+<text x="54" y="300" text-anchor="start" dominant-baseline="central" fill="#CECBF6" font-size="13" font-weight="500">MetadataRanker (metadataRanker.mts)</text>
+<text x="54" y="320" text-anchor="start" dominant-baseline="central" fill="#AFA9EC" font-size="11" font-weight="400">Ranks by relevance, recency, quality</text>
+</g>
+<g>
+<rect x="40" y="358" width="580" height="54" rx="8" fill="#3C3489" stroke="#AFA9EC" stroke-width="0.5"/>
+<text x="54" y="380" text-anchor="start" dominant-baseline="central" fill="#CECBF6" font-size="13" font-weight="500">ContextBuilder (contextBuilder.mts)</text>
+<text x="54" y="400" text-anchor="start" dominant-baseline="central" fill="#AFA9EC" font-size="11" font-weight="400">Builds SearchContext: domains, time range, top topics</text>
+</g>
+<g>
+<rect x="40" y="438" width="580" height="54" rx="8" fill="#3C3489" stroke="#AFA9EC" stroke-width="0.5"/>
+<text x="54" y="460" text-anchor="start" dominant-baseline="central" fill="#CECBF6" font-size="13" font-weight="500">AnswerGenerator (answerGenerator.mts)</text>
+<text x="54" y="480" text-anchor="start" dominant-baseline="central" fill="#AFA9EC" font-size="11" font-weight="400">Single LLM call via TypeChat -&gt; AnswerEnhancement</text>
+</g>
+<g>
+<rect x="40" y="518" width="580" height="54" rx="8" fill="#085041" stroke="#5DCAA5" stroke-width="0.5"/>
+<text x="54" y="540" text-anchor="start" dominant-baseline="central" fill="#9FE1CB" font-size="13" font-weight="500">ActionResult</text>
+<text x="54" y="560" text-anchor="start" dominant-baseline="central" fill="#5DCAA5" font-size="11" font-weight="400">Summary + source links + follow-up suggestions</text>
+</g>
+</svg>

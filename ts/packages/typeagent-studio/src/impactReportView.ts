@@ -59,9 +59,11 @@ export function openImpactReport(
     // Subscription to the shared connection's state, disposed with the panel.
     let stateSub: { dispose(): void } | undefined;
     // The last completed result + its request id. Re-posted whenever the webview
-    // signals `ready` so a run that finished while the iframe was torn down (the
-    // panel is `retainContextWhenHidden: false`, so hidden panels drop posts) is
-    // recovered on reveal — the webview dedupes by request id.
+    // signals `ready` so a run whose result arrived before the webview was
+    // listening (e.g. the first load, or a full extension reload) is recovered
+    // on the next `ready` — the webview dedupes by request id. With the panel
+    // retaining context while hidden, navigate-away/back no longer reloads it,
+    // so this mainly guards the initial-load and extension-reload cases.
     let lastResult:
         | {
               requestId: number;
@@ -82,6 +84,11 @@ export function openImpactReport(
         title: `Impact Report — ${agent}`,
         scriptPath: ["dist", "webview", "impactReport.js"],
         stylePath: ["media", "impactReport.css"],
+        // The panel holds a live service connection and a rendered result, and
+        // the agent/connection context is re-pushed only via a single reveal
+        // `ready` handshake. Retain the context so navigating away and back
+        // keeps that state instead of tearing the webview down and reloading.
+        retainContextWhenHidden: true,
         onMessage: (raw) => void handleMessage(raw),
         onDispose: () => {
             stateSub?.dispose();
@@ -126,7 +133,13 @@ export function openImpactReport(
         post({ type: "status", text: "Connecting to the studio service…" });
         const c = await ensureClient();
         if (!c) {
-            post({ type: "init", agent, connected: false, available: false });
+            post({
+                type: "init",
+                agent,
+                connected: false,
+                available: false,
+                canValidateWildcards: false,
+            });
             return;
         }
         // Confirm this agent still has a corpus to replay so the webview can
@@ -138,7 +151,22 @@ export function openImpactReport(
         } catch {
             // Connected but listing failed; treat as unavailable for now.
         }
-        post({ type: "init", agent, connected: true, available });
+        // Check whether wildcard validation can actually run for this agent (it
+        // has a validator), so the webview can disable the toggle when there is
+        // nothing to run. A lookup failure stays conservative (toggle disabled).
+        let canValidateWildcards = false;
+        try {
+            canValidateWildcards = await c.canValidateWildcards(agent);
+        } catch {
+            // Leave the toggle disabled rather than offering a no-op.
+        }
+        post({
+            type: "init",
+            agent,
+            connected: true,
+            available,
+            canValidateWildcards,
+        });
         // Recover a result computed while the panel was hidden/reloaded.
         if (lastResult) {
             post({
@@ -211,47 +239,79 @@ export function openImpactReport(
     // (invalidated on each run); remote-tracking refs are enumerated lazily and
     // appended only when the user asks for them. An empty selection (Esc) leaves
     // the webview's current choice untouched — no message is posted.
-    const pickVersion = async (side: ReplaySide): Promise<void> => {
-        const exec =
-            repoRoot !== undefined ? defaultGitExec(repoRoot) : undefined;
-        if (localRefsCache === undefined) {
-            if (exec) {
-                try {
-                    localRefsCache = await listVersionRefs(exec);
-                } catch {
-                    localRefsCache = [WORKING_TREE_REF];
-                }
-            } else {
-                localRefsCache = [WORKING_TREE_REF];
+    const ensureLocalRefs = async (
+        exec: ReturnType<typeof defaultGitExec> | undefined,
+    ): Promise<ResolvedVersion[]> => {
+        if (localRefsCache !== undefined) {
+            return localRefsCache;
+        }
+        if (!exec) {
+            localRefsCache = [WORKING_TREE_REF];
+            return localRefsCache;
+        }
+        try {
+            localRefsCache = await listVersionRefs(exec);
+        } catch {
+            localRefsCache = [WORKING_TREE_REF];
+        }
+        return localRefsCache;
+    };
+
+    // Enumerate remote-tracking refs on first request; returns whether any exist.
+    const loadRemoteRefs = async (
+        exec: ReturnType<typeof defaultGitExec>,
+    ): Promise<boolean> => {
+        if (remoteRefsCache === undefined) {
+            try {
+                remoteRefsCache = await listRemoteRefs(exec);
+            } catch {
+                remoteRefsCache = [];
             }
         }
+        return remoteRefsCache.length > 0;
+    };
 
-        const title = `Impact Report — ${side === "a" ? "base (A)" : "compare (B)"} version`;
-        const toItems = (refs: ResolvedVersion[]): VersionItem[] =>
-            refs.map((r) => ({
+    // The QuickPick item list: local refs, then the enter-ref and show-remotes
+    // affordances (only with a git exec), then remotes once the user reveals them.
+    const buildVersionItems = (
+        refs: ResolvedVersion[],
+        exec: ReturnType<typeof defaultGitExec> | undefined,
+        showRemotes: boolean,
+    ): VersionItem[] => {
+        const toItems = (rs: ResolvedVersion[]): VersionItem[] =>
+            rs.map((r) => ({
                 label: r.label,
                 description: r.tooltip,
                 resolved: r,
             }));
+        const items: VersionItem[] = toItems(refs);
+        if (exec) {
+            items.push(ENTER_REF_ITEM);
+        }
+        if (!showRemotes && exec) {
+            items.push(SHOW_REMOTES_ITEM);
+        }
+        if (showRemotes && remoteRefsCache && remoteRefsCache.length > 0) {
+            items.push({
+                label: "remote branches",
+                kind: vscode.QuickPickItemKind.Separator,
+            });
+            items.push(...toItems(remoteRefsCache));
+        }
+        return items;
+    };
+
+    const pickVersion = async (side: ReplaySide): Promise<void> => {
+        const exec =
+            repoRoot !== undefined ? defaultGitExec(repoRoot) : undefined;
+        const refs = await ensureLocalRefs(exec);
+        const title = `Impact Report — ${side === "a" ? "base (A)" : "compare (B)"} version`;
 
         // Re-open loop: selecting the sentinel enumerates remotes and re-renders
         // with them appended; any other choice resolves (or Esc cancels).
         let showRemotes = remoteRefsCache !== undefined;
         for (;;) {
-            const items: VersionItem[] = toItems(localRefsCache);
-            if (exec) {
-                items.push(ENTER_REF_ITEM);
-            }
-            if (!showRemotes && exec) {
-                items.push(SHOW_REMOTES_ITEM);
-            }
-            if (showRemotes && remoteRefsCache && remoteRefsCache.length > 0) {
-                items.push({
-                    label: "remote branches",
-                    kind: vscode.QuickPickItemKind.Separator,
-                });
-                items.push(...toItems(remoteRefsCache));
-            }
+            const items = buildVersionItems(refs, exec, showRemotes);
             const choice = await vscode.window.showQuickPick(items, {
                 title,
                 placeHolder: "Select a version to compare",
@@ -269,22 +329,15 @@ export function openImpactReport(
                 // Cancelled the input box — fall back to the version list.
                 continue;
             }
-            if (choice === SHOW_REMOTES_ITEM) {
-                if (remoteRefsCache === undefined && exec) {
-                    try {
-                        remoteRefsCache = await listRemoteRefs(exec);
-                    } catch {
-                        remoteRefsCache = [];
-                    }
-                }
-                if (!remoteRefsCache || remoteRefsCache.length === 0) {
+            if (choice === SHOW_REMOTES_ITEM && exec) {
+                if (await loadRemoteRefs(exec)) {
+                    showRemotes = true;
+                } else {
                     void vscode.window.showInformationMessage(
                         "No remote-tracking branches were found.",
                     );
                     showRemotes = false;
-                    continue;
                 }
-                showRemotes = true;
                 continue;
             }
             if (choice.resolved) {
@@ -360,6 +413,14 @@ export function openImpactReport(
                 // free of LLM calls.
                 versionA: msg.versionA,
                 versionB: msg.versionB,
+                // The webview's mode toggle selects which deterministic dispatch
+                // path to model (grammar-only vs construction-cache-first); the
+                // runtime defaults unknown/missing to the cache-free baseline.
+                mode: msg.mode,
+                // Opt-in wildcard validation: the runtime only acts on it when a
+                // `resolveWildcardValidator` is wired and the agent's manifest
+                // declares it replay-safe; otherwise it is a no-op.
+                validateWildcards: msg.validateWildcards,
                 missPolicy: "needs-explanation",
             });
             post({
