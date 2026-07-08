@@ -95,7 +95,17 @@ export function buildVariantCommit(variantAgrAbsPath: string): string {
         tmpdir(),
         `rgbench-index-${process.pid}-${Math.random().toString(36).slice(2)}`,
     );
-    const env = { ...process.env, GIT_INDEX_FILE: indexFile };
+    // Pin the committer/author identity so `commit-tree` succeeds even when the
+    // environment has no configured git user (e.g. a fresh CI runner). Only the
+    // resulting tree content is read back, so the exact identity is irrelevant.
+    const env = {
+        ...process.env,
+        GIT_INDEX_FILE: indexFile,
+        GIT_AUTHOR_NAME: "regression-benchmark",
+        GIT_AUTHOR_EMAIL: "regression-benchmark@localhost",
+        GIT_COMMITTER_NAME: "regression-benchmark",
+        GIT_COMMITTER_EMAIL: "regression-benchmark@localhost",
+    };
     try {
         git(["read-tree", "HEAD"], env);
         git(
