@@ -1096,7 +1096,14 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
 
         // An update starts a drain; the gated sibling keeps it `removing`.
         const updating = built.testApi.update("foo", undefined, issuing);
-        await flush();
+        await waitFor(
+            () =>
+                !built.testApi
+                    .listInstalled()
+                    .map((i) => i.name)
+                    .includes("foo"),
+            "foo to enter the draining (removing) state",
+        );
 
         // A session connecting now parks on the in-flight drain: its `providers`
         // promise stays pending (the dispatcher blocks on it under the held
@@ -1226,7 +1233,14 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         await installFoo(built, issuing);
 
         const uninstalling = built.testApi.uninstall("foo", issuing);
-        await flush();
+        await waitFor(
+            () =>
+                !built.testApi
+                    .listInstalled()
+                    .map((i) => i.name)
+                    .includes("foo"),
+            "foo to enter the draining (removing) state",
+        );
 
         // A session connects mid-drain and parks. Its host records any fan-out.
         const lateCalls: string[] = [];
@@ -1346,7 +1360,10 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         issuing.calls.length = 0;
 
         const updating = built.testApi.update("foo", undefined, issuing.host);
-        await flush();
+        await waitFor(
+            () => issuing.calls.some((c) => c.op === "remove"),
+            "issuing session removed v1",
+        );
         // The old version has been removed on the issuing session, but the new
         // one is NOT added yet — the drain (gated sibling) has not completed.
         expect(issuing.calls).toEqual([{ op: "remove" }]);
@@ -1567,6 +1584,18 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
 
 describe("Update Coordination — timeout & rollback (5.3)", () => {
     const flush = () => new Promise((r) => setTimeout(r, 0));
+    const waitFor = async (
+        predicate: () => boolean,
+        label = "condition",
+    ): Promise<void> => {
+        for (let i = 0; i < 200; i++) {
+            if (predicate()) {
+                return;
+            }
+            await new Promise((r) => setTimeout(r, 0));
+        }
+        throw new Error(`waitFor timed out waiting for ${label}`);
+    };
     const settle = async () => {
         // Drain the timer + microtask chain a few times so a phase-timeout
         // rollback (timer → decide → release → re-add → GC finalize)
@@ -1687,7 +1716,10 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         );
         // All hosts have quiesced, but verify-0 is non-zero → parked. Before the
         // timeout, v2 has NOT been added (no commit, no coexistence).
-        await flush();
+        await waitFor(
+            () => issuing.calls.some((c) => c.op === "remove"),
+            "issuing session removed v1",
+        );
         expect(issuing.calls).toEqual([{ op: "remove" }]);
         expect(outcomes).toEqual([]);
 
@@ -1734,7 +1766,10 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         );
         // Every slot has quiesced, but v1's ref is still held → the barrier is
         // parked on verify-0 (no commit, no v2 added).
-        await flush();
+        await waitFor(
+            () => issuing.calls.some((c) => c.op === "remove"),
+            "issuing session removed v1",
+        );
         expect(outcomes).toEqual([]);
         expect(issuing.calls).toEqual([{ op: "remove" }]);
 
@@ -1982,7 +2017,12 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         await built.testApi.update("foo", undefined, issuing.host, (o) =>
             outcomes.push(o),
         );
-        await flush();
+        await waitFor(
+            () =>
+                issuing.calls.some((c) => c.op === "remove") &&
+                liveStraggler.calls.some((c) => c.op === "remove"),
+            "both live sessions removed v1",
+        );
         // The closed host filled its slot, but the LIVE straggler has not
         // quiesced — so NO host has added v2 yet (no premature commit, no
         // coexistence).
