@@ -1,0 +1,7 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+- name: Guides
+  href: index.md
+- name: Embedding the dispatcher
+  href: embedding-dispatcher.md

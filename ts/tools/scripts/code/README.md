@@ -41,7 +41,11 @@ Run any of these from `ts/`. All accept `--help`, `--root <path>`,
   `--type-aware` (adds `no-floating-promises`, `no-misused-promises`,
   `no-deprecated` — slower, report only), `--new-file-max <n>`.
 - **code-complexity:** `--cyclomatic <n>`, `--cognitive <n>`,
-  `--new-file-cyclomatic <n>`, `--new-file-cognitive <n>`.
+  `--new-file-cyclomatic <n>`, `--new-file-cognitive <n>`,
+  `--exceptions-file <path>` (optional baseline exceptions by `file:line`).
+  For local CI-parity runs, use `npm run code-complexity:ci`.
+  To refresh the baseline exception file from current code, use
+  `npm run code-complexity:update-exceptions`.
 - **code-deadcode:** `--config` (defaults to [`knip.jsonc`](./knip.jsonc)).
 
 ### Notes for maintainers

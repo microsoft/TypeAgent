@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Completion types (SeparatorMode, CompletionDirection, CompletionGroups,
-// getCommandCompletion): docs/architecture/core/completion.md — §3 Agent SDK
+// getCommandCompletion): docs/architecture/core/completion.md —  Agent SDK
 
 import { ActionResult } from "./action.js";
 import { ActionContext, SessionContext } from "./agentInterface.js";
@@ -169,10 +169,12 @@ export interface AppAgentCommandInterface {
     // Get the command descriptors
     getCommands(context: SessionContext): Promise<CommandDescriptors>;
 
-    // Provide completion for a partial command
+    // Provide completion for a partial command. The command's parameters have
+    // already been parsed by the dispatcher, so `params` is always concrete
+    // here (unlike executeCommand, which may run parameter-less commands).
     getCommandCompletion?(
         commands: string[], // path to the command descriptors
-        params: ParsedCommandParams<ParameterDefinitions> | undefined,
+        params: ParsedCommandParams<ParameterDefinitions>,
         names: string[], // array of <argName> or --<flagName> or --<jsonFlagName> for completion
         context: SessionContext<unknown>,
         direction?: CompletionDirection,

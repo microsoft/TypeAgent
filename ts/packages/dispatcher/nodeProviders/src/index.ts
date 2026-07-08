@@ -3,6 +3,7 @@
 
 export {
     NpmAppAgentInfo,
+    ExecutionMode,
     createNpmAppAgentProvider,
 } from "./agentProvider/npmAgentProvider.js";
 export { getFsStorageProvider } from "./storageProvider/fsStorageProvider.js";

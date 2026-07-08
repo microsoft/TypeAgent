@@ -122,6 +122,7 @@ interface Options {
     base: string;
     newCyclomaticCap: number;
     newCognitiveCap: number;
+    exceptionsFile?: string;
     help: boolean;
 }
 
@@ -144,6 +145,7 @@ function parseArgs(argv: string[]): Options {
         base: "origin/main",
         newCyclomaticCap: 0,
         newCognitiveCap: 0,
+        exceptionsFile: undefined,
         help: false,
     };
 
@@ -199,6 +201,14 @@ function parseArgs(argv: string[]): Options {
                 opts.newCognitiveCap = parseIntArg(arg, next);
                 i++;
                 break;
+            case "--exceptions-file":
+            case "--exceptionsFile":
+                if (next === undefined) {
+                    throw new Error(`${arg} requires a path`);
+                }
+                opts.exceptionsFile = next;
+                i++;
+                break;
             case "--root":
                 if (next === undefined) {
                     throw new Error(`${arg} requires a path`);
@@ -248,6 +258,9 @@ Options:
                      cyclomatic <n> (0 = disabled, the default).
   --new-file-cognitive <n>
                      Same, for cognitive complexity.
+  --exceptions-file <path>
+                     Optional JSON baseline-exception file. Functions listed in
+                     it are ignored for over-budget counts and ratchet checks.
   --help             Show this help.`;
 
 // ---------------------------------------------------------------------------
@@ -276,6 +289,63 @@ interface AnalysisResult {
     parseErrorFiles: number;
     cognitiveEnabled: boolean;
     elapsedMs: number;
+}
+
+interface ExceptionsFile {
+    exceptions?: Array<{
+        file?: string;
+        line?: number;
+    }>;
+}
+
+function normalizeExceptionPath(file: string): string {
+    const normalized = file.replaceAll("\\", "/").replace(/^\.\//, "");
+    return normalized.replace(/^ts\//, "");
+}
+
+function functionExceptionKey(file: string, line: number): string {
+    return `${normalizeExceptionPath(file)}:${line}`;
+}
+
+function toFunctionExceptionKey(f: FuncRecord): string {
+    return functionExceptionKey(f.file, f.line);
+}
+
+function loadExceptionSet(opts: Options): Set<string> {
+    if (!opts.exceptionsFile) {
+        return new Set();
+    }
+
+    const filePath = path.isAbsolute(opts.exceptionsFile)
+        ? opts.exceptionsFile
+        : path.resolve(process.cwd(), opts.exceptionsFile);
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`Exceptions file not found: ${filePath}`);
+    }
+
+    let raw: unknown;
+    try {
+        raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+            `Invalid JSON in exceptions file ${filePath}: ${message}`,
+        );
+    }
+
+    const entries = Array.isArray(raw)
+        ? raw
+        : ((raw as ExceptionsFile).exceptions ?? []);
+    const out = new Set<string>();
+    for (const entry of entries) {
+        const file = normalizeExceptionPath(entry?.file ?? "");
+        const line = entry?.line;
+        if (!file || typeof line !== "number" || line <= 0) {
+            continue;
+        }
+        out.add(functionExceptionKey(file, line));
+    }
+    return out;
 }
 
 /** Load the optional sonarjs plugin, returning undefined if unavailable. */
@@ -518,13 +588,18 @@ function printSummary(
     byCyclomatic: FuncRecord[],
     byCognitive: FuncRecord[],
     counts: number[],
+    exceptions: Set<string>,
 ): void {
     const { functions } = analysis;
     const overCyclomatic = functions.filter(
-        (f) => f.cyclomatic > opts.cyclomaticBudget,
+        (f) =>
+            f.cyclomatic > opts.cyclomaticBudget &&
+            !exceptions.has(toFunctionExceptionKey(f)),
     ).length;
     const overCognitive = functions.filter(
-        (f) => f.cognitive > opts.cognitiveBudget,
+        (f) =>
+            f.cognitive > opts.cognitiveBudget &&
+            !exceptions.has(toFunctionExceptionKey(f)),
     ).length;
 
     console.log("");
@@ -561,6 +636,11 @@ function printSummary(
                 ? `, ${fmt(overCognitive)} > cognitive ${opts.cognitiveBudget}`
                 : ""),
     );
+    if (exceptions.size > 0) {
+        console.log(
+            `  (${fmt(exceptions.size)} baseline exception(s) ignored by file:line)`,
+        );
+    }
 
     const printTable = (title: string, rows: FuncRecord[]): void => {
         console.log("");
@@ -614,6 +694,7 @@ function writeJson(
     analysis: AnalysisResult,
     files: FileRollup[],
     counts: number[],
+    exceptions: Set<string>,
 ): void {
     const { functions } = analysis;
     const payload = {
@@ -621,6 +702,8 @@ function writeJson(
         root: opts.root,
         includeTests: opts.includeTests,
         cognitiveEnabled: analysis.cognitiveEnabled,
+        exceptionsFile: opts.exceptionsFile ?? null,
+        baselineExceptions: exceptions.size,
         thresholds: {
             cyclomatic: opts.cyclomaticBudget,
             cognitive: opts.cognitiveBudget,
@@ -634,6 +717,16 @@ function writeJson(
             ).length,
             overCognitive: functions.filter(
                 (f) => f.cognitive > opts.cognitiveBudget,
+            ).length,
+            overCyclomaticNet: functions.filter(
+                (f) =>
+                    f.cyclomatic > opts.cyclomaticBudget &&
+                    !exceptions.has(toFunctionExceptionKey(f)),
+            ).length,
+            overCognitiveNet: functions.filter(
+                (f) =>
+                    f.cognitive > opts.cognitiveBudget &&
+                    !exceptions.has(toFunctionExceptionKey(f)),
             ).length,
         },
         distribution: BUCKETS.map((b, i) => ({
@@ -698,10 +791,13 @@ function buildHtml(
     byCyclomatic: FuncRecord[],
     files: FileRollup[],
     counts: number[],
+    exceptions: Set<string>,
 ): string {
     const { functions } = analysis;
     const overCyclomatic = functions.filter(
-        (f) => f.cyclomatic > opts.cyclomaticBudget,
+        (f) =>
+            f.cyclomatic > opts.cyclomaticBudget &&
+            !exceptions.has(toFunctionExceptionKey(f)),
     ).length;
     const topFns = byCyclomatic.slice(0, Math.max(opts.top, 100));
     const topFiles = [...files]
@@ -713,6 +809,10 @@ function buildHtml(
     const cogNote = analysis.cognitiveEnabled
         ? "cyclomatic + cognitive"
         : "cyclomatic only (sonarjs not loaded)";
+    const exceptionNote =
+        exceptions.size > 0
+            ? ` · ${fmt(exceptions.size)} baseline exception(s)`
+            : "";
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -753,7 +853,7 @@ function buildHtml(
 </head>
 <body>
   <h1>TypeAgent <code>ts/</code> — Complexity Report</h1>
-  <div class="sub">${cogNote} · generated ${genDate} · ${testNote} · budgets: cyclomatic ${opts.cyclomaticBudget}, cognitive ${opts.cognitiveBudget}</div>
+    <div class="sub">${cogNote} · generated ${genDate} · ${testNote}${exceptionNote} · budgets: cyclomatic ${opts.cyclomaticBudget}, cognitive ${opts.cognitiveBudget}</div>
 
   <div class="stats">
     <div class="stat"><div class="n">${fmt(functions.length)}</div><div class="l">functions</div></div>
@@ -887,13 +987,18 @@ function parseNameStatus(raw: string): DiffEntry[] {
 function countOver(
     functions: FuncRecord[],
     opts: Options,
+    exceptions: Set<string>,
 ): { overCyclomatic: number; overCognitive: number } {
     return {
         overCyclomatic: functions.filter(
-            (f) => f.cyclomatic > opts.cyclomaticBudget,
+            (f) =>
+                f.cyclomatic > opts.cyclomaticBudget &&
+                !exceptions.has(toFunctionExceptionKey(f)),
         ).length,
         overCognitive: functions.filter(
-            (f) => f.cognitive > opts.cognitiveBudget,
+            (f) =>
+                f.cognitive > opts.cognitiveBudget &&
+                !exceptions.has(toFunctionExceptionKey(f)),
         ).length,
     };
 }
@@ -906,6 +1011,7 @@ function countOver(
  * Returns the desired process exit code.
  */
 async function runRatchet(opts: Options): Promise<number> {
+    const exceptions = loadExceptionSet(opts);
     let repoRoot: string;
     let mergeBase: string;
     try {
@@ -987,8 +1093,8 @@ async function runRatchet(opts: Options): Promise<number> {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
 
-    const headOver = countOver(head.functions, opts);
-    const baseOver = countOver(base.functions, opts);
+    const headOver = countOver(head.functions, opts, exceptions);
+    const baseOver = countOver(base.functions, opts, exceptions);
     const dCyc = headOver.overCyclomatic - baseOver.overCyclomatic;
     const dCog = headOver.overCognitive - baseOver.overCognitive;
     const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
@@ -1024,6 +1130,7 @@ async function runRatchet(opts: Options): Promise<number> {
               .filter(
                   (f) =>
                       newFiles.has(f.file) &&
+                      !exceptions.has(toFunctionExceptionKey(f)) &&
                       ((opts.newCyclomaticCap > 0 &&
                           f.cyclomatic > opts.newCyclomaticCap) ||
                           (opts.newCognitiveCap > 0 &&
@@ -1043,6 +1150,11 @@ async function runRatchet(opts: Options): Promise<number> {
         console.log(
             `  New-file cap (${parts.join(", ")}): ${newFiles.size} new file(s), ` +
                 `${capViolations.length} function(s) over.`,
+        );
+    }
+    if (exceptions.size > 0) {
+        console.log(
+            `  Baseline exceptions ignored: ${fmt(exceptions.size)} (file:line).`,
         );
     }
 
@@ -1065,8 +1177,9 @@ async function runRatchet(opts: Options): Promise<number> {
         const offenders = head.functions
             .filter(
                 (f) =>
-                    f.cyclomatic > opts.cyclomaticBudget ||
-                    f.cognitive > opts.cognitiveBudget,
+                    (f.cyclomatic > opts.cyclomaticBudget ||
+                        f.cognitive > opts.cognitiveBudget) &&
+                    !exceptions.has(toFunctionExceptionKey(f)),
             )
             .sort((a, b) => b.cyclomatic - a.cyclomatic);
         printTable(
@@ -1105,6 +1218,8 @@ async function main(): Promise<void> {
         return;
     }
 
+    const exceptions = loadExceptionSet(opts);
+
     console.log(`Scanning ${opts.root} for complexity metrics...`);
     const analysis = await analyze(opts);
 
@@ -1122,17 +1237,17 @@ async function main(): Promise<void> {
     const files = rollupByFile(analysis.functions);
     const counts = distribution(analysis.functions);
 
-    printSummary(opts, analysis, byCyclomatic, byCognitive, counts);
+    printSummary(opts, analysis, byCyclomatic, byCognitive, counts, exceptions);
 
     fs.mkdirSync(opts.outDir, { recursive: true });
     const csvPath = path.join(opts.outDir, "functions.csv");
     const jsonPath = path.join(opts.outDir, "report.json");
     const htmlPath = path.join(opts.outDir, "report.html");
     writeCsv(csvPath, analysis.functions);
-    writeJson(jsonPath, opts, analysis, files, counts);
+    writeJson(jsonPath, opts, analysis, files, counts, exceptions);
     fs.writeFileSync(
         htmlPath,
-        buildHtml(opts, analysis, byCyclomatic, files, counts),
+        buildHtml(opts, analysis, byCyclomatic, files, counts, exceptions),
         "utf8",
     );
 

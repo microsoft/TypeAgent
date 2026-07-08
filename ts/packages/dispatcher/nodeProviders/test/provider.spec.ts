@@ -147,3 +147,51 @@ describe("dispatcher", () => {
         });
     });
 });
+
+describe("npm provider refcount (5.6 verify-0)", () => {
+    // Load the test agent in-process (execMode "dispatcher") so the loaded state
+    // can be exercised without forking a child per load.
+    function makeProvider() {
+        return createNpmAppAgentProvider(
+            {
+                test: {
+                    name: "test-agent",
+                    path: fileURLToPath(
+                        new URL("../../../../agents/test", import.meta.url),
+                    ),
+                    execMode: "dispatcher",
+                },
+            },
+            import.meta.url,
+        );
+    }
+
+    it("tracks the shared loaded state across repeat loads/unloads", async () => {
+        const provider = makeProvider();
+
+        // Not loaded yet: verify-0 sees the name as fully released.
+        expect(provider.isLoaded?.("test")).toBe(false);
+
+        // First load → loaded.
+        await provider.loadAppAgent("test");
+        expect(provider.isLoaded?.("test")).toBe(true);
+
+        // A repeat load shares the one process → still loaded.
+        await provider.loadAppAgent("test");
+        expect(provider.isLoaded?.("test")).toBe(true);
+
+        // One unload → still loaded (a straggler holds it).
+        await provider.unloadAppAgent("test");
+        expect(provider.isLoaded?.("test")).toBe(true);
+
+        // Final unload → fully released: the verify-0 signal the source relies on
+        // before starting the next version / freeing the name.
+        await provider.unloadAppAgent("test");
+        expect(provider.isLoaded?.("test")).toBe(false);
+    });
+
+    it("reports not-loaded for an unknown agent", () => {
+        const provider = makeProvider();
+        expect(provider.isLoaded?.("nope")).toBe(false);
+    });
+});
