@@ -4347,9 +4347,6 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
-      android-mobile-agent:
-        specifier: workspace:*
-        version: link:../agents/androidMobile
       browser-typeagent:
         specifier: workspace:*
         version: link:../agents/browser
@@ -4470,9 +4467,6 @@ importers:
       utility-typeagent:
         specifier: workspace:*
         version: link:../agents/utility
-      vampire-agent:
-        specifier: workspace:*
-        version: link:../agents/vampire
       video-agent:
         specifier: workspace:*
         version: link:../agents/video

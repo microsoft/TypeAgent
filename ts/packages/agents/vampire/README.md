@@ -2,7 +2,7 @@
 
 🧛 — A test agent that **deliberately collides** with other agents to exercise the dispatcher's [action collision detection](../../dispatcher/dispatcher/README.md#action-collision-detection) subsystem.
 
-> Default-disabled. The vampire is registered in the default agent provider but its `schemaDefaultEnabled` and `actionDefaultEnabled` are both `false`, so it never loads in production sessions unless explicitly enabled.
+> Default-disabled and not bundled. Install `vampire` from the catalog source, then explicitly enable its schema/actions for the current session when running collision experiments.
 
 ## Why
 
@@ -50,7 +50,14 @@ With the default `PlaceholderScorer` these produce no fuzzy hits (default-safe).
 
 ## How to use
 
-The vampire is registered in [defaultAgentProvider/data/config.json](../../defaultAgentProvider/data/config.json) and `config.all.json` but disabled by default.
+The vampire is not bundled by default. Install it from the workspace catalog source, then enable it in session settings.
+
+```text
+@package source list
+@package install vampire
+```
+
+The catalog source entry for `vampire` lives in [../agents.catalog.json](../agents.catalog.json).
 
 To enable in a session via session settings:
 
