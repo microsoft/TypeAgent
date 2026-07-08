@@ -9,5 +9,7 @@
   href: packages/index.md
 - name: Agents
   href: agents/index.md
+- name: Guides
+  href: guides/index.md
 - name: Contributing
   href: contributing/index.md

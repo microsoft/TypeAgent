@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "description": "TypeAgent agent for Visual Studio (EnvDTE bridge)",
+  "keywords": [
+    "typeagent-agent"
+  ],
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",

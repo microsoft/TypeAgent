@@ -4437,6 +4437,9 @@ importers:
       screencapture-agent:
         specifier: workspace:*
         version: link:../agents/screencapture
+      semver:
+        specifier: ^7.7.2
+        version: 7.8.4
       settings-agent:
         specifier: workspace:*
         version: link:../agents/settings
@@ -4504,6 +4507,9 @@ importers:
       '@types/proper-lockfile':
         specifier: ^4.1.4
         version: 4.1.4
+      '@types/semver':
+        specifier: ^7.7.1
+        version: 7.7.1
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
@@ -10348,6 +10354,9 @@ packages:
 
   '@types/sarif@2.1.7':
     resolution: {integrity: sha512-kRz0VEkJqWLf1LLVN4pT1cg1Z9wAuvI6L97V3m2f5B76Tg8d413ddvLBPTEHAZJlnn4XSvu0FkZtViCQGVyrXQ==}
+
+  '@types/semver@7.7.1':
+    resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
 
   '@types/send@0.17.4':
     resolution: {integrity: sha512-x2EM6TJOybec7c52BX0ZspPodMsQUd5L6PRwOunVyVUhXiBSKf3AezDL8Dgvgt5o0UfKNfuA0eMLr2wLT4AiBA==}
@@ -20155,7 +20164,7 @@ snapshots:
       '@oclif/plugin-commands': 4.1.21
       '@oclif/plugin-help': 6.2.26
       '@oclif/plugin-not-found': 3.2.65(@types/node@22.15.18)
-      semver: 7.7.4
+      semver: 7.8.4
       table: 6.9.0
     transitivePeerDependencies:
       - '@types/node'
@@ -22107,7 +22116,7 @@ snapshots:
       extract-zip: 2.0.1
       progress: 2.0.3
       proxy-agent: 6.5.0
-      semver: 7.7.4
+      semver: 7.8.4
       tar-fs: 3.1.1
       yargs: 17.7.2
     transitivePeerDependencies:
@@ -23275,6 +23284,8 @@ snapshots:
 
   '@types/sarif@2.1.7': {}
 
+  '@types/semver@7.7.1': {}
+
   '@types/send@0.17.4':
     dependencies:
       '@types/mime': 1.3.5
@@ -23575,7 +23586,7 @@ snapshots:
       parse-semver: 1.1.1
       read: 1.0.7
       secretlint: 9.3.2
-      semver: 7.8.0
+      semver: 7.8.4
       tmp: 0.2.7
       typed-rest-client: 1.8.11
       url-join: 4.0.1
@@ -25897,7 +25908,7 @@ snapshots:
       lazy-val: 1.0.5
       lodash.escaperegexp: 4.1.2
       lodash.isequal: 4.5.0
-      semver: 7.7.4
+      semver: 7.8.4
       tiny-typed-emitter: 2.1.0
     transitivePeerDependencies:
       - supports-color
@@ -31578,7 +31589,7 @@ snapshots:
       detect-newline: 4.0.1
       git-hooks-list: 4.1.1
       is-plain-obj: 4.1.0
-      semver: 7.7.4
+      semver: 7.8.4
       sort-object-keys: 1.1.3
       tinyglobby: 0.2.12
 

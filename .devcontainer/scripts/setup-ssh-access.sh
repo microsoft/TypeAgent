@@ -202,7 +202,9 @@ find_container() {
     local workspace=$1
     local config=$2
     local container_ids=()
-    mapfile -t container_ids < <(docker ps -q)
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && container_ids+=("$line")
+    done < <(docker ps -q)
     [[ ${#container_ids[@]} -gt 0 ]] || return 0
 
     docker inspect "${container_ids[@]}" | jq -r --arg workspace "$workspace" --arg config "$config" '

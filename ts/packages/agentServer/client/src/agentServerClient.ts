@@ -503,6 +503,35 @@ export interface AgentServerSpawnOptions {
     stdio?: StdioOptions;
 }
 
+// Choose a PowerShell executable for Windows. Detects whether PowerShell 7+
+// (pwsh) is installed by probing its standard install locations and PATH, so
+// installs outside the default "C:\Program Files\PowerShell\7" directory
+// (winget, x86, a relocated Program Files) are still recognized. Returns a bare
+// executable name — never an environment-derived path — so no path built from
+// the environment is ever routed through cmd.exe; `start` resolves the name via
+// PATH/App Paths, which every standard PowerShell 7 install registers. Falls
+// back to Windows PowerShell (powershell.exe), which is always present.
+function resolvePowerShellExe(): string {
+    const candidates: string[] = [];
+    for (const base of [
+        process.env["ProgramFiles"],
+        process.env["ProgramW6432"],
+        process.env["ProgramFiles(x86)"],
+    ]) {
+        if (base) {
+            candidates.push(path.join(base, "PowerShell", "7", "pwsh.exe"));
+        }
+    }
+    for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
+        if (dir) {
+            candidates.push(path.join(dir, "pwsh.exe"));
+        }
+    }
+    return candidates.some((candidate) => fs.existsSync(candidate))
+        ? "pwsh.exe"
+        : "powershell.exe";
+}
+
 function spawnAgentServer(
     serverPath: string,
     port: number,
@@ -552,16 +581,22 @@ function spawnAgentServer(
                     `Agent server process spawned hidden (pid: ${child.pid})`,
                 );
             } else {
-                const pwsh7 = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
-                const psExe = fs.existsSync(pwsh7) ? pwsh7 : "powershell.exe";
-                // Single-quote and double any internal single quotes so a
-                // path containing quotes or PowerShell metacharacters can't
-                // break out of the -Command string. port/idleTimeout are
-                // numeric so they need no escaping.
-                const psQuote = (s: string) =>
-                    "'" + s.replace(/'/g, "''") + "'";
-                const psCommand = `& node ${psQuote(serverPath)} --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
-                const psArgs = ["-NoExit", "-Command", psCommand];
+                const psExe = resolvePowerShellExe();
+                // Pass serverPath to the child through the environment rather
+                // than the command line so it never reaches cmd.exe or the
+                // PowerShell parser as text. Only the numeric port and
+                // idleTimeout are interpolated into the command; the path is
+                // read from $env:TYPEAGENT_SERVER_PATH at runtime. The command
+                // is handed to PowerShell as a base64 -EncodedCommand blob,
+                // whose alphabet is inert to both cmd.exe and PowerShell.
+                const psCommand =
+                    `& node $env:TYPEAGENT_SERVER_PATH --port ${port}` +
+                    (idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : "");
+                const encodedCommand = Buffer.from(
+                    psCommand,
+                    "utf16le",
+                ).toString("base64");
+                const psArgs = ["-NoExit", "-EncodedCommand", encodedCommand];
                 // The first quoted argument to `start` is the new window's
                 // title. It MUST be non-empty: an empty title leaves the
                 // console window title blank, which trips a libuv bug on
@@ -576,6 +611,10 @@ function spawnAgentServer(
                     {
                         detached: true,
                         stdio: "ignore",
+                        env: {
+                            ...process.env,
+                            TYPEAGENT_SERVER_PATH: serverPath,
+                        },
                     },
                 );
                 child.unref();

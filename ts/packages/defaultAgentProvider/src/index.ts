@@ -3,7 +3,7 @@
 
 export {
     getDefaultAppAgentProviders,
-    getDefaultAppAgentInstaller,
+    getDefaultAppAgentSource,
     getDefaultDispatcherOptions,
     getIndexingServiceRegistry,
 } from "./defaultAgentProviders.js";
