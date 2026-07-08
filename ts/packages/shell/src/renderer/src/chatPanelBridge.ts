@@ -21,6 +21,7 @@ import {
     HistoryEntry,
     SettingsPanelSchema,
     HelpPanelContent,
+    formatHistorySeparatorLabel,
     type TemplateEditServices,
 } from "chat-ui";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
@@ -217,55 +218,6 @@ function toHistoryEntries(entries: any[]): HistoryEntry[] {
         }
     }
     return out;
-}
-
-function formatHistorySeparatorLabel(entries: any[]): string {
-    let newestTimestamp: number | undefined;
-    for (const entry of entries) {
-        if (typeof entry.timestamp !== "number") continue;
-        if (
-            newestTimestamp === undefined ||
-            entry.timestamp > newestTimestamp
-        ) {
-            newestTimestamp = entry.timestamp;
-        }
-    }
-
-    if (newestTimestamp === undefined) {
-        return "earlier";
-    }
-
-    const diffMs = Math.max(0, Date.now() - newestTimestamp);
-    const diffMinutes = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMinutes < 2) {
-        return "a moment ago";
-    }
-    if (diffMinutes < 10) {
-        return "a few minutes ago";
-    }
-    if (diffMinutes < 60) {
-        return `${diffMinutes} minutes ago`;
-    }
-    if (diffHours < 2) {
-        return "an hour ago";
-    }
-    if (diffHours < 6) {
-        return "a few hours ago";
-    }
-    if (diffHours < 24) {
-        return `${diffHours} hours ago`;
-    }
-    if (diffDays < 2) {
-        return "yesterday";
-    }
-    if (diffDays < 7) {
-        return `${diffDays} days ago`;
-    }
-
-    return new Date(newestTimestamp).toLocaleDateString();
 }
 
 export type ChatPanelClient = {

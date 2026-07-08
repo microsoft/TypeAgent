@@ -171,6 +171,66 @@ export type HistoryEntry =
       }
     | { kind: "system"; text: string };
 
+/**
+ * Compute a human-friendly relative-time label for the history separator
+ * shown between replayed session history and new live messages (e.g.
+ * "a few minutes ago", "yesterday"). Uses the newest timestamp among the
+ * given entries; falls back to "earlier" when none carry a timestamp.
+ *
+ * Entries carry a numeric epoch-ms `timestamp` (the dispatcher display-log
+ * shape), which is distinct from `HistoryEntry.timestamp` (an ISO string).
+ */
+export function formatHistorySeparatorLabel(
+    entries: ReadonlyArray<{ timestamp?: number }>,
+): string {
+    let newestTimestamp: number | undefined;
+    for (const entry of entries) {
+        if (typeof entry.timestamp !== "number") continue;
+        if (
+            newestTimestamp === undefined ||
+            entry.timestamp > newestTimestamp
+        ) {
+            newestTimestamp = entry.timestamp;
+        }
+    }
+
+    if (newestTimestamp === undefined) {
+        return "earlier";
+    }
+
+    const diffMs = Math.max(0, Date.now() - newestTimestamp);
+    const diffMinutes = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMinutes < 2) {
+        return "a moment ago";
+    }
+    if (diffMinutes < 10) {
+        return "a few minutes ago";
+    }
+    if (diffMinutes < 60) {
+        return `${diffMinutes} minutes ago`;
+    }
+    if (diffHours < 2) {
+        return "an hour ago";
+    }
+    if (diffHours < 6) {
+        return "a few hours ago";
+    }
+    if (diffHours < 24) {
+        return `${diffHours} hours ago`;
+    }
+    if (diffDays < 2) {
+        return "yesterday";
+    }
+    if (diffDays < 7) {
+        return `${diffDays} days ago`;
+    }
+
+    return new Date(newestTimestamp).toLocaleDateString();
+}
+
 function formatDuration(ms: number): string {
     if (ms < 1) return `${ms.toFixed(2)}ms`;
     if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;

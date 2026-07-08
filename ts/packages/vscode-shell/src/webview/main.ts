@@ -7,7 +7,12 @@
 //
 // Renders the shared `chat-ui` ChatPanel plus the host-managed session bar.
 
-import { ChatPanel, ConversationBar, HistoryEntry } from "chat-ui";
+import {
+    ChatPanel,
+    ConversationBar,
+    HistoryEntry,
+    formatHistorySeparatorLabel,
+} from "chat-ui";
 import type { TemplateEditServices } from "chat-ui";
 import chatPanelStyles from "chat-ui/styles";
 import completionUiStyles from "@typeagent/completion-ui/styles.css";
@@ -802,6 +807,15 @@ window.addEventListener("message", (event) => {
             // races or is lost.
             const replayEntries = toChatPanelHistory(msg.entries);
             void chatPanel.replayHistoryStreaming(replayEntries).then(() => {
+                // Divider between replayed history and live messages,
+                // matching the Electron shell. The bridge only sends
+                // historyReplay when prior history exists, but guard
+                // defensively.
+                if (msg.entries.length > 0) {
+                    chatPanel.addHistorySeparator(
+                        formatHistorySeparatorLabel(msg.entries),
+                    );
+                }
                 chatPanel.setHistoryLoading(false);
                 chatPanel.setEnabled(isConnected);
             });

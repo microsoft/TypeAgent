@@ -25,6 +25,7 @@ export {
     DEFAULT_AVATAR_MAP,
     NotifyExplainedData,
     HistoryEntry,
+    formatHistorySeparatorLabel,
 } from "./chatPanel.js";
 
 export {
