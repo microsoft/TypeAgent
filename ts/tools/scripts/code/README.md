@@ -38,11 +38,28 @@ Run any of these from `ts/`. All accept `--help`, `--root <path>`,
 ### Tool-specific flags
 
 - **code-lint:** `--fix` (apply `no-var`/`prefer-const` autofixes in place),
+  `--changed` (with `--fix`, only rewrite files changed vs `--base`),
   `--type-aware` (adds `no-floating-promises`, `no-misused-promises`,
   `no-deprecated` — slower, report only), `--new-file-max <n>`.
 - **code-complexity:** `--cyclomatic <n>`, `--cognitive <n>`,
   `--new-file-cyclomatic <n>`, `--new-file-cognitive <n>`.
 - **code-deadcode:** `--config` (defaults to [`knip.jsonc`](./knip.jsonc)).
+
+### Baseline exceptions
+
+The ratchet/gate tools accept `--exceptions-file <path>` — an optional JSON file
+that grandfathers a specific set of known offenders so they don't trip the gate
+(useful when a file move that git rename detection misses makes pre-existing
+debt look new). Each file's `--ratchet`/`--gate` step honors it; the report
+modes ignore it. Shape is `{ "exceptions": [ ... ] }` (a bare array also works):
+
+- **code-lint** / **code-complexity** / **code-debt:** entries are
+  `{ "file": "packages/foo/src/bar.ts", "line": 42 }` (paths are normalized, so
+  a leading `ts/` is optional). Matches by `file:line`.
+- **code-circular:** entries are `{ "cycle": ["packages/a/src/x.ts", "packages/b/src/y.ts"] }`
+  or `{ "key": "packages/a/src/x.ts > packages/b/src/y.ts" }`. Matched
+  rotation-invariantly against detected cycles.
+
 
 ### Notes for maintainers
 
