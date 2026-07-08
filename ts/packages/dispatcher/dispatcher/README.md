@@ -375,6 +375,7 @@ For deliberate, repeatable collisions during evaluation, enable the [vampire tes
 A typical Phase 1 observability experiment looks like:
 
 ```
+@package install vampire                           # one-time install from catalog source
 @config agent vampire                              # enable the test agent
 @config log db on                                  # remote upload (Cosmos)
 @config collision telemetry emit on                # capture events

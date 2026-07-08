@@ -56,10 +56,6 @@ import { getNotifyCommandHandlers } from "./handlers/notifyCommandHandler.js";
 import { DisplayCommandHandler } from "./handlers/displayCommandHandler.js";
 import { getTokenCommandHandlers } from "./handlers/tokenCommandHandler.js";
 import { getEnvCommandHandlers } from "./handlers/envCommandHandler.js";
-import {
-    InstallCommandHandler,
-    UninstallCommandHandler,
-} from "./handlers/installCommandHandlers.js";
 import { ActionCommandHandler } from "./handlers/actionCommandHandler.js";
 import { RunCommandScriptHandler } from "./handlers/runScriptCommandHandler.js";
 import { HelpCommandHandler } from "./handlers/helpCommandHandler.js";
@@ -137,8 +133,6 @@ export const systemHandlers: CommandHandlerTable = {
         notify: getNotifyCommandHandlers(),
         token: getTokenCommandHandlers(),
         env: getEnvCommandHandlers(),
-        install: new InstallCommandHandler(),
-        uninstall: new UninstallCommandHandler(),
         open: new OpenCommandHandler(),
         index: getIndexCommandHandlers(),
         settings: getSettingsCommandHandlers(),

@@ -55,6 +55,16 @@ module.exports = {
           url: "/content/tutorial/agent/"
         }
       ]
+    },
+    {
+      title: "Reference",
+      url: "/content/reference/install-sources/",
+      children: [
+        {
+          title: "Agent Install Sources",
+          url: "/content/reference/install-sources/"
+        }
+      ]
     }
   ]
 };

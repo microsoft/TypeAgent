@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
-import { AppAgentProvider } from "../src/agentProvider/agentProvider.js";
+import {
+    AppAgentProvider,
+    AppAgentSource,
+} from "../src/agentProvider/agentProvider.js";
 import {
     type CommandHandlerContext,
     closeCommandHandlerContext,
@@ -67,6 +70,34 @@ export const testCommandAgentProvider: AppAgentProvider = {
 };
 
 describe("Command", () => {
+    describe("initialize", () => {
+        it("disposes connected app-agent sources when initial provider registration fails", async () => {
+            let disposed = false;
+            const source: AppAgentSource = {
+                connect: () => ({
+                    providers: Promise.reject(new Error("provider boom")),
+                    dispose: () => {
+                        disposed = true;
+                    },
+                }),
+            };
+
+            await expect(
+                initializeCommandHandlerContext("test", {
+                    agents: {
+                        actions: false,
+                        schemas: false,
+                    },
+                    translation: { enabled: false },
+                    explainer: { enabled: false },
+                    cache: { enabled: false },
+                    appAgentSources: [source],
+                }),
+            ).rejects.toThrow(/provider boom/);
+            expect(disposed).toBe(true);
+        });
+    });
+
     describe("resolve", () => {
         let context: CommandHandlerContext;
         beforeAll(async () => {
