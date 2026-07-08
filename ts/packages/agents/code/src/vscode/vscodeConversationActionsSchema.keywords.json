@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "schema": "code.code-vscode-shell",
   "generatedBy": "llm",
-  "generatedAt": "2026-07-08T00:12:03.119Z",
+  "generatedAt": "2026-07-08T09:37:38.624Z",
   "sourceHash": "sOhuawGOYtZH5sGx9H7rng5mHoyJ2Vyp4Ncm2MomgcI=",
   "actions": {
     "newConversation": [
@@ -10,24 +10,27 @@
       "chat",
       "tab",
       "shell",
-      "extension",
-      "vscode",
-      "typeagent",
-      "name",
-      "design",
-      "review"
+      "session",
+      "dialogue",
+      "discussion",
+      "thread",
+      "topic",
+      "channel",
+      "window",
+      "workspace",
+      "interaction",
+      "exchange",
+      "communication"
     ],
     "renameConversation": [
       "conversation",
       "chat",
       "tab",
       "shell",
-      "vscode",
-      "rename",
-      "name",
-      "displayname",
       "typeagent",
-      "extension"
+      "name",
+      "current",
+      "active"
     ],
     "switchConversation": [
       "conversation",
@@ -35,25 +38,26 @@
       "tab",
       "shell",
       "typeagent",
-      "extension",
       "name",
-      "picker",
+      "existing",
+      "current",
       "switch",
       "rename",
-      "existing",
-      "current"
+      "picker",
+      "extension",
+      "ui"
     ],
     "deleteConversation": [
       "conversation",
       "chat",
       "tab",
-      "shell",
-      "extension",
-      "typeagent",
-      "vscode",
-      "name",
-      "picker",
-      "confirmation"
+      "session",
+      "discussion",
+      "thread",
+      "dialogue",
+      "exchange",
+      "interaction",
+      "communication"
     ]
   }
 }

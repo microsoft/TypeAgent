@@ -2,55 +2,69 @@
   "schemaVersion": 1,
   "schema": "onboarding.onboarding-packaging",
   "generatedBy": "llm",
-  "generatedAt": "2026-07-08T00:12:58.190Z",
+  "generatedAt": "2026-07-08T09:38:56.177Z",
   "sourceHash": "MXHWqxw4IhLnyBEtCmQNkitMDX4quVaTmVcPoQos6Xs=",
   "actions": {
     "packageAgent": [
-      "package",
       "agent",
+      "package",
       "distribution",
       "register",
       "dispatcher",
       "integration",
-      "typeagent",
-      "config"
+      "config",
+      "typeagent"
     ],
     "validatePackage": [
       "package",
+      "integration",
+      "validation",
       "distribution",
       "dispatcher",
-      "typeagent",
-      "integration",
-      "validate",
       "agent",
-      "registration"
+      "typeagent"
     ],
     "generateDemo": [
       "demo",
       "script",
       "narration",
       "agent",
-      "distribution",
-      "dispatcher",
       "integration",
       "duration",
       "minute",
-      "phase",
-      "package",
-      "register",
-      "typeagent"
+      "presentation",
+      "showcase",
+      "example",
+      "overview",
+      "introduction",
+      "walkthrough",
+      "guide",
+      "tutorial",
+      "explanation",
+      "summary",
+      "highlight",
+      "feature",
+      "demonstration",
+      "session",
+      "preview",
+      "description"
     ],
     "generateReadme": [
       "readme",
+      "documentation",
       "agent",
-      "distribution",
-      "dispatcher",
       "integration",
       "package",
-      "register",
+      "distribution",
+      "dispatcher",
       "typeagent",
-      "documentation",
-      "onboarded"
+      "onboarding",
+      "guide",
+      "instruction",
+      "overview",
+      "summary",
+      "detail",
+      "description"
     ]
   }
 }

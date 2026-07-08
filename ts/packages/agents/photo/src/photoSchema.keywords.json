@@ -2,25 +2,33 @@
   "schemaVersion": 1,
   "schema": "photo",
   "generatedBy": "llm",
-  "generatedAt": "2026-07-08T00:12:05.729Z",
+  "generatedAt": "2026-07-08T09:37:41.660Z",
   "sourceHash": "ULvzA3eNL9j/z0HRGF07lKwPruu3/H+4wJ/zHBx/tkw=",
   "actions": {
     "takePhoto": [
       "photo",
-      "camera",
       "image",
       "picture",
       "snapshot",
+      "camera",
       "photograph",
       "capture",
-      "shoot",
-      "snap",
+      "visual",
+      "media",
+      "jpeg",
+      "png",
+      "gif",
+      "bmp",
+      "photography",
       "pic",
-      "upload",
-      "take",
-      "system",
-      "attached",
-      "request"
+      "selfie",
+      "portrait",
+      "landscape",
+      "thumbnail",
+      "gallery",
+      "album",
+      "frame",
+      "shot"
     ]
   }
 }

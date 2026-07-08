@@ -2,20 +2,21 @@
   "schemaVersion": 1,
   "schema": "onboarding.onboarding-testing",
   "generatedBy": "llm",
-  "generatedAt": "2026-07-08T00:12:55.647Z",
+  "generatedAt": "2026-07-08T09:38:52.396Z",
   "sourceHash": "g4LuPw2eMutytw5WiG1LW9DyiZxBPExCRBHvHvZa8X0=",
   "actions": {
     "generateTests": [
       "test",
-      "cas",
-      "phras",
+      "case",
       "validation",
-      "loop",
       "schema",
       "grammar",
+      "integration",
+      "sample",
+      "phrase",
+      "loop",
       "repair",
-      "failure",
-      "integration"
+      "failure"
     ],
     "runTests": [
       "test",
@@ -23,31 +24,46 @@
       "schema",
       "grammar",
       "integration",
+      "sample",
       "phrase",
       "loop",
       "repair",
       "failure",
-      "case",
-      "sample"
+      "case"
     ],
     "getTestResults": [
       "test",
       "result",
-      "cas",
-      "phras",
+      "integration",
       "validation",
       "schema",
       "grammar",
+      "sample",
+      "phrase",
       "failure",
-      "integration",
-      "filter",
       "passing",
-      "failing"
+      "failing",
+      "loop",
+      "repair"
     ],
     "proposeRepair": [
       "test",
-      "cas",
-      "phras",
+      "case",
+      "phrase",
+      "validation",
+      "loop",
+      "schema",
+      "grammar",
+      "repair",
+      "failure",
+      "integration",
+      "sample"
+    ],
+    "approveRepair": [
+      "test",
+      "case",
+      "sample",
+      "phrase",
       "validation",
       "loop",
       "schema",
@@ -55,19 +71,6 @@
       "repair",
       "failure",
       "integration"
-    ],
-    "approveRepair": [
-      "test",
-      "cas",
-      "phras",
-      "validation",
-      "loop",
-      "schema",
-      "grammar",
-      "repair",
-      "failure",
-      "integration",
-      "approve"
     ]
   }
 }

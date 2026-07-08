@@ -2,31 +2,26 @@
   "schemaVersion": 1,
   "schema": "browser.lookupAndAnswer",
   "generatedBy": "llm",
-  "generatedAt": "2026-07-08T01:46:48.131Z",
+  "generatedAt": "2026-07-08T09:35:04.456Z",
   "sourceHash": "w0SuvUxSEgtnl69yLP9lQJNrMNfzVH6pp9CzjRkryjU=",
   "actions": {
     "lookupAndAnswerInternet": [
-      "internet",
       "information",
-      "question",
-      "answer",
-      "search",
-      "web",
       "fact",
+      "knowledge",
+      "internet",
+      "web",
+      "question",
+      "search",
+      "answer",
       "data",
-      "stock",
-      "price",
-      "sport",
-      "score",
-      "event",
-      "commerce",
-      "offering",
-      "site",
-      "term",
+      "detail",
+      "specific",
       "entitie",
-      "request",
+      "site",
       "result",
-      "response"
+      "response",
+      "contemporary"
     ]
   }
 }
