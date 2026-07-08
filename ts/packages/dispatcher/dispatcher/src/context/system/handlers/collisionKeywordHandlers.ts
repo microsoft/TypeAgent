@@ -351,6 +351,7 @@ type BackfillWriteResult = {
     actionsTotal: number;
     distilledTotal: number;
     lexicalTotal: number;
+    preservedTotal: number;
     mergedFiles: number;
     failed: string[];
 };
@@ -372,10 +373,15 @@ function writePendingFiles(
         actionsTotal: 0,
         distilledTotal: 0,
         lexicalTotal: 0,
+        preservedTotal: 0,
         mergedFiles: 0,
         failed: [],
     };
     for (const entry of pendingByPath.values()) {
+        // Actions carried over from the on-disk file (a partial run keeping
+        // co-located siblings) are preserved, not produced — counted separately
+        // so `actionsTotal` stays equal to distilled + lexical.
+        let preserved = 0;
         if (preserveExisting) {
             const existing = loadKeywordFile(entry.path, entry.file.schema);
             for (const [action, vec] of Object.entries(
@@ -383,6 +389,7 @@ function writePendingFiles(
             )) {
                 if (!(action in entry.file.actions)) {
                     entry.file.actions[action] = vec;
+                    preserved++;
                 }
             }
         }
@@ -396,9 +403,10 @@ function writePendingFiles(
         }
         result.filesWritten++;
         result.schemasWritten += entry.contributors.length;
-        result.actionsTotal += Object.keys(entry.file.actions).length;
+        result.actionsTotal += entry.distilled + entry.lexical;
         result.distilledTotal += entry.distilled;
         result.lexicalTotal += entry.lexical;
+        result.preservedTotal += preserved;
         if (entry.contributors.length > 1) {
             result.mergedFiles++;
         }
@@ -415,8 +423,13 @@ function formatBackfillSummary(
     const lines = [
         `Keyword backfill complete (${llm ? "LLM distillation" : "lexical"}):`,
         `  files written:   ${w.filesWritten} (${w.schemasWritten} schemas)`,
-        `  actions:         ${w.actionsTotal} (distilled ${w.distilledTotal}, lexical ${w.lexicalTotal})`,
+        `  actions produced: ${w.actionsTotal} (distilled ${w.distilledTotal}, lexical ${w.lexicalTotal})`,
     ];
+    if (w.preservedTotal > 0) {
+        lines.push(
+            `  kept:            ${w.preservedTotal} co-located action(s) carried over from existing file(s) (partial run)`,
+        );
+    }
     if (w.mergedFiles > 0) {
         lines.push(
             `  merged:          ${w.mergedFiles} file(s) shared by multiple schemas`,
