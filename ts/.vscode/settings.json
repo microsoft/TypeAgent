@@ -73,5 +73,6 @@
     },
     "search.followSymlinks": false,
     "search.useIgnoreFiles": true,
-    "search.useParentIgnoreFiles": true
+    "search.useParentIgnoreFiles": true,
+    "typeagent.serverStartCommand": "pnpm --filter agent-server start"  
 }
