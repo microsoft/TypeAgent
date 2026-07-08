@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "schema": "code.code-general",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T00:11:41.848Z",
+  "sourceHash": "1MyD9tYfQsRLNpKduZR2nsIE+cERtIlVVVdfCE/d+IA=",
+  "actions": {
+    "showCommandPalette": [
+      "command",
+      "palette",
+      "editor",
+      "vscode",
+      "workspace",
+      "symbol",
+      "line",
+      "window",
+      "setting",
+      "json",
+      "search",
+      "navigate"
+    ],
+    "gotoFileOrLineOrSymbol": [
+      "file",
+      "line",
+      "symbol",
+      "workspace",
+      "editor",
+      "vscode",
+      "command",
+      "palette",
+      "setting",
+      "json",
+      "keyboard",
+      "shortcut",
+      "search",
+      "name",
+      "navigate"
+    ],
+    "showUserSettings": [
+      "setting",
+      "user",
+      "editor",
+      "vscode",
+      "workspace",
+      "symbol",
+      "line",
+      "window",
+      "command",
+      "palette",
+      "json",
+      "file"
+    ],
+    "showKeyboardShortcuts": [
+      "keyboard",
+      "shortcut",
+      "command",
+      "palette",
+      "setting",
+      "editor",
+      "workspace",
+      "file",
+      "symbol",
+      "line",
+      "vscode",
+      "window",
+      "json"
+    ]
+  }
+}

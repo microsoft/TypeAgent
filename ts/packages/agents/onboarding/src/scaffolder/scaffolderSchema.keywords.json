@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "schema": "onboarding.onboarding-scaffolder",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T00:12:52.421Z",
+  "sourceHash": "pU97nwTQOfy6fER7kzWcB9FZEJAtlsPRRehkms8/nRY=",
+  "actions": {
+    "scaffoldAgent": [
+      "scaffold",
+      "agent",
+      "package",
+      "infrastructure",
+      "manifest",
+      "handler",
+      "plugin",
+      "integration",
+      "pattern",
+      "directory",
+      "emoji",
+      "icon"
+    ],
+    "scaffoldPlugin": [
+      "scaffold",
+      "typeagent",
+      "infrastructure",
+      "manifest",
+      "handler",
+      "package",
+      "plugin",
+      "integration",
+      "template",
+      "directory",
+      "host",
+      "target",
+      "ts",
+      "agent"
+    ],
+    "listTemplates": [
+      "scaffold",
+      "typeagent",
+      "agent",
+      "package",
+      "infrastructure",
+      "manifest",
+      "handler",
+      "plugin",
+      "template",
+      "json",
+      "phase",
+      "complete",
+      "required"
+    ],
+    "listPatterns": [
+      "scaffold",
+      "typeagent",
+      "infrastructure",
+      "manifest",
+      "handler",
+      "package",
+      "plugin",
+      "pattern",
+      "phase",
+      "json"
+    ]
+  }
+}

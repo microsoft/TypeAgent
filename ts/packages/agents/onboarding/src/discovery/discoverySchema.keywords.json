@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "schema": "onboarding.onboarding-discovery",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T00:12:42.200Z",
+  "sourceHash": "SniKgyVYYjziLO6faTIXTXOWWd6JbUxx3PHxufn0D68=",
+  "actions": {
+    "crawlDocUrl": [
+      "api",
+      "documentation",
+      "openapi",
+      "spec",
+      "integration",
+      "url",
+      "crawl",
+      "depth",
+      "link",
+      "page",
+      "surface",
+      "application"
+    ],
+    "crawlCliHelp": [
+      "api",
+      "surface",
+      "documentation",
+      "openapi",
+      "spec",
+      "cli",
+      "command",
+      "integration",
+      "onboarding",
+      "recursion",
+      "subcommand",
+      "crawl",
+      "phase",
+      "depth"
+    ],
+    "parseOpenApiSpec": [
+      "api",
+      "openapi",
+      "swagger",
+      "spec",
+      "documentation",
+      "integration",
+      "application",
+      "surface",
+      "crawl",
+      "parse",
+      "enumerate",
+      "target",
+      "onboarded",
+      "url",
+      "file",
+      "path"
+    ],
+    "listDiscoveredActions": [
+      "api",
+      "surface",
+      "documentation",
+      "openapi",
+      "spec",
+      "integration",
+      "enumerate",
+      "crawl",
+      "parse",
+      "target",
+      "application"
+    ],
+    "approveApiSurface": [
+      "api",
+      "surface",
+      "application",
+      "documentation",
+      "openapi",
+      "spec",
+      "integration",
+      "approve",
+      "enumerate",
+      "target"
+    ]
+  }
+}

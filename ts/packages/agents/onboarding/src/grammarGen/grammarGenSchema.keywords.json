@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "schema": "onboarding.onboarding-grammargen",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T00:12:49.496Z",
+  "sourceHash": "Nrne/x6yizVByaRbizrL0PKBNScPa+1egY9fxBbMv3Q=",
+  "actions": {
+    "generateGrammar": [
+      "grammar",
+      "file",
+      "schemas",
+      "phras",
+      "compile",
+      "validate",
+      "integration",
+      "generation",
+      "syntax",
+      "language",
+      "rule",
+      "structure",
+      "format",
+      "text",
+      "lexicon",
+      "parser",
+      "compilation",
+      "validation",
+      "document",
+      "expression",
+      "token",
+      "pattern",
+      "definition"
+    ],
+    "compileGrammar": [
+      "grammar",
+      "compile",
+      "validate",
+      "integration",
+      "schema",
+      "phras",
+      "file",
+      "agr",
+      "generate"
+    ],
+    "approveGrammar": [
+      "grammar",
+      "file",
+      "compile",
+      "validate",
+      "integration",
+      "approve",
+      "schema",
+      "phras",
+      "agr"
+    ]
+  }
+}

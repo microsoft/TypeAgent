@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "schema": "onboarding",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T00:12:38.687Z",
+  "sourceHash": "oq+pF+ZsGqAVv4SxsYCKXXWZoGe0I7fI/Xn/aLrgVoU=",
+  "actions": {
+    "startOnboarding": [
+      "onboarding",
+      "integration",
+      "workflow",
+      "status",
+      "api",
+      "template",
+      "pattern",
+      "coordination",
+      "workspace",
+      "folder",
+      "slack",
+      "jira",
+      "rest",
+      "description"
+    ],
+    "resumeOnboarding": [
+      "onboarding",
+      "integration",
+      "workflow",
+      "phase",
+      "status",
+      "coordination",
+      "resume",
+      "current",
+      "state"
+    ],
+    "getOnboardingStatus": [
+      "onboarding",
+      "integration",
+      "status",
+      "workflow",
+      "coordination",
+      "process",
+      "progress",
+      "check",
+      "resume",
+      "integrationname"
+    ],
+    "listIntegrations": [
+      "onboarding",
+      "integration",
+      "workflow",
+      "status",
+      "phase",
+      "coordination"
+    ]
+  }
+}

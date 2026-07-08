@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "schema": "onboarding.onboarding-testing",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T00:12:55.647Z",
+  "sourceHash": "g4LuPw2eMutytw5WiG1LW9DyiZxBPExCRBHvHvZa8X0=",
+  "actions": {
+    "generateTests": [
+      "test",
+      "cas",
+      "phras",
+      "validation",
+      "loop",
+      "schema",
+      "grammar",
+      "repair",
+      "failure",
+      "integration"
+    ],
+    "runTests": [
+      "test",
+      "validation",
+      "schema",
+      "grammar",
+      "integration",
+      "phrase",
+      "loop",
+      "repair",
+      "failure",
+      "case",
+      "sample"
+    ],
+    "getTestResults": [
+      "test",
+      "result",
+      "cas",
+      "phras",
+      "validation",
+      "schema",
+      "grammar",
+      "failure",
+      "integration",
+      "filter",
+      "passing",
+      "failing"
+    ],
+    "proposeRepair": [
+      "test",
+      "cas",
+      "phras",
+      "validation",
+      "loop",
+      "schema",
+      "grammar",
+      "repair",
+      "failure",
+      "integration"
+    ],
+    "approveRepair": [
+      "test",
+      "cas",
+      "phras",
+      "validation",
+      "loop",
+      "schema",
+      "grammar",
+      "repair",
+      "failure",
+      "integration",
+      "approve"
+    ]
+  }
+}

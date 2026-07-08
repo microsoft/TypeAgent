@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "schema": "onboarding.onboarding-phrasegen",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T00:12:45.041Z",
+  "sourceHash": "c3oMa6U/mDiSzvII2SiK3MynreNmAQn2k998/oVSdMA=",
+  "actions": {
+    "generatePhrases": [
+      "phras",
+      "language",
+      "sample",
+      "integration",
+      "generation",
+      "natural",
+      "name",
+      "specific",
+      "invoke",
+      "user",
+      "discovered",
+      "generate",
+      "number"
+    ],
+    "addPhrase": [
+      "phrase",
+      "language",
+      "sample",
+      "integration",
+      "natural",
+      "invoke",
+      "map",
+      "discovered",
+      "generate",
+      "user",
+      "request",
+      "conversation",
+      "text",
+      "command",
+      "utterance",
+      "expression",
+      "dialogue",
+      "interaction",
+      "communication",
+      "statement",
+      "input",
+      "sentence"
+    ],
+    "removePhrase": [
+      "phrase",
+      "integration",
+      "language",
+      "sample",
+      "natural",
+      "invoke",
+      "discovered",
+      "exact"
+    ],
+    "approvePhrases": [
+      "phras",
+      "approval",
+      "integration",
+      "language",
+      "sample",
+      "natural",
+      "user",
+      "invoke"
+    ]
+  }
+}
