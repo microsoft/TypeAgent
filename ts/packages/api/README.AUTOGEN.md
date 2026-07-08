@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=0b22757dee3f752244fa1554c4677a8177d6bd3ecb8a4ee3bb8e57ba07cad58f -->
+<!-- AUTOGEN:DOCS:HASH:sha256=484dce4ebdf6f63df3234940da50994f36d89bf826a20ad09e14dc9ca28d44b4 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-api — AI-generated documentation
@@ -18,12 +18,12 @@ The `agent-api` package is a TypeScript library that provides an HTTP and WebSoc
 
 The `agent-api` package offers the following key capabilities:
 
-- **HTTP and WebSocket Server**: Provides an API server that supports both HTTP and WebSocket protocols, enabling real-time communication with agents.
-- **Storage Integration**: Includes support for multiple storage providers, such as AWS S3 and Azure Blob Storage, to manage remote files. Actions like `listRemoteFiles`, `downloadFile`, and `uploadFile` are implemented to interact with these storage systems.
-- **Web Dispatcher**: Facilitates the handling of actions and commands sent to agents via WebSocket connections.
-- **Configuration Management**: Relies on environment variables for configuring the server and storage providers, ensuring flexibility and adaptability to different deployment environments.
+- **HTTP and WebSocket Server**: Implements an API server that supports both HTTP and WebSocket protocols, enabling real-time communication with agents.
+- **Storage Integration**: Provides support for multiple storage providers, such as AWS S3 and Azure Blob Storage, to manage remote files. Actions like `listRemoteFiles`, `downloadFile`, and `uploadFile` are implemented to interact with these storage systems.
+- **Web Dispatcher**: Manages the processing of actions and commands sent to agents via WebSocket connections.
+- **Configuration Management**: Utilizes environment variables to configure the server and storage providers, allowing for flexible deployment in various environments.
 
-The package integrates with other components in the TypeAgent ecosystem, such as `agent-cache`, `agent-dispatcher`, and `telemetry`, to provide a cohesive and extensible framework for building and managing interactive agents.
+The package integrates with other components in the TypeAgent ecosystem, such as `agent-cache`, `agent-dispatcher`, and `telemetry`, to create a cohesive framework for building and managing interactive agents.
 
 ## Setup
 
@@ -120,6 +120,6 @@ _4 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-api docs:verify-links` to spot-check._
+_Auto-generated against commit `3548f69881c177639659059c44ea281c83009ca0` on `2026-07-08T08:52:31.709Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-api docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
