@@ -2158,6 +2158,15 @@ function renderCollisionShowHTML(cfg: {
         registryFirst: boolean;
         remember: string;
     };
+    contextSelector: {
+        detect: boolean;
+        windowTurns: number;
+        decay: number;
+        minUniqueTokens: number;
+        minMass: number;
+        margin: number;
+        abstainFallback: string;
+    };
 }): string {
     const C_MUTED = "#777";
     const C_LABEL = "#555";
@@ -2253,13 +2262,24 @@ function renderCollisionShowHTML(cfg: {
                         : `<span style="color:#999;font-style:italic;">(no registry)</span>`
                 }
             </div>
+            <div style="margin-top:6px;">
+                <span style="color:${C_MUTED};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;margin-right:6px;">contextSelector</span>
+                detect ${statusPill(cfg.contextSelector.detect)}
+                window <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.windowTurns}</code>
+                decay <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.decay}</code>
+                minTokens <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.minUniqueTokens}</code>
+                minMass <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.minMass}</code>
+                margin <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.margin}</code>
+                abstain <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${escapeHtml(cfg.contextSelector.abstainFallback)}</code>
+            </div>
         </div>`;
 
     const anyOn =
         cfg.static.detect ||
         cfg.grammarMatch.detect ||
         cfg.llmSelect.detect ||
-        cfg.fuzzy.detect;
+        cfg.fuzzy.detect ||
+        cfg.contextSelector.detect;
     const summary = anyOn
         ? `<div style="font-size:11px;color:${C_MUTED};margin-bottom:10px;">Detection is <b style="color:#070;">active</b> on at least one point. Telemetry is captured when emit=on; remote upload requires <code>@config log db on</code>.</div>`
         : `<div style="font-size:11px;color:${C_MUTED};margin-bottom:10px;">All detection points are <b>off</b> — runtime behavior is byte-identical to legacy first-match. Opt in with <code>@config collision &lt;point&gt; detect on</code>.</div>`;
@@ -2315,6 +2335,15 @@ function renderCollisionShowText(cfg: {
         registryFirst: boolean;
         remember: string;
     };
+    contextSelector: {
+        detect: boolean;
+        windowTurns: number;
+        decay: number;
+        minUniqueTokens: number;
+        minMass: number;
+        margin: number;
+        abstainFallback: string;
+    };
 }): string[] {
     const onOff = (b: boolean) => (b ? "on" : "off");
     const expId = cfg.telemetry.experimentId
@@ -2330,6 +2359,7 @@ function renderCollisionShowText(cfg: {
         `  multipleActionBehavior: ${cfg.multipleActionBehavior}`,
         `  telemetry: emit=${onOff(cfg.telemetry.emit)} debugLog=${onOff(cfg.telemetry.debugLog)}${expId}`,
         `  preference: enabled=${onOff(cfg.preference.enabled)} source=${cfg.preference.ambiguitySource} registryFirst=${onOff(cfg.preference.registryFirst)} remember=${cfg.preference.remember} registry=${cfg.preference.registryPath ? `"${cfg.preference.registryPath}"` : "(empty)"}`,
+        `  contextSelector: detect=${onOff(cfg.contextSelector.detect)} window=${cfg.contextSelector.windowTurns} decay=${cfg.contextSelector.decay} minTokens=${cfg.contextSelector.minUniqueTokens} minMass=${cfg.contextSelector.minMass} margin=${cfg.contextSelector.margin} abstain=${cfg.contextSelector.abstainFallback}`,
     ];
 }
 
@@ -2756,6 +2786,25 @@ function getCollisionCommandHandlers(): CommandHandlerTable {
                         },
                     ),
                     experimentId: new CollisionExperimentIdCommandHandler(),
+                },
+            },
+            contextSelector: {
+                description:
+                    "Configure the context-weighted resolution tier (deterministic topical tiebreaker on the grammar path)",
+                commands: {
+                    detect: getToggleHandlerTable(
+                        "context-weighted resolution (contextSelector)",
+                        async (context, enable) => {
+                            await changeContextConfig(
+                                {
+                                    collision: {
+                                        contextSelector: { detect: enable },
+                                    },
+                                } as SessionOptions,
+                                context,
+                            );
+                        },
+                    ),
                 },
             },
         },
