@@ -21,7 +21,8 @@
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "start": "node ./dist/index.js",
     "test": "npm run test:local",
-    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "test:live": "pnpm run jest-esm --testPathPattern=\".*[.]test[.]js\"",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\" --passWithNoTests",
     "test:local:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
     "tsc": "tsc -b"
   },
