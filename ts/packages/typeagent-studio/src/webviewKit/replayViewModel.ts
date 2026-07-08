@@ -239,8 +239,8 @@ const VERDICT_RANK: Record<RegressionVerdict, number> = {
     neutral: 3,
 };
 
-/** Order rows regression-first for the "find a regression" journey; original
- *  order is preserved within a verdict group. */
+/** Order rows regression-first so likely regressions surface at the top;
+ *  original order is preserved within a verdict group. */
 export function sortImpactRowsByVerdict(
     rows: readonly ImpactRow[],
 ): ImpactRow[] {

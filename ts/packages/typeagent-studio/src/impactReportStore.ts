@@ -7,6 +7,11 @@ import type {
     RunProvenance,
 } from "./webviewKit/replayViewModel.js";
 import type { StudioReplayResult } from "@typeagent/core/runtime";
+import {
+    likelyBadChange,
+    type RegressionRow,
+    type RegressionVerdict,
+} from "@typeagent/core/replay";
 
 // The Impact Report and the lightweight "Replay corpus" action both write the
 // last run here so opening the report re-renders whichever ran most recently for
@@ -16,6 +21,33 @@ import type { StudioReplayResult } from "@typeagent/core/runtime";
 /** Cap the stored rows so the persisted payload stays bounded; the summary still
  *  reflects the full run. */
 const MAX_PERSISTED_ROWS = 500;
+
+/** Keep-priority when the row cap is hit: significant (changed) rows first so a
+ *  reopened, capped report still surfaces every likely regression rather than an
+ *  arbitrary payload-order prefix of mostly-unchanged rows. */
+const VERDICT_KEEP_RANK: Record<RegressionVerdict, number> = {
+    regression: 0,
+    improvement: 1,
+    benign: 2,
+    neutral: 3,
+};
+
+/** Reduce rows to the `max` most significant, regression-first, preserving the
+ *  original order within a rank. */
+function keepMostSignificantRows<T extends RegressionRow>(
+    rows: readonly T[],
+    max: number,
+): T[] {
+    return rows
+        .map((row, index) => ({
+            row,
+            index,
+            rank: VERDICT_KEEP_RANK[likelyBadChange(row)],
+        }))
+        .sort((a, b) => a.rank - b.rank || a.index - b.index)
+        .slice(0, max)
+        .map((entry) => entry.row);
+}
 
 const runStoreKey = (agent: string): string => `impactReport.lastRun.${agent}`;
 
@@ -50,7 +82,13 @@ export function savePersistedRun(
 ): void {
     const bounded =
         payload.rows.length > MAX_PERSISTED_ROWS
-            ? { ...payload, rows: payload.rows.slice(0, MAX_PERSISTED_ROWS) }
+            ? {
+                  ...payload,
+                  rows: keepMostSignificantRows(
+                      payload.rows,
+                      MAX_PERSISTED_ROWS,
+                  ),
+              }
             : payload;
     void state.update(runStoreKey(agent), {
         payload: bounded,

@@ -121,6 +121,9 @@ export function openImpactReport(
     // panel's lifetime (re-open the panel to refresh it).
     let localRefsCache: ResolvedVersion[] | undefined;
     let remoteRefsCache: ResolvedVersion[] | undefined;
+    // The live utterance-filter input box, tracked so it can be torn down if the
+    // panel is disposed while it is still open.
+    let searchInputBox: vscode.InputBox | undefined;
 
     const panel = WebviewKitPanel.createOrReveal(context, {
         viewType: VIEW_TYPE,
@@ -138,6 +141,8 @@ export function openImpactReport(
             openReportRefreshers.delete(agent);
             stateSub?.dispose();
             stateSub = undefined;
+            searchInputBox?.dispose();
+            searchInputBox = undefined;
             client?.close();
             client = undefined;
             connecting = undefined;
@@ -482,7 +487,10 @@ export function openImpactReport(
             // A live input box: each keystroke posts the current text back so the
             // report filters as the user types. Closing it (accept or Esc) keeps
             // whatever is currently shown — no revert, since it was applied live.
+            // Only one is open at a time; opening a fresh one hides the previous.
+            searchInputBox?.dispose();
             const input = vscode.window.createInputBox();
+            searchInputBox = input;
             input.title = "Impact Report — filter utterances";
             input.prompt = "Show only rows whose utterance contains this text";
             input.placeholder = "Filter by utterance text";
@@ -491,7 +499,12 @@ export function openImpactReport(
                 post({ type: "utteranceSearch", query: value });
             });
             input.onDidAccept(() => input.hide());
-            input.onDidHide(() => input.dispose());
+            input.onDidHide(() => {
+                input.dispose();
+                if (searchInputBox === input) {
+                    searchInputBox = undefined;
+                }
+            });
             input.show();
             return;
         }

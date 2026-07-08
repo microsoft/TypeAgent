@@ -11,8 +11,8 @@
  * regression* (red) or *benign/an improvement* (green)?
  *
  * The judgment is made from the shape of the delta so it works on a fresh edit
- * with no human feedback yet (the common case for the "find a regression"
- * journey). Explicit feedback on side B, when present, overrides the structural
+ * with no human feedback yet (the common case when hunting for a regression).
+ * Explicit feedback on side B, when present, overrides the structural
  * guess: a thumbs-down means the new result is bad, a thumbs-up means it is
  * accepted. Side-A feedback is not used — a prior approval of the old result
  * does not by itself make a change a regression.
