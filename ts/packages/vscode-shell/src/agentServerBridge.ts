@@ -1018,6 +1018,37 @@ export class AgentServerBridge {
                 loading: false,
             });
         }
+        // Push current developer-mode state so dev-only UI (the per-message
+        // delete button) reflects a server started with `--dev` on connect
+        // and session switches, without waiting for a `@config dev` toggle.
+        await this.pushDeveloperMode();
+    }
+
+    /**
+     * Query the current developer-mode flag from the dispatcher and forward
+     * it to the webview(s) so dev-only affordances toggle to match. Targets a
+     * single webview when provided (re-attach hydration), else broadcasts.
+     * Best-effort: silently skipped when the dispatcher predates
+     * `getDeveloperMode`.
+     */
+    private async pushDeveloperMode(webview?: vscode.Webview): Promise<void> {
+        const dispatcher = this.session?.dispatcher;
+        if (!dispatcher || typeof dispatcher.getDeveloperMode !== "function") {
+            return;
+        }
+        let enabled: boolean;
+        try {
+            enabled = await dispatcher.getDeveloperMode();
+        } catch (e) {
+            console.warn("[agentServerBridge] getDeveloperMode failed:", e);
+            return;
+        }
+        const message = { type: "developerMode" as const, enabled };
+        if (webview) {
+            this.postToWebview(webview, message);
+        } else {
+            this.broadcastToWebviews(message);
+        }
     }
 
     private async replayHistoryInner(
@@ -1127,6 +1158,9 @@ export class AgentServerBridge {
                         e,
                     );
                 }
+                // Seed dev-mode state so the per-message delete button
+                // reflects a `--dev` server on webview re-attach.
+                await this.pushDeveloperMode(webview);
             } catch (e) {
                 console.warn(
                     "[agentServerBridge] hydrateWebview replay failed:",
@@ -1164,6 +1198,24 @@ export class AgentServerBridge {
         switch (msg.type) {
             case "sendCommand":
                 await this.sendCommand(msg.command, msg.requestId);
+                break;
+            case "deleteMessage":
+                // Developer-mode per-message delete. Reuse the feedback
+                // "hide" RPC: permanent=true is a non-recoverable hard delete;
+                // permanent=false is a recoverable soft delete (trash).
+                try {
+                    await this.session?.dispatcher.recordUserHide(
+                        { requestId: msg.requestId },
+                        true,
+                        msg.target,
+                        msg.permanent,
+                    );
+                } catch (e) {
+                    console.warn(
+                        "[agentServerBridge] deleteMessage failed:",
+                        e,
+                    );
+                }
                 break;
             case "cancelCommand":
                 // Forward to the dispatcher so an in-flight request can be

@@ -697,8 +697,11 @@ export function createChatPanelClient(
                 ctx,
             );
         },
-        onFeedbackHidden: (requestId, target, hidden) => {
-            void dispatcher?.recordUserHide(requestId, hidden, target);
+        onDeleteMessage: (requestId, target, permanent) => {
+            // Developer-mode per-message delete. Reuse the feedback "hide"
+            // RPC: permanent=true is a non-recoverable hard delete;
+            // permanent=false is a recoverable soft delete (trash).
+            void dispatcher?.recordUserHide(requestId, true, target, permanent);
         },
         speechProvider,
         ttsProvider,
@@ -909,6 +912,10 @@ export function createChatPanelClient(
             switch (event) {
                 case "explained":
                     chatPanel.notifyExplained(ridStr(requestId)!, data);
+                    break;
+                case "developerMode":
+                    // Toggle dev-only UI affordances (per-message delete).
+                    chatPanel.setDeveloperMode(data?.enabled === true);
                     break;
                 case "randomCommandSelected":
                     break;
@@ -1310,6 +1317,15 @@ export function createChatPanelClient(
             cutoffSeq: number | undefined,
         ): void {
             dispatcher = d;
+            // Seed dev-mode state so the per-message delete button reflects a
+            // server started with `--dev` on connect, without waiting for a
+            // `@config dev` toggle. Best-effort (older servers lack the RPC).
+            if (typeof d.getDeveloperMode === "function") {
+                void d
+                    .getDeveloperMode()
+                    .then((enabled) => chatPanel.setDeveloperMode(enabled))
+                    .catch(() => {});
+            }
             // Seed mirror sync; defer DOM reconcile until replay finishes.
             if (initialQueueSnapshot) {
                 const prev = queueMirror.snapshot;

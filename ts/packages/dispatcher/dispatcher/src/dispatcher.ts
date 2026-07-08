@@ -372,6 +372,9 @@ export function createDispatcherFromContext(
         async getQueueSnapshot() {
             return context.requestQueue.getSnapshot();
         },
+        async getDeveloperMode() {
+            return context.developerMode === true;
+        },
         async interrupt(command, attachments, options, clientRequestId) {
             let entry;
             try {

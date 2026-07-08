@@ -27,6 +27,7 @@ import {
     FeedbackUIVariant,
     FeedbackWidget,
 } from "./feedbackWidget.js";
+import { createDeleteControl } from "./deleteControl.js";
 import { ChatContextMenu } from "./contextMenu.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
@@ -413,14 +414,16 @@ export interface ChatPanelOptions {
      */
     helpPanel?: HelpPanelContent;
     /**
-     * Optional soft-hide ("trash") hook for the feedback widget. When
-     * supplied, the feedback footer shows a trash button that toggles the
-     * hidden state of the user or agent message for the given request.
+     * Optional developer-mode hook to delete a message. When supplied and
+     * developer mode is enabled (see `ChatPanel.setDeveloperMode`), each
+     * message bubble shows a split "delete" button: the primary action is a
+     * soft (recoverable) delete; the caret offers a permanent (hard) delete.
+     * `permanent` is `true` for the hard-delete choice.
      */
-    onFeedbackHidden?: (
+    onDeleteMessage?: (
         requestId: RequestId,
         target: "user" | "agent",
-        hidden: boolean,
+        permanent: boolean,
     ) => void;
 }
 
@@ -630,11 +633,12 @@ export class ChatPanel {
     private imageCaptureProvider?: ImageCaptureProvider;
     private settingsPanel?: SettingsPanelSchema;
     private helpPanel?: HelpPanelContent;
-    public onFeedbackHidden?: (
+    public onDeleteMessage?: (
         requestId: RequestId,
         target: "user" | "agent",
-        hidden: boolean,
+        permanent: boolean,
     ) => void;
+    private developerMode = false;
     // Input-bar affordances created only when the matching provider exists.
     private micButton?: HTMLButtonElement;
     private attachButton?: HTMLButtonElement;
@@ -662,7 +666,7 @@ export class ChatPanel {
         this.imageCaptureProvider = options.imageCaptureProvider;
         this.settingsPanel = options.settingsPanel;
         this.helpPanel = options.helpPanel;
-        this.onFeedbackHidden = options.onFeedbackHidden;
+        this.onDeleteMessage = options.onDeleteMessage;
 
         // Build DOM structure
         const wrapper = document.createElement("div");
@@ -1601,6 +1605,64 @@ export class ChatPanel {
     }
 
     /**
+     * Toggle the developer-mode per-message delete affordance. When enabled,
+     * every message bubble that carries a requestId shows a split "delete"
+     * button offering soft (recoverable) or permanent delete. No-op unless the
+     * host wired `onDeleteMessage`.
+     */
+    public setDeveloperMode(enabled: boolean): void {
+        if (this.developerMode === enabled) {
+            return;
+        }
+        this.developerMode = enabled;
+        this.rootElement.classList.toggle("chat-developer-mode", enabled);
+        if (this.onDeleteMessage === undefined) {
+            return;
+        }
+        if (enabled) {
+            const containers = this.messageDiv.querySelectorAll<HTMLElement>(
+                ".chat-message-container-user[data-request-id]," +
+                    ".chat-message-container-agent[data-request-id]",
+            );
+            containers.forEach((c) => {
+                const target = c.classList.contains(
+                    "chat-message-container-user",
+                )
+                    ? "user"
+                    : "agent";
+                this.attachDeleteControl(c, c.dataset.requestId!, target);
+            });
+        } else {
+            this.messageDiv
+                .querySelectorAll(".chat-delete-control")
+                .forEach((el) => el.remove());
+        }
+    }
+
+    /**
+     * Attach the dev-mode delete split button to a message container, reading
+     * the requestId + target from it. No-op when developer mode is off, the
+     * host didn't wire `onDeleteMessage`, or a control is already present.
+     */
+    private attachDeleteControl(
+        containerEl: HTMLElement,
+        requestId: string,
+        target: "user" | "agent",
+    ): void {
+        if (!this.developerMode || this.onDeleteMessage === undefined) {
+            return;
+        }
+        if (containerEl.querySelector(":scope > .chat-delete-control")) {
+            return;
+        }
+        const control = createDeleteControl((permanent) => {
+            containerEl.classList.add("chat-message-trashed");
+            this.onDeleteMessage?.({ requestId }, target, permanent);
+        });
+        containerEl.appendChild(control);
+    }
+
+    /**
      * Display a user message bubble.
      *
      * `requestId` is stamped on the container as `data-request-id` so later
@@ -1849,6 +1911,9 @@ export class ChatPanel {
 
         const id = container.dataset.requestId!;
         this.userMessageById.set(id, container);
+        if (this.developerMode) {
+            this.attachDeleteControl(container, id, "user");
+        }
         if (!isRemote) {
             if (!this.suppressFirstMessageTracking) {
                 this.requestStartByRequestId.set(id, Date.now());
@@ -2124,6 +2189,10 @@ export class ChatPanel {
             anchor,
         );
         this.threadContainers.set(threadId, container);
+        container.div.dataset.requestId = threadId;
+        if (this.developerMode) {
+            this.attachDeleteControl(container.div, threadId, "agent");
+        }
         const requestContainers =
             this.requestAgentContainers.get(threadId) ?? [];
         requestContainers.push(container);
@@ -4044,12 +4113,6 @@ export class ChatPanel {
                 }
             },
         };
-        // Only expose the trash affordance when the host supplied a hide hook.
-        if (this.onFeedbackHidden) {
-            controller.setHidden = async (hidden, target) => {
-                this.onFeedbackHidden!(requestId, target ?? "agent", hidden);
-            };
-        }
         container.attachFeedbackController(controller, this._feedbackUIVariant);
         const existing = this.feedbackByRequestId.get(threadId);
         if (existing) {

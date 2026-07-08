@@ -191,6 +191,15 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
             source: string,
             seq?: number,
         ) => {
+            // Developer-mode toggle: forward as a dedicated message so the
+            // webview can flip dev-only UI affordances (per-message delete).
+            if (event === "developerMode") {
+                ctx.broadcast({
+                    type: "developerMode",
+                    enabled: data?.enabled === true,
+                });
+                return;
+            }
             const clientId = clientIdOf(notificationId);
             // For commandComplete, also attach the canonical server UUID
             // (when known) so the webview's cancellation dedupe can mark

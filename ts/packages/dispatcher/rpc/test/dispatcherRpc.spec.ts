@@ -62,6 +62,7 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
         submitCommand: notImplemented("submitCommand") as any,
         interrupt: notImplemented("interrupt") as any,
         getQueueSnapshot: notImplemented("getQueueSnapshot") as any,
+        getDeveloperMode: notImplemented("getDeveloperMode") as any,
         getDynamicDisplay: notImplemented("getDynamicDisplay") as any,
         getTemplateSchema: notImplemented("getTemplateSchema") as any,
         getTemplateCompletion: notImplemented("getTemplateCompletion") as any,

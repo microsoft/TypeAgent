@@ -2808,7 +2808,16 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
             dev: getToggleHandlerTable(
                 "development mode",
                 async (context, enable) => {
-                    context.sessionContext.agentContext.developerMode = enable;
+                    const systemContext = context.sessionContext.agentContext;
+                    systemContext.developerMode = enable;
+                    // Notify connected clients so dev-mode UI affordances
+                    // (e.g. the per-message delete button) can toggle live.
+                    systemContext.clientIO.notify(
+                        undefined,
+                        "developerMode",
+                        { enabled: enable },
+                        "dispatcher",
+                    );
                 },
             ),
             log: {

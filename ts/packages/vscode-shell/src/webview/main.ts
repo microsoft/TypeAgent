@@ -95,6 +95,14 @@ const chatPanel = new ChatPanel(rootEl, {
     onCancel: (requestId: string) => {
         vscode.postMessage({ type: "cancelCommand", requestId });
     },
+    onDeleteMessage: (requestId, target, permanent) => {
+        vscode.postMessage({
+            type: "deleteMessage",
+            requestId: requestId.requestId,
+            target,
+            permanent,
+        });
+    },
 });
 
 // `onDemoAction` is exposed as a settable public property on ChatPanel
@@ -501,6 +509,9 @@ window.addEventListener("message", (event) => {
         }
         case "userInfo":
             chatPanel.setUserInfo(msg.name);
+            break;
+        case "developerMode":
+            chatPanel.setDeveloperMode(msg.enabled);
             break;
         case "sessionChanged":
             currentSessionId = msg.sessionId;

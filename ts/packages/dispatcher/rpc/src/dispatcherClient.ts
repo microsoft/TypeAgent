@@ -135,6 +135,9 @@ export function createDispatcherRpcClient(
         async getQueueSnapshot() {
             return rpc.invoke("getQueueSnapshot");
         },
+        async getDeveloperMode() {
+            return rpc.invoke("getDeveloperMode");
+        },
         async getDynamicDisplay(...args) {
             return rpc.invoke("getDynamicDisplay", ...args);
         },

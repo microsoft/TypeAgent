@@ -65,6 +65,8 @@ export type DispatcherInvokeFunctions = {
 
     getQueueSnapshot(): Promise<QueueSnapshot>;
 
+    getDeveloperMode(): Promise<boolean>;
+
     getDynamicDisplay(
         appAgentName: string,
         type: DisplayType,

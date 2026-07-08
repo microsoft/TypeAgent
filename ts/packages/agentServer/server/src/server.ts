@@ -149,6 +149,17 @@ async function main() {
     const configName =
         configIdx !== -1 ? process.argv[configIdx + 1] : undefined;
 
+    // `--dev` (or TYPEAGENT_DEV=1) starts every conversation with developer
+    // mode enabled — captures translation debug data and shows dev-only UI
+    // affordances (per-message delete) without needing `@config dev on`.
+    const developerMode =
+        process.argv.includes("--dev") ||
+        process.env.TYPEAGENT_DEV === "1" ||
+        process.env.TYPEAGENT_DEV === "true";
+    if (developerMode) {
+        debugStartup("developer mode enabled at startup (--dev)");
+    }
+
     debugStartup("creating conversation manager (will lockInstanceDir)");
     // Single PortRegistrar shared across every conversation in this
     // process. Lets external clients (browser extension, VS Code, CLI)
@@ -170,6 +181,7 @@ async function main() {
                 storageProvider: getFsStorageProvider(),
                 metrics: true,
                 dblogging: true,
+                developerMode,
                 traceId,
                 indexingServiceRegistry: await getIndexingServiceRegistry(
                     instanceDir,

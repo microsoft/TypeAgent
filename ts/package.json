@@ -58,6 +58,7 @@
     "shell:start:package": "pnpm -C packages/shell run start:package",
     "shell:test": "pnpm -C packages/shell run shell:test",
     "start:agent-server": "pnpm -C packages/agentServer/server run start",
+    "start:agent-server:dev": "pnpm -C packages/agentServer/server run start:dev",
     "start:mcp": "pnpm -C packages/commandExecutor run start",
     "stop:agent-server": "pnpm -C packages/agentServer/server run stop",
     "test": "pnpm run test:local && pnpm run test:live && pnpm run shell:test",
