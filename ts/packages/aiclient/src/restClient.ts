@@ -395,7 +395,7 @@ export function getRetryAfterMs(
             // console.log(`Retry-After: ${pauseHeader}`);
             pauseHeader = pauseHeader.trim();
             if (pauseHeader) {
-                let seconds = parseInt(pauseHeader);
+                const seconds = parseInt(pauseHeader);
                 let pauseMs: number;
                 if (isNaN(seconds)) {
                     const retryDate = new Date(pauseHeader);

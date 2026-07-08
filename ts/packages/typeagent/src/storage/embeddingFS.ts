@@ -140,12 +140,12 @@ export async function createEmbeddingFolder(
         embeddings: Embedding[];
     }> {
         const names: string[] = await folder.allNames();
-        let loadedEmbeddings = await asyncArray.mapAsync(
+        const loadedEmbeddings = await asyncArray.mapAsync(
             names,
             concurrency!,
             (name) => folder.get(name),
         );
-        let embeddings = loadedEmbeddings.filter(
+        const embeddings = loadedEmbeddings.filter(
             (e) => e !== undefined,
         ) as Embedding[];
         return { names, embeddings };

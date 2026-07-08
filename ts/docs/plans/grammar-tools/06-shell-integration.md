@@ -14,7 +14,7 @@ Track G.
 ## TL;DR
 
 Add a developer panel inside
-[`packages/shell`](../../../packages/shell) (gated by a debug flag) that
+[`packages/shell`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/shell) (gated by a debug flag) that
 loads the chunk-05 SPA bundle and points it at the **live dispatcher
 session's compiled grammar** via a new RPC method.
 

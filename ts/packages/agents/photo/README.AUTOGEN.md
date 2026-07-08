@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=dd832066bc448df7af558e0ed2f771549b85f68e8bdafb13e7183152ef0cc3f4 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d7e95bf747ceb760a07d41d2d0515846ece45c95d8e31bb24dc5639508090e14 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # photo-agent — AI-generated documentation
@@ -12,39 +12,44 @@
 
 ## Overview
 
-The `photo-agent` package is a TypeAgent application agent designed to handle photo-related actions. It primarily focuses on using a camera attached to the system to take photos based on user requests.
+The `photo-agent` package is a TypeAgent application agent designed to handle photo-related actions. It enables the system to interact with a camera attached to the device, allowing users to take photos through natural language requests.
 
 ## What it does
 
-The `photo-agent` package implements the `takePhoto` action, which allows the agent to take a photo using a camera attached to the system. This action is triggered by various user requests that are parsed and handled by the agent. The agent can interpret different ways users might ask to take a photo, such as "Take a photo of this sunset" or "Snap a picture of my outfit."
+The primary functionality of the `photo-agent` is to implement the `takePhoto` action. This action uses a connected camera to capture a photo based on user input. The agent interprets user requests such as "Take a photo of this sunset" or "Snap a picture of my outfit" and executes the corresponding action.
+
+The `takePhoto` action accepts a single parameter, `originalRequest`, which captures the user's original input. This parameter can be used for logging or further processing. The agent's grammar, defined in [photoSchema.agr](./src/photoSchema.agr), supports a variety of natural language patterns to trigger the action.
 
 ## Setup
 
-To set up the `photo-agent`, ensure you have the necessary environment configured to support camera functionality. This may include installing drivers for the camera and ensuring the camera is accessible by the system.
+To use the `photo-agent`, ensure the following prerequisites are met:
 
-For detailed setup instructions, see the hand-written README.
+1. **Camera Access**: Verify that a camera is connected to the system and accessible. This may require installing appropriate drivers or granting necessary permissions.
+2. **Environment Configuration**: No specific environment variables are required for this package, but the system must support camera functionality.
+
+For additional setup details, refer to the hand-written README.
 
 ## Key Files
 
-The `photo-agent` package is structured around several key files:
+The `photo-agent` package is organized into several key files that define its functionality:
 
-- **[photoManifest.json](./src/photoManifest.json)**: Defines the agent's manifest, including its description and schema.
-- **[photoSchema.ts](./src/photoSchema.ts)**: Contains the TypeScript definitions for the `PhotoAction` and `TakePhotoAction`.
-- **[photoActionHandler.ts](./src/photoActionHandler.ts)**: Implements the logic for handling the `takePhoto` action, including initializing the agent context and executing the action.
-- **[photoSchema.agr](./src/photoSchema.agr)**: Defines the grammar rules for parsing user requests related to photo actions.
-
-The agent's main entry point is the `instantiate` function in [photoActionHandler.ts](./src/photoActionHandler.ts), which sets up the agent's context and action handling.
+- **[photoManifest.json](./src/photoManifest.json)**: This file contains the agent's manifest, including metadata such as the description, emoji representation, and schema details.
+- **[photoSchema.ts](./src/photoSchema.ts)**: Defines the TypeScript types for the actions supported by the agent. Currently, it includes the `PhotoAction` and `TakePhotoAction` types.
+- **[photoActionHandler.ts](./src/photoActionHandler.ts)**: Implements the core logic for handling the `takePhoto` action. This file includes functions for initializing the agent context, updating it, and executing actions.
+- **[photoSchema.agr](./src/photoSchema.agr)**: Specifies the grammar rules for parsing user requests into actionable commands. It defines patterns for recognizing requests to take photos.
+- **[photoSchema.tests.json](./src/photoSchema.tests.json)**: Contains test cases for validating the grammar and action handling. These tests ensure that user requests are correctly parsed and mapped to the `takePhoto` action.
 
 ## How to extend
 
 To extend the `photo-agent` package, follow these steps:
 
-1. **Add new actions**: Define new actions in [photoSchema.ts](./src/photoSchema.ts) by creating new TypeScript types for the actions.
-2. **Update grammar**: Modify [photoSchema.agr](./src/photoSchema.agr) to include grammar rules for the new actions.
-3. **Implement handlers**: Add logic for handling the new actions in [photoActionHandler.ts](./src/photoActionHandler.ts). Ensure the `executeAction` function can process the new actions.
-4. **Test**: Add test cases for the new actions in [photoSchema.tests.json](./src/photoSchema.tests.json) to ensure they are correctly parsed and handled.
+1. **Define New Actions**: Add new action types to [photoSchema.ts](./src/photoSchema.ts). Each action should have a unique `actionName` and a set of parameters.
+2. **Update Grammar**: Modify [photoSchema.agr](./src/photoSchema.agr) to include grammar rules for the new actions. Define patterns that map user requests to the new actions.
+3. **Implement Action Handlers**: Extend the logic in [photoActionHandler.ts](./src/photoActionHandler.ts) to handle the new actions. Update the `executeAction` function to process the new action types.
+4. **Add Test Cases**: Create new test cases in [photoSchema.tests.json](./src/photoSchema.tests.json) to validate the parsing and handling of the new actions.
+5. **Test Your Changes**: Run the existing test suite and add new tests to ensure the agent behaves as expected with the new functionality.
 
-Start by opening [photoActionHandler.ts](./src/photoActionHandler.ts) and following the existing patterns for action handling. Run tests to verify your changes and ensure the new functionality works as expected.
+To get started, open [photoActionHandler.ts](./src/photoActionHandler.ts) and review the existing implementation of the `takePhoto` action. Use it as a reference for adding and handling new actions.
 
 ## Reference
 
@@ -53,7 +58,7 @@ Start by opening [photoActionHandler.ts](./src/photoActionHandler.ts) and follow
 ### Entry points
 
 - `./agent/manifest` → [./src/photoManifest.json](./src/photoManifest.json)
-- `./agent/handlers` → [./dist/photoActionHandler.js](./dist/photoActionHandler.js)
+- `./agent/handlers` → `./dist/photoActionHandler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -89,6 +94,6 @@ _1 action implemented by this agent, parsed deterministically from `./src/photoS
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.509Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter photo-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter photo-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

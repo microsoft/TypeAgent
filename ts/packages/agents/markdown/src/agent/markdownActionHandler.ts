@@ -36,7 +36,10 @@ async function executeMarkdownAction(
     action: AppAction,
     context: ActionContext<MarkdownActionContext>,
 ) {
-    let result = await handleMarkdownAction(action as MarkdownAction, context);
+    const result = await handleMarkdownAction(
+        action as MarkdownAction,
+        context,
+    );
     return result;
 }
 

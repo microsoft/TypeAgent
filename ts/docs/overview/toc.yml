@@ -1,0 +1,28 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+- name: Overview
+  href: index.md
+- name: Getting started
+  href: getting-started.md
+  items:
+    - name: Set up on Windows
+      href: setup-windows.md
+    - name: Set up on WSL2
+      href: setup-wsl2.md
+    - name: Set up on Linux
+      href: setup-linux.md
+    - name: Set up on macOS
+      href: setup-macos.md
+    - name: Service keys & configuration
+      href: service-keys.md
+    - name: Developer tips & troubleshooting
+      href: developer-tips.md
+    - name: "Tutorial: build an agent"
+      href: tutorial-build-an-agent.md
+- name: Surfaces
+  href: surfaces.md
+- name: Command reference
+  href: command-reference.md
+- name: Glossary
+  href: glossary.md

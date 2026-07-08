@@ -9,6 +9,7 @@ import {
     buildCorpusSourceNodes,
     type CorpusTreeNode,
 } from "./corpusTreePresentation.js";
+import { BaseStudioTreeProvider } from "./baseTreeProvider.js";
 
 /** View id contributed in package.json. */
 export const CORPUS_VIEW_ID = "typeagentStudioCorpora";
@@ -19,47 +20,53 @@ export const CORPUS_VIEW_ID = "typeagentStudioCorpora";
  * resolves children from the runtime and maps descriptors to `TreeItem`s.
  */
 export class CorpusTreeProvider
-    implements vscode.TreeDataProvider<CorpusTreeNode>, vscode.Disposable
+    extends BaseStudioTreeProvider<CorpusTreeNode>
+    implements vscode.Disposable
 {
-    private readonly emitter = new vscode.EventEmitter<
-        CorpusTreeNode | undefined
-    >();
-    readonly onDidChangeTreeData = this.emitter.event;
     private readonly subscription: { dispose(): void };
 
     constructor(private readonly source: CorpusSource) {
+        super();
         // Loaded-agent set drives the agent rows, so refresh on sandbox
         // lifecycle changes (agent load/unload) as well as manual refresh.
         this.subscription = source.onSandboxChanged(() => this.refresh());
     }
 
-    refresh(): void {
-        this.emitter.fire(undefined);
+    protected collapsibleState(
+        node: CorpusTreeNode,
+    ): vscode.TreeItemCollapsibleState {
+        if (!node.hasChildren) {
+            return vscode.TreeItemCollapsibleState.None;
+        }
+        return node.kind === "agent"
+            ? vscode.TreeItemCollapsibleState.Expanded
+            : vscode.TreeItemCollapsibleState.Collapsed;
     }
 
-    getTreeItem(node: CorpusTreeNode): vscode.TreeItem {
-        const item = new vscode.TreeItem(
-            node.label,
-            node.hasChildren
-                ? node.kind === "agent"
-                    ? vscode.TreeItemCollapsibleState.Expanded
-                    : vscode.TreeItemCollapsibleState.Collapsed
-                : vscode.TreeItemCollapsibleState.None,
-        );
-        item.id = node.id;
-        item.description = node.description;
-        item.tooltip = node.tooltip;
-        item.contextValue = node.contextValue;
+    protected decorate(item: vscode.TreeItem, node: CorpusTreeNode): void {
         item.iconPath = iconForNode(node);
-        // Note: the seed empty-state node intentionally has no click command —
-        // creating a file is done via its explicit inline action (with a
-        // confirmation) so a corpus file is never written just by selecting
-        // the row.
-        return item;
+        // The seed empty-state row is clickable: selecting it runs the same
+        // seed command as its inline button. The command shows a modal
+        // confirmation before writing, so a corpus file is never created just
+        // by selecting the row — this makes the row's affordance match the
+        // obvious expectation (the bare inline `+` was easy to miss).
+        if (node.contextValue === "corpusAgentSeed") {
+            item.command = {
+                command: "typeagent-studio.seedInRepoCorpus",
+                title: "Seed in-repo corpus",
+                arguments: [node],
+            };
+        }
     }
 
     async getChildren(node?: CorpusTreeNode): Promise<CorpusTreeNode[]> {
         if (!node) {
+            // Show the native loading bar while connecting; once connected,
+            // fetch and render rows (or the "no corpora" placeholder).
+            await this.whenConnected();
+            if (!this.connected) {
+                return [];
+            }
             return buildCorpusAgentNodes(await this.source.listCorpusAgents());
         }
         if (node.kind === "agent" && node.agent) {
@@ -75,7 +82,7 @@ export class CorpusTreeProvider
 
     dispose(): void {
         this.subscription.dispose();
-        this.emitter.dispose();
+        super.dispose();
     }
 }
 
@@ -86,10 +93,22 @@ function iconForNode(node: CorpusTreeNode): vscode.ThemeIcon | undefined {
         case "source":
             return new vscode.ThemeIcon("folder");
         case "entry":
+            if (node.feedbackRating === "up") {
+                return new vscode.ThemeIcon(
+                    "thumbsup",
+                    new vscode.ThemeColor("testing.iconPassed"),
+                );
+            }
+            if (node.feedbackRating === "down") {
+                return new vscode.ThemeIcon(
+                    "thumbsdown",
+                    new vscode.ThemeColor("testing.iconFailed"),
+                );
+            }
             return new vscode.ThemeIcon("comment");
         case "empty":
             return new vscode.ThemeIcon(
-                node.contextValue === "corpusAgentSeed" ? "add" : "info",
+                node.contextValue === "corpusAgentSeed" ? "new-file" : "info",
             );
         default:
             return new vscode.ThemeIcon("info");

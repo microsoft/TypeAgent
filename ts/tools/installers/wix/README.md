@@ -72,10 +72,71 @@ The pipeline handles this automatically via:
 
 ## Local Build & Test
 
-### 1. Pull the Certificate from Key Vault
+Use the local source build to validate WiX changes before pushing to CI. This is the recommended path for catching `LGHT`/`CANDLE` errors early — it runs the same WiX heat → candle → light pipeline that CI does, but stages the artifacts from your local repo build instead of downloading from the ADO feed. No Azure CLI login required.
+
+### Option A: Build from local repo (recommended for WiX development)
+
+#### 1. Build the workspace
 
 ```powershell
-cd ts/tools/scripts
+cd D:\repos\TypeAgent\ts
+pnpm run build
+```
+
+#### 2. Stage agent-server
+
+```powershell
+# From D:\repos\TypeAgent\ts
+node tools/scripts/deployAgentServer.mjs `
+  --out "$env:TEMP\typeagent-msi-stage\agent-server" `
+  --platform win32 --arch x64 `
+  --profile service
+```
+
+#### 3. Stage copilot-plugin
+
+```powershell
+$plugin = "packages/copilot-plugin"
+$out    = "$env:TEMP\typeagent-msi-stage\copilot-plugin"
+New-Item -ItemType Directory -Force $out | Out-Null
+Copy-Item -Recurse "$plugin/dist"       "$out/dist"
+Copy-Item          "$plugin/hooks.json" "$out/hooks.json"
+Copy-Item          "$plugin/.mcp.json"  "$out/.mcp.json"
+Copy-Item          "$plugin/plugin.json" "$out/plugin.json"
+Copy-Item -Recurse "$plugin/agents"     "$out/agents"
+Copy-Item -Recurse "$plugin/skills"     "$out/skills"
+```
+
+#### 4. Run the WiX build with local staged artifacts
+
+```powershell
+node tools/scripts/build-msi.mjs `
+  --skip-download `
+  --agent-dir  "$env:TEMP\typeagent-msi-stage\agent-server" `
+  --plugin-dir "$env:TEMP\typeagent-msi-stage\copilot-plugin" `
+  --version 0.0.1-local `
+  --plugin-version 0.0.1-local `
+  --output "$env:TEMP\typeagent-msi-stage\out"
+```
+
+**Output:**
+
+```
+$env:TEMP\typeagent-msi-stage\out\TypeAgent-0.0.1-local-win32-x64.msi
+```
+
+This is the same code path CI uses. If WiX fails here it will fail in CI.
+
+---
+
+### Option B: Build from ADO feed artifact (requires az login)
+
+Pull pre-published artifacts from the `typeagent` feed instead of staging locally.
+
+#### 1. Pull the Certificate from Key Vault
+
+```powershell
+cd D:\repos\TypeAgent\ts\tools\scripts
 node getCert.mjs pull
 ```
 
@@ -87,16 +148,13 @@ Status check:
 node getCert.mjs status
 ```
 
-### 2. Build the MSI
+#### 2. Build the MSI
 
 ```powershell
-cd ts/tools/scripts
+cd D:\repos\TypeAgent\ts\tools\scripts
 
-# Build for win32-x64 (default)
-node build-msi.mjs --rid win32-x64 --version 0.0.1-test --output ./msi-out
-
-# Or specify latest published version
-node build-msi.mjs --rid win32-x64 --version latest --output ./msi-out
+# Build for win32-x64
+node build-msi.mjs --rid win32-x64 --version 0.0.1-<buildId> --output ./msi-out
 ```
 
 **What it does:**
@@ -104,54 +162,116 @@ node build-msi.mjs --rid win32-x64 --version latest --output ./msi-out
 1. Downloads `agent-server.win32-x64` from the `typeagent` feed
 2. Extracts to `./msi-out/artifact`
 3. Compiles WiX definition (`.wxs` → `.wixobj`)
-4. Links to create `TypeAgent-AgentServer-<version>-win32-x64.msi`
+4. Links to create `TypeAgent-<version>-win32-x64.msi`
 
 **Output:**
 
 ```
 msi-out/
 ├── artifact/              # Downloaded and extracted agent-server
-├── TypeAgent-AgentServer.wixobj   # Compiled WiX
-└── TypeAgent-AgentServer-0.0.1-test-win32-x64.msi
+└── TypeAgent-0.0.1-<buildId>-win32-x64.msi
 ```
 
-### 3. Sign the MSI
+#### 3. Sign the MSI (optional for local testing)
 
 ```powershell
-cd ts/tools/scripts
-
-# Sign with the dev certificate
-node sign-msi.mjs ../installers/wix/msi-out/TypeAgent-AgentServer-0.0.1-test-win32-x64.msi
+cd D:\repos\TypeAgent\ts\tools\scripts
+node sign-msi.mjs "$env:TEMP\typeagent-msi-stage\out\TypeAgent-0.0.1-local-win32-x64.msi"
 ```
 
-**What it does:**
+Signing requires Key Vault access. For local WiX validation you can skip signing and test install directly.
 
-1. Invokes `getCert.mjs pull` (if not already done)
-2. Signs the MSI with `signtool.exe` using the dev cert
-3. Optionally timestamps the signature (via DigiCert timestamp server)
-4. Verifies the signature
-
-**Output:**
-
-```
-✅ MSI signed successfully
-✔️  Signature verified successfully
-```
-
-### 4. Test Installation
-
-On a clean Windows machine (or VM):
+#### 4. Test installation
 
 ```powershell
-# Interactive install (shows progress dialog)
-msiexec /i TypeAgent-AgentServer-0.0.1-test-win32-x64.msi
+# Interactive install
+msiexec /i "$env:TEMP\typeagent-msi-stage\out\TypeAgent-0.0.1-local-win32-x64.msi"
 
-# Unattended install (for scripted/Intune deployment)
-msiexec /i TypeAgent-AgentServer-0.0.1-test-win32-x64.msi /quiet /norestart
+# Unattended
+msiexec /i "$env:TEMP\typeagent-msi-stage\out\TypeAgent-0.0.1-local-win32-x64.msi" /quiet /norestart
 
-# Verify installation
-Get-Item 'C:\Program Files\TypeAgent\agent-server\' -ErrorAction SilentlyContinue
+# Verify
+Get-Item "$env:LOCALAPPDATA\TypeAgent\agent-server" -ErrorAction SilentlyContinue
 ```
+
+## Endpoint provider selection (self-host)
+
+TypeAgent needs an LLM endpoint configuration (`config.local.yaml`) at runtime.
+By default it is downloaded from the AI Systems Key Vault, but machines without
+Key Vault access can instead run against a local **Ollama** server or the
+**Copilot** SDK.
+
+During an **interactive** install the MSI shows a provider-selection dialog
+(after the license page) with radio-button groups for the chat provider
+(AI Systems / Ollama / Copilot), the embedding provider (Local / Ollama / OpenAI
+/ None), and an Ollama host field. The same choices can be driven **silently**
+through public properties:
+
+| Property     | Values                              | Default                  | Notes                                                                           |
+| ------------ | ----------------------------------- | ------------------------ | ------------------------------------------------------------------------------- |
+| `PROVIDER`   | `AISYSTEMS`, `OLLAMA`, `COPILOT`    | `AISYSTEMS`              | `OLLAMA`/`COPILOT` generate `config.local.yaml` during install (no Key Vault).  |
+| `EMBEDDING`  | `LOCAL`, `OLLAMA`, `OPENAI`, `NONE` | `LOCAL`                  | Embedding source for the self-host providers. `LOCAL` = bundled CPU-only model. |
+| `OLLAMAHOST` | any URL                             | `http://localhost:11434` | Ollama base URL (used for `OLLAMA` chat and/or embeddings).                     |
+
+```powershell
+# AI Systems (default) — provisions via az login + getKeys after install
+msiexec /i TypeAgent-<version>-win32-x64.msi
+
+# Local Ollama chat with the bundled local embedding model
+msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=OLLAMA
+
+# Copilot SDK chat (requires an authenticated `copilot` CLI) + local embeddings
+msiexec /i TypeAgent-<version>-win32-x64.msi PROVIDER=COPILOT
+
+# Fully silent
+msiexec /i TypeAgent-<version>-win32-x64.msi /quiet PROVIDER=OLLAMA EMBEDDING=LOCAL
+```
+
+The UI is a custom scheme (`WixUI_TypeAgent`): WelcomeDlg → LicenseAgreementDlg →
+**ProviderDlg** → VerifyReadyDlg. For `OLLAMA`/`COPILOT`, a deferred, impersonated
+custom action runs `node "[INSTALLFOLDER]typeagent-serve.mjs" provision --provider
+[PROVIDER] --embedding [EMBEDDING] --ollama-host [OLLAMAHOST] --force` as the
+installing user, writing `config.local.yaml` to `~/.typeagent`. For `AISYSTEMS`
+(the default), config provisioning remains an interactive post-install step
+(`az login` + `getKeys`), since it requires browser/device authentication that a
+silent installer cannot perform. Fine-grained overrides (chat model, embedding
+endpoint, API keys) are available on the `provision`/`generate-selfhost-config`
+CLI; re-run provisioning post-install to adjust them.
+
+## Optional: install the TypeAgent Shell (desktop app)
+
+The MSI can optionally download and silently install the **TypeAgent Shell**
+(the Electron desktop app) from the same Azure Blob Storage container used by the
+shell's auto-update feed. This is off by default. During an interactive install
+a checkbox on **ProviderDlg** ("Also install the TypeAgent Shell desktop app")
+enables it; silently, set the public properties:
+
+| Property         | Values / example                                      | Default | Notes                                                                        |
+| ---------------- | ----------------------------------------------------- | ------- | ---------------------------------------------------------------------------- |
+| `SHELL`          | `0`, `1`                                              | `0`     | `1` enables the optional shell download + silent install.                    |
+| `SHELLCHANNEL`   | `lkg`, `test`, `ci`                                   | `lkg`   | electron-updater channel to read (`<channel>-<arch>.yml`).                   |
+| `SHELLSTORAGE`   | Azure Storage account name                            | —       | Used with the Azure CLI (`az login`) to read the shell blobs.                |
+| `SHELLCONTAINER` | Azure Storage container name                          | —       | Defaults to `SHELLSTORAGE` if omitted.                                       |
+| `SHELLBASEURL`   | `https://<account>.blob.core.windows.net/<container>` | —       | Anonymous HTTPS base for a **public** container; when set, `az` is not used. |
+
+```powershell
+# Authenticated (az login) blob read from a private container
+msiexec /i TypeAgent-<version>-win32-x64.msi SHELL=1 SHELLSTORAGE=myaccount SHELLCONTAINER=mycontainer SHELLCHANNEL=lkg
+
+# Public container (no az): anonymous HTTPS download
+msiexec /i TypeAgent-<version>-win32-x64.msi SHELL=1 SHELLBASEURL=https://myaccount.blob.core.windows.net/mycontainer
+```
+
+When `SHELL=1`, a deferred, impersonated custom action runs the bundled
+`install-shell.ps1` (`[TYPEAGENTROOT]install-shell.ps1`), which reads the
+channel metadata, downloads `typeagentshell-<version>-win32-x64-setup.exe`, and
+runs it silently (NSIS `/S`). It runs as the installing user so blob auth and
+the per-user shell install target resolve correctly. The action is **non-fatal**
+(`Return="ignore"`): a shell download/install failure is logged to
+`%LOCALAPPDATA%\TypeAgent\logs\msi-install-shell.log` but does not roll back the
+agent-server install. Because the shell shares `~/.typeagent/config.local.yaml`,
+no extra config step is needed. `install-shell.ps1` is the Windows sibling of
+`install-shell.sh` and can also be run standalone.
 
 ## Pipeline Usage
 

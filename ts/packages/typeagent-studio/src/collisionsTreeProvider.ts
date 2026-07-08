@@ -11,6 +11,7 @@ import {
     type CollisionEntry,
     type CollisionRow,
 } from "./collisionsPresentation.js";
+import { BaseStudioTreeProvider } from "./baseTreeProvider.js";
 import type { CollisionsSource } from "./collisionsSource.js";
 
 /** View id contributed in package.json. */
@@ -30,12 +31,9 @@ export const COLLISIONS_CAPACITY = 200;
  * in-flight reload or late collision event can't repopulate the tree.
  */
 export class CollisionsTreeProvider
-    implements vscode.TreeDataProvider<CollisionRow>, vscode.Disposable
+    extends BaseStudioTreeProvider<CollisionRow>
+    implements vscode.Disposable
 {
-    private readonly emitter = new vscode.EventEmitter<
-        CollisionRow | undefined
-    >();
-    readonly onDidChangeTreeData = this.emitter.event;
     private source: CollisionsSource;
     private subscription: { dispose(): void } | undefined;
     private entries: CollisionEntry[] = [];
@@ -45,6 +43,7 @@ export class CollisionsTreeProvider
     private generation = 0;
 
     constructor(source: CollisionsSource) {
+        super();
         this.source = source;
         this.install(++this.generation);
     }
@@ -63,10 +62,6 @@ export class CollisionsTreeProvider
         this.refresh();
         this.source = source;
         this.install(++this.generation);
-    }
-
-    refresh(): void {
-        this.emitter.fire(undefined);
     }
 
     /** Re-read collisions from the active source (e.g. after a scan). */
@@ -92,17 +87,15 @@ export class CollisionsTreeProvider
         this.refresh();
     }
 
-    getTreeItem(row: CollisionRow): vscode.TreeItem {
-        const item = new vscode.TreeItem(
-            row.label,
-            row.hasChildren
-                ? vscode.TreeItemCollapsibleState.Collapsed
-                : vscode.TreeItemCollapsibleState.None,
-        );
-        item.id = row.id;
-        item.description = row.description;
-        item.tooltip = row.tooltip;
-        item.contextValue = row.contextValue;
+    protected collapsibleState(
+        row: CollisionRow,
+    ): vscode.TreeItemCollapsibleState {
+        return row.hasChildren
+            ? vscode.TreeItemCollapsibleState.Collapsed
+            : vscode.TreeItemCollapsibleState.None;
+    }
+
+    protected decorate(item: vscode.TreeItem, row: CollisionRow): void {
         item.iconPath = new vscode.ThemeIcon(row.icon);
         if (row.openPath !== undefined) {
             item.command = {
@@ -111,11 +104,24 @@ export class CollisionsTreeProvider
                 arguments: [vscode.Uri.file(row.openPath)],
             };
         }
-        return item;
     }
 
-    getChildren(row?: CollisionRow): CollisionRow[] {
+    async getChildren(row?: CollisionRow): Promise<CollisionRow[]> {
         if (!row) {
+            // Render the last known scan immediately so a mid-session
+            // disconnect keeps results visible instead of dropping back to the
+            // loading bar. Only gate on the connection (showing the native
+            // loading bar) during the initial load, before anything is scanned.
+            if (this.entries.length === 0 && this.skipped.length === 0) {
+                await this.whenConnected();
+                if (
+                    !this.connected &&
+                    this.entries.length === 0 &&
+                    this.skipped.length === 0
+                ) {
+                    return [];
+                }
+            }
             return buildCollisionRows(this.entries, this.skipped);
         }
         if (row.kind === "skipped-group") {
@@ -170,7 +176,7 @@ export class CollisionsTreeProvider
         this.generation++; // invalidate any in-flight reload
         this.subscription?.dispose();
         this.subscription = undefined;
-        this.emitter.dispose();
+        super.dispose();
     }
 }
 

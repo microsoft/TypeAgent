@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=2e6939e4afd8f137870d24526579728e764f41e9f2019ecaaffce78e51151539 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=184f419d78d90e8f3fc215076bf7e2d4da186008c313b5081e380e05026a9285 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # code-agent — AI-generated documentation
@@ -70,10 +70,12 @@ By following these steps, you can add new capabilities to the `code-agent` packa
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
+- [@typeagent/websocket-utils](../../../packages/utils/webSocketUtils/README.md)
 - [telemetry](../../../packages/telemetry/README.md)
-- [websocket-utils](../../../packages/utils/webSocketUtils/README.md)
+- [websocket-channel-server](../../../packages/utils/webSocketChannelServer/README.md)
 
 External: `better-sqlite3`, `chalk`, `debug`, `ws`
 
@@ -83,7 +85,7 @@ External: `better-sqlite3`, `chalk`, `debug`, `ws`
 
 ### Files of interest
 
-`./src/codeActionHandler.ts`, `./src/codeActionsSchema.ts`, `./src/codeManifest.json`, …and 26 more under `./src/`.
+`./src/codeActionHandler.ts`, `./src/codeActionsSchema.ts`, `./src/codeManifest.json`, …and 32 more under `./src/`.
 
 ### Agent surface
 
@@ -108,6 +110,6 @@ _1 action implemented by this agent, parsed deterministically from `./src/codeAc
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

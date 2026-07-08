@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=88de2560c339c76edc3e2e3be768ea7f2d2aab9b9a549cfb943d098d24bdfc3a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=5fc9058e13e4263f0812b052a29013ee3992bf7befd2f653953e273824e405d9 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-cache — AI-generated documentation
@@ -12,72 +12,111 @@
 
 ## Overview
 
-The `agent-cache` package is a TypeScript library designed to manage the construction cache for TypeAgent requests. It facilitates the caching of parsed grammar and rules derived from user requests, enabling local translations of user requests without relying on the LLM (Large Language Model). This package is essential for optimizing the performance and efficiency of TypeAgent by reducing the dependency on external LLM services.
+The `agent-cache` package is a TypeScript library that provides a construction cache for TypeAgent requests. It is designed to optimize the processing of user requests by caching parsed grammar and rules, referred to as "constructions." These constructions enable local translation of user requests, reducing the need for repeated interactions with external Large Language Models (LLMs). This approach improves system performance and reduces latency.
 
 ## What it does
 
-The `agent-cache` package provides functionalities to explain how user requests are transformed into actions and to create constructions that can be cached. These constructions are used to perform translations of user requests locally, bypassing the LLM. The package supports multiple explainers, each with its own validator and construction creator, allowing for exploration of changes to the explainer prompt and schema.
+The `agent-cache` package focuses on enhancing the efficiency of request handling in the TypeAgent ecosystem. Its key functionalities include:
 
-Key actions supported by the package include:
-
-- `createMessage`: Creates a message based on user input.
-- `explainRequest`: Explains how a user request is transformed into an action.
-- `cacheConstruction`: Caches the construction derived from the explanation.
-- `loadConstructionCacheFile`: Loads a construction cache file for use.
-
-These actions enable the creation, explanation, caching, and loading of constructions, respectively.
+- **Request Explanation**: Using the `explainRequest` action, the package explains how a user request is transformed into an action. This explanation is then used to generate constructions.
+- **Construction Caching**: The `cacheConstruction` action allows the system to store constructions derived from user requests. These constructions are reusable for similar requests, reducing the need for repeated LLM queries.
+- **Local Request Translation**: Cached constructions are used to translate user requests locally, bypassing the LLM and improving response times.
+- **Cache Management**: The package provides tools to load, store, and manage construction caches. For example, the `loadConstructionCacheFile` action enables loading pre-existing cache files for immediate use.
+- **Support for Multiple Explainers**: The package supports multiple explainers, each with its own validator and construction creator. This allows for experimentation with different approaches to optimize the explanation and translation process.
 
 ## Setup
 
-To set up the `agent-cache` package, ensure you have the necessary environment variables and dependencies configured. The package relies on several internal and external dependencies, including `async`, `chalk`, `debug`, `regexp.escape`, and `typechat`.
+The `agent-cache` package requires minimal setup. To get started:
 
-For detailed setup instructions, including environment variables and configuration steps, refer to the hand-written README.
+1. Install the package and its dependencies using your package manager (e.g., `pnpm install`).
+2. Ensure the following internal dependencies are available in your workspace:
+   - `@typeagent/action-grammar`
+   - `@typeagent/action-schema`
+   - `@typeagent/agent-sdk`
+   - `@typeagent/aiclient`
+   - `@typeagent/common-utils`
+   - `telemetry`
+   - `test-lib`
+   - `typechat-utils`
+3. Ensure the following external dependencies are installed:
+   - `async`
+   - `chalk`
+   - `debug`
+   - `regexp.escape`
+   - `typechat`
+
+For additional setup instructions, refer to the hand-written README.
 
 ## Key Files
 
-The `agent-cache` package is organized into several key components:
+The `agent-cache` package is organized into several key modules, each with specific responsibilities. Below is an overview of the key files:
 
-- **Cache**: Manages the construction cache, including loading and storing constructions. Key files include [cache.ts](./src/cache/cache.ts), [constructionStore.ts](./src/cache/constructionStore.ts), and [grammarStore.ts](./src/cache/grammarStore.ts).
-- **Explanation**: Handles the explanation of user requests and the creation of constructions. Key files include [explainerFactories.ts](./src/explanation/explainerFactories.ts), [genericExplainer.ts](./src/explanation/genericExplainer.ts), and [schemaInfoProvider.ts](./src/explanation/schemaInfoProvider.ts).
-- **Constructions**: Defines the structure and management of constructions. Key files include [constructionCache.ts](./src/constructions/constructionCache.ts), [constructionJSONTypes.ts](./src/constructions/constructionJSONTypes.ts), and [matchPart.ts](./src/constructions/matchPart.ts).
-- **Grammar**: Converts constructions to grammar and manages grammar matching. Key files include [exportGrammar.ts](./src/grammar/exportGrammar.ts) and [grammarStore.ts](./src/cache/grammarStore.ts).
+### Cache Management
 
-### Key Files and Their Responsibilities
+- [cache.ts](./src/cache/cache.ts): Core logic for managing the construction cache, including loading and storing constructions.
+- [constructionStore.ts](./src/cache/constructionStore.ts): Handles the storage and retrieval of constructions.
+- [explainWorkQueue.ts](./src/cache/explainWorkQueue.ts): Manages the queue for processing explanations.
+- [factory.ts](./src/cache/factory.ts): Provides factory methods for creating explainers and caches.
+- [grammarStore.ts](./src/cache/grammarStore.ts): Manages grammar storage and matching logic.
+- [sortMatches.ts](./src/cache/sortMatches.ts): Implements sorting algorithms for matching results.
+- [types.ts](./src/cache/types.ts): Defines types and interfaces for cache and grammar management.
 
-- [index.ts](./src/index.ts): Main entry point, exporting types and functionalities.
+### Explanation
+
+- [explainerFactories.ts](./src/explanation/explainerFactories.ts): Maintains a registry of supported explainers and their configurations.
+- [genericExplainer.ts](./src/explanation/genericExplainer.ts): Provides a generic implementation for explainers.
+- [schemaInfoProvider.ts](./src/explanation/schemaInfoProvider.ts): Supplies schema-related information for explanations.
+
+### Constructions
+
+- [constructionCache.ts](./src/constructions/constructionCache.ts): Defines the structure and management of constructions.
+- [constructionJSONTypes.ts](./src/constructions/constructionJSONTypes.ts): Specifies JSON types for serializing and deserializing constructions.
+- [matchPart.ts](./src/constructions/matchPart.ts): Handles matching logic for construction parts.
+
+### Grammar
+
+- [exportGrammar.ts](./src/grammar/exportGrammar.ts): Converts constructions to grammar for local processing.
+- [grammarStore.ts](./src/cache/grammarStore.ts): Manages grammar storage and matching.
+
+### Entry Points
+
+- [index.ts](./src/index.ts): Main entry point, exporting core types and functionalities.
 - [indexBrowser.ts](./src/indexBrowser.ts): Browser-specific entry point, exporting constructions and match parts.
 - [indexGrammar.ts](./src/indexGrammar.ts): Grammar-specific entry point, exporting grammar conversion functionalities.
-- [cache.ts](./src/cache/cache.ts): Manages the construction cache, including loading and storing constructions.
-- [constructionStore.ts](./src/cache/constructionStore.ts): Handles the storage and retrieval of constructions.
-- [explainWorkQueue.ts](./src/cache/explainWorkQueue.ts): Manages the work queue for processing explanations.
-- [factory.ts](./src/cache/factory.ts): Provides factory methods for creating explainers and caches.
-- [grammarStore.ts](./src/cache/grammarStore.ts): Manages grammar storage and matching.
 
 ## How to extend
 
-To extend the `agent-cache` package, follow these steps:
+The `agent-cache` package is designed to be extensible, allowing contributors to add new explainers, modify existing components, or enhance its functionality. Below are some guidelines for extending the package:
 
-### Adding a new explainer
+### Adding a New Explainer
 
-1. Locate the list of supported explainers in [explainerFactories.ts](./src/explanation/explainerFactories.ts).
-2. Create a new explainer by cloning an existing one. For example, to create `v5` from `v4`:
-   - Copy the code and schemas from `explanationV4.ts`, `explanationSchemaV4.ts`, and `actionExplanationSchemaV4.ts` to new files with `V5` suffix.
-   - Rename all `V4` suffixes in the new files to `V5`.
-   - Add the new explainer to `explainerFactories.ts` by adding a new entry in the `explainerFactories` array.
-   - Use `@config explainer v5` in the CLI or shell to start using the new explainer.
+1. **Clone an Existing Explainer**:
 
-### Modifying existing components
+   - Navigate to the [./src/explanation](./src/explanation) directory.
+   - Copy the code and schema files of an existing explainer (e.g., `explanationV4.ts`, `explanationSchemaV4.ts`, and `actionExplanationSchemaV4.ts`) and rename them with a new version suffix (e.g., `V5`).
+   - Update all references to the old version (e.g., `V4`) in the new files to the new version (e.g., `V5`).
 
-- To modify the cache management, start with [cache.ts](./src/cache/cache.ts) and [constructionStore.ts](./src/cache/constructionStore.ts).
-- To update the explanation logic, refer to [genericExplainer.ts](./src/explanation/genericExplainer.ts) and [schemaInfoProvider.ts](./src/explanation/schemaInfoProvider.ts).
-- For changes to constructions, look into [constructionCache.ts](./src/constructions/constructionCache.ts) and [matchPart.ts](./src/constructions/matchPart.ts).
-- To adjust grammar handling, review [exportGrammar.ts](./src/grammar/exportGrammar.ts) and [grammarStore.ts](./src/cache/grammarStore.ts).
+2. **Register the New Explainer**:
+
+   - Add an entry for the new explainer in [explainerFactories.ts](./src/explanation/explainerFactories.ts).
+   - Use the new explainer's name as the key and its factory function as the value.
+
+3. **Activate the New Explainer**:
+   - Use the CLI or shell command `@config explainer v5` to start using the new explainer.
+
+### Modifying Existing Components
+
+- **Cache Management**: To modify how constructions are cached, start with [cache.ts](./src/cache/cache.ts) and [constructionStore.ts](./src/cache/constructionStore.ts).
+- **Explanation Logic**: To update how user requests are explained, refer to [genericExplainer.ts](./src/explanation/genericExplainer.ts) and [schemaInfoProvider.ts](./src/explanation/schemaInfoProvider.ts).
+- **Constructions**: For changes to the structure or handling of constructions, look into [constructionCache.ts](./src/constructions/constructionCache.ts) and [matchPart.ts](./src/constructions/matchPart.ts).
+- **Grammar Handling**: To adjust grammar-related functionalities, review [exportGrammar.ts](./src/grammar/exportGrammar.ts) and [grammarStore.ts](./src/cache/grammarStore.ts).
 
 ### Testing
 
-Ensure that any new or modified components are thoroughly tested. The package relies on the `test-lib` dependency for testing utilities. Run tests to verify the functionality and integration of your changes.
+- Use the `test-lib` dependency to write and run tests for any new or modified components.
+- Ensure that all changes are thoroughly tested to maintain the package's reliability and functionality.
 
-By following these steps, you can effectively extend and customize the `agent-cache` package to meet your specific requirements. For more detailed instructions and examples, refer to the hand-written README.
+By following these guidelines, you can effectively extend and customize the `agent-cache` package to meet specific requirements. For additional details, refer to the hand-written README.
 
 ## Reference
 
@@ -85,19 +124,19 @@ By following these steps, you can effectively extend and customize the `agent-ca
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
-- default → [./dist/indexBrowser.js](./dist/indexBrowser.js)
-- `./grammar` → [./dist/indexGrammar.js](./dist/indexGrammar.js)
+- default → `./dist/index.js` _(not found on disk)_
+- default → `./dist/indexBrowser.js` _(not found on disk)_
+- `./grammar` → `./dist/indexGrammar.js` _(not found on disk)_
 
 ### Dependencies
 
 Workspace:
 
+- [@typeagent/action-grammar](../../packages/actionGrammar/README.md)
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
-- [action-grammar](../../packages/actionGrammar/README.md)
-- [aiclient](../../packages/aiclient/README.md)
 - [telemetry](../../packages/telemetry/README.md)
 - [test-lib](../../packages/testLib/README.md)
 - [typechat-utils](../../packages/utils/typechatUtils/README.md)
@@ -106,6 +145,7 @@ External: `async`, `chalk`, `debug`, `regexp.escape`, `typechat`
 
 ### Used by
 
+- [@typeagent/core](../../packages/typeagent-core/README.md)
 - [agent-api](../../packages/api/README.md)
 - [agent-cache-explorer](../../packages/cacheExplorer/README.md)
 - [agent-cli](../../packages/cli/README.md)
@@ -114,7 +154,7 @@ External: `async`, `chalk`, `debug`, `regexp.escape`, `typechat`
 - [cache-rest-endpoint](../../examples/cacheRESTEndpoint/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 - [desktop-automation](../../packages/agents/desktop/README.md)
-- [schema-studio](../../examples/schemaStudio/README.md)
+- schema-studio
 
 ### Files of interest
 
@@ -132,6 +172,6 @@ External: `async`, `chalk`, `debug`, `regexp.escape`, `typechat`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cache docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cache docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

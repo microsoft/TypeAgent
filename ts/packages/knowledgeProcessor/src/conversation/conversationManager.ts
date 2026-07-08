@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import path from "path";
-import { ChatModel, openai } from "@typeagent/aiclient";
+import {
+    ChatModel,
+    openai,
+    tryCreateEmbeddingModel,
+} from "@typeagent/aiclient";
 import {
     ObjectFolderSettings,
     SearchOptions,
@@ -214,7 +218,7 @@ export async function createConversationManager(
         createKnowledgeExtractorSettings(),
     );
 
-    let topicMerger = await createMerger();
+    const topicMerger = await createMerger();
 
     const searchProcessor = createSearchProcessor(
         conversation,
@@ -406,16 +410,17 @@ export async function createConversationManager(
         if (existingConversation) {
             return existingConversation.settings;
         }
-        const embeddingModel = createEmbeddingCache(
-            openai.createEmbeddingModel(),
-            64,
-        );
+        const innerModel = tryCreateEmbeddingModel();
+        const embeddingModel =
+            innerModel === undefined
+                ? undefined
+                : createEmbeddingCache(innerModel, 64);
         return {
             indexSettings: {
                 caseSensitive: false,
                 concurrency: 2,
                 embeddingModel,
-                semanticIndex: true,
+                semanticIndex: embeddingModel !== undefined,
             },
         };
     }
@@ -495,7 +500,7 @@ export async function addMessageToConversation(
     const messageIndex = await conversation.getMessageIndex();
     await messageIndex.put(messageBlock.value, messageBlock.blockId);
 
-    let extractedKnowledge = await extractKnowledgeFromMessage(
+    const extractedKnowledge = await extractKnowledgeFromMessage(
         knowledgeExtractor,
         message,
         messageBlock,
@@ -666,7 +671,7 @@ function getMessageHeaderAndText(
         if (typeof message.text === "string") {
             return message.header + "\n\n" + message.text;
         }
-        let textBlock: TextBlock = {
+        const textBlock: TextBlock = {
             type: message.text.type,
             value: message.header + "\n\n" + message.text.value,
             sourceIds: message.text.sourceIds,

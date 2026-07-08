@@ -63,7 +63,7 @@ export async function loadPdfChunksFromJson(
     rootDir: string,
     filenames: string[],
 ): Promise<(ChunkedFile | ErrorItem)[]> {
-    let results: (ChunkedFile | ErrorItem)[] = [];
+    const results: (ChunkedFile | ErrorItem)[] = [];
     try {
         const chunkedDocsDir = path.join(rootDir, "chunked-docs");
         for (const filename of filenames) {
@@ -117,7 +117,7 @@ export async function chunkifyPdfFiles(
         const absChunkerPath = resolve(chunkerPath);
         const absFilenames = filenames.map((f) => path.join(__dirname, f));
         const outputDir = path.join(rootDir, "chunked-docs");
-        let { stdout, stderr } = await execFilePromise(
+        const { stdout, stderr } = await execFilePromise(
             "python3",
             [
                 "-X",

@@ -68,6 +68,9 @@ export function createStudioInvokeHandlers(
         async listCorpusAgents(repoRoot) {
             return conn.getRuntime(repoRoot).listCorpusAgents();
         },
+        async canValidateWildcards(repoRoot, agent) {
+            return conn.getRuntime(repoRoot).canValidateWildcards(agent);
+        },
         async listCorpusEntries(repoRoot, agent) {
             return conn.getRuntime(repoRoot).listCorpusEntries(agent);
         },

@@ -9,6 +9,8 @@ import type {
     CommandResult,
 } from "agent-dispatcher";
 import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
+import type { ConversationInfo } from "@typeagent/agent-server-client";
+import type { ConnectionStatus } from "chat-ui";
 
 export type { ShellUserSettings };
 
@@ -86,6 +88,10 @@ export interface ClientAPI {
     continuousSpeechProcessing(text: string): Promise<string | undefined>;
 
     // Conversation management
+    // Whether the multi-conversation switcher should be shown. True only when
+    // connected to a separate agent server (--connect); false when the shell
+    // hosts the agent server in-process (standalone) or for web/mobile clients.
+    conversationBarEnabled(): Promise<boolean>;
     conversationList(): Promise<ConversationInfo[]>;
     conversationCreate(name: string): Promise<ConversationInfo>;
     conversationSwitch(
@@ -101,6 +107,11 @@ export interface ClientAPI {
         kind: "info" | "warning" | "error";
         switched?: boolean;
     }>;
+
+    // Manual connection recovery, triggered from the "stopped" reconnect
+    // banner (only meaningful in --connect mode).
+    reconnectRetry(): Promise<void>;
+    reconnectStartServer(): Promise<void>;
 }
 
 // Functions that are called from the main process to the renderer process.
@@ -143,8 +154,12 @@ export interface Client {
         clientRequestId: string,
         result: CommandResult | undefined,
     ): void;
-    /** Show/clear the reconnect banner. Pass undefined to clear. */
-    reconnectStatusChanged?(message: string | undefined): void;
+    /**
+     * Show/clear the reconnect banner. Pass `undefined` to clear. The
+     * structured status drives the shared connection-status rendering
+     * (countdown, or a "stopped" state with Retry / Start links).
+     */
+    reconnectStatusChanged?(status: ConnectionStatus | undefined): void;
 }
 
 export interface ElectronWindowFields {
@@ -162,13 +177,11 @@ export type UserExpression = {
     text: string;
 };
 
-// Conversation management types
-export type ConversationInfo = {
-    conversationId: string;
-    name: string;
-    clientCount: number;
-    createdAt: string; // ISO 8601
-};
+// Conversation management types.
+// Re-export the authoritative protocol type (via the agent-server client) so
+// the Electron IPC surface stays in lockstep with the server wire shape
+// instead of drifting as a hand-maintained copy.
+export type { ConversationInfo };
 
 export type ConversationSwitchResult = {
     success: boolean;

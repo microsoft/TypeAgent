@@ -31,6 +31,7 @@ export interface IMessageTextIndexData {
 
 export interface IMessageTextEmbeddingIndex extends IMessageTextIndex {
     readonly size: number;
+    readonly isEmbeddingEnabled?: boolean;
     generateEmbedding(text: string): Promise<NormalizedEmbedding>;
     lookupByEmbedding(
         textEmbedding: NormalizedEmbedding,
@@ -59,6 +60,17 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         return this.textLocationIndex.size;
     }
 
+    /**
+     * True only when an embedding model is available. When false, message
+     * semantic search is disabled and callers fall back to non-embedding
+     * ranking (see isMessageTextEmbeddingIndex and search.ts).
+     */
+    public get isEmbeddingEnabled(): boolean {
+        return (
+            this.settings.embeddingIndexSettings.embeddingModel !== undefined
+        );
+    }
+
     public addMessages(
         messages: Iterable<IMessage>,
         eventHandler?: IndexingEventHandlers,
@@ -68,7 +80,7 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
         // Collect everything so we can batch efficiently
         let i = 0;
         for (const message of messages) {
-            let messageOrdinal = baseMessageOrdinal + i;
+            const messageOrdinal = baseMessageOrdinal + i;
             for (
                 let chunkOrdinal = 0;
                 chunkOrdinal < message.textChunks.length;
@@ -117,10 +129,14 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
 
     public generateEmbedding(text: string): Promise<NormalizedEmbedding> {
         // Note: if you rename generateEmbedding, be sure to also fix isMessageTextEmbeddingIndex
-        return generateEmbeddingWithRetry(
-            this.settings.embeddingIndexSettings.embeddingModel,
-            text,
-        );
+        const embeddingModel =
+            this.settings.embeddingIndexSettings.embeddingModel;
+        if (embeddingModel === undefined) {
+            throw new Error(
+                "Message text embedding index is disabled (no embedding model configured)",
+            );
+        }
+        return generateEmbeddingWithRetry(embeddingModel, text);
     }
 
     public lookupByEmbedding(
@@ -201,7 +217,7 @@ export async function addToMessageIndex(
     eventHandler?: IndexingEventHandlers,
     batchSize: number = 8,
 ): Promise<ListIndexingResult> {
-    let result: ListIndexingResult = {
+    const result: ListIndexingResult = {
         numberCompleted: 0,
     };
     if (conversation.secondaryIndexes) {
@@ -236,6 +252,7 @@ export function isMessageTextEmbeddingIndex(
     return (
         textIndex.generateEmbedding !== undefined &&
         textIndex.lookupByEmbedding !== undefined &&
-        textIndex.lookupInSubsetByEmbedding !== undefined
+        textIndex.lookupInSubsetByEmbedding !== undefined &&
+        (textIndex.isEmbeddingEnabled ?? true)
     );
 }

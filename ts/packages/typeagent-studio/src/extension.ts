@@ -5,7 +5,6 @@ import * as vscode from "vscode";
 import { randomUUID } from "node:crypto";
 import * as path from "node:path";
 import { readFile } from "node:fs/promises";
-import { VERSION } from "@typeagent/core";
 import { registerStudioCommands } from "./commands.js";
 import { createStudioRuntime } from "./studioRuntime.js";
 import { ensureStudioService } from "./studioServiceLauncher.js";
@@ -328,6 +327,11 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const corpusTree = new CorpusTreeProvider(serviceRuntime);
+    // The Corpora tree refreshes only on explicit in-extension actions (seeding
+    // an in-repo file, adding an external source, recording feedback) and the
+    // manual Refresh command -- each of those calls corpusTree.refresh()
+    // directly. We intentionally do not watch the filesystem for out-of-band
+    // edits to *.utterances.jsonl.
     context.subscriptions.push(
         corpusTree,
         vscode.window.registerTreeDataProvider(CORPUS_VIEW_ID, corpusTree),
@@ -501,6 +505,7 @@ export function activate(context: vscode.ExtensionContext): void {
             },
         ),
     );
+
     const statusBar = new StudioStatusBar(serviceRuntime);
     context.subscriptions.push(
         statusBar,
@@ -517,19 +522,45 @@ export function activate(context: vscode.ExtensionContext): void {
         99,
     );
     serviceStatusBar.command = SERVICE_CONNECT_COMMAND;
+    // While disconnected the connection auto-retries on a backoff; a 1s ticker
+    // refreshes the countdown ("reconnecting in Ns…"). It's the single, global
+    // place that surfaces connection state — the views render nothing until
+    // connected rather than repeating a per-view "connecting" message.
+    let countdownTimer: ReturnType<typeof setInterval> | undefined;
+    const stopCountdown = () => {
+        if (countdownTimer !== undefined) {
+            clearInterval(countdownTimer);
+            countdownTimer = undefined;
+        }
+    };
+    const renderReconnecting = () => {
+        const at = connection.nextRetryAt;
+        const secs =
+            at !== undefined
+                ? Math.max(0, Math.ceil((at - Date.now()) / 1000))
+                : 0;
+        serviceStatusBar.text =
+            secs > 0
+                ? `$(sync~spin) Studio: reconnecting in ${secs}s…`
+                : "$(sync~spin) Studio: reconnecting…";
+        serviceStatusBar.tooltip =
+            "Studio service unavailable — reconnecting automatically. Click to retry now (or run `typeagent-studio serve`).";
+        serviceStatusBar.show();
+    };
     const renderServiceStatus = (state: StudioConnectionState) => {
+        stopCountdown();
         if (state === "connected") {
             serviceStatusBar.text = "$(plug) Studio: connected";
             serviceStatusBar.tooltip =
                 "Connected to the standalone Studio service for this workspace.";
         } else if (state === "connecting") {
             serviceStatusBar.text = "$(sync~spin) Studio: connecting…";
-            serviceStatusBar.tooltip =
-                "Launching / connecting to the Studio service…";
+            serviceStatusBar.tooltip = "Connecting to the Studio service…";
         } else {
-            serviceStatusBar.text = "$(debug-disconnect) Studio: disconnected";
-            serviceStatusBar.tooltip =
-                "Studio service not connected. Click to retry (or run `typeagent-studio serve`).";
+            // Disconnected always schedules an auto-retry (backoff), so frame it
+            // as reconnecting (with a live countdown) rather than a dead end.
+            renderReconnecting();
+            countdownTimer = setInterval(renderReconnecting, 1000);
         }
         serviceStatusBar.show();
     };
@@ -547,6 +578,7 @@ export function activate(context: vscode.ExtensionContext): void {
         eventLog,
         eventLogView,
         serviceStatusBar,
+        { dispose: stopCountdown },
         { dispose: () => connection.dispose() },
         vscode.commands.registerCommand("typeagent-studio.refreshEvents", () =>
             eventLog.refresh(),
@@ -554,15 +586,40 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand("typeagent-studio.clearEvents", () =>
             eventLog.clear(),
         ),
-        // Open the Impact Report webview — the first greenfield client of the
-        // service channel (replay over the channel; webview never opens a
-        // socket).
+        // Open a per-agent Impact Report. Launched from the graph icon on a
+        // Corpora agent row (the node carries the agent); when invoked without a
+        // row, fall back to a quick pick so a keybinding still works.
         vscode.commands.registerCommand(
             "typeagent-studio.openImpactReport",
-            () =>
-                openImpactReport(context, repoRootInfo.repoRoot, () =>
-                    connection.getTarget(),
-                ),
+            async (node?: { agent?: string }) => {
+                let agent = node?.agent;
+                if (!agent) {
+                    const agents = await serviceRuntime.listCorpusAgents();
+                    if (agents.length === 0) {
+                        vscode.window.showInformationMessage(
+                            "No agents have a corpus to replay. Load an agent into a sandbox first.",
+                        );
+                        return;
+                    }
+                    agent =
+                        agents.length === 1
+                            ? agents[0]
+                            : await vscode.window.showQuickPick(agents, {
+                                  title: "Open Impact Report",
+                                  placeHolder:
+                                      "Select an agent to open a report for",
+                              });
+                    if (!agent) {
+                        return;
+                    }
+                }
+                openImpactReport(
+                    context,
+                    repoRootInfo.repoRoot,
+                    connection,
+                    agent,
+                );
+            },
         ),
     );
 
@@ -577,7 +634,7 @@ export function activate(context: vscode.ExtensionContext): void {
         treeDataProvider: collisions,
     });
 
-    let currentCollisionsSource: CollisionsSource = collisionsChannelSource;
+    const currentCollisionsSource: CollisionsSource = collisionsChannelSource;
 
     // Shared scan flow used by both the manual command and the auto-scan
     // Auto-scan debounce state, declared before the shared scan helper so an
@@ -800,12 +857,18 @@ export function activate(context: vscode.ExtensionContext): void {
             renderServiceStatus(state);
             const connected = state === "connected";
 
+            // Each tree provider gates its own loading bar / empty state on the
+            // connection (see BaseStudioTreeProvider.whenConnected); the global
+            // status bar item carries the user-facing connection state.
+            corpusTree.setConnected(connected);
+            eventLog.setConnected(connected);
+            collisions.setConnected(connected);
+
             sandboxTree.setConnected(connected);
             if (connected && !sandboxesRestored) {
                 sandboxesRestored = true;
                 // Replay the service's persisted sandboxes once connected, then
-                // release the Sandbox view's loading bar (whether restore
-                // succeeded or failed) so it renders the restored rows.
+                // refresh so the view renders the restored rows.
                 void sandboxSource
                     .restoreSandboxes()
                     .then(() => sandboxTree.refresh())
@@ -814,8 +877,7 @@ export function activate(context: vscode.ExtensionContext): void {
                             "[typeagent-studio] Failed to restore sandboxes:",
                             describeError(err),
                         ),
-                    )
-                    .finally(() => sandboxTree.markReady());
+                    );
             }
         }),
         vscode.commands.registerCommand(SERVICE_CONNECT_COMMAND, async () => {
@@ -869,14 +931,6 @@ export function activate(context: vscode.ExtensionContext): void {
             connection.startAutoConnect();
         }
     })();
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand("typeagent-studio.hello", () => {
-            vscode.window.showInformationMessage(
-                `TypeAgent Studio skeleton (typeagent-core ${VERSION}).`,
-            );
-        }),
-    );
 }
 
 async function resolveSandboxId(

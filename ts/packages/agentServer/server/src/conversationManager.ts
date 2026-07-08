@@ -6,10 +6,15 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {
     DispatcherConnectOptions,
+    ConversationNameCollisionOptions,
+    CreateConversationOptions,
     ConversationInfo,
+    ConversationSource,
+    RenameConversationOptions,
 } from "@typeagent/agent-server-protocol";
 import { ClientIO, Dispatcher, DispatcherOptions } from "agent-dispatcher";
 import type {
+    DisplayLogEntry,
     PendingInteractionRequest,
     QueueSnapshot,
 } from "@typeagent/dispatcher-types";
@@ -17,6 +22,7 @@ import {
     createSharedDispatcher,
     SharedDispatcher,
 } from "./sharedDispatcher.js";
+import { importCopilotSessions } from "./copilot/mirrorImporter.js";
 import { lockInstanceDir } from "agent-dispatcher/internal";
 
 import registerDebug from "debug";
@@ -26,11 +32,73 @@ const debugConversationErr = registerDebug("agent-server:conversation:error");
 const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const CONVERSATIONS_DIR = "conversations";
 const METADATA_FILE = "conversations.json";
+// Must match the filename DisplayLog.load()/save() use in the dispatcher; a
+// synthesized mirror log is written here so the conversation replays normally.
+const DISPLAY_LOG_FILE_NAME = "displayLog.json";
+
+/**
+ * Metadata recorded for a conversation that originated as a mirror of a
+ * GitHub Copilot Chat session. Present only on imported conversations; native
+ * TypeAgent conversations leave this undefined.
+ */
+export type CopilotMirrorMetadata = {
+    /** The Copilot `sessions.id` this mirror was imported from. */
+    sessionId: string;
+    /**
+     * Highest Copilot `turn_index` that has been imported so far. Used as the
+     * incremental-sync watermark; turns with a greater index are new.
+     */
+    lastSyncedTurnIndex: number;
+    /** ISO timestamp of the last successful import/sync. */
+    lastSyncedAt: string;
+};
+
+/** Parameters for {@link ConversationManager.importCopilotMirror}. */
+export type ImportCopilotMirrorParams = {
+    /** Copilot `sessions.id`; the idempotency key for the mirror. */
+    sessionId: string;
+    /** Desired display name (e.g. session summary). Clamped to 256 chars. */
+    name: string;
+    /** ISO creation time to record (e.g. the Copilot session's created_at). */
+    createdAt: string;
+    /** Pre-synthesized display log entries to persist for replay. */
+    displayLogEntries: DisplayLogEntry[];
+    /** Highest Copilot turn_index represented in {@link displayLogEntries}. */
+    lastSyncedTurnIndex: number;
+};
+
+/** Result of {@link ConversationManager.importCopilotMirror}. */
+export type ImportCopilotMirrorResult = {
+    conversationId: string;
+    name: string;
+    /** False when a mirror for this session already existed (no-op). */
+    created: boolean;
+    /**
+     * True when an existing mirror's display name was reconciled to the
+     * current VS Code title during this import. Only meaningful when
+     * `created` is false.
+     */
+    renamed?: boolean;
+};
+
+/**
+ * Normalize a raw mirror name (e.g. a VS Code chat title or session summary):
+ * collapse whitespace and clamp length, leaving room for an appended " (N)"
+ * de-dup suffix. Falls back to a generic label when empty.
+ */
+function normalizeMirrorName(rawName: string): string {
+    return (
+        rawName.trim().replace(/\s+/g, " ").slice(0, 200) || "Copilot session"
+    );
+}
 
 type ConversationMetadata = {
     conversationId: string;
     name: string;
     createdAt: string;
+    source?: ConversationSource;
+    readOnly?: boolean;
+    copilot?: CopilotMirrorMetadata;
 };
 
 type ConversationRecord = {
@@ -41,6 +109,9 @@ type ConversationRecord = {
     sharedDispatcher: SharedDispatcher | undefined; // undefined = not yet restored
     sharedDispatcherP: Promise<SharedDispatcher> | undefined; // in-progress init
     idleTimer: ReturnType<typeof setTimeout> | undefined;
+    source?: ConversationSource | undefined;
+    readOnly?: boolean | undefined;
+    copilot?: CopilotMirrorMetadata | undefined;
 };
 
 type PersistedMetadata = {
@@ -48,7 +119,10 @@ type PersistedMetadata = {
 };
 
 export type ConversationManager = {
-    createConversation(name: string): Promise<ConversationInfo>;
+    createConversation(
+        name: string,
+        options?: CreateConversationOptions,
+    ): Promise<ConversationInfo>;
     /**
      * Resolve a conversation ID. If undefined, returns the default conversation,
      * creating one if none exist.
@@ -77,8 +151,21 @@ export type ConversationManager = {
         connectionId: string,
     ): Promise<void>;
     listConversations(name?: string): ConversationInfo[];
-    renameConversation(conversationId: string, newName: string): Promise<void>;
+    renameConversation(
+        conversationId: string,
+        newName: string,
+        options?: RenameConversationOptions,
+    ): Promise<void>;
     deleteConversation(conversationId: string): Promise<void>;
+    /**
+     * Create a read-only mirror of a GitHub Copilot Chat session. Idempotent on
+     * `sessionId`: if a mirror for that session already exists this is a no-op
+     * and returns the existing conversation with `created: false`. (Incremental
+     * sync of new turns into an existing mirror is a later phase.)
+     */
+    importCopilotMirror(
+        params: ImportCopilotMirrorParams,
+    ): Promise<ImportCopilotMirrorResult>;
     close(): Promise<void>;
 };
 
@@ -195,6 +282,9 @@ export async function createConversationManager(
                     sharedDispatcher: undefined, // lazy restore
                     sharedDispatcherP: undefined,
                     idleTimer: undefined,
+                    source: entry.source,
+                    readOnly: entry.readOnly,
+                    copilot: entry.copilot,
                 });
             }
             debugConversation(
@@ -236,11 +326,17 @@ export async function createConversationManager(
         const tmpPath = `${metadataPath}.tmp`;
         const entries: ConversationMetadata[] = [];
         for (const record of conversations.values()) {
-            entries.push({
+            const entry: ConversationMetadata = {
                 conversationId: record.conversationId,
                 name: record.name,
                 createdAt: record.createdAt,
-            });
+            };
+            // Only persist mirror fields when set, so native conversations keep
+            // their existing on-disk shape.
+            if (record.source !== undefined) entry.source = record.source;
+            if (record.readOnly !== undefined) entry.readOnly = record.readOnly;
+            if (record.copilot !== undefined) entry.copilot = record.copilot;
+            entries.push(entry);
         }
         const persisted: PersistedMetadata = {
             sessions: entries,
@@ -272,6 +368,27 @@ export async function createConversationManager(
                         persistDir,
                         instanceDir: baseDir,
                         persistSession: true,
+                        // Let the per-conversation dispatcher offer name
+                        // completions for `@conversation switch/rename/delete`
+                        // by exposing the current set of sibling conversations.
+                        getConversationList: () =>
+                            [...conversations.values()].map((r) => ({
+                                conversationId: r.conversationId,
+                                name: r.name,
+                            })),
+                        // Let the `@copilot import` command import Copilot
+                        // sessions server-side and stream per-session progress
+                        // to the user via clientIO (works in every client).
+                        copilotImport: (onProgress) =>
+                            importCopilotSessions(manager, {}, onProgress).then(
+                                (r) => ({
+                                    total: r.total,
+                                    imported: r.imported,
+                                    skipped: r.skipped,
+                                    renamed: r.renamed,
+                                    failed: r.failed,
+                                }),
+                            ),
                     }),
                 )
                 .then((dispatcher) => {
@@ -350,6 +467,17 @@ export async function createConversationManager(
         return undefined;
     }
 
+    function findMirrorBySessionId(
+        sessionId: string,
+    ): ConversationRecord | undefined {
+        for (const record of conversations.values()) {
+            if (record.copilot?.sessionId === sessionId) {
+                return record;
+            }
+        }
+        return undefined;
+    }
+
     function validateConversationName(name: string): void {
         if (name.length === 0 || name.length > 256) {
             throw new Error(
@@ -373,6 +501,60 @@ export async function createConversationManager(
                 );
             }
         }
+    }
+
+    function isNameAvailable(name: string, selfId?: string): boolean {
+        const norm = name.trim().toLowerCase();
+        for (const [id, record] of conversations) {
+            if (id === selfId) continue;
+            if (record.name.trim().toLowerCase() === norm) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function splitNumberSuffix(name: string): {
+        baseName: string;
+        suffix: number;
+    } {
+        const match = /^(.*) \((\d+)\)$/.exec(name);
+        if (match === null || match[1].length === 0) {
+            return { baseName: name, suffix: 0 };
+        }
+        return { baseName: match[1], suffix: Number(match[2]) };
+    }
+
+    function resolveAvailableName(
+        name: string,
+        options?: ConversationNameCollisionOptions,
+        selfId?: string,
+    ): string {
+        const behavior = options?.nameCollisionBehavior ?? "error";
+        if (behavior === "error") {
+            ensureNameAvailable(name, selfId);
+            return name;
+        }
+        if (behavior !== "appendNumber") {
+            throw new Error(`Unknown name collision behavior: ${behavior}`);
+        }
+        if (isNameAvailable(name, selfId)) {
+            return name;
+        }
+
+        const requested = splitNumberSuffix(name.trim());
+        const baseNorm = requested.baseName.trim().toLowerCase();
+        let maxSuffix = 0;
+        for (const record of conversations.values()) {
+            if (record.conversationId === selfId) continue;
+            const existing = splitNumberSuffix(record.name.trim());
+            if (existing.baseName.trim().toLowerCase() === baseNorm) {
+                maxSuffix = Math.max(maxSuffix, existing.suffix);
+            }
+        }
+        const resolved = `${requested.baseName} (${maxSuffix + 1})`;
+        validateConversationName(resolved);
+        return resolved;
     }
 
     // Sweep orphaned ephemeral conversations left behind by unclean CLI exits
@@ -408,14 +590,17 @@ export async function createConversationManager(
     }
 
     const manager: ConversationManager = {
-        async createConversation(name: string): Promise<ConversationInfo> {
+        async createConversation(
+            name: string,
+            options?: CreateConversationOptions,
+        ): Promise<ConversationInfo> {
             validateConversationName(name);
-            ensureNameAvailable(name);
+            const resolvedName = resolveAvailableName(name, options);
             const conversationId = randomUUID();
             const createdAt = new Date().toISOString();
             const record: ConversationRecord = {
                 conversationId,
-                name,
+                name: resolvedName,
                 createdAt,
                 lastActiveAt: Date.now(),
                 sharedDispatcher: undefined,
@@ -425,14 +610,91 @@ export async function createConversationManager(
             conversations.set(conversationId, record);
             await saveMetadata();
             debugConversation(
-                `Conversation created: "${name}" (${conversationId})`,
+                `Conversation created: "${resolvedName}" (${conversationId})`,
             );
             return {
                 conversationId,
-                name,
+                name: resolvedName,
                 clientCount: 0,
                 createdAt,
             };
+        },
+
+        async importCopilotMirror(
+            params: ImportCopilotMirrorParams,
+        ): Promise<ImportCopilotMirrorResult> {
+            const existing = findMirrorBySessionId(params.sessionId);
+            if (existing !== undefined) {
+                // Content is idempotent, but reconcile the display name so a
+                // re-import adopts a title VS Code generated or changed after
+                // the mirror was first created (early imports fall back to the
+                // first user message until Copilot titles the chat).
+                // Appending newly-arrived turns is a later sync phase.
+                const desiredName = resolveAvailableName(
+                    normalizeMirrorName(params.name),
+                    { nameCollisionBehavior: "appendNumber" },
+                    existing.conversationId,
+                );
+                let renamed = false;
+                if (desiredName !== existing.name) {
+                    debugConversation(
+                        `Reconciling Copilot mirror name "${existing.name}" -> "${desiredName}" (${existing.conversationId})`,
+                    );
+                    existing.name = desiredName;
+                    await saveMetadata();
+                    renamed = true;
+                }
+                return {
+                    conversationId: existing.conversationId,
+                    name: existing.name,
+                    created: false,
+                    renamed,
+                };
+            }
+
+            const resolvedName = resolveAvailableName(
+                normalizeMirrorName(params.name),
+                {
+                    nameCollisionBehavior: "appendNumber",
+                },
+            );
+
+            const conversationId = randomUUID();
+            const record: ConversationRecord = {
+                conversationId,
+                name: resolvedName,
+                createdAt: params.createdAt,
+                lastActiveAt: 0,
+                sharedDispatcher: undefined,
+                sharedDispatcherP: undefined,
+                idleTimer: undefined,
+                source: "copilot",
+                readOnly: true,
+                copilot: {
+                    sessionId: params.sessionId,
+                    lastSyncedTurnIndex: params.lastSyncedTurnIndex,
+                    lastSyncedAt: new Date().toISOString(),
+                },
+            };
+            conversations.set(conversationId, record);
+
+            // Persist the synthesized display log so joining the conversation
+            // replays the imported history through the normal replay path.
+            const persistDir = getConversationPersistDir(conversationId);
+            await fs.promises.mkdir(persistDir, { recursive: true });
+            const logPath = path.join(persistDir, DISPLAY_LOG_FILE_NAME);
+            const tmpPath = `${logPath}.tmp`;
+            await fs.promises.writeFile(
+                tmpPath,
+                JSON.stringify(params.displayLogEntries),
+            );
+            await fs.promises.rename(tmpPath, logPath);
+
+            await saveMetadata();
+            debugConversation(
+                `Imported Copilot mirror "${resolvedName}" (${conversationId}) from session ${params.sessionId} with ${params.displayLogEntries.length} display entries`,
+            );
+            return { conversationId, name: resolvedName, created: true };
         },
 
         async resolveConversationId(
@@ -593,6 +855,12 @@ export async function createConversationManager(
                     name: recordName,
                     clientCount: record.sharedDispatcher?.clientCount ?? 0,
                     createdAt: record.createdAt,
+                    ...(record.source !== undefined
+                        ? { source: record.source }
+                        : {}),
+                    ...(record.readOnly !== undefined
+                        ? { readOnly: record.readOnly }
+                        : {}),
                 });
             }
             return result;
@@ -601,17 +869,22 @@ export async function createConversationManager(
         async renameConversation(
             conversationId: string,
             newName: string,
+            options?: RenameConversationOptions,
         ): Promise<void> {
             validateConversationName(newName);
             const record = conversations.get(conversationId);
             if (record === undefined) {
                 throw new Error(`Conversation not found: ${conversationId}`);
             }
-            ensureNameAvailable(newName, conversationId);
-            record.name = newName;
+            const resolvedName = resolveAvailableName(
+                newName,
+                options,
+                conversationId,
+            );
+            record.name = resolvedName;
             await saveMetadata();
             debugConversation(
-                `Conversation renamed: "${newName}" (${conversationId})`,
+                `Conversation renamed: "${resolvedName}" (${conversationId})`,
             );
         },
 

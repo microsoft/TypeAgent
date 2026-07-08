@@ -134,7 +134,7 @@ export async function runCodeMemoryCommands(): Promise<void> {
         const concurrency = namedArgs.concurrency;
         printer.writeLine(`${functions.length} function/s found.`);
         for (let i = 0; i < functions.length; i += concurrency) {
-            let slice = functions.slice(i, i + concurrency);
+            const slice = functions.slice(i, i + concurrency);
             if (slice.length === 0) {
                 break;
             }
@@ -219,7 +219,7 @@ export async function runCodeMemoryCommands(): Promise<void> {
         }
         const concurrency = namedArgs.concurrency;
         for (let i = 0; i < statements.length; i += concurrency) {
-            let slice = statements.slice(i, i + concurrency);
+            const slice = statements.slice(i, i + concurrency);
             if (slice.length === 0) {
                 break;
             }
@@ -361,7 +361,7 @@ export async function runCodeMemoryCommands(): Promise<void> {
         statement: ts.Statement,
         fullPath: string,
     ): Promise<CodeBlockName | undefined> {
-        let name = tsCode.getStatementName(statement);
+        const name = tsCode.getStatementName(statement);
         if (!name) {
             return undefined;
         }

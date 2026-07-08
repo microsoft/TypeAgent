@@ -12,6 +12,7 @@ import {
     ConversationBar,
     HistoryEntry,
     formatHistorySeparatorLabel,
+    type ConnectionStatus,
 } from "chat-ui";
 import type { TemplateEditServices } from "chat-ui";
 import chatPanelStyles from "chat-ui/styles";
@@ -80,6 +81,15 @@ const conversationBar = new ConversationBar(conversationBarRootEl, {
                 type: "deleteSession",
                 sessionId: conversationId,
             });
+        },
+        connectionAction: (action) => {
+            // Manual recovery from the "stopped" reconnect ribbon. The host
+            // (AgentServerBridge) owns the actual retry / server-start logic.
+            if (action === "retry") {
+                vscode.postMessage({ type: "retryConnection" });
+            } else if (action === "start") {
+                vscode.postMessage({ type: "startServer" });
+            }
         },
     },
     icons: {
@@ -550,8 +560,9 @@ let lastConnected = false;
 let demoSuffix: string | undefined;
 // Reconnect ribbon overlay shown while disconnected. Replaces the old
 // per-attempt error spam in the chat area with a single in-place
-// updating string (countdown + last error).
-let reconnectText: string | undefined;
+// updating status (countdown, or a "stopped" state with Retry / Start
+// links once auto-reconnect gives up).
+let connectionStatus: ConnectionStatus | undefined;
 
 function requestSessionList(): void {
     vscode.postMessage({ type: "requestSessions" });
@@ -561,7 +572,7 @@ function updateConversationBarStatus(): void {
     conversationBar.setStatus({
         connected: isConnected,
         switching: isSwitching,
-        reconnectText,
+        connection: connectionStatus,
         demoSuffix,
     });
 }
@@ -576,6 +587,10 @@ function setStatus(
     currentSessionId = sessionId ?? currentSessionId;
     if (sessionId || sessionName) {
         conversationBar.setCurrentConversation(sessionId, sessionName);
+    }
+    // Back online — drop any lingering reconnect/stopped ribbon state.
+    if (connected) {
+        connectionStatus = undefined;
     }
     updateConversationBarStatus();
     chatPanel.setEnabled(connected);
@@ -602,15 +617,18 @@ window.addEventListener("message", (event) => {
             // Single in-place reconnect indicator. Phases:
             //   waiting     -> "Disconnected — retrying in Ns (attempt N)"
             //   connecting  -> "Disconnected — connecting..."
+            //   stopped     -> "Disconnected — stopped" + Retry / Start links
             //   cleared     -> hide overlay (back online or user disconnected)
             if (msg.phase === "cleared") {
-                reconnectText = undefined;
-            } else if (msg.phase === "connecting") {
-                reconnectText = `Disconnected — connecting${msg.attempt ? ` (attempt ${msg.attempt})` : ""}…`;
+                connectionStatus = undefined;
             } else {
-                const sec = msg.secondsRemaining ?? 0;
-                const errSuffix = msg.error ? ` · ${msg.error}` : "";
-                reconnectText = `Disconnected — retrying in ${sec}s (attempt ${msg.attempt ?? 1})${errSuffix}`;
+                connectionStatus = {
+                    phase: msg.phase,
+                    attempt: msg.attempt,
+                    secondsRemaining: msg.secondsRemaining,
+                    error: msg.error,
+                    actions: msg.actions,
+                };
             }
             updateConversationBarStatus();
             break;
@@ -648,11 +666,13 @@ window.addEventListener("message", (event) => {
                         name: string;
                         clientCount: number;
                         createdAt?: string;
+                        source?: "copilot";
                     }) => ({
                         conversationId: session.sessionId,
                         name: session.name,
                         clientCount: session.clientCount,
                         createdAt: session.createdAt,
+                        source: session.source,
                     }),
                 ),
                 msg.currentSessionId,

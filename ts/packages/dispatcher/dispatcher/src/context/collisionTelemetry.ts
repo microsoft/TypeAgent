@@ -55,6 +55,12 @@ export type CollisionCandidate = {
      * (`collision.priorityOrder`); 0 = highest priority.
      */
     priorityRank?: number;
+    /**
+     * Optional matched context tokens and their decayed weights — populated by
+     * the `contextSelector` tier so a topical decision is explainable from
+     * counts (§13.4). Left undefined for other detection points.
+     */
+    matchedTokens?: { token: string; weight: number }[];
 };
 
 export type CollisionEvent = {
@@ -77,7 +83,12 @@ export type CollisionEvent = {
      * undefined for static (where there's no runtime ranking).
      */
     firstMatchCandidate?: CollisionCandidate | undefined;
-    strategy: CollisionStrategy | "warn" | "error" | "downgraded";
+    strategy:
+        | CollisionStrategy
+        | "warn"
+        | "error"
+        | "downgraded"
+        | "context-weight";
     /**
      * For `kind="grammarMatch"`: which classifier flagged this collision
      * (`distinctActions` vs `tiedHeuristics`).  Helps decide whether to

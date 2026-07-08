@@ -16,6 +16,7 @@ import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import {
     getDefaultAppAgentProviders,
+    getDefaultAppAgentSource,
     getDefaultConstructionProvider,
     getIndexingServiceRegistry,
 } from "default-agent-provider";
@@ -50,6 +51,11 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
     const clientIO = createClientIORpcClient(clientIOChannel.channel);
     const dispatcher = await createDispatcher("api", {
         appAgentProviders: getDefaultAppAgentProviders(instanceDir),
+        appAgentSources: [
+            getDefaultAppAgentSource(instanceDir, {
+                excludePathSources: true,
+            }),
+        ],
         persistSession: true,
         persistDir: instanceDir,
         storageProvider: getFsStorageProvider(),
@@ -87,7 +93,7 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
         // TODO: expose executeAction so we can call that directly instead of running it through a command
         // TODO: bubble back any action results along with the command result
 
-        var paramStr =
+        const paramStr =
             action.parameters && Object.keys(action.parameters).length
                 ? `--parameters '${JSON.stringify(action.parameters).replaceAll("'", "\\'")}'`
                 : "";

@@ -138,7 +138,7 @@ function deleteLocalGraphEventId(
     calendarContext: CalendarActionContext,
 ) {
     if (calendarContext.graphEventIds !== undefined) {
-        let index = calendarContext.graphEventIds.findIndex(
+        const index = calendarContext.graphEventIds.findIndex(
             (graphEventRefId) => graphEventRefId.localEventId === localEventId,
         );
         if (index !== -1) {
@@ -154,7 +154,7 @@ function getGraphEventId(
 ) {
     let graphEventId = undefined;
     if (localEventId !== undefined && calendarContext !== undefined) {
-        let graphEventRefIds = calendarContext.graphEventIds?.find(
+        const graphEventRefIds = calendarContext.graphEventIds?.find(
             (graphEventRefId) => graphEventRefId.localEventId === localEventId,
         );
         if (graphEventRefIds !== undefined) {
@@ -170,7 +170,7 @@ function getLocalEventId(
 ) {
     let localEventId = undefined;
     if (graphEventId !== undefined && calendarContext !== undefined) {
-        let graphEventRefIds = calendarContext.graphEventIds?.find(
+        const graphEventRefIds = calendarContext.graphEventIds?.find(
             (graphEventRefId) => graphEventRefId.graphEventId === graphEventId,
         );
         if (graphEventRefIds !== undefined) {
@@ -200,7 +200,7 @@ async function executeCalendarAction(
     action: AppAction,
     context: ActionContext<CalendarActionContext>,
 ) {
-    let result = await handleCalendarAction(
+    const result = await handleCalendarAction(
         action as CalendarAction,
         context.sessionContext.agentContext,
     );
@@ -261,12 +261,10 @@ async function addParticipantsToMeeting(
     dateInfo: any,
     calendarClient: CalendarClient,
 ): Promise<string | undefined | ErrorResponse> {
-    let emailAddrsInMeeting: string[] | undefined = await getParticipantsToAdd(
-        participantsInMeeting,
-        calendarClient,
-    );
+    const emailAddrsInMeeting: string[] | undefined =
+        await getParticipantsToAdd(participantsInMeeting, calendarClient);
 
-    let emailAddrsToAdd: string[] | undefined = await getParticipantsToAdd(
+    const emailAddrsToAdd: string[] | undefined = await getParticipantsToAdd(
         participantsToAdd,
         calendarClient,
     );
@@ -292,7 +290,7 @@ function updateCalendarEntity(
 ) {
     const localEventId = getLocalEventId(eventid, calendarContext);
     if (localEventId !== undefined) {
-        let calendarEvent = calendarContext.mapGraphEntity?.get(localEventId);
+        const calendarEvent = calendarContext.mapGraphEntity?.get(localEventId);
         if (calendarEvent !== undefined) {
             calendarEvent.participants?.push(...emailAddrsToAdd);
             calendarEvent.lastModifiedDateTime = new Date().toISOString();
@@ -411,7 +409,7 @@ export async function handleCalendarAction(
                             );
                     }
 
-                    let eventid = await client.createCalendarEvent(
+                    const eventid = await client.createCalendarEvent(
                         actionEvent.description,
                         actionEvent.description ?? "",
                         response.startDate,
@@ -439,7 +437,7 @@ export async function handleCalendarAction(
                         );
                         debug(displayText);
 
-                        let result =
+                        const result =
                             createActionResultFromHtmlDisplay(displayText);
 
                         if (result && localId) {
@@ -507,9 +505,9 @@ export async function handleCalendarAction(
                     actionEvent.timeRange ||
                     actionEvent.dayRange)
             ) {
-                let findQuery = getTimeRangeBasedQuery(actionEvent);
+                const findQuery = getTimeRangeBasedQuery(actionEvent);
                 if (findQuery !== undefined) {
-                    let results: any =
+                    const results: any =
                         await client.findCalendarEventsByDateRange(findQuery);
                     return populateMeetingDetailsFromEvent(
                         actionEvent.description!,
@@ -541,13 +539,13 @@ export async function handleCalendarAction(
                 actionEvent.participants &&
                 actionEvent.participants.length > 0
             ) {
-                let findQuery = getTimeRangeBasedQuery(actionEvent);
+                const findQuery = getTimeRangeBasedQuery(actionEvent);
                 if (
                     actionEvent?.participants?.length > 0 &&
                     findQuery !== undefined
                 ) {
                     debug(findQuery);
-                    let results: any =
+                    const results: any =
                         await client.findCalendarEventsByDateRange(findQuery);
 
                     if (Array.isArray(results)) {
@@ -594,7 +592,7 @@ export async function handleCalendarAction(
         case "addParticipants":
             debug(chalk.green("Handling ADD_PARTICIPANTS action ..."));
             actionEvent = action.parameters.eventReference;
-            let participantsToAdd = action.parameters.participants;
+            const participantsToAdd = action.parameters.participants;
             if (
                 actionEvent != undefined &&
                 actionEvent.description != undefined
@@ -610,7 +608,7 @@ export async function handleCalendarAction(
                         false,
                     );
                 } else {
-                    let { startDateTime, endDateTime } =
+                    const { startDateTime, endDateTime } =
                         getNWeeksDateRangeISO(2);
 
                     dateInfo = {
@@ -619,7 +617,7 @@ export async function handleCalendarAction(
                     };
                 }
 
-                let eventId = await addParticipantsToMeeting(
+                const eventId = await addParticipantsToMeeting(
                     actionEvent.participants,
                     participantsToAdd,
                     actionEvent.description ?? "** Generated Event **",
@@ -649,7 +647,8 @@ export async function handleCalendarAction(
                     );
                     debug(displayText);
 
-                    let result = createActionResultFromHtmlDisplay(displayText);
+                    const result =
+                        createActionResultFromHtmlDisplay(displayText);
                     if (result && localId) {
                         result.entities = [
                             {
@@ -684,17 +683,17 @@ export async function handleCalendarAction(
                                 lastLocalEventId,
                             );
                         if (meeting) {
-                            let participantsToAdd =
+                            const participantsToAdd =
                                 action.parameters.participants;
-                            let participantsInMeeting = meeting.participants;
+                            const participantsInMeeting = meeting.participants;
 
-                            let emailAddrsInMeeting: string[] | undefined =
+                            const emailAddrsInMeeting: string[] | undefined =
                                 await getParticipantsToAdd(
                                     participantsInMeeting,
                                     client,
                                 );
 
-                            let emailAddrsToAdd: string[] | undefined =
+                            const emailAddrsToAdd: string[] | undefined =
                                 await getParticipantsToAdd(
                                     participantsToAdd,
                                     client,
@@ -705,7 +704,7 @@ export async function handleCalendarAction(
                                 emailAddrsToAdd &&
                                 emailAddrsToAdd.length > 0
                             ) {
-                                let eventId =
+                                const eventId =
                                     await client.addParticipantsToExistingMeeting(
                                         lastGraphEventId,
                                         emailAddrsInMeeting,
@@ -734,7 +733,7 @@ export async function handleCalendarAction(
                                         );
                                     debug(displayText);
 
-                                    let result =
+                                    const result =
                                         createActionResultFromHtmlDisplay(
                                             displayText,
                                         );
@@ -751,7 +750,7 @@ export async function handleCalendarAction(
                                     // Could happen because the calendar event was deleted
                                     // and clear the entity from the context
 
-                                    let err = eventId as ErrorResponse;
+                                    const err = eventId as ErrorResponse;
                                     if (err.code === "ErrorItemNotFound") {
                                         deleteLocalGraphEventId(
                                             lastLocalEventId,
@@ -786,16 +785,16 @@ async function populateMeetingDetailsFromEvent(
     if (events instanceof Array) {
         if (events && events.length > 0) {
             const displayText = findEventsDisplayHtml(events);
-            let result = createActionResultFromHtmlDisplay(displayText);
+            const result = createActionResultFromHtmlDisplay(displayText);
             return result;
         } else {
             const displayText = `You have a meeting free day 😊`;
-            let result = createActionResultFromTextDisplay(displayText);
+            const result = createActionResultFromTextDisplay(displayText);
             return result;
         }
     } else {
         const displayText = findEventsDisplayHtml(events);
-        let result = createActionResultFromHtmlDisplay(displayText);
+        const result = createActionResultFromHtmlDisplay(displayText);
         return result;
     }
 }

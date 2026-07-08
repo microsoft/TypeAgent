@@ -34,13 +34,14 @@ import { getCollisionCorpusCommandHandlers } from "./collisionCorpusHandlers.js"
 import { CollisionNeighborhoodsCommandHandler } from "./collisionNeighborhoodHandlers.js";
 import { getCollisionOptimizeCommandHandlers } from "./collisionOptimizeHandlers.js";
 import { getCollisionPreferenceCommandHandlers } from "./collisionPreferenceHandlers.js";
+import { getCollisionKeywordCommandHandlers } from "./collisionKeywordHandlers.js";
 
 // ---------------------------------------------------------------------------
 // `@collision events` — show recent events captured in the in-memory ring
 // buffer.  Lets a tester confirm in-flight that detection is firing during
 // a Phase 1 / Phase 2 experiment without shelling out to the per-session
 // JSONL file.  See the soft-rollout plan
-// (`docs/architecture/collision-rollout.md`) for the surrounding workflow.
+// (`docs/architecture/collision/collision-rollout.md`) for the surrounding workflow.
 // ---------------------------------------------------------------------------
 
 const VALID_KINDS: readonly CollisionEventKind[] = [
@@ -1282,6 +1283,7 @@ export function getCollisionCommandHandlers(): CommandHandlerTable {
             neighborhoods: new CollisionNeighborhoodsCommandHandler(),
             optimize: getCollisionOptimizeCommandHandlers(),
             preferences: getCollisionPreferenceCommandHandlers(),
+            keywords: getCollisionKeywordCommandHandlers(),
             "list-strategies":
                 new CollisionSimilarListStrategiesCommandHandler(),
         },

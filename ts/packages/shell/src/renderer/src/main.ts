@@ -122,10 +122,20 @@ document.addEventListener("DOMContentLoaded", async function () {
         },
     });
     const conversationBarEl = conversationBar.getContainer();
+    // Hidden by default; only revealed when connected to a separate agent
+    // server (--connect). The standalone shell (in-process server) keeps it
+    // hidden.
+    conversationBarEl.hidden = true;
     layout.insertBefore(conversationBarEl, chatRoot);
     window.addEventListener("beforeunload", () => conversationBar.dispose());
 
     let refreshConversationsPromise: Promise<void> | undefined;
+
+    // Whether the conversation switcher should be shown. True only when
+    // connected to a separate agent server (--connect); false when the shell
+    // hosts the agent server in-process (standalone) or for web/mobile. The
+    // mode is fixed for the shell's lifetime, so it is fetched once and cached.
+    let conversationBarEnabled: boolean | undefined;
 
     async function refreshConversations(): Promise<void> {
         refreshConversationsPromise ??= refreshConversationsCore().finally(
@@ -138,13 +148,21 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     async function refreshConversationsCore(): Promise<void> {
         try {
+            if (conversationBarEnabled === undefined) {
+                conversationBarEnabled =
+                    await clientAPI.conversationBarEnabled();
+            }
+            if (!conversationBarEnabled) {
+                // Standalone shell hosts the agent server in-process: a single
+                // embedded conversation, so keep the switcher hidden.
+                setConversationBarVisible(false);
+                return;
+            }
             const [conversations, current] = await Promise.all([
                 clientAPI.conversationList(),
                 clientAPI.conversationGetCurrent(),
             ]);
-            const isLocalOnly = isLocalOnlyConversationMode(conversations);
-            setConversationBarVisible(!isLocalOnly);
-            if (isLocalOnly) return;
+            setConversationBarVisible(true);
             conversationBar.setStatus({
                 connected: true,
                 errorText: undefined,
@@ -155,6 +173,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                     name: conversation.name,
                     clientCount: conversation.clientCount,
                     createdAt: conversation.createdAt,
+                    source: conversation.source,
                 })),
                 current?.conversationId,
             );
@@ -165,7 +184,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                 );
             }
         } catch (e: any) {
-            setConversationBarVisible(true);
+            setConversationBarVisible(conversationBarEnabled ?? false);
             conversationBar.setStatus({ connected: false });
             conversationBar.setError(e?.message ?? String(e));
         }
@@ -234,13 +253,6 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     function setConversationBarVisible(visible: boolean): void {
         conversationBarEl.hidden = !visible;
-    }
-
-    function isLocalOnlyConversationMode(conversations: ConversationInfo[]) {
-        return (
-            conversations.length === 1 &&
-            conversations[0]?.conversationId === "local"
-        );
     }
 
     // Build the chat-ui ChatPanel + provider stack and the dispatcher Client

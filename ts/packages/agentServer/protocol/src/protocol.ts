@@ -10,12 +10,46 @@ export type DispatcherConnectOptions = {
     conversationId?: string; // join a specific conversation by UUID. If omitted, connects to the default conversation.
 };
 
+/**
+ * Origin of a conversation. Absent (undefined) means a native TypeAgent
+ * conversation. `"copilot"` marks a read-only mirror imported from GitHub
+ * Copilot Chat's session store.
+ */
+export type ConversationSource = "copilot";
+
 export type ConversationInfo = {
     conversationId: string;
     name: string;
     clientCount: number;
     createdAt: string; // ISO 8601
+    /**
+     * Where this conversation came from. Omitted for native TypeAgent
+     * conversations; set to `"copilot"` for imported mirrors. Clients use it to
+     * badge the conversation and (together with {@link readOnly}) decide whether
+     * to allow input.
+     */
+    source?: ConversationSource;
+    /**
+     * When true, the conversation is a read-only view (e.g. a Copilot mirror)
+     * and clients should disable the input box. Omitted/false for normal
+     * conversations.
+     */
+    readOnly?: boolean;
 };
+
+export type ConversationNameCollisionBehavior = "error" | "appendNumber";
+
+export type ConversationNameCollisionOptions = {
+    /**
+     * How to handle an existing conversation with the same name.
+     * Defaults to "error".
+     */
+    nameCollisionBehavior?: ConversationNameCollisionBehavior;
+};
+
+export type CreateConversationOptions = ConversationNameCollisionOptions;
+
+export type RenameConversationOptions = ConversationNameCollisionOptions;
 
 export type JoinConversationResult = {
     connectionId: string;
@@ -48,11 +82,15 @@ export type AgentServerInvokeFunctions = {
         options?: DispatcherConnectOptions,
     ) => Promise<JoinConversationResult>;
     leaveConversation: (conversationId: string) => Promise<void>;
-    createConversation: (name: string) => Promise<ConversationInfo>;
+    createConversation: (
+        name: string,
+        options?: CreateConversationOptions,
+    ) => Promise<ConversationInfo>;
     listConversations: (name?: string) => Promise<ConversationInfo[]>;
     renameConversation: (
         conversationId: string,
         newName: string,
+        options?: RenameConversationOptions,
     ) => Promise<void>;
     deleteConversation: (conversationId: string) => Promise<void>;
     shutdown: () => Promise<void>;

@@ -241,7 +241,7 @@ async function runStudio(): Promise<void> {
             );
         }
         // Facets are any remaining options
-        let list = await generateVariationsRecursive(
+        const list = await generateVariationsRecursive(
             studio.model,
             phrase,
             variationOptions,

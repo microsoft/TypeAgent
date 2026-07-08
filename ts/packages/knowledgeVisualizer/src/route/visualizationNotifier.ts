@@ -195,7 +195,7 @@ export class VisualizationNotifier {
     };
 
     public async enumerateLists(): Promise<TypeAgentList> {
-        let retValue: TypeAgentList = new TypeAgentList(
+        const retValue: TypeAgentList = new TypeAgentList(
             "sessions",
             new Array<TypeAgentList>(),
         );
@@ -208,7 +208,7 @@ export class VisualizationNotifier {
                 return; // skip sessions starting with '.'
             }
 
-            let newList = new TypeAgentList(n, new Array<TypeAgentList>());
+            const newList = new TypeAgentList(n, new Array<TypeAgentList>());
             (retValue.items as TypeAgentList[]).push(newList);
 
             // get the lists for all sessions
@@ -235,7 +235,7 @@ export class VisualizationNotifier {
     }
 
     public async enumerateKnowledge(): Promise<KnowledgeGraph[][]> {
-        let retValue: KnowledgeGraph[][] = new Array<KnowledgeGraph[]>();
+        const retValue: KnowledgeGraph[][] = new Array<KnowledgeGraph[]>();
 
         // create levels
         for (let i = 0; i < 6; i++) {
@@ -373,7 +373,7 @@ export class VisualizationNotifier {
     public async enumerateKnowledgeForHierarchy(): Promise<
         KnowledgeHierarchy[]
     > {
-        let retValue: KnowledgeHierarchy[] = new Array<KnowledgeHierarchy>();
+        const retValue: KnowledgeHierarchy[] = new Array<KnowledgeHierarchy>();
 
         retValue.push({ name: "knowledge.entity", imports: [] });
         retValue.push({ name: "knowledge.action", imports: [] });
@@ -410,7 +410,7 @@ export class VisualizationNotifier {
 
             if (kk.entities?.length > 0) {
                 kk.entities.map((e) => {
-                    let newE: KnowledgeHierarchy = {
+                    const newE: KnowledgeHierarchy = {
                         name: `knowledge.entities.${e.value.name.replace(".", ",")}`,
                         imports: [
                             "knowledge.entity",
@@ -478,7 +478,7 @@ export class VisualizationNotifier {
 
                     a.value.params?.map((p) => {
                         if (typeof p === "string") {
-                            let valueImports = [
+                            const valueImports = [
                                 "knowledge.param",
                                 `knowledge.messages.${f}`,
                             ];
@@ -511,7 +511,7 @@ export class VisualizationNotifier {
             }
 
             // the original message that has the aforementioned EATs
-            let hh: KnowledgeHierarchy = {
+            const hh: KnowledgeHierarchy = {
                 name: `knowledge.messages.${f}`,
                 imports: new Array<string>("knowledge.message"),
             };
@@ -522,7 +522,7 @@ export class VisualizationNotifier {
     }
 
     public async enumerateKnowledgeForWordCloud(): Promise<string[]> {
-        let retValue: string[] = new Array<string>();
+        const retValue: string[] = new Array<string>();
 
         const sessions: string[] = await getInstanceSessionNames();
         const lastSession: string = sessions[sessions.length - 1];

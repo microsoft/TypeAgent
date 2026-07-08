@@ -54,7 +54,7 @@ export async function loadReasoningTrace(
 }
 
 /**
- * F0.9/F0.10 read-only renderer model.
+ * Read-only renderer model.
  *
  * If payloads include explicit workflow metadata (`workflow.stepId`,
  * `workflow.parentStepId`), use that graph. Otherwise derive a simple linear

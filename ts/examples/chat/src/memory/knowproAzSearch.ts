@@ -64,12 +64,12 @@ export async function createKnowproAzureCommands(
     commands.azSearch.metadata = azSearchDef();
     async function azSearch(args: string[]) {
         const commandDef = azSearchDef();
-        let [termArgs, namedArgs] = parseFreeAndNamedArguments(
+        const [termArgs, namedArgs] = parseFreeAndNamedArguments(
             args,
             commandDef,
         );
         const semanticRefIndex = getSemanticRefIndex();
-        let query: string = namedArgs.query;
+        const query: string = namedArgs.query;
         let queryTerms: string | kp.SearchTermGroup;
         if (query) {
             // User provided a raw lucene query.. but with single quotes
@@ -111,12 +111,12 @@ export async function createKnowproAzureCommands(
     commands.azScope.metadata = azScopeDef();
     async function azScope(args: string[]) {
         const commandDef = azScopeDef();
-        let [termArgs, namedArgs] = parseFreeAndNamedArguments(
+        const [termArgs, namedArgs] = parseFreeAndNamedArguments(
             args,
             commandDef,
         );
         const semanticRefIndex = getSemanticRefIndex();
-        let queryTerms: kp.SearchTermGroup = createSearchGroup(
+        const queryTerms: kp.SearchTermGroup = createSearchGroup(
             termArgs,
             namedArgs,
             commandDef,
@@ -202,7 +202,7 @@ export async function createKnowproAzureCommands(
     async function azTerms(args: string[]) {
         const namedArgs = parseNamedArguments(args, azTermsDef());
         const termIndex = getTermsIndex();
-        let term: string = namedArgs.term;
+        const term: string = namedArgs.term;
         const embedding = await generateEmbedding(
             kpContext.similarityModel,
             term,
@@ -242,7 +242,7 @@ export async function createKnowproAzureCommands(
         }
         const namedArgs = parseNamedArguments(args, ingestTermEmbeddingsDef());
         const batchSize: number = namedArgs.batchSize;
-        let termData = relatedTermsIndex.serialize();
+        const termData = relatedTermsIndex.serialize();
         const progress = new ProgressBar(
             context.printer,
             Math.ceil(termData.textItems.length / batchSize),
@@ -251,7 +251,7 @@ export async function createKnowproAzureCommands(
             termData.textItems,
             batchSize,
         )) {
-            let termBatch: ms.azSearch.TermDoc[] = [];
+            const termBatch: ms.azSearch.TermDoc[] = [];
             for (let i = 0; i < textBatch.value.length; ++i) {
                 termBatch.push({
                     termId: (i + textBatch.startAt).toString(),
@@ -325,7 +325,7 @@ export async function createKnowproAzureCommands(
         for (const result of indexingResults) {
             switch (result.statusCode) {
                 default:
-                    let errorMessage =
+                    const errorMessage =
                         result.errorMessage ?? result.statusCode.toString();
                     context.printer.writeError(
                         `FAILED: ordinal: ${result.key} [${errorMessage}]`,

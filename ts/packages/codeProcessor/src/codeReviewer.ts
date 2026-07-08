@@ -148,7 +148,7 @@ export function createCodeReviewer(
     ): Promise<CodeDocumentation> {
         const annotatedCode = codeSectionFromBlock(code);
         facets ??= "accurate, active voice, crisp, succinct";
-        let request =
+        const request =
             "Understand the included code and document it where necessary, especially complicated loops. Also explain parameters as needed using JSDoc syntax." +
             `The docs must be: ${facets}`;
         return getData(await docTranslator.translate(request, [annotatedCode]));

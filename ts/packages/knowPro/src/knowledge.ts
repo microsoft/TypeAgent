@@ -62,16 +62,16 @@ export function extractKnowledgeFromTextBatch(
 }
 
 export function mergeTopics(topics: string[]): string[] {
-    let mergedTopics = new Set<string>();
-    for (let topic of topics) {
+    const mergedTopics = new Set<string>();
+    for (const topic of topics) {
         mergedTopics.add(topic);
     }
     return [...mergedTopics.values()];
 }
 
 export function mergeTags(tags: Tag[]): string[] {
-    let mergedText = new Set<string>();
-    for (let tag of tags) {
+    const mergedText = new Set<string>();
+    for (const tag of tags) {
         mergedText.add(tag.text);
     }
     return [...mergedText.values()];

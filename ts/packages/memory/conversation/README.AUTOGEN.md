@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=1c84c80985c51fb1a6fe296a4725a9bf7cb1c10b185892233bdeacbef171579b -->
+<!-- AUTOGEN:DOCS:HASH:sha256=62ccc2dc93d87b2d23124e2f51803cff574fe7d50fb0e216a67c70839877e744 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # conversation-memory — AI-generated documentation
@@ -12,55 +12,70 @@
 
 ## Overview
 
-The `conversation-memory` package is a TypeScript library designed to implement various types of conversational memory using Structured Retrieval-Augmented Generation (RAG). It leverages the `KnowPro` package to index and search through sequences of timestamped messages, documents, emails, and other forms of conversational data.
+The `conversation-memory` package is a TypeScript library designed to implement various types of conversational memory using Structured Retrieval-Augmented Generation (RAG). It integrates with the `KnowPro` package to enable efficient storage, retrieval, and analysis of structured conversational data, such as chats, documents, emails, and transcripts.
 
 ## What it does
 
-The `conversation-memory` package provides functionality to manage and query different types of conversational memories, including:
+The `conversation-memory` package provides tools to create, index, and query different types of conversational memories. These include:
 
-- **Conversation Memory**: Interactive chats, agent interaction history, and invocation/response memory.
-- **Document Memory**: Transcripts of meetings, videos, chats, markdown, and HTML documents.
-- **Email Memory**: Collections of email messages.
-- **Podcast Memory**: Transcripts of podcasts.
+- **Conversation Memory**: Tracks interactive chats, agent interaction history, and invocation/response memory. Messages are timestamped and can be incrementally added to the memory.
+- **Document Memory**: Manages collections of document parts, such as meeting transcripts, video transcripts, markdown files, and HTML documents. It supports importing and indexing documents in formats like `.vtt`, `.md`, `.html`, and `.txt`.
+- **Email Memory**: Handles collections of email messages, including parsing and indexing emails in MIME format (e.g., `.eml` files).
+- **Podcast Memory**: Manages podcast transcripts, enabling indexing and retrieval of information from audio content.
 
-These memories are indexed incrementally, allowing new messages, emails, transcript chunks, or document parts to be added and indexed as they come in. The package extracts salient knowledge such as entities, actions, and topics from new messages, enabling precise search and retrieval with low latency. Users can query these memories using natural language or structured search expressions, and the package can generate answers, summaries, and analyses based on the indexed data.
+The package extracts key knowledge from input data, such as entities, actions, and topics, and indexes this knowledge for precise search and retrieval. Users can query the memory using natural language or structured search expressions. Additionally, the package supports generating answers, summaries, and analyses based on the indexed data.
+
+Key features include:
+
+- Incremental indexing of new data as it arrives.
+- Support for natural language queries and structured search expressions.
+- Integration with the `KnowPro` package for knowledge extraction and indexing.
+- Persistence and on-demand loading of memories.
 
 ## Setup
 
-To set up the `conversation-memory` package, follow these steps:
+To use the `conversation-memory` package, follow these steps:
 
-1. Install the necessary dependencies using `pnpm install`.
-2. Set up environment variables as required by the `KnowPro` and `memory-storage` packages.
-3. Ensure you have access to external services like OpenAI for embedding models.
+1. **Install dependencies**: Run `pnpm install` to install the required dependencies.
+2. **Environment variables**: Ensure that any necessary environment variables for the `KnowPro` and `memory-storage` packages are set. Refer to their respective documentation for details.
+3. **External services**: If using embedding models, ensure access to external services like OpenAI for embedding generation.
 
-For detailed setup instructions, see the hand-written README.
+For additional setup details, refer to the hand-written README.
 
 ## Key Files
 
-The `conversation-memory` package is organized into several key files and modules:
+The `conversation-memory` package is organized into several key files, each responsible for specific functionalities:
 
-- **[index.ts](./src/index.ts)**: Exports the main functionalities of the package, including podcast, memory, conversation memory, email memory, and document memory modules.
-- **[conversationMemory.ts](./src/conversationMemory.ts)**: Implements the `ConversationMemory` class, handling interactive chats and agent interaction history.
-- **[docMemory.ts](./src/docMemory.ts)**: Implements the `DocMemory` class, managing collections of document parts.
-- **[emailMemory.ts](./src/emailMemory.ts)**: Implements the `EmailMemory` class, managing collections of email messages.
-- **[podcast.ts](./src/podcast.ts)**: Implements the `PodcastMemory` class, handling podcast transcripts.
-- **[common.ts](./src/common.ts)**: Contains common utility functions used across different memory types.
-- **[docImport.ts](./src/docImport.ts)**: Handles the import of text documents into `DocMemory`.
-- **[emailImport.ts](./src/emailImport.ts)**: Handles the import of email messages into `EmailMemory`.
+- **[index.ts](./src/index.ts)**: The main entry point, exporting the core functionalities of the package.
+- **[conversationMemory.ts](./src/conversationMemory.ts)**: Implements the `ConversationMemory` class for managing interactive chats and agent interaction history.
+- **[docMemory.ts](./src/docMemory.ts)**: Implements the `DocMemory` class for managing collections of document parts.
+- **[emailMemory.ts](./src/emailMemory.ts)**: Implements the `EmailMemory` class for managing collections of email messages.
+- **[podcast.ts](./src/podcast.ts)**: Implements the `PodcastMemory` class for managing podcast transcripts.
+- **[common.ts](./src/common.ts)**: Contains utility functions shared across different memory types, such as embedding model creation and indexing state management.
+- **[docImport.ts](./src/docImport.ts)**: Handles the import of text documents into `DocMemory`, supporting various file formats like `.vtt`, `.md`, `.html`, and `.txt`.
+- **[emailImport.ts](./src/emailImport.ts)**: Handles the import and parsing of email messages in MIME format.
+- **[docSearchQuerySchema.ts](./src/docSearchQuerySchema.ts)**: Defines the schema for document search queries, including entity and facet terms.
 
 ## How to extend
 
 To extend the `conversation-memory` package, follow these steps:
 
-1. **Identify the memory type** you want to extend (e.g., conversation, document, email, podcast).
-2. **Open the corresponding file** (e.g., [conversationMemory.ts](./src/conversationMemory.ts), [docMemory.ts](./src/docMemory.ts), [emailMemory.ts](./src/emailMemory.ts), [podcast.ts](./src/podcast.ts)).
-3. **Add new functionalities** or modify existing ones. Ensure that new messages or data types are properly indexed and searchable.
-4. **Update the schema** if necessary, such as modifying [docSearchQuerySchema.ts](./src/docSearchQuerySchema.ts) for document-related queries.
-5. **Write tests** to validate your changes. Use the `test-lib` package for testing utilities.
+1. **Determine the memory type**: Identify the type of memory you want to extend or create (e.g., conversation, document, email, podcast).
+2. **Locate the relevant file**: Open the corresponding file for the memory type you want to modify or extend:
+   - Conversation memory: [conversationMemory.ts](./src/conversationMemory.ts)
+   - Document memory: [docMemory.ts](./src/docMemory.ts)
+   - Email memory: [emailMemory.ts](./src/emailMemory.ts)
+   - Podcast memory: [podcast.ts](./src/podcast.ts)
+3. **Add or modify functionality**: Implement new methods or modify existing ones to support additional features. For example:
+   - To add a new type of memory, create a new class similar to `ConversationMemory` or `DocMemory`.
+   - Implement methods for adding data, indexing, and querying.
+   - Ensure that new data types are properly integrated with the `KnowPro` indexing and search mechanisms.
+4. **Update schemas**: If your changes involve new query types or data structures, update the relevant schema files, such as [docSearchQuerySchema.ts](./src/docSearchQuerySchema.ts).
+5. **Write tests**: Validate your changes by writing and running tests. Use the `test-lib` package for testing utilities.
 
-For example, to add a new type of conversational memory, you might start by creating a new class similar to `ConversationMemory` and implement methods for adding messages, indexing, and querying. Ensure that the new class integrates with the existing indexing and search mechanisms provided by `KnowPro`.
+For example, to add support for a new file format in `DocMemory`, you can extend the [docImport.ts](./src/docImport.ts) file to include a parser for the new format. Then, update the `DocMemory` class to handle the new document type during indexing and querying.
 
-By following these steps, you can extend the `conversation-memory` package to support additional types of conversational data or enhance its existing capabilities.
+By following these steps, you can customize and expand the `conversation-memory` package to meet your specific requirements.
 
 ## Reference
 
@@ -68,13 +83,13 @@ By following these steps, you can extend the `conversation-memory` package to su
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
 Workspace:
 
-- [aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [knowledge-processor](../../../packages/knowledgeProcessor/README.md)
 - [knowpro](../../../packages/knowPro/README.md)
 - [memory-storage](../../../packages/memory/storage/README.md)
@@ -101,6 +116,6 @@ External: `async`, `debug`, `mailparser`, `typechat`, `webvtt-parser`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter conversation-memory docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter conversation-memory docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

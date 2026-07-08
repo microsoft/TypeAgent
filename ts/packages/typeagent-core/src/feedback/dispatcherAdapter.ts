@@ -12,7 +12,7 @@ import type {
 } from "./types.js";
 
 /**
- * Dispatcher-side RPC shape from PR #2341 naming.
+ * Dispatcher-side RPC shape.
  *
  * This is intentionally structural (not imported from dispatcher package) so
  * `@typeagent/core` remains dependency-light.

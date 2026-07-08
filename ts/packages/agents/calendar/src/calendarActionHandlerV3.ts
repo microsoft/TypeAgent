@@ -622,7 +622,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
             const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
             // Parse the natural language date (default to today if not provided)
-            let eventDate = date ? this.parseNaturalDate(date) : new Date();
+            const eventDate = date ? this.parseNaturalDate(date) : new Date();
             if (!eventDate) {
                 return createActionResultFromError(
                     `Could not parse date: ${date}`,

@@ -10,7 +10,7 @@ import { handleExtensionActions } from "./handleExtensionActions";
 import { handleEditorCodeActions } from "./handleEditorCodeActions";
 
 async function execChangeEditorColumns(actionData: any): Promise<ActionResult> {
-    let actionResult: ActionResult = {
+    const actionResult: ActionResult = {
         handled: true,
         message: "Ok",
     };
@@ -51,7 +51,7 @@ async function execChangeEditorColumns(actionData: any): Promise<ActionResult> {
 export async function handleDisplayKBActions(
     action: any,
 ): Promise<ActionResult> {
-    let actionResult: ActionResult = {
+    const actionResult: ActionResult = {
         handled: true,
         message: "Ok",
     };
@@ -162,7 +162,7 @@ export async function handleDisplayKBActions(
 export async function handleGeneralKBActions(
     action: any,
 ): Promise<ActionResult> {
-    let actionResult: ActionResult = {
+    const actionResult: ActionResult = {
         handled: true,
         message: "Ok",
     };
@@ -179,7 +179,7 @@ export async function handleGeneralKBActions(
         case "gotoFileOrLineOrSymbol": {
             const editor = vscode.window.activeTextEditor;
             if (action.parameters.goto === "file") {
-                let fileName = action.parameters.ref;
+                const fileName = action.parameters.ref;
                 if (!fileName) {
                     vscode.commands.executeCommand(
                         "workbench.action.quickOpen",
@@ -263,7 +263,7 @@ export async function handleBaseEditorActions(
         message: "Ok",
     };
 
-    let actionData = action.parameters;
+    const actionData = action.parameters;
     const actionName =
         action.actionName ?? action.fullActionName.split(".").at(-1);
 
@@ -341,7 +341,7 @@ export async function handleBaseEditorActions(
         }
 
         case "changeColorScheme": {
-            let currentTheme = await vscode.workspace
+            const currentTheme = await vscode.workspace
                 .getConfiguration()
                 .get("workbench.colorTheme");
             if (currentTheme && currentTheme === actionData.theme) {

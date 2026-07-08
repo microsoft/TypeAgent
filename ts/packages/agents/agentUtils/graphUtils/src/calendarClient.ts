@@ -54,7 +54,7 @@ export class CalendarClient extends GraphClient {
 
             if (fSync) {
                 for (const [eventid] of this.calendarDataMap) {
-                    let found = events.find(
+                    const found = events.find(
                         (event: any) => event.id === eventid,
                     );
                     if (!found) {
@@ -93,7 +93,7 @@ export class CalendarClient extends GraphClient {
                               })
                               .select("id,subject,bodyPreview,attendees");
 
-                    let responseData = await response?.get();
+                    const responseData = await response?.get();
 
                     allEvents = allEvents.concat(responseData.value || []);
                     nextPageLink = responseData["@odata.nextLink"];
@@ -341,14 +341,14 @@ export class CalendarClient extends GraphClient {
     }
 
     public async findEventsFromEmbeddings(subject: string): Promise<string[]> {
-        let matchingEvents = [];
+        const matchingEvents = [];
         if (this.useEmbeddings) {
-            let searchResult: any = await this.calendarDataIndex.search(
+            const searchResult: any = await this.calendarDataIndex.search(
                 subject,
                 1,
             );
             if (searchResult) {
-                let event = this.calendarDataMap.get(
+                const event = this.calendarDataMap.get(
                     searchResult[0].item.value,
                 );
 
@@ -401,7 +401,7 @@ export class CalendarClient extends GraphClient {
                                       );
                         }
 
-                        let responseData = await response?.get();
+                        const responseData = await response?.get();
                         await this.generateEmbedding(responseData.value, false);
                         allEvents = allEvents.concat(responseData.value || []);
                         nextPageLink = responseData["@odata.nextLink"];
@@ -421,7 +421,7 @@ export class CalendarClient extends GraphClient {
                             subject.toLocaleLowerCase(),
                         );
                     } else {
-                        let searchResult: any =
+                        const searchResult: any =
                             await this.calendarDataIndex.search(subject, 1);
                         if (searchResult) {
                             matchingEvent = allEvents.find(
@@ -613,7 +613,7 @@ export class CalendarClient extends GraphClient {
                                   "id,subject,bodyPreview,start,end,attendees",
                               );
 
-                    let responseData = await response?.get();
+                    const responseData = await response?.get();
                     //await this.generateEmbedding(responseData.value, false);
 
                     allEvents = allEvents.concat(responseData.value || []);

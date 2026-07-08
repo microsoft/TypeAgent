@@ -681,7 +681,7 @@ async function handleCrawlCliHelp(
     }
 
     const source = `cli:${command}`;
-    let actions: DiscoveredAction[] = result.data.actions.map((a) => {
+    const actions: DiscoveredAction[] = result.data.actions.map((a) => {
         const action: DiscoveredAction = {
             name: a.name,
             description: a.description,

@@ -5,7 +5,7 @@
  * Wire types for the Studio service **registry** — the relay by which a
  * standalone, per-workspace Studio service is made discoverable.
  *
- * Discovery split (see `docs/plans/vscode-devx/DESIGN.md` §3.5): the
+ * Discovery split: the
  * agent-server's port registrar is read-only (`discoverPort` looks up a port,
  * there is no external `registerPort`), and the extension/CLI — not the agent —
  * spawns the service, so the agent cannot learn the service's `{port, token}`

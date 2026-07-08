@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=9db20de69a7523f9b1d323a119c18334180214c83cf63d34d450fab1e8246bbc -->
+<!-- AUTOGEN:DOCS:HASH:sha256=5803d96f08c61da93f6192c07fedd3d715920ee1be8757c490634c8cb643b5c5 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # video-agent — AI-generated documentation
@@ -12,55 +12,82 @@
 
 ## Overview
 
-The `video-agent` package is a TypeAgent application agent designed to handle video generation requests. It leverages the Sora-2 model on Azure OpenAI to create videos based on user descriptions and parameters.
+The `video-agent` package is a TypeAgent application agent designed to handle video generation tasks. It integrates with the Sora-2 model on Azure OpenAI to create videos based on user-provided descriptions, captions, and other parameters. This agent is a sample implementation that demonstrates how to interact with video generation APIs.
 
 ## What it does
 
-The `video-agent` package implements one primary action: `createVideoAction`. This action allows users to generate videos by providing a description, caption, optional related files, and duration. The agent processes these inputs and interacts with the video generation API to produce the requested video.
+The primary functionality of the `video-agent` is to process user requests for video creation and interact with the Sora-2 model on Azure OpenAI to generate videos. The agent currently supports one action:
 
-### Actions
+- `createVideoAction`: This action generates a video based on the provided parameters, which include:
+  - `originalRequest`: The user's original request as a string.
+  - `caption`: A caption to be included in the video.
+  - `relatedFiles` (optional): A list of file names for any attachments provided by the user, such as images or video clips.
+  - `duration` (optional): The desired duration of the video, which can be one of the following values: `"4"`, `"8"`, or `"12"` seconds.
 
-- `createVideoAction`: Creates a video based on the supplied description, caption, related files, and duration.
+The agent processes these inputs, maps them to the appropriate schema, and uses the Sora-2 model to generate the requested video. The output is a video file that matches the user's specifications.
 
 ## Setup
 
-To use the `video-agent`, you need to configure your environment with the necessary API keys and endpoints. Specifically, you need to set the following environment variables in the root `.env` file:
+To use the `video-agent`, you need to configure your environment with the necessary API keys and endpoints for Azure OpenAI. Follow these steps:
 
-- `AZURE_OPENAI_ENDPOINT_SORA_2`: The endpoint for the Sora-2 model on Azure OpenAI.
-- `AZURE_OPENAI_API_KEY_SORA_2`: The API key for accessing the Sora-2 model.
+1. **Set up the Azure OpenAI endpoint and API key**:
 
-For identity-based authentication, specify the key as `identity`.
+   - Obtain the endpoint URL and API key for the Sora-2 model from your Azure OpenAI account.
+   - Add the following environment variables to the root `.env` file or the `config.local.yaml` file:
+     - `AZURE_OPENAI_ENDPOINT_SORA_2`: The endpoint URL for the Sora-2 model.
+     - `AZURE_OPENAI_API_KEY_SORA_2`: The API key for accessing the Sora-2 model.
+   - If you are using identity-based authentication, set `AZURE_OPENAI_API_KEY_SORA_2` to `identity`.
 
-See the hand-written README for the full walk-through on setting up these environment variables.
+2. **Install dependencies**:
+   - Run `pnpm install` in the root of the monorepo to install all required dependencies.
+
+For more detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
 
-The `video-agent` package is structured around the TypeAgent framework, with key components including the manifest, schema, grammar, and handler.
+The `video-agent` package is organized around the core components of a TypeAgent application: the manifest, schema, grammar, and handler. Below is an overview of the key files and their responsibilities:
 
-### Key Files
+- [videoManifest.json](./src/videoManifest.json): Defines the agent's metadata, including its description, schema, and capabilities.
+- [videoActionSchema.ts](./src/videoActionSchema.ts): Specifies the structure and parameters of the `createVideoAction`.
+- [videoSchema.agr](./src/videoSchema.agr): Contains the grammar rules for parsing user requests into structured actions.
+- [videoActionHandler.ts](./src/videoActionHandler.ts): Implements the logic for executing the `createVideoAction`. This file handles the interaction with the Sora-2 video generation API.
+- [videoSchema.tests.json](./src/videoSchema.tests.json): Contains test cases for validating the agent's ability to parse user requests and execute actions correctly.
 
-- [videoManifest.json](./src/videoManifest.json): Defines the agent's metadata, including its description and schema.
-- [videoActionSchema.ts](./src/videoActionSchema.ts): Specifies the structure of the `createVideoAction` and its parameters.
-- [videoSchema.agr](./src/videoSchema.agr): Contains the grammar rules for parsing user requests into actions.
-- [videoActionHandler.ts](./src/videoActionHandler.ts): Implements the logic for executing the `createVideoAction`.
+### File Responsibilities
 
-### Workflow
-
-1. **Manifest**: The agent's capabilities and schema are defined in the manifest file.
-2. **Schema**: The schema file outlines the parameters and structure of the actions the agent can perform.
-3. **Grammar**: The grammar file translates user requests into actionable commands based on predefined patterns.
-4. **Handler**: The handler file contains the implementation of the action, interacting with the video generation API to fulfill the request.
+1. **Manifest**: The [videoManifest.json](./src/videoManifest.json) file serves as the entry point for the agent, describing its purpose and linking to the schema and grammar files.
+2. **Schema**: The [videoActionSchema.ts](./src/videoActionSchema.ts) file defines the structure of the `createVideoAction`, including its parameters and expected input types.
+3. **Grammar**: The [videoSchema.agr](./src/videoSchema.agr) file defines the natural language patterns that the agent can interpret and map to the `createVideoAction`.
+4. **Handler**: The [videoActionHandler.ts](./src/videoActionHandler.ts) file contains the implementation of the `createVideoAction`, including the logic for interacting with the Sora-2 model and handling the video generation process.
 
 ## How to extend
 
-To extend the `video-agent` package, follow these steps:
+To extend the functionality of the `video-agent`, you can add new actions or modify existing ones. Here’s how:
 
-1. **Add a new action**: Define the new action in the [videoActionSchema.ts](./src/videoActionSchema.ts) file, specifying its name and parameters.
-2. **Update the grammar**: Modify the [videoSchema.agr](./src/videoSchema.agr) file to include patterns for the new action.
-3. **Implement the handler**: Add the logic for the new action in the [videoActionHandler.ts](./src/videoActionHandler.ts) file, ensuring it interacts correctly with the video generation API.
-4. **Test the new action**: Create test cases in the [videoSchema.tests.json](./src/videoSchema.tests.json) file to validate the new action's functionality.
+1. **Define a new action**:
 
-By following these steps, you can extend the capabilities of the `video-agent` to handle additional video generation scenarios.
+   - Add a new action type to the [videoActionSchema.ts](./src/videoActionSchema.ts) file. Specify the action name and the parameters it will accept.
+
+2. **Update the grammar**:
+
+   - Modify the [videoSchema.agr](./src/videoSchema.agr) file to include new grammar rules that map user requests to the new action. Ensure the grammar is comprehensive enough to handle various ways users might phrase their requests.
+
+3. **Implement the action handler**:
+
+   - Add the logic for the new action in the [videoActionHandler.ts](./src/videoActionHandler.ts) file. This may involve interacting with external APIs or services to fulfill the action.
+
+4. **Update the manifest**:
+
+   - Update the [videoManifest.json](./src/videoManifest.json) file to include the new action in the agent's schema.
+
+5. **Test the new action**:
+
+   - Add test cases to the [videoSchema.tests.json](./src/videoSchema.tests.json) file to validate the new action. Ensure the tests cover a variety of user inputs and edge cases.
+
+6. **Run tests**:
+   - Use the testing framework provided by the monorepo to run the tests and verify that the new action works as expected.
+
+By following these steps, you can extend the `video-agent` to support additional video generation capabilities or other related functionalities.
 
 ## Reference
 
@@ -69,7 +96,7 @@ By following these steps, you can extend the capabilities of the `video-agent` t
 ### Entry points
 
 - `./agent/manifest` → [./src/videoManifest.json](./src/videoManifest.json)
-- `./agent/handlers` → [./dist/videoActionHandler.js](./dist/videoActionHandler.js)
+- `./agent/handlers` → `./dist/videoActionHandler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -77,7 +104,7 @@ Workspace:
 
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [telemetry](../../../packages/telemetry/README.md)
 - [typechat-utils](../../../packages/utils/typechatUtils/README.md)
 
@@ -108,6 +135,6 @@ _1 action implemented by this agent, parsed deterministically from `./src/videoA
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter video-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter video-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

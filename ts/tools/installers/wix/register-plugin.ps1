@@ -3,103 +3,126 @@
 
 <#
 .SYNOPSIS
-    Registers (or unregisters) the TypeAgent plugin with the GitHub Copilot CLI.
+    Registers (or unregisters) the TypeAgent plugin with GitHub Copilot CLI.
 
 .DESCRIPTION
-    Called automatically by the TypeAgent MSI installer as a deferred custom
-    action.  Can also be run manually after installing the Copilot CLI.
-
-    Registration mechanism (mirrors install-plugin.mjs):
-      1. `copilot plugin marketplace add <InstallDir>` — registers the directory
-         that contains .github/plugin/marketplace.json as a local marketplace.
-      2. `copilot plugin install typeagent@typeagent-local` — installs the plugin
-         from that marketplace into ~/.copilot/installed-plugins/.
-
-    If `copilot` is not on PATH the script exits 0 (non-fatal), so the MSI
-    install always succeeds even on machines without the Copilot CLI.
-
-.PARAMETER InstallDir
-    Path to the TypeAgent install root (default: the directory this script
-    lives in).  Must contain .github\plugin\marketplace.json.
-
-.PARAMETER Uninstall
-    When set, unregisters the plugin instead of registering it.
+    Thin Windows wrapper that discovers a safe Copilot CLI path in MSI context
+    and delegates all registration logic to the shared Node script:
+    register-plugin.mjs.
 #>
 param(
     [string]$InstallDir = $PSScriptRoot,
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    [string]$LogPath = "$env:LOCALAPPDATA\TypeAgent\logs\msi-register-plugin.log"
 )
 
-$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Stop"
+
+function Test-Command {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
+}
+
+function Test-VsCodeCopilotShimPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $shimRoot = Join-Path $env:APPDATA "Code\User\globalStorage\github.copilot-chat\copilotCli"
+    try {
+        $resolvedPath = (Resolve-Path -Path $Path -ErrorAction SilentlyContinue).Path
+        $resolvedShimRoot = (Resolve-Path -Path $shimRoot -ErrorAction SilentlyContinue).Path
+        if ($resolvedPath -and $resolvedShimRoot) {
+            return $resolvedPath.StartsWith($resolvedShimRoot, [System.StringComparison]::OrdinalIgnoreCase)
+        }
+    }
+    catch {
+        # If resolution fails, fall back to string test below.
+    }
+
+    return $Path -like "*$([IO.Path]::DirectorySeparatorChar)Code$([IO.Path]::DirectorySeparatorChar)User$([IO.Path]::DirectorySeparatorChar)globalStorage$([IO.Path]::DirectorySeparatorChar)github.copilot-chat$([IO.Path]::DirectorySeparatorChar)copilotCli*"
+}
 
 function Find-CopilotCli {
+    $candidates = @()
+    $rejectedShimPaths = @()
+
     try {
+        # 1) Optional explicit override for deterministic installs.
+        if ($env:COPILOT_CLI_PATH) {
+            $candidates += $env:COPILOT_CLI_PATH
+        }
+
+        # 2) Typical npm global shims on Windows.
+        $candidates += (Join-Path $env:APPDATA "npm\copilot.cmd")
+        $candidates += (Join-Path $env:APPDATA "npm\copilot.ps1")
+
+        # 2b) Winget links location (common for copilot.exe installs).
+        $candidates += (Join-Path $env:LOCALAPPDATA "Microsoft\\WinGet\\Links\\copilot.exe")
+
+        # 3) PATH discovery, similar to install-typeagent.ps1.
         $cmd = Get-Command copilot -ErrorAction SilentlyContinue
-        return $cmd?.Source
+        if ($cmd) {
+            $candidates += $cmd.Source
+        }
+
+        foreach ($candidate in ($candidates | Select-Object -Unique)) {
+            if ([string]::IsNullOrWhiteSpace($candidate)) {
+                continue
+            }
+
+            if (-not (Test-Path $candidate)) {
+                continue
+            }
+
+            if (Test-VsCodeCopilotShimPath -Path $candidate) {
+                $rejectedShimPaths += $candidate
+                continue
+            }
+
+            return $candidate
+        }
+
+        # Final fallback: if command exists and is not a VS Code shim, use it by name.
+        if (Test-Command -Name "copilot") {
+            $pathResolved = (Get-Command copilot -ErrorAction SilentlyContinue).Source
+            if (-not [string]::IsNullOrWhiteSpace($pathResolved) -and -not (Test-VsCodeCopilotShimPath -Path $pathResolved)) {
+                return "copilot"
+            }
+        }
     } catch {
-        return $null
+        # Fall through and report not found.
     }
+
+    if ($rejectedShimPaths.Count -gt 0) {
+        Write-Host "[TypeAgent] Rejected VS Code wrapper path(s) for MSI context: $($rejectedShimPaths -join '; ')"
+    }
+    return $null
 }
 
 $copilotPath = Find-CopilotCli
 if (-not $copilotPath) {
-    Write-Host "[TypeAgent] GitHub Copilot CLI not found on PATH — skipping plugin registration."
-    Write-Host "[TypeAgent] After installing Copilot CLI, re-run this script to register:"
-    Write-Host "[TypeAgent]   powershell -File `"$PSCommandPath`" -InstallDir `"$InstallDir`""
-    exit 0
+    Write-Host "[TypeAgent] Registration failed. GitHub Copilot CLI not found in MSI-safe locations."
+    exit 1
 }
 
-Write-Host "[TypeAgent] Found Copilot CLI: $copilotPath"
+$registerScript = Join-Path $InstallDir "register-plugin.mjs"
+if (-not (Test-Path $registerScript)) {
+    $registerScript = Join-Path $PSScriptRoot "register-plugin.mjs"
+}
+if (-not (Test-Path $registerScript)) {
+    Write-Host "[TypeAgent] Registration failed. Shared script not found: register-plugin.mjs"
+    exit 1
+}
 
-# ── Uninstall path ─────────────────────────────────────────────────────────────
+$env:COPILOT_CLI_PATH = $copilotPath
+
+$args = @(
+    $registerScript,
+    "--install-dir", $InstallDir,
+    "--log-path", $LogPath
+)
 if ($Uninstall) {
-    Write-Host "[TypeAgent] Unregistering TypeAgent Copilot CLI plugin..."
-    try {
-        & copilot plugin uninstall typeagent 2>&1 | ForEach-Object { Write-Host $_ }
-    } catch {
-        Write-Host "[TypeAgent] Note: uninstall skipped (plugin may not have been registered). $_"
-    }
-    try {
-        & copilot plugin marketplace remove typeagent-local 2>&1 | ForEach-Object { Write-Host $_ }
-    } catch {
-        Write-Host "[TypeAgent] Note: marketplace remove skipped. $_"
-    }
-    Write-Host "[TypeAgent] Done."
-    exit 0
+    $args += "--uninstall"
 }
 
-# ── Install path ───────────────────────────────────────────────────────────────
-$marketplaceRoot = $InstallDir.TrimEnd('\').TrimEnd('/')
-$marketplaceJson = Join-Path $marketplaceRoot ".github\plugin\marketplace.json"
-
-if (-not (Test-Path $marketplaceJson)) {
-    Write-Host "[TypeAgent] marketplace.json not found at: $marketplaceJson"
-    Write-Host "[TypeAgent] TypeAgent installation may be incomplete — skipping plugin registration."
-    exit 0
-}
-
-Write-Host "[TypeAgent] Registering plugin from: $marketplaceRoot"
-
-# 1. Register (or refresh) the local marketplace
-$mpList = & copilot plugin marketplace list 2>&1 | Out-String
-if ($mpList -match "typeagent-local") {
-    Write-Host "[TypeAgent] Marketplace 'typeagent-local' already registered."
-    Write-Host "[TypeAgent] Updating plugin..."
-    & copilot plugin update typeagent 2>&1 | ForEach-Object { Write-Host $_ }
-} else {
-    Write-Host "[TypeAgent] Adding marketplace..."
-    & copilot plugin marketplace add "$marketplaceRoot" 2>&1 | ForEach-Object { Write-Host $_ }
-
-    # 2. Install the plugin from the marketplace
-    $pluginList = & copilot plugin list 2>&1 | Out-String
-    if ($pluginList -match "typeagent@typeagent-local") {
-        Write-Host "[TypeAgent] Plugin already installed, updating..."
-        & copilot plugin update typeagent 2>&1 | ForEach-Object { Write-Host $_ }
-    } else {
-        Write-Host "[TypeAgent] Installing plugin..."
-        & copilot plugin install "typeagent@typeagent-local" 2>&1 | ForEach-Object { Write-Host $_ }
-    }
-}
-
-Write-Host "[TypeAgent] Plugin registration complete."
-exit 0
+& node @args
+exit $LASTEXITCODE

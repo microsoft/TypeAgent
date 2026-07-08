@@ -33,7 +33,7 @@ async function executeListAction(
     action: TypeAgentAction<ListAction | ListActivity>,
     context: ActionContext<ListActionContext>,
 ) {
-    let result = await handleListAction(
+    const result = await handleListAction(
         action,
         context.sessionContext.agentContext,
     );

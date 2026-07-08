@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=bdb89958dbd279471b546e6e996cad66a9b029674b9f2bf555f1dceba18d3f95 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4622ac0cdb2934142d59aef3555eeb6de379ddf65277f8fbe0233c0825188bdd -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -12,51 +12,112 @@
 
 ## Overview
 
-The `agent-shell` package is a TypeScript library that serves as the UI entry point for the TypeAgent sample code. It explores architectures for building interactive agents with natural language interfaces using structured prompting and large language models (LLMs). The shell acts as a personal agent that processes user requests, performs actions, answers questions, and engages in conversations using an extensible set of agents.
+The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) entry point for the TypeAgent ecosystem. It is designed to demonstrate how to build interactive agents with natural language interfaces using structured prompting and large language models (LLMs). Acting as a personal agent, the shell processes user requests, performs actions, answers questions, and facilitates multi-conversation management. It integrates with other components of the TypeAgent system, such as the dispatcher and agent server, to provide a cohesive and interactive user experience.
 
 ## What it does
 
-The `agent-shell` package provides a graphical interface for interacting with TypeAgent. It supports various actions such as managing conversations, processing speech input, and handling commands. Key functionalities include:
+The `agent-shell` package provides a rich set of features to enable users to interact with the TypeAgent system:
 
-- **Conversation Management**: Create, switch, rename, and delete conversations using commands like `conversation list`, `conversation new [name]`, `conversation switch <id|name>`, `conversation rename <id> <name>`, and `conversation delete <id|name>`.
-- **Speech Processing**: Utilize Azure Speech Services or Local Whisper Service for voice input.
-- **Command Handling**: Execute various commands through the shell interface.
-- **Multi-client Notifications**: Display status messages when multiple clients are connected to the same conversation.
+### Conversation Management
+
+- **Multi-Conversation Support**: Users can create, switch, rename, and delete conversations. Conversations persist across sessions, and the shell supports full multi-conversation management when connected to an agent server.
+- **Default Conversation**: Upon connecting to the agent server, the shell automatically joins a default conversation named `"Shell"`. This conversation is persistent, and its history is replayed on reconnect.
+- **Conversation Commands**: Users can manage conversations using commands such as `/conversation list`, `/conversation new [name]`, `/conversation switch <id|name>`, `/conversation rename [id|name] <newName>`, and `/conversation delete <id|name>`. These commands can also be executed via natural language inputs.
+- **Request Queue Management**: The shell provides visual indicators for queued and running requests, allowing users to manage and cancel requests directly from the chat interface.
+
+### Speech Input
+
+The shell supports voice input through:
+
+- **Azure Speech Services**: Enables speech-to-text functionality using Azure's cloud-based service.
+- **Local Whisper Service**: Provides an alternative for speech-to-text processing using a local service.
+
+### Multi-Client Notifications
+
+The shell notifies users when other clients join or leave the same conversation, making it easier to manage collaborative interactions.
+
+### Local Mode
+
+In the absence of an agent server, the shell operates in local mode, providing a single default conversation and hosting an in-process WebSocket for port discovery. This allows external clients, such as the browser agent, to connect to in-process agents.
 
 ## Setup
 
-To set up the `agent-shell` package, you need to configure several environment variables and follow specific instructions for building and running the shell. The required environment variables are:
+To set up and run the `agent-shell` package, follow these steps:
 
-- `ELECTRON_RENDERER_URL`: URL for the Electron renderer.
-- `SPEECH_SDK_ENDPOINT`: Service URL or speech API resource ID for Azure Speech Services.
-- `SPEECH_SDK_KEY`: API key for Azure Speech Services.
-- `SPEECH_SDK_REGION`: Region of the Azure Speech Services (e.g., `westus2`).
-- `WEBSOCKET_HOST`: Host for WebSocket connections.
+1. **Install Dependencies**:
 
-Additionally, you need to install the necessary libraries for building and using Electron in a Linux/WSL environment. Follow the instructions provided in the Electron documentation (`https://www.electronjs.org/docs/latest/development/build-instructions-linux`) to complete this setup.
+   - The shell is built using Electron. If you are using Linux or WSL, you may need to install additional libraries. Refer to the Electron build instructions for Linux at `https://www.electronjs.org/docs/latest/development/build-instructions-linux`.
 
-For detailed setup steps, including keyless API access for Azure Speech Services, refer to the hand-written README.
+2. **Set Environment Variables**:
+
+   - Configure the following environment variables in your `.env` file or system environment:
+     - `ELECTRON_RENDERER_URL`: The URL for the Electron renderer.
+     - `SPEECH_SDK_ENDPOINT`: The service URL or speech API resource ID for Azure Speech Services.
+     - `SPEECH_SDK_KEY`: The API key for Azure Speech Services.
+     - `SPEECH_SDK_REGION`: The region of the Azure Speech Services (e.g., `westus2`).
+     - `WEBSOCKET_HOST`: The host for WebSocket connections.
+
+3. **Run the Shell**:
+
+   - Start the shell using the following command:
+     ```shell
+     pnpm run shell
+     ```
+
+4. **Optional: Configure Azure Speech Services**:
+
+   - To enable voice input via Azure Speech Services, additional setup is required:
+     - Set `SPEECH_SDK_KEY` to `identity` in your `.env` file or `config.local.yaml` for keyless API access.
+     - Replace the `SPEECH_SDK_ENDPOINT` value with the Azure resource ID of your cognitive service instance (e.g., `/subscriptions/<your-subscription-guid>/resourceGroups/myResourceGroup/providers/Microsoft.CognitiveServices/accounts/speechapi`).
+     - Configure your Azure Speech API to support identity-based authentication.
+
+5. **Windows-Specific Notes**:
+   - If you experience lag during startup, consider adding the source code folder to the exclusions list for Windows Defender. Instructions can be found in the hand-written README.
+   - For MS Graph-based sample agents (e.g., Calendar and Email), you may need to clear the identity cache if the authentication token becomes corrupted. Use the following command:
+     ```shell
+     del %LOCALAPPDATA%\.IdentityService\typeagent-tokencache
+     ```
 
 ## Key Files
 
-The `agent-shell` package is organized into several key components:
+The `agent-shell` package is organized into several key files, each responsible for specific functionality:
 
-- **Main Entry Point**: The main entry point is located at [./src/main/index.ts](./src/main/index.ts), which initializes the shell and sets up the necessary configurations.
-- **Command Handlers**: Command handlers are defined in files like [localWhisperCommandHandler.ts](./src/main/localWhisperCommandHandler.ts) and [commands/pen.ts](./src/main/commands/pen.ts). These handlers process specific commands and actions.
-- **Speech Processing**: Speech processing functionalities are implemented in [azureSpeech.ts](./src/main/azureSpeech.ts), which handles interactions with Azure Speech Services.
-- **Browser IPC**: The browser IPC component, defined in [browserIpc.ts](./src/main/browserIpc.ts), manages inter-process communication between the shell and the browser.
-- **Chat Server**: The chat server, implemented in [chatServer.ts](./src/main/chatServer.ts), handles WebSocket connections and serves the HTML page for the shell interface.
+- **[index.ts](./src/main/index.ts)**: The main entry point for initializing the shell and setting up configurations.
+- **[localWhisperCommandHandler.ts](./src/main/localWhisperCommandHandler.ts)**: Handles commands related to the Local Whisper Service for speech-to-text processing.
+- **[azureSpeech.ts](./src/main/azureSpeech.ts)**: Manages interactions with Azure Speech Services, including token handling and speech-to-text processing.
+- **[browserIpc.ts](./src/main/browserIpc.ts)**: Handles inter-process communication (IPC) between the shell and the browser.
+- **[chatServer.ts](./src/main/chatServer.ts)**: Implements the WebSocket server for managing chat interactions and serving the shell's HTML interface.
+- **[commands/pen.ts](./src/main/commands/pen.ts)**: Contains the implementation of the `pen` command, which interacts with a local endpoint for pen events and speech recognition.
 
 ## How to extend
 
-To extend the `agent-shell` package, follow these steps:
+To extend the functionality of the `agent-shell` package, follow these steps:
 
-1. **Open the main entry point**: Start by examining [index.ts](./src/main/index.ts) to understand the initialization process and overall structure.
-2. **Add new command handlers**: Implement new command handlers in appropriate files, such as [commands/pen.ts](./src/main/commands/pen.ts). Follow the existing patterns for defining and registering command handlers.
-3. **Integrate new services**: If you need to integrate new services (e.g., speech processing), modify or add files like [azureSpeech.ts](./src/main/azureSpeech.ts) to handle interactions with the new service.
-4. **Test your changes**: Ensure that your changes are thoroughly tested. Run the shell using `pnpm run shell` and verify that the new functionalities work as expected.
+1. **Familiarize Yourself with the Codebase**:
 
-By following these steps, you can effectively extend the capabilities of the `agent-shell` package and contribute to its development.
+   - Start by reviewing [index.ts](./src/main/index.ts) to understand the initialization and configuration process of the shell.
+
+2. **Add New Commands**:
+
+   - To introduce new commands, create a new file in the `commands` directory (e.g., `./src/main/commands/yourCommand.ts`).
+   - Use the existing command handler pattern as a reference. For example, see [commands/pen.ts](./src/main/commands/pen.ts).
+
+3. **Integrate New Services**:
+
+   - If you need to add support for additional services (e.g., new APIs or external integrations), create or modify files like [azureSpeech.ts](./src/main/azureSpeech.ts) to handle the integration.
+
+4. **Enhance Conversation Management**:
+
+   - To extend conversation-related features, review the existing implementation in [chatServer.ts](./src/main/chatServer.ts) and [browserIpc.ts](./src/main/browserIpc.ts). Add new functionality as needed.
+
+5. **Test Your Changes**:
+
+   - Use the `pnpm run shell` command to test your changes in the shell environment. Ensure that all new features are thoroughly tested and do not introduce regressions.
+
+6. **Follow Established Patterns**:
+   - Maintain consistency with the existing codebase by adhering to the established coding conventions and patterns.
+
+By following these steps, you can effectively contribute to the development and enhancement of the `agent-shell` package.
 
 ## Reference
 
@@ -64,7 +125,7 @@ By following these steps, you can effectively extend the capabilities of the `ag
 
 ### Entry points
 
-- default → [./out/main/index.js](./out/main/index.js)
+- default → `./out/main/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -74,26 +135,28 @@ Workspace:
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/completion-ui](../../packages/completionUI/README.md)
 - [@typeagent/config](../../packages/config/README.md)
 - [@typeagent/dispatcher-rpc](../../packages/dispatcher/rpc/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
+- [@typeagent/websocket-utils](../../packages/utils/webSocketUtils/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
-- [aiclient](../../packages/aiclient/README.md)
+- [agent-server](../../packages/agentServer/server/README.md)
 - [browser-typeagent](../../packages/agents/browser/README.md)
+- [chat-ui](../../packages/chat-ui/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 - [dispatcher-node-providers](../../packages/dispatcher/nodeProviders/README.md)
 - [typeagent](../../packages/typeagent/README.md)
 - [typechat-utils](../../packages/utils/typechatUtils/README.md)
 - [websocket-channel-server](../../packages/utils/webSocketChannelServer/README.md)
-- [websocket-utils](../../packages/utils/webSocketUtils/README.md)
 
 External: `@azure/identity`, `@azure/msal-node-extensions`, `@electron-toolkit/preload`, `ansi_up`, `debug`, `dompurify`, `dotenv`, `electron-updater`, `jose`, `js-yaml`, `markdown-it`, `microsoft-cognitiveservices-speech-sdk`, `typechat`, `ws`
 
 ### Files of interest
 
-`./src/main/index.ts`, `./src/main/localWhisperCommandHandler.ts`, `./src/main/speechProcessingSchema.ts`, …and 85 more under `./src/`.
+`./src/main/index.ts`, `./src/main/localWhisperCommandHandler.ts`, `./src/main/speechProcessingSchema.ts`, …and 65 more under `./src/`.
 
 ### Environment variables
 
@@ -107,6 +170,6 @@ _5 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

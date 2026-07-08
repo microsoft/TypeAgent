@@ -489,7 +489,7 @@ export class HtmlToMdConvertor {
                     }
                     break;
                 case "text":
-                    let text = this.getInnerText(child);
+                    const text = this.getInnerText(child);
                     if (text && text.length > 0) {
                         this.append(text);
                     }
@@ -586,7 +586,7 @@ export class HtmlToMdConvertor {
                     this.appendInnerMarkup(child);
                     break;
                 case "text":
-                    let text = this.getInnerText(child);
+                    const text = this.getInnerText(child);
                     if (text && text.length > 0) {
                         this.append(text);
                     }
@@ -672,7 +672,7 @@ export class HtmlToMdConvertor {
     }
 
     private append(text: string): void {
-        let markdownText = escapeMarkdownText(text);
+        const markdownText = escapeMarkdownText(text);
         this.curBlock += markdownText;
     }
 
@@ -709,7 +709,7 @@ export class HtmlToMdConvertor {
     }
 
     private appendInnerList(element: cheerio.Element): void {
-        let list = this.$(element).find("li");
+        const list = this.$(element).find("li");
         list.each((i, li) => {
             if (i > 0) {
                 this.appendMarkup(", ");
@@ -729,7 +729,7 @@ export class HtmlToMdConvertor {
     }
 
     private convertTable(element: cheerio.Element): void {
-        let tbody = this.$(element).find("tbody");
+        const tbody = this.$(element).find("tbody");
         if (tbody !== undefined) {
             element = tbody[0];
         }

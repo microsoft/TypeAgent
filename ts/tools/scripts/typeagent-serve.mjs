@@ -39,6 +39,11 @@ import { fileURLToPath } from "node:url";
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 const serverEntry = path.join(artifactDir, "dist", "server.js");
 const getKeysEntry = path.join(artifactDir, "tools", "getKeys.mjs");
+const generateConfigEntry = path.join(
+    artifactDir,
+    "tools",
+    "generate-selfhost-config.mjs",
+);
 
 // Profile recorded by deployAgentServer when the artifact was profile-pruned.
 function readProfileMarker() {
@@ -115,6 +120,18 @@ function runInline(entry, extraArgs) {
     });
 }
 
+function daemonLogPath() {
+    return path.join(userDataDir(), "agent-server.log");
+}
+
+function isDebugMode() {
+    const v = process.env.TYPEAGENT_DEBUG;
+    return (
+        process.argv.includes("--debug") ||
+        (v !== undefined && v !== "0" && v !== "false" && v !== "")
+    );
+}
+
 function spawnDaemon(port) {
     const idle = arg("--idle-timeout");
     const args = [serverEntry, "--port", String(port)];
@@ -131,11 +148,53 @@ function spawnDaemon(port) {
         readProfileMarker();
     if (profile) args.push("--config", profile);
     const isWindows = process.platform === "win32";
+
+    const debugMode = isDebugMode();
+
+    // In debug mode redirect daemon stdout/stderr to a log file and enable the
+    // debug namespace so startup failures are captured instead of silently lost.
+    let stdio = "ignore";
+    const env = { ...process.env };
+    if (debugMode) {
+        const logPath = daemonLogPath();
+        fs.mkdirSync(path.dirname(logPath), { recursive: true });
+        const logFd = fs.openSync(logPath, "a");
+        stdio = ["ignore", logFd, logFd];
+        if (!env.DEBUG) env.DEBUG = "typeagent:*";
+        console.log(`[debug] Daemon log: ${logPath}`);
+        // Close our copy of the fd after spawn so the child owns it.
+        setTimeout(() => {
+            try {
+                fs.closeSync(logFd);
+            } catch {}
+        }, 1000);
+    }
+
+    if (isWindows && !debugMode) {
+        // Detached node processes on Windows can create visible console windows
+        // (including for spawned descendants). Use cmd `start /B` to keep the
+        // daemon backgrounded without opening extra windows.
+        const child = spawn(
+            "cmd.exe",
+            ["/d", "/c", "start", "", "/B", process.execPath, ...args],
+            {
+                windowsHide: true,
+                stdio: "ignore",
+                env,
+            },
+        );
+        child.unref();
+        return;
+    }
+
     const child = spawn(process.execPath, args, {
-        detached: !isWindows,
+        // The launcher is short-lived. Detach on all platforms so the daemon
+        // survives after this process exits; otherwise on Windows it can die
+        // immediately after reporting startup success.
+        detached: true,
         windowsHide: true,
-        stdio: "ignore",
-        env: process.env,
+        stdio,
+        env,
     });
     child.unref();
 }
@@ -147,7 +206,21 @@ async function cmdStart() {
         return 0;
     }
     if (!fs.existsSync(serverEntry)) {
-        console.error(`Server entry not found at ${serverEntry}.`);
+        // Detect running from the repo source tree (not a deployed artifact).
+        const inRepo = fs.existsSync(
+            path.join(artifactDir, "..", "..", "package.json"),
+        );
+        if (inRepo) {
+            console.error(
+                `typeagent-serve.mjs 'start' is for the deployed artifact only.\n` +
+                    `In development, start the agent-server with:\n` +
+                    `  cd packages/agentServer/server && pnpm start\n` +
+                    `  (or: pnpm run start:tunnel   — to also bring up the dev tunnel)\n\n` +
+                    `Tunnel host commands (tunnel start/stop/status) work from here.`,
+            );
+        } else {
+            console.error(`Server entry not found at ${serverEntry}.`);
+        }
         return 1;
     }
     console.log(`Starting agent server (port ${port})...`);
@@ -162,14 +235,48 @@ async function cmdStart() {
         }
         return 0;
     }
+    const logPath = daemonLogPath();
+    const logHint = fs.existsSync(logPath)
+        ? `\nDaemon log: ${logPath}`
+        : `\nRe-run with TYPEAGENT_DEBUG=1 (or --debug) to capture daemon output to ${logPath}`;
     console.error(
         `Agent server did not start. If this is a fresh install, run ` +
-            `'node typeagent-serve.mjs provision' first to write config.local.yaml.`,
+            `'node typeagent-serve.mjs provision' first to write config.local.yaml.` +
+            logHint,
     );
     return 1;
 }
 
 async function cmdProvision() {
+    // Chat endpoint provider. Default 'aisystems' preserves today's behavior
+    // (Key Vault download via getKeys). 'ollama'/'copilot' synthesize a
+    // config.local.yaml locally with generate-selfhost-config (no Key Vault).
+    const provider = (arg("--provider") ?? "aisystems").toLowerCase();
+
+    if (provider === "ollama" || provider === "copilot") {
+        if (!fs.existsSync(generateConfigEntry)) {
+            console.error(
+                `Self-host config generator not found at ${generateConfigEntry}.`,
+            );
+            return 1;
+        }
+        const dir = process.env.TYPEAGENT_CONFIG_DIR;
+        console.log(
+            `Generating config.local.yaml for '${provider}' provider into ${dir}...`,
+        );
+        // Forward provider + all generator options; drop launcher-only flags.
+        const drop = new Set(["--port"]);
+        const passthrough = process.argv.slice(3).filter((a) => !drop.has(a));
+        return runInline(generateConfigEntry, passthrough);
+    }
+
+    if (provider !== "aisystems") {
+        console.error(
+            `Unknown --provider '${provider}'. Use aisystems, ollama, or copilot.`,
+        );
+        return 1;
+    }
+
     if (!fs.existsSync(getKeysEntry)) {
         console.error(`getKeys not found at ${getKeysEntry}.`);
         return 1;
@@ -179,7 +286,17 @@ async function cmdProvision() {
         `Provisioning config.local.yaml into ${dir} (browser login)...`,
     );
     // Pass through any extra args after the subcommand (e.g. --vault, --verbose).
-    const passthrough = process.argv.slice(3).filter((a) => a !== "--port");
+    // Strip --provider/--port which getKeys does not understand.
+    const passthrough = [];
+    const rest = process.argv.slice(3);
+    for (let i = 0; i < rest.length; i++) {
+        if (rest[i] === "--provider") {
+            i++; // skip its value
+            continue;
+        }
+        if (rest[i] === "--port") continue;
+        passthrough.push(rest[i]);
+    }
     return runInline(getKeysEntry, passthrough);
 }
 
@@ -359,7 +476,36 @@ async function cmdStatus() {
             ? `Agent server is listening on port ${port}.`
             : `Agent server is not running on port ${port}.`,
     );
+    if (!up) {
+        const logPath = daemonLogPath();
+        if (fs.existsSync(logPath)) {
+            console.log(`Daemon log: ${logPath}`);
+        } else {
+            console.log(
+                `No daemon log found. Re-run 'node typeagent-serve.mjs start --debug' ` +
+                    `(or set TYPEAGENT_DEBUG=1) to capture daemon output to ${logPath}`,
+            );
+        }
+    }
     return up ? 0 : 1;
+}
+
+function cmdLogs() {
+    const logPath = daemonLogPath();
+    if (!fs.existsSync(logPath)) {
+        console.log(`No daemon log found at ${logPath}.`);
+        console.log(
+            `Start with 'node typeagent-serve.mjs start --debug' or set TYPEAGENT_DEBUG=1 to enable logging.`,
+        );
+        return 0;
+    }
+    console.log(`=== Daemon log: ${logPath} ===`);
+    const lines = fs.readFileSync(logPath, "utf8").split("\n");
+    // Print last 200 lines by default; --all to show everything.
+    const all = process.argv.includes("--all");
+    const tail = all ? lines : lines.slice(-200);
+    tail.forEach((l) => console.log(l));
+    return 0;
 }
 
 async function main() {
@@ -378,6 +524,8 @@ async function main() {
             return cmdStatus();
         case "tunnel":
             return cmdTunnel();
+        case "logs":
+            return cmdLogs();
         case "stop": {
             // Best-effort: defer to the deployed control utility if present.
             const stop = path.join(artifactDir, "dist", "stop.js");

@@ -14,9 +14,9 @@ export type CommandArgs = {
  */
 export function parseCommandArgs(line: string): CommandArgs {
     const namedArgsStartAt = line.indexOf("--");
-    let argPart =
+    const argPart =
         namedArgsStartAt >= 0 ? line.slice(0, namedArgsStartAt) : line;
-    let namedArgPart =
+    const namedArgPart =
         namedArgsStartAt >= 0 ? line.slice(namedArgsStartAt) : undefined;
 
     const commandArgs: CommandArgs = {};

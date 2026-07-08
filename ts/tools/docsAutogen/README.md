@@ -3,10 +3,11 @@
 On-demand regeneration of `README.AUTOGEN.md` companion files for every
 package under `ts/packages/**` in the TypeAgent monorepo.
 
-This package implements the workflow described in
-[`ts/docs/architecture/doc-autogen.md`](../../docs/architecture/doc-autogen.md).
-It is intended to be invoked manually from CI via `workflow_dispatch`
-(no schedule) and exposes a CLI (`docs-autogen`) for local invocation.
+This package implements the regeneration described in
+[`ts/docs/architecture/doc-pipeline/doc-autogen.md`](../../docs/architecture/doc-pipeline/doc-autogen.md).
+It runs daily in CI via the
+[`docs-generate`](../../../.github/workflows/docs-generate.yml) GitHub
+Actions workflow, and exposes a CLI (`docs-autogen`) for local invocation.
 
 > **Important:** `docs-autogen` writes to a parallel
 > `README.AUTOGEN.md` file alongside each package's hand-written
@@ -58,8 +59,10 @@ pnpm docs:generate:dry
 # refreshing the deterministic Reference section without spending tokens.
 pnpm docs:generate
 
-# Same, plus author the documentation body via Azure OpenAI (requires
-# AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY in ts/.env).
+# Same, plus author the documentation body via an LLM. aiclient reads its
+# provider from env: Azure OpenAI (AZURE_OPENAI_ENDPOINT + _API_KEY in
+# ts/.env), or any OpenAI-compatible endpoint such as GitHub Models --
+# which is what CI uses.
 pnpm docs:generate:llm
 
 # Spot-check that every link in every package's README.AUTOGEN.md still
@@ -130,95 +133,58 @@ instead of starting from scratch.
 
 ## Operations
 
-### CI workflow
+### CI (daily GitHub Actions workflow)
 
-The on-demand GitHub Action lives at
-[`.github/workflows/docs-generate.yml`](../../../.github/workflows/docs-generate.yml).
-It is **not** scheduled — runs are triggered manually via
-`workflow_dispatch` with the same flags the CLI exposes. The job is
-bound to the `development-fork` GitHub environment (the same
-environment used by `smoke-tests.yml` and `build-docker-container.yml`)
-so federated-credential exchange against the existing build-pipeline
-Entra App registration succeeds and `getKeys.mjs` can read
-`build-pipeline-kv` for Azure OpenAI credentials.
+Regeneration and PR creation run in one self-contained workflow,
+[`.github/workflows/docs-generate.yml`](../../../.github/workflows/docs-generate.yml),
+on a daily `cron` plus manual `workflow_dispatch`. It needs **no federated
+credentials and no stored secrets**:
 
-> **First-time pipeline setup** — installing the GitHub App,
-> provisioning secrets and variables, and validating the first run
-> — is covered in
-> [`ts/docs/architecture/doc-autogen-setup.md`](../../docs/architecture/doc-autogen-setup.md).
-> The summary below is reference-only; do not use it as a substitute
-> for the setup guide on a fresh repo.
+| Stage                   | How                                                                                                                                                                                                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Author the docs (LLM)   | **GitHub Models** via aiclient's OpenAI-compatible path (`OPENAI_ENDPOINT` = `https://models.github.ai/inference/chat/completions`, `OPENAI_API_KEY` = the job's `GITHUB_TOKEN`, `OPENAI_MODEL` = `openai/gpt-4o`) under `permissions: models: read`. No Azure OpenAI, Key Vault, or WIF. |
+| Push the branch         | Native `GITHUB_TOKEN` (`contents: write`); pushing is not blocked by the org "Actions can't create PRs" policy.                                                                                                                                                                           |
+| Open / supersede the PR | The **TypeAgent-Bot** GitHub App, reusing the existing `DEPENDABOT_APP_ID` / `DEPENDABOT_APP_PRIVATE_KEY` already configured for `fix-dependabot-alerts.yml`. An App-authored PR is exempt from the policy and triggers downstream CI.                                                    |
 
-Required repository configuration (provision once):
-
-| Kind     | Name                       | Purpose                                 |
-| -------- | -------------------------- | --------------------------------------- |
-| variable | `DOCS_BOT_APP_ID`          | GitHub App that opens the generated PR  |
-| secret   | `DOCS_BOT_APP_PRIVATE_KEY` | Private key for the same GitHub App     |
-| secret   | `AZURE_OPENAI_ENDPOINT`    | Azure OpenAI endpoint URL               |
-| secret   | `AZURE_OPENAI_API_KEY`     | Azure OpenAI key (or wire OIDC instead) |
-
-The GitHub App needs `contents: write` and `pull-requests: write` on
-this repo. Until those are provisioned the workflow will run but fail
-at the "Generate GitHub App token" step — that's safe (it cannot
-modify anything before that step).
+Selection is change-scoped: the workflow computes `--since` from the last
+`README.AUTOGEN.md` commit, so only packages modified since their docs were
+last generated are regenerated, with **no per-run cap**. Before opening a PR,
+a hard gate fails the run unless only `ts/packages/**/README.AUTOGEN.md` files
+changed. First-time setup is covered in
+[`ts/docs/architecture/doc-pipeline/doc-autogen-setup.md`](../../docs/architecture/doc-pipeline/doc-autogen-setup.md).
 
 ### Triggering manually
 
-From the GitHub UI: **Actions → docs-generate → Run workflow**. The
-dispatch form mirrors the CLI flags:
+From the Actions UI or `gh workflow run docs-generate.yml`:
 
-- `dry-run` — analyse and render only, never write or open a PR.
-- `packages` — comma-separated list to override change detection.
-- `since` — git ref to diff against, overriding the watermark.
-- `llm` — toggle the AI authoring (default on; off emits placeholder
-  documentation alongside the deterministic Reference).
-- `max-packages` — per-run cap (default 25).
+- `dry-run` -- analyse and render only, never write or open a PR.
+- `since` -- git ref to diff against, overriding the last-commit baseline.
+- `model` -- GitHub Models model id (default `openai/gpt-4o`).
 
-The workflow never advances the `docs-bot/last-run` watermark — there
-is no scheduled run to protect against — so any dispatch is safely
-idempotent against the operator's chosen `since` baseline.
+### `--since` baseline and the watermark tag
 
-### Resetting the watermark
-
-The watermark is a lightweight git tag pointing at the SHA of the
-commit a prior run was generated against. The workflow no longer
-auto-advances it; operators advance, reset, or delete it by hand to
-control the default diff baseline used when `since` is left blank:
+When `--since` is not passed explicitly, the CLI picks a baseline in order:
+merge-base with `origin/main` (on a feature branch), then the
+`docs-bot/last-run` watermark tag if present, then a first-run full sweep on
+the default branch. The shipped workflow always passes `--since` explicitly
+(the last `README.AUTOGEN.md` commit), so it does **not** use or advance the
+watermark tag -- the tag is only an optional convenience for local /
+standalone runs:
 
 ```bash
-# Inspect the current watermark.
-git fetch origin --tags
-git rev-parse refs/tags/docs-bot/last-run
-
-# Force the watermark to a specific commit (e.g. force a full re-sweep).
-git tag -f docs-bot/last-run <sha>
+git tag -f docs-bot/last-run <sha>          # set a local baseline
 git push origin docs-bot/last-run --force
-
-# Delete the watermark entirely (subsequent dispatches that omit
-# `since` will fall back to "regenerate everything"; supply `since`
-# explicitly to avoid that).
-git tag -d docs-bot/last-run
-git push origin :refs/tags/docs-bot/last-run
 ```
-
-### First-run bootstrap
-
-If the watermark tag does not exist, dispatches that leave `since`
-blank have no diff baseline. Either tag a known-good SHA on `main`
-manually, or use `workflow_dispatch` with `since: main` (or any other
-ref) to seed.
 
 ### Cost expectations
 
-Placeholder runs (`--llm` off) make zero LLM calls and are cheap
-enough to run on every commit if needed. With `--llm` on, each
-package costs roughly one `gpt-4`-class chat completion sized at
-~6–10k input tokens (the documentation prompt forwards the
-hand-written `README.md`, source samples, action list, and the
-deterministic Reference) and ~1000–1500 output tokens, plus one retry
-on validation failure. The default `--max-packages 25` cap bounds the
-worst-case at ~50 calls per run.
+The microsoft-tenant GitHub Models limits are ample (tens of thousands of
+requests / 10s, 10M tokens / min), so even a full ~100-package sweep runs
+comfortably within quota. With `--llm` on, each package is roughly one
+`gpt-4o`-class chat completion (~6-10k input tokens forwarding the
+hand-written `README.md`, source samples, action list, and the deterministic
+Reference; ~1000-1500 output tokens) plus up to one retry on validation
+failure. Placeholder runs (`--llm` off) make zero LLM calls.
 
 ### Opting a package out
 

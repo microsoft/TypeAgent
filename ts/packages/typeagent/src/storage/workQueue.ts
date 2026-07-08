@@ -45,15 +45,15 @@ export async function createWorkQueueFolder(
     workItemFilter?: (queuePath: string, workItems: Path[]) => Promise<Path[]>,
 ): Promise<WorkQueue> {
     queueFolderName ??= "queue";
-    let queuePath = await ensureDir(path.join(rootPath, queueFolderName));
+    const queuePath = await ensureDir(path.join(rootPath, queueFolderName));
     queueFolderName ??= "";
-    let completedPath = await ensureDir(
+    const completedPath = await ensureDir(
         path.join(rootPath, queueFolderName + "_completed"),
     );
-    let skippedPath = await ensureDir(
+    const skippedPath = await ensureDir(
         path.join(rootPath, queueFolderName + "_skipped"),
     );
-    let errorPath = await ensureDir(
+    const errorPath = await ensureDir(
         path.join(rootPath, queueFolderName + "_error"),
     );
     const namedGenerator = createFileNameGenerator(
@@ -115,7 +115,7 @@ export async function createWorkQueueFolder(
         const total = fileNames.length;
         let startAt = 0;
         let successCount = 0;
-        for (let slice of slices(fileNames, concurrency)) {
+        for (const slice of slices(fileNames, concurrency)) {
             startAt = slice.startAt;
             await asyncArray.forEachAsync(
                 slice.value,

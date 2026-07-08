@@ -14,6 +14,7 @@ import {
     emitCollisionEvent,
 } from "../context/collisionTelemetry.js";
 import { getAppAgentName } from "./agentTranslators.js";
+import { getPrimary } from "./matchResultUtils.js";
 import { ClarifyMultipleAgentMatches } from "../context/dispatcher/schema/clarifyActionSchema.js";
 import { buildClarifyMultipleAgentMatches } from "./clarifyHelpers.js";
 import {
@@ -35,17 +36,6 @@ export type GrammarCollisionDecision =
      */
     | { kind: "fallthrough" };
 
-function getPrimary(match: MatchResult): {
-    schemaName: string;
-    actionName: string;
-} {
-    const first = match.match.actions[0]?.action;
-    return {
-        schemaName: first?.schemaName ?? "",
-        actionName: first?.actionName ?? "",
-    };
-}
-
 /**
  * Build a `CollisionCandidate` from a cache `MatchResult`, propagating
  * the heuristic counters (matchedCount / nonOptionalCount /
@@ -53,7 +43,7 @@ function getPrimary(match: MatchResult): {
  * uses these fields to reconstruct alternative rankings (e.g.
  * counterfactual `score-rank` outcomes) without re-running the matcher.
  */
-function toCandidate(
+export function toCandidate(
     match: MatchResult,
     ctx?: CommandHandlerContext,
 ): CollisionCandidate {

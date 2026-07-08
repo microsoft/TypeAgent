@@ -21,7 +21,9 @@
     "./collisions": "./dist/collisions/index.js",
     "./collisionScanner": "./dist/collisions/scanner.js",
     "./replay": "./dist/replay/index.js",
+    "./replayResolver": "./dist/replay/grammarResolver.js",
     "./onboardingBridge": "./dist/onboardingBridge/index.js",
+    "./webview": "./dist/webview/index.js",
     "./runtime": "./dist/runtime/index.js"
   },
   "types": "./dist/index.d.ts",
@@ -37,6 +39,8 @@
   },
   "dependencies": {
     "@typeagent/action-grammar": "workspace:*",
+    "@typeagent/action-schema": "workspace:*",
+    "agent-cache": "workspace:*",
     "debug": "^4.4.0",
     "grammar-tools-core": "workspace:*"
   },

@@ -68,12 +68,18 @@ import {
 } from "./appAgentManager.js";
 import { IPortRegistrar, PortRegistrar } from "./portRegistrar.js";
 import {
-    AppAgentInstaller,
     AppAgentProvider,
+    AppAgentHost,
+    AppAgentSource,
+    AppAgentConnection,
     ConstructionProvider,
 } from "../agentProvider/agentProvider.js";
-import { RequestMetricsManager } from "../utils/metrics.js";
+import {
+    AppAgentHostApplicator,
+    AppAgentHostApplyFns,
+} from "./appAgentHost.js";
 import { getSchemaNamePrefix } from "../execute/actionHandlers.js";
+import { RequestMetricsManager } from "../utils/metrics.js";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
 
 import {
@@ -95,6 +101,15 @@ import {
 } from "./collisionTelemetry.js";
 import { CollisionPreferenceStore } from "./collisionPreferences.js";
 import { CollisionRegistry } from "./collisionRegistry.js";
+import {
+    ConversationSignalSource,
+    RingBufferSignalSource,
+} from "./contextSelector/conversationSignal.js";
+import {
+    KeywordIndex,
+    agentSchemaSource,
+} from "./contextSelector/keywordIndex.js";
+import { KeywordSidecar } from "./contextSelector/keywordSidecar.js";
 import { ChoiceManager } from "@typeagent/agent-sdk/helpers/action";
 import lockfile from "proper-lockfile";
 import { IndexManager } from "./indexManager.js";
@@ -144,11 +159,48 @@ export function ensureCommandResult(
     return context.commandResult;
 }
 
+/** Progress update emitted once per session during a Copilot import. */
+export type CopilotImportProgress = {
+    /** 1-based index of the session currently being processed. */
+    current: number;
+    /** Total sessions being processed in this run. */
+    total: number;
+    /** Display name of the session currently being processed. */
+    name: string;
+};
+
+/** Summary returned when a Copilot import completes. */
+export type CopilotImportSummary = {
+    total: number;
+    imported: number;
+    skipped: number;
+    /** Existing mirrors whose name was reconciled to the current VS Code title. */
+    renamed: number;
+    failed: number;
+};
+
+/**
+ * Host capability that imports GitHub Copilot Chat sessions as conversation
+ * mirrors, invoking `onProgress` once per session so the caller can stream
+ * status to the user.
+ */
+export type CopilotImporter = (
+    onProgress?: (progress: CopilotImportProgress) => void,
+) => Promise<CopilotImportSummary>;
+
 // Command Handler Context definition.
 export type CommandHandlerContext = {
     readonly agents: AppAgentManager;
     readonly portRegistrar: IPortRegistrar;
-    readonly agentInstaller: AppAgentInstaller | undefined;
+    // The per-dispatcher AppAgentHost applicator: an
+    // idle-gated FIFO add/remove surface connected AppAgentSources use to mutate
+    // this session's live agent set. This instance is placed into the
+    // host-owned `@package` agent's own agentContext.
+    appAgentHost: AppAgentHostApplicator;
+    // Live connections to the injected AppAgentSources. Disposed at context
+    // teardown, which deregisters this host from each source's registry without
+    // tearing down the shared provider instances.
+    readonly appAgentConnections: AppAgentConnection[];
     session: Session;
 
     readonly persistDir: string | undefined;
@@ -163,6 +215,22 @@ export type CommandHandlerContext = {
     activityContext?: ActivityContext | undefined;
     conversationManager?: Conversation.ConversationManager | undefined;
     conversationMemory?: ConversationMemory | undefined;
+    /**
+     * Host-provided enumeration of sibling conversations (id + name), used to
+     * offer `@conversation switch/rename/delete` name completions. Undefined
+     * for standalone hosts that don't manage multiple conversations.
+     */
+    readonly getConversationList?:
+        | (() => { conversationId: string; name: string }[])
+        | undefined;
+    /**
+     * Host-provided capability to import GitHub Copilot Chat sessions as
+     * conversation mirrors, streaming per-session progress. Injected by the
+     * agent-server (which owns the ConversationManager + session-store
+     * reader); undefined for hosts that can't import (e.g. standalone local
+     * mode).
+     */
+    readonly copilotImport?: CopilotImporter | undefined;
     // Per activation configs
     developerMode?: boolean;
     // When true, each translated request is confirmed via the client
@@ -245,6 +313,13 @@ export type CommandHandlerContext = {
     // chosen candidate; consumed on first read. Covers the "don't remember"
     // case (no durable preference written).
     collisionOneShotPicks: Set<string>;
+
+    // contextSelector (§11). The conversation signal source (produces the
+    // per-turn context vector), the effective-keyword index (derived floor +
+    // sidecar overrides), and the live-tunable keyword sidecar it reads.
+    conversationSignal: ConversationSignalSource;
+    contextSelectorKeywords: KeywordIndex;
+    contextSelectorSidecar: KeywordSidecar;
 };
 
 export function getRequestId(context: CommandHandlerContext): RequestId {
@@ -308,6 +383,11 @@ async function getAgentCache(
 export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     // Core options
     appAgentProviders?: AppAgentProvider[];
+    // Dynamic (installed) agent sources. Each is connected once per dispatcher
+    // at context init; `connect()` vends the provider(s) to register and a
+    // teardown handle, and lets the source fan out live install/uninstall to
+    // this session.
+    appAgentSources?: AppAgentSource[];
     persistDir?: string | undefined; // the directory to save state.
     instanceDir?: string | undefined; // global instance directory for cross-session agent storage (config, auth tokens, user preferences). When omitted, falls back to persistDir.
     persistSession?: boolean; // default to false,
@@ -344,7 +424,6 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     traceId?: string; // optional additional for logging identification
 
     // Additional integration options
-    agentInstaller?: AppAgentInstaller;
     constructionProvider?: ConstructionProvider;
     explanationAsynchronousMode?: boolean; // default to true
 
@@ -361,6 +440,24 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
         actionResultEntityStorage?: boolean;
         actionResultKnowledgeExtraction?: boolean;
     };
+
+    /**
+     * Optional callback letting the host (e.g. agentServer's
+     * ConversationManager) expose the set of sibling conversations to the
+     * dispatcher — used to offer name completions for `@conversation
+     * switch/rename/delete`. Omitted by standalone hosts that have a single
+     * conversation.
+     */
+    getConversationList?:
+        | (() => { conversationId: string; name: string }[])
+        | undefined;
+
+    /**
+     * Optional capability letting the host import GitHub Copilot Chat sessions
+     * as conversation mirrors, streaming per-session progress. Injected by the
+     * agent-server; omitted by hosts without a ConversationManager.
+     */
+    copilotImport?: CopilotImporter | undefined;
 };
 
 async function getSession(
@@ -602,6 +699,237 @@ export async function installAppProvider(
     }
 }
 
+/**
+ * Whether an app agent is currently "on" in this session:
+ * either its command surface is enabled or any of its schemas is enabled. Used
+ * to word the add/reconcile notification (enabled vs. disabled).
+ */
+function isAgentEnabled(context: CommandHandlerContext, name: string): boolean {
+    const agents = context.agents;
+    try {
+        if (agents.isCommandEnabled(name)) {
+            return true;
+        }
+    } catch {
+        // Agent has no command surface / not loaded — fall through to schemas.
+    }
+    for (const schemaName of agents.getSchemaNames()) {
+        if (getAppAgentName(schemaName) === name) {
+            try {
+                if (agents.isSchemaEnabled(schemaName)) {
+                    return true;
+                }
+            } catch {
+                // Ignore invalid schema name.
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * Add agent names to this session's persisted known set so
+ * a later load reconciles against an accurate baseline. No-op before the
+ * baseline is established (reconciliation records it at load).
+ */
+function addKnownAgents(
+    context: CommandHandlerContext,
+    names: readonly string[],
+): void {
+    const known = context.session.getKnownAgents();
+    if (known === undefined) {
+        return;
+    }
+    const next = new Set(known);
+    for (const name of names) {
+        next.add(name);
+    }
+    context.session.setKnownAgents([...next]);
+}
+
+/**
+ * Remove agent names from this session's persisted known set. No-op before the
+ * baseline is established.
+ */
+function removeKnownAgents(
+    context: CommandHandlerContext,
+    names: readonly string[],
+): void {
+    const known = context.session.getKnownAgents();
+    if (known === undefined) {
+        return;
+    }
+    const drop = new Set(names);
+    context.session.setKnownAgents(known.filter((n) => !drop.has(n)));
+}
+
+/**
+ * Drop the persisted enable preference for the given agent(s) from session
+ * config: an explicit `@package uninstall` clears the
+ * schema/action/command overrides so a fresh reinstall starts from the manifest
+ * default. (Reconciliation-removal, by contrast, leaves the entry dormant.)
+ * `schemaNames` must be captured BEFORE the provider is removed, since the
+ * manager no longer knows them afterward.
+ */
+function dropAgentConfig(
+    context: CommandHandlerContext,
+    agentNames: readonly string[],
+    schemaNames: readonly string[],
+): void {
+    const schemas: Record<string, null> = {};
+    const actions: Record<string, null> = {};
+    const commands: Record<string, null> = {};
+    for (const schemaName of schemaNames) {
+        schemas[schemaName] = null;
+        actions[schemaName] = null;
+    }
+    for (const name of agentNames) {
+        commands[name] = null;
+    }
+    context.session.updateSettings({ schemas, actions, commands });
+}
+
+/**
+ * Emit the cross-session fan-out system message for a single add/remove:
+ * name the agent and its resulting state so the change is
+ * visible, not silent. Exported for unit testing of the wording/visibility.
+ */
+export function emitAgentChangeNotification(
+    clientIO: ClientIO,
+    op: "add" | "remove",
+    provider: AppAgentProvider,
+    enable: boolean,
+) {
+    for (const name of provider.getAppAgentNames()) {
+        const message =
+            op === "remove"
+                ? `Agent '${name}' was removed.`
+                : enable
+                  ? `Agent '${name}' was added — enabled.`
+                  : `Agent '${name}' was added — disabled (\`@config agent ${name}\` to enable).`;
+        clientIO.notify(undefined, AppAgentEvent.Info, message, DispatcherName);
+    }
+}
+
+/**
+ * Reconcile this session's persisted known agent set against what is actually
+ * available now. Agents that appeared while the session was
+ * offline are reported as added (adopting their manifest default); agents that
+ * disappeared are reported as removed (their enable preference stays dormant in
+ * config). The first time a session has no recorded baseline (brand-new session,
+ * or first load after upgrading to a build that tracks this) it records a silent
+ * baseline. The known set is persisted so the next load reconciles accurately.
+ */
+export function reconcileKnownAgents(context: CommandHandlerContext): void {
+    const available = context.agents.getAppAgentNames();
+    const known = context.session.getKnownAgents();
+    if (known === undefined) {
+        // No baseline yet: adopt the current set silently.
+        context.session.setKnownAgents(available);
+        return;
+    }
+    const knownSet = new Set(known);
+    const availableSet = new Set(available);
+    const added = available.filter((n) => !knownSet.has(n));
+    const removed = known.filter((n) => !availableSet.has(n));
+    if (added.length !== 0 || removed.length !== 0) {
+        const parts: string[] = [];
+        for (const name of added) {
+            parts.push(
+                isAgentEnabled(context, name)
+                    ? `${name} added — enabled`
+                    : `${name} added — disabled (\`@config agent ${name}\` to enable)`,
+            );
+        }
+        for (const name of removed) {
+            parts.push(`${name} removed`);
+        }
+        context.clientIO.notify(
+            undefined,
+            AppAgentEvent.Info,
+            `Agent set changed: ${parts.join("; ")}.`,
+            DispatcherName,
+        );
+    }
+    context.session.setKnownAgents(available);
+}
+
+/**
+ * The {@link AppAgentHost.addProvider} body: register
+ * the provider (deriving its enabled state from session config with the manifest
+ * default as fallback, via {@link installAppProvider}), record it in the known
+ * set, and — on a sibling fan-out (`notify`) — show a system message naming
+ * the agent and its resulting state. Runs through the idle-gated applicator.
+ */
+async function hostAddProvider(
+    context: CommandHandlerContext,
+    provider: AppAgentProvider,
+    notify: boolean,
+) {
+    await installAppProvider(context, provider);
+
+    // Record the newly-added agent(s) so a later load reconciles accurately.
+    addKnownAgents(context, provider.getAppAgentNames());
+
+    // Sibling fan-out notification: show a system message naming
+    // the agent and its resulting (config/manifest-derived) state.
+    if (notify) {
+        const name = provider.getAppAgentNames()[0];
+        emitAgentChangeNotification(
+            context.clientIO,
+            "add",
+            provider,
+            isAgentEnabled(context, name),
+        );
+    }
+}
+
+/**
+ * The {@link AppAgentHost.removeProvider} body: tear down a
+ * previously-added provider by identity via the {@link AppAgentManager}
+ * removeProvider primitive, and forget it from the known set. Runs through the
+ * idle-gated applicator. On a sibling fan-out (`notify`), surfaces
+ * a system message.
+ *
+ * `dropConfig`: when true (explicit `@package uninstall`), also
+ * clears the agent's persisted enable preference so a fresh reinstall starts
+ * from the manifest default. An `@package update` passes `false` so the remove leg of
+ * its remove-then-add swap leaves the user's per-session preference intact
+ * across a version bump.
+ */
+async function hostRemoveProvider(
+    context: CommandHandlerContext,
+    provider: AppAgentProvider,
+    notify: boolean,
+    dropConfig: boolean,
+) {
+    const names = provider.getAppAgentNames();
+    // Capture the agent's schema names before removal so we can clear their
+    // persisted config entries afterward.
+    const schemaNames = context.agents
+        .getSchemaNames()
+        .filter((s) => names.includes(getAppAgentName(s)));
+
+    await context.agents.removeProvider(
+        provider,
+        context.agentCache.grammarStore,
+    );
+
+    if (dropConfig) {
+        dropAgentConfig(context, names, schemaNames);
+    }
+    removeKnownAgents(context, names);
+
+    if (notify) {
+        emitAgentChangeNotification(
+            context.clientIO,
+            "remove",
+            provider,
+            false,
+        );
+    }
+}
+
 export async function initializeCommandHandlerContext(
     hostName: string,
     options?: DispatcherOptions,
@@ -631,6 +959,7 @@ export async function initializeCommandHandlerContext(
     const instanceDirLock = persistDir
         ? await lockInstanceDir(persistDir)
         : undefined;
+    let contextForCleanup: CommandHandlerContext | undefined;
 
     try {
         const session = await getSession(
@@ -687,7 +1016,10 @@ export async function initializeCommandHandlerContext(
         const context: CommandHandlerContext = {
             agents,
             portRegistrar,
-            agentInstaller: options?.agentInstaller,
+            // Assigned just below once `context` exists (the apply closures need
+            // it); mirrors how `requestQueue` is wired.
+            appAgentHost: undefined as unknown as AppAgentHostApplicator,
+            appAgentConnections: [],
             session,
             persistDir,
             instanceDir,
@@ -699,6 +1031,8 @@ export async function initializeCommandHandlerContext(
             developerMode: options?.developerMode ?? false,
             confirmActions: false,
             clientIO,
+            getConversationList: options?.getConversationList,
+            copilotImport: options?.copilotImport,
 
             // Runtime context
             commandLock: createLimiter(1), // Make sure we process one command at a time.
@@ -759,10 +1093,22 @@ export async function initializeCommandHandlerContext(
                 session.getConfig().collision.preference.registryPath,
             collisionChoiceManager: new ChoiceManager(),
             collisionOneShotPicks: new Set(),
+            conversationSignal: new RingBufferSignalSource(
+                () => session.getConfig().collision.contextSelector,
+            ),
+            contextSelectorSidecar: KeywordSidecar.load(instanceDir),
+            // Needs `context` for the sidecar getter; assigned after the literal.
+            contextSelectorKeywords: undefined as unknown as KeywordIndex,
             // Replaced below; the queue's broadcaster needs `context` to be
             // available so it can route through `context.clientIO`.
             requestQueue: undefined as unknown as RequestQueue,
         };
+        contextForCleanup = context;
+
+        context.contextSelectorKeywords = new KeywordIndex(
+            agentSchemaSource(agents),
+            () => context.contextSelectorSidecar,
+        );
 
         const snapshotCoalescer = createSnapshotCoalescer((snapshot) => {
             context.clientIO.queueStateChanged?.(snapshot);
@@ -827,7 +1173,66 @@ export async function initializeCommandHandlerContext(
         );
 
         await initializeMemory(context, sessionDirPath);
+
+        // Build the per-dispatcher AppAgentHost applicator.
+        // Its apply closures reach the fully-built `context`.
+        const hostApplyFns: AppAgentHostApplyFns = {
+            applyAdd: (provider, notify) =>
+                hostAddProvider(context, provider, notify),
+            applyRemove: (provider, notify, dropConfig) =>
+                hostRemoveProvider(context, provider, notify, dropConfig),
+        };
+        context.appAgentHost = new AppAgentHostApplicator(
+            context.commandLock,
+            hostApplyFns,
+        );
+
         await addAppAgentProviders(context, options?.appAgentProviders);
+
+        // Connect the injected dynamic agent sources. The
+        // initial set comes from the vended `connection.providers` registered
+        // through the normal path; subsequent add/remove deltas arrive via the
+        // `AppAgentHost` fan-out.
+        if (options?.appAgentSources) {
+            for (const source of options.appAgentSources) {
+                const connection = source.connect(context.appAgentHost);
+                context.appAgentConnections.push(connection);
+                // Register the vended providers under a SINGLE held command
+                // lock, acquired synchronously in the same tick as the
+                // `connect()` above. The applicator's fan-out add/remove legs
+                // acquire the SAME command lock (FIFO), and the lock is free
+                // here, so this section grabs it first and holds it across the
+                // whole install. Any concurrent uninstall/update barrier that
+                // targets this session therefore enqueues its op strictly AFTER
+                // this section runs. That closes the connect-vs-drain race where
+                // a sibling drain could remove an agent on this session before
+                // its add had landed — leaking it here while it is gone
+                // everywhere else.
+                //
+                // `connection.providers` is a single promise. When nothing is in
+                // flight it resolves immediately with the active set (the source
+                // joins this session to its fan-out registry in the same tick).
+                // When this session connects while a name is mid-`removing`, the
+                // source instead PARKS it OUT of the fan-out registry until every
+                // in-flight barrier settles, then snapshots the now-quiet active
+                // set (already reflecting each decided outcome) and joins. Either
+                // way, awaiting it here — STILL holding the command lock, so no
+                // user command can slip in — means the session never loads a
+                // doomed version (verify-0 pollution) nor runs a command with an
+                // agent mid-swap. The wait is bounded by the barriers' quiesce
+                // timeout, and they decide independently of this session's
+                // command lock, so holding it here cannot deadlock.
+                // Uses `installAppProvider` directly (not the add-known-agents
+                // path) so `reconcileKnownAgents` below still sees the true
+                // persisted-vs-available diff.
+                const { providers } = connection;
+                await context.commandLock(async () => {
+                    for (const provider of await providers) {
+                        await installAppProvider(context, provider);
+                    }
+                });
+            }
+        }
 
         // Initialize geolocation in the background (non-blocking)
         initializeGeolocation().catch(() => {});
@@ -844,11 +1249,39 @@ export async function initializeCommandHandlerContext(
             session.updateDefaultConfig(appAgentStateSettings);
         }
         await setAppAgentStates(context);
+
+        // Reconcile this session's known agent set against what is now available:
+        // report agents that appeared/disappeared while it
+        // was offline, and record the baseline for the next load.
+        reconcileKnownAgents(context);
         debug("Context initialized");
         return context;
     } catch (e) {
+        if (contextForCleanup !== undefined) {
+            contextForCleanup.appAgentHost?.dispose();
+            try {
+                await contextForCleanup.requestQueue?.drainAndStop();
+            } catch {
+                // best-effort
+            }
+            try {
+                await contextForCleanup.agents.close();
+            } catch {
+                // best-effort
+            }
+            for (const connection of contextForCleanup.appAgentConnections) {
+                try {
+                    connection.dispose();
+                } catch (disposeError) {
+                    debugError(
+                        `Failed to dispose source connection after init failure: ${disposeError}`,
+                    );
+                }
+            }
+            contextForCleanup.appAgentConnections.length = 0;
+        }
         if (instanceDirLock) {
-            instanceDirLock();
+            await instanceDirLock();
         }
         throw e;
     }
@@ -1184,6 +1617,9 @@ function processSetAppAgentStateResult(
 export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
+    // Stop accepting fan-out ops into this (closing) session: abandon queued
+    // add/remove and make any later fan-out a no-op.
+    context.appAgentHost.dispose();
     // Drain in-flight/queued entries before tearing down agents.
     try {
         await context.requestQueue.drainAndStop();
@@ -1192,7 +1628,22 @@ export async function closeCommandHandlerContext(
     }
     // Save the session because the token count is in it.
     context.session.save();
+    // Tear down every loaded agent, including those vended by the dynamic
+    // sources: `close()` unloads each agent instance from its provider and drops
+    // its session context. The shared provider instances themselves are NOT torn
+    // down — other sessions still hold them.
     await context.agents.close();
+    // Only after this session's agent instances are unloaded do we disconnect
+    // from the dynamic sources: deregister this host from each source's client
+    // registry so any in-flight barrier stops waiting on it.
+    for (const connection of context.appAgentConnections) {
+        try {
+            connection.dispose();
+        } catch (e) {
+            debugError(`Failed to dispose source connection: ${e}`);
+        }
+    }
+    context.appAgentConnections.length = 0;
     if (context.instanceDirLock) {
         await context.instanceDirLock();
     }
@@ -1213,7 +1664,15 @@ export async function setSessionOnCommandHandlerContext(
         context.logger,
     );
     await setAppAgentStates(context);
+    // Reconcile the newly-activated session's known agent set:
+    // switching to a session that was created/last-saved against a
+    // different available set reports the delta and re-baselines.
+    reconcileKnownAgents(context);
     context.translatorCache.clear();
+    // Session switch (§7.2): drop the contextSelector conversation buffer and
+    // the derived-keyword cache (agents were closed/reloaded above).
+    context.conversationSignal.reset();
+    context.contextSelectorKeywords.invalidate();
 }
 
 export async function reloadSessionOnCommandHandlerContext(

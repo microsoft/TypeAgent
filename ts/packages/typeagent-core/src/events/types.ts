@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 /**
- * F0.3 — Structured event stream types.
+ * Structured event stream types.
  *
- * See docs/plans/vscode-devx/05-implementation-plan.md §2 for the schema-versioning
- * rule: bump the top-level `schemaVersion` only on payload-breaking changes; adding
- * a new optional field or a new event type does not bump it.
+ * The schema-versioning rule: bump the top-level `schemaVersion` only on
+ * payload-breaking changes; adding a new optional field or a new event type
+ * does not bump it.
  */
 
 export const EVENT_SCHEMA_VERSION = 1;
@@ -20,7 +20,7 @@ export interface StudioEventBase {
     ts: number;
     /** Correlates a single user-request dispatch. */
     requestId?: string;
-    /** Correlates a single replay run (F4.1). */
+    /** Correlates a single replay run. */
     runId?: string;
     /** Which sandbox emitted the event. Always present. */
     sandboxId: string;
@@ -105,7 +105,7 @@ export interface ActionExecutedEvent extends StudioEventBase {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Feedback events (PR #2341)                                                  */
+/* Feedback events                                                             */
 /* -------------------------------------------------------------------------- */
 
 export type FeedbackRating = "up" | "down";
@@ -125,7 +125,7 @@ export interface FeedbackRecordedEvent extends StudioEventBase {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Collision events (§10)                                                      */
+/* Collision events                                                            */
 /* -------------------------------------------------------------------------- */
 
 export type CollisionKind = "overlap" | "shadow" | "ambiguity";
@@ -147,7 +147,7 @@ export interface CollisionDetectedEvent extends StudioEventBase {
     type: "collision.detected";
     kind: CollisionKind;
     detectionPoint: CollisionDetectionPoint;
-    /** Experiment id from the §10 tagging system. */
+    /** Experiment id from the collision tagging system. */
     experimentId?: string;
     participants: CollisionParticipant[];
     exemplarUtterances?: string[];
@@ -165,7 +165,7 @@ export interface ReasoningStepEvent extends StudioEventBase {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Sandbox lifecycle events (F0.1)                                             */
+/* Sandbox lifecycle events                                                    */
 /* -------------------------------------------------------------------------- */
 
 export type SandboxState =
@@ -188,7 +188,7 @@ export interface SandboxLifecycleEvent extends StudioEventBase {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Replay events (F4.1)                                                        */
+/* Replay events                                                               */
 /* -------------------------------------------------------------------------- */
 
 export interface ReplayRowEvent extends StudioEventBase {

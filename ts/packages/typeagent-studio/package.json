@@ -31,18 +31,14 @@
     "commands": [
       {
         "command": "typeagent-studio.connectStudioService",
-        "title": "Connect Event Log to studio service",
+        "title": "Connect to Studio service",
         "category": "TypeAgent Studio"
       },
       {
         "command": "typeagent-studio.openImpactReport",
         "title": "Open Impact Report",
-        "category": "TypeAgent Studio"
-      },
-      {
-        "command": "typeagent-studio.hello",
-        "title": "Hello (skeleton)",
-        "category": "TypeAgent Studio"
+        "category": "TypeAgent Studio",
+        "icon": "$(graph)"
       },
       {
         "command": "typeagent-studio.startOnboardingSession",
@@ -315,6 +311,10 @@
         {
           "command": "typeagent-studio.focusSandboxes",
           "when": "false"
+        },
+        {
+          "command": "typeagent-studio.openImpactReport",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -408,6 +408,11 @@
         {
           "command": "typeagent-studio.addExternalCorpus",
           "when": "view == typeagentStudioCorpora && viewItem == corpusAgent",
+          "group": "inline@1"
+        },
+        {
+          "command": "typeagent-studio.openImpactReport",
+          "when": "view == typeagentStudioCorpora && viewItem == corpusAgent",
           "group": "inline@0"
         },
         {
@@ -455,7 +460,6 @@
     "onView:typeagentStudioCollisions",
     "onCommand:typeagent-studio.connectStudioService",
     "onCommand:typeagent-studio.openImpactReport",
-    "onCommand:typeagent-studio.hello",
     "onCommand:typeagent-studio.startOnboardingSession",
     "onCommand:typeagent-studio.ask",
     "onCommand:typeagent-studio.installToSandbox",
@@ -497,13 +501,16 @@
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/core": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.4.0",
+    "default-agent-provider": "workspace:*",
     "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/debug": "^4.1.0",
     "@types/vscode": "^1.90.0",
     "@types/ws": "^8.5.10",
+    "@vscode/codicons": "^0.0.42",
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.28.1",
     "mkdirp": "^3.0.1",

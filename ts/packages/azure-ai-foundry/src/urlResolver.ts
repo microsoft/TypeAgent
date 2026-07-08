@@ -245,7 +245,7 @@ export async function resolveURLWithWikipedia(
         limit: numberOfResults.toString(),
     });
 
-    let retVal: string[] = [];
+    const retVal: string[] = [];
     await fetch(`${url}?${parameters}`, { method: "GET", headers: headers })
         .then((response) => response.json())
         .then(async (data: any) => {
@@ -336,11 +336,11 @@ async function getTypeChatResponse(
     config: wikipedia.WikipediaApiSettings,
 ): Promise<Result<wikipediaSchemas.WikipediaPageExternalLinks>> {
     // Create Model instance
-    let chatModel = createModel(true);
+    const chatModel = createModel(true);
 
     // Create Chat History
-    let maxContextLength = 8196;
-    let maxWindowLength = 30;
+    const maxContextLength = 8196;
+    const maxWindowLength = 30;
 
     // create TypeChat object
     const chat = createTypeChat<wikipediaSchemas.WikipediaPageExternalLinks>(
@@ -384,7 +384,7 @@ function createModel(fastModel: boolean = true): ChatModelWithStreaming {
         }
     }
 
-    let completionSettings: CompletionSettings = {
+    const completionSettings: CompletionSettings = {
         temperature: 1.0,
         // Max response tokens
         max_tokens: 1000,

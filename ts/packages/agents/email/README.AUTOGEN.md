@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=aa2e2450a1010ca810db07832f9aedf86d71298dc634ac207d0a8c4a056c1ae9 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=3092396a257215cc156805e6b5b75081a68a4480ec46491f713e4f19793b1068 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # email — AI-generated documentation
@@ -12,50 +12,86 @@
 
 ## Overview
 
-The Email agent is a TypeAgent application agent designed to interact with the Outlook mail client using the Microsoft Graph API. It enables operations such as composing, replying, forwarding, and searching for email messages. This package includes the schema definition and implementation necessary for building an email agent that leverages structured prompting and large language models (LLMs).
+The Email agent is a TypeAgent application agent designed to manage email interactions through the Microsoft Graph API. It provides functionality for sending, replying to, forwarding, and searching emails. This agent leverages structured prompting and large language models (LLMs) to process user requests and integrates with the Outlook mail client via the Microsoft Graph API.
 
 ## What it does
 
-The Email agent supports four main actions:
+The Email agent implements four primary actions to facilitate email management:
 
-- `sendEmail`: Sends a simple email with specified subject, body, recipients, and optional attachments.
-- `forwardEmail`: Forwards an existing email to specified recipients, optionally adding an additional message.
-- `replyEmail`: Replies to an existing email, optionally including a body, CC, BCC, and attachments.
-- `findEmail`: Searches for an email message based on a message reference.
+- **`sendEmail`**: Sends an email with a specified subject, body, recipients, and optional attachments. It supports CC, BCC, and the inclusion of file paths or URLs for attachments.
+- **`forwardEmail`**: Forwards an existing email to specified recipients, with the option to include an additional message.
+- **`replyEmail`**: Replies to an existing email, optionally including a body, CC, BCC, and attachments.
+- **`findEmail`**: Searches for an email message using a message reference, enabling retrieval of specific emails.
 
-These actions allow the agent to manage email communications effectively, integrating with the Microsoft Graph API to perform these tasks.
+These actions are implemented using the Microsoft Graph API, which allows the agent to interact with the user's email account. The agent also integrates with the `graph-utils` library for email-related operations and supports advanced features like generating email content using LLMs.
 
 ## Setup
 
-To set up the Email agent, you need to configure access to the Microsoft Graph API. This involves creating a Graph Client application and updating the following environment variables in the `.env` file or `config.local.yaml`:
+To use the Email agent, you need to configure access to the Microsoft Graph API. Follow these steps:
 
-- `MSGRAPH_APP_CLIENTID`
-- `MSGRAPH_APP_CLIENTSECRET`
-- `MSGRAPH_APP_TENANTID`
+1. **Create a Microsoft Graph Client Application**:
 
-These variables are essential for authenticating and interacting with the Microsoft Graph API. For detailed setup instructions, refer to the hand-written README.
+   - Visit the Microsoft Graph quickstart page to create a Graph Client application.
+   - Set up a demo tenant if required.
+
+2. **Configure Environment Variables**:
+
+   - Update the following variables in `config.local.yaml` (under the `msGraph` section) or in a `.env` file:
+     - `MSGRAPH_APP_CLIENTID`: The client ID of your Graph Client application.
+     - `MSGRAPH_APP_CLIENTSECRET`: The client secret of your Graph Client application.
+     - `MSGRAPH_APP_TENANTID`: The tenant ID associated with your Azure Active Directory.
+
+3. **Identity Cache Management**:
+   - The agent uses the `@azure/identity-cache-persistence` package to persist user identity information. If you encounter issues with the identity cache, clear it by running:
+     ```bash
+     cd %localappdata%/.IdentityService
+     del typeagent-tokencache*
+     ```
+
+These steps are required only once to set up the Graph Client application and configure the agent.
 
 ## Key Files
 
-The internal structure of the Email agent is organized into several key files:
+The Email agent's functionality is distributed across several key files:
 
-- [emailManifest.json](./src/emailManifest.json): Defines the agent's manifest, including its description and schema.
-- [emailActionsSchema.ts](./src/emailActionsSchema.ts): Contains the type definitions for the email actions.
-- [emailActionHandler.ts](./src/emailActionHandler.ts): Implements the handlers for the email actions, integrating with the Microsoft Graph API.
-- [emailSchema.agr](./src/emailSchema.agr): Defines the grammar for the email actions.
-- [emailKpBridge.ts](./src/emailKpBridge.ts): Bridges email agent types and Knowledge Processor (kp) types, converting email messages into kp TextChunks and ChunkGroups.
-- [emailKpIndex.ts](./src/emailKpIndex.ts): Manages the kp index lifecycle for the email agent, including fetching emails, indexing them, and providing search capabilities.
+- **[emailManifest.json](./src/emailManifest.json)**: Defines the agent's manifest, including its description, schema, and integration points.
+- **[emailActionsSchema.ts](./src/emailActionsSchema.ts)**: Contains type definitions for the supported email actions (`sendEmail`, `replyEmail`, `forwardEmail`, and `findEmail`).
+- **[emailActionHandler.ts](./src/emailActionHandler.ts)**: Implements the logic for handling email actions, including integration with the Microsoft Graph API.
+- **[emailSchema.agr](./src/emailSchema.agr)**: Defines the grammar for parsing user requests into actionable commands.
+- **[emailKpBridge.ts](./src/emailKpBridge.ts)**: Bridges email agent types with Knowledge Processor (kp) types, converting email messages into `TextChunks` and `ChunkGroups` for indexing and search.
+- **[emailKpIndex.ts](./src/emailKpIndex.ts)**: Manages the lifecycle of the kp index, including fetching emails, indexing them, and enabling search capabilities.
+- **[emailSchema.tests.json](./src/emailSchema.tests.json)**: Contains test cases for validating the email schema and actions.
+
+These files collectively define the agent's schema, grammar, action handlers, and integration with external services.
 
 ## How to extend
 
 To extend the Email agent, follow these steps:
 
-1. **Open the schema file**: Start with [emailActionsSchema.ts](./src/emailActionsSchema.ts) to define new actions or modify existing ones.
-2. **Implement handlers**: Add or update handlers in [emailActionHandler.ts](./src/emailActionHandler.ts) to process the new actions.
-3. **Update the grammar**: Modify [emailSchema.agr](./src/emailSchema.agr) to include new action rules.
-4. **Test your changes**: Ensure your modifications work correctly by adding test cases in [emailSchema.tests.json](./src/emailSchema.tests.json).
+1. **Define New Actions**:
 
-By following this pattern, you can extend the functionality of the Email agent to support additional email operations or integrate with other services.
+   - Add new action types or modify existing ones in [emailActionsSchema.ts](./src/emailActionsSchema.ts).
+   - Ensure the new actions are well-typed and include all necessary parameters.
+
+2. **Implement Action Handlers**:
+
+   - Add or update handlers in [emailActionHandler.ts](./src/emailActionHandler.ts) to process the new actions.
+   - Use the `graph-utils` library or other relevant APIs to implement the desired functionality.
+
+3. **Update the Grammar**:
+
+   - Modify [emailSchema.agr](./src/emailSchema.agr) to include rules for the new actions.
+   - Ensure the grammar can parse user requests into the appropriate action format.
+
+4. **Test Your Changes**:
+
+   - Add test cases to [emailSchema.tests.json](./src/emailSchema.tests.json) to validate the new actions and grammar rules.
+   - Run the tests to ensure the agent behaves as expected.
+
+5. **Integrate with Knowledge Processor (Optional)**:
+   - If the new actions involve indexing or searching email content, update [emailKpBridge.ts](./src/emailKpBridge.ts) and [emailKpIndex.ts](./src/emailKpIndex.ts) to handle the new data.
+
+By following this process, you can extend the Email agent to support additional email operations or integrate with other systems.
 
 ## Reference
 
@@ -64,7 +100,7 @@ By following this pattern, you can extend the functionality of the Email agent t
 ### Entry points
 
 - `./agent/manifest` → [./src/emailManifest.json](./src/emailManifest.json)
-- `./agent/handlers` → [./dist/emailActionHandler.js](./dist/emailActionHandler.js)
+- `./agent/handlers` → `./dist/emailActionHandler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -72,7 +108,7 @@ Workspace:
 
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [graph-utils](../../../packages/agents/agentUtils/graphUtils/README.md)
 - kp
 - [typeagent](../../../packages/typeagent/README.md)
@@ -107,6 +143,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/email
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter email docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter email docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -24,8 +24,10 @@ import {
     AgentServerChannelName,
     AGENT_SERVER_DEFAULT_PORT,
     DispatcherConnectOptions,
+    CreateConversationOptions,
     ConversationInfo,
     JoinConversationResult,
+    RenameConversationOptions,
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -105,9 +107,16 @@ export type AgentServerConnection = {
         options?: DispatcherConnectOptions,
     ): Promise<ConversationDispatcher>;
     leaveConversation(conversationId: string): Promise<void>;
-    createConversation(name: string): Promise<ConversationInfo>;
+    createConversation(
+        name: string,
+        options?: CreateConversationOptions,
+    ): Promise<ConversationInfo>;
     listConversations(name?: string): Promise<ConversationInfo[]>;
-    renameConversation(conversationId: string, newName: string): Promise<void>;
+    renameConversation(
+        conversationId: string,
+        newName: string,
+        options?: RenameConversationOptions,
+    ): Promise<void>;
     deleteConversation(conversationId: string): Promise<void>;
     shutdown(): Promise<void>;
     /**
@@ -119,6 +128,31 @@ export type AgentServerConnection = {
     reconnect(): Promise<boolean>;
     close(): Promise<void>;
 };
+
+/**
+ * Options for connecting to the agent-server WebSocket. Use `headers` to pass
+ * tunnel authorization tokens when connecting through a private Dev Tunnel.
+ */
+export interface AgentServerConnectOptions {
+    /** Extra headers sent during the WebSocket upgrade handshake. */
+    headers?: Record<string, string>;
+}
+
+/**
+ * Build the connect options (including tunnel token header) from environment
+ * variables. Returns undefined if no tunnel token is configured.
+ *
+ * Reads: `TYPEAGENT_TUNNEL_TOKEN`
+ */
+export function getConnectOptionsFromEnv():
+    | AgentServerConnectOptions
+    | undefined {
+    const token = process.env.TYPEAGENT_TUNNEL_TOKEN;
+    if (!token) return undefined;
+    return {
+        headers: { "X-Tunnel-Authorization": `tunnel ${token}` },
+    };
+}
 
 /**
  * Build an {@link AgentServerConnection} over an already-connected channel
@@ -238,8 +272,11 @@ export function createAgentServerConnection(
             await rpc.invoke("leaveConversation", conversationId);
         },
 
-        async createConversation(name: string): Promise<ConversationInfo> {
-            return rpc.invoke("createConversation", name);
+        async createConversation(
+            name: string,
+            options?: CreateConversationOptions,
+        ): Promise<ConversationInfo> {
+            return rpc.invoke("createConversation", name, options);
         },
 
         async listConversations(name?: string): Promise<ConversationInfo[]> {
@@ -249,8 +286,14 @@ export function createAgentServerConnection(
         async renameConversation(
             conversationId: string,
             newName: string,
+            options?: RenameConversationOptions,
         ): Promise<void> {
-            return rpc.invoke("renameConversation", conversationId, newName);
+            return rpc.invoke(
+                "renameConversation",
+                conversationId,
+                newName,
+                options,
+            );
         },
 
         async deleteConversation(conversationId: string): Promise<void> {
@@ -309,6 +352,7 @@ export function createAgentServerConnection(
 export async function connectAgentServer(
     url: string | URL,
     onDisconnect?: () => void,
+    connectOptions?: AgentServerConnectOptions,
 ): Promise<AgentServerConnection> {
     // A single logical connection over a transport that can be reopened in
     // place (reconnect()). `currentClose` tracks the live socket's teardown,
@@ -329,7 +373,12 @@ export async function connectAgentServer(
             // is still open can't leak it; its (now superseded) onclose is
             // ignored via the generation guard below.
             currentWs?.close();
-            const ws = new WebSocket(url);
+            const ws = new WebSocket(
+                url,
+                connectOptions?.headers
+                    ? { headers: connectOptions.headers }
+                    : undefined,
+            );
             currentWs = ws;
             let opened = false;
             let settled = false;
@@ -454,6 +503,35 @@ export interface AgentServerSpawnOptions {
     stdio?: StdioOptions;
 }
 
+// Choose a PowerShell executable for Windows. Detects whether PowerShell 7+
+// (pwsh) is installed by probing its standard install locations and PATH, so
+// installs outside the default "C:\Program Files\PowerShell\7" directory
+// (winget, x86, a relocated Program Files) are still recognized. Returns a bare
+// executable name — never an environment-derived path — so no path built from
+// the environment is ever routed through cmd.exe; `start` resolves the name via
+// PATH/App Paths, which every standard PowerShell 7 install registers. Falls
+// back to Windows PowerShell (powershell.exe), which is always present.
+function resolvePowerShellExe(): string {
+    const candidates: string[] = [];
+    for (const base of [
+        process.env["ProgramFiles"],
+        process.env["ProgramW6432"],
+        process.env["ProgramFiles(x86)"],
+    ]) {
+        if (base) {
+            candidates.push(path.join(base, "PowerShell", "7", "pwsh.exe"));
+        }
+    }
+    for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
+        if (dir) {
+            candidates.push(path.join(dir, "pwsh.exe"));
+        }
+    }
+    return candidates.some((candidate) => fs.existsSync(candidate))
+        ? "pwsh.exe"
+        : "powershell.exe";
+}
+
 function spawnAgentServer(
     serverPath: string,
     port: number,
@@ -503,22 +581,40 @@ function spawnAgentServer(
                     `Agent server process spawned hidden (pid: ${child.pid})`,
                 );
             } else {
-                const pwsh7 = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
-                const psExe = fs.existsSync(pwsh7) ? pwsh7 : "powershell.exe";
-                // Single-quote and double any internal single quotes so a
-                // path containing quotes or PowerShell metacharacters can't
-                // break out of the -Command string. port/idleTimeout are
-                // numeric so they need no escaping.
-                const psQuote = (s: string) =>
-                    "'" + s.replace(/'/g, "''") + "'";
-                const psCommand = `& node ${psQuote(serverPath)} --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
-                const psArgs = ["-NoExit", "-Command", psCommand];
+                const psExe = resolvePowerShellExe();
+                // Pass serverPath to the child through the environment rather
+                // than the command line so it never reaches cmd.exe or the
+                // PowerShell parser as text. Only the numeric port and
+                // idleTimeout are interpolated into the command; the path is
+                // read from $env:TYPEAGENT_SERVER_PATH at runtime. The command
+                // is handed to PowerShell as a base64 -EncodedCommand blob,
+                // whose alphabet is inert to both cmd.exe and PowerShell.
+                const psCommand =
+                    `& node $env:TYPEAGENT_SERVER_PATH --port ${port}` +
+                    (idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : "");
+                const encodedCommand = Buffer.from(
+                    psCommand,
+                    "utf16le",
+                ).toString("base64");
+                const psArgs = ["-NoExit", "-EncodedCommand", encodedCommand];
+                // The first quoted argument to `start` is the new window's
+                // title. It MUST be non-empty: an empty title leaves the
+                // console window title blank, which trips a libuv bug on
+                // Windows — GetConsoleTitleW returns 0 with GetLastError()==0,
+                // libuv reads that as success but leaves process_title NULL,
+                // and the next process.title read aborts with
+                // "Assertion failed: process_title, file src\\win\\util.c".
+                const windowTitle = `TypeAgent Server (port ${port})`;
                 const child = spawn(
                     "cmd.exe",
-                    ["/c", "start", "", psExe, ...psArgs],
+                    ["/c", "start", windowTitle, psExe, ...psArgs],
                     {
                         detached: true,
                         stdio: "ignore",
+                        env: {
+                            ...process.env,
+                            TYPEAGENT_SERVER_PATH: serverPath,
+                        },
                     },
                 );
                 child.unref();

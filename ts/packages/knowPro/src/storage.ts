@@ -104,7 +104,7 @@ export function* getBatchesFromCollection<T = any>(
 ): IterableIterator<Batch<T>> {
     let startAt = startAtOrdinal;
     while (true) {
-        let batch = collection.getSlice(startAt, startAt + batchSize);
+        const batch = collection.getSlice(startAt, startAt + batchSize);
         if (batch.length === 0) {
             break;
         }
@@ -117,7 +117,7 @@ export function mapCollection<T = any>(
     collection: IReadonlyCollection<T>,
     callback: (item: T, index: number) => T,
 ) {
-    let results: T[] = [];
+    const results: T[] = [];
     const length = collection.length;
     for (let i = 0; i < length; ++i) {
         results.push(callback(collection.get(i), i));
@@ -129,7 +129,7 @@ export function filterCollection<T = any>(
     collection: IReadonlyCollection<T>,
     predicate: (item: T, index: number) => boolean,
 ) {
-    let results: T[] = [];
+    const results: T[] = [];
     const length = collection.length;
     for (let i = 0; i < length; ++i) {
         const item = collection.get(i);

@@ -190,19 +190,19 @@ export async function genEmbeddingDataFromActionSchema(
         }
 
         const embeddingModel = openai.createEmbeddingModel();
-        let aggrData: any = [];
+        const aggrData: any = [];
         let processedNodeCount = 0;
 
         for (const schemaStr of schemaDefinitions) {
-            let actionSchemaData: any = parseTypeComponents(schemaStr);
+            const actionSchemaData: any = parseTypeComponents(schemaStr);
             const actionString: string = `${actionSchemaData.typeName} ${actionSchemaData.actionName} ${actionSchemaData.comments.join(" ")}`;
-            let actionEmbedding: Float32Array =
+            const actionEmbedding: Float32Array =
                 await generateEmbeddingWithRetry(
                     embeddingModel,
                     JSON.stringify(actionString),
                 );
 
-            let typeSchema: TypeSchema = {
+            const typeSchema: TypeSchema = {
                 typeName: actionSchemaData.typeName,
                 schemaText: schemaStr,
             };
@@ -218,10 +218,11 @@ export async function genEmbeddingDataFromActionSchema(
             actionRequests = dedupeList(actionRequests);
             actionRequests.sort();
 
-            let actionReqEmbeddings = await generateEmbeddingForActionsRequests(
-                embeddingModel,
-                actionRequests,
-            );
+            const actionReqEmbeddings =
+                await generateEmbeddingForActionsRequests(
+                    embeddingModel,
+                    actionRequests,
+                );
 
             aggrData.push({
                 ...actionSchemaData,
@@ -305,8 +306,8 @@ export async function processVscodeCommandsJsonFile(
     const schemaDefinitions: string[] = [];
     let processedNodeCount = 0;
     let schemaCount = 0;
-    let aggrData: any = [];
-    let actionTypeNames: Set<string> = new Set();
+    const aggrData: any = [];
+    const actionTypeNames: Set<string> = new Set();
 
     for (const node of jsonData) {
         try {
@@ -337,17 +338,17 @@ export async function processVscodeCommandsJsonFile(
                 schemaDefinitions.push(schemaStr);
                 schemaCount++;
 
-                let actionSchemaData: any = parseTypeComponents(schemaStr);
+                const actionSchemaData: any = parseTypeComponents(schemaStr);
                 actionTypeNames.add(actionSchemaData.typeName);
 
                 const actionString: string = `${actionSchemaData.typeName} ${actionSchemaData.actionName} ${actionSchemaData.comments.join(" ")}`;
-                let actionEmbedding: Float32Array =
+                const actionEmbedding: Float32Array =
                     await generateEmbeddingWithRetry(
                         embeddingModel,
                         JSON.stringify(actionString),
                     );
 
-                let typeSchema: TypeSchema = {
+                const typeSchema: TypeSchema = {
                     typeName: actionSchemaData.typeName,
                     schemaText: schemaStr,
                 };
@@ -363,7 +364,7 @@ export async function processVscodeCommandsJsonFile(
                 actionRequests = dedupeList(actionRequests);
                 actionRequests.sort();
 
-                let actionReqEmbeddings =
+                const actionReqEmbeddings =
                     await generateEmbeddingForActionsRequests(
                         embeddingModel,
                         actionRequests,
@@ -405,7 +406,7 @@ export async function processVscodeCommandsJsonFile(
     );
 
     // print action type names separates by "|"
-    let actionTypeNamesStr = Array.from(actionTypeNames).join("|");
+    const actionTypeNamesStr = Array.from(actionTypeNames).join("|");
     console.log("------------------------------------------------");
     console.log(`Action Type Names: ${actionTypeNamesStr}\n`);
     console.log(`Total action type names: ${actionTypeNames.size}\n`);

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=dab46e54e83202ae26b3f18a3d6dcac3b774201b713d0775d12025f972711769 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=30e0486670b0c8124ea1be34b4cc3958b2b56d7e33d16516cd18c4a971478c83 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typechat-utils — AI-generated documentation
@@ -12,61 +12,83 @@
 
 ## Overview
 
-The `typechat-utils` package is a TypeScript library that provides common utilities for the TypeAgent project. It includes functions and classes for handling JSON translation, image processing, date and time manipulation, and location-based services. These utilities are essential for various packages within the TypeAgent monorepo.
+The `typechat-utils` package is a TypeScript library that provides a collection of utility functions and classes for the TypeAgent project. These utilities are designed to support various functionalities such as JSON translation, image processing, date and time manipulation, and location-based services. The package is widely used across the TypeAgent monorepo, serving as a foundational component for other packages and agents.
 
 ## What it does
 
-The `typechat-utils` package offers a variety of utilities that are essential for the TypeAgent project. These utilities include:
+The `typechat-utils` package provides a range of utility functions and helpers that are grouped into the following categories:
 
-- **JSON Translation**: Functions for creating JSON translators from schema definitions, enabling JSON translator streaming, and validating JSON data. Key functions include `createJsonTranslatorFromSchemaDef`, `createJsonTranslatorFromFile`, and `createJsonTranslatorWithValidator`.
-- **Image Processing**: Functions for extracting EXIF data from images, generating image elements, and finding nearby points of interest based on image metadata. Notable functions include `extractRelevantExifTags`, `getImageElement`, and `findNearbyPointsOfInterest`.
-- **Date and Time Manipulation**: Functions for parsing and formatting dates and times, including fuzzy date parsing and time string conversion. Important functions include `parseDateString`, `parseFuzzyDateString`, and `parseTimeString`.
-- **Location Services**: Functions for reverse geocoding, converting EXIF GPS tags to latitude and longitude, and finding nearby points of interest. Key functions include `reverseGeocode`, `exifGPSTagToLatLong`, and `findNearbyPointsOfInterest`.
-- **MIME Types**: Functions for determining file extensions from MIME types and vice versa, as well as checking if a MIME type is supported for images. Notable functions include `getFileExtensionForMimeType`, `getMimeTypeFromFileExtension`, and `isImageMimeTypeSupported`.
+### JSON Translation
 
-These utilities are used by various other packages within the TypeAgent monorepo, such as `agent-api`, `agent-cache`, `agent-cli`, and several agent-specific packages.
+- **Schema-based JSON Translators**: Functions like `createJsonTranslatorFromSchemaDef`, `createJsonTranslatorFromFile`, and `createJsonTranslatorWithValidator` enable the creation of JSON translators from schema definitions. These translators are used to validate and process JSON data.
+- **Incremental JSON Parsing**: The `createIncrementalJsonParser` function allows for efficient, step-by-step parsing of JSON data, which is useful for handling large or streaming JSON payloads.
+
+### Image Processing
+
+- **EXIF Data Extraction**: Functions such as `extractRelevantExifTags` allow for the extraction of metadata from image files.
+- **Image Element Generation**: The `getImageElement` function generates HTML image elements from image data.
+- **Location-Based Image Analysis**: Functions like `findNearbyPointsOfInterest` and `exifGPSTagToLatLong` enable the identification of nearby points of interest and the conversion of EXIF GPS tags to latitude and longitude.
+
+### Date and Time Manipulation
+
+- **Parsing and Formatting**: Functions like `parseDateString`, `parseFuzzyDateString`, and `parseTimeString` handle various date and time formats, including fuzzy parsing and time string conversion.
+- **Date Calculations**: Utilities for adding days, months, or milliseconds to dates, as well as determining the start of a week or month.
+
+### Location Services
+
+- **Reverse Geocoding**: The `reverseGeocode` function translates geographic coordinates into human-readable addresses.
+- **Point of Interest (POI) Discovery**: The `findNearbyPointsOfInterest` function identifies nearby locations of interest based on geographic coordinates.
+
+### MIME Types
+
+- **File Type Identification**: Functions like `getFileExtensionForMimeType` and `getMimeTypeFromFileExtension` map between MIME types and file extensions.
+- **Image MIME Type Support**: The `isImageMimeTypeSupported` function checks if a given MIME type is supported for image processing.
+
+These utilities are integral to the functionality of other packages in the TypeAgent monorepo, including `agent-api`, `agent-cache`, `agent-cli`, and various agent-specific packages.
 
 ## Setup
 
-The `typechat-utils` package does not require any special setup beyond installing its dependencies. To get started, simply run:
+The `typechat-utils` package does not require any special setup beyond installing its dependencies. To get started, run:
 
 ```sh
 pnpm install
 ```
 
-For detailed setup instructions, see the hand-written README.
+For additional details, refer to the hand-written README.
 
 ## Key Files
 
-The `typechat-utils` package is organized into several modules, each responsible for different aspects of utility functions:
+The `typechat-utils` package is organized into several modules, each focusing on a specific set of utilities:
 
-- **[index.ts](./src/index.ts)**: The main entry point that exports functions and classes from other modules.
-- **[jsonTranslator.ts](./src/jsonTranslator.ts)**: Contains functions for creating and managing JSON translators. This module includes functions like `createJsonTranslatorFromSchemaDef`, `createJsonTranslatorFromFile`, and `createJsonTranslatorWithValidator`.
-- **[incrementalJsonParser.ts](./src/incrementalJsonParser.ts)**: Provides functions for incremental JSON parsing. The main function here is `createIncrementalJsonParser`.
-- **[image.ts](./src/image.ts)**: Includes functions for processing images and extracting metadata. Key functions include `extractRelevantExifTags`, `getImageElement`, and `findNearbyPointsOfInterest`.
-- **[datetimeHelper.ts](./src/datetimeHelper.ts)**: Offers functions for date and time manipulation. Important functions include `parseDateString`, `parseFuzzyDateString`, and `parseTimeString`.
-- **[location.ts](./src/location.ts)**: Contains functions for location-based services, such as reverse geocoding and finding points of interest. Key functions include `reverseGeocode`, `exifGPSTagToLatLong`, and `findNearbyPointsOfInterest`.
-- **[mimeTypes.ts](./src/mimeTypes.ts)**: Provides functions for handling MIME types and file extensions. Notable functions include `getFileExtensionForMimeType`, `getMimeTypeFromFileExtension`, and `isImageMimeTypeSupported`.
+- **[index.ts](./src/index.ts)**: The main entry point that re-exports functions and classes from other modules.
+- **[jsonTranslator.ts](./src/jsonTranslator.ts)**: Handles JSON translation, including schema-based translators and validators. Key exports include `createJsonTranslatorFromSchemaDef`, `createJsonTranslatorFromFile`, and `createJsonTranslatorWithValidator`.
+- **[incrementalJsonParser.ts](./src/incrementalJsonParser.ts)**: Provides the `createIncrementalJsonParser` function for step-by-step JSON parsing.
+- **[image.ts](./src/image.ts)**: Focuses on image processing, including EXIF data extraction (`extractRelevantExifTags`), image element generation (`getImageElement`), and location-based image analysis (`findNearbyPointsOfInterest`).
+- **[datetimeHelper.ts](./src/datetimeHelper.ts)**: Contains utilities for date and time parsing and formatting, such as `parseDateString`, `parseFuzzyDateString`, and `parseTimeString`.
+- **[location.ts](./src/location.ts)**: Implements location-based services, including `reverseGeocode`, `exifGPSTagToLatLong`, and `findNearbyPointsOfInterest`.
+- **[mimeTypes.ts](./src/mimeTypes.ts)**: Provides functions for handling MIME types and file extensions, such as `getFileExtensionForMimeType` and `isImageMimeTypeSupported`.
 
 ## How to extend
 
-To extend the `typechat-utils` package, follow these steps:
+To add new functionality to the `typechat-utils` package, follow these steps:
 
-1. **Identify the module to extend**: Determine which module is most relevant to the functionality you want to add or modify. For example, if you need to add a new date manipulation function, you would start with [datetimeHelper.ts](./src/datetimeHelper.ts).
+1. **Identify the appropriate module**: Determine which existing module aligns with the functionality you want to add. For example, if you're adding a new image processing function, start with [image.ts](./src/image.ts).
 
-2. **Add your function or class**: Implement your new function or class within the identified module. Ensure that your code follows the existing patterns and conventions used in the package.
+2. **Implement the new feature**: Write your new function or class in the identified module. Follow the existing coding style and patterns to maintain consistency.
 
-3. **Export your addition**: Make sure to export your new function or class from the module so that it can be used by other parts of the package. Update [index.ts](./src/index.ts) if necessary to include your new export.
+3. **Export the new functionality**: Ensure your new function or class is exported from its module. If it needs to be publicly accessible, add it to the exports in [index.ts](./src/index.ts).
 
-4. **Write tests**: Add tests for your new functionality to ensure it works as expected. Place your tests in the appropriate test file or create a new test file if needed.
+4. **Write tests**: Create or update test files to include test cases for your new functionality. This ensures that your changes work as intended and do not introduce regressions.
 
-5. **Run tests**: Execute the test suite to verify that your changes do not break existing functionality. You can run the tests using:
+5. **Run the test suite**: Use the following command to run the tests and verify your changes:
 
 ```sh
 pnpm test
 ```
 
-By following these steps, you can effectively extend the `typechat-utils` package and contribute to the TypeAgent project.
+6. **Document your changes**: Update the hand-written README or other relevant documentation to describe the new functionality and how to use it.
+
+By following these steps, you can contribute effectively to the `typechat-utils` package and ensure that your changes integrate smoothly with the existing codebase.
 
 ## Reference
 
@@ -74,14 +96,14 @@ By following these steps, you can effectively extend the `typechat-utils` packag
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
 Workspace:
 
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [telemetry](../../../packages/telemetry/README.md)
 
 External: `@azure-rest/maps-search`, `chalk`, `date-fns`, `debug`, `exifreader`, `typechat`
@@ -106,6 +128,6 @@ External: `@azure-rest/maps-search`, `chalk`, `date-fns`, `debug`, `exifreader`,
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typechat-utils docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typechat-utils docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

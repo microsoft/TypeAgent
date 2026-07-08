@@ -229,7 +229,7 @@ function writeDistinctKnowledge(
         out.writeLine(`Distinct and sorted in ascending order (lowest first)`);
     }
     for (let i = 0; i < distinctKnowledge.length; ++i) {
-        let pos = sortAsc ? distinctKnowledge.length - (i + 1) : i;
+        const pos = sortAsc ? distinctKnowledge.length - (i + 1) : i;
         const knowledge = distinctKnowledge[pos];
         out.writeInColor(
             chalk.green,
@@ -303,7 +303,7 @@ function writeScoredSemanticRefs(
         `Displaying ${matchesToDisplay.length} matches of total ${semanticRefMatches.length}`,
     );
     for (let i = 0; i < matchesToDisplay.length; ++i) {
-        let pos = sortAsc ? matchesToDisplay.length - (i + 1) : i;
+        const pos = sortAsc ? matchesToDisplay.length - (i + 1) : i;
         writeScoredRef(
             out,
             pos,
@@ -388,7 +388,7 @@ function writeScoredMessages(
         `Displaying ${matchesToDisplay.length} matches of total ${messageIndexMatches.length}`,
     );
     for (let i = 0; i < matchesToDisplay.length; ++i) {
-        let pos = sortAsc ? matchesToDisplay.length - (i + 1) : i;
+        const pos = sortAsc ? matchesToDisplay.length - (i + 1) : i;
         writeScoredMessage(
             out,
             pos,

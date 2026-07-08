@@ -4,7 +4,7 @@
 // `@collision preferences` — inspect and edit the Tier-1 profile-scoped
 // collision preference store ("given these competing options the user always
 // picks X"). The store is consumed by the `preference-clarify` resolution
-// strategy; see docs/architecture/collision-rollout.md.
+// strategy; see docs/architecture/collision/collision-rollout.md.
 
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import {

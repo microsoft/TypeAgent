@@ -9,6 +9,7 @@ import {
     type EventLogEntry,
     type EventLogRow,
 } from "./eventLogPresentation.js";
+import { BaseStudioTreeProvider } from "./baseTreeProvider.js";
 import type { EventLogSource } from "./eventLogSource.js";
 
 /** View id contributed in package.json. */
@@ -29,12 +30,9 @@ export const EVENT_LOG_CAPACITY = 200;
  * repopulate the tree after it's been replaced.
  */
 export class EventLogTreeProvider
-    implements vscode.TreeDataProvider<EventLogRow>, vscode.Disposable
+    extends BaseStudioTreeProvider<EventLogRow>
+    implements vscode.Disposable
 {
-    private readonly emitter = new vscode.EventEmitter<
-        EventLogRow | undefined
-    >();
-    readonly onDidChangeTreeData = this.emitter.event;
     private subscription: { dispose(): void } | undefined;
     private readonly entries: EventLogEntry[] = [];
     private readonly eventById = new Map<string, StudioEvent>();
@@ -42,6 +40,7 @@ export class EventLogTreeProvider
     private generation = 0;
 
     constructor(source: EventLogSource) {
+        super();
         this.install(source, ++this.generation);
     }
 
@@ -59,35 +58,32 @@ export class EventLogTreeProvider
         this.install(source, ++this.generation);
     }
 
-    refresh(): void {
-        this.emitter.fire(undefined);
-    }
-
     clear(): void {
         this.entries.length = 0;
         this.eventById.clear();
         this.refresh();
     }
 
-    getTreeItem(row: EventLogRow): vscode.TreeItem {
-        const item = new vscode.TreeItem(
-            row.label,
-            vscode.TreeItemCollapsibleState.None,
-        );
-        item.id = row.id;
-        item.description = row.description;
-        item.tooltip = row.tooltip;
-        item.contextValue = row.contextValue;
+    protected decorate(item: vscode.TreeItem, row: EventLogRow): void {
         const event = this.eventById.get(row.id);
         item.iconPath = new vscode.ThemeIcon(
             row.kind === "event" && event ? iconForEvent(event) : "info",
         );
-        return item;
     }
 
-    getChildren(row?: EventLogRow): EventLogRow[] {
+    async getChildren(row?: EventLogRow): Promise<EventLogRow[]> {
         if (row) {
             return [];
+        }
+        // Render buffered events immediately so a mid-session disconnect keeps
+        // the ring visible instead of dropping back to the loading bar. Only
+        // gate on the connection (showing the native loading bar) during the
+        // initial load, when nothing has been buffered yet.
+        if (this.entries.length === 0) {
+            await this.whenConnected();
+            if (!this.connected && this.entries.length === 0) {
+                return [];
+            }
         }
         return buildEventLogRows(this.entries);
     }
@@ -158,6 +154,6 @@ export class EventLogTreeProvider
         this.generation++; // invalidate any in-flight seed
         this.subscription?.dispose();
         this.subscription = undefined;
-        this.emitter.dispose();
+        super.dispose();
     }
 }

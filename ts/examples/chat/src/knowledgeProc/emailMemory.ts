@@ -137,9 +137,9 @@ export function createEmailCommands(
     commands.importEmail.metadata = importEmailDef();
     async function importEmail(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, importEmailDef());
-        let sourcePath: string = namedArgs.sourcePath;
-        let isDir = isDirectoryPath(sourcePath);
-        let isJson = sourcePath.endsWith("json");
+        const sourcePath: string = namedArgs.sourcePath;
+        const isDir = isDirectoryPath(sourcePath);
+        const isJson = sourcePath.endsWith("json");
         if (isDir) {
             await indexEmails(namedArgs, sourcePath);
         } else if (isJson) {
@@ -171,7 +171,7 @@ export function createEmailCommands(
     ): Promise<void> {
         const meta = emailConvertMsgDef();
         const namedArgs = parseNamedArguments(args, meta);
-        let sourcePath: string = namedArgs.sourcePath;
+        const sourcePath: string = namedArgs.sourcePath;
         context.printer.writeInColor(chalk.cyan, "Converting message files");
         const result = await convertMsgFiles(sourcePath, io);
         if (!result.success) {
@@ -280,13 +280,13 @@ export function createEmailCommands(
     commands.emailActionItems.metadata = emailActionItemsDef();
     async function emailActionItems(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, emailActionItemsDef());
-        let tenses: string[] = [];
+        const tenses: string[] = [];
         if (namedArgs.period) {
             tenses.push(namedArgs.period);
         } else {
             tenses.push("past", "present", "future");
         }
-        for (let tense of tenses) {
+        for (const tense of tenses) {
             const actionItems = await emailActionItemsFromConversation(
                 context.emailMemory,
                 namedArgs.name,
@@ -406,7 +406,7 @@ export function createEmailCommands(
     commands.emailExportToKp.metadata = emailExportToKpDef();
     async function emailExportKp(args: string[]) {
         const namedArgs = parseNamedArguments(args, emailExportToKpDef());
-        let emailIndexPath = memoryNameToIndexPath(
+        const emailIndexPath = memoryNameToIndexPath(
             "/data/testChat/knowpro/email",
             namedArgs.name,
         );
@@ -475,7 +475,7 @@ export function createEmailCommands(
                 async (filePath, index, total) => {
                     context.printer.writeProgress(index + 1, total);
 
-                    let email = await knowLib.email.loadEmailFile(filePath);
+                    const email = await knowLib.email.loadEmailFile(filePath);
                     const emailLength = email!.body.length;
                     context.printer.writeLine(
                         `${email!.sourcePath}\n${emailLength} chars`,
@@ -546,7 +546,7 @@ export function createEmailCommands(
         rootPath: string,
         fileNames: string[],
     ): Promise<string[]> {
-        let timestampedNames: dateTime.Timestamped<string>[] = [];
+        const timestampedNames: dateTime.Timestamped<string>[] = [];
         for (const fileName of fileNames) {
             const filePath = path.join(rootPath, fileName);
             const email = await knowLib.email.loadEmailFile(filePath);

@@ -26,7 +26,7 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
      * Sanitize and clamp the timeout value to a safe range
      */
     private sanitizeTimeout(timeout: any): number {
-        let t = Number(timeout);
+        const t = Number(timeout);
         if (!Number.isFinite(t) || t < this.minTimeout) {
             return this.defaultTimeout;
         }
@@ -313,7 +313,7 @@ export class BrowserContentDownloader implements ContentDownloadAdapter {
         html: string,
         options: ProcessingOptions = {},
     ): Promise<{ html: string; text: string }> {
-        let processedHtml = html;
+        const processedHtml = html;
         let textContent = "";
 
         if (options.extractText) {

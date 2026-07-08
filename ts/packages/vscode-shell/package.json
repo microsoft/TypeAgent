@@ -77,6 +77,11 @@
         "category": "TypeAgent"
       },
       {
+        "command": "vscode-shell.importCopilotSessions",
+        "title": "Import Copilot Sessions",
+        "category": "TypeAgent"
+      },
+      {
         "command": "vscode-shell.clearChat",
         "title": "Clear Chat View",
         "category": "TypeAgent"
@@ -114,6 +119,11 @@
           "type": "number",
           "default": 8999,
           "description": "Port for the agent server when auto-starting"
+        },
+        "typeagent.serverStartCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Shell command used by the \"Start server\" recovery action (shown when auto-reconnect stops) to launch the TypeAgent agent server. Runs in an integrated terminal at the workspace root. Example: cd ts/packages/agentServer/server && pnpm run start"
         }
       }
     },
@@ -198,6 +208,7 @@
     "@typeagent/core": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
+    "@typeagent/websocket-utils": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "ansi_up": "^6.0.6",
     "chat-ui": "workspace:*",

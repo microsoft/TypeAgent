@@ -31,7 +31,6 @@ import { extractMessageText } from "../shared/message-formatter.js";
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function stripAnsi(text: string): string {
-    // eslint-disable-next-line no-control-regex
     return text.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
@@ -91,27 +90,36 @@ class TypeAgentMcpServer {
     }
 
     private registerTools(): void {
-        this.server.tool(
+        this.server.registerTool(
             "typeagent-processCommand",
-            "Send a natural language command to TypeAgent for processing. " +
-                "Use this for action requests like scheduling meetings, sending emails, " +
-                "playing music, controlling the browser, managing lists, etc. " +
-                "Do NOT use this for general knowledge questions. " +
-                "CRITICAL: Preserve special prefixes EXACTLY as written - do NOT strip them: " +
-                "'learn:', 'dev:', 'record:', 'dev: learn:'. " +
-                "These are TypeAgent directives that trigger special behavior (e.g., flow recording). " +
-                "If user says 'learn: create a playlist', pass 'learn: create a playlist' - NOT just 'create a playlist'. " +
-                "IMPORTANT: Always display the FULL output to the user exactly as returned. " +
-                "Do NOT summarize, truncate, or paraphrase the tool result. " +
-                "Present it in a code block if it contains a list or structured data.",
             {
-                command: z
-                    .string()
-                    .describe(
-                        "The natural language command to execute, including any special prefixes like 'learn:', 'dev:', 'record:'",
-                    ),
+                title: "TypeAgent Command Processor",
+                description:
+                    "Send a natural language command to TypeAgent for processing. " +
+                    "Use this for action requests like scheduling meetings, sending emails, " +
+                    "playing music, controlling the browser, managing lists, etc. " +
+                    "Do NOT use this for general knowledge questions. " +
+                    "CRITICAL: Preserve special prefixes EXACTLY as written - do NOT strip them: " +
+                    "'learn:', 'dev:', 'record:', 'dev: learn:'. " +
+                    "These are TypeAgent directives that trigger special behavior (e.g., flow recording). " +
+                    "If user says 'learn: create a playlist', pass 'learn: create a playlist' - NOT just 'create a playlist'. " +
+                    "IMPORTANT: Always display the FULL output to the user exactly as returned. " +
+                    "Do NOT summarize, truncate, or paraphrase the tool result. " +
+                    "Present it in a code block if it contains a list or structured data.",
+                inputSchema: z.object({
+                    command: z
+                        .string()
+                        .describe(
+                            "The natural language command to execute, including any special prefixes like 'learn:', 'dev:', 'record:'",
+                        ),
+                }),
+                annotations: {
+                    displayVerbatim: true,
+                } as Record<string, unknown>,
+                _meta: {
+                    "com.github/displayVerbatim": true,
+                },
             },
-            { displayVerbatim: true } as Record<string, unknown>,
             async (params, extra) =>
                 this.processCommand(params.command, extra as ToolExtra),
         );

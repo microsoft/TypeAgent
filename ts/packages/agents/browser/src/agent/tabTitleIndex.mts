@@ -9,7 +9,11 @@ import {
     ScoredItem,
     NameValue,
 } from "typeagent";
-import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
+import {
+    TextEmbeddingModel,
+    openai,
+    isEmbeddingAvailable,
+} from "@typeagent/aiclient";
 
 export interface TabTitleIndex {
     addOrUpdate(title: string, tabId: number): Promise<void>;
@@ -23,11 +27,14 @@ export interface TabTitleIndex {
 
 export function createTabTitleIndex() {
     let tabEmbeddings: Record<number, NormalizedEmbedding> = {};
-    let embeddingModel: TextEmbeddingModel;
-
-    const aiSettings = openai.apiSettingsFromEnv(openai.ModelType.Embedding);
-
-    embeddingModel = openai.createEmbeddingModel(aiSettings);
+    // Undefined when no embedding provider is configured; tab-title fuzzy
+    // search is then disabled and returns no matches instead of failing.
+    const embeddingModel: TextEmbeddingModel | undefined =
+        isEmbeddingAvailable()
+            ? openai.createEmbeddingModel(
+                  openai.apiSettingsFromEnv(openai.ModelType.Embedding),
+              )
+            : undefined;
 
     return {
         addOrUpdate,
@@ -37,7 +44,7 @@ export function createTabTitleIndex() {
     };
 
     async function addOrUpdate(title: string, tabId: number) {
-        if (!title) {
+        if (!title || embeddingModel === undefined) {
             return;
         }
 
@@ -59,6 +66,9 @@ export function createTabTitleIndex() {
         query: string | NormalizedEmbedding,
         maxMatches: number,
     ): Promise<ScoredItem<NameValue<number>>[]> {
+        if (embeddingModel === undefined) {
+            return [];
+        }
         const embeddings = Object.values(tabEmbeddings);
         const tabIds = Object.keys(tabEmbeddings);
 

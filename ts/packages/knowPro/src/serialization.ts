@@ -62,13 +62,26 @@ export async function readConversationDataFromFile(
     if (!jsonData) {
         return undefined;
     }
-    let fileData: ConversationFileData = {
+    const fileData: ConversationFileData = {
         jsonData: jsonData,
         binaryData: {},
     };
     validateFileData(fileData, embeddingSize);
     let embeddings: Float32Array[] | undefined;
-    if (embeddingSize && embeddingSize > 0) {
+    const embeddingsCompatible = arePersistedEmbeddingsCompatible(
+        fileData,
+        embeddingSize,
+    );
+    if (
+        !embeddingsCompatible &&
+        getStoredEmbeddingSize(fileData) !== undefined
+    ) {
+        console.warn(
+            `knowPro: persisted embeddings (size ${getStoredEmbeddingSize(fileData)}) are incompatible with the current embedding model (size ${embeddingSize ?? "none"}). Dropping stored vectors; affected indexes will rebuild.`,
+        );
+        dropPersistedEmbeddings(fileData.jsonData);
+    }
+    if (embeddingsCompatible && embeddingSize && embeddingSize > 0) {
         const embeddingsBuffer = await readFile(
             path.join(dirPath, baseFileName + EmbeddingFileSuffix),
         );
@@ -90,16 +103,30 @@ export async function readConversationDataFromBuffer(
         return undefined;
     }
     let embeddings: Float32Array[] | undefined;
-    if (embeddingSize && embeddingSize > 0) {
-        if (embeddingsBuffer) {
-            embeddings = deserializeEmbeddings(embeddingsBuffer, embeddingSize);
-        }
-    }
-    let fileData: ConversationFileData = {
+    const fileData: ConversationFileData = {
         jsonData: JSON.parse(jsonData),
-        binaryData: { embeddings },
+        binaryData: {},
     };
     validateFileData(fileData);
+    const embeddingsCompatible = arePersistedEmbeddingsCompatible(
+        fileData,
+        embeddingSize,
+    );
+    if (
+        !embeddingsCompatible &&
+        getStoredEmbeddingSize(fileData) !== undefined
+    ) {
+        console.warn(
+            `knowPro: persisted embeddings (size ${getStoredEmbeddingSize(fileData)}) are incompatible with the current embedding model (size ${embeddingSize ?? "none"}). Dropping stored vectors; affected indexes will rebuild.`,
+        );
+        dropPersistedEmbeddings(fileData.jsonData);
+    }
+    if (embeddingsCompatible && embeddingSize && embeddingSize > 0) {
+        if (embeddingsBuffer) {
+            embeddings = deserializeEmbeddings(embeddingsBuffer, embeddingSize);
+            fileData.binaryData.embeddings = embeddings;
+        }
+    }
     fileData.jsonData.fileHeader ??= createFileHeader();
     return fromConversationFileData(fileData);
 }
@@ -154,15 +181,63 @@ function validateFileData(
     if (fileData.jsonData === undefined) {
         throw new Error(`${Error_FileCorrupt}: Missing json data`);
     }
-    if (expectedEmbeddingSize && fileData.jsonData.embeddingFileHeader) {
-        const actualEmbeddingSize =
+}
+
+/**
+ * The persisted embedding size, if the file records it.
+ */
+function getStoredEmbeddingSize(
+    fileData: ConversationFileData,
+): number | undefined {
+    if (fileData.jsonData?.embeddingFileHeader) {
+        return (
             fileData.jsonData.embeddingFileHeader.modelMetadata
-                ?.embeddingSize ?? modelMetadata_ada002().embeddingSize;
-        if (expectedEmbeddingSize !== actualEmbeddingSize) {
-            throw new Error(
-                `File has embeddings of size ${actualEmbeddingSize}, expected size ${expectedEmbeddingSize}`,
-            );
-        }
+                ?.embeddingSize ?? modelMetadata_ada002().embeddingSize
+        );
+    }
+    return undefined;
+}
+
+/**
+ * Returns true when the persisted embeddings can be loaded under the current
+ * embedding model. Incompatible (different-dimension) or absent expectations
+ * mean we must NOT load the persisted vectors.
+ *
+ * Persisted embedding indexes are fixed-dimension. When a self-host user
+ * switches embedding providers (e.g. Azure 1536-d -> local 384-d), the stored
+ * vectors are unusable. Rather than throw at load, we drop the stale vectors
+ * and let the affected indexes rebuild / degrade.
+ */
+function arePersistedEmbeddingsCompatible(
+    fileData: ConversationFileData,
+    expectedEmbeddingSize?: number | undefined,
+): boolean {
+    if (!expectedEmbeddingSize || expectedEmbeddingSize <= 0) {
+        // No embedding model available now: cannot use persisted vectors.
+        return false;
+    }
+    const storedSize = getStoredEmbeddingSize(fileData);
+    if (storedSize === undefined) {
+        return true;
+    }
+    return storedSize === expectedEmbeddingSize;
+}
+
+/**
+ * Clear persisted embedding vectors and their associated text so downstream
+ * deserialization sees consistent (empty) embedding indexes. The indexes will
+ * be repopulated the next time the conversation is indexed.
+ */
+function dropPersistedEmbeddings(jsonData: ConversationJsonData): void {
+    if (jsonData.relatedTermsIndexData?.textEmbeddingData) {
+        jsonData.relatedTermsIndexData.textEmbeddingData = undefined;
+    }
+    if (jsonData.messageIndexData?.indexData) {
+        jsonData.messageIndexData.indexData = undefined;
+    }
+    if (jsonData.embeddingFileHeader) {
+        jsonData.embeddingFileHeader.relatedCount = undefined;
+        jsonData.embeddingFileHeader.messageCount = undefined;
     }
 }
 
@@ -170,7 +245,7 @@ function toConversationFileData(
     conversationData: IConversationDataWithIndexes,
     modelMeta?: EmbeddingModelMetadata,
 ): ConversationFileData {
-    let fileData: ConversationFileData = {
+    const fileData: ConversationFileData = {
         jsonData: {
             ...conversationData,
             fileHeader: createFileHeader(),
@@ -226,7 +301,7 @@ function fromConversationFileData(
     fileData: ConversationFileData,
 ): IConversationDataWithIndexes {
     // TODO: Remove this temporary backward compat. All future files should have proper headers
-    let embeddingFileHeader = fileData.jsonData.embeddingFileHeader ?? {
+    const embeddingFileHeader = fileData.jsonData.embeddingFileHeader ?? {
         relatedCount:
             fileData.jsonData.relatedTermsIndexData?.textEmbeddingData
                 ?.textItems.length,

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=af1ae06bd3741d5bb9baf4f72e0abcc00e0865bd4c0e35752dfbde90289e85d2 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6f665b00141157344045cb3fe2eaa9b39848c96d4b42f2053bfe3d46aa425a6b -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # schema-author — AI-generated documentation
@@ -12,52 +12,57 @@
 
 ## Overview
 
-The `schema-author` package is a TypeScript library designed for creating intents and associated schemas. It leverages structured prompting and large language models (LLMs) to generate variations of user utterances and possible utterances for a given schema. This package is particularly useful for applications that rely on natural language processing and need to handle diverse user inputs.
+The `schema-author` package is a TypeScript library designed to assist in creating intents and their associated schemas. It leverages structured prompting and large language models (LLMs) to generate variations of user utterances and possible utterances for a given schema. This functionality is particularly useful for applications that rely on natural language processing and need to handle diverse user inputs effectively.
 
 ## What it does
 
-The `schema-author` package provides functionality to load and manipulate action schemas, as well as generate variations of phrases that can target these schemas. It includes the following capabilities:
+The `schema-author` package provides tools for working with action schemas and generating natural language variations. Its key features include:
 
-- **Schema Loading**: The `loadActionSchema` function allows loading a schema from a file path or a `SchemaParser` instance, and retrieves the schema text along with any referenced types.
-- **Phrase Generation**: The `generateActionPhrases` function generates phrases that can be mapped to a given action schema, using a specified variation type and language model.
+- **Schema Loading**: The `loadActionSchema` function allows you to load and process action schemas from a file path or a `SchemaParser` instance. It retrieves the schema text and any referenced types, enabling structured intent creation.
+- **Phrase Generation**: The `generateActionPhrases` function generates natural language phrases that align with a given action schema. This includes support for specifying variation types, language models, and additional parameters like example phrases or language preferences.
 
-These functionalities are essential for creating and managing structured intents in applications that rely on natural language processing. The package integrates with other workspace packages such as `@typeagent/action-schema` for schema parsing and `typeagent` for type definitions and utilities.
+These features make the package a valuable tool for developers building systems that require structured natural language understanding, such as chatbots, virtual assistants, or other AI-driven applications. The package integrates with other components in the TypeAgent monorepo, such as `@typeagent/action-schema` for schema parsing and `typeagent` for type definitions and utilities.
 
 ## Setup
 
-To set up the `schema-author` package, ensure you have the necessary dependencies installed. The package relies on other workspace packages such as `@typeagent/action-schema`, `aiclient`, and `typeagent`, as well as the external `typechat` package.
+To use the `schema-author` package, follow these steps:
 
-1. Install the dependencies using `pnpm`:
+1. **Install Dependencies**: Use `pnpm` to install the required dependencies. Run the following command in the root of the monorepo:
 
    ```sh
    pnpm install
    ```
 
-2. Ensure you have the required environment variables and API keys set up as described in the hand-written README.
+2. **Workspace Dependencies**: Ensure that the related workspace packages (`@typeagent/action-schema`, `@typeagent/aiclient`, and `typeagent`) are properly linked and installed. These packages provide essential functionality for schema parsing and interaction with language models.
 
-For detailed setup instructions, see the hand-written README.
+3. **External Dependencies**: The package also depends on the `typechat` library. Ensure it is installed and available in your environment.
+
+For additional setup details, refer to the hand-written README.
 
 ## Key Files
 
-The `schema-author` package is structured into several key files:
+The `schema-author` package is organized into the following key files:
 
-- **[index.ts](./src/index.ts)**: This file exports the main functionalities of the package, including schema loading and variation generation.
-- **[schema.ts](./src/schema.ts)**: Contains the `loadActionSchema` function, which loads and processes action schemas.
-- **[variationGenerator.ts](./src/variationGenerator.ts)**: Implements the `generateActionPhrases` function, which generates variations of phrases based on the provided schema and language model.
-- **[tsconfig.json](./src/tsconfig.json)**: Configuration file for TypeScript compiler options.
+- **[index.ts](./src/index.ts)**: Serves as the main entry point for the package. It exports the primary functions, including `loadActionSchema` and `generateActionPhrases`.
+- **[schema.ts](./src/schema.ts)**: Contains the implementation of the `loadActionSchema` function. This file is responsible for loading and processing action schemas, including handling referenced types.
+- **[variationGenerator.ts](./src/variationGenerator.ts)**: Implements the `generateActionPhrases` function. This file handles the logic for generating natural language variations based on a schema, using a language model and optional parameters.
+- **[tsconfig.json](./src/tsconfig.json)**: Defines the TypeScript compiler configuration for the package, including output directory settings.
 
-The package integrates with other workspace packages such as `@typeagent/action-schema` for schema parsing and `typeagent` for type definitions and utilities.
+These files collectively provide the core functionality of the package, enabling schema manipulation and phrase generation.
 
 ## How to extend
 
 To extend the `schema-author` package, follow these steps:
 
-1. **Start with the main files**: Open [index.ts](./src/index.ts) to understand the exported functions and their usage.
-2. **Add new schema functionalities**: If you need to add new schema-related functionalities, modify or add functions in [schema.ts](./src/schema.ts).
-3. **Enhance phrase generation**: To enhance or customize phrase generation, update [variationGenerator.ts](./src/variationGenerator.ts) with new logic or parameters.
-4. **Test your changes**: Ensure your changes are well-tested. Add or update tests in the appropriate test files to cover new functionalities.
+1. **Understand the Existing Code**: Start by reviewing [index.ts](./src/index.ts) to understand the exported functions and their usage. This will give you an overview of the package's capabilities.
 
-By following these steps, you can effectively extend the capabilities of the `schema-author` package to suit your application's needs.
+2. **Add New Schema Features**: If you need to introduce new schema-related functionality, modify or add functions in [schema.ts](./src/schema.ts). This file is the primary location for schema processing logic.
+
+3. **Enhance Phrase Generation**: To customize or expand the phrase generation capabilities, update [variationGenerator.ts](./src/variationGenerator.ts). You can add new parameters, adjust the generation logic, or integrate additional language model features.
+
+4. **Test Your Changes**: Ensure that your modifications are thoroughly tested. Add or update test cases to cover the new functionality and verify that existing features remain unaffected.
+
+By following these steps, you can adapt the `schema-author` package to meet the specific requirements of your application or project.
 
 ## Reference
 
@@ -65,21 +70,21 @@ By following these steps, you can effectively extend the capabilities of the `sc
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
 Workspace:
 
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
-- [aiclient](../../packages/aiclient/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [typeagent](../../packages/typeagent/README.md)
 
 External: `typechat`
 
 ### Used by
 
-- [schema-studio](../../examples/schemaStudio/README.md)
+- schema-studio
 
 ### Files of interest
 
@@ -87,6 +92,6 @@ External: `typechat`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.903Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter schema-author docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter schema-author docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

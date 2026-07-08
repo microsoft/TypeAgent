@@ -33,7 +33,7 @@ export async function getTabHTMLFragments(
     const frames = await chrome.webNavigation.getAllFrames({
         tabId: targetTab.id!,
     });
-    let htmlFragments: HTMLFragment[] = [];
+    const htmlFragments: HTMLFragment[] = [];
     if (frames) {
         for (let i = 0; i < frames?.length; i++) {
             if (frames[i].url == "about:blank") {

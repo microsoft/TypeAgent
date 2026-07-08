@@ -224,7 +224,7 @@ export function printDetailedMarkdownTable(
             )
             .join(", ");
 
-        let res: string = `| ${chalk.cyan(request.padEnd(34))} | ${chalk.yellow(
+        const res: string = `| ${chalk.cyan(request.padEnd(34))} | ${chalk.yellow(
             actualActionName.padEnd(24),
         )} | ${chalk.green(rank.toFixed(2))}    | ${chalk.magenta(meanScore.toFixed(2))}     | ${chalk.magenta(
             medianScore.toFixed(2),
@@ -290,13 +290,13 @@ export function loadCommentsActionSchema(
     schema.loadSchema(filePath);
     const typeNames = schema.actionTypeNames();
 
-    let actionSchemaComments: Record<string, string> = {};
+    const actionSchemaComments: Record<string, string> = {};
     for (const type of typeNames) {
         const node = schema.openActionNode(type);
         if (node !== undefined) {
-            let actionName = getActionName(node);
+            const actionName = getActionName(node);
             if (actionName !== "") {
-                let comments = node.leadingComments?.join(" ") ?? "";
+                const comments = node.leadingComments?.join(" ") ?? "";
                 actionSchemaComments[actionName] = comments;
             }
         }

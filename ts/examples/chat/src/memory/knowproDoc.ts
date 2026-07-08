@@ -109,7 +109,7 @@ export async function createKnowproDocMemoryCommands(
     commands.kpDocLoad.metadata = docLoadDef();
     async function docLoad(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, docLoadDef());
-        let memoryFilePath = sourcePathToMemoryIndexPath(namedArgs.filePath);
+        const memoryFilePath = sourcePathToMemoryIndexPath(namedArgs.filePath);
         if (!memoryFilePath) {
             context.printer.writeError("No filepath or name provided");
             return;
@@ -154,7 +154,7 @@ export async function createKnowproDocMemoryCommands(
             return;
         }
         let html = "";
-        let srcUrl = toUrl(filePath);
+        const srcUrl = toUrl(filePath);
         if (srcUrl !== undefined) {
             const htmlResult = await getHtml(srcUrl.href);
             if (!htmlResult.success) {
@@ -169,7 +169,7 @@ export async function createKnowproDocMemoryCommands(
         } else {
             html = await readAllText(filePath);
         }
-        let markdown = tp.htmlToMarkdown(html, namedArgs.rootTag);
+        const markdown = tp.htmlToMarkdown(html, namedArgs.rootTag);
         context.printer.writeLine(markdown);
 
         const destPath = namedArgs.destPath
@@ -200,7 +200,7 @@ export async function createKnowproDocMemoryCommands(
             );
         }
         const maxMessages = context.docMemory.messages.length;
-        let progress = new ProgressBar(context.printer, maxMessages);
+        const progress = new ProgressBar(context.printer, maxMessages);
         const eventHandler = createIndexingEventHandler(
             context.printer,
             progress,

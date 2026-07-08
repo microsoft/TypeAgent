@@ -7,6 +7,11 @@ import type {
     SandboxStatus,
 } from "@typeagent/core/sandbox";
 import type { SandboxState } from "@typeagent/core/events";
+import {
+    noteTooltip,
+    type TooltipField,
+    type TooltipModel,
+} from "./tooltipModel.js";
 
 /**
  * Pure, vscode-free mapping from sandbox status to tree-node descriptors.
@@ -24,7 +29,7 @@ export interface SandboxTreeNode {
     id: string;
     label: string;
     description?: string;
-    tooltip?: string;
+    tooltip?: TooltipModel;
     /** Drives `when` clauses for context-menu contributions. */
     contextValue?: string;
     /** Present on `sandbox` and `agent` nodes. */
@@ -50,7 +55,9 @@ export function buildSandboxRootNodes(
                 id: EMPTY_ROOT_ID,
                 label: "No sandboxes running",
                 description: "Start one to begin",
-                tooltip: "Use “TypeAgent Studio: Start sandbox” to create one.",
+                tooltip: noteTooltip(
+                    "Use \u201cTypeAgent Studio: Start sandbox\u201d to create one.",
+                ),
                 hasChildren: false,
             },
         ];
@@ -110,12 +117,13 @@ function toAgentNode(
     agent: SandboxAgentInfo,
 ): SandboxTreeNode {
     const fingerprint = formatHashFingerprint(agent.schemaHash);
-    const health = formatHealth(agent.health);
     return {
         kind: "agent",
         id: `agent:${sandboxId}:${agent.name}`,
         label: agent.name,
-        description: fingerprint ? `${health} \u00b7 ${fingerprint}` : health,
+        // Health is conveyed by the row icon's colour, so the description carries
+        // just the schema fingerprint (when the agent has one on disk).
+        description: fingerprint,
         tooltip: buildAgentTooltip(agent),
         contextValue: "sandboxAgent",
         sandboxId,
@@ -156,36 +164,50 @@ export function formatHealth(health: HealthStatus): string {
     }
 }
 
-function buildSandboxTooltip(sandbox: SandboxStatus): string {
-    const lines = [
-        `Sandbox: ${sandbox.id}`,
-        `Mode: ${sandbox.mode}`,
-        `State: ${formatSandboxState(sandbox.state)}`,
-        `Agents: ${sandbox.agents.length}`,
+function buildSandboxTooltip(sandbox: SandboxStatus): TooltipModel {
+    const fields: TooltipField[] = [
+        { label: "Sandbox", value: sandbox.id, mono: true },
+        { label: "Mode", value: sandbox.mode },
+        { label: "State", value: formatSandboxState(sandbox.state) },
+        { label: "Agents", value: String(sandbox.agents.length) },
     ];
     if (sandbox.pid !== undefined) {
-        lines.push(`PID: ${sandbox.pid}`);
+        fields.push({ label: "PID", value: String(sandbox.pid), mono: true });
     }
     if (sandbox.startedAt !== undefined) {
-        lines.push(`Started: ${new Date(sandbox.startedAt).toISOString()}`);
+        fields.push({
+            label: "Started",
+            value: new Date(sandbox.startedAt).toISOString(),
+        });
     }
-    return lines.join("\n");
+    return { fields };
 }
 
-function buildAgentTooltip(agent: SandboxAgentInfo): string {
-    const lines = [
-        `Agent: ${agent.name}`,
-        `Health: ${formatHealth(agent.health)}`,
-        `Schema: ${formatHashFull(agent.schemaHash)}`,
-        `Grammar: ${formatHashFull(agent.grammarHash)}`,
+function buildAgentTooltip(agent: SandboxAgentInfo): TooltipModel {
+    const fields: TooltipField[] = [
+        { label: "Agent", value: agent.name },
+        { label: "Health", value: formatHealth(agent.health) },
+        {
+            label: "Schema",
+            value: formatHashFull(agent.schemaHash),
+            mono: true,
+        },
+        {
+            label: "Grammar",
+            value: formatHashFull(agent.grammarHash),
+            mono: true,
+        },
     ];
     if (agent.sourcePath) {
-        lines.push(`Source: ${agent.sourcePath}`);
+        fields.push({ label: "Source", value: agent.sourcePath, mono: true });
     }
     if (agent.loadedAt !== undefined) {
-        lines.push(`Loaded: ${new Date(agent.loadedAt).toISOString()}`);
+        fields.push({
+            label: "Loaded",
+            value: new Date(agent.loadedAt).toISOString(),
+        });
     }
-    return lines.join("\n");
+    return { fields };
 }
 
 /**

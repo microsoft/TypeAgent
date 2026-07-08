@@ -23,6 +23,7 @@ import {
     HelpPanelContent,
     formatHistorySeparatorLabel,
     type TemplateEditServices,
+    type ConnectionStatus,
 } from "chat-ui";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import {
@@ -1407,8 +1408,16 @@ export function createChatPanelClient(
             chatPanel.setDemoRunning(state !== "idle");
             chatPanel.setDemoPaused(state === "paused");
         },
-        reconnectStatusChanged(message: string | undefined): void {
-            chatPanel.setReconnectStatus(message);
+        reconnectStatusChanged(status: ConnectionStatus | undefined): void {
+            chatPanel.setConnectionStatus(status, (action) => {
+                // Manual recovery from the "stopped" banner — main owns the
+                // retry / server-start logic.
+                if (action === "retry") {
+                    void getClientAPI().reconnectRetry();
+                } else if (action === "start") {
+                    void getClientAPI().reconnectStartServer();
+                }
+            });
         },
     };
 

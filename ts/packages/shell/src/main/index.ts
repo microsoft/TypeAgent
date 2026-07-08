@@ -253,7 +253,7 @@ async function initialize() {
         });
 
         if (result && !result.canceled) {
-            let paths = result.filePaths;
+            const paths = result.filePaths;
             if (paths && paths.length > 0) {
                 const content = readFileSync(paths[0], "base64");
                 shellWindow.chatView.webContents.send(

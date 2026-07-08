@@ -32,6 +32,7 @@ export function stubInvokeHandlers(
         clearCollisions: async () => 0,
         queryRecentEvents: async () => [],
         listCorpusAgents: async () => [],
+        canValidateWildcards: async () => false,
         listCorpusEntries: async () => [],
         seedInRepoCorpus: async () => ({
             path: "/repo/ts/corpus",

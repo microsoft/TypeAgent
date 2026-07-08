@@ -5,7 +5,7 @@
 //
 // Pure function over `Neighborhood.evidence`. No I/O, no dispatcher state.
 //
-// See docs/architecture/collision-analysis.md and the plan in
+// See docs/architecture/collision/collision-analysis.md and the plan in
 // ~/.claude/plans/for-each-collision-grouping-prancy-elephant.md for the
 // design rationale. Summary:
 //   - owedTraffic: outDegree on ranker-misroute edges (default primary score)

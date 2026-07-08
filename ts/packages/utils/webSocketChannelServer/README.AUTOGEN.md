@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c0c7da38e2e6efe425e5b909f4c301bc1bd7e6634b60b8397026c241bdaf50ab -->
+<!-- AUTOGEN:DOCS:HASH:sha256=73dadfbf600f2af147e827f64b864d0c9c5f044de094acd81822fea54f1cf82a -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # websocket-channel-server — AI-generated documentation
@@ -23,7 +23,7 @@ The `websocket-channel-server` package enables the creation and management of a 
 - Enforce origin policies.
 - Handle RPC messages.
 
-This package integrates with other TypeAgent packages such as `@typeagent/agent-rpc` and `@typeagent/common-utils` to provide a comprehensive solution for RPC communication over WebSockets. It is used by several other packages within the TypeAgent monorepo, including `@typeagent/agent-server-client`, `agent-server`, and `agent-shell`.
+This package integrates with other TypeAgent packages such as `@typeagent/agent-rpc`, `@typeagent/common-utils`, and `@typeagent/websocket-utils` to provide a comprehensive solution for RPC communication over WebSockets. It is used by several other packages within the TypeAgent monorepo, including `@typeagent/agent-server-client`, `agent-server`, and `agent-shell`.
 
 ## Setup
 
@@ -32,7 +32,7 @@ To set up the `websocket-channel-server` package, follow these steps:
 1. Install the necessary dependencies:
 
    ```sh
-   pnpm install @typeagent/agent-rpc @typeagent/common-utils debug ws
+   pnpm install @typeagent/agent-rpc @typeagent/common-utils @typeagent/websocket-utils debug ws
    ```
 
 2. Ensure that the environment variables and configuration options are set up as required. Refer to the hand-written README for detailed setup instructions.
@@ -45,6 +45,7 @@ The package's architecture is centered around the WebSocket server implementatio
 
 - [index.ts](./src/index.ts): This file exports the main functionalities of the package, primarily the server implementation.
 - [server.ts](./src/server.ts): Contains the core logic for setting up and managing the WebSocket server, including handling connections and RPC channels.
+- [heartbeat.ts](./src/heartbeat.ts): Re-exports heartbeat primitives from `@typeagent/websocket-utils` for liveness checks.
 - [tsconfig.json](./src/tsconfig.json): TypeScript configuration file that sets up the compiler options and project structure.
 
 ### Key Components
@@ -85,6 +86,7 @@ Workspace:
 
 - [@typeagent/agent-rpc](../../../packages/agentRpc/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
+- [@typeagent/websocket-utils](../../../packages/utils/webSocketUtils/README.md)
 
 External: `debug`, `ws`
 
@@ -93,13 +95,15 @@ External: `debug`, `ws`
 - [@typeagent/agent-server-client](../../../packages/agentServer/client/README.md)
 - [agent-server](../../../packages/agentServer/server/README.md)
 - [agent-shell](../../../packages/shell/README.md)
+- [browser-typeagent](../../../packages/agents/browser/README.md)
+- [code-agent](../../../packages/agents/code/README.md)
 
 ### Files of interest
 
-`./src/index.ts`, `./src/server.ts`, `./src/tsconfig.json`.
+`./src/index.ts`, `./src/heartbeat.ts`, `./src/server.ts`, …and 1 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter websocket-channel-server docs:verify-links` to spot-check._
+_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter websocket-channel-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

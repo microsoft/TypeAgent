@@ -42,14 +42,14 @@ Commands (each corresponds to one PLAN Track E item; deps in italics):
 - **E.5** `grammar diff <a> <b>` - structural diff. _Needs B.4._
 
 Fixture grammars used by tests live under
-[`packages/actionGrammar/test-data`](../../../packages/actionGrammar/test-data);
+[`packages/actionGrammar/test-data`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/actionGrammar/test-data);
 the CLI does not ship its own fixtures.
 
 ## Non-scope
 
 - UI / visualization (text output only).
 - Replacing
-  [`packages/actionGrammarCompiler`](../../../packages/actionGrammarCompiler)
+  [`packages/actionGrammarCompiler`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/actionGrammarCompiler)
   CLI - that stays the canonical compile / format entry point.
 
 ## Open questions
@@ -60,7 +60,7 @@ the CLI does not ship its own fixtures.
   `--json` mandatory from E.0.
 - REPL detail (history, multi-line input, `help`) - decide during E.0
   scaffolding; default is whatever the
-  [`interactive-app`](../../../packages/interactiveApp) primitives offer
+  [`interactive-app`](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/interactiveApp) primitives offer
   out of the box.
 
 ## Verification

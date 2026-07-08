@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "description": "Dispatcher adapter: wraps the workflow engine as a TypeAgent AppAgent.",
+  "keywords": [
+    "typeagent-agent"
+  ],
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",

@@ -175,7 +175,7 @@ export function mergeAfterWildcard(
     return a === b ? a : "some";
 }
 
-// Architecture: docs/architecture/completion.md — §2 Cache Layer
+// Architecture: docs/architecture/core/completion.md — §2 Cache Layer
 export function mergeCompletionResults(
     first: CompletionResult | undefined,
     second: CompletionResult | undefined,

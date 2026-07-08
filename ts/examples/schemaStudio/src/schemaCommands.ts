@@ -149,12 +149,12 @@ async function getTypeChatResponse(
     id: string,
 ): Promise<Result<CreateSchemaAction>> {
     // Create Model instance
-    let chatModel = createModel();
+    const chatModel = createModel();
 
     // Create Chat History
-    let maxContextLength = 8196;
-    let maxWindowLength = 30;
-    let chatHistory: PromptSection[] = [];
+    const maxContextLength = 8196;
+    const maxWindowLength = 30;
+    const chatHistory: PromptSection[] = [];
 
     // create TypeChat object
     const chat = createTypeChat<CreateSchemaAction>(
@@ -184,7 +184,7 @@ function createModel(): ChatModelWithStreaming {
         // Create default model
         apiSettings = openai.apiSettingsFromEnv();
     }
-    let completionSettings: CompletionSettings = {
+    const completionSettings: CompletionSettings = {
         temperature: 1.0,
         // Max response tokens
         max_tokens: 1000,

@@ -209,7 +209,7 @@ export async function createKnowproCommands(
         if (queryTerms && queryTerms.length > 0) {
             args = queryTerms;
         }
-        let [termArgs, namedArgs] = parseFreeAndNamedArguments(
+        const [termArgs, namedArgs] = parseFreeAndNamedArguments(
             args,
             commandDef,
         );
@@ -403,7 +403,7 @@ export async function createKnowproCommands(
             args = queryTerms;
         }
         delete commandDef.args!.query;
-        let [termArgs, namedArgs] = parseFreeAndNamedArguments(
+        const [termArgs, namedArgs] = parseFreeAndNamedArguments(
             args,
             commandDef,
         );
@@ -556,7 +556,7 @@ export async function createKnowproCommands(
                     conversation.semanticRefs,
                     (sr) => sr.knowledgeType === "entity",
                 );
-                let concreteEntities = entityRefs.map(
+                const concreteEntities = entityRefs.map(
                     (e) => e.knowledge as knowLib.ConcreteEntity,
                 );
                 context.printer.writeEntities(concreteEntities);
@@ -613,7 +613,7 @@ export async function createKnowproCommands(
                     conversation.semanticRefs,
                     (sr) => sr.knowledgeType === "tag",
                 );
-                let tags = tagRefs.map((t) => t.knowledge as kp.Tag);
+                const tags = tagRefs.map((t) => t.knowledge as kp.Tag);
                 if (tags.length > 0) {
                     context.printer.writeHeading("Tags");
                     context.printer.writeTags(tags);
@@ -709,7 +709,7 @@ export async function createKnowproCommands(
             }
         }
         context.printer.writeHeading("Message Abstract");
-        let topicMatches = semanticRefsInMessage.get("topic");
+        const topicMatches = semanticRefsInMessage.get("topic");
         if (topicMatches && topicMatches.length > 0) {
             const topics = kp.getDistinctTopicMatches(
                 semanticRefs,
@@ -723,7 +723,7 @@ export async function createKnowproCommands(
             context.printer.writeLine();
         }
 
-        let entityMatches = semanticRefsInMessage.get("entity");
+        const entityMatches = semanticRefsInMessage.get("entity");
         if (entityMatches && entityMatches.length > 0) {
             const entities = kp.getDistinctEntityMatches(
                 semanticRefs,
@@ -804,7 +804,7 @@ export async function createKnowproCommands(
             );
             return;
         }
-        let searchTerm: kp.SearchTerm = { term: { text: namedArgs.term } };
+        const searchTerm: kp.SearchTerm = { term: { text: namedArgs.term } };
         searchTerm.relatedTerms = await relatedTerms.lookupTerm(
             searchTerm.term.text,
         );
@@ -860,7 +860,7 @@ export async function createKnowproCommands(
     function createAnswerOptions(
         namedArgs: NamedArgs,
     ): kp.AnswerContextOptions {
-        let topK = namedArgs.knowledgeTopK;
+        const topK = namedArgs.knowledgeTopK;
         if (topK === undefined) {
             return {};
         }

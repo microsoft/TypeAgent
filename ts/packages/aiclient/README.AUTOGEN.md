@@ -3,81 +3,98 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ac5837025b8a56a960b79349c25cdbaa2e487d26914e128a9109a27585e8775b -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6cf63dd38c433bfb10a4c7dc0f0080e4b060febddc940586f7a6613c1f23accc -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# aiclient — AI-generated documentation
+# @typeagent/aiclient — AI-generated documentation
 
 > 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
-The `aiclient` package is a TypeScript library designed to facilitate interactions with various AI APIs used by the Microsoft AI Systems team. It is primarily intended for sample agents and examples within the TypeAgent project.
+The `@typeagent/aiclient` package is a TypeScript library designed to interact with AI APIs, including OpenAI endpoints (both Azure-hosted and OpenAI-hosted) and Bing search APIs. It is primarily used within the TypeAgent project for sample agents and examples, providing tools to manage API settings, authentication, and multi-region endpoint pools.
 
 ## What it does
 
-The `aiclient` package supports calling AI endpoints and other REST services, specifically:
+The `aiclient` package provides a range of capabilities for interacting with AI services:
 
-- OpenAI model endpoints, both on Azure and OpenAI.
-- Bing search APIs.
+- **OpenAI API Support**: Includes functionality for accessing OpenAI models hosted on Azure and OpenAI, such as GPT-4 and embedding models.
+- **Bing API Support**: Provides tools for interacting with Bing search APIs.
+- **Multi-region Endpoint Pools**: Implements a mechanism to distribute requests across multiple endpoints, mitigating throttling and ensuring high availability.
+- **Environment-based Configuration**: Reads settings such as API keys and endpoints from environment variables, simplifying integration with existing infrastructure.
+- **Authentication**: Supports Azure identity-based authentication and API key-based authentication.
 
-The library includes functionality for managing settings required to call these services, which are typically sourced from environment variables. It also features multi-region endpoint pools to handle API requests efficiently, rotating among endpoints to mitigate throttling and ensure high availability.
+### Multi-region Endpoint Pools
 
-### Multi-region endpoint pools
+The package's endpoint pool mechanism is designed to handle throttling and regional failures gracefully. It rotates requests among endpoints based on priority tiers and health status. Key features include:
 
-The package includes a sophisticated mechanism for managing multi-region endpoint pools. Chat, embedding, and image factories resolve each model into an endpoint pool — a list of endpoints (one per region + variant) that the client rotates among on 429 / 5xx / timeout errors. This helps to survive single-region throttling without user-visible stalls and keeps a PTU reservation preferred when one is configured.
+- **Priority-based Selection**: Endpoints are grouped into priority tiers, with the lowest-priority tier containing healthy endpoints being selected.
+- **Cooldown Mechanism**: Endpoints that return transient errors (e.g., 429, 5xx) are temporarily marked as unavailable and excluded from selection.
+- **Custom Pool Configuration**: Users can override the default endpoint discovery and priority settings using environment variables.
 
-### Selection algorithm
+### Debugging and Logging
 
-Endpoints are grouped by priority tiers, with random selection within each tier. The lowest-priority tier that still has at least one healthy (non-cooling-down) member wins; within that tier, one member is picked uniformly at random. This ensures that multiple client processes spread across the regions in that tier instead of stampeding the same endpoint.
-
-On failure:
-
-- **429**: Parses `Retry-After`, marks the member as cooling for `max(Retry-After, base × 2^consecutive_429s)`, capped at 120 seconds, and rotates to the next healthy member.
-- **5xx / timeout / network error**: Applies a floor cooldown of 5 seconds and rotates.
-- **Non-transient 4xx** (e.g., 401): Returns immediately without rotating.
+The package includes debug logging capabilities for monitoring endpoint selection, rotation, and retry behavior. Enabling the `typeagent:pool` namespace provides detailed logs for troubleshooting.
 
 ## Setup
 
-To use the `aiclient` package, certain environment variables need to be set up. These include:
+To use the `@typeagent/aiclient` package, you need to configure the following environment variables:
+
+- **`TYPEAGENT_COPILOT_SDK_LOG_LEVEL`**: Sets the log level for the Copilot SDK. Valid values include `none`, `error`, `warning`, `info`, `debug`, and `all`.
+
+Additionally, the package relies on a set of environment variables for endpoint pools and API keys. These are dynamically discovered based on the model and region. For example:
 
 - `AZURE_OPENAI_ENDPOINT_<MODEL>_<REGION>`: Specifies the endpoint for a given model and region.
 - `AZURE_OPENAI_API_KEY_<MODEL>_<REGION>`: Specifies the API key for a given model and region.
 - `BING_API_KEY`: Specifies the API key for Bing search APIs.
 
-For detailed setup instructions, including how to provision more endpoints and configure multi-region deploy and secret-sync tooling, see the hand-written README.
+Refer to the hand-written README for detailed instructions on provisioning endpoints and configuring multi-region deployments.
 
 ## Key Files
 
-The `aiclient` package is organized into several key files, each responsible for different aspects of the library:
+The `aiclient` package is organized into several key files, each responsible for specific functionality:
 
-- [index.ts](./src/index.ts): The main entry point, exporting various modules and functions.
-- [auth.ts](./src/auth.ts): Handles authentication, including token management and Azure credentials.
-- [azureSettings.ts](./src/azureSettings.ts): Manages settings for Azure OpenAI services, loading them from environment variables.
-- [bing.ts](./src/bing.ts): Contains functions and types for interacting with Bing search APIs.
-- [common.ts](./src/common.ts): Utility functions for retrieving and managing environment settings.
-- [endpointPool.ts](./src/endpointPool.ts): Manages endpoint pools, including selection algorithms and cooldown mechanisms.
-- [modelResource.ts](./src/modelResource.ts): Functions for managing model resources, including concurrency settings.
-- [models.ts](./src/models.ts): Types and settings for various AI models, including completion settings and JSON schema definitions.
+- **[index.ts](./src/index.ts)**: The main entry point, exporting core modules and functions.
+- **[auth.ts](./src/auth.ts)**: Handles authentication, including Azure identity and token management.
+- **[azureSettings.ts](./src/azureSettings.ts)**: Manages settings for Azure-hosted OpenAI services, including API keys and endpoint configurations.
+- **[bing.ts](./src/bing.ts)**: Provides tools for interacting with Bing search APIs.
+- **[common.ts](./src/common.ts)**: Contains utility functions for managing environment variables and settings.
+- **[endpointPool.ts](./src/endpointPool.ts)**: Implements the multi-region endpoint pool mechanism, including selection and cooldown logic.
+- **[modelResource.ts](./src/modelResource.ts)**: Manages model-specific resources, such as concurrency limits.
+- **[models.ts](./src/models.ts)**: Defines types and settings for AI models, including completion settings and JSON schema definitions.
+- **[apiSettingsFromConfig.ts](./src/apiSettingsFromConfig.ts)**: Provides typed-config entry points for resolving API settings from a structured configuration.
 
 ## How to extend
 
-To extend the `aiclient` package, follow these steps:
+To extend the `@typeagent/aiclient` package, follow these steps:
 
-1. **Identify the area to extend**: Determine which part of the library you need to modify or add functionality to. For example, if you need to add support for a new AI model, you might start with [models.ts](./src/models.ts).
+1. **Identify the Area to Extend**:
 
-2. **Modify or add code**: Open the relevant file and implement your changes. Follow the existing patterns and structures to ensure consistency. For example, if adding a new model, define its settings and types similarly to existing models.
+   - Determine which part of the library you need to modify or enhance. For example, to add support for a new AI model, start with [models.ts](./src/models.ts).
 
-3. **Update environment variables**: If your changes require new environment variables, update the setup instructions and ensure they are correctly loaded in the relevant settings files.
+2. **Modify or Add Code**:
 
-4. **Test your changes**: Write tests to verify your modifications. You can find existing tests in the `./test` directory. Ensure your tests cover various scenarios and edge cases.
+   - Open the relevant file and implement your changes. Follow the existing patterns and conventions to maintain consistency. For example, when adding a new model, define its settings and types similarly to existing models.
 
-5. **Run tests**: Execute the tests to ensure everything works as expected. You can run the tests using the following command:
-   ```bash
-   pnpm test
-   ```
+3. **Update Environment Variables**:
 
-By following these steps, you can effectively extend the functionality of the `aiclient` package while maintaining its integrity and consistency.
+   - If your changes require new environment variables, update the setup instructions and ensure they are correctly loaded in the relevant settings files.
+
+4. **Write Tests**:
+
+   - Add tests to verify your changes. Place them in the `./test` directory, and ensure they cover various scenarios and edge cases.
+
+5. **Run Tests**:
+
+   - Execute the tests to ensure everything works as expected. Use the following command:
+     ```bash
+     pnpm test
+     ```
+
+6. **Document Your Changes**:
+   - Update the documentation to reflect your modifications, including any new environment variables or configuration options.
+
+By following these steps, you can effectively extend the functionality of the `aiclient` package while maintaining its reliability and consistency.
 
 ## Reference
 
@@ -94,7 +111,7 @@ Workspace:
 
 - [@typeagent/config](../../packages/config/README.md)
 
-External: `@azure/identity`, `@github/copilot-sdk`, `async`, `debug`, `typechat`
+External: `@azure/identity`, `@github/copilot-sdk`, `@huggingface/transformers`, `async`, `debug`, `typechat`
 
 ### Used by
 
@@ -108,14 +125,20 @@ External: `@azure/identity`, `@github/copilot-sdk`, `async`, `debug`, `typechat`
 - [agent-shell](../../packages/shell/README.md)
 - [azure-ai-foundry](../../packages/azure-ai-foundry/README.md)
 - [browser-typeagent](../../packages/agents/browser/README.md)
-- _…and 38 more workspace consumers._
+- _…and 40 more workspace consumers._
 
 ### Files of interest
 
-`./src/index.ts`, `./src/apiSettingsFromConfig.ts`, `./src/auth.ts`, …and 18 more under `./src/`.
+`./src/index.ts`, `./src/apiSettingsFromConfig.ts`, `./src/auth.ts`, …and 20 more under `./src/`.
+
+### Environment variables
+
+_1 environment variable referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+
+- `TYPEAGENT_COPILOT_SDK_LOG_LEVEL`
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.413Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter aiclient docs:verify-links` to spot-check._
+_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/aiclient docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

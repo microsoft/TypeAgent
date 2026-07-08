@@ -2,8 +2,9 @@
 // Licensed under the MIT License.
 
 import WebSocket from "ws";
+import { attachClientHeartbeat } from "@typeagent/websocket-utils/heartbeat";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
-import type { RpcChannel } from "@typeagent/agent-rpc/channel";
+import { createWebSocketRpcChannel } from "@typeagent/websocket-utils/rpcChannel";
 import type {
     StudioInfo,
     StudioServiceInvokeFunctions,
@@ -42,6 +43,8 @@ export class StudioServiceClient {
         private readonly repoRoot: string | undefined,
         private readonly endpoint: string,
         private readonly token: string | undefined,
+        /** Resolved heartbeat period; re-applied on every reconnect. `0` off. */
+        private readonly heartbeatMs: number,
     ) {}
 
     /**
@@ -65,6 +68,15 @@ export class StudioServiceClient {
         endpoint?: string;
         /** Capability token presented as `Authorization: Bearer`. */
         token?: string;
+        /**
+         * Liveness-heartbeat period in ms (default 10s). The client pings the
+         * service every period and terminates the socket if a pong hasn't
+         * arrived since the previous ping — so a silently-dropped service (an
+         * abrupt kill, a crash, or a half-open socket that never emits `close`)
+         * is detected instead of leaving a stale "connected" state. `0`
+         * disables the heartbeat. Exposed for tests.
+         */
+        heartbeatMs?: number;
     }): Promise<StudioServiceClient | undefined> {
         if (options.endpoint === undefined) {
             return undefined;
@@ -80,6 +92,8 @@ export class StudioServiceClient {
         if (options.onClose) {
             socket.on("close", options.onClose);
         }
+        const heartbeatMs = options.heartbeatMs ?? 10_000;
+        attachClientHeartbeat(socket, { intervalMs: heartbeatMs });
         const callHandlers: StudioClientCallFunctions = {
             studioEvent: (event: StudioEvent) => options.onEvent?.(event),
         };
@@ -101,6 +115,7 @@ export class StudioServiceClient {
             options.repoRoot,
             options.endpoint,
             options.token,
+            heartbeatMs,
         );
     }
 
@@ -120,6 +135,13 @@ export class StudioServiceClient {
         }
         const socket = attempt.socket;
         socket.on("close", onClose);
+        // Re-arm liveness on the fresh socket: without this the ping/pong
+        // watchdog would exist only for the first socket, so every reconnect
+        // after the first drop would again be unable to detect a silently
+        // half-open peer — the exact stale-"connected" failure the heartbeat
+        // was added to fix. The previous socket's heartbeat self-stops on its
+        // own `close`, so this re-attaches rather than leaks.
+        attachClientHeartbeat(socket, { intervalMs: this.heartbeatMs });
         this.rpc.rebind(createWebSocketRpcChannel(socket));
         this.socket = socket;
         return true;
@@ -206,6 +228,11 @@ export class StudioServiceClient {
     /** Corpus agents available for replay in this workspace. */
     listCorpusAgents(): Promise<string[]> {
         return this.rpc.invoke("listCorpusAgents", this.repoRoot);
+    }
+
+    /** Whether wildcard validation can run for `agent` (it has a validator). */
+    canValidateWildcards(agent: string): Promise<boolean> {
+        return this.rpc.invoke("canValidateWildcards", this.repoRoot, agent);
     }
 
     /** Federated corpus entries for an agent (Corpus tree expansion). */
@@ -297,49 +324,4 @@ export class StudioServiceClient {
 }
 
 /** Adapt a `ws` WebSocket to the `agent-rpc` {@link RpcChannel} interface. */
-export function createWebSocketRpcChannel(socket: WebSocket): RpcChannel {
-    const messageHandlers = new Set<(message: any) => void>();
-    const disconnectHandlers = new Set<() => void>();
-    const onceMessage = new Set<(message: any) => void>();
-    const onceDisconnect = new Set<() => void>();
-
-    socket.on("message", (data: WebSocket.RawData) => {
-        let message: unknown;
-        try {
-            message = JSON.parse(data.toString());
-        } catch {
-            return;
-        }
-        for (const h of messageHandlers) h(message);
-        for (const h of onceMessage.values()) {
-            onceMessage.delete(h);
-            h(message);
-        }
-    });
-    socket.on("close", () => {
-        for (const h of disconnectHandlers) h();
-        for (const h of onceDisconnect.values()) {
-            onceDisconnect.delete(h);
-            h();
-        }
-    });
-
-    return {
-        on(event: "message" | "disconnect", cb: any) {
-            (event === "message" ? messageHandlers : disconnectHandlers).add(
-                cb,
-            );
-        },
-        once(event: "message" | "disconnect", cb: any) {
-            (event === "message" ? onceMessage : onceDisconnect).add(cb);
-        },
-        off(event: "message" | "disconnect", cb: any) {
-            (event === "message" ? messageHandlers : disconnectHandlers).delete(
-                cb,
-            );
-        },
-        send(message: unknown, cb?: (err: Error | null) => void) {
-            socket.send(JSON.stringify(message), (err) => cb?.(err ?? null));
-        },
-    };
-}
+export { createWebSocketRpcChannel };

@@ -177,6 +177,14 @@ function loadGrammar(actionConfig: ActionConfig): Grammar | undefined {
 }
 
 export class AppAgentManager implements ActionConfigProvider {
+    // TODO: the per-agent routing artifacts below - action schemas
+    // (`actionConfigs` / `actionSchemaFileCache`), grammars (built per record in
+    // `agents`), and action embeddings (`actionSemanticMap`) - are built and
+    // held PER DISPATCHER (one AppAgentManager per CommandHandlerContext). For
+    // installed agents these are identical across dispatchers, so every
+    // `connect()` rebuilds the same artifacts. Share them across dispatchers
+    // (build once per agent version, reference from each manager) to avoid the
+    // redundant rebuild on connect and on `@package update`.
     private readonly agents = new Map<string, AppAgentRecord>();
     private readonly actionConfigs = new Map<string, ActionConfig>();
     private readonly loadingSchemas = new Set<string>();
@@ -1155,6 +1163,28 @@ export class AppAgentManager implements ActionConfigProvider {
         }
     }
 
+    /**
+     * Remove a whole provider by identity: derive the
+     * provider's agent name(s) via {@link AppAgentProvider.getAppAgentNames} and
+     * tear each one down through the existing name-based {@link removeAgent}
+     * (schemas, grammars, embeddings, and any live `SessionContext` are dropped
+     * there). A no-op for names this manager never registered (e.g. an unknown
+     * provider) — `removeAgent` skips names it does not know.
+     *
+     * NEW work relative to `removeAgent`, which is name-only and neither tracks
+     * nor drops a provider. Source-vended providers are single-agent (the host
+     * asserts that invariant before add), but this loops defensively over every
+     * vended name.
+     */
+    public async removeProvider(
+        provider: AppAgentProvider,
+        grammarStore?: GrammarStore,
+    ) {
+        for (const name of provider.getAppAgentNames()) {
+            await this.removeAgent(name, grammarStore);
+        }
+    }
+
     public getActionEmbeddings() {
         return this.actionSemanticMap?.embeddings();
     }
@@ -1858,6 +1888,10 @@ export class AppAgentManager implements ActionConfigProvider {
 
         // Clear translator cache to force re-translation with new schema
         context.translatorCache.clear();
+        // Drop cached derived keyword vectors for this agent's schemas so the
+        // contextSelector re-extracts from the reloaded (possibly changed)
+        // schema text instead of scoring against stale keywords.
+        context.contextSelectorKeywords.invalidate(appAgentName);
 
         // Drop construction-cache entries whose schema hash no longer matches
         // the reloaded schema (e.g. constructions for a deleted or edited flow),

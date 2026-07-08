@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=cd656f1f0132dfd01cfe55093c1cd68c1ec9f0ae9f92fee18c049ac58f77be4d -->
+<!-- AUTOGEN:DOCS:HASH:sha256=379153755e64cc3874d3d2391debc2c5b4a3ec03c67b484349627b511e4b1ee5 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-cli — AI-generated documentation
@@ -12,57 +12,89 @@
 
 ## Overview
 
-The `agent-cli` package provides a command-line interface (CLI) for interacting with the TypeAgent system. It allows users to connect to the TypeAgent Dispatcher, send requests, and manage conversations with agents. The CLI supports various subcommands for different functionalities, including connecting to the dispatcher, running commands non-interactively, and replaying chat histories for testing purposes.
+The `agent-cli` package provides a command-line interface (CLI) for interacting with the TypeAgent system. It enables users to connect to the TypeAgent Dispatcher, send requests, and manage conversations with agents. The CLI supports various subcommands for different functionalities, including connecting to the dispatcher, running commands non-interactively, and replaying chat histories for testing purposes.
 
 ## What it does
 
-The `agent-cli` package hosts multiple subcommands, with the primary one being `connect`, which is the default when no subcommand is specified. The `connect` subcommand allows users to interact with the TypeAgent Dispatcher, sending requests and receiving responses in real-time. Other subcommands include:
+The `agent-cli` package offers several subcommands to interact with the TypeAgent system. The primary subcommand is `connect`, which is the default when no subcommand is specified. This command allows users to interact with the TypeAgent Dispatcher in real-time, sending requests and receiving responses. Other subcommands include:
 
-- `run`: Execute dispatcher commands non-interactively.
-- `replay`: Replay chat histories for regression testing.
-- `conversations`: Manage conversations on the agent server (create, delete, list, rename).
-- `data`: Manage explanation test data (add, diff).
+- **`run`**: Execute dispatcher commands non-interactively. This includes sending requests, translating them, or generating explanations.
+- **`replay`**: Replay chat histories for regression testing or generating test files.
+- **`conversations`**: Manage conversations on the agent server, including creating, deleting, listing, and renaming conversations.
+- **`data`**: Manage explanation test data, such as adding new data or comparing differences between datasets.
 
-These commands facilitate various interactions with the TypeAgent system, enabling users to perform actions, translate requests, and manage conversations efficiently.
+These commands provide a comprehensive interface for interacting with the TypeAgent system, enabling users to perform actions, translate requests, and manage conversations effectively.
 
 ## Setup
 
-To set up the `agent-cli` package, follow these steps:
+To set up and use the `agent-cli` package, follow these steps:
 
-1. Ensure the workspace root (repo `ts` directory) is set up and built.
-2. Run `pnpm run cli` or `pnpm run cli:dev` in the workspace root to start the CLI.
-3. Optionally, link the package globally by running `pnpm link --global` in the package directory. Use `agent-cli` or `agent-cli-dev` for the development version.
-4. Alternatively, run the CLI directly using `./bin/run.js` (Linux) or `.\bin\run` (Windows). For development, use `./bin/dev.js` (Linux) or `.\bin\dev` (Windows).
+1. **Build the workspace**: Ensure the workspace root (repo `ts` directory) is set up and built. Run `pnpm setup` to create the global bin for `pnpm` if not already done.
+2. **Run the CLI**:
+   - From the workspace root, use `pnpm run cli` or `pnpm run cli:dev` to start the CLI.
+   - Alternatively, navigate to the `agent-cli` package directory and run the CLI directly:
+     - On Linux: `./bin/run.js` (or `./bin/dev.js` for development).
+     - On Windows: `.\bin\run` (or `.\bin\dev` for development).
+3. **Optional global linking**:
+   - Run `pnpm link --global` in the package directory to link the CLI globally.
+   - Use `agent-cli` (or `agent-cli-dev` for the development version) to invoke the CLI globally.
+   - To unlink, run `pnpm uninstall --global agent-cli`.
 
-Make sure `pnpm setup` has been run to create the global bin for pnpm, and the project is built. For detailed setup instructions, see the hand-written README.
+For more details on setup and usage, refer to the hand-written README.
 
 ## Key Files
 
-The `agent-cli` package is structured around several key files and directories:
+The `agent-cli` package is organized into several key files and directories, each responsible for specific functionalities:
 
-- `src/commands/`: Contains the implementation of various CLI commands.
-  - `connect.ts`: Handles the `connect` subcommand, allowing users to interact with the TypeAgent Dispatcher.
-  - `run/index.ts`: Implements the `run` subcommand for executing dispatcher commands non-interactively.
-  - `replay.ts`: Manages the `replay` subcommand for replaying chat histories.
-  - `conversations/`: Contains commands for managing conversations (`create.ts`, `delete.ts`, `list.ts`, `rename.ts`).
-  - `data/`: Includes commands for managing explanation test data (`add.ts`, `diff.ts`).
+- **`src/commands/`**: Contains the implementation of CLI subcommands.
 
-The package relies on several dependencies from the TypeAgent monorepo, including `@typeagent/action-schema`, `@typeagent/agent-sdk`, `@typeagent/agent-server-client`, and others. These dependencies provide the necessary functionality for interacting with the TypeAgent system.
+  - **`connect.ts`**: Implements the `connect` subcommand, which allows users to interact with the TypeAgent Dispatcher in real-time.
+  - **`run/index.ts`**: Handles the `run` subcommand for executing dispatcher commands non-interactively.
+  - **`replay.ts`**: Manages the `replay` subcommand for replaying chat histories.
+  - **`conversations/`**: Includes commands for managing conversations:
+    - `create.ts`: Create a new conversation.
+    - `delete.ts`: Delete an existing conversation.
+    - `list.ts`: List all conversations.
+    - `rename.ts`: Rename a conversation.
+  - **`data/`**: Contains commands for managing explanation test data:
+    - `add.ts`: Add new data to the explanation test dataset.
+    - `diff.ts`: Compare differences between datasets.
+
+- **Dependencies**: The package relies on several internal dependencies from the TypeAgent monorepo, such as:
+  - `@typeagent/action-schema`, `@typeagent/agent-sdk`, `@typeagent/agent-server-client`, and others for core functionality.
+  - External libraries like `@oclif/core` for CLI scaffolding and `chalk` for terminal output formatting.
 
 ## How to extend
 
 To extend the `agent-cli` package, follow these steps:
 
-1. Identify the command you want to extend or create a new command. Start by exploring the `src/commands/` directory.
-2. Create a new TypeScript file for your command in the appropriate subdirectory (e.g., `src/commands/yourCommand.ts`).
-3. Implement the command by extending the `Command` class from `@oclif/core` and defining the necessary arguments, flags, and logic.
-4. Ensure your command interacts with the TypeAgent system using the provided SDKs and clients.
-5. Add tests for your command to verify its functionality. You can use the `replay` subcommand to generate test files for regression testing.
-6. Update the documentation in the hand-written README to include your new command and its usage.
+1. **Identify the command to extend or create**:
 
-For example, to add a new command for listing agent statuses, you might create a file `src/commands/status/list.ts` and implement the logic to fetch and display agent statuses from the dispatcher.
+   - Explore the `src/commands/` directory to locate existing commands.
+   - If creating a new command, decide on its purpose and structure.
 
-By following these steps, you can extend the `agent-cli` package to support additional functionalities and improve its capabilities.
+2. **Create a new command**:
+
+   - Add a new TypeScript file in the appropriate subdirectory under `src/commands/`.
+   - Implement the command by extending the `Command` class from `@oclif/core`.
+   - Define arguments, flags, and the command's logic.
+
+3. **Integrate with the TypeAgent system**:
+
+   - Use the provided SDKs and clients (e.g., `@typeagent/agent-server-client`) to interact with the dispatcher or agent server.
+   - Follow patterns from existing commands like `connect.ts` or `run/index.ts`.
+
+4. **Test your command**:
+
+   - Add unit tests to verify the command's functionality.
+   - Use the `replay` subcommand to generate test files for regression testing.
+
+5. **Update documentation**:
+   - Document the new command in the hand-written README, including usage examples and available flags.
+
+For example, to add a command for exporting conversation logs, you might create a file `src/commands/conversations/export.ts` and implement logic to fetch and save logs from the agent server.
+
+By following these steps, you can extend the `agent-cli` package to support additional functionalities and improve its utility.
 
 ## Reference
 
@@ -76,16 +108,16 @@ _No public exports declared in `package.json`._
 
 Workspace:
 
+- [@typeagent/action-grammar](../../packages/actionGrammar/README.md)
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/config](../../packages/config/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
-- [action-grammar](../../packages/actionGrammar/README.md)
 - [agent-cache](../../packages/cache/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
-- [aiclient](../../packages/aiclient/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 - [interactive-app](../../packages/interactiveApp/README.md)
 - [telemetry](../../packages/telemetry/README.md)
@@ -99,6 +131,6 @@ External: `@oclif/core`, `@oclif/plugin-help`, `chalk`, `debug`, `dotenv`, `html
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

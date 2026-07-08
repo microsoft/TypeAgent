@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=30ea2a1089d61cec4f70adf48a952acdf3ccab0f4d8bbc9d7fd7de7feb256cdb -->
+<!-- AUTOGEN:DOCS:HASH:sha256=1b248567a133b4a44aa5fab9e514a6cd1a0435c9569bce2888b4ad091e96bc44 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # calendar — AI-generated documentation
@@ -12,56 +12,103 @@
 
 ## Overview
 
-The `calendar` package is a TypeAgent application agent designed to interact with the Outlook mail client using the Microsoft Graph API. It provides functionalities to manage calendar events, such as creating, updating, deleting, and finding events. This package includes the schema definition and implementation necessary for building a Calendar Agent that can handle structured prompting and leverage LLM capabilities.
+The `calendar` package is a TypeAgent application agent designed to manage calendar events by interacting with the Microsoft Graph API. It enables users to perform operations such as creating, updating, deleting, and finding calendar events. The agent leverages structured prompting and large language models (LLMs) to interpret user requests and execute corresponding actions. It integrates with the Outlook mail client and uses the `@microsoft/microsoft-graph-client` library for API communication.
 
 ## What it does
 
-The calendar agent supports various actions related to calendar management. These actions include:
+The calendar agent provides a range of actions to manage calendar events. These actions include:
 
-- `scheduleEvent`: Schedule a new event with specified details such as description, date, time, location, and participants.
-- `findEvents`: Find events based on criteria like date, participant, or description.
-- `addEvent`: Add a new event to the calendar.
-- `removeEvent`: Remove an existing event from the calendar.
-- `addParticipants`: Add participants to an existing event.
-- `changeTime`: Change the time of an existing event.
-- `changeDescription`: Change the description of an existing event.
+- **Event Management**:
 
-The agent uses the Microsoft Graph API to interact with the user's calendar and relies on the `@microsoft/microsoft-graph-client` library for API communication. It also utilizes the `graph-utils` library for implementing various calendar actions.
+  - `scheduleEvent`: Schedule a new event with details like description, date, time, location, and participants.
+  - `addEvent`: Add a new event to the calendar.
+  - `removeEvent`: Delete an existing event from the calendar.
+  - `findEvents`: Search for events based on criteria such as date, participant, or description.
+
+- **Event Modification**:
+  - `addParticipants`: Add participants to an existing event.
+  - `changeTime`: Update the time of an existing event.
+  - `changeDescription`: Modify the description of an existing event.
+
+The agent uses the `graph-utils` library to implement these actions and relies on the `@microsoft/microsoft-graph-client` library for communication with the Microsoft Graph API. The agent also supports structured prompting through its schema and grammar definitions, enabling it to interpret natural language requests effectively.
 
 ## Setup
 
-To set up the calendar agent, you need to configure the Microsoft Graph API access. Follow these steps:
+To use the calendar agent, you need to configure access to the Microsoft Graph API. Follow these steps:
 
-1. Create a Microsoft Graph client application and demo tenant by following the Microsoft Graph quickstart example.
-2. Update the following environment variables in the `.env` file with the credentials obtained from the Microsoft Graph client application:
-   ```text
-   MSGRAPH_APP_CLIENTID
-   MSGRAPH_APP_CLIENTSECRET
-   MSGRAPH_APP_TENANTID
-   ```
-3. Ensure you have the necessary dependencies installed by running `pnpm install`.
+1. **Create a Microsoft Graph Client Application**:
 
-For detailed setup instructions, see the hand-written README.
+   - Follow the Microsoft Graph quickstart guide to create a Graph client application and demo tenant.
+
+2. **Set Environment Variables**:
+
+   - Update the following environment variables in the `config.local.yaml` file (under the `msGraph` section) or in the legacy `.env` file with the credentials obtained from your Microsoft Graph client application:
+     ```text
+     MSGRAPH_APP_CLIENTID
+     MSGRAPH_APP_CLIENTSECRET
+     MSGRAPH_APP_TENANTID
+     ```
+
+3. **Install Dependencies**:
+
+   - Run `pnpm install` to install the required dependencies.
+
+4. **Identity Cache Issues**:
+   - If you encounter issues with the identity cache, clear it by running the following commands:
+     ```text
+     cd %localappdata%/.IdentityService
+     del typeagent-tokencache*
+     ```
+
+For more details, refer to the hand-written README.
 
 ## Key Files
 
-The `calendar` package is structured as follows:
+The `calendar` package is organized into several key files that define its functionality:
 
-- **Manifest**: The agent's manifest is defined in [calendarManifest.json](./src/calendarManifest.json). This file describes the agent's integration with the Microsoft Graph's calendar and specifies the schema and grammar files.
-- **Schema**: The schema definitions for the calendar actions are provided in [calendarActionsSchemaV1.ts](./src/calendarActionsSchemaV1.ts), [calendarActionsSchemaV2.ts](./src/calendarActionsSchemaV2.ts), and [calendarActionsSchemaV3.ts](./src/calendarActionsSchemaV3.ts). These files define the types and parameters for various calendar actions.
-- **Grammar**: The grammar for parsing user requests is defined in [calendarSchema.agr](./src/calendarSchema.agr). This file contains patterns for user requests and maps them to corresponding actions.
-- **Handlers**: The action handlers are implemented in [calendarActionHandlerV1.ts](./src/calendarActionHandlerV1.ts), [calendarActionHandlerV2.ts](./src/calendarActionHandlerV2.ts), and [calendarActionHandlerV3.ts](./src/calendarActionHandlerV3.ts). These files contain the logic for executing the calendar actions.
+- **Manifest**:
+
+  - [calendarManifest.json](./src/calendarManifest.json): Defines the agent's integration with the Microsoft Graph API, including references to the schema and grammar files.
+
+- **Schema**:
+
+  - [calendarActionsSchemaV1.ts](./src/calendarActionsSchemaV1.ts), [calendarActionsSchemaV2.ts](./src/calendarActionsSchemaV2.ts), [calendarActionsSchemaV3.ts](./src/calendarActionsSchemaV3.ts): Define the types and parameters for various calendar actions. These files evolve across versions to support new features and capabilities.
+
+- **Grammar**:
+
+  - [calendarSchema.agr](./src/calendarSchema.agr): Contains patterns for interpreting user requests and mapping them to corresponding actions. This file is essential for enabling natural language understanding.
+
+- **Handlers**:
+
+  - [calendarActionHandlerV1.ts](./src/calendarActionHandlerV1.ts), [calendarActionHandlerV2.ts](./src/calendarActionHandlerV2.ts), [calendarActionHandlerV3.ts](./src/calendarActionHandlerV3.ts): Implement the logic for executing calendar actions. Each version corresponds to a specific schema version.
+
+- **Utilities**:
+  - The package relies on utility libraries such as `graph-utils` and `typechat-utils` for tasks like date parsing, time zone handling, and API client creation.
 
 ## How to extend
 
-To extend the calendar agent, follow these steps:
+To extend the functionality of the calendar agent, follow these steps:
 
-1. **Add new actions**: Define new actions in the schema files (e.g., [calendarActionsSchemaV3.ts](./src/calendarActionsSchemaV3.ts)). Ensure you specify the action name and parameters.
-2. **Update grammar**: Add new patterns for user requests in the grammar file [calendarSchema.agr](./src/calendarSchema.agr). Map these patterns to the new actions.
-3. **Implement handlers**: Create or update the action handlers in the handler files (e.g., [calendarActionHandlerV3.ts](./src/calendarActionHandlerV3.ts)). Implement the logic for executing the new actions.
-4. **Test**: Write tests to verify the new actions and handlers. Ensure the agent behaves as expected with the new functionalities.
+1. **Define New Actions**:
 
-Start by exploring the existing schema, grammar, and handler files to understand the current implementation. Then, follow the patterns to add your extensions.
+   - Add new actions to the schema files (e.g., [calendarActionsSchemaV3.ts](./src/calendarActionsSchemaV3.ts)). Specify the action name, parameters, and expected behavior.
+
+2. **Update Grammar**:
+
+   - Extend the grammar file [calendarSchema.agr](./src/calendarSchema.agr) with new patterns to interpret user requests. Map these patterns to the newly defined actions.
+
+3. **Implement Handlers**:
+
+   - Add or update action handlers in the appropriate handler file (e.g., [calendarActionHandlerV3.ts](./src/calendarActionHandlerV3.ts)). Implement the logic for executing the new actions.
+
+4. **Test Your Changes**:
+
+   - Write tests to verify the new actions and handlers. Ensure the agent behaves as expected with the added functionality.
+
+5. **Update the Manifest**:
+   - If necessary, update the [calendarManifest.json](./src/calendarManifest.json) file to include references to new schema or grammar files.
+
+By following these steps, you can extend the calendar agent to support additional use cases or integrate with other systems. Start by reviewing the existing schema, grammar, and handler files to understand the current implementation patterns.
 
 ## Reference
 
@@ -70,15 +117,15 @@ Start by exploring the existing schema, grammar, and handler files to understand
 ### Entry points
 
 - `./agent/manifest` → [./src/calendarManifest.json](./src/calendarManifest.json)
-- `./agent/handlers` → [./dist/calendarActionHandlerV3.js](./dist/calendarActionHandlerV3.js)
+- `./agent/handlers` → `./dist/calendarActionHandlerV3.js` _(not found on disk)_
 
 ### Dependencies
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [graph-utils](../../../packages/agents/agentUtils/graphUtils/README.md)
 - [typechat-utils](../../../packages/utils/typechatUtils/README.md)
 
@@ -99,6 +146,6 @@ External: `chalk`, `date-fns`, `debug`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T19:00:56.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

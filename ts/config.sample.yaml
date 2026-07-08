@@ -106,11 +106,56 @@ openAI:
   maxRetryAttempts: 3
 
   # Ollama / local OpenAI-compatible endpoint.
-  # Also emits OLLAMA_ENDPOINT for backward compatibility.
+  # NOTE: use the BASE url here (no /v1/chat/completions). It is emitted verbatim
+  # as OLLAMA_ENDPOINT and the client appends the /v1/chat/completions (chat) and
+  # /v1/embeddings (embedding) paths itself. A full path here would be doubled.
   local:
     apiKey: None # Ollama doesn't require a key
-    endpoint: http://localhost:11434/v1/chat/completions
+    endpoint: http://localhost:11434
     model: phi3
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Self-host provider presets                                      ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# For machines WITHOUT AI Systems Key Vault access, TypeAgent can run entirely
+# against a local (Ollama) or Copilot-SDK chat backend. The install scripts and
+# MSI generate one of these config.local.yaml shapes automatically via
+# `typeagent-serve.mjs provision --provider ollama|copilot`
+# (tools/scripts/generate-selfhost-config.mjs). The blocks below are the
+# equivalent hand-written config; omit the `vault:` section in these modes.
+#
+# --- Ollama (local chat + local embeddings) --------------------------------
+# modelProvider: ollama
+# openAI:
+#   apiKey: ollama            # dummy, non-empty
+#   local:
+#     apiKey: None
+#     endpoint: http://localhost:11434   # BASE url (see note above)
+#     model: llama3.2
+# embedding:
+#   provider: local           # bundled CPU-only model; no GPU / key / network
+#   model: Xenova/all-MiniLM-L6-v2
+#
+# --- Copilot (Copilot SDK chat + local embeddings) -------------------------
+# modelProvider: copilot
+# copilot:
+#   defaultModel: claude-sonnet-4.5   # requires an authenticated `copilot` CLI
+#   # Optional: connect to an already-running Copilot CLI server over TCP
+#   # instead of spawning a CLI child per host. Eliminates the one-time
+#   # (multi-second) CLI startup latency. Format: "host:port" / "port".
+#   # Mutually exclusive with cliPath. Start the server with the Copilot CLI's
+#   # server/headless mode first, then point cliUrl at it.
+#   # cliUrl: 127.0.0.1:8123
+# embedding:
+#   provider: local
+#   model: Xenova/all-MiniLM-L6-v2
+#
+# To use Ollama for embeddings instead of the bundled local model, set
+# `embedding.provider: openai` and add
+# `openAI.endpointEmbedding: http://localhost:11434/v1/embeddings` (FULL path)
+# plus `openAI.modelEmbedding: nomic-embed-text`. Set `embedding.provider: none`
+# to disable embeddings entirely (semantic/fuzzy features degrade gracefully).
 
 # ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Azure Speech SDK                                                ║
@@ -232,6 +277,30 @@ reasoning:
   copilotModel: claude-sonnet-4.5 # override default Copilot reasoning model
 
 # ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Embedding provider                                              ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Selects where text embeddings come from, independent of the chat
+# `modelProvider`. Useful for self-host: e.g. route chat through Copilot
+# while still producing embeddings from a bundled CPU-only local model.
+#
+#   provider:
+#     local  - CPU-only transformers.js model (no GPU, no API key). Weights
+#              download from the Hugging Face hub on first use and are cached.
+#     openai - use the `openAI.endpointEmbedding` / `modelEmbedding` above.
+#     azure  - use the `azureOpenAI` embedding deployment.
+#     none   - disable embeddings; embedding-dependent features degrade
+#              gracefully (see the self-host docs).
+#
+# When omitted, the provider is inferred from the configured embedding
+# endpoints (openAI/azureOpenAI), or disabled if none is present.
+
+embedding:
+  provider: local
+  model: Xenova/all-MiniLM-L6-v2 # local provider only (384-d, ~23MB)
+  # cacheDir: /var/lib/typeagent/models  # pre-stage weights (air-gapped)
+
+# ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Key Vault                                                       ║
 # ╚═══════════════════════════════════════════════════════════════════╝
 #
@@ -241,3 +310,16 @@ reasoning:
 
 vault:
   shared: aisystems
+
+# ╔═══════════════════════════════════════════════════════════════════╗
+# ║  TypeAgent Feed Source                                           ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Optional override for the default @install feed source used by
+# default-agent-provider. Values flatten to TYPEAGENT_FEED_REGISTRY and
+# TYPEAGENT_FEED_SCOPES.
+
+typeagent:
+  feed:
+    registry: https://pkgs.dev.azure.com/<org>/<project>/_packaging/<feed>/npm/registry/
+    scopes: "@typeagent" # comma-separated for multiple scopes

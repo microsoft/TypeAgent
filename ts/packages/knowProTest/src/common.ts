@@ -209,7 +209,7 @@ export async function compareObjectFuzzy(
     threshold = 0.9,
 ): Promise<string | undefined> {
     // First do a straight compare
-    let error = compareObject(x, y, label);
+    const error = compareObject(x, y, label);
     if (error === undefined) {
         return undefined;
     }
@@ -320,7 +320,7 @@ export function compareArray<T = any>(
         return `${label}: length mismatch`;
     }
     for (let i = 0; i < x.length; ++i) {
-        let error = comparer(x[i], y[i]);
+        const error = comparer(x[i], y[i]);
         if (error !== undefined) {
             return error;
         }

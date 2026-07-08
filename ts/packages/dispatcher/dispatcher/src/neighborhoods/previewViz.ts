@@ -912,7 +912,7 @@ function filteredCrossVerdicts(n) {
     // were correct. Without a per-style breakdown of those, fall back to
     // the stored count when all styles are on; zero otherwise (avoids
     // misleading display). This is a known limitation; the CONFIRMED /
-    // RESCUED / NEW_FAILURE counts are the load-bearing ones for triage.
+    // RESCUED / NEW_FAILURE counts are the ones that matter for triage.
     if (enabledStyles.size === ALL_STYLES.length) clean = cv.CLEAN ?? 0;
     return { CONFIRMED: confirmed, RESCUED: rescued, NEW_FAILURE: newFail, CLEAN: clean };
 }

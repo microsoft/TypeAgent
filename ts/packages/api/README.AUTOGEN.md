@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=20f33a68273cdbd05d195e3abaa7504abc1ce29aaa76a8debbd09d810d421079 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=0b22757dee3f752244fa1554c4677a8177d6bd3ecb8a4ee3bb8e57ba07cad58f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-api — AI-generated documentation
@@ -12,69 +12,71 @@
 
 ## Overview
 
-The `agent-api` package is a TypeScript library that provides a HTTP and WebSocket API server for the TypeAgent sample code. It is designed to facilitate the development of distributed interactive agents with natural language interfaces using structured prompting and large language models (LLMs). This package enables developers to extend the reach of agents to web-enabled devices such as internet browsers, mobile phones, and IoT connected devices.
+The `agent-api` package is a TypeScript library that provides an HTTP and WebSocket API server for the TypeAgent sample code. It is designed to support the development of distributed interactive agents with natural language interfaces, leveraging structured prompting and large language models (LLMs). This package enables developers to extend the functionality of agents to web-enabled devices, including browsers, mobile devices, and IoT-connected systems.
 
 ## What it does
 
-The `agent-api` package offers several key functionalities:
+The `agent-api` package offers the following key capabilities:
 
-- **HTTP and WebSocket Server**: It provides a server that can handle HTTP and WebSocket connections, allowing for real-time communication with agents.
-- **Storage Providers**: It supports multiple storage providers, including AWS S3 and Azure Blob Storage, for managing remote files.
-- **Web Dispatcher**: It includes a web dispatcher for handling actions and commands sent to the agents.
-- **Configuration Management**: It uses environment variables to configure the server and storage providers.
+- **HTTP and WebSocket Server**: Provides an API server that supports both HTTP and WebSocket protocols, enabling real-time communication with agents.
+- **Storage Integration**: Includes support for multiple storage providers, such as AWS S3 and Azure Blob Storage, to manage remote files. Actions like `listRemoteFiles`, `downloadFile`, and `uploadFile` are implemented to interact with these storage systems.
+- **Web Dispatcher**: Facilitates the handling of actions and commands sent to agents via WebSocket connections.
+- **Configuration Management**: Relies on environment variables for configuring the server and storage providers, ensuring flexibility and adaptability to different deployment environments.
 
-The package includes actions such as `listRemoteFiles`, `downloadFile`, and `uploadFile` for interacting with remote storage, and it integrates with other TypeAgent packages like `agent-cache`, `agent-dispatcher`, and `telemetry`.
+The package integrates with other components in the TypeAgent ecosystem, such as `agent-cache`, `agent-dispatcher`, and `telemetry`, to provide a cohesive and extensible framework for building and managing interactive agents.
 
 ## Setup
 
-To set up the `agent-api` package, you need to configure several environment variables related to AWS S3:
+To use the `agent-api` package, you need to configure the following environment variables for AWS S3 integration:
 
 - `AWS_ACCESS_KEY_ID`: Your AWS access key ID.
 - `AWS_S3_BUCKET_NAME`: The name of your AWS S3 bucket.
-- `AWS_S3_REGION`: The region where your AWS S3 bucket is located.
+- `AWS_S3_REGION`: The AWS region where your S3 bucket is located.
 - `AWS_SECRET_ACCESS_KEY`: Your AWS secret access key.
 
-These environment variables are essential for the package to interact with AWS S3 for storage purposes. Ensure that these variables are set in your `.env` file or your shell environment.
+These variables are required for the package to interact with AWS S3 for storage operations. You can set these variables in a `.env` file or directly in your shell environment. For more details on obtaining these values, refer to the hand-written README.
 
-For detailed setup instructions, including how to obtain these values, see the hand-written README.
+Once the environment variables are configured, you can start the server locally using `npm run start` in the package directory. The server will be accessible at `http://localhost:3000`. To access the Shell interface, navigate to `http://localhost:3000/chatView.html`.
+
+Alternatively, you can deploy the server using the provided Docker image. This allows you to host the API locally or in a cloud environment, such as Azure App Service.
 
 ## Key Files
 
-The `agent-api` package is structured into several key components:
+The `agent-api` package is organized into several key files, each responsible for specific functionality:
 
-- **[index.ts](./src/index.ts)**: The entry point of the package, which initializes and starts the TypeAgent server.
-- **[storageProvider.ts](./src/storageProvider.ts)**: Defines the interface for storage providers, including methods for listing, downloading, and uploading files.
-- **[awsStorageProvider.ts](./src/storageProviders/awsStorageProvider.ts)**: Implements the storage provider interface for AWS S3.
-- **[azureStorageProvider.ts](./src/storageProviders/azureStorageProvider.ts)**: Implements the storage provider interface for Azure Blob Storage.
-- **[typeAgentServer.ts](./src/typeAgentServer.ts)**: Manages the initialization and configuration of the TypeAgent server, including the web dispatcher and storage providers.
-- **[webDispatcher.ts](./src/webDispatcher.ts)**: Handles actions and commands sent to the agents via WebSocket.
-- **[webServer.ts](./src/webServer.ts)**: Implements the HTTP and HTTPS server for handling incoming requests.
+- **[index.ts](./src/index.ts)**: The main entry point of the package. It initializes and starts the TypeAgent server.
+- **[storageProvider.ts](./src/storageProvider.ts)**: Defines the `TypeAgentStorageProvider` interface, which outlines methods for interacting with remote storage, such as `listRemoteFiles`, `downloadFile`, and `uploadFile`.
+- **[storageProviders/awsStorageProvider.ts](./src/storageProviders/awsStorageProvider.ts)**: Implements the `TypeAgentStorageProvider` interface for AWS S3, enabling file operations like listing, downloading, and uploading files.
+- **[storageProviders/azureStorageProvider.ts](./src/storageProviders/azureStorageProvider.ts)**: Implements the `TypeAgentStorageProvider` interface for Azure Blob Storage.
+- **[typeAgentServer.ts](./src/typeAgentServer.ts)**: Manages the initialization and configuration of the TypeAgent server, including the integration of storage providers and the web dispatcher.
+- **[webDispatcher.ts](./src/webDispatcher.ts)**: Handles actions and commands sent to agents via WebSocket connections. It processes actions such as `listRemoteFiles`, `downloadFile`, and `uploadFile`.
+- **[webServer.ts](./src/webServer.ts)**: Implements the HTTP and HTTPS server for handling incoming requests and serving static files.
 
 ## How to extend
 
-To extend the `agent-api` package, follow these steps:
+To extend the functionality of the `agent-api` package, you can follow these steps:
 
 1. **Add a new storage provider**:
 
    - Create a new file in the `src/storageProviders` directory.
    - Implement the `TypeAgentStorageProvider` interface defined in [storageProvider.ts](./src/storageProvider.ts).
-   - Ensure that the new storage provider handles methods like `listRemoteFiles`, `downloadFile`, and `uploadFile`.
+   - Ensure the new storage provider supports methods like `listRemoteFiles`, `downloadFile`, and `uploadFile`.
 
-2. **Modify the server configuration**:
+2. **Update the server configuration**:
 
-   - Update [typeAgentServer.ts](./src/typeAgentServer.ts) to include your new storage provider.
-   - Adjust the server configuration as needed to support additional features or integrations.
+   - Modify [typeAgentServer.ts](./src/typeAgentServer.ts) to include your new storage provider.
+   - Update the server initialization logic to accommodate any new features or configurations.
 
-3. **Handle new actions**:
+3. **Add new actions**:
 
-   - Extend the web dispatcher in [webDispatcher.ts](./src/webDispatcher.ts) to handle new actions.
+   - Extend the web dispatcher in [webDispatcher.ts](./src/webDispatcher.ts) to handle additional actions.
    - Implement the logic for processing these actions and interacting with the agents.
 
 4. **Test your changes**:
-   - Write unit tests for your new storage provider and actions.
-   - Run the tests to ensure that your changes work as expected.
+   - Write unit tests for your new features, including storage providers and actions.
+   - Run the tests to verify that your changes work as expected.
 
-By following these steps, you can extend the functionality of the `agent-api` package to support additional storage providers, actions, and configurations.
+By following these guidelines, you can customize the `agent-api` package to meet your specific requirements and integrate it with additional systems or services.
 
 ## Reference
 
@@ -82,7 +84,7 @@ By following these steps, you can extend the functionality of the `agent-api` pa
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -90,11 +92,11 @@ Workspace:
 
 - [@typeagent/agent-rpc](../../packages/agentRpc/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
+- [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [@typeagent/config](../../packages/config/README.md)
 - [@typeagent/dispatcher-rpc](../../packages/dispatcher/rpc/README.md)
 - [agent-cache](../../packages/cache/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
-- [aiclient](../../packages/aiclient/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 - [dispatcher-node-providers](../../packages/dispatcher/nodeProviders/README.md)
 - [telemetry](../../packages/telemetry/README.md)
@@ -118,6 +120,6 @@ _4 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-api docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-api docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

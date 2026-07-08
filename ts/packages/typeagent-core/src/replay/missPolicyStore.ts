@@ -11,7 +11,7 @@ export interface ReplayPolicyStore {
 }
 
 /**
- * F0.8 lightweight per-workspace miss-policy store.
+ * Lightweight per-workspace miss-policy store.
  *
  * Persistence to VS Code memento/configuration lives in the extension layer;
  * this typeagent-core store is intentionally in-memory and deterministic.

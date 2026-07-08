@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=143fb58cf8e856dcd1cb296414d7e2c3400a897e43bcc4e50e2e34acbadc2db6 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=595ace6ee3ef7a8d8c1d6fa42bf7cd784001391a3f9d5b4f80a074c9aac6ec6e -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # powershell-typeagent — AI-generated documentation
@@ -12,37 +12,68 @@
 
 ## Overview
 
-The `powershell-typeagent` package is a TypeAgent application agent designed to create and execute PowerShell workflows. It leverages reusable PowerShell scripts derived from reasoning traces to perform various system, file, process, and network operations.
+The `powershell-typeagent` package is a TypeAgent application agent designed to create, manage, and execute PowerShell workflows. It provides a set of reusable PowerShell scripts derived from reasoning traces, enabling automation of system, file, process, and network operations. This package integrates with other TypeAgent components to support a wide range of actions and workflows.
 
 ## What it does
 
-This package provides a set of actions for managing and executing PowerShell scripts. It includes actions for creating, listing, and deleting PowerShell flows (`listPowerShellFlows`, `deletePowerShellFlow`, `importPowerShellFlow`). Additionally, it supports file system operations (`listFiles`, `readFile`, `writeFile`, `deleteFile`), process management (`listProcesses`, `startProcess`, `stopProcess`), and system information retrieval (`getDiskUsage`, `getUptime`, `getEnvironmentVariables`). The package integrates with other TypeAgent components to facilitate these operations.
+The `powershell-typeagent` package enables the execution of PowerShell scripts and workflows through a set of predefined actions. These actions are grouped into several categories:
+
+- **PowerShell Flow Management**: Actions like `listPowerShellFlows`, `deletePowerShellFlow`, and `importPowerShellFlow` allow users to manage PowerShell workflows, including listing available flows, deleting existing ones, and importing new scripts.
+- **File System Operations**: Actions such as `listFiles`, `readFile`, `writeFile`, and `deleteFile` provide functionality for interacting with the file system.
+- **Process Management**: Actions like `listProcesses`, `startProcess`, and `stopProcess` enable users to manage system processes.
+- **System Information Retrieval**: Actions such as `getDiskUsage`, `getUptime`, and `getEnvironmentVariables` allow users to query system-level information.
+- **Data Manipulation**: Actions like `readJson`, `writeJson`, `readCsv`, `writeCsv`, and `filterCsv` provide tools for working with structured data formats.
+- **Archive Management**: Actions such as `compress` and `expand` allow users to create and extract compressed files.
+
+The package also includes advanced features like script analysis using the Claude AI model and sandboxed execution of PowerShell scripts to ensure security and control over the execution environment.
 
 ## Setup
 
-The package requires the environment variable `TYPEAGENT_NO_SAMPLES`. This variable controls whether sample data is included in the agent's responses. To set up the package, ensure this environment variable is defined in your environment. For detailed setup instructions, see the hand-written README.
+To set up the `powershell-typeagent` package, you need to configure the following environment variable:
+
+- `TYPEAGENT_NO_SAMPLES`: This variable determines whether sample data is included in the agent's responses. Set it to `true` to disable sample data or `false` to enable it.
+
+Ensure that this environment variable is defined in your environment before running the agent. If additional setup steps are required, refer to the hand-written README for more details.
 
 ## Key Files
 
-The package is structured into several key components:
+The `powershell-typeagent` package is organized into several key files, each responsible for specific functionality:
 
-- **Manifest**: The [manifest.json](./src/manifest.json) file defines the agent's capabilities, including the core flow management actions and sub-action manifests for file operations, process management, and system information.
-- **Schema**: The [powershellSchema.agr](./src/powershellSchema.agr) file contains the grammar rules for PowerShell actions. It defines how different actions are parsed and executed.
-- **Types**: The [scriptRecipe.ts](./src/types/scriptRecipe.ts) file defines the TypeScript interfaces for script recipes, parameters, grammar patterns, and sandbox policies.
-- **Handlers**: The [actionHandler.mts](./src/actionHandler.mts) file implements the logic for handling various PowerShell actions. It includes functions for executing scripts, managing flows, and interacting with the file system.
-- **Analysis**: The [scriptAnalyzer.mts](./src/analysis/scriptAnalyzer.mts) file provides functionality for analyzing PowerShell scripts using the Claude AI model.
-- **Execution**: The [powershellRunner.mts](./src/execution/powershellRunner.mts) file handles the execution of PowerShell scripts, including sandboxing and parameter management.
+- **[manifest.json](./src/manifest.json)**: Defines the agent's capabilities, including the core flow management actions and sub-action manifests for file operations, process management, and system information.
+- **[powershellSchema.agr](./src/powershellSchema.agr)**: Contains the grammar rules for PowerShell actions, defining how different actions are parsed and executed.
+- **[allActionsSchema.ts](./src/schema/allActionsSchema.ts)**: Aggregates all action schemas, providing a centralized definition of the agent's capabilities.
+- **[actionHandler.mts](./src/actionHandler.mts)**: Implements the logic for handling various PowerShell actions, including script execution, flow management, and file system interactions.
+- **[scriptAnalyzer.mts](./src/analysis/scriptAnalyzer.mts)**: Provides functionality for analyzing PowerShell scripts using the Claude AI model, ensuring scripts are optimized and secure.
+- **[powershellRunner.mts](./src/execution/powershellRunner.mts)**: Handles the execution of PowerShell scripts, including sandboxing, parameter management, and output handling.
+- **Namespace Schemas**: The `./src/namespaces/` directory contains additional schema files for specific namespaces, such as `archives`, `data`, `files`, `network`, `processes`, `services`, and `system`. These define actions for specialized operations like file compression, data manipulation, and network interactions.
 
 ## How to extend
 
-To extend the `powershell-typeagent` package, follow these steps:
+To extend the functionality of the `powershell-typeagent` package, follow these steps:
 
-1. **Add new actions**: Define new actions in the appropriate schema file (e.g., [powershellSchema.agr](./src/powershellSchema.agr)). Ensure the action name and parameters are correctly specified.
-2. **Implement handlers**: Update the [actionHandler.mts](./src/actionHandler.mts) file to include logic for the new actions. Implement the necessary functions to handle the action's execution.
-3. **Update manifest**: Modify the [manifest.json](./src/manifest.json) file to include the new actions and their descriptions.
-4. **Test**: Write tests for the new actions to ensure they work as expected. Run the tests to verify the implementation.
+1. **Define New Actions**:
 
-For a starting point, open the [actionHandler.mts](./src/actionHandler.mts) file and follow the existing patterns for implementing new actions.
+   - Add new actions to the appropriate schema file, such as [powershellSchema.agr](./src/powershellSchema.agr) or one of the namespace-specific schema files in the `./src/namespaces/` directory.
+   - Specify the action name, parameters, and grammar rules for parsing the action.
+
+2. **Implement Action Handlers**:
+
+   - Open the [actionHandler.mts](./src/actionHandler.mts) file.
+   - Add the logic for handling the new actions. Use existing handlers as a reference for implementing the required functionality.
+
+3. **Update the Manifest**:
+
+   - Modify the [manifest.json](./src/manifest.json) file to include the new actions. Provide a description and ensure the action is properly registered in the manifest.
+
+4. **Test the Implementation**:
+
+   - Write unit tests for the new actions to verify their functionality. Ensure that the tests cover various scenarios, including edge cases.
+   - Run the tests to confirm that the new actions work as expected.
+
+5. **Integrate with Other Components**:
+   - If the new actions interact with other TypeAgent components, ensure proper integration and compatibility. Update any necessary dependencies or configurations.
+
+By following these steps, you can extend the `powershell-typeagent` package to support additional PowerShell actions and workflows. For more details, refer to the existing codebase and the hand-written README.
 
 ## Reference
 
@@ -51,17 +82,17 @@ For a starting point, open the [actionHandler.mts](./src/actionHandler.mts) file
 ### Entry points
 
 - `./agent/manifest` → [./src/manifest.json](./src/manifest.json)
-- `./agent/handlers` → [./dist/actionHandler.mjs](./dist/actionHandler.mjs)
-- `./recipe` → [./dist/types/scriptRecipe.js](./dist/types/scriptRecipe.js)
+- `./agent/handlers` → `./dist/actionHandler.mjs` _(not found on disk)_
+- `./recipe` → `./dist/types/scriptRecipe.js` _(not found on disk)_
 
 ### Dependencies
 
 Workspace:
 
+- [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
 - [@typeagent/agent-flows](../../../packages/agent-flows/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
-- [action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 
 External: `@anthropic-ai/claude-agent-sdk`, `debug`
 
@@ -96,6 +127,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:30.178Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter powershell-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter powershell-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

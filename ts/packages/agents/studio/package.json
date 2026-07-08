@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "description": "TypeAgent Studio agent — the AI / conversational presenter over the @typeagent/core Studio runtime (inspect, and later run/validate/author)",
+  "keywords": [
+    "typeagent-agent"
+  ],
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",

@@ -31,6 +31,12 @@ export type SinceResolution =
           /** No since-ref could be determined (e.g. first run). */
           readonly source: "none";
           readonly reason: string;
+          /**
+           * True when this happened on the default branch with no
+           * watermark tag — the cold-start case where callers may opt
+           * to regenerate every package instead of doing nothing.
+           */
+          readonly onDefaultBranch: boolean;
       };
 
 export interface ResolveSinceOptions {
@@ -45,7 +51,7 @@ export interface ResolveSinceOptions {
 /**
  * Resolve the "since" ref for a docs-autogen run, applying the
  * smart-default logic described in
- * `ts/docs/architecture/doc-autogen.md`:
+ * `ts/docs/architecture/doc-pipeline/doc-autogen.md`:
  *
  *  1. If `--since <ref>` was passed, use it verbatim.
  *  2. Else, if the current branch differs from the default branch
@@ -53,7 +59,9 @@ export interface ResolveSinceOptions {
  *     between HEAD and that ref. (PR-scoped manual run.)
  *  3. Else, fall back to the `docs-bot/last-run` watermark tag.
  *  4. Else, return `source: "none"` so callers can decide whether
- *     to no-op or regenerate everything.
+ *     to no-op or regenerate everything. The `onDefaultBranch` flag
+ *     marks the default-branch cold start (no watermark seeded yet),
+ *     where a full sweep is the sensible default.
  */
 export async function resolveSinceRef(
     git: Git,
@@ -106,5 +114,6 @@ export async function resolveSinceRef(
             branch === defaultBranch
                 ? "On default branch and no watermark tag is present (first run?)"
                 : "No merge-base with default branch and no watermark tag is present",
+        onDefaultBranch: branch === defaultBranch,
     };
 }
