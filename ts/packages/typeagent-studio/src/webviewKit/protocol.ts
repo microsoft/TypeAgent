@@ -76,7 +76,10 @@ export type HostToWebviewMessage =
     /** A failure for a prior `run` request (or general error). */
     | { type: "error"; requestId?: number; message: string }
     /** Result of a host version QuickPick (omitted message ⇒ user cancelled). */
-    | { type: "versionPicked"; side: ReplaySide; resolved: ResolvedVersion };
+    | { type: "versionPicked"; side: ReplaySide; resolved: ResolvedVersion }
+    /** The utterance filter the user entered in the host input box (empty ⇒
+     *  cleared). Only sent when the user confirmed; a cancel sends nothing. */
+    | { type: "utteranceSearch"; query: string };
 
 /** Messages the webview posts to the extension host. */
 export type WebviewToHostMessage =
@@ -106,7 +109,10 @@ export type WebviewToHostMessage =
           validateWildcards: boolean;
       }
     /** Ask the host to open a native version QuickPick for one side. */
-    | { type: "pickVersion"; side: ReplaySide };
+    | { type: "pickVersion"; side: ReplaySide }
+    /** Ask the host to open a native input box to edit the utterance filter,
+     *  seeded with the filter currently applied in the report. */
+    | { type: "searchUtterances"; current: string };
 
 function narrowSide(value: unknown): ReplaySide | undefined {
     return value === "a" || value === "b" ? value : undefined;
@@ -161,6 +167,13 @@ export function parseWebviewMessage(
         case "pickVersion": {
             const side = narrowSide((value as { side?: unknown }).side);
             return side ? { type: "pickVersion", side } : undefined;
+        }
+        case "searchUtterances": {
+            const current = (value as { current?: unknown }).current;
+            return {
+                type: "searchUtterances",
+                current: typeof current === "string" ? current : "",
+            };
         }
         case "run": {
             const m = value as {

@@ -478,6 +478,23 @@ export function openImpactReport(
             await pickVersion(msg.side);
             return;
         }
+        if (msg.type === "searchUtterances") {
+            // A live input box: each keystroke posts the current text back so the
+            // report filters as the user types. Closing it (accept or Esc) keeps
+            // whatever is currently shown — no revert, since it was applied live.
+            const input = vscode.window.createInputBox();
+            input.title = "Impact Report — filter utterances";
+            input.prompt = "Show only rows whose utterance contains this text";
+            input.placeholder = "Filter by utterance text";
+            input.value = msg.current;
+            input.onDidChangeValue((value) => {
+                post({ type: "utteranceSearch", query: value });
+            });
+            input.onDidAccept(() => input.hide());
+            input.onDidHide(() => input.dispose());
+            input.show();
+            return;
+        }
         // msg.type === "run"
         // A run may follow a commit or branch switch, so the cached local refs
         // could be stale — drop them so the next picker re-enumerates HEAD.
