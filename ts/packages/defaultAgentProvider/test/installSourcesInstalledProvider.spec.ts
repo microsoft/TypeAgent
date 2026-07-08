@@ -1448,7 +1448,12 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         gated.calls.length = 0;
 
         const updating = built.testApi.update("foo", undefined, fast.host);
-        await flush();
+        await waitFor(
+            () =>
+                fast.calls.some((c) => c.op === "remove") &&
+                gated.calls.some((c) => c.op === "remove"),
+            "both sessions removed v1",
+        );
         // The fast session removed v1 and quiesced, but the barrier has not
         // completed (the gated session has not quiesced), so NEITHER session has
         // added v2 yet — no coexistence, no partial swap.
