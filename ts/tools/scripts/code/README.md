@@ -26,7 +26,7 @@ Run any of these from `ts/`. All accept `--help`, `--root <path>`,
 | `npm run code-circular`    | madge                      | runtime import cycles                                                                             | 232 cycles (dispatcher 115)                                      | **ratchet** (no new cycles)                                |
 | `npm run code-consistency` | custom                     | cross-package duplicate exports, direct `process.env`, agent-layout conformance                   | 16 dup exports · 263 env refs · agents 33/34                     | —                                                          |
 | `npm run code-deadcode`    | knip                       | unused files / exports / deps                                                                     | ~1,790 raw (needs config)                                        | — (report-only)                                            |
-| `npm run code-debt`        | regex scan                 | TODO/FIXME/HACK/XXX, `@deprecated`, skipped/focused tests                                         | TODO 208 · `@deprecated` 41 · skipped 14 · focused 0             | **gate** (no focused / no new skips)                       |
+| `npm run code-debt`        | regex scan                 | TODO/FIXME/HACK/XXX, `@deprecated`, skipped/focused tests                                         | TODO 207 · `@deprecated` 41 · skipped 2 · focused 0              | **gate** (no focused / no new skips)                       |
 
 ### Modes
 
@@ -81,8 +81,8 @@ PR-only steps in `build-ts.yml`, after the build, each fetching the base ref:
 3. **Circular dependency ratchet** — the change may not introduce a new import
    cycle (compares HEAD vs the merge base via a throwaway git worktree; heavier,
    ~80s).
-4. **Test debt gate** — zero focused tests (`.only`/`fit`/`fdescribe`), no newly
-   skipped tests (`.skip`/`xit`/`xdescribe`) in changed files.
+4. **Test debt gate** — zero focused tests (`.only`/`.only.each`/`fit`/`fdescribe`),
+   no newly skipped tests (`.skip`/`.skip.each`/`xit`/`xdescribe`) in changed files.
 
 Dead-code is **not** gated yet — knip's numbers are inflated until
 [`knip.jsonc`](./knip.jsonc) declares the entry points it can't infer.
@@ -97,10 +97,21 @@ Dead-code is **not** gated yet — knip's numbers are inflated until
   `code-lint --fix` + 7 hand-fixed; now gated at zero). Verified: full build
   passes, and every unit/live test failure was proven pre-existing (the changes
   are semantics-preserving `let`/`var`→`const`).
+- **Quick win #2 — skipped-test detection + triage.** Taught `code-debt` to see
+  `.skip.each`/`.only.each` and to ignore conditional/placeholder stubs (empty
+  `() => {}` bodies from the `testIf`/`describeIf` key-gates and data-driven
+  loops), so the count reflects genuinely disabled tests. Re-enabled the
+  `CalendarDate` grammar test (the converter it waited on now exists) and
+  replaced the dead, no-op `api/test/api.spec.ts` with a real `api.test.ts`
+  web-server smoke test: **14 → 2** (both remaining are intentional).
 
 ### Next — quick wins (low risk)
 
-- **14 skipped tests** — un-skip or delete; the debt gate already blocks new ones.
+- **Skipped tests — down to 2, both intentional** (no action needed): the
+  documented `.skip.each` suites `actionGrammar/test/nfaDfaParity.spec.ts`
+  (DFA-AST ruleRef-binding gap) and `actionSchema/test/regen.spec.ts`
+  (exact-regen, explicitly not a goal). Un-skip when those land; the debt gate
+  already blocks new ones.
 - **WebSocket helpers** — `createWebSocket` + `keepWebSocketAlive` are
   reimplemented in 4 packages; point `browser`/`coda`/`shell` at
   `utils/webSocketUtils` and delete the forks.
