@@ -31,14 +31,20 @@ function loadCatalog(file: string): AgentCatalog {
     let text: string;
     try {
         text = fs.readFileSync(file, "utf8");
-    } catch (e: any) {
-        throw new Error(`Could not read catalog '${file}': ${e?.message ?? e}`);
+    } catch (e: unknown) {
+        throw new Error(
+            `Could not read catalog '${file}': ${
+                e instanceof Error ? e.message : String(e)
+            }`,
+        );
     }
     try {
         return JSON.parse(text) as AgentCatalog;
-    } catch (e: any) {
+    } catch (e: unknown) {
         throw new Error(
-            `Catalog '${file}' is not valid JSON: ${e?.message ?? e}`,
+            `Catalog '${file}' is not valid JSON: ${
+                e instanceof Error ? e.message : String(e)
+            }`,
         );
     }
 }

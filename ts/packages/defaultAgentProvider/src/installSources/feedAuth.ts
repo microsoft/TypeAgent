@@ -50,8 +50,14 @@ async function defaultAzRunner(): Promise<string> {
             { shell: process.platform === "win32" },
         );
         return stdout;
-    } catch (e: any) {
-        const detail = e?.stderr?.toString?.() ?? e?.message ?? String(e);
+    } catch (e: unknown) {
+        const detail =
+            e && typeof e === "object" && "stderr" in e
+                ? String((e as { stderr?: unknown }).stderr ?? "") ||
+                  (e instanceof Error ? e.message : String(e))
+                : e instanceof Error
+                  ? e.message
+                  : String(e);
         throw new FeedAuthError(
             `Could not get an Azure DevOps access token from the Azure CLI. ` +
                 `Run 'az login' and try again.\n${detail}`,

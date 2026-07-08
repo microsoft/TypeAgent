@@ -165,6 +165,19 @@ interface AzureFeedInfo {
     feed: string;
 }
 
+interface AzurePackagesResponse {
+    value?: Array<{
+        normalizedName?: string;
+        name?: string;
+    }>;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : undefined;
+}
+
 // Parse an Azure Artifacts npm registry URL into { org, project?, feed }.
 // project-scoped: https://pkgs.dev.azure.com/{org}/{project}/_packaging/{feed}/npm/registry/
 // org-scoped:     https://pkgs.dev.azure.com/{org}/_packaging/{feed}/npm/registry/
@@ -258,10 +271,11 @@ async function listScopedPackages(
                 `Azure Artifacts packages query failed (${res.status} ${res.statusText})`,
             );
         }
-        const data: any = await res.json();
-        const page: any[] = data.value ?? [];
+        const data = (await res.json()) as AzurePackagesResponse;
+        const page = Array.isArray(data.value) ? data.value : [];
         for (const pkg of page) {
-            const name: string = pkg.normalizedName ?? pkg.name;
+            const nameValue = pkg.normalizedName ?? pkg.name;
+            const name = typeof nameValue === "string" ? nameValue : undefined;
             if (
                 name &&
                 (scopes.length === 0 ||
@@ -293,8 +307,8 @@ async function isAgentPackage(
     if (!res.ok) {
         return false;
     }
-    const packument: any = await res.json();
-    const keywords: unknown = packument.keywords;
+    const packument = asRecord(await res.json());
+    const keywords: unknown = packument?.keywords;
     return Array.isArray(keywords) && keywords.includes(AGENT_KEYWORD);
 }
 
@@ -306,7 +320,7 @@ async function fetchPackument(
     packageName: string,
     token: string,
     fetchFn: typeof fetch,
-): Promise<any | undefined> {
+): Promise<unknown | undefined> {
     const url = `${registry.replace(/\/$/, "")}/${packageName.replace("/", "%2F")}`;
     try {
         const res = await fetchFn(url, {
@@ -329,16 +343,18 @@ async function fetchPackument(
 // range) so the caller defers to npm's own resolution at install time.
 function resolveConcreteVersion(
     spec: string,
-    packument: any,
+    packument: unknown,
 ): string | undefined {
+    const packumentRecord = asRecord(packument);
+    const versionsRecord = asRecord(packumentRecord?.versions);
     const versions =
-        packument && typeof packument.versions === "object"
-            ? Object.keys(packument.versions)
-            : [];
-    const distTags: Record<string, string> =
-        packument && typeof packument["dist-tags"] === "object"
-            ? packument["dist-tags"]
-            : {};
+        versionsRecord !== undefined ? Object.keys(versionsRecord) : [];
+    const distTagsRecord = asRecord(packumentRecord?.["dist-tags"]);
+    const distTags: Record<string, string> = Object.fromEntries(
+        Object.entries(distTagsRecord ?? {}).filter(
+            (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+    );
     // The part after the module name: "" (no version) | exact | tag | range.
     const at = spec.lastIndexOf("@");
     const range = at > 0 ? spec.slice(at + 1) : "";
@@ -357,16 +373,20 @@ function resolveConcreteVersion(
     return undefined;
 }
 
-function packageManifestForVersion(packument: any, version: string): any {
-    const versions =
-        packument && typeof packument.versions === "object"
-            ? packument.versions
-            : undefined;
+function packageManifestForVersion(
+    packument: unknown,
+    version: string,
+): Record<string, unknown> | undefined {
+    const packumentRecord = asRecord(packument);
+    const versions = asRecord(packumentRecord?.versions);
     const manifest = versions?.[version];
-    return manifest && typeof manifest === "object" ? manifest : undefined;
+    return asRecord(manifest);
 }
 
-function hasAgentKeywordForVersion(packument: any, version: string): boolean {
+function hasAgentKeywordForVersion(
+    packument: unknown,
+    version: string,
+): boolean {
     const keywords: unknown = packageManifestForVersion(
         packument,
         version,
@@ -374,7 +394,7 @@ function hasAgentKeywordForVersion(packument: any, version: string): boolean {
     return Array.isArray(keywords) && keywords.includes(AGENT_KEYWORD);
 }
 
-function packageOsForVersion(packument: any, version: string): unknown {
+function packageOsForVersion(packument: unknown, version: string): unknown {
     return packageManifestForVersion(packument, version)?.os;
 }
 
