@@ -640,6 +640,64 @@ function loadExceptionSet(exceptionsFile: string | undefined): Set<string> {
     return out;
 }
 
+interface HeadScan {
+    focusedHits: string[];
+    skipHits: string[];
+    skips: number;
+}
+
+// Scan a changed test file's HEAD content for focused/skipped test markers,
+// honoring baseline exceptions and the empty-stub exclusion (matching
+// countSkips). Returns the focused/skip locations and the real skip count.
+function scanHeadTestFile(
+    relPath: string,
+    absPath: string,
+    exceptions: Set<string>,
+): HeadScan {
+    const focusedHits: string[] = [];
+    const skipHits: string[] = [];
+    let skips = 0;
+    const lines = fs.readFileSync(absPath, "utf8").split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        // A baseline exception (file:line) grandfathers whatever
+        // focused/skipped marker sits on that head line.
+        if (exceptions.has(exceptionKey(relPath, i + 1))) {
+            continue;
+        }
+        FOCUSED_RE.lastIndex = 0;
+        if (FOCUSED_RE.test(line)) {
+            focusedHits.push(`  ${relPath}:${i + 1}  ${line.trim()}`);
+        }
+        // Ignore empty stub bodies (`() => {}`) so the gate only trips on
+        // genuinely disabled tests, not key-gated/data-driven runtime skips.
+        if (EMPTY_SKIP_STUB_RE.test(line)) {
+            continue;
+        }
+        SKIP_RE.lastIndex = 0;
+        const skipsOnLine = line.match(SKIP_RE)?.length ?? 0;
+        if (skipsOnLine > 0) {
+            skips += skipsOnLine;
+            skipHits.push(`  ${relPath}:${i + 1}  ${line.trim()}`);
+        }
+    }
+    return { focusedHits, skipHits, skips };
+}
+
+// Count real skipped tests in a changed file's content at the merge base.
+// Returns 0 if the file did not exist there.
+function countBaseSkips(
+    repoRoot: string,
+    mergeBase: string,
+    basePath: string,
+): number {
+    try {
+        return countSkips(git(["show", `${mergeBase}:${basePath}`], repoRoot));
+    } catch {
+        return 0; // file did not exist at base
+    }
+}
+
 function runGate(opts: Options): number {
     const exceptions = loadExceptionSet(opts.exceptionsFile);
     let repoRoot: string;
@@ -684,43 +742,13 @@ function runGate(opts: Options): number {
         }
         const headAbs = path.resolve(repoRoot, e.head);
         if (fs.existsSync(headAbs)) {
-            const content = fs.readFileSync(headAbs, "utf8");
-            const lines = content.split(/\r?\n/);
-            for (let i = 0; i < lines.length; i++) {
-                // A baseline exception (file:line) grandfathers whatever
-                // focused/skipped marker sits on that head line.
-                if (exceptions.has(exceptionKey(e.head, i + 1))) {
-                    continue;
-                }
-                FOCUSED_RE.lastIndex = 0;
-                if (FOCUSED_RE.test(lines[i])) {
-                    focusedHits.push(
-                        `  ${e.head}:${i + 1}  ${lines[i].trim()}`,
-                    );
-                }
-                // Match countSkips(): ignore empty stub bodies (`() => {}`) so
-                // the gate only trips on genuinely disabled tests.
-                if (EMPTY_SKIP_STUB_RE.test(lines[i])) {
-                    continue;
-                }
-                SKIP_RE.lastIndex = 0;
-                const skipsOnLine = lines[i].match(SKIP_RE)?.length ?? 0;
-                if (skipsOnLine > 0) {
-                    headSkips += skipsOnLine;
-                    skipHits.push(`  ${e.head}:${i + 1}  ${lines[i].trim()}`);
-                }
-            }
+            const scan = scanHeadTestFile(e.head, headAbs, exceptions);
+            focusedHits.push(...scan.focusedHits);
+            skipHits.push(...scan.skipHits);
+            headSkips += scan.skips;
         }
         if (e.base && isTestFile(e.base)) {
-            try {
-                const baseContent = git(
-                    ["show", `${mergeBase}:${e.base}`],
-                    repoRoot,
-                );
-                baseSkips += countSkips(baseContent);
-            } catch {
-                /* file did not exist at base */
-            }
+            baseSkips += countBaseSkips(repoRoot, mergeBase, e.base);
         }
     }
 
