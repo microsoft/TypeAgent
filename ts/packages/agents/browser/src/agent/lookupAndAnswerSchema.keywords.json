@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "schema": "browser.lookupAndAnswer",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T01:46:48.131Z",
+  "sourceHash": "w0SuvUxSEgtnl69yLP9lQJNrMNfzVH6pp9CzjRkryjU=",
+  "actions": {
+    "lookupAndAnswerInternet": [
+      "internet",
+      "information",
+      "question",
+      "answer",
+      "search",
+      "web",
+      "fact",
+      "data",
+      "stock",
+      "price",
+      "sport",
+      "score",
+      "event",
+      "commerce",
+      "offering",
+      "site",
+      "term",
+      "entitie",
+      "request",
+      "result",
+      "response"
+    ]
+  }
+}
