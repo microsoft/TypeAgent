@@ -474,6 +474,35 @@ function isSingleVariableRule(rule: GrammarRule): { variable: string } | false {
 }
 
 /**
+ * For a rule with no explicit value expression and more than one part,
+ * find the single variable-bearing part (if exactly one exists) so its
+ * value can be forwarded as the rule's effective value.
+ *
+ * Mirrors the matcher's implicit-default forwarding rule
+ * (`getImplicitDefaultValue` in grammarOptimizer.ts), which the grammar
+ * optimizer's `factorCommonPrefixes` pass relies on: a shared-prefix
+ * rule factored to `[<prefix>, RulesPart(variable: "w")]` has no value
+ * of its own - the matcher (and, with this helper, the NFA compiler)
+ * forwards whatever value the bound `RulesPart` produces at match time.
+ *
+ * Returns `undefined` when zero or more-than-one parts carry a variable
+ * - the caller treats "more than one" as a genuine ambiguity error and
+ * "zero" as "no implicit value derivable here".
+ */
+function findSingleVariableBearingPart(
+    rule: GrammarRule,
+): { variable: string } | "ambiguous" | undefined {
+    let found: string | undefined;
+    for (const part of rule.parts) {
+        const name = part.variable;
+        if (name === undefined) continue;
+        if (found !== undefined) return "ambiguous";
+        found = name;
+    }
+    return found !== undefined ? { variable: found } : undefined;
+}
+
+/**
  * Collect all variable names from a rule's parts
  * Returns them in order of appearance
  *
@@ -614,15 +643,6 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
     ) {
         const rule = normalizedGrammar.alternatives[ruleIndex];
 
-        // VALIDATION: Multi-term rules MUST have value expressions
-        // Single-term rules can omit value expressions (they inherit from the term)
-        if (rule.parts.length > 1 && !rule.value) {
-            throw new Error(
-                `Grammar rule at index ${ruleIndex} has ${rule.parts.length} terms but no value expression. ` +
-                    `Multi-term rules must have an explicit value expression (using ->).`,
-            );
-        }
-
         // Check for single-variable rules like <ArtistName> = $(x:wildcard);
         // These should implicitly produce their variable's value: -> x
         let effectiveValue = rule.value;
@@ -630,6 +650,44 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
             const singleVar = isSingleVariableRule(rule);
             if (singleVar) {
                 effectiveValue = { type: "variable", name: singleVar.variable };
+            } else if (rule.parts.length > 1) {
+                // Multi-term rule with no explicit value: mirror the
+                // matcher's implicit-default forwarding rule (see
+                // `findSingleVariableBearingPart`) - this is the shape
+                // produced by the grammar optimizer's
+                // `factorCommonPrefixes` pass (`nfaSafeOptimizations`
+                // preset) when it factors a shared optional prefix out
+                // of alternatives that each carry their own `->` value.
+                const singleVarPart = findSingleVariableBearingPart(rule);
+                if (singleVarPart === "ambiguous") {
+                    throw new Error(
+                        `Grammar rule at index ${ruleIndex} has ${rule.parts.length} terms but no value expression, ` +
+                            `and more than one part carries a variable - the implicit value is ambiguous. ` +
+                            `Multi-term rules must have an explicit value expression (using ->).`,
+                    );
+                }
+                if (singleVarPart !== undefined) {
+                    effectiveValue = {
+                        type: "variable",
+                        name: singleVarPart.variable,
+                    };
+                } else {
+                    // VALIDATION: Multi-term rules MUST have a value
+                    // expression, either explicit or implicitly derivable
+                    // from exactly one variable-bearing part.
+                    const hasTailCall = rule.parts.some(
+                        (p) => p.type === "rules" && p.tailCall,
+                    );
+                    throw new Error(
+                        `Grammar rule at index ${ruleIndex} has ${rule.parts.length} terms but no value expression. ` +
+                            `Multi-term rules must have an explicit value expression (using ->).` +
+                            (hasTailCall
+                                ? " This rule contains a tailCall RulesPart, which the NFA compiler " +
+                                  "does not support - disable `tailFactoring` / `promoteTailRulesParts` " +
+                                  "in the grammar optimizer (use `nfaSafeOptimizations`) for NFA/DFA paths."
+                                : ""),
+                    );
+                }
             }
         }
 
@@ -1535,6 +1593,24 @@ function compileRulesPartWithSlots(
             const singleVar = isSingleVariableRule(rule);
             if (singleVar) {
                 effectiveValue = { type: "variable", name: singleVar.variable };
+            } else if (rule.parts.length > 1) {
+                // Mirror the matcher's implicit-default forwarding rule
+                // (see `findSingleVariableBearingPart`) for nested
+                // multi-term rules produced by `factorCommonPrefixes`.
+                const singleVarPart = findSingleVariableBearingPart(rule);
+                if (singleVarPart === "ambiguous") {
+                    throw new Error(
+                        `Nested grammar rule has ${rule.parts.length} terms but no value expression, ` +
+                            `and more than one part carries a variable - the implicit value is ambiguous. ` +
+                            `Multi-term rules must have an explicit value expression (using ->).`,
+                    );
+                }
+                if (singleVarPart !== undefined) {
+                    effectiveValue = {
+                        type: "variable",
+                        name: singleVarPart.variable,
+                    };
+                }
             }
         }
 

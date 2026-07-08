@@ -7,7 +7,7 @@ import fs from "node:fs";
 import {
     grammarToJson,
     loadGrammarRulesNoThrow,
-    recommendedOptimizations,
+    nfaSafeOptimizations,
     SchemaLoader,
 } from "@typeagent/action-grammar";
 import { parseSchemaSource } from "@typeagent/action-schema";
@@ -86,7 +86,14 @@ export default class Compile extends Command {
                 : {
                       startValueRequired: true,
                       schemaLoader,
-                      optimizations: recommendedOptimizations,
+                      // agent-server defaults to `grammarSystem: "nfa"`, so
+                      // agc must emit an optimized AST the NFA compiler can
+                      // consume.  `nfaSafeOptimizations` keeps every safe
+                      // pass (inlining, prefix-factoring, dispatch) but
+                      // omits `tailFactoring` / `promoteTailRulesParts`,
+                      // whose `RulesPart.tailCall` output only the
+                      // AST-walking matcher understands.
+                      optimizations: nfaSafeOptimizations,
                   },
         );
 
