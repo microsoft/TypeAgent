@@ -582,29 +582,36 @@ function spawnAgentServer(
                 );
             } else {
                 const psExe = resolvePowerShellExe();
-                // Pass serverPath to the child through the environment rather
-                // than the command line so it never reaches cmd.exe or the
-                // PowerShell parser as text. Only the numeric port and
-                // idleTimeout are interpolated into the command; the path is
-                // read from $env:TYPEAGENT_SERVER_PATH at runtime. The command
-                // is handed to PowerShell as a base64 -EncodedCommand blob,
-                // whose alphabet is inert to both cmd.exe and PowerShell.
+                // Pass the server path, port and idle timeout to the child
+                // through the environment rather than the command line so none
+                // of them ever reach cmd.exe or the PowerShell parser as text.
+                // The command handed to PowerShell is therefore a fixed
+                // constant that only reads $env values at runtime, delivered as
+                // a base64 -EncodedCommand blob whose alphabet is inert to both
+                // cmd.exe and PowerShell.
                 const psCommand =
-                    `& node $env:TYPEAGENT_SERVER_PATH --port ${port}` +
-                    (idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : "");
+                    `$host.UI.RawUI.WindowTitle = ` +
+                    `"TypeAgent Server (port $env:TYPEAGENT_SERVER_PORT)"; ` +
+                    `& node $env:TYPEAGENT_SERVER_PATH --port $env:TYPEAGENT_SERVER_PORT` +
+                    (idleTimeout > 0
+                        ? ` --idle-timeout $env:TYPEAGENT_SERVER_IDLE_TIMEOUT`
+                        : "");
                 const encodedCommand = Buffer.from(
                     psCommand,
                     "utf16le",
                 ).toString("base64");
                 const psArgs = ["-NoExit", "-EncodedCommand", encodedCommand];
                 // The first quoted argument to `start` is the new window's
-                // title. It MUST be non-empty: an empty title leaves the
-                // console window title blank, which trips a libuv bug on
+                // initial title. It MUST be non-empty: an empty title leaves
+                // the console window title blank, which trips a libuv bug on
                 // Windows — GetConsoleTitleW returns 0 with GetLastError()==0,
                 // libuv reads that as success but leaves process_title NULL,
                 // and the next process.title read aborts with
                 // "Assertion failed: process_title, file src\\win\\util.c".
-                const windowTitle = `TypeAgent Server (port ${port})`;
+                // A fixed literal keeps caller-supplied values out of the
+                // cmd.exe argument list; the port is appended to the title from
+                // the environment once PowerShell starts (see psCommand above).
+                const windowTitle = "TypeAgent Server";
                 const child = spawn(
                     "cmd.exe",
                     ["/c", "start", windowTitle, psExe, ...psArgs],
@@ -614,6 +621,8 @@ function spawnAgentServer(
                         env: {
                             ...process.env,
                             TYPEAGENT_SERVER_PATH: serverPath,
+                            TYPEAGENT_SERVER_PORT: String(port),
+                            TYPEAGENT_SERVER_IDLE_TIMEOUT: String(idleTimeout),
                         },
                     },
                 );
