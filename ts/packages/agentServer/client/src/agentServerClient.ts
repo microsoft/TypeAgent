@@ -503,6 +503,36 @@ export interface AgentServerSpawnOptions {
     stdio?: StdioOptions;
 }
 
+// Locate a PowerShell executable on Windows. Prefer PowerShell 7+ (pwsh.exe)
+// from its standard install locations or PATH, so installs outside the default
+// "C:\Program Files\PowerShell\7" directory (winget, x86, a relocated Program
+// Files) are still found. Fall back to Windows PowerShell (powershell.exe),
+// which is always present. An absolute path is returned when one is found so
+// the result does not depend on the launcher's PATH.
+function resolvePowerShellExe(): string {
+    const candidates: string[] = [];
+    for (const base of [
+        process.env["ProgramFiles"],
+        process.env["ProgramW6432"],
+        process.env["ProgramFiles(x86)"],
+    ]) {
+        if (base) {
+            candidates.push(path.join(base, "PowerShell", "7", "pwsh.exe"));
+        }
+    }
+    for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
+        if (dir) {
+            candidates.push(path.join(dir, "pwsh.exe"));
+        }
+    }
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+    return "powershell.exe";
+}
+
 function spawnAgentServer(
     serverPath: string,
     port: number,
@@ -552,8 +582,7 @@ function spawnAgentServer(
                     `Agent server process spawned hidden (pid: ${child.pid})`,
                 );
             } else {
-                const pwsh7 = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
-                const psExe = fs.existsSync(pwsh7) ? pwsh7 : "powershell.exe";
+                const psExe = resolvePowerShellExe();
                 // Pass serverPath to the child through the environment rather
                 // than the command line so it never reaches cmd.exe or the
                 // PowerShell parser as text. Only the numeric port and
