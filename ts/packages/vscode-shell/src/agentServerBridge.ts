@@ -6,6 +6,7 @@ import * as os from "os";
 import {
     connectAgentServer,
     type AgentServerConnection,
+    type SpeechToken,
 } from "@typeagent/agent-server-client";
 import {
     findOrCreateNamedConversation,
@@ -1238,7 +1239,11 @@ export class AgentServerBridge {
     ): Promise<void> {
         switch (msg.type) {
             case "sendCommand":
-                await this.sendCommand(msg.command, msg.requestId);
+                await this.sendCommand(
+                    msg.command,
+                    msg.requestId,
+                    msg.attachments,
+                );
                 break;
             case "interactionResponse":
                 // Reply to a server-driven interactive prompt (dev-mode
@@ -1256,23 +1261,69 @@ export class AgentServerBridge {
                     );
                 }
                 break;
+            case "choiceResponse":
+                // Reply to an agent's non-blocking choice card
+                // (createYesNoChoiceResult / createMultiChoiceResult /
+                // createPickRememberChoiceResult). Resolves the dispatcher's
+                // pending choice route so the agent's handleChoice callback
+                // runs. Without this the card's buttons would do nothing.
+                try {
+                    await this.session?.dispatcher.respondToChoice(
+                        msg.choiceId,
+                        msg.response,
+                    );
+                } catch (e) {
+                    console.warn(
+                        "[agentServerBridge] respondToChoice failed:",
+                        e,
+                    );
+                }
+                break;
+            case "recordUserFeedback":
+                // Persist a user's thumbs up/down rating. Mirrors the
+                // deleteMessage -> recordUserHide path (same RequestId shape);
+                // the dispatcher broadcasts the result back via
+                // ClientIO.onUserFeedback so the bubble updates.
+                try {
+                    await this.session?.dispatcher.recordUserFeedback(
+                        { requestId: msg.requestId },
+                        msg.rating,
+                        msg.category,
+                        msg.comment,
+                        msg.includeContext,
+                    );
+                } catch (e) {
+                    console.warn(
+                        "[agentServerBridge] recordUserFeedback failed:",
+                        e,
+                    );
+                }
+                break;
             case "bridgeRpcRequest": {
-                // Template-editor service call routed from the webview to the
-                // dispatcher (used by the proposeAction edit flow). Correlated
-                // by `id`; always answered so the webview promise settles.
+                // Service call routed from the webview to the dispatcher:
+                // template-editor lookups (proposeAction edit flow) or
+                // getDynamicDisplay (live display refresh). Correlated by
+                // `id`; always answered so the webview promise settles.
                 const dispatcher = this.session?.dispatcher;
                 try {
                     if (dispatcher === undefined) {
                         throw new Error("No active session");
                     }
-                    const result =
-                        msg.method === "getTemplateSchema"
-                            ? await (dispatcher.getTemplateSchema as any)(
-                                  ...msg.args,
-                              )
-                            : await (dispatcher.getTemplateCompletion as any)(
-                                  ...msg.args,
-                              );
+                    let result: unknown;
+                    if (msg.method === "getTemplateSchema") {
+                        result = await (dispatcher.getTemplateSchema as any)(
+                            ...msg.args,
+                        );
+                    } else if (msg.method === "getTemplateCompletion") {
+                        result = await (
+                            dispatcher.getTemplateCompletion as any
+                        )(...msg.args);
+                    } else {
+                        // getDynamicDisplay(appAgentName, type, displayId)
+                        result = await (dispatcher.getDynamicDisplay as any)(
+                            ...msg.args,
+                        );
+                    }
                     this.postToWebview(webview, {
                         type: "bridgeRpcResponse",
                         id: msg.id,
@@ -1363,6 +1414,27 @@ export class AgentServerBridge {
                     void vscode.env.openExternal(vscode.Uri.parse(msg.href));
                 }
                 break;
+            case "getSpeechToken": {
+                // Relay a speech-token request to the agent server (which owns
+                // the `speech:` config) so the webview can run Azure Speech
+                // recognition. Always answer so the webview promise settles;
+                // `token` is undefined when speech isn't configured.
+                let speechToken: SpeechToken | undefined;
+                try {
+                    speechToken = await this.rawConnection?.getSpeechToken();
+                } catch (e) {
+                    console.warn(
+                        "[agentServerBridge] getSpeechToken failed:",
+                        e,
+                    );
+                }
+                this.postToWebview(webview, {
+                    type: "speechTokenResponse",
+                    id: msg.id,
+                    token: speechToken,
+                });
+                break;
+            }
             case "connect":
                 // The webview posts `connect` once it has wired up its
                 // message listener — this is also our cue that it's ready
@@ -1722,6 +1794,7 @@ export class AgentServerBridge {
     private async sendCommand(
         command: string,
         requestId?: string,
+        attachments?: string[],
     ): Promise<void> {
         // Once the user actually engages with an ephemeral panel session,
         // promote it to a persistent named session so it survives panel
@@ -1757,7 +1830,7 @@ export class AgentServerBridge {
             const result = await awaitCommand(
                 this.session.dispatcher,
                 command,
-                undefined,
+                attachments,
                 options,
                 requestId,
             );

@@ -67,6 +67,7 @@ import type {
     SpeechState,
     TtsProvider,
 } from "./providers.js";
+import { createWebSpeechProvider } from "./webSpeechProvider.js";
 import { openSettingsPopup, openHelpPopup } from "./popups.js";
 import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
@@ -452,9 +453,10 @@ export interface ChatPanelOptions {
     feedbackUIVariant?: FeedbackUIVariant;
 
     /**
-     * Optional speech-to-text provider. When supplied, ChatPanel renders a
-     * microphone button (reflecting the provider's state) and a "listening"
-     * banner, and inserts recognized text into the input.
+     * Optional speech-to-text provider. The mic button renders by default
+     * using the browser's Web Speech API; supplying a provider overrides that
+     * default (e.g. the Electron shell's Azure/Whisper recognizer), driving
+     * the mic-button state, the "listening" banner, and recognized-text input.
      */
     speechProvider?: SpeechInputProvider;
     /**
@@ -463,9 +465,11 @@ export interface ChatPanelOptions {
      */
     ttsProvider?: TtsProvider;
     /**
-     * Optional image-capture provider. When supplied, ChatPanel renders an
-     * attach-file button (if pickFile present) and a camera button (if
-     * openCamera present) that feed the next message's attachments.
+     * Optional image-capture provider. The attach-file button renders by
+     * default using a web-native hidden file picker; supplying `pickFile`
+     * overrides that with a host-native picker (e.g. the Electron dialog).
+     * When `openCamera` is present, an in-app camera button is also rendered.
+     * Both feed the next message's attachments.
      */
     imageCaptureProvider?: ImageCaptureProvider;
     /**
@@ -708,6 +712,9 @@ export class ChatPanel {
     private micButton?: HTMLButtonElement;
     private attachButton?: HTMLButtonElement;
     private cameraButton?: HTMLButtonElement;
+    // Hidden <input type="file"> backing the web-native default attach button
+    // (used when the host doesn't supply an imageCaptureProvider.pickFile).
+    private fileInput?: HTMLInputElement;
     private voiceBanner?: HTMLDivElement;
     private lightboxOverlay?: HTMLDivElement;
     private lightboxKeyHandler?: (ev: KeyboardEvent) => void;
@@ -732,6 +739,14 @@ export class ChatPanel {
         this.settingsPanel = options.settingsPanel;
         this.helpPanel = options.helpPanel;
         this.onDeleteMessage = options.onDeleteMessage;
+
+        // Web-native default: when the host doesn't inject a speech provider,
+        // fall back to the browser's Web Speech API so the mic button works
+        // out of the box. Resolves to undefined where the API is unavailable,
+        // in which case the mic affordance is simply not rendered.
+        if (!this.speechProvider) {
+            this.speechProvider = createWebSpeechProvider();
+        }
 
         // Build DOM structure
         const wrapper = document.createElement("div");
@@ -1049,22 +1064,37 @@ export class ChatPanel {
 
     /**
      * Create the mic / attach / camera buttons and wire the speech
-     * provider's state callbacks. Only the affordances whose providers are
-     * present get rendered, so hosts that omit a provider see no change.
+     * provider's state callbacks. The attach-file and mic buttons render by
+     * default (web-native file picker + Web Speech API); the camera button
+     * renders only when the host supplies `imageCaptureProvider.openCamera`.
      */
     private setupProviderAffordances() {
-        // Attach-file + camera buttons (image capture provider).
-        if (this.imageCaptureProvider?.pickFile) {
-            this.attachButton = document.createElement("button");
-            this.attachButton.className =
-                "chat-input-button chat-attach-button";
-            this.attachButton.title = "Attach image";
-            this.attachButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 0 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6z"/></svg>`;
-            this.attachButton.addEventListener("click", () =>
-                this.handleAttachFile(),
-            );
-            this.inputArea.insertBefore(this.attachButton, this.sendButton);
-        }
+        // Attach-file button — always rendered. Uses the host's
+        // imageCaptureProvider.pickFile when supplied, otherwise a built-in
+        // web-native hidden <input type="file"> (see handleAttachFile).
+        this.fileInput = document.createElement("input");
+        this.fileInput.type = "file";
+        this.fileInput.accept = "image/*";
+        this.fileInput.multiple = true;
+        this.fileInput.style.display = "none";
+        this.fileInput.addEventListener("change", () => {
+            this.handleFileDrop(this.fileInput?.files);
+            // Reset so re-selecting the same file still fires "change".
+            if (this.fileInput) this.fileInput.value = "";
+        });
+        this.inputArea.appendChild(this.fileInput);
+
+        this.attachButton = document.createElement("button");
+        this.attachButton.className = "chat-input-button chat-attach-button";
+        this.attachButton.title = "Attach image";
+        this.attachButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 0 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6z"/></svg>`;
+        this.attachButton.addEventListener("click", () =>
+            this.handleAttachFile(),
+        );
+        this.inputArea.insertBefore(this.attachButton, this.sendButton);
+
+        // Camera button — only when the host supplies an in-app capture
+        // (there is no reliable web-native default for this yet).
         if (this.imageCaptureProvider?.openCamera) {
             this.cameraButton = document.createElement("button");
             this.cameraButton.className =
@@ -1153,13 +1183,20 @@ export class ChatPanel {
     }
 
     private async handleAttachFile() {
-        const urls = await this.imageCaptureProvider?.pickFile();
-        if (urls && urls.length > 0) {
-            for (const url of urls) {
-                this.pendingAttachments.push(url);
-                this.showAttachmentPreview(url);
+        // Prefer a host-supplied native picker (e.g. the Electron dialog).
+        if (this.imageCaptureProvider?.pickFile) {
+            const urls = await this.imageCaptureProvider.pickFile();
+            if (urls && urls.length > 0) {
+                for (const url of urls) {
+                    this.pendingAttachments.push(url);
+                    this.showAttachmentPreview(url);
+                }
             }
+            return;
         }
+        // Web-native default: open the hidden file input; the "change"
+        // handler reads the selection via handleFileDrop.
+        this.fileInput?.click();
     }
 
     private async handleCameraCapture() {

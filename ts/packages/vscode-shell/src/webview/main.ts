@@ -14,7 +14,9 @@ import {
     formatHistorySeparatorLabel,
     type ConnectionStatus,
 } from "chat-ui";
-import type { TemplateEditServices } from "chat-ui";
+import type { TemplateEditServices, DynamicDisplayResult } from "chat-ui";
+import { VsCodeAzureSpeechProvider } from "./azureSpeechProvider.js";
+import type { SpeechToken } from "@typeagent/agent-server-protocol";
 import chatPanelStyles from "chat-ui/styles";
 import completionUiStyles from "@typeagent/completion-ui/styles.css";
 import vscodeThemeStyles from "./vscode-theme.css";
@@ -102,6 +104,22 @@ const conversationBar = new ConversationBar(conversationBarRootEl, {
 
 window.addEventListener("beforeunload", () => conversationBar.dispose());
 
+// Azure Speech token round-trip: the mic provider asks the extension host
+// (which relays to the agent server that owns the `speech:` config) for a
+// short-lived token. Correlated by `id`; see "speechTokenResponse" below.
+let nextSpeechTokenId = 1;
+const pendingSpeechToken = new Map<
+    number,
+    (token: SpeechToken | undefined) => void
+>();
+function requestSpeechToken(): Promise<SpeechToken | undefined> {
+    const id = nextSpeechTokenId++;
+    return new Promise<SpeechToken | undefined>((resolve) => {
+        pendingSpeechToken.set(id, resolve);
+        vscode.postMessage({ type: "getSpeechToken", id });
+    });
+}
+
 const chatPanel = new ChatPanel(rootEl, {
     platformAdapter: {
         // Open links via the extension host — webviews can't call window.open
@@ -110,8 +128,17 @@ const chatPanel = new ChatPanel(rootEl, {
             vscode.postMessage({ type: "openExternal", href });
         },
     },
-    onSend: (text: string, _attachments, requestId: string) => {
-        vscode.postMessage({ type: "sendCommand", command: text, requestId });
+    // The browser Web Speech API doesn't work inside VS Code webviews, so
+    // override chat-ui's default with an Azure-backed provider fed by a
+    // server-vended token.
+    speechProvider: new VsCodeAzureSpeechProvider(requestSpeechToken),
+    onSend: (text: string, attachments, requestId: string) => {
+        vscode.postMessage({
+            type: "sendCommand",
+            command: text,
+            requestId,
+            attachments,
+        });
     },
     onCancel: (requestId: string) => {
         vscode.postMessage({ type: "cancelCommand", requestId });
@@ -122,6 +149,30 @@ const chatPanel = new ChatPanel(rootEl, {
             requestId: requestId.requestId,
             target,
             permanent,
+        });
+    },
+    // Refresh callback for live-updating ("dynamic") displays. chat-ui's
+    // setDynamicDisplay schedules the timer; each tick calls this to fetch
+    // fresh content, routed through the host to dispatcher.getDynamicDisplay.
+    // "html" is the render format (same choice as the visualStudio and
+    // browser webview hosts).
+    getDynamicDisplay: (source: string, displayId: string) =>
+        bridgeRpc("getDynamicDisplay", [
+            source,
+            "html",
+            displayId,
+        ]) as Promise<DynamicDisplayResult>,
+    // User rated an agent message (thumbs up/down). Forward to the host,
+    // which calls dispatcher.recordUserFeedback; the resulting broadcast
+    // (userFeedback) updates the bubble via applyFeedback.
+    onFeedback: (requestId, rating, category, comment, includeContext) => {
+        vscode.postMessage({
+            type: "recordUserFeedback",
+            requestId: requestId.requestId,
+            rating,
+            category,
+            comment,
+            includeContext,
         });
     },
 });
@@ -158,7 +209,7 @@ const pendingBridgeRpc = new Map<
     { resolve: (v: unknown) => void; reject: (e: unknown) => void }
 >();
 function bridgeRpc(
-    method: "getTemplateSchema" | "getTemplateCompletion",
+    method: "getTemplateSchema" | "getTemplateCompletion" | "getDynamicDisplay",
     args: unknown[],
 ): Promise<unknown> {
     const id = nextBridgeRpcId++;
@@ -233,6 +284,51 @@ function handleRequestInteraction(
         activeInteractions.delete(interaction.interactionId);
         vscode.postMessage({ type: "interactionResponse", response });
     })();
+}
+
+// Render a non-blocking choice card (yes/no, multi-select, or pick+remember)
+// and reply with the user's response. Mirrors the Electron shell
+// (chatPanelBridge.ts requestChoice). The prompt text is already rendered as
+// the action's displayContent, so `showMessage:false` suppresses the card's
+// duplicate copy and `requestId` anchors the buttons onto that agent bubble so
+// the message and the buttons read as one card.
+function handleRequestChoice(msg: {
+    choiceId: string;
+    choiceType: "yesNo" | "multiChoice" | "pickRemember";
+    message: string;
+    choices: string[];
+    checkboxLabel?: string;
+    requestId?: string;
+}): void {
+    void (async () => {
+        const opts = { showMessage: false, requestId: msg.requestId };
+        let response:
+            | boolean
+            | number[]
+            | { selected: number; remember: boolean };
+        if (msg.choiceType === "yesNo") {
+            response = await chatPanel.askYesNo(msg.message, undefined, opts);
+        } else if (msg.choiceType === "pickRemember") {
+            response = await chatPanel.addPickRememberPrompt(
+                msg.message,
+                msg.choices,
+                msg.checkboxLabel ?? "Remember this for next time",
+                opts,
+            );
+        } else {
+            const index = await chatPanel.addChoicePrompt<number>(
+                msg.message,
+                msg.choices.map((label, i) => ({ label, value: i })),
+                opts,
+            );
+            response = [index];
+        }
+        vscode.postMessage({
+            type: "choiceResponse",
+            choiceId: msg.choiceId,
+            response,
+        });
+    })().catch((e) => console.error("[requestChoice] failed", e));
 }
 
 // Mirror of dispatcher's queue lifecycle (requestQueued / requestStarted
@@ -998,6 +1094,24 @@ window.addEventListener("message", (event) => {
         case "requestInteraction":
             handleRequestInteraction(msg.interaction);
             break;
+        case "requestChoice":
+            handleRequestChoice(msg);
+            break;
+        case "setDynamicDisplay":
+            // Register/refresh a live-updating display. chat-ui owns the
+            // refresh timer and calls back via the getDynamicDisplay option
+            // wired at construction.
+            chatPanel.setDynamicDisplay(
+                msg.source,
+                msg.displayId,
+                msg.nextRefreshMs,
+            );
+            break;
+        case "userFeedback":
+            // A rating was recorded (by us or a peer) — mirror it onto the
+            // matching bubble.
+            chatPanel.applyFeedback(msg.entry);
+            break;
         case "interactionResolved":
         case "interactionCancelled": {
             // Another client answered, or the server cancelled/timed out the
@@ -1018,6 +1132,14 @@ window.addEventListener("message", (event) => {
                 } else {
                     pending.resolve(msg.result);
                 }
+            }
+            break;
+        }
+        case "speechTokenResponse": {
+            const resolve = pendingSpeechToken.get(msg.id);
+            if (resolve) {
+                pendingSpeechToken.delete(msg.id);
+                resolve(msg.token);
             }
             break;
         }
