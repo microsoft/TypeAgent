@@ -48,14 +48,26 @@ function stubModel(
 ): CreateChatModel {
     return () =>
         ({
-            complete: async (prompt: string) => {
+            // TypeChat calls complete() with a PromptSection[]; older callers pass
+            // a plain string. Normalize to text so `respond` sees the full prompt.
+            complete: async (prompt: string | { content?: unknown }[]) => {
                 if (opts.throws) {
                     throw new Error("boom");
                 }
                 if (opts.fail) {
                     return { success: false, message: "nope" };
                 }
-                return { success: true, data: respond(prompt) };
+                const text =
+                    typeof prompt === "string"
+                        ? prompt
+                        : prompt
+                              .map((s) =>
+                                  typeof s?.content === "string"
+                                      ? s.content
+                                      : JSON.stringify(s),
+                              )
+                              .join("\n");
+                return { success: true, data: respond(text) };
             },
         }) as any;
 }
