@@ -3422,7 +3422,12 @@ export class ChatPanel {
             const finish = (value: unknown) => {
                 setKeyHandler(undefined);
                 clearButtons();
-                actionContainer.remove();
+                // Remove the whole confirmation bubble, not just the inner
+                // template editor. Removing only `actionContainer` left an
+                // empty agent container ("dispatcher" bubble) behind after
+                // Accept/Cancel/Replace. The action's own result renders in
+                // its own bubble when it runs.
+                container.remove();
                 resolve(value);
             };
 
