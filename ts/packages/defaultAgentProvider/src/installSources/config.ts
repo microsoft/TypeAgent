@@ -239,9 +239,13 @@ export interface InstallSource {
     /** Performs the install (npm install / copy / record data). A source that
      * needs a per-agent, version-scoped install root names it from the
      * candidate's package name. Sources whose materialize is already
-     * non-destructive (`path`, `catalog`) have no such root. */
+     * non-destructive (`path`, `catalog`) have no such root. `onStatus`, when
+     * supplied, is a per-command callback the source calls with live progress
+     * messages during a long install (the feed source's `npm install`); sources
+     * that materialize instantly ignore it. */
     materialize(
         candidate: ResolvedCandidate,
+        onStatus?: SourceStatus,
     ): Promise<MaterializedInstallRecord>;
     /** Sources that can list their agents (catalog, feed) implement this; `path` cannot. */
     listAgents?(onWarn?: SourceWarning): Promise<string[]>;

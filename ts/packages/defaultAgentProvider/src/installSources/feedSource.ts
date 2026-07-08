@@ -12,6 +12,7 @@ import {
     InstalledAgentRecord,
     MaterializedInstallRecord,
     ResolvedCandidate,
+    SourceStatus,
     AGENT_INSTALL_ROOTS_SUBDIR,
 } from "./config.js";
 import {
@@ -636,6 +637,7 @@ export function createFeedSource(
         },
         async materialize(
             candidate: ResolvedCandidate,
+            onStatus?: SourceStatus,
         ): Promise<MaterializedInstallRecord> {
             const registry = resolveFeedRegistry(config);
             if (registry === undefined) {
@@ -707,6 +709,7 @@ export function createFeedSource(
             // content-addressed root -> reuse it with no npm install at all
             // (dedup / same-version no-op).
             if (fs.existsSync(installedPkgJsonUnder(finalRoot))) {
+                onStatus?.(`Reusing installed ${moduleName}@${version}...`);
                 return buildRecord();
             }
 
@@ -723,6 +726,22 @@ export function createFeedSource(
                     registry,
                     tokenRunner,
                 );
+                // Report the long step and, since `npm install` reports nothing
+                // back until it exits, drive a heartbeat while it runs.
+                onStatus?.(
+                    `Downloading and installing ${moduleName}@${version}...`,
+                );
+                const installStart = now();
+                const heartbeat =
+                    onStatus !== undefined
+                        ? setInterval(() => {
+                              const elapsed = Math.round(
+                                  (now() - installStart) / 1000,
+                              );
+                              onStatus(`Still working... (${elapsed}s elapsed)`);
+                          }, 2500)
+                        : undefined;
+                heartbeat?.unref?.();
                 try {
                     await npmInstall({
                         spec: installSpec,
@@ -731,6 +750,9 @@ export function createFeedSource(
                         userconfig,
                     });
                 } finally {
+                    if (heartbeat !== undefined) {
+                        clearInterval(heartbeat);
+                    }
                     removeTransientNpmAuth(userconfig);
                 }
                 if (!fs.existsSync(installedPkgJsonUnder(tempRoot))) {
@@ -746,6 +768,7 @@ export function createFeedSource(
                 // Adopt the temp root as the content-addressed final root. Clear
                 // any stale/partial directory first so the rename can't fail on
                 // an existing incomplete root.
+                onStatus?.("Finalizing...");
                 fs.rmSync(finalRoot, { recursive: true, force: true });
                 fs.renameSync(tempRoot, finalRoot);
                 adopted = true;

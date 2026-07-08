@@ -289,7 +289,7 @@ export function createInstallSourceRegistry(
                 // Explicit --source non-match is a hard error.
                 throw new Error(`'${ref}' not found in source '${sourceName}'`);
             }
-            return entry.source.materialize(candidate);
+            return entry.source.materialize(candidate, onStatus);
         }
         const match = await walk(ref, onWarn, onStatus);
         if (match === undefined) {
@@ -299,7 +299,7 @@ export function createInstallSourceRegistry(
                     .join(", ")}]`,
             );
         }
-        return match.source.materialize(match.candidate);
+        return match.source.materialize(match.candidate, onStatus);
     }
 
     return {
