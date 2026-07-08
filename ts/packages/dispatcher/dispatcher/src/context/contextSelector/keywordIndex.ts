@@ -7,11 +7,11 @@
 // schema-reading side is behind `ActionSchemaSource` so the index is unit-
 // testable with a stub source.
 //
-// v1 baseline = the deterministic lexical floor (keywordExtractor). LLM
-// distillation (the design's preferred baseline) and auto-derived sidecar layers
-// (misroute mining, learned-preference deltas) are follow-ups: they slot in as
-// an alternate baseline and additional sidecar deltas without changing this
-// index's shape.
+// Baseline = the committed per-agent keyword file (§5 Source 1, LLM-distilled or
+// lexical) when present, else the deterministic lexical floor (keywordExtractor).
+// The auto-derived sidecar layers (misroute mining, learned-preference deltas)
+// remain follow-ups: they slot in as additional sidecar deltas without changing
+// this index's shape.
 
 import { ActionSchemaTypeDefinition } from "@typeagent/action-schema";
 import { KeywordVector, applyKeywordDelta } from "./keywordVector.js";
