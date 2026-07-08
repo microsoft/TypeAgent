@@ -585,10 +585,12 @@ function spawnAgentServer(
                 // Pass the server path, port and idle timeout to the child
                 // through the environment rather than the command line so none
                 // of them ever reach cmd.exe or the PowerShell parser as text.
-                // The command handed to PowerShell is therefore a fixed
-                // constant that only reads $env values at runtime, delivered as
-                // a base64 -EncodedCommand blob whose alphabet is inert to both
-                // cmd.exe and PowerShell.
+                // The command handed to PowerShell is assembled only from
+                // string literals (the --idle-timeout flag is appended based on
+                // whether idleTimeout is set, but its text is still literal) and
+                // reads the actual values from $env at runtime. It is delivered
+                // as a base64 -EncodedCommand blob whose alphabet is inert to
+                // both cmd.exe and PowerShell.
                 const psCommand =
                     `$host.UI.RawUI.WindowTitle = ` +
                     `"TypeAgent Server (port $env:TYPEAGENT_SERVER_PORT)"; ` +
