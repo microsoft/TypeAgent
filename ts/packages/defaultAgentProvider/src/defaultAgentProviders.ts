@@ -818,6 +818,7 @@ export function createDefaultInstalledAgentSource(
             sourceName: string | undefined,
             issuingHost: AppAgentHost,
             onStatus?: SourceStatus,
+            abortSignal?: AbortSignal,
         ): Promise<{ source: string; warnings?: string[] }> {
             if (isBuiltin(name)) {
                 throw new Error(
@@ -838,6 +839,7 @@ export function createDefaultInstalledAgentSource(
                     sourceName,
                     (m) => warningSet.add(m),
                     onStatus,
+                    abortSignal,
                 );
                 // The source assigns the authoritative dispatcher name. The
                 // source's `materialize` persists its own load/update handle

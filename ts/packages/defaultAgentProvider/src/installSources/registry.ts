@@ -47,12 +47,14 @@ export interface DefaultInstallSourceRegistry {
     // non-fatal source problem messages (e.g. a corrupt catalog) for the caller
     // to show on the triggering command. `onStatus`, when supplied, is
     // called with the name of each source as it is probed so the caller can
-    // show a live status line.
+    // show a live status line. `abortSignal`, when supplied, cancels a long
+    // install (the feed source's `npm install`) mid flight.
     resolve(
         ref: string,
         sourceName?: string,
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
+        abortSignal?: AbortSignal,
     ): Promise<MaterializedInstallRecord>;
     // Update a previously-installed record via its recorded source. The source
     // owns whether update is supported and how its persisted record is
@@ -269,6 +271,7 @@ export function createInstallSourceRegistry(
         sourceName?: string,
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
+        abortSignal?: AbortSignal,
     ): Promise<MaterializedInstallRecord> {
         if (sourceName !== undefined) {
             const entry = entries.get(sourceName);
@@ -289,7 +292,7 @@ export function createInstallSourceRegistry(
                 // Explicit --source non-match is a hard error.
                 throw new Error(`'${ref}' not found in source '${sourceName}'`);
             }
-            return entry.source.materialize(candidate, onStatus);
+            return entry.source.materialize(candidate, onStatus, abortSignal);
         }
         const match = await walk(ref, onWarn, onStatus);
         if (match === undefined) {
@@ -299,7 +302,7 @@ export function createInstallSourceRegistry(
                     .join(", ")}]`,
             );
         }
-        return match.source.materialize(match.candidate, onStatus);
+        return match.source.materialize(match.candidate, onStatus, abortSignal);
     }
 
     return {
@@ -365,12 +368,19 @@ export function createInstallSourceRegistry(
             sourceName?: string,
             onWarn?: SourceWarning,
             onStatus?: SourceStatus,
+            abortSignal?: AbortSignal,
         ): Promise<MaterializedInstallRecord> {
             // The whole install op (resolve -> materialize) runs under the
             // shared limiter. The installer reuses the
             // same limiter for the record write.
             return limiter(() =>
-                resolveUnlocked(ref, sourceName, onWarn, onStatus),
+                resolveUnlocked(
+                    ref,
+                    sourceName,
+                    onWarn,
+                    onStatus,
+                    abortSignal,
+                ),
             );
         },
         async update(

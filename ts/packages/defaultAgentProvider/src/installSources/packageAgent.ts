@@ -55,13 +55,16 @@ export interface InstalledAgentSourceApi {
     // config with the manifest default as fallback. Returns which
     // source matched plus any warnings once the record is committed. `onStatus`,
     // when supplied, is called as each source is probed during the sequential
-    // resolution walk so the caller can show a live status line.
+    // resolution walk so the caller can show a live status line. `abortSignal`,
+    // when supplied, cancels a long install (the feed source's `npm install`)
+    // mid flight.
     install(
         name: string,
         ref: string,
         sourceName: string | undefined,
         issuingHost: AppAgentHost,
         onStatus?: SourceStatus,
+        abortSignal?: AbortSignal,
     ): Promise<{ source: string; warnings?: string[] }>;
     // Drop the record (commit), then fan out `removeProvider` to every session —
     // including the issuing one — through its idle-gated applicator, each
@@ -305,6 +308,7 @@ class InstallCommandHandler implements CommandHandler {
             sourceName,
             appAgentHost,
             (message) => displayStatus(message, context),
+            context.abortSignal,
         );
         // Show any non-fatal source warnings once, for this command.
         for (const warning of warnings ?? []) {

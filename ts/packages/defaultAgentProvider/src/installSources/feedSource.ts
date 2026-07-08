@@ -141,6 +141,9 @@ export interface NpmInstallArgs {
     cwd: string;
     registry: string;
     userconfig: string;
+    // When supplied, cancels the npm child process mid flight (kills it and
+    // rejects with an AbortError). Omitted for callers that cannot cancel.
+    signal?: AbortSignal;
 }
 
 export interface FeedSourceDeps {
@@ -228,7 +231,7 @@ async function defaultNpmInstall(args: NpmInstallArgs): Promise<void> {
             "--userconfig",
             args.userconfig,
         ],
-        { cwd: args.cwd, shell: isWindows },
+        { cwd: args.cwd, shell: isWindows, signal: args.signal },
     );
 }
 
@@ -638,6 +641,7 @@ export function createFeedSource(
         async materialize(
             candidate: ResolvedCandidate,
             onStatus?: SourceStatus,
+            abortSignal?: AbortSignal,
         ): Promise<MaterializedInstallRecord> {
             const registry = resolveFeedRegistry(config);
             if (registry === undefined) {
@@ -718,6 +722,7 @@ export function createFeedSource(
             // behind (atomicity), then adopt it as `module@version`. If the final
             // root already exists (a prior/concurrent install of the same version
             // won the race) discard the temp and reuse it (dedup).
+            abortSignal?.throwIfAborted();
             const tempRoot = path.join(rootsDir, `.tmp-${makeInstallId()}`);
             ensureInstallRoot(tempRoot);
             let adopted = false;
@@ -748,6 +753,7 @@ export function createFeedSource(
                         cwd: tempRoot,
                         registry,
                         userconfig,
+                        signal: abortSignal,
                     });
                 } finally {
                     if (heartbeat !== undefined) {
