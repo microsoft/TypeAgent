@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { createInstallSourceRegistry } from "../src/installSources/registry.js";
 import {
+    AGENT_KEYWORD,
     createFeedSource,
     moduleNameFromSpec,
 } from "../src/installSources/feedSource.js";
@@ -331,7 +332,11 @@ describe("InstallSourceRegistry serializes concurrent install ops", () => {
                         status: 200,
                         statusText: "OK",
                         json: async () => ({
-                            versions: { "1.0.0": {} },
+                            versions: {
+                                "1.0.0": {
+                                    keywords: [AGENT_KEYWORD],
+                                },
+                            },
                             "dist-tags": { latest: "1.0.0" },
                         }),
                     })) as unknown as typeof fetch,
