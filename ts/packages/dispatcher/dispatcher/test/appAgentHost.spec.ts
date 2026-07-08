@@ -699,12 +699,17 @@ describe("AppAgentHostApplicator", () => {
         expect(order).toEqual(["remove:v1", "add:after"]);
     });
 
-    it("replaceProvider threads notify to both legs and defaults dropConfig=false (update)", async () => {
+    it("replaceProvider suppresses per-leg notify and defaults dropConfig=false (update)", async () => {
         const seen: {
             addNotify?: boolean;
             removeNotify?: boolean;
             dropConfig?: boolean;
         } = {};
+        const replaceCalls: Array<{
+            op: "update" | "remove" | undefined;
+            oldName: string;
+            newName: string | undefined;
+        }> = [];
         const host = new AppAgentHostApplicator(createLimiter(1), {
             applyAdd: async (_p, n) => {
                 seen.addNotify = n;
@@ -713,19 +718,93 @@ describe("AppAgentHostApplicator", () => {
                 seen.removeNotify = n;
                 seen.dropConfig = d;
             },
+            notifyReplace: (op, oldProvider, newProvider) => {
+                replaceCalls.push({
+                    op,
+                    oldName: oldProvider.getAppAgentNames()[0],
+                    newName: newProvider?.getAppAgentNames()[0],
+                });
+            },
         });
         // No dropConfig supplied → the update default (Model B: preserve the
-        // enable preference across a version bump) must thread `false`.
+        // enable preference across a version bump) must thread `false`. The
+        // per-leg notifications are SUPPRESSED (false) in favor of the single
+        // consolidated `notifyReplace` call.
         await host.replaceProvider(
             fakeProvider("v1"),
             async () => fakeProvider("v2"),
             true,
         );
         expect(seen).toEqual({
-            addNotify: true,
-            removeNotify: true,
+            addNotify: false,
+            removeNotify: false,
             dropConfig: false,
         });
+        // One consolidated "update" notification (v1 -> v2).
+        expect(replaceCalls).toEqual([
+            { op: "update", oldName: "v1", newName: "v2" },
+        ]);
+    });
+
+    it("replaceProvider consolidated notify reports 'remove' for an uninstall (old → ∅)", async () => {
+        const replaceCalls: Array<{
+            op: "update" | "remove" | undefined;
+            oldName: string;
+            newName: string | undefined;
+        }> = [];
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async () => {},
+            applyRemove: async () => {},
+            notifyReplace: (op, oldProvider, newProvider) => {
+                replaceCalls.push({
+                    op,
+                    oldName: oldProvider.getAppAgentNames()[0],
+                    newName: newProvider?.getAppAgentNames()[0],
+                });
+            },
+        });
+        await host.replaceProvider(
+            fakeProvider("gone"),
+            async () => undefined,
+            true,
+            true,
+        );
+        expect(replaceCalls).toEqual([
+            { op: "remove", oldName: "gone", newName: undefined },
+        ]);
+    });
+
+    it("replaceProvider consolidated notify stays silent on a rollback (old restored)", async () => {
+        const replaceCalls: unknown[] = [];
+        const old = fakeProvider("v1");
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async () => {},
+            applyRemove: async () => {},
+            notifyReplace: (op) => {
+                replaceCalls.push(op);
+            },
+        });
+        // The resolver returns the SAME old provider (a rollback restores the
+        // exact version): nothing changed, so op is undefined (stay silent).
+        await host.replaceProvider(old, async () => old, true);
+        expect(replaceCalls).toEqual([undefined]);
+    });
+
+    it("replaceProvider does not notify when notify=false", async () => {
+        let called = false;
+        const host = new AppAgentHostApplicator(createLimiter(1), {
+            applyAdd: async () => {},
+            applyRemove: async () => {},
+            notifyReplace: () => {
+                called = true;
+            },
+        });
+        await host.replaceProvider(
+            fakeProvider("v1"),
+            async () => fakeProvider("v2"),
+            false,
+        );
+        expect(called).toBe(false);
     });
 });
 
@@ -828,6 +907,30 @@ describe("emitAgentChangeNotification (sibling system messages, )", () => {
             false,
         );
         expect(messages).toEqual(["Agent 'foo' was removed."]);
+    });
+
+    it("an enabled update reports plainly (no config hint)", () => {
+        const { messages, clientIO } = captureClientIO();
+        emitAgentChangeNotification(
+            clientIO,
+            "update",
+            fakeProvider("foo"),
+            true,
+        );
+        expect(messages).toEqual(["Agent 'foo' was updated."]);
+    });
+
+    it("a disabled update reports updated + how to enable", () => {
+        const { messages, clientIO } = captureClientIO();
+        emitAgentChangeNotification(
+            clientIO,
+            "update",
+            fakeProvider("foo"),
+            false,
+        );
+        expect(messages).toEqual([
+            "Agent 'foo' was updated — disabled (`@config agent foo` to enable).",
+        ]);
     });
 });
 
