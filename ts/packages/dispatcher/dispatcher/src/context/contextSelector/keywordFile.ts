@@ -62,15 +62,19 @@ function siblingKeywordPath(schemaPath: string): string {
 //     into a bogus tree, so treat them as "no committed file",
 //   - a compiled `.pas.json` with no `.ts` source: `dist` is a transient build
 //     artifact, not a place to commit an authored keyword file.
-// Prefers the original `.ts` source, falling back to the schema file when that
-// is itself the `.ts` source. Both `ActionConfig` paths are absolute for NPM
-// agents (patched at load).
+// Prefers the original TypeScript source, falling back to the schema file when
+// that is itself the source. Accepts `.ts`, `.mts`, and `.cts` sources. Both
+// `ActionConfig` paths are absolute for NPM agents (patched at load).
 export function keywordFilePathFor(
     originalSchemaFilePath: string | undefined,
     schemaFilePath: string | undefined,
 ): string | undefined {
     const base = originalSchemaFilePath ?? schemaFilePath;
-    if (base === undefined || !path.isAbsolute(base) || !/\.ts$/i.test(base)) {
+    if (
+        base === undefined ||
+        !path.isAbsolute(base) ||
+        !/\.[mc]?ts$/i.test(base)
+    ) {
         return undefined;
     }
     return siblingKeywordPath(base);
@@ -117,6 +121,7 @@ export function parseKeywordFileContent(
     const obj = parsed as Partial<KeywordFile> | undefined;
     if (
         obj === undefined ||
+        obj === null ||
         typeof obj !== "object" ||
         typeof obj.actions !== "object" ||
         obj.actions === null

@@ -2,8 +2,10 @@
 // Licensed under the MIT License.
 
 import { ActionSchemaTypeDefinition } from "@typeagent/action-schema";
+import path from "node:path";
 import {
     parseKeywordFileContent,
+    keywordFilePathFor,
     KeywordFile,
 } from "../src/context/contextSelector/keywordFile.js";
 import {
@@ -57,6 +59,45 @@ function stubModel(
         }) as any;
 }
 
+describe("contextSelector/keywordFilePathFor", () => {
+    const abs = (p: string) => path.resolve(p);
+    const base = (p: string | undefined) =>
+        p === undefined ? undefined : path.basename(p);
+
+    it("resolves the sibling keyword file for .ts / .mts / .cts sources", () => {
+        for (const ext of ["ts", "mts", "cts"]) {
+            const src = abs(`agents/foo/src/fooSchema.${ext}`);
+            const result = keywordFilePathFor(src, undefined);
+            expect(base(result)).toBe("fooSchema.keywords.json");
+            // Sits beside the source, not in a bogus tree.
+            expect(result && path.dirname(result)).toBe(path.dirname(src));
+        }
+    });
+
+    it("prefers the original .ts source over the (dist) schema file", () => {
+        const result = keywordFilePathFor(
+            abs("agents/foo/src/fooSchema.ts"),
+            abs("agents/foo/dist/fooSchema.pas.json"),
+        );
+        expect(result).toBe(abs("agents/foo/src/fooSchema.keywords.json"));
+    });
+
+    it("returns undefined for no path, relative paths, and .pas.json-only", () => {
+        expect(keywordFilePathFor(undefined, undefined)).toBeUndefined();
+        // Relative (inline/system agents bypass patchPaths).
+        expect(
+            keywordFilePathFor("src/fooSchema.ts", undefined),
+        ).toBeUndefined();
+        // dist-only compiled schema — not a committable source location.
+        expect(
+            keywordFilePathFor(
+                undefined,
+                abs("agents/foo/dist/fooSchema.pas.json"),
+            ),
+        ).toBeUndefined();
+    });
+});
+
 describe("contextSelector/keywordFile parse", () => {
     it("normalizes a well-formed file and filters non-string tokens", () => {
         const file = parseKeywordFileContent(
@@ -80,7 +121,10 @@ describe("contextSelector/keywordFile parse", () => {
 
     it("degrades to undefined on malformed input", () => {
         expect(parseKeywordFileContent(undefined, "list")).toBeUndefined();
+        expect(parseKeywordFileContent(null, "list")).toBeUndefined();
         expect(parseKeywordFileContent("not json", "list")).toBeUndefined();
+        expect(parseKeywordFileContent(42, "list")).toBeUndefined();
+        expect(parseKeywordFileContent([], "list")).toBeUndefined();
         expect(parseKeywordFileContent({}, "list")).toBeUndefined();
         expect(
             parseKeywordFileContent({ actions: null }, "list"),

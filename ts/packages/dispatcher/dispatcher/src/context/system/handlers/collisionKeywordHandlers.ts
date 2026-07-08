@@ -357,9 +357,14 @@ type BackfillWriteResult = {
 
 // Phase 2: write each pending file once and invalidate the in-memory index so
 // the fresh vectors take effect on the next collision without a restart.
+// `preserveExisting` (set for a PARTIAL run that names specific schemas) merges
+// any actions already on disk that this run didn't produce, so backfilling a
+// subset of schemas that share one source file doesn't drop the omitted
+// co-located siblings' committed vectors.
 function writePendingFiles(
     pendingByPath: Map<string, PendingFile>,
     invalidate: (schemaName: string) => void,
+    preserveExisting: boolean,
 ): BackfillWriteResult {
     const result: BackfillWriteResult = {
         filesWritten: 0,
@@ -371,6 +376,16 @@ function writePendingFiles(
         failed: [],
     };
     for (const entry of pendingByPath.values()) {
+        if (preserveExisting) {
+            const existing = loadKeywordFile(entry.path, entry.file.schema);
+            for (const [action, vec] of Object.entries(
+                existing?.actions ?? {},
+            )) {
+                if (!(action in entry.file.actions)) {
+                    entry.file.actions[action] = vec;
+                }
+            }
+        }
         const written = writeKeywordFile(entry.path, entry.file);
         if (written === undefined) {
             result.failed.push(...entry.contributors);
@@ -480,10 +495,8 @@ class CollisionKeywordsBackfillCommandHandler implements CommandHandler {
         const ctx = context.sessionContext.agentContext;
         const agents = ctx.agents;
         const requested = params.args.schemas;
-        const schemaNames =
-            requested !== undefined && requested.length > 0
-                ? requested
-                : agents.getSchemaNames();
+        const partial = requested !== undefined && requested.length > 0;
+        const schemaNames = partial ? requested : agents.getSchemaNames();
 
         // Default chat model, tagged for token accounting; only built when --llm.
         const createModel = params.flags.llm
@@ -500,8 +513,10 @@ class CollisionKeywordsBackfillCommandHandler implements CommandHandler {
                 plan,
             );
         }
-        const written = writePendingFiles(plan.pendingByPath, (s) =>
-            ctx.contextSelectorKeywords.invalidate(s),
+        const written = writePendingFiles(
+            plan.pendingByPath,
+            (s) => ctx.contextSelectorKeywords.invalidate(s),
+            partial,
         );
         displayResult(
             formatBackfillSummary(params.flags.llm, plan, written),
