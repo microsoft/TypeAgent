@@ -60,7 +60,6 @@ modes ignore it. Shape is `{ "exceptions": [ ... ] }` (a bare array also works):
   or `{ "key": "packages/a/src/x.ts > packages/b/src/y.ts" }`. Matched
   rotation-invariantly against detected cycles.
 
-
 ### Notes for maintainers
 
 - `npx` cannot resolve local bins in some dev environments; the tools invoke
