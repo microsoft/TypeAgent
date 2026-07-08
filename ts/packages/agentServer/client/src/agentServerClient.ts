@@ -503,12 +503,14 @@ export interface AgentServerSpawnOptions {
     stdio?: StdioOptions;
 }
 
-// Locate a PowerShell executable on Windows. Prefer PowerShell 7+ (pwsh.exe)
-// from its standard install locations or PATH, so installs outside the default
-// "C:\Program Files\PowerShell\7" directory (winget, x86, a relocated Program
-// Files) are still found. Fall back to Windows PowerShell (powershell.exe),
-// which is always present. An absolute path is returned when one is found so
-// the result does not depend on the launcher's PATH.
+// Choose a PowerShell executable for Windows. Detects whether PowerShell 7+
+// (pwsh) is installed by probing its standard install locations and PATH, so
+// installs outside the default "C:\Program Files\PowerShell\7" directory
+// (winget, x86, a relocated Program Files) are still recognized. Returns a bare
+// executable name — never an environment-derived path — so no path built from
+// the environment is ever routed through cmd.exe; `start` resolves the name via
+// PATH/App Paths, which every standard PowerShell 7 install registers. Falls
+// back to Windows PowerShell (powershell.exe), which is always present.
 function resolvePowerShellExe(): string {
     const candidates: string[] = [];
     for (const base of [
@@ -525,12 +527,9 @@ function resolvePowerShellExe(): string {
             candidates.push(path.join(dir, "pwsh.exe"));
         }
     }
-    for (const candidate of candidates) {
-        if (fs.existsSync(candidate)) {
-            return candidate;
-        }
-    }
-    return "powershell.exe";
+    return candidates.some((candidate) => fs.existsSync(candidate))
+        ? "pwsh.exe"
+        : "powershell.exe";
 }
 
 function spawnAgentServer(
