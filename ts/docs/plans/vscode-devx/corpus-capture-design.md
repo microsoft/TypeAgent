@@ -272,6 +272,12 @@ side, `actionsEqual(a.action, b.action)` — not a stored expected action.)
   and consumed by the Impact Report at replay time. The default backend is
   in-memory (`InMemoryFeedbackBackend`); a durable store is a separate follow-up
   only if a use case needs labels to survive restart.
+- **A rating only speaks for a replay side that reproduces its action.** Because a
+  rating judges the action seen in one run — not the utterance in the abstract —
+  the replay resolver attaches it to a side only when that side re-resolves to the
+  exact action the rating was recorded against. A rating for a now-different action
+  is dropped and the structural delta decides, so a stale thumbs-down can never
+  turn an unrelated new result red.
 
 **Decision:** the standalone "Record feedback" command and the read-time
 "Feedback" group in the Corpora tree are **retired**. They were a scaffold that

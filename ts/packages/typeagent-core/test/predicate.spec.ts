@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { likelyBadChange } from "../src/replay/predicate.js";
+import { likelyRegression } from "../src/replay/predicate.js";
 import type { FeedbackLabel } from "../src/corpus/types.js";
 
 const up: FeedbackLabel = { rating: "up", recordedAt: 0 };
@@ -13,26 +13,32 @@ const play = (parameters: Record<string, unknown>) => ({
     parameters,
 });
 
-describe("likelyBadChange predicate (structural)", () => {
+describe("likelyRegression predicate (structural)", () => {
     it("returns neutral for an unchanged row", () => {
-        expect(likelyBadChange({ equal: true })).toBe("neutral");
+        expect(likelyRegression({ equal: true })).toBe("neutral");
     });
 
     it("flags a lost match as a regression", () => {
         expect(
-            likelyBadChange({ equal: false, actionA: play({ trackName: "X" }) }),
+            likelyRegression({
+                equal: false,
+                actionA: play({ trackName: "X" }),
+            }),
         ).toBe("regression");
     });
 
     it("treats a gained match as an improvement", () => {
         expect(
-            likelyBadChange({ equal: false, actionB: play({ trackName: "X" }) }),
+            likelyRegression({
+                equal: false,
+                actionB: play({ trackName: "X" }),
+            }),
         ).toBe("improvement");
     });
 
     it("flags an action-type change as a regression", () => {
         expect(
-            likelyBadChange({
+            likelyRegression({
                 equal: false,
                 actionA: { schemaName: "player", actionName: "next" },
                 actionB: { schemaName: "player", actionName: "previous" },
@@ -42,7 +48,7 @@ describe("likelyBadChange predicate (structural)", () => {
 
     it("flags a dropped parameter as a regression", () => {
         expect(
-            likelyBadChange({
+            likelyRegression({
                 equal: false,
                 actionA: play({ trackName: "Yellow", artists: ["Coldplay"] }),
                 actionB: play({ trackName: "Yellow" }),
@@ -52,7 +58,7 @@ describe("likelyBadChange predicate (structural)", () => {
 
     it("flags a changed parameter value as a regression", () => {
         expect(
-            likelyBadChange({
+            likelyRegression({
                 equal: false,
                 actionA: play({ trackNumber: 3 }),
                 actionB: play({ trackNumber: 4 }),
@@ -62,7 +68,7 @@ describe("likelyBadChange predicate (structural)", () => {
 
     it("treats a purely additive parameter as benign enrichment", () => {
         expect(
-            likelyBadChange({
+            likelyRegression({
                 equal: false,
                 actionA: play({ trackName: "One", artists: ["U2"] }),
                 actionB: play({
@@ -76,7 +82,7 @@ describe("likelyBadChange predicate (structural)", () => {
 
     it("ignores key order and array order when comparing params", () => {
         expect(
-            likelyBadChange({
+            likelyRegression({
                 equal: false,
                 actionA: play({ trackName: "Q", artists: ["a", "b"] }),
                 actionB: play({ artists: ["a", "b"], trackName: "Q" }),
@@ -86,7 +92,7 @@ describe("likelyBadChange predicate (structural)", () => {
 
     it("treats a null/absent A param as not-lost", () => {
         expect(
-            likelyBadChange({
+            likelyRegression({
                 equal: false,
                 actionA: play({ trackName: "Q", albumName: null }),
                 actionB: play({ trackName: "Q" }),
@@ -96,7 +102,7 @@ describe("likelyBadChange predicate (structural)", () => {
 
     it("lets feedbackB.down override to regression", () => {
         expect(
-            likelyBadChange({
+            likelyRegression({
                 equal: false,
                 actionA: play({ trackName: "X" }),
                 actionB: play({ trackName: "X", artists: ["Y"] }),
@@ -107,7 +113,7 @@ describe("likelyBadChange predicate (structural)", () => {
 
     it("lets feedbackB.up override to benign even on a lost match", () => {
         expect(
-            likelyBadChange({
+            likelyRegression({
                 equal: false,
                 actionA: play({ trackName: "X" }),
                 feedbackB: up,
@@ -117,7 +123,7 @@ describe("likelyBadChange predicate (structural)", () => {
 
     it("ignores feedbackA", () => {
         expect(
-            likelyBadChange({
+            likelyRegression({
                 equal: false,
                 actionA: play({ trackName: "X" }),
                 actionB: play({ trackName: "X", artists: ["Y"] }),

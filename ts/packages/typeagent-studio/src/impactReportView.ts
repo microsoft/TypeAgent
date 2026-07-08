@@ -540,10 +540,9 @@ export function openImpactReport(
                 // agent rather than trusting the webview's echoed value.
                 agent,
                 // The launch controls choose the two versions to compare
-                // (default: HEAD → working tree, the "find a regression"
-                // journey). The static-grammar resolver builds each side and
-                // the deterministic `needs-explanation` policy keeps the run
-                // free of LLM calls.
+                // (default: HEAD → working tree). The static-grammar resolver
+                // builds each side and the deterministic `needs-explanation`
+                // policy keeps the run free of LLM calls.
                 versionA: msg.versionA,
                 versionB: msg.versionB,
                 // The webview's mode toggle selects which deterministic dispatch

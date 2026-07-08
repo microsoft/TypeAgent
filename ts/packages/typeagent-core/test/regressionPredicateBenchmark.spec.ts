@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Measures the default "likely-bad change" predicate against a set of blind
+// Measures the default likely-regression predicate against a set of blind
 // human labels over real replay deltas. The deltas are produced by running the
 // actual grammar replay resolver over the committed player corpus for a set of
 // hand-authored grammar variants (see the fixtures under
@@ -12,7 +12,7 @@
 // the label, and the label is not derived from the predicate.
 
 import { readFileSync } from "node:fs";
-import { likelyBadChange } from "../src/replay/predicate.js";
+import { likelyRegression } from "../src/replay/predicate.js";
 import { actionsEqual } from "../src/replay/engine.js";
 import {
     BENCHMARK_PATH,
@@ -45,13 +45,13 @@ function loadBenchmark(): BenchmarkRow[] {
 }
 
 /** A label or predicate verdict is "red" only when it flags a regression. */
-function isRed(value: Label | ReturnType<typeof likelyBadChange>): boolean {
+function isRed(value: Label | ReturnType<typeof likelyRegression>): boolean {
     return value === "regression";
 }
 
 /** Run the predicate on a benchmark row (all rows are non-equal deltas). */
-function predict(row: BenchmarkRow): ReturnType<typeof likelyBadChange> {
-    return likelyBadChange({
+function predict(row: BenchmarkRow): ReturnType<typeof likelyRegression> {
+    return likelyRegression({
         actionA: row.actionA ?? undefined,
         actionB: row.actionB ?? undefined,
         equal: false,

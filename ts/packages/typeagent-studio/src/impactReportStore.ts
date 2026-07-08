@@ -8,7 +8,7 @@ import type {
 } from "./webviewKit/replayViewModel.js";
 import type { StudioReplayResult } from "@typeagent/core/runtime";
 import {
-    likelyBadChange,
+    likelyRegression,
     type RegressionRow,
     type RegressionVerdict,
 } from "@typeagent/core/replay";
@@ -42,7 +42,7 @@ function keepMostSignificantRows<T extends RegressionRow>(
         .map((row, index) => ({
             row,
             index,
-            rank: VERDICT_KEEP_RANK[likelyBadChange(row)],
+            rank: VERDICT_KEEP_RANK[likelyRegression(row)],
         }))
         .sort((a, b) => a.rank - b.rank || a.index - b.index)
         .slice(0, max)

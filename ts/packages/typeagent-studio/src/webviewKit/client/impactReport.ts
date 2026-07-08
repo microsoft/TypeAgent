@@ -55,7 +55,7 @@ import {
     type FidelityCell,
 } from "../replayViewModel.js";
 
-/** Default base (A): the last commit — the baseline of the regression journey. */
+/** Default base (A): the last commit — the baseline the working tree is compared against. */
 const DEFAULT_VERSION_A: ResolvedVersion = {
     spec: { kind: "git", ref: "HEAD" },
     label: "HEAD",
@@ -1149,7 +1149,7 @@ function renderTable(): void {
 
     if (rows.length === 0) {
         // Distinguish "filtered everything out" from a genuinely all-equal run
-        // (the happy path of the regression journey: nothing changed).
+        // (nothing changed between the two versions).
         const empty = el("div", "truncation");
         if (allRowsEqual(currentRows)) {
             empty.textContent = `No differences — all ${currentRows.length} row(s) are equal between A and B.`;

@@ -16,7 +16,7 @@ import type {
     RegressionVerdict,
     VersionSpec,
 } from "@typeagent/core/replay";
-import { likelyBadChange } from "@typeagent/core/replay";
+import { likelyRegression } from "@typeagent/core/replay";
 import type {
     SideFidelity,
     FidelityLayer,
@@ -143,7 +143,7 @@ export function toImpactRow(
     methodB?: StudioReplayMethod,
 ): ImpactRow {
     const status = classifyReplayRow(row);
-    const verdict = likelyBadChange(row);
+    const verdict = likelyRegression(row);
     const { reason, fromFeedback } = describeVerdict(row, verdict);
     return {
         status,
