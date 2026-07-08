@@ -86,13 +86,8 @@ export default class Compile extends Command {
                 : {
                       startValueRequired: true,
                       schemaLoader,
-                      // agent-server defaults to `grammarSystem: "nfa"`, so
-                      // agc must emit an optimized AST the NFA compiler can
-                      // consume.  `nfaSafeOptimizations` keeps every safe
-                      // pass (inlining, prefix-factoring, dispatch) but
-                      // omits `tailFactoring` / `promoteTailRulesParts`,
-                      // whose `RulesPart.tailCall` output only the
-                      // AST-walking matcher understands.
+                      // NFA is agent-server's default grammar system;
+                      // this preset avoids tailCall RulesParts it can't compile.
                       optimizations: nfaSafeOptimizations,
                   },
         );

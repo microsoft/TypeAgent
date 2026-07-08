@@ -474,20 +474,11 @@ function isSingleVariableRule(rule: GrammarRule): { variable: string } | false {
 }
 
 /**
- * For a rule with no explicit value expression and more than one part,
- * find the single variable-bearing part (if exactly one exists) so its
- * value can be forwarded as the rule's effective value.
- *
- * Mirrors the matcher's implicit-default forwarding rule
- * (`getImplicitDefaultValue` in grammarOptimizer.ts), which the grammar
- * optimizer's `factorCommonPrefixes` pass relies on: a shared-prefix
- * rule factored to `[<prefix>, RulesPart(variable: "w")]` has no value
- * of its own - the matcher (and, with this helper, the NFA compiler)
- * forwards whatever value the bound `RulesPart` produces at match time.
- *
- * Returns `undefined` when zero or more-than-one parts carry a variable
- * - the caller treats "more than one" as a genuine ambiguity error and
- * "zero" as "no implicit value derivable here".
+ * For a value-less multi-part rule, find its single variable-bearing
+ * part so that part's value can be forwarded as the rule's effective
+ * value (mirrors `getImplicitDefaultValue` in grammarOptimizer.ts).
+ * Returns `"ambiguous"` if more than one part carries a variable, or
+ * `undefined` if none do.
  */
 function findSingleVariableBearingPart(
     rule: GrammarRule,
@@ -651,13 +642,9 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
             if (singleVar) {
                 effectiveValue = { type: "variable", name: singleVar.variable };
             } else if (rule.parts.length > 1) {
-                // Multi-term rule with no explicit value: mirror the
-                // matcher's implicit-default forwarding rule (see
-                // `findSingleVariableBearingPart`) - this is the shape
-                // produced by the grammar optimizer's
-                // `factorCommonPrefixes` pass (`nfaSafeOptimizations`
-                // preset) when it factors a shared optional prefix out
-                // of alternatives that each carry their own `->` value.
+                // factorCommonPrefixes (nfaSafeOptimizations) can leave
+                // a multi-part rule with no top-level value; forward
+                // the single variable-bearing part's value if possible.
                 const singleVarPart = findSingleVariableBearingPart(rule);
                 if (singleVarPart === "ambiguous") {
                     throw new Error(
@@ -672,9 +659,6 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
                         name: singleVarPart.variable,
                     };
                 } else {
-                    // VALIDATION: Multi-term rules MUST have a value
-                    // expression, either explicit or implicitly derivable
-                    // from exactly one variable-bearing part.
                     const hasTailCall = rule.parts.some(
                         (p) => p.type === "rules" && p.tailCall,
                     );
@@ -1594,9 +1578,7 @@ function compileRulesPartWithSlots(
             if (singleVar) {
                 effectiveValue = { type: "variable", name: singleVar.variable };
             } else if (rule.parts.length > 1) {
-                // Mirror the matcher's implicit-default forwarding rule
-                // (see `findSingleVariableBearingPart`) for nested
-                // multi-term rules produced by `factorCommonPrefixes`.
+                // Same implicit-value forwarding as above, for nested rules.
                 const singleVarPart = findSingleVariableBearingPart(rule);
                 if (singleVarPart === "ambiguous") {
                     throw new Error(

@@ -1,21 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Regression coverage for the "shared optional prefix breaks NFA
-// compilation" bug: when every top-level alternative shares a common
-// optional leading rule (e.g. an optional politeness lead-in), the
-// grammar optimizer's `factorCommonPrefixes` pass hoists that prefix
-// out, leaving a value-less multi-term rule whose remaining value
-// lives on a nested `RulesPart`. The NFA compiler used to reject this
-// shape outright (`nfaCompiler.ts:619`) even though the AST-walking
-// matcher evaluates it correctly.
-//
-// Fix: (A) the NFA compiler now derives an implicit forwarding value
-// for multi-term rules with exactly one variable-bearing part, mirroring
-// the matcher's own implicit-default rule; (B) `nfaSafeOptimizations`
-// (recommendedOptimizations minus `tailFactoring` /
-// `promoteTailRulesParts`) avoids emitting the `tailCall` RulesParts the
-// NFA compiler still can't support, so the two changes work together.
+// Regression coverage: grammars where every top-level alternative
+// shares a common optional prefix used to fail to compile to an NFA
+// once `factorCommonPrefixes` hoisted the shared prefix out, leaving a
+// value-less multi-term rule. See nfaCompiler.ts (implicit value
+// derivation) and grammarOptimizer.ts (`nfaSafeOptimizations`).
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
@@ -27,8 +17,7 @@ import {
 import { Grammar, createStringPart } from "../src/grammarTypes.js";
 
 describe("NFA compilation of factored shared-prefix grammars", () => {
-    // Minimal repro straight from the bug report: every alternative
-    // shares a common optional prefix rule <P>.
+    // Every alternative shares a common optional prefix rule <P>.
     const agr = `
 <Start> = <a> | <b>;
 <a> = <P> foo -> { actionName: "A" };
@@ -67,12 +56,8 @@ describe("NFA compilation of factored shared-prefix grammars", () => {
         expect(matchNFA(nfa, ["baz"], true).matched).toBe(false);
     });
 
-    it("still refuses tailCall RulesParts from recommendedOptimizations, with a clear message", () => {
-        // recommendedOptimizations enables tailFactoring /
-        // promoteTailRulesParts, which the NFA compiler does not (and
-        // by design cannot cheaply) support. This documents the
-        // remaining, intentional limitation so a future attempt to
-        // silently "fix" it here doesn't mask a real incompatibility.
+    it("still refuses tailCall RulesParts from recommendedOptimizations", () => {
+        // tailFactoring/promoteTailRulesParts still aren't NFA-compatible.
         const grammar = loadGrammarRules("factored-prefix.agr", agr, {
             optimizations: recommendedOptimizations,
         });
@@ -83,9 +68,6 @@ describe("NFA compilation of factored shared-prefix grammars", () => {
     });
 
     it("derives an implicit value for a manually-authored factored rule", () => {
-        // Same shape as above, but hand-written (bypassing the
-        // optimizer) to directly exercise the NFA compiler's new
-        // implicit-value derivation for multi-term, value-less rules.
         const agr2 = `
 <Start> = <a> | <b>;
 <a> = (please)? $(w:<Choice>) -> w;
@@ -106,14 +88,8 @@ describe("NFA compilation of factored shared-prefix grammars", () => {
     });
 
     it("throws a clear error when the implicit value is genuinely ambiguous", () => {
-        // Two variable-bearing parts with no top-level value: neither
-        // the matcher nor the NFA compiler can determine which one's
-        // value should be forwarded. Built as a raw AST (bypassing the
-        // parser/loader's own stricter "start rule must produce a
-        // value" validation) to exercise the NFA compiler's defensive
-        // check in isolation - this shape should never be reachable
-        // through the normal parse+optimize pipeline, but the compiler
-        // must still fail loudly and clearly if it ever is.
+        // Raw AST (bypasses the loader's own validation) with two
+        // variable-bearing parts and no top-level value.
         const grammar: Grammar = {
             alternatives: [
                 {

@@ -264,26 +264,11 @@ export const recommendedOptimizations: GrammarOptimizationOptions = {
 };
 
 /**
- * NFA-compatible preset: every pass in `recommendedOptimizations` except
- * `tailFactoring` and `promoteTailRulesParts`.  Those two passes emit
- * `RulesPart.tailCall` nodes that only the AST-walking matcher
- * (`grammarMatcher.ts`) understands - the NFA compiler
- * (`nfaCompiler.ts`) rejects them outright.
- *
- * `factorCommonPrefixes` (without `tailFactoring`) still factors shared
- * leading parts across alternatives, but emits the factored suffix as a
- * plain (non-tail) `RulesPart` bound to a synthesized wrapper variable
- * (e.g. `__opt_factor_0`), with the parent rule's own `value` either set
- * explicitly to reference that variable (when `dispatchifyAlternations`
- * finalizes the rule) or left implicit for the compiler's single
- * variable-bearing-part forwarding rule to resolve (see
- * `isSingleVariableRule` / the multi-part forwarding check in
- * `nfaCompiler.ts`). Both shapes compile and match correctly on the NFA
- * path.
- *
- * Use this preset (instead of `recommendedOptimizations`) for any
- * grammar that will be compiled to an NFA - which, since `nfa` is the
- * default `grammarSystem` for agent-server, is the common case.
+ * NFA-compatible preset: all of `recommendedOptimizations` except
+ * `tailFactoring` and `promoteTailRulesParts`, which emit
+ * `RulesPart.tailCall` nodes the NFA compiler rejects. Use this preset
+ * for any grammar that will be compiled to an NFA (the default
+ * `grammarSystem` for agent-server).
  */
 export const nfaSafeOptimizations: GrammarOptimizationOptions = {
     inlineSingleAlternatives: true,
