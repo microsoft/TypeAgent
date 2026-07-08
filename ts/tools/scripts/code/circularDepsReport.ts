@@ -193,7 +193,10 @@ function loadCycleExceptionSet(
         if (Array.isArray(entry?.cycle)) {
             nodes = entry.cycle.map(normalizeCycleNode).filter(Boolean);
         } else if (typeof entry?.key === "string") {
-            nodes = entry.key.split(">").map(normalizeCycleNode).filter(Boolean);
+            nodes = entry.key
+                .split(">")
+                .map(normalizeCycleNode)
+                .filter(Boolean);
         }
         if (nodes.length > 0) {
             out.add(canonicalKey(nodes));
