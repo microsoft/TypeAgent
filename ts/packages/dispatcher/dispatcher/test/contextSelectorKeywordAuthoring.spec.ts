@@ -10,6 +10,7 @@ import {
 } from "../src/context/contextSelector/keywordFile.js";
 import {
     distillKeywords,
+    stripExampleValues,
     CreateChatModel,
 } from "../src/context/contextSelector/keywordDistiller.js";
 import { produceKeywordFile } from "../src/context/contextSelector/keywordProducer.js";
@@ -224,6 +225,49 @@ describe("contextSelector/keywordDistiller", () => {
         });
         expect(kw).toHaveLength(3);
         expect(kw).toEqual(["alpha", "beta", "gamma"]);
+    });
+
+    it("strips illustrative example values before prompting the model", async () => {
+        // Example values in a param doc must NOT reach the model, or it anchors
+        // on them (list.addItems -> garden/movie/gift). The concept + action name
+        // must survive.
+        let prompt = "";
+        const create = stubModel((p) => {
+            prompt = p;
+            return '{ "keywords": ["list"] }';
+        });
+        await distillKeywords(
+            {
+                schemaDescription: "list agent",
+                actionName: "addItems",
+                actionComments: ["add one or more items to a list"],
+                paramNames: ["listName"],
+                paramComments: [
+                    "name of the list such as 'zucchini', 'kayak', 'trombone', 'obsidian task'",
+                ],
+            },
+            { createModel: create },
+        );
+        for (const junk of ["zucchini", "kayak", "trombone", "obsidian"]) {
+            expect(prompt).not.toContain(junk);
+        }
+        expect(prompt).toContain("addItems");
+        expect(prompt.toLowerCase()).toContain("list");
+    });
+
+    it("stripExampleValues drops quoted + 'such as' enumerations, keeps concepts", () => {
+        expect(
+            stripExampleValues(
+                "name of the list such as 'grocery', 'gift', 'movie'",
+            ),
+        ).not.toMatch(/grocery|gift|movie/);
+        expect(
+            stripExampleValues('a color, e.g. "red", "green", "blue"'),
+        ).not.toMatch(/red|green|blue/);
+        // No examples -> unchanged concept text.
+        expect(stripExampleValues("the spreadsheet cell value")).toBe(
+            "the spreadsheet cell value",
+        );
     });
 });
 
