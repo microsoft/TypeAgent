@@ -5,7 +5,7 @@
 // translator includes this string in its system prompt as the schema's
 // top-level identity; widening it is a complementary lever to `jsdoc`
 // (which targets per-action JSDoc/PAS-description) for cases where the
-// schema-level boundary is the load-bearing signal.
+// schema-level boundary is the deciding signal.
 //
 // Manifest edits are format-agnostic — both .ts-source and PAS-only
 // agents share the same JSON manifest. The patch artifact is

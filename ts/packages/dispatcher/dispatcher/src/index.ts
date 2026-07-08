@@ -15,7 +15,10 @@ export type {
 } from "./context/portRegistrar.js";
 export type {
     AppAgentProvider,
-    AppAgentInstaller,
+    AppAgentHost,
+    AppAgentSource,
+    AppAgentConnection,
+    InstalledAgentInfo,
     ConstructionProvider,
 } from "./agentProvider/agentProvider.js";
 export type {

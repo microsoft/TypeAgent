@@ -13,8 +13,8 @@
 // is "known to be ambiguous" even when the runtime detector found a single
 // confident match, and to enrich a clarify candidate set with siblings.
 
-import fs from "node:fs";
 import registerDebug from "debug";
+import { readJsonFileSafe } from "../utils/fsUtils.js";
 import type {
     Neighborhood,
     NeighborhoodMember,
@@ -64,24 +64,19 @@ export class CollisionRegistry {
         if (!registryPath) {
             return CollisionRegistry.empty();
         }
-        try {
-            if (!fs.existsSync(registryPath)) {
-                debugRegistry(`Registry not found: ${registryPath}`);
-                return CollisionRegistry.empty();
-            }
-            const raw = fs.readFileSync(registryPath, "utf8");
-            const parsed = JSON.parse(raw) as NeighborhoodPreview;
-            const neighborhoods = Array.isArray(parsed?.neighborhoods)
-                ? parsed.neighborhoods
-                : [];
-            debugRegistry(
-                `Loaded ${neighborhoods.length} neighborhoods from ${registryPath}`,
-            );
-            return new CollisionRegistry(neighborhoods);
-        } catch (e) {
-            debugRegistry(`Failed to load registry ${registryPath}: ${e}`);
+        const parsed = readJsonFileSafe(registryPath, (e) =>
+            debugRegistry(`Failed to load registry ${registryPath}: ${e}`),
+        ) as NeighborhoodPreview | undefined;
+        if (parsed === undefined) {
             return CollisionRegistry.empty();
         }
+        const neighborhoods = Array.isArray(parsed.neighborhoods)
+            ? parsed.neighborhoods
+            : [];
+        debugRegistry(
+            `Loaded ${neighborhoods.length} neighborhoods from ${registryPath}`,
+        );
+        return new CollisionRegistry(neighborhoods);
     }
 
     /** True when the registry has any neighborhoods. */

@@ -960,14 +960,73 @@ Arguments:
 
 - &lt;name&gt; - Name of the index (type: string)
 
-## @install - Install an agent
+## @package list - List installed agents
 
-Usage: `@install <name> <agent>`
+Usage: `@package list`
+
+## @package install - Install an agent
+
+Usage: `@package install [--source <source>] <name> <ref>`
 
 ### Arguments:
 
 - &lt;name&gt; - Name of the agent (type: string)
-- &lt;agent&gt; - Path of agent package directory or tar file to install (type: string)
+- &lt;ref&gt; - Reference to install: a filesystem path, a catalog short name, or a feed specifier. Interpreted by the matching source in the configured order. (type: string)
+
+### Flags:
+
+- --source &lt;source&gt; (-s) : Resolve only against this named source, bypassing the order. (optional)
+
+## @package update - Update an installed agent
+
+Usage: `@package update <name> [<range>]`
+
+### Arguments:
+
+- &lt;name&gt; - Name of the agent to update (type: string)
+- &lt;range&gt; - Optional version range for feed agents (e.g. ^1.4, ~2.0, '>=3 <4'). Ignored for path/catalog agents. (type: string, optional)
+
+## @package uninstall - Uninstall an agent
+
+Usage: `@package uninstall <name>`
+
+### Arguments:
+
+- &lt;name&gt; - Name of the agent (type: string)
+
+## @package source list - List install sources and the resolution order
+
+Usage: `@package source list`
+
+## @package source order - Set the resolution order (a subset is allowed; the named sources move to the front)
+
+Usage: `@package source order <names>...`
+
+### Arguments:
+
+- &lt;names&gt; - Source names in priority order (first wins) (type: string)
+
+## @package source where - Report which source would resolve a ref, without installing
+
+Usage: `@package source where <ref>`
+
+### Arguments:
+
+- &lt;ref&gt; - Reference to resolve: a filesystem path, a catalog short name, or a feed specifier. (type: string)
+
+## @package source remove - Remove an install source
+
+Usage: `@package source remove [--force] <name>`
+
+### Arguments:
+
+- &lt;name&gt; - Source name to remove (type: string)
+
+### Flags:
+
+- --force (-f) : Remove even when installed agents still reference this source (default: false)
+
+## @package source add - Add an install source
 
 ## @mcpfilesystem server - Set the server arguments
 
@@ -1130,11 +1189,3 @@ Usage: `@shell trash restore`
 ## @shell trash flush - Permanently delete every message currently in the trash. They stay hidden and can no longer be restored
 
 Usage: `@shell trash flush`
-
-## @uninstall - Uninstall an agent
-
-Usage: `@uninstall <name>`
-
-### Arguments:
-
-- &lt;name&gt; - Name of the agent (type: string)

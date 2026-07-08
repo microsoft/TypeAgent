@@ -10,7 +10,7 @@
 //   2. The dispatcher's optimize loop (system prompt for caseAnalyzer
 //      classification and every lever's hypothesis-generation prompt). The
 //      "WORK WITH THE LLM'S INTENT, NOT AGAINST IT" principle is the
-//      load-bearing instruction for collision-fix hypotheses.
+//      key instruction for collision-fix hypotheses.
 //
 // Phase 9 (`@collision optimize distill`) periodically proposes new
 // candidate entries here, distilled from winning attempts across runs.

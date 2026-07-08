@@ -3,7 +3,6 @@ layout: docs
 title: Building Agents for TypeAgent Dispatcher
 ---
 
-
 TypeAgent [Shell](../../../ts/packages/shell) and [CLI](../../../ts/packages/cli) are built using [TypeAgent Dispatcher](../../../ts/packages/dispatcher). It has a configurable and extensible architecture that allow custom agents to plug into the system. The TypeAgent repo includes several example [agents](../../../ts/packages/agents/). **Application agents** can be built **_outside_** the TypeAgent repo by using the [TypeAgent SDK](../../../ts/packages/agentSdk/README.md). These agents can be packaged as npm packages and then surfaced in the [Shell](../../../ts/packages/shell) or [CLI](../../../ts/packages/cli).
 
 This document describes how to build a custom application agent as an independent local NPM package **_outside of the repo_** that works with a locally built TypeAgent [Shell](../../../ts/packages/shell) or [CLI](../../../ts/packages/cli). The are two example agents in this repo you can reference: [Echo Agent](../../../ts/examples/agentExamples/echo/) and [Measure Agent](../../../ts/examples/agentExamples/measure/).
@@ -152,7 +151,7 @@ async function initializeEchoContext(): Promise<EchoActionContext> {
 
 async function executeEchoAction(
   action: TypeAgentAction<EchoAction>,
-  context: ActionContext<EchoActionContext>
+  context: ActionContext<EchoActionContext>,
 ) {
   // The context created in initializeEchoContext is returned in the action context.
   const echoContext = context.sessionContext.agentContext;
@@ -217,11 +216,18 @@ pnpm run shell
 In the [Shell](../../../ts/packages/shell) or [CLI](../../../ts/packages/cli), install the echo agent and check the status by issuing the command:
 
 ```
-@install echo <path to echo package>
+@package install echo <path to echo package>
 @config agent
 ```
 
 The `Echo` agent should be in the list and enabled.
+
+> `@package install` can resolve an agent from more than one place (a local path, a
+> bundled catalog, or a package feed). You can control which source is used,
+> preview where a `ref` would resolve, list what you have installed with
+> `@package list`, refresh an installed agent with `@package update`, and manage
+> sources with the `@package source` group. See
+> [Agent Install Sources](../reference/install-sources.md) for the full command reference.
 
 ### Step 4: See the `Echo` agent in action
 
@@ -236,7 +242,7 @@ When to run the shell this is how interaction with the `Echo` agent will look li
 The `Echo` agent will be reloaded again after installation. It can be uninstalled using the command:
 
 ```
-@uninstall echo
+@package uninstall echo
 ```
 
 ## Next step

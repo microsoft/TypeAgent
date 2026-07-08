@@ -106,3 +106,41 @@ export function ensureDirectory(dir: string): void {
         }
     }
 }
+
+// Read + JSON.parse a file, degrading to `undefined` (never throwing) when the
+// path is unset, missing, unreadable, or malformed. `onError` receives read /
+// parse failures for optional debug logging; a missing file is silent. The
+// caller owns shape validation and the default value, so the same primitive
+// serves every profile-scoped JSON store (preferences, keyword sidecar,
+// neighborhood registry, ...).
+export function readJsonFileSafe(
+    filePath: string | undefined,
+    onError?: (error: unknown) => void,
+): unknown {
+    if (filePath === undefined || !fs.existsSync(filePath)) {
+        return undefined;
+    }
+    try {
+        return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch (error) {
+        onError?.(error);
+        return undefined;
+    }
+}
+
+// Serialize `data` as pretty JSON and write it, creating parent directories as
+// needed. Swallows all I/O errors (routed to `onError` for optional debug
+// logging) so a filesystem hiccup never crashes the caller — matching the
+// best-effort persistence the profile-scoped stores rely on.
+export function writeJsonFileSafe(
+    filePath: string,
+    data: unknown,
+    onError?: (error: unknown) => void,
+): void {
+    try {
+        ensureDirectory(path.dirname(filePath));
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+    } catch (error) {
+        onError?.(error);
+    }
+}

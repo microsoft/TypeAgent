@@ -4,7 +4,7 @@
 import { schemaGuidelines } from "../src/translation/schemaGuidelines.js";
 
 describe("schemaGuidelines", () => {
-    it("contains the load-bearing 'WORK WITH THE LLM'S INTENT' principle", () => {
+    it("contains the key 'WORK WITH THE LLM'S INTENT' principle", () => {
         // The optimize loop's lever propose prompts rely on this clause to
         // bias toward widening over scolding. Surface-level snapshot —
         // text must be there verbatim.

@@ -116,7 +116,10 @@ function tableToMarkdown(table: string[][]): string {
 }
 
 function escapeTableCell(cell: string): string {
-    return cell.replace(/\|/g, "\\|").replace(/\r?\n/g, "<br>");
+    return cell
+        .replace(/\\/g, "\\\\")
+        .replace(/\|/g, "\\|")
+        .replace(/\r?\n/g, "<br>");
 }
 
 function tableToHtml(table: string[][]): string {
@@ -150,17 +153,27 @@ function stripMarkdownHtml(text: string): string {
 }
 
 function htmlToText(html: string): string {
-    return stripAnsi(
-        decodeHtmlEntities(
-            html
-                .replace(/<\s*br\s*\/?\s*>/gi, "\n")
-                .replace(/<\s*\/\s*(p|div|tr|li|h[1-6])\s*>/gi, "\n")
-                .replace(/<\s*\/\s*(td|th)\s*>/gi, " | ")
-                .replace(/<[^>]*>/g, "")
-                .replace(/[ \t]+\n/g, "\n")
-                .replace(/\n{3,}/g, "\n\n"),
-        ),
-    ).trim();
+    const withStructure = html
+        .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+        .replace(/<\s*\/\s*(p|div|tr|li|h[1-6])\s*>/gi, "\n")
+        .replace(/<\s*\/\s*(td|th)\s*>/gi, " | ");
+    const withoutTags = stripHtmlTags(withStructure)
+        .replace(/[ \t]+\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n");
+    return stripAnsi(decodeHtmlEntities(withoutTags)).trim();
+}
+
+// Remove HTML tags, repeating until the string stops changing so that
+// overlapping or nested tags (e.g. "<scr<script>ipt>") can't reconstruct a
+// tag after a single removal pass.
+function stripHtmlTags(text: string): string {
+    let previous: string;
+    let current = text;
+    do {
+        previous = current;
+        current = current.replace(/<[^>]*>/g, "");
+    } while (current !== previous);
+    return current;
 }
 
 function stripAnsi(text: string): string {

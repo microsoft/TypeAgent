@@ -50,6 +50,21 @@ choose. These docs cover detection, resolution strategies, and rollout:
   server models conversations.
 - [User settings](./core/user-settings.md) — the settings subsystem.
 
+## Agent installation & lifecycle
+
+How an agent is discovered, installed, made live in a running session, and
+updated — the install-source model and the connected-source runtime:
+
+- [Agent sources](./lifecycle/agent-sources.md) — install sources
+  (`path` / `catalog` / `feed`), ordered resolution, the `agents.json` record
+  store, and the feed/npm plumbing.
+- [Agent lifecycle](./lifecycle/agent-lifecycle.md) — the `AppAgentSource`
+  connection model, cross-session fan-out, per-session enable policy, and the
+  coordinated update/uninstall restart.
+
+Embedding this machinery in your own host is covered in
+[Guides › Embedding the dispatcher](../guides/embedding-dispatcher.md).
+
 ## Browser agent
 
 The browser agent is large enough to warrant its own set of docs:

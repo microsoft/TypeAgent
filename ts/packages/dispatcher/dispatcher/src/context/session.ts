@@ -261,6 +261,29 @@ export type CollisionConfig = {
         scorer: "placeholder" | "actionEmbedding";
         strategy: CollisionStrategy;
     };
+    // Context-weighted resolution (the `contextSelector` tier, §11.3). A
+    // deterministic, LLM-free tiebreaker that runs on the grammarMatch path
+    // before the configured strategy: confident -> resolve (no LLM); abstain ->
+    // fall through. Off by default; only `detect` is exposed via `@config`.
+    contextSelector: {
+        detect: boolean;
+        // Ring-buffer look-back N over recent user turns (default 20).
+        windowTurns: number;
+        // Per-turn recency decay lambda (default 0.9).
+        decay: number;
+        // Evidence gate: min distinct distinguishing tokens the winner must
+        // match (default 2).
+        minUniqueTokens: number;
+        // Evidence gate: min winner score / matched mass (default 1.0). Also
+        // bounds staleness — at λ=0.9 two matched tokens fall below 1.0 past
+        // roughly age 7, so a single old topic turn stops resolving.
+        minMass: number;
+        // Clear-winner margin the winner must beat the runner-up by (default 0.5).
+        margin: number;
+        // On abstain: hand to the configured grammar strategy (default) or
+        // escalate the request to the LLM translation path.
+        abstainFallback: "defer-to-strategy" | "escalate-to-llm";
+    };
     // Optional explicit ranking — comma-separated agent names (e.g. "list,music,player").
     // Stored as a string because the dispatcher config system rejects arrays.
     // Empty / unset falls back to agent registration order.
@@ -441,6 +464,15 @@ const defaultSessionConfig: SessionConfig = {
             scorer: "placeholder",
             strategy: "first-match",
         },
+        contextSelector: {
+            detect: false,
+            windowTurns: 20,
+            decay: 0.9,
+            minUniqueTokens: 2,
+            minMass: 1.0,
+            margin: 0.5,
+            abstainFallback: "defer-to-strategy",
+        },
         priorityOrder: "",
         multipleActionBehavior: "downgrade-to-priority",
         telemetry: {
@@ -468,6 +500,13 @@ type SessionData = {
     cacheData: SessionCacheData;
     tokens?: TokenCounterData;
     indexes?: IndexData[];
+    // The set of app agent names this session has already seen (static +
+    // dynamic). Used for load-time reconciliation: agents that became
+    // available while this session was offline are reported as added, and agents
+    // that disappeared as removed. `undefined` means "never recorded" — the first
+    // reconciliation establishes a silent baseline (a brand-new session or the
+    // first load after upgrading to a build that tracks this).
+    knownAgents?: string[] | undefined;
 };
 
 // Fill in missing fields when loading sessions from disk
@@ -512,6 +551,9 @@ export class Session {
     private readonly settings: SessionSettings;
     private config: SessionConfig;
     private cacheData: SessionCacheData;
+    // Names of app agents this session has already seen.
+    // `undefined` until the first reconciliation records a baseline.
+    private knownAgents: string[] | undefined;
 
     public static async create(
         settings?: SessionSettings,
@@ -572,6 +614,7 @@ export class Session {
         this.config = cloneConfig(defaultSessionConfig);
         mergeConfig(this.config, this.settings, appAgentStateKeys);
         this.cacheData = sessionData.cacheData;
+        this.knownAgents = sessionData.knownAgents;
 
         // rehydrate token stats
         if (sessionData.tokens) {
@@ -645,6 +688,25 @@ export class Session {
 
     public getSessionDirPath(): string | undefined {
         return this.sessionDirPath;
+    }
+
+    /**
+     * The set of app agent names this session has already seen,
+     * or `undefined` if no baseline has been recorded yet.
+     */
+    public getKnownAgents(): readonly string[] | undefined {
+        return this.knownAgents;
+    }
+
+    /**
+     * Record the set of app agent names currently known to this session
+     * and persist it. Called by load-time reconciliation
+     * and by live add/remove so the next load reconciles against an accurate
+     * baseline.
+     */
+    public setKnownAgents(names: readonly string[]): void {
+        this.knownAgents = [...names];
+        this.save();
     }
 
     public getConstructionDataFilePath() {
@@ -731,6 +793,7 @@ export class Session {
                 cacheData: this.cacheData,
                 tokens: TokenCounter.getInstance(),
                 indexes: IndexManager.getInstance().indexes,
+                knownAgents: this.knownAgents,
             };
             debugSession(
                 `Saving session: ${getSessionName(this.sessionDirPath)}`,

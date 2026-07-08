@@ -592,7 +592,7 @@ if ($Provider -eq "aisystems") {
         )
 
         if ($isKeyVaultAuthError) {
-            Write-Host "" 
+            Write-Host ""
             Write-Host "Key Vault access failed for the current Azure identity." -ForegroundColor Yellow
             Write-Host "Launching 'az login' so you can select an identity with access..." -ForegroundColor Yellow
             & az login --only-show-errors | Out-Null
