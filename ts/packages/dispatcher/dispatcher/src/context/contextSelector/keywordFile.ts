@@ -46,27 +46,34 @@ export type KeywordFile = {
     actions: Record<string, string[]>;
 };
 
-// The `<schema>.keywords.json` sibling of a schema file. Strips a trailing
-// `.pas` (from `<name>.pas.json`) so both the `.ts` source and the compiled
-// `.pas.json` resolve to the same `<name>.keywords.json`.
+// The `<schema>.keywords.json` sibling of a schema SOURCE file.
 function siblingKeywordPath(schemaPath: string): string {
     const parsed = path.parse(schemaPath);
-    const name = parsed.name.replace(/\.pas$/i, "");
-    return path.join(parsed.dir, `${name}${KEYWORD_FILE_SUFFIX}`);
+    return path.join(parsed.dir, `${parsed.name}${KEYWORD_FILE_SUFFIX}`);
 }
 
-// Absolute path to a schema's keyword file — a sibling of the schema SOURCE. The
-// single point that decides where keyword files live (§5). Prefers the original
-// schema source (`src/<name>.ts`, where a committed file belongs) and falls back
-// to the compiled schema file (`dist/<name>.pas.json`). Both `ActionConfig`
-// paths are already absolute (patched at agent load). Returns undefined when a
-// schema has no file path (dynamic/inline agents) — those use the lexical floor.
+// A committed keyword file only ever sits beside an agent's schema SOURCE — an
+// absolute `<name>.ts` — so both the read path and the backfill agree on exactly
+// one committable location (§5). Returns undefined (→ lexical floor) for schemas
+// we must NOT place a file beside:
+//   - no path at all (dynamic/inline agents),
+//   - a relative path: inline/system agents carry package-relative schema paths
+//     (they bypass patchPaths); resolving those against cwd would scatter files
+//     into a bogus tree, so treat them as "no committed file",
+//   - a compiled `.pas.json` with no `.ts` source: `dist` is a transient build
+//     artifact, not a place to commit an authored keyword file.
+// Prefers the original `.ts` source, falling back to the schema file when that
+// is itself the `.ts` source. Both `ActionConfig` paths are absolute for NPM
+// agents (patched at load).
 export function keywordFilePathFor(
     originalSchemaFilePath: string | undefined,
     schemaFilePath: string | undefined,
 ): string | undefined {
     const base = originalSchemaFilePath ?? schemaFilePath;
-    return base !== undefined ? siblingKeywordPath(base) : undefined;
+    if (base === undefined || !path.isAbsolute(base) || !/\.ts$/i.test(base)) {
+        return undefined;
+    }
+    return siblingKeywordPath(base);
 }
 
 // Canonicalize every token through the SAME tokenizer the scorer / context

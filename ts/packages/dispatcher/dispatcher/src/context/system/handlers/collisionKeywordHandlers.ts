@@ -15,6 +15,7 @@
 //   @collision keywords <schema.action> clear        # revert to derived-only
 
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import fs from "node:fs";
 import {
     CommandHandler,
     CommandHandlerTable,
@@ -34,6 +35,7 @@ import {
     writeKeywordFile,
     loadKeywordFile,
     keywordFilePathFor,
+    KeywordFile,
 } from "../../contextSelector/keywordFile.js";
 
 type Target = { schemaName: string; actionName: string; id: string };
@@ -256,13 +258,25 @@ class CollisionKeywordsBackfillCommandHandler implements CommandHandler {
             ? (name: string) => openai.createChatModelDefault(name)
             : undefined;
 
-        let schemasWritten = 0;
-        let actionsTotal = 0;
-        let distilledTotal = 0;
-        let lexicalTotal = 0;
-        const skipped: string[] = [];
+        // Produce a keyword file per schema, but GROUP by the committed file
+        // path first: several schema names can share one source `.ts` (an agent's
+        // base schema plus its activity / sub schemas), and each must MERGE its
+        // action vectors into the single shared file instead of overwriting the
+        // others (which would silently drop the earlier schema's vectors).
+        type PendingFile = {
+            path: string;
+            file: KeywordFile;
+            contributors: string[];
+            distilled: number;
+            lexical: number;
+        };
+        const pendingByPath = new Map<string, PendingFile>();
+        const preservedPaths = new Set<string>();
+        const skippedNoActions: string[] = [];
+        const skippedNoPath: string[] = [];
         const preserved: string[] = [];
         const failed: string[] = [];
+        const loadErrors: string[] = [];
 
         for (const schemaName of schemaNames) {
             try {
@@ -270,25 +284,46 @@ class CollisionKeywordsBackfillCommandHandler implements CommandHandler {
                 const actionSchemas =
                     schemaFile?.parsedActionSchema.actionSchemas;
                 if (actionSchemas === undefined || actionSchemas.size === 0) {
-                    skipped.push(schemaName);
+                    skippedNoActions.push(schemaName);
                     continue;
                 }
-                // Per-agent keyword file: a sibling of this schema's source.
-                // No path (dynamic/inline agent) -> can't place a committed file.
+                // Committed keyword file: a sibling of this schema's `.ts`
+                // source. No path -> a dynamic/inline agent (or a dist-only
+                // schema) that can't host a committed file and uses the floor.
                 const config = agents.tryGetActionConfig(schemaName);
+                const sourcePath =
+                    config?.originalSchemaFilePath ?? config?.schemaFilePath;
                 const keywordPath = keywordFilePathFor(
                     config?.originalSchemaFilePath,
                     config?.schemaFilePath,
                 );
-                if (keywordPath === undefined) {
-                    skipped.push(schemaName);
+                // Only place a committed file beside a source that actually
+                // exists on disk — skips inline/dynamic agents (echo, MCP) whose
+                // schema is generated in memory, not authored in a `.ts` file.
+                if (
+                    keywordPath === undefined ||
+                    sourcePath === undefined ||
+                    !fs.existsSync(sourcePath)
+                ) {
+                    skippedNoPath.push(schemaName);
+                    continue;
+                }
+                if (preservedPaths.has(keywordPath)) {
+                    preserved.push(schemaName);
                     continue;
                 }
                 // Don't let a lexical backfill silently downgrade an existing
-                // LLM-distilled file — require --force (or --llm) to overwrite it.
-                if (createModel === undefined && !params.flags.force) {
+                // LLM-distilled file — require --force (or --llm). Checked once
+                // per path (the first time it is seen) so it also short-circuits
+                // producing for the other schemas that share that file.
+                if (
+                    !pendingByPath.has(keywordPath) &&
+                    createModel === undefined &&
+                    !params.flags.force
+                ) {
                     const existing = loadKeywordFile(keywordPath, schemaName);
                     if (existing?.generatedBy === "llm") {
+                        preservedPaths.add(keywordPath);
                         preserved.push(schemaName);
                         continue;
                     }
@@ -303,42 +338,95 @@ class CollisionKeywordsBackfillCommandHandler implements CommandHandler {
                     input,
                     { createModel },
                 );
-                const written = writeKeywordFile(keywordPath, file);
-                if (written === undefined) {
-                    failed.push(schemaName);
-                    continue;
+                const entry = pendingByPath.get(keywordPath);
+                if (entry === undefined) {
+                    pendingByPath.set(keywordPath, {
+                        path: keywordPath,
+                        file,
+                        contributors: [schemaName],
+                        distilled,
+                        lexical,
+                    });
+                } else {
+                    // Union the action vectors; co-located schemas have distinct
+                    // action names, so a merge never clobbers another's vector.
+                    Object.assign(entry.file.actions, file.actions);
+                    // The file is only fully "llm" if every contributor was.
+                    if (file.generatedBy !== "llm") {
+                        entry.file.generatedBy = "lexical";
+                    }
+                    entry.contributors.push(schemaName);
+                    entry.distilled += distilled;
+                    entry.lexical += lexical;
                 }
-                // Drop cached vectors so the fresh file is read next collision.
-                ctx.contextSelectorKeywords.invalidate(schemaName);
-                schemasWritten++;
-                actionsTotal += Object.keys(file.actions).length;
-                distilledTotal += distilled;
-                lexicalTotal += lexical;
             } catch {
-                // One unloadable/misbehaving schema must not abort the roster.
-                failed.push(schemaName);
+                // A schema whose file won't load/parse (a dynamic/inline agent
+                // with no authored `.ts`, e.g. MCP) can't be backfilled — record
+                // it, but don't let it abort the roster.
+                loadErrors.push(schemaName);
+            }
+        }
+
+        let filesWritten = 0;
+        let schemasWritten = 0;
+        let actionsTotal = 0;
+        let distilledTotal = 0;
+        let lexicalTotal = 0;
+        let mergedFiles = 0;
+        for (const entry of pendingByPath.values()) {
+            const written = writeKeywordFile(entry.path, entry.file);
+            if (written === undefined) {
+                failed.push(...entry.contributors);
+                continue;
+            }
+            // Drop cached vectors so the fresh file is read next collision.
+            for (const s of entry.contributors) {
+                ctx.contextSelectorKeywords.invalidate(s);
+            }
+            filesWritten++;
+            schemasWritten += entry.contributors.length;
+            actionsTotal += Object.keys(entry.file.actions).length;
+            distilledTotal += entry.distilled;
+            lexicalTotal += entry.lexical;
+            if (entry.contributors.length > 1) {
+                mergedFiles++;
             }
         }
 
         const lines = [
             `Keyword backfill complete (${params.flags.llm ? "LLM distillation" : "lexical"}):`,
-            `  schemas written: ${schemasWritten}`,
+            `  files written:   ${filesWritten} (${schemasWritten} schemas)`,
             `  actions:         ${actionsTotal} (distilled ${distilledTotal}, lexical ${lexicalTotal})`,
         ];
+        if (mergedFiles > 0) {
+            lines.push(
+                `  merged:          ${mergedFiles} file(s) shared by multiple schemas`,
+            );
+        }
         if (preserved.length > 0) {
             lines.push(
                 `  preserved (existing llm file; use --force to overwrite): ${preserved.length}`,
             );
         }
-        if (skipped.length > 0) {
+        if (skippedNoPath.length > 0) {
             lines.push(
-                `  skipped (no actions loaded): ${skipped.length} (${skipped.slice(0, 8).join(", ")}${skipped.length > 8 ? ", …" : ""})`,
+                `  skipped (no committable source path): ${skippedNoPath.length} (${skippedNoPath.slice(0, 8).join(", ")}${skippedNoPath.length > 8 ? ", …" : ""})`,
+            );
+        }
+        if (skippedNoActions.length > 0) {
+            lines.push(
+                `  skipped (no actions loaded): ${skippedNoActions.length}`,
+            );
+        }
+        if (loadErrors.length > 0) {
+            lines.push(
+                `  skipped (schema did not load): ${loadErrors.length} (${loadErrors.join(", ")})`,
             );
         }
         if (failed.length > 0) {
             lines.push(`  FAILED to write: ${failed.join(", ")}`);
         }
-        if (schemasWritten > 0) {
+        if (filesWritten > 0) {
             lines.push(
                 "  Note: other active sessions pick up the change on their next reload.",
             );
