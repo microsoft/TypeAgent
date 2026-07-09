@@ -59,10 +59,10 @@ The important limitation is that sources only answer one question: "can this sou
 
 Resolution runs in two phases; a default agent name always wins over a ref match:
 
-1. Phase 1 - default agent name. Walk the install sources in configured priority order calling `findName(<target>)`. The first source whose `findName` matches wins. If a single source has two entries declaring the same default agent name, that source fails as ambiguous (see Ambiguity and Errors).
-2. Phase 2 - ref. Only if no source matched in phase 1, walk the sources again in priority order calling `find(<target>)` (a filesystem path for a path source, a package name for a feed, a package name or entry path for a catalog). The first source whose `find` matches wins.
+1. Phase 1 - default agent name. Attempted only when `<target>` is itself a legal agent name (`AGENT_NAME_RE`); a target that cannot be an agent name (for example a filesystem path like `./agents/weather`) skips phase 1 entirely. When attempted, walk the install sources in configured priority order calling `findName(<target>)`. The first source whose `findName` matches wins. If a single source has two entries declaring the same default agent name, that source fails as ambiguous (see Ambiguity and Errors).
+2. Phase 2 - ref. Only if phase 1 was skipped or matched nothing, walk the sources again in priority order calling `find(<target>)` (a filesystem path for a path source, a package name for a feed or catalog). The first source whose `find` matches wins.
 
-Because every source's `findName` is tried before any source's `find`, a stray `weather` directory under a path source can never shadow a feed package whose default agent name is `weather`: the feed's `findName` is consulted (phase 1) before the path source's `find` (phase 2). Within each phase, source priority order decides and the first match wins. That intra-phase shadowing is intentional (source order is a deliberate priority list); `@package install --dry-run` surfaces the full match set across both phases so an incidental shadow is visible.
+Because every source's `findName` is tried before any source's `find`, a stray `weather` directory under a path source can never shadow a feed package whose default agent name is `weather`: the feed's `findName` is consulted (phase 1) before the path source's `find` (phase 2). Within each phase, source priority order decides and the first match wins. That intra-phase shadowing is intentional (source order is a deliberate priority list); `@package install --dry-run` surfaces the full match set across both phases so an incidental shadow is visible. The `AGENT_NAME_RE` gate also bounds cost: a path-shaped target skips phase 1, so a one-argument path install never triggers a feed `findName` (and never forces a feed cache refresh) just to reject the path.
 
 The installed dispatcher name is always the selected package's own default agent name. In phase 1 that equals the typed target. In phase 2 (matched by ref) the name is read from the resolved package's `package.json` `typeagent.defaultAgentName`, which is the source of truth, so the one-argument installed name never diverges from the package's own default.
 
@@ -153,7 +153,7 @@ Feed fallback:
 Keep `InstallSource.find(ref)` as the source's abstract ref lookup. The meaning of `ref` remains source-owned:
 
 - Path source: filesystem path.
-- Catalog source: package name or entry path. The catalog key is internal (the durable load handle persisted in the record's `ref`) and is never matched as a user-facing ref.
+- Catalog source: package name (read from the entry's `package.json` for a `path` entry, or the declared `name` for a `module` entry). The catalog key and the entry path are internal (the key is the durable load handle persisted in the record's `ref`) and are never matched as a user-facing ref.
 - Feed source: npm package specifier or package name.
 
 Add one optional lookup for default agent names:
@@ -174,7 +174,7 @@ interface InstallSource {
 }
 ```
 
-`find(ref)` preserves today's explicit ref lookup (but for a catalog it now matches the package name or entry path, not the internal key). `findName(name)` matches `typeagent.defaultAgentName`. Sources that cannot support default-name lookup omit `findName`. The `package.json` reads behind `findName` for catalog entries and path installs are read-through (re-read on each install), so the authoritative default name is always current; only the completion/listing path caches derived rows (see Command Completion and Listing) and the feed descriptor list is cached (rebuilt with `--refresh`). One-argument install resolves in two phases: it walks every source's `findName` first (priority order, first match wins), then, only if nothing matched, every source's `find`. The only ambiguity failure is within a single source when two entries declare the same default agent name.
+`find(ref)` preserves today's explicit ref lookup (but for a catalog it now matches the package name, not the internal key or entry path). `findName(name)` matches `typeagent.defaultAgentName`. Sources that cannot support default-name lookup omit `findName`. The `package.json` reads behind `find` / `findName` for catalog entries and path installs are read-through (re-read on each install), so the authoritative package name and default name are always current; only the completion/listing path caches derived rows (see Command Completion and Listing) and the feed descriptor list is cached (rebuilt with `--refresh`). One-argument install resolves in the two phases described under User-Facing Behavior; the only ambiguity failure is within a single source when two entries declare the same default agent name.
 
 ### Resolved Candidate
 
@@ -201,34 +201,58 @@ Rules:
 
 ### Registry Resolution API
 
-Replace the current materializing `resolve(ref, sourceName, onWarn, onStatus)` install path with a single non-materializing install resolver. The command handler owns command arity and turns it into an explicit request shape; the registry owns source resolution and never guesses intent from an optional string:
+Minimize the API surface by keeping a single public registry entry point: extend today's `resolve` to `resolve(nameOrTarget, ref?, sourceName?, onWarn?, onStatus?)` rather than adding a second resolver or a request/response union. The two command forms map directly onto whether `ref` is supplied:
+
+- One argument (`@package install <target>`): the handler calls `resolve(target)` with `ref` omitted. This is _infer_ mode - `nameOrTarget` is the target and the installed name is derived from the resolved package.
+- Two arguments (`@package install <ref> <name>`): the handler calls `resolve(name, ref)`. This is _explicit_ mode - `nameOrTarget` is the user's install name and `ref` is resolved by the existing ref walk.
 
 ```ts
-type InstallResolveRequest =
-  | { kind: "infer"; target: string }
-  | { kind: "explicit"; ref: string; installName: string };
-
-type InstallMatchKind = "defaultAgentName" | "packageName" | "path";
-
-interface InstallResolution {
-  source: InstallSource;
-  candidate: ResolvedCandidate;
-  installName: string;
-  matchKind: InstallMatchKind;
-  explicitName: boolean;
+interface ResolveResult {
+  record: InstalledAgentRecord; // name already assigned
+  // Which resolution phase matched: the inferred default-agent-name walk
+  // (findName) or the ref walk (find). This binary phase is all the registry
+  // commits to, because the source is abstract - the registry never knows
+  // whether a source's `find` matched a path, a package name, or something else.
+  matchedByName: boolean;
 }
 
-resolveInstall(
-  request: InstallResolveRequest,
+resolve(
+  nameOrTarget: string,
+  ref?: string,
   sourceName?: string,
   onWarn?: SourceWarning,
   onStatus?: SourceStatus,
-): Promise<InstallResolution>;
+): Promise<ResolveResult>;
 ```
 
-The provider wrapper should continue to be the layer that checks builtin/name collisions, materializes the winning candidate, validates the provider, persists the record, and fans out the provider. The registry resolves source-owned candidates and returns the final installed dispatcher name. `@package install` and `@package install --dry-run` both consume the same `InstallResolution`, so preview and install cannot drift.
+An omitted `ref` selects the two-phase inferred walk; a defined `ref` keeps today's single ref walk and stamps `nameOrTarget` as the record name. Either way `resolve` materializes the winning candidate and returns a named record plus a `matchedByName` flag for the success / dry-run message. The only change from today's `resolve(ref, sourceName, ...)` is the extra optional `ref` parameter and a small `ResolveResult` return type (was a nameless `MaterializedInstallRecord`): no new method, no `InstallResolveRequest` union, no separate `matchInstallTarget`. The provider wrapper stops passing a name in and instead reads it off the returned record; it still owns the built-in / existing-agent check and the `agents.json` write.
 
-Internally, the registry can still keep private helper walks. The existing private ref walk scans the configured source list in order and calls `source.find(ref)` for explicit two-argument installs. Add a sibling source-first resolver for one-argument inferred installs:
+The `InstalledAgentSourceApi.install` boundary the command handler actually calls changes to match `resolve`. Today it is `install(name, ref, sourceName, issuingHost, onStatus)` returning `{ source, warnings? }`. It becomes:
+
+```ts
+install(
+  nameOrTarget: string,
+  ref: string | undefined,
+  sourceName: string | undefined,
+  issuingHost: AppAgentHost,
+  onStatus?: SourceStatus,
+): Promise<{
+  name: string; // installed dispatcher name (derived in infer mode, explicit in ref mode)
+  source: string;
+  matchedByName: boolean; // which phase won, for the success line
+  packageName?: string; // user-facing package identity when known
+  ref: string; // durable handle, for the "durable ref" success line
+  warnings?: string[];
+}>;
+```
+
+The handler passes its positional arguments straight through - one argument -> `install(target, undefined, ...)`, two arguments -> `install(name, ref, ...)` - and renders the success message from the returned `name` / `matchedByName` / `packageName` (see User Feedback). The wrapper reads the installed name off `resolve`'s returned record instead of stamping a name it was given; provider validation, the built-in / existing-agent check, and the `agents.json` write are unchanged.
+
+`@package install --dry-run` does not go through `install`: it calls the registry's internal `walkInferName` / `walkRef` directly (pre-materialize), so the old public `registry.where` method and the `@package source where` command it backed are both removed rather than kept.
+
+Ambiguity and illegal or missing default names are detected during the inferred walk and name derivation, which run before `materialize`, so those fail without touching disk or the feed. The built-in and existing-agent collisions stay where they are today - at the serialized `agents.json` write - so no pre-materialize name reservation is introduced.
+
+Internally, `resolve` keeps the existing private ref walk for the explicit case and adds a sibling two-phase walk for the inferred case:
 
 ```ts
 async function walkInferName(
@@ -236,62 +260,62 @@ async function walkInferName(
   sourceName?: string,
   onWarn?: SourceWarning,
   onStatus?: SourceStatus,
-): Promise<{ source: InstallSource; candidate: ResolvedCandidate } | undefined>;
+): Promise<
+  | {
+      source: InstallSource;
+      candidate: ResolvedCandidate;
+      matchedByName: boolean;
+    }
+  | undefined
+>;
 ```
 
-`walkInferName` resolves in two phases. Phase 1: scan the configured source list in priority order calling `source.findName?.(target)`; the first source that matches wins. If one source has two entries with the same default agent name, that source fails as ambiguous and the error lists the concrete candidate packages. Phase 2 (only if phase 1 matched nothing): scan again calling `source.find(target)`; the first source that matches wins. A default agent name (phase 1) always beats a ref match (phase 2). Explicit source filtering runs the same two-phase walk over a one-source list; it changes the candidate set, not the matching rules. The resolver records `matchKind` from the winning lookup path so success and dry-run output can explain whether the target matched a default agent name, package name, or path.
+`walkInferName` resolves in two phases. Phase 1 is attempted only when `target` is a legal agent name (`AGENT_NAME_RE`); otherwise it is skipped and resolution begins at phase 2. Phase 1: scan the configured source list in priority order calling `source.findName?.(target)`; the first source that matches wins. If one source has two entries with the same default agent name, that source fails as ambiguous and the error lists the concrete candidate packages. Phase 2 (if phase 1 was skipped or matched nothing): scan again calling `source.find(target)`; the first source that matches wins. A default agent name (phase 1) always beats a ref match (phase 2). Explicit source filtering runs the same two-phase walk over a one-source list; it changes the candidate set, not the matching rules. The match result records only whether the name phase (`findName`) or the ref phase (`find`) won. Because sources are abstract, the finer user-facing label (default agent name, package name, or path) is not a registry enum: it is derived at the display layer from the resolved candidate's own fields (`defaultAgentName`, `packageName`, `path`) that the owning source populated.
+
+For phase-2 path matches, the registry can read `typeagent.defaultAgentName` from the matched `candidate.path` before materialization. That avoids changing the path source's explicit `find(ref)` path or adding source-specific options just to skip a metadata read for two-argument installs. Catalog path entries also benefit from the same helper. Feed and catalog-name matches should put `defaultAgentName` on the `ResolvedCandidate` during lookup.
 
 ## Resolution Algorithm
 
-Pseudo-code for the single public resolver:
+Pseudo-code for the single overloaded resolver:
 
 ```ts
-async function resolveInstall(request, sourceName) {
-  switch (request.kind) {
-    case "infer": {
-      const match = await walkInferName(request.target, sourceName);
-      if (match === undefined) {
-        throw unresolved(request.target);
-      }
-      return {
-        source: match.source,
-        candidate: match.candidate,
-        installName: requireLegalDefaultName(match.candidate, request.target),
-        matchKind: inferMatchKind(match.candidate, request.target),
-        explicitName: false,
-      };
+async function resolve(nameOrTarget, ref, sourceName) {
+  if (ref !== undefined) {
+    // Explicit: existing ref walk, user-supplied name.
+    const match = await walkRef(ref, sourceName);
+    if (match === undefined) {
+      throw unresolved(ref);
     }
-    case "explicit": {
-      validateAgentName(request.installName);
-      const match = await walkRef(request.ref, sourceName);
-      if (match === undefined) {
-        throw unresolved(request.ref);
-      }
-      return {
-        source: match.source,
-        candidate: match.candidate,
-        installName: request.installName,
-        matchKind: inferRefMatchKind(match.candidate, request.ref),
-        explicitName: true,
-      };
-    }
+    const record = await match.source.materialize(match.candidate);
+    return { record: { ...record, name: nameOrTarget }, matchedByName: false };
   }
+
+  // Infer: two-phase findName-then-find walk, name from the package.
+  const match = await walkInferName(nameOrTarget, sourceName);
+  if (match === undefined) {
+    throw unresolved(nameOrTarget);
+  }
+  const name = requireLegalDefaultName(
+    match.candidate.defaultAgentName ?? readDefaultName(match.candidate.path),
+    nameOrTarget,
+  );
+  const record = await match.source.materialize(match.candidate);
+  return { record: { ...record, name }, matchedByName: match.matchedByName };
 }
 ```
 
-The public resolver throws on no match. There is no path-specific branch: path sources simply omit `findName`, so inferred-name resolution falls through to their existing `find(ref)` path lookup. The command handler decides arity once, before calling the resolver: one argument becomes `{ kind: "infer", target }`; two arguments become `{ kind: "explicit", ref, installName }`. This keeps the rule that explicit installs never consult default agent names visible in the type shape.
+Path sources simply omit `findName`, so inferred-name resolution falls through to their existing `find(ref)` path lookup. The command handler decides arity once: one argument calls `resolve(target)`; two arguments call `resolve(name, ref)`. The presence of `ref` is the only thing that switches modes, so explicit installs never consult default agent names and no discriminated-union request type is needed.
 
 ### Install Commit Flow
 
-Install remains two-phase:
+Install stays a single `resolve` call followed by validation and a serialized write:
 
-1. Resolve the package candidate and final installed dispatcher name without materializing package contents.
-2. Validate the final installed name and check built-in and existing-agent collisions.
-3. Materialize the candidate through the winning source.
-4. Build and validate the provider manifest.
-5. Persist the `agents.json` record and fan out the provider.
+1. Call `resolve(nameOrTarget, ref?)`: walk sources (inferred or explicit), derive or stamp the installed dispatcher name, and materialize the winning candidate into a named record.
+2. Build and validate the provider manifest for that record.
+3. Under the shared serialize-to-one limiter, check built-in and existing-agent collisions and write the `agents.json` record.
+4. Fan out the provider.
 
-The important change is that phase 1 may infer the name. All name collision checks still happen before materialization, so a bad inferred name, built-in collision, or existing installed agent fails without touching disk or the feed. Steps 1, 2, and 5 (resolve, derive name, collision check, and the `agents.json` write) run inside the installer's shared serialize-to-one limiter, so no early name reservation is needed - see Install Serialization. If the implementation later narrows the limiter so materialization can run concurrently, it must replace the broad limiter with an equivalent per-name reservation made immediately after name derivation and before materialization.
+The important change is that step 1 may infer the name. Ambiguity and illegal or missing default names are detected inside `resolve` during the walk and name derivation, before `materialize`, so they fail without touching disk or the feed. The built-in and existing-agent collisions are checked at the serialized write (step 3), exactly as today, so no early name reservation is needed - see Install Serialization. If the implementation later narrows the limiter so materialization can run concurrently, it must add an equivalent per-name reservation immediately after name derivation and before materialization.
 
 ### Install Serialization
 
@@ -316,14 +340,14 @@ The per-name `busy`/`removing` guard is kept, but only for the lifecycle window 
 
 ### Catalog Source
 
-The catalog format is unchanged: it keeps the keyed `agents` map, so the catalog key remains the durable `ref` and the `load` "live pointer" behavior (re-look-up the entry by its key) is preserved. The key is now purely internal: it is never matched as a user-facing install target. Users install a catalog entry by its default agent name (phase 1) or by its package name / path (phase 2), never by the key.
+The catalog format is unchanged: it keeps the keyed `agents` map, so the catalog key remains the durable `ref` and the `load` "live pointer" behavior (re-look-up the entry by its key) is preserved. The key is now purely internal: it is never matched as a user-facing install target. Users install a catalog entry by its default agent name (phase 1) or by its package name (phase 2), never by the key or the entry path.
 
 > Why the catalog key still exists (do not remove it): the key is the catalog's stable, source-owned identity for an entry, decoupled from both the package name and the default agent name so that:
 >
 > - It is the durable `ref` persisted in each installed record. `load` re-resolves an entry by key, so a catalog author can change an entry's `path`, package `name`, or `typeagent.defaultAgentName` and existing installs keep resolving. Deriving `ref` from the package path or package name instead would break already-installed records and turn a catalog entry into a plain path record, losing the live-pointer property.
 > - It keeps entry identity unique and stable when two entries would otherwise collide on package name or default agent name (for example, two variants of the same package), which is what lets the same-source ambiguity check be well defined.
 >
-> The key is not a user-facing match target: users never need to know it. Install by default agent name (`findName`) or by package name / path (`find`) covers every user path, while the key keeps the identity and live-pointer guarantees above.
+> The key is not a user-facing match target: users never need to know it. Install by default agent name (`findName`) or by package name (`find`) covers every user path, while the key keeps the identity and live-pointer guarantees above.
 
 ```json
 {
@@ -347,12 +371,12 @@ For each catalog entry:
 
 Supported lookups:
 
-- `find(ref)`: match the entry `path` or package `name`, not the internal key. Used for two-argument ref installs and as the one-argument phase-2 fallback.
+- `find(ref)`: match the entry's package name - read read-through from the entry's resolved `package.json` for a `path` entry, or the declared `name` for a `module` entry - not the internal key and not the entry path string. Used for two-argument ref installs and as the one-argument phase-2 fallback.
 - `findName(name)`: match `packageJson.typeagent.defaultAgentName`, read read-through from the entry's resolved `package.json`. If no default name is declared or the metadata is unreadable, the entry is a non-match for this method.
 
 A catalog entry resolves to a local `path` or, when it declares only a package `name`, to a `module`. `findName` reads the entry's `package.json` from the resolved `path`; a `module`-only entry has no local `package.json` to read before install, so it cannot participate in `findName` (it is a non-match for name lookup and remains installable by package name or with the two-argument form). In practice the workspace catalog entries all carry a `path`, so this only affects hypothetical package-name-only catalog entries.
 
-There is no `find`/`findName` collapse: one-argument resolution is two-phase, so a catalog entry is matched either by default agent name (phase 1) or by package name / path (phase 2), never by both competing. The only intra-catalog ambiguity is two entries declaring the same default agent name.
+There is no `find`/`findName` collapse: one-argument resolution is two-phase, so a catalog entry is matched either by default agent name (phase 1) or by package name (phase 2), never by both competing. The only intra-catalog ambiguity is two entries declaring the same default agent name.
 
 Because keys are retained, catalog records still store the key in `ref`, so already-installed catalog agents load unchanged and there is no persisted-record migration. The `package.json` reads behind `findName` are read-through on each install (the catalog file is already re-read live on every access, so the entry's metadata stays consistent with it). The completion/listing path caches its derived rows separately (see Command Completion and Listing) so interactive completion does not read every entry's `package.json` per keystroke.
 
@@ -361,7 +385,7 @@ Because keys are retained, catalog records still store the key in `ref`, so alre
 Supported lookups:
 
 - `find(ref)`: same package membership and version resolution as current `find(ref)`.
-- `findName(name)`: use the cached descriptors only to shortlist the package whose default agent name equals `name`, then run the same version resolution as ref lookup. The cached default name is a hint, never authoritative: after the concrete version is resolved, its `typeagent.defaultAgentName` must equal `name` for the match to stand, and that resolved value becomes the installed name. A stale or drifted cache therefore never installs under a surprising name - it just fails to match and resolution falls through.
+- `findName(name)`: use the cached descriptors only to shortlist the package whose default agent name equals `name`, then run the same version resolution as ref lookup. The shortlist is cache-only (no network for a cache miss), but confirming a shortlist hit runs the same live resolution as `find` - an auth token plus the packument to pin a concrete published version - so a hit can fail exactly the way `find` does today when offline or unauthenticated. The cached default name is a hint, never authoritative: after the concrete version is resolved, its `typeagent.defaultAgentName` must equal `name` for the match to stand, and that resolved value becomes the installed name. A stale or drifted cache therefore never installs under a surprising name - it just fails to match and resolution falls through.
 
 Feed lookup should use a descriptor cache instead of a bare package-name list. The cache should evolve from `string[]` to package descriptors:
 
@@ -393,7 +417,7 @@ Cases:
 - The inferred or explicit agent name already exists or shadows a built-in agent.
 - One-argument path install cannot discover a legal default agent name.
 
-Cross-source matches are not ambiguous. Install sources are ordered, and the first source that returns a match wins, same as today's ref resolution. The only one-argument ambiguity is within a single source: two entries declaring the same default agent name (phase 1). Because resolution is two-phase - every source's `findName` before any source's `find` - a target is never simultaneously a name match and a ref match competing for the same install; the name interpretation always wins, so there is no name-vs-ref ambiguity to resolve.
+Cross-source matches are not ambiguous. Install sources are ordered, and the first source that returns a match wins, same as today's ref resolution. The only one-argument ambiguity is within a single source: two entries declaring the same default agent name (phase 1). Two-phase resolution keeps a target from being a name match and a ref match at once (see User-Facing Behavior), so there is no name-vs-ref ambiguity to resolve.
 
 Source order is a deliberate priority list, so a higher-priority source shadowing a lower-priority one within the same phase is intentional, not an error. Two-phase resolution removes the worst case (a path source's `fs.stat` shadowing a real default-name match), because default-name matching happens in phase 1, before any `find`. Remaining same-phase shadows (two feeds both matching a name, or two sources both matching a ref) are resolved by priority; `@package install --dry-run` reports every source that would match, in priority order across both phases, so an incidental shadow is visible, and `--source` forces a specific source.
 
@@ -425,7 +449,7 @@ Completion changes:
 - Keep `--source` completion unchanged.
 - `@package available --refresh` should refresh cache-backed source metadata before listing rows.
 
-This likely requires changing `listAvailableAgents()` from `{ ref, source }[]` to a richer row:
+This changes the enumeration boundary, from a ref/name list to a richer row:
 
 ```ts
 export interface AvailableInstallRow {
@@ -435,6 +459,12 @@ export interface AvailableInstallRow {
   readonly packageName?: string; // shown as the package; absent for path-only entries
 }
 ```
+
+Three layers change together:
+
+- `InstallSource.listAgents?()` returns `AvailableInstallRow[]` (was `string[]`); each enumerable source (catalog, feed) emits one row per default agent name and/or package name it can offer.
+- The `listAvailableAgents(registry, ...)` helper de-duplicates rows by `(source, ref)` and returns the flattened `AvailableInstallRow[]` (was a `string[]` of refs).
+- `InstalledAgentSourceApi.listAvailableAgents(opts?)` returns `AvailableInstallRow[]` (was `{ ref, source }[]`); the install completion handler completes default agent names and package names from those rows instead of `r.ref`.
 
 `ref` is required (every enumerable entry has a durable handle) but is never rendered - it exists only as the dedup/identity key. The invariant is that at least one of `defaultAgentName` / `packageName` is present, so every row has something typeable into `install`. Rows are de-duplicated by `(source, ref)`, since one source can surface the same entry under both its default agent name and its package name. Displayed columns are the default agent name (or `-` when the package declares none), the package name (or `-` for path-only entries), and the source.
 
@@ -479,7 +509,7 @@ Feed cache errors should say whether resolution used fresh metadata, stale cache
 Note: `@package install` (and the `@package` source commands) are new and not yet released, so none of the items below break real users or existing scripts - there is no prior released behavior to be compatible with. They are recorded here only as differences from the interim in-development shape of the command, not as compatibility hazards.
 
 - The command syntax changes from `<agent-name> <ref>` to `<ref> <agent-name>` for two-argument installs. Because the command is new, this is not a compatibility concern (the earlier order was never released).
-- The catalog key is no longer accepted as a user-facing install ref. Previously (in development) `@package install <catalog-key> <name>` resolved a catalog entry by key; now a catalog entry is installed by its default agent name or its package name / path. (Already-installed catalog records still carry the key in `ref` and load unchanged.)
+- The catalog key is no longer accepted as a user-facing install ref. Previously (in development) `@package install <catalog-key> <name>` resolved a catalog entry by key; now a catalog entry is installed by its default agent name or its package name (never by the key or the entry path). (Already-installed catalog records still carry the key in `ref` and load unchanged.)
 - `@package source where` is removed; `@package install --dry-run` replaces it.
 - The catalog file format is unchanged (keys retained internally), so catalogs and already-installed catalog records need no migration.
 
@@ -487,17 +517,18 @@ Note: `@package install` (and the `@package` source commands) are new and not ye
 
 1. Add `defaultAgentName` and `packageName` to `ResolvedCandidate`.
 2. Keep `InstallSource.find(ref)` as the source's abstract ref lookup and add optional `findName(name)` for default-agent-name lookup.
-3. Keep the catalog `agents` keyed format; add `findName` that reads `typeagent.defaultAgentName` read-through from each entry's resolved `package.json`, and change `find` to match the package name or entry path (the catalog key stays internal as the durable `ref`/load handle, no longer a user ref).
-4. Update feed source cache and lookup to expose package descriptors with default names; use the cache only to shortlist a `findName` candidate and take the final installed name from the resolved version's metadata, which must equal the typed target.
-5. Add a `--refresh` flag (fetch fresh metadata, atomically swap the cache in on success, and fail the command on fetch error without destroying the prior cache) for install and `@package available`.
-6. Replace the materializing registry install resolver with one `resolveInstall(request, sourceName, ...)` API. The request is an explicit union: `{ kind: "infer"; target }` for one argument or `{ kind: "explicit"; ref; installName }` for two arguments.
-7. Keep private registry walks underneath `resolveInstall`: a ref walk for explicit installs and a two-phase inferred-name walk that matches `findName` across sources in priority order first, then `find` if nothing matched; fail ambiguous only when one source has two entries with the same default agent name.
-8. Change `InstalledAgentSourceApi.install` to accept the same explicit install request shape instead of required `name` and `ref` strings.
-9. Change `InstallCommandHandler` args so the second name argument is optional, parse one-argument versus two-argument form once, and delegate the explicit request shape to the source API.
-10. Add a `--dry-run` flag to `@package install` that runs the same `resolveInstall` path and reports the winning source, match kind, and inferred install name without materializing or persisting; remove the `@package source where` command, since `--dry-run` supersedes it.
-11. Update install success messages and `@package install --dry-run` output to show match kind, package identity, source, and installed name.
-12. Update `@package available` and completion to use richer available rows (name + package only, never the key), backed by a short-TTL cache of derived rows refreshable via `--refresh`.
-13. Add tests for path refs, default-name matching, package-name matching, two-phase precedence (a `findName` match beats a path `find`), explicit name override, source filtering, read-through `findName` vs cached completion rows, cache refresh, user feedback text, `install --dry-run` (including the shadow match set), ambiguity, in-process install serialization via the limiter, and breaking changes.
+3. Extend the single registry entry point to `resolve(nameOrTarget, ref?, sourceName?, onWarn?, onStatus?)`: a defined `ref` keeps today's explicit ref walk and stamps `nameOrTarget` as the name; an omitted `ref` runs the inferred two-phase walk. Change its return from a nameless record to `{ record, matchedByName }` (name already assigned); `matchedByName` records only which phase won, since the source-specific label is derived from the candidate at display time.
+4. Change the `InstalledAgentSourceApi.install` boundary to `install(nameOrTarget, ref?, sourceName, issuingHost, onStatus)` returning `{ name, source, matchedByName, packageName?, ref, warnings? }`, and make the second `<agent-name>` argument optional in `InstallCommandHandler`: one argument calls `install(target, undefined, ...)`; two arguments call `install(name, ref, ...)`. Keep the explicit-name format / built-in validation for the two-argument form and render the success message from the returned `name` / `matchedByName` / `packageName`.
+5. Inside `resolve`, add the sibling `walkInferName` two-phase walk (`findName` across sources first, then `find`) returning the winning source, candidate, and which phase matched (name vs ref); derive and validate the inferred name before `materialize`, then materialize the winner as today.
+6. For phase-2 path candidates, read `typeagent.defaultAgentName` from `candidate.path/package.json` in a shared registry/helper function before materialization. This keeps path-source explicit lookup unchanged and also covers catalog entries that resolve to local paths.
+7. Keep the catalog `agents` keyed format; add `findName` that reads `typeagent.defaultAgentName` read-through from each entry's resolved `package.json`, and change `find` to match the package name (the catalog key and entry path stay internal; the key is the durable `ref`/load handle, no longer a user ref).
+8. Update feed source cache and lookup to expose package descriptors with default names; use the cache only to shortlist a `findName` candidate (cache-only, no network for a miss) and confirm the hit with the same live resolution `find` uses (token + packument), taking the final installed name from the resolved version's metadata, which must equal the typed target.
+9. Reuse the existing install limiter and record-write path. For inferred installs, derive and validate the name after source resolution and before provider validation / persistence; for explicit installs, keep the current pre-resolution name validation.
+10. Add a `--refresh` flag (fetch fresh metadata, atomically swap the cache in on success, and fail the command on fetch error without destroying the prior cache) for install and `@package available`.
+11. Add a `--dry-run` flag after the inferred walk exists. It reuses the internal `walkInferName` / `walkRef` walks directly (pre-materialize, so nothing is installed) and reports the winning source, how it matched, and the inferred install name without persisting. Remove the public `registry.where` method and the `@package source where` command in the same change, since `--dry-run` supersedes them.
+12. Update install success messages and `@package install --dry-run` output to show how the target matched (default agent name, package name, or path - derived from the resolved candidate), package identity, source, and installed name.
+13. Update `@package available` and completion to use richer available rows (name + package only, never the key): change `InstallSource.listAgents?()`, the `listAvailableAgents` registry helper, and `InstalledAgentSourceApi.listAvailableAgents` from a ref/name list to `AvailableInstallRow[]`, backed by a short-TTL cache of derived rows refreshable via `--refresh`.
+14. Add tests for path refs, default-name matching, package-name matching, two-phase precedence (a `findName` match beats a path `find`), explicit name override, source filtering, read-through `findName` vs cached completion rows, cache refresh, user feedback text, `install --dry-run` (including the shadow match set), ambiguity, in-process install serialization via the limiter, and breaking changes.
 
 ## Test Matrix
 
