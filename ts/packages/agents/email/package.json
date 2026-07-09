@@ -6,9 +6,6 @@
   "keywords": [
     "typeagent-agent"
   ],
-  "typeagent": {
-    "defaultAgentName": "email"
-  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -64,5 +61,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "email"
   }
 }

@@ -6,9 +6,6 @@
   "keywords": [
     "typeagent-agent"
   ],
-  "typeagent": {
-    "defaultAgentName": "powershell"
-  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -277,5 +274,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "powershell"
   }
 }

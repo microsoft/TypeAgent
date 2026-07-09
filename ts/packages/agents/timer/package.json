@@ -6,9 +6,6 @@
   "keywords": [
     "typeagent-agent"
   ],
-  "typeagent": {
-    "defaultAgentName": "timer"
-  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -71,5 +68,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "timer"
   }
 }

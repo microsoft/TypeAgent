@@ -6,9 +6,6 @@
   "keywords": [
     "typeagent-agent"
   ],
-  "typeagent": {
-    "defaultAgentName": "greeting"
-  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -48,5 +45,8 @@
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
+  },
+  "typeagent": {
+    "defaultAgentName": "greeting"
   }
 }

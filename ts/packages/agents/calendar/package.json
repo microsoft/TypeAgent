@@ -6,9 +6,6 @@
   "keywords": [
     "typeagent-agent"
   ],
-  "typeagent": {
-    "defaultAgentName": "calendar"
-  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -82,5 +79,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "calendar"
   }
 }

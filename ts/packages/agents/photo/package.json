@@ -6,9 +6,6 @@
   "keywords": [
     "typeagent-agent"
   ],
-  "typeagent": {
-    "defaultAgentName": "photo"
-  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -56,5 +53,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "photo"
   }
 }

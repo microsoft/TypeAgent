@@ -6,9 +6,6 @@
   "keywords": [
     "typeagent-agent"
   ],
-  "typeagent": {
-    "defaultAgentName": "taskflow"
-  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -41,5 +38,8 @@
     "@types/debug": "^4.1.12",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1"
+  },
+  "typeagent": {
+    "defaultAgentName": "taskflow"
   }
 }

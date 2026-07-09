@@ -6,9 +6,6 @@
   "keywords": [
     "typeagent-agent"
   ],
-  "typeagent": {
-    "defaultAgentName": "studio"
-  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -70,5 +67,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "studio"
   }
 }

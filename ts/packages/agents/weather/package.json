@@ -6,9 +6,6 @@
   "keywords": [
     "typeagent-agent"
   ],
-  "typeagent": {
-    "defaultAgentName": "weather"
-  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -72,5 +69,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "weather"
   }
 }

@@ -6,9 +6,6 @@
   "keywords": [
     "typeagent-agent"
   ],
-  "typeagent": {
-    "defaultAgentName": "discord"
-  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -39,5 +36,8 @@
     "concurrently": "^9.1.2",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
+  },
+  "typeagent": {
+    "defaultAgentName": "discord"
   }
 }

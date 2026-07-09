@@ -6,9 +6,6 @@
   "keywords": [
     "typeagent-agent"
   ],
-  "typeagent": {
-    "defaultAgentName": "screencapture"
-  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -80,5 +77,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "screencapture"
   }
 }

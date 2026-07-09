@@ -6,9 +6,6 @@
   "keywords": [
     "typeagent-agent"
   ],
-  "typeagent": {
-    "defaultAgentName": "browser"
-  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -269,5 +266,8 @@
         ]
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "browser"
   }
 }
