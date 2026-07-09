@@ -172,7 +172,7 @@ function upsertTokenHelper(nerfDart, helperPath) {
         : [];
     const esc = nerfDart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const stale = new RegExp(
-        `^\\s*${esc}:(?:_authToken|tokenHelper|username|_password|email)=`,
+        `^\\s*${esc}:(?:_authToken|tokenHelper|username|_password|email)\\s*=`,
     );
     lines = lines.filter((l) => !stale.test(l));
     while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
@@ -309,6 +309,17 @@ async function push() {
         return;
     }
     const content = await fs.promises.readFile(repoNpmrcPath, "utf8");
+    // Reject files that contain auth lines to avoid persisting credentials in Key Vault.
+    if (/^\s*[^#\s][^:]*:(?:_authToken|_password|tokenHelper|username|email)\s*=/m.test(content)) {
+        console.error(
+            chalk.red(
+                `${repoNpmrcPath} contains auth lines (_authToken / _password / tokenHelper / etc.).\n` +
+                    `Remove all credential entries before pushing to avoid persisting secrets in Key Vault.`,
+            ),
+        );
+        process.exitCode = 1;
+        return;
+    }
     const vault = paramVault ?? config.vault;
     const secret = paramSecret ?? config.secret;
     const credential = await getAzureCredential();
