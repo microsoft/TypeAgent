@@ -12,6 +12,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { CorpusEntry } from "../src/corpus/types.js";
 import { actionsEqual } from "../src/replay/engine.js";
 import {
@@ -25,10 +26,22 @@ import type { VersionSpec } from "../src/replay/types.js";
 export const PLAYER_GRAMMAR_GIT_PATH =
     "ts/packages/agents/player/src/agent/playerSchema.agr";
 
-/** Absolute repository top level (the git working copy root). */
-export const REPO_ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-    encoding: "utf8",
-}).trim();
+/** Package root (`ts/packages/typeagent-core`). The compiled harness runs from
+ *  `dist/test`, so the package root is two levels above it. */
+const PKG_ROOT = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+);
+
+/**
+ * Absolute repository top level (the git working copy root), derived from this
+ * module's location rather than `git rev-parse` so the measurement tests can
+ * locate the committed fixtures without a git executable and without a
+ * shell-out at import time. The git-backed authenticity tests guard themselves
+ * separately via {@link gitAvailable}.
+ */
+export const REPO_ROOT = path.resolve(PKG_ROOT, "..", "..", "..");
 
 /** The `ts` monorepo root, where agent packages live under `packages/agents`. */
 export const TS_ROOT = path.join(REPO_ROOT, "ts");

@@ -864,24 +864,28 @@ export function activate(context: vscode.ExtensionContext): void {
                     // report's provenance line stays truthful after a branch move.
                     const versionA = { kind: "git", ref: "HEAD" } as const;
                     const versionB = { kind: "workingTree" } as const;
-                    const runAt = Date.now();
-                    let provenance: RunProvenance | undefined;
                     const exec =
                         repoRootInfo.repoRoot !== undefined
                             ? defaultGitExec(repoRootInfo.repoRoot)
                             : undefined;
-                    if (exec) {
-                        const [a, b] = await Promise.all([
-                            resolveVersionProvenance(versionA, exec),
-                            resolveVersionProvenance(versionB, exec),
-                        ]);
-                        provenance = { a, b, runAt };
-                    }
+                    const resolvedSides = exec
+                        ? await Promise.all([
+                              resolveVersionProvenance(versionA, exec),
+                              resolveVersionProvenance(versionB, exec),
+                          ])
+                        : undefined;
                     const result = await serviceRuntime.replayCorpus({
                         agent,
                         versionA,
                         versionB,
                     });
+                    // Stamp the run at completion so the report's "Last run" time
+                    // (and provenance) reflects when the replay finished, not when
+                    // it was launched.
+                    const runAt = Date.now();
+                    const provenance: RunProvenance | undefined = resolvedSides
+                        ? { a: resolvedSides[0], b: resolvedSides[1], runAt }
+                        : undefined;
                     // The report's launch controls this run maps to: HEAD (A) vs
                     // the working tree (B) — matching the report's own defaults so
                     // a report opened after this run restores the same dropdowns.
