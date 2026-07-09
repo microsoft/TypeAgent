@@ -134,9 +134,11 @@ function writeTokenHelperScript() {
     const adoResource =
         process.env.TYPEAGENT_ADO_RESOURCE ?? config.adoResource;
     const azCmd = `az account get-access-token --resource ${adoResource} --query accessToken --output tsv --only-show-errors`;
+
+    let helperPath;
     if (process.platform === "win32") {
         helperPath = path.join(typeagentDir, "npmrc-token-helper.cmd");
-        fs.writeFileSync(helperPath, `@echo off\r\ncall ${azCmd}\r\n`);
+        fs.writeFileSync(helperPath, `@echo off\r\n${azCmd}\r\n`);
     } else {
         // macOS / Linux: an executable shell script. Prepend the common
         // Homebrew/az install locations so the helper finds `az` even when pnpm
