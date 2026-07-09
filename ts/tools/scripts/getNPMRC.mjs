@@ -394,5 +394,5 @@ const commands = ["push", "pull", "help"];
     }
 })().catch((e) => {
     console.error(chalk.red(`FATAL ERROR: ${e.stack ?? e.message}`));
-    process.exit(-1);
+    process.exit(1);
 });
