@@ -76,7 +76,7 @@ function printIdentity(jwt) {
 
 // Try DefaultAzureCredential (az cli, az powershell, VS Code, managed identity,
 // env vars, ...) and fall back to an interactive browser login. Returns a
-// credential usable for both Key Vault and Azure DevOps token requests.
+// credential usable for Key Vault requests.
 async function getAzureCredential() {
     const tenantId = process.env.AZURE_TENANT_ID;
     const defaultCred = new DefaultAzureCredential(
