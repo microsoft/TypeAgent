@@ -49,6 +49,13 @@ export async function getSpeechToken(): Promise<SpeechToken | undefined> {
     const key = process.env["SPEECH_SDK_KEY"] ?? IdentityApiKey;
     // Only identity/AAD tokens use the `aad#<endpoint>#` prefix; key-issued STS
     // tokens must be passed verbatim, so keep endpoint empty for key-based auth.
+    // Identity (AAD) tokens must include an endpoint so clients can format
+    // `aad#<endpoint>#<token>` for the Speech SDK.
+    if (key.toLowerCase() === IdentityApiKey && !endpoint) {
+        debugError("identity-based speech tokens require SPEECH_SDK_ENDPOINT to be set");
+        return undefined;
+    }
+
     const endpoint =
         key.toLowerCase() === IdentityApiKey
             ? (process.env["SPEECH_SDK_ENDPOINT"] ?? "")
