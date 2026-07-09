@@ -49,5 +49,12 @@ tools/scripts/code/debt-report/
 # Never commit.
 config.local.yaml
 
+# Per-developer npm registry config — points pnpm at the internal
+# "typeagent-feed" Azure Artifacts feed. Provisioned via `npm run getNPMRC`
+# from Azure Key Vault; never committed (internal feed URL, and external
+# contributors use their own registry). Root-anchored so packages/*/.npmrc
+# stay tracked.
+/.npmrc
+
 # Legacy .env files — deprecated, will stop working September 2026.
 .env
