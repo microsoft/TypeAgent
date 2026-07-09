@@ -1,18 +1,18 @@
 {
-  "generatedAt": "2026-07-08T00:19:36.857Z",
+  "generatedAt": "2026-07-09T00:34:30.183Z",
   "sourceReport": "tools/scripts/code/complexity-report/report.json",
-  "branch": "installsource",
-  "commit": "87a2da2b552af067c7685847c256d76dbe5974de",
+  "branch": "dev/georgeng/fix_nfa_with_subrules",
+  "commit": "ed60c05a48dd275c7a1914a155bca5403b6ae1e0",
   "thresholds": {
     "cyclomatic": 25,
     "cognitive": 30
   },
   "totals": {
-    "functionsAnalyzed": 26973,
+    "functionsAnalyzed": 27001,
     "filesAnalyzed": 1952,
-    "overCyclomatic": 204,
-    "overCognitive": 258,
-    "totalExceptions": 301
+    "overCyclomatic": 203,
+    "overCognitive": 254,
+    "totalExceptions": 299
   },
   "exceptions": [
     {
@@ -899,7 +899,7 @@
     },
     {
       "file": "packages/actionGrammar/src/nfaCompiler.ts",
-      "line": 118,
+      "line": 119,
       "name": "Function 'collectVariablePaths'",
       "cyclomatic": 35,
       "cognitive": 48,
@@ -1151,7 +1151,7 @@
     },
     {
       "file": "packages/actionGrammar/src/grammarOptimizer.ts",
-      "line": 715,
+      "line": 728,
       "name": "Function 'tryInlineRulesPart'",
       "cyclomatic": 32,
       "cognitive": 35,
@@ -1238,15 +1238,6 @@
       "cognitive": 23,
       "overCyclomatic": true,
       "overCognitive": false
-    },
-    {
-      "file": "extensions/agr-language/webview-dist/debugPanel.js",
-      "line": 502,
-      "name": "Arrow function",
-      "cyclomatic": 30,
-      "cognitive": 83,
-      "overCyclomatic": true,
-      "overCognitive": true
     },
     {
       "file": "packages/dispatcher/dispatcher/src/translation/translateRequest.ts",
@@ -1339,6 +1330,15 @@
       "overCognitive": false
     },
     {
+      "file": "extensions/agr-language/webview-dist/debugPanel.js",
+      "line": 15,
+      "name": "Arrow function",
+      "cyclomatic": 30,
+      "cognitive": 4,
+      "overCyclomatic": true,
+      "overCognitive": false
+    },
+    {
       "file": "tools/docsAutogen/src/cli.ts",
       "line": 453,
       "name": "Async function 'renderSelected'",
@@ -1393,15 +1393,6 @@
       "overCognitive": true
     },
     {
-      "file": "extensions/agr-language/webview-dist/debugPanel.js",
-      "line": 2204,
-      "name": "Method '_derivedTraceData'",
-      "cyclomatic": 29,
-      "cognitive": 33,
-      "overCyclomatic": true,
-      "overCognitive": true
-    },
-    {
       "file": "packages/agents/browser/src/agent/knowledge/utils/graphologyLayoutEngine.mts",
       "line": 523,
       "name": "Function 'convertToCytoscapeElements'",
@@ -1416,6 +1407,15 @@
       "name": "Function 'buildGraphologyGraph'",
       "cyclomatic": 29,
       "cognitive": 26,
+      "overCyclomatic": true,
+      "overCognitive": false
+    },
+    {
+      "file": "extensions/agr-language/webview-dist/debugPanel.js",
+      "line": 624,
+      "name": "Method '_derivedTraceData'",
+      "cyclomatic": 29,
+      "cognitive": 2,
       "overCyclomatic": true,
       "overCognitive": false
     },
@@ -1627,15 +1627,6 @@
       "overCognitive": true
     },
     {
-      "file": "packages/actionGrammar/src/nfaCompiler.ts",
-      "line": 1467,
-      "name": "Function 'compileRulesPartWithSlots'",
-      "cyclomatic": 27,
-      "cognitive": 35,
-      "overCyclomatic": true,
-      "overCognitive": true
-    },
-    {
       "file": "packages/config/src/runtime/build.ts",
       "line": 810,
       "name": "Function 'buildCopilot'",
@@ -1718,7 +1709,7 @@
     },
     {
       "file": "packages/actionGrammar/src/grammarOptimizer.ts",
-      "line": 2419,
+      "line": 2432,
       "name": "Function 'walkPartForKeys'",
       "cyclomatic": 26,
       "cognitive": 42,
@@ -2329,15 +2320,6 @@
       "overCognitive": true
     },
     {
-      "file": "extensions/agr-language/webview-dist/debugPanel.js",
-      "line": 562,
-      "name": "Constructor",
-      "cyclomatic": 20,
-      "cognitive": 66,
-      "overCyclomatic": false,
-      "overCognitive": true
-    },
-    {
       "file": "examples/workflow/model/src/validate.ts",
       "line": 669,
       "name": "Function 'isBindingCoveredAtNode'",
@@ -2627,7 +2609,7 @@
     },
     {
       "file": "packages/actionGrammar/src/grammarOptimizer.ts",
-      "line": 3503,
+      "line": 3516,
       "name": "Function 'walk'",
       "cyclomatic": 15,
       "cognitive": 45,
