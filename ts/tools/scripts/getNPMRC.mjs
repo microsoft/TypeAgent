@@ -217,7 +217,7 @@ async function pull() {
         } catch (e) {
             console.error(
                 chalk.red(
-                    `Failed to read '${secret}' from vault '${vault}': ${e.message}`,
+                    `Failed to read '${secret}' from vault '${vault}': ${e?.message ?? String(e)}`,
                 ),
             );
             console.log(
