@@ -552,12 +552,16 @@ describe("@package install one-argument, dry-run, and refresh", () => {
                 sourceName: undefined,
             },
         ]);
-        expect(output()).toContain(
-            "Agent 'weather' installed from package '@typeagent/weather-agent' via source 'typeagent' (matched default agent name)",
+        const text = output();
+        // The install confirmation and the match clarification are separate
+        // messages.
+        expect(text).toContain(
+            "Agent 'weather' installed from package '@typeagent/weather-agent' via source 'typeagent';",
         );
+        expect(text).toContain("Matched as default agent name 'weather'.");
     });
 
-    it("two-argument install renders an explicit name override", async () => {
+    it("two-argument install omits the match-kind note (the name was explicit)", async () => {
         const { api } = makeSource({
             install: async () => ({
                 name: "teamWeather",
@@ -575,9 +579,12 @@ describe("@package install one-argument, dry-run, and refresh", () => {
             args: { target: "@typeagent/weather-agent", name: "teamWeather" },
             flags: {},
         } as any);
-        expect(output()).toContain(
-            "Agent 'teamWeather' installed from package '@typeagent/weather-agent' via source 'typeagent' (explicit name override)",
+        const text = output();
+        expect(text).toContain(
+            "Agent 'teamWeather' installed from package '@typeagent/weather-agent' via source 'typeagent';",
         );
+        // No "(...)" match-kind note for an explicit name.
+        expect(text).not.toContain("(");
     });
 
     it("--dry-run previews the winning source and the shadow set without installing", async () => {

@@ -333,7 +333,12 @@ class InstallCommandHandler implements CommandHandler {
         },
     } as const;
 
-    private describeMatch(m: InstallPreview["winner"]): string {
+    private describeMatch(m: {
+        matchKind: InstallMatchKind;
+        name: string;
+        packageName?: string | undefined;
+        path?: string | undefined;
+    }): string {
         switch (m.matchKind) {
             case "defaultAgentName":
                 return `as default agent name '${m.name}'`;
@@ -342,20 +347,6 @@ class InstallCommandHandler implements CommandHandler {
             case "path":
                 return `as path '${m.path ?? "?"}'`;
         }
-    }
-
-    private matchKindLabel(
-        explicit: boolean,
-        matchedByName: boolean,
-        matchKind: InstallMatchKind,
-    ): string {
-        if (explicit) {
-            return "explicit name override";
-        }
-        if (matchedByName) {
-            return "matched default agent name";
-        }
-        return matchKind === "path" ? "matched path" : "matched package name";
     }
 
     public async run(
@@ -435,24 +426,34 @@ class InstallCommandHandler implements CommandHandler {
         for (const warning of result.warnings ?? []) {
             displayWarn(warning, context);
         }
-        const matchKind: InstallMatchKind = result.matchedByName
-            ? "defaultAgentName"
-            : result.path !== undefined
-              ? "path"
-              : "packageName";
         const pkgPart =
             result.packageName !== undefined
                 ? ` from package '${result.packageName}'`
                 : "";
-        let message = `Agent '${result.name}' installed${pkgPart} via source '${result.source}' (${this.matchKindLabel(
-            explicit,
-            result.matchedByName,
-            matchKind,
-        )}); it will load in each session shortly.`;
+        let message = `Agent '${result.name}' installed${pkgPart} via source '${result.source}'; it will load in each session shortly.`;
         if (result.ref !== undefined && result.ref !== result.packageName) {
             message += ` Durable ref: ${result.ref}.`;
         }
         displayResult(message, context);
+        // One-argument (inferred) installs clarify HOW the single ambiguous
+        // token matched, as a separate follow-up line. A two-argument install
+        // typed the name explicitly, so there is nothing to clarify.
+        if (!explicit) {
+            const matchKind: InstallMatchKind = result.matchedByName
+                ? "defaultAgentName"
+                : result.path !== undefined
+                  ? "path"
+                  : "packageName";
+            displayResult(
+                `Matched ${this.describeMatch({
+                    matchKind,
+                    name: result.name,
+                    packageName: result.packageName,
+                    path: result.path,
+                })}.`,
+                context,
+            );
+        }
     }
 
     public async getCompletion(

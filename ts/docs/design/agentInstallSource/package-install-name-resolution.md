@@ -480,18 +480,22 @@ Install success should include:
 
 - Installed dispatcher agent name.
 - Matched source.
-- Matched kind: default agent name, package name, or path.
+- Matched kind (default agent name, package name, or path) - shown as a
+  SEPARATE follow-up message, and only for the one-argument inferred form. A
+  two-argument install omits it: the user typed the name explicitly, so the
+  note would be noise (and there may be no default name to "override").
 - User-facing package identity when available.
 - Durable ref when it differs from the package identity.
 
 Example success messages:
 
 ```text
-Agent 'weather' installed from package '@typeagent/weather-agent' via source 'typeagent' (matched default agent name).
+Agent 'weather' installed from package '@typeagent/weather-agent' via source 'typeagent'; it will load in each session shortly.
+Matched as default agent name 'weather'.
 ```
 
 ```text
-Agent 'teamWeather' installed from package '@typeagent/weather-agent' via source 'typeagent' (explicit name override).
+Agent 'teamWeather' installed from package '@typeagent/weather-agent' via source 'typeagent'.
 ```
 
 `@package install --dry-run` should show the same resolution facts without installing:

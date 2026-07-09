@@ -291,6 +291,31 @@ describe("InstallSourceRegistry one-argument name resolution", () => {
         );
     });
 
+    it("a catalog package match with no default name errors with the package (not path) form", async () => {
+        // A catalog `path` entry carries BOTH a resolved path and a package
+        // name; matching it by package name with no default name must report
+        // the package, not "resolved as a path" (regression: the `echo` entry).
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-reg-cat-"));
+        const pkgDir = path.join(dir, "echo");
+        fs.mkdirSync(pkgDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(pkgDir, "package.json"),
+            JSON.stringify({ name: "echo" }),
+        );
+        const catalog = path.join(dir, "agents.catalog.json");
+        fs.writeFileSync(
+            catalog,
+            JSON.stringify({ agents: { echo: { path: "echo" } } }),
+        );
+        const registry = createInstallSourceRegistry(
+            [{ kind: "catalog", name: "workspace", catalog }],
+            { installDir: tmpInstallDir() },
+        );
+        await expect(registry.resolve("echo")).rejects.toThrow(
+            "'echo' has no default agent name. Use '@package install echo <name>'.",
+        );
+    });
+
     it("a phase-1 findName match beats a higher-priority path find", async () => {
         // A 'weather' directory exists under the higher-priority path source AND
         // a catalog offers default name 'weather'; the catalog wins because

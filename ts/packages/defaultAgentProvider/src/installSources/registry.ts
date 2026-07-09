@@ -434,14 +434,24 @@ export function createInstallSourceRegistry(
         if (defaultAgentName !== undefined) {
             return defaultAgentName;
         }
+        // A user-facing package name means the target matched as a PACKAGE
+        // (catalog or feed) - even a catalog entry that resolves to a local
+        // `path` carries one, whereas a bare path-source match does not. Prefer
+        // the package wording so the message reflects how the target actually
+        // matched (the `path` branch is only for a genuine path-source match).
+        if (candidate.packageName !== undefined) {
+            const pkg = candidate.packageName;
+            throw new Error(
+                `'${pkg}' has no default agent name. Use '@package install ${pkg} <name>'.`,
+            );
+        }
         if (candidate.path !== undefined) {
             throw new Error(
                 `'${target}' resolved as a path, but no default agent name could be discovered. Use '@package install ${target} <name>'.`,
             );
         }
-        const pkg = candidate.packageName ?? target;
         throw new Error(
-            `'${pkg}' has no default agent name. Use '@package install ${pkg} <name>'.`,
+            `'${target}' has no default agent name. Use '@package install ${target} <name>'.`,
         );
     }
 
