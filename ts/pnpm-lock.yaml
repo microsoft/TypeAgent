@@ -9526,7 +9526,7 @@ packages:
     libc: [glibc]
 
   '@rollup/rollup-linux-x64-gnu@4.59.0':
-    resolution: {integrity: sha1-m2ax+c2VxmJMeI8CHHViaf/tFVI=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@rollup/rollup-linux-x64-gnu/-/rollup-linux-x64-gnu-4.59.0.tgz}
+    resolution: {integrity: sha1-m2ax+c2VxmJMeI8CHHViaf/tFVI=}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
