@@ -200,11 +200,13 @@ export type TokenizeOptions = {
 // only insofar as BOTH the context vector and the keyword vectors pass through
 // the same function — consistency, not linguistics. Deliberately narrow to avoid
 // over-stemming that would fuse unrelated words; not a full Porter stemmer.
-export function stem(token: string): string {
-    // Never touch protected patterns (they aren't pure [a-z0-9]).
-    if (!/^[a-z0-9]+$/.test(token)) {
-        return token;
-    }
+//
+// IDEMPOTENT by construction: the single-step rules are applied to a fixed point.
+// This matters because callers may canonicalize an already-canonical token (e.g.
+// re-loading a committed keyword file); without a fixed point, `-ses` words would
+// stem differently on the second pass ("licenses"->"licens"->"licen") and a
+// re-canonicalized keyword would stop matching a once-tokenized conversation word.
+function stemStep(token: string): string {
     // "boxes"->"box", "dishes"->"dish", "glasses"->"glass", "watches"->"watch".
     if (
         token.length > 4 &&
@@ -230,6 +232,21 @@ export function stem(token: string): string {
         return token.slice(0, -1);
     }
     return token;
+}
+
+export function stem(token: string): string {
+    // Never touch protected patterns (they aren't pure [a-z0-9]).
+    if (!/^[a-z0-9]+$/.test(token)) {
+        return token;
+    }
+    // Apply the step rules to a fixed point so stem() is idempotent.
+    let current = token;
+    let next = stemStep(current);
+    while (next !== current) {
+        current = next;
+        next = stemStep(current);
+    }
+    return current;
 }
 
 // Split identifier casing/separators into space-delimited words:
