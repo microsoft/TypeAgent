@@ -6,7 +6,7 @@
  * getNPMRC — provision the internal npm registry config + feed auth for
  * developers, mirroring the getKeys workflow.
  *
- * The repo `.npmrc` points pnpm at the an Azure Artifacts feed.
+ * The repo `.npmrc` points pnpm at an Azure Artifacts feed.
  * Because that URL is internal (and this repo is public), the
  * `.npmrc` is gitignored rather than committed — it is stored as a single Azure
  * Key Vault secret and pulled onto developer machines by this script.
@@ -76,7 +76,7 @@ function printIdentity(jwt) {
 
 // Try DefaultAzureCredential (az cli, az powershell, VS Code, managed identity,
 // env vars, ...) and fall back to an interactive browser login. Returns a
-// credential usable for both Key Vault and Azure DevOps token requests.
+// credential usable for Key Vault requests.
 async function getAzureCredential() {
     const tenantId = process.env.AZURE_TENANT_ID;
     const defaultCred = new DefaultAzureCredential(
@@ -131,11 +131,22 @@ function registryToNerfDart(registryUrl) {
 // accepted by both pnpm and Windows, and safe from .npmrc backslash escaping).
 function writeTokenHelperScript() {
     fs.mkdirSync(typeagentDir, { recursive: true });
-    const azCmd = `az account get-access-token --resource ${config.adoResource} --query accessToken --output tsv`;
+    const adoResource =
+        process.env.TYPEAGENT_ADO_RESOURCE ?? config.adoResource;
+    if (
+        typeof adoResource !== "string" ||
+        !/^[0-9A-Za-z-.:/]+$/.test(adoResource)
+    ) {
+        throw new Error(
+            `Invalid adoResource '${adoResource}'. Use a GUID / URL-safe resource id.`,
+        );
+    }
+    const azCmd = `az account get-access-token --resource "${adoResource}" --query accessToken --output tsv --only-show-errors`;
+
     let helperPath;
     if (process.platform === "win32") {
         helperPath = path.join(typeagentDir, "npmrc-token-helper.cmd");
-        fs.writeFileSync(helperPath, `@echo off\r\ncall ${azCmd}\r\n`);
+        fs.writeFileSync(helperPath, `@echo off\r\n${azCmd}\r\n`);
     } else {
         // macOS / Linux: an executable shell script. Prepend the common
         // Homebrew/az install locations so the helper finds `az` even when pnpm
@@ -161,7 +172,7 @@ function upsertTokenHelper(nerfDart, helperPath) {
         : [];
     const esc = nerfDart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const stale = new RegExp(
-        `^${esc}:(_authToken|tokenHelper|username|_password|email)=`,
+        `^\\s*${esc}:(?:_authToken|_auth|tokenHelper|username|_password|email)\\s*=`,
     );
     lines = lines.filter((l) => !stale.test(l));
     while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
@@ -215,14 +226,17 @@ async function pull() {
         try {
             value = (await client.getSecret(secret)).value;
         } catch (e) {
+            const status = e?.statusCode ?? e?.status;
             console.error(
                 chalk.red(
-                    `Failed to read '${secret}' from vault '${vault}': ${e.message}`,
+                    `Failed to read '${secret}' from vault '${vault}': ${e?.message ?? String(e)}`,
                 ),
             );
             console.log(
                 chalk.yellow(
-                    `\nHint: seed it first with:  npm run getNPMRC -- push`,
+                    status === 404
+                        ? `\nHint: seed it first with:  npm run getNPMRC -- push`
+                        : `\nHint: if you don't have access to this vault, pass --vault/--secret to use your own (or ask a maintainer for access).`,
                 ),
             );
             process.exitCode = 1;
@@ -251,6 +265,15 @@ async function pull() {
         console.warn(
             chalk.yellow("No registry= line in .npmrc — skipping feed auth."),
         );
+        return;
+    }
+    if (!/^https:\/\//i.test(registry)) {
+        console.error(
+            chalk.red(
+                `Registry must be https:// for tokenHelper auth: ${registry}`,
+            ),
+        );
+        process.exitCode = 1;
         return;
     }
     const nerfDart = registryToNerfDart(registry);
@@ -286,6 +309,21 @@ async function push() {
         return;
     }
     const content = await fs.promises.readFile(repoNpmrcPath, "utf8");
+    // Reject files that contain auth lines to avoid persisting credentials in Key Vault.
+    if (
+        /^\s*(?![#;])(?:[^:]*:)?(?:_authToken|_auth|_password|tokenHelper|username|email)\s*=/m.test(
+            content,
+        )
+    ) {
+        console.error(
+            chalk.red(
+                `${repoNpmrcPath} contains auth lines (_authToken / _password / tokenHelper / etc.).\n` +
+                    `Remove all credential entries before pushing to avoid persisting secrets in Key Vault.`,
+            ),
+        );
+        process.exitCode = 1;
+        return;
+    }
     const vault = paramVault ?? config.vault;
     const secret = paramSecret ?? config.secret;
     const credential = await getAzureCredential();
@@ -308,7 +346,11 @@ async function push() {
             chalk.green(`Secret '${secret}' updated in vault '${vault}'.`),
         );
     } catch (e) {
-        console.error(chalk.red(`Failed to write '${secret}': ${e.message}`));
+        console.error(
+            chalk.red(
+                `Failed to write '${secret}': ${e?.message ?? String(e)}`,
+            ),
+        );
         process.exitCode = 1;
     }
 }
@@ -318,7 +360,8 @@ function printHelp() {
 ${chalk.bold("getNPMRC")} — provision the internal npm registry config + feed auth
 
 ${chalk.bold("Usage:")}
-  node getNPMRC.mjs [command] [options]
+  npm run getNPMRC -- [command] [options]
+  node tools/scripts/getNPMRC.mjs [command] [options]
 
 ${chalk.bold("Commands:")}
   pull    Download ts/.npmrc from Key Vault and set up feed auth (default)
@@ -329,6 +372,7 @@ ${chalk.bold("Options:")}
   --auth-only   Skip the Key Vault download; just (re)install the feed tokenHelper
   --vault <n>   Key Vault name (default: ${config.vault})
   --secret <n>  Secret name (default: ${config.secret})
+  --commit      Write changes (default)
   --dry-run     Preview without writing
 
 Feed auth uses a pnpm tokenHelper backed by the Azure CLI — run 'az login' once
@@ -386,5 +430,5 @@ const commands = ["push", "pull", "help"];
     }
 })().catch((e) => {
     console.error(chalk.red(`FATAL ERROR: ${e.stack ?? e.message}`));
-    process.exit(-1);
+    process.exit(1);
 });
