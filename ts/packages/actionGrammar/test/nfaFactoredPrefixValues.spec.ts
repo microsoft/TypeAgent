@@ -6,6 +6,12 @@
 // once `factorCommonPrefixes` hoisted the shared prefix out, leaving a
 // value-less multi-term rule. See nfaCompiler.ts (implicit value
 // derivation) and grammarOptimizer.ts (`nfaSafeOptimizations`).
+//
+// Note: `factorCommonPrefixes`'s own output already stamps an
+// explicit `value` on the factored top-level rule, so grammar-source
+// tests below don't reach the new implicit-derivation code path. The
+// hand-built-AST test further down is what directly exercises
+// `findSingleValueBearingPart`'s forwarding logic.
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
@@ -14,7 +20,11 @@ import {
     recommendedOptimizations,
     nfaSafeOptimizations,
 } from "../src/grammarOptimizer.js";
-import { Grammar, createStringPart } from "../src/grammarTypes.js";
+import {
+    Grammar,
+    createStringPart,
+    createRulesPart,
+} from "../src/grammarTypes.js";
 import { describeForEachMatcher } from "./testUtils.js";
 
 describe("NFA compilation of factored shared-prefix grammars", () => {
@@ -64,7 +74,7 @@ describe("NFA compilation of factored shared-prefix grammars", () => {
         ).toThrow(/tail/i);
     });
 
-    it("derives an implicit value for a manually-authored factored rule", () => {
+    it("evaluates an explicit -> value expression through a manually-factored shape", () => {
         const agr2 = `
 <Start> = <a> | <b>;
 <a> = (please)? $(w:<Choice>) -> w;
@@ -82,6 +92,41 @@ describe("NFA compilation of factored shared-prefix grammars", () => {
         expect(matchNFA(nfa, ["please", "bar"], true).actionValue).toEqual({
             actionName: "B",
         });
+    });
+
+    it("forwards the single variable-bearing part's value for a value-less multi-term rule", () => {
+        // Hand-built AST mirroring the actual bug shape: a value-less
+        // 2-part rule (value-less optional prefix + a variable-bearing
+        // nested RulesPart), with no top-level `value`. The grammar-source
+        // tests above don't exercise this path because
+        // `factorCommonPrefixes` and explicit `->` expressions both
+        // already stamp `rule.value`, so this is the only test that
+        // directly reaches `findSingleValueBearingPart`'s forwarding case.
+        const prefixPart = createRulesPart(
+            [{ parts: [createStringPart(["please"])] }],
+            { optional: true },
+        );
+        const nestedPart = createRulesPart(
+            [
+                {
+                    parts: [createStringPart(["foo"])],
+                    value: { type: "literal", value: "A" },
+                },
+                {
+                    parts: [createStringPart(["bar"])],
+                    value: { type: "literal", value: "B" },
+                },
+            ],
+            { variable: "chosen" },
+        );
+        const grammar: Grammar = {
+            alternatives: [{ parts: [prefixPart, nestedPart] }],
+        };
+
+        const nfa = compileGrammarToNFA(grammar, "hand-built-factored");
+
+        expect(matchNFA(nfa, ["foo"], true).actionValue).toBe("A");
+        expect(matchNFA(nfa, ["please", "bar"], true).actionValue).toBe("B");
     });
 
     it("throws a clear error when the implicit value is genuinely ambiguous", () => {
