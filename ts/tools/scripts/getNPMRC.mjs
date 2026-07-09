@@ -6,7 +6,7 @@
  * getNPMRC — provision the internal npm registry config + feed auth for
  * developers, mirroring the getKeys workflow.
  *
- * The repo `.npmrc` points pnpm at the an Azure Artifacts feed.
+ * The repo `.npmrc` points pnpm at an Azure Artifacts feed.
  * Because that URL is internal (and this repo is public), the
  * `.npmrc` is gitignored rather than committed — it is stored as a single Azure
  * Key Vault secret and pulled onto developer machines by this script.
