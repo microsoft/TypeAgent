@@ -44,11 +44,11 @@ steps:
       echo "Using node $(node --version)"
       storePath=${{ parameters.pnpmStorePath }}
       if [[ '$(Agent.OS)' == 'Windows_NT' ]]; then
-        npm install -g corepack@0.31.0 --force
+        npm install -g corepack@0.35.0 --force
         corepack enable
         storePath=$PNPM_STORE_PATH
       else
-        npm install -g corepack@0.31.0
+        npm install -g corepack@0.35.0
         sudo corepack enable
       fi
       pnpm config set store-dir $storePath
