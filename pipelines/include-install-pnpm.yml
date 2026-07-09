@@ -24,7 +24,12 @@ steps:
   - ${{ if eq(parameters.enableCache, true) }}:
       - task: Cache@2
         displayName: Cache pnpm store
-        timeoutInMinutes: 3
+        # 5 min (was 3): this monorepo's pnpm store is large, so restore/dedup
+        # can legitimately need several minutes. Too short a cap cancels the
+        # task, and with continueOnError below that surfaces as a "succeeded
+        # with issues" warning — which the GitHub merge queue treats as a
+        # failing check and blocks the PR.
+        timeoutInMinutes: 5
         continueOnError: true
         inputs:
           # Caches are already scoped to individual pipelines, so no need to include the release group name or tag
