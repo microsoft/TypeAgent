@@ -311,7 +311,7 @@ async function push() {
     const content = await fs.promises.readFile(repoNpmrcPath, "utf8");
     // Reject files that contain auth lines to avoid persisting credentials in Key Vault.
     if (
-        /^\s*[^#\s][^:]*:(?:_authToken|_password|tokenHelper|username|email)\s*=/m.test(
+        /^\\s*(?![#;])(?:[^:]*:)?(?:_authToken|_auth|_password|tokenHelper|username|email)\\s*=/m.test(
             content,
         )
     ) {
