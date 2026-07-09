@@ -34,6 +34,7 @@
  *   --out-dir <path> Output directory (default tools/scripts/code/debt-report).
  *   --gate           CI gate: fail on focused tests / new skipped tests vs --base.
  *   --base <ref>     Base git ref for --gate (default origin/main).
+ *   --exceptions-file <path>  Baseline exceptions (file:line) ignored by --gate.
  *   --help           Show this help.
  */
 
@@ -131,6 +132,7 @@ interface Options {
     top: number;
     gate: boolean;
     base: string;
+    exceptionsFile?: string;
     help: boolean;
 }
 
@@ -141,6 +143,7 @@ function parseArgs(argv: string[]): Options {
         top: 25,
         gate: false,
         base: "origin/main",
+        exceptionsFile: undefined,
         help: false,
     };
 
@@ -177,6 +180,14 @@ function parseArgs(argv: string[]): Options {
                     throw new Error("--base requires a git ref");
                 }
                 opts.base = next;
+                i++;
+                break;
+            case "--exceptions-file":
+            case "--exceptionsFile":
+                if (next === undefined) {
+                    throw new Error(`${arg} requires a path`);
+                }
+                opts.exceptionsFile = next;
                 i++;
                 break;
             case "--root":
@@ -218,6 +229,9 @@ Options:
   --out-dir <path> Output directory (default: tools/scripts/code/debt-report).
   --gate           CI gate: fail on focused tests / new skipped tests vs --base.
   --base <ref>     Base git ref for --gate (default origin/main).
+  --exceptions-file <path>
+                   Optional JSON baseline-exception file. Focused/skipped tests
+                   listed in it (by file:line) are ignored by the --gate check.
   --help           Show this help.`;
 
 // ---------------------------------------------------------------------------
@@ -578,7 +592,114 @@ function isSource(rel: string): boolean {
     );
 }
 
+// Baseline exceptions: a JSON file of { file, line } entries (or
+// { exceptions: [...] }) whose file:line focused/skipped tests the gate ignores.
+// Lets a deliberately retained marker be grandfathered without weakening the
+// gate for everything else.
+function normalizeExceptionPath(file: string): string {
+    const normalized = file.replaceAll("\\", "/").replace(/^\.\//, "");
+    return normalized.replace(/^ts\//, "");
+}
+
+function exceptionKey(file: string, line: number): string {
+    return `${normalizeExceptionPath(file)}:${line}`;
+}
+
+function loadExceptionSet(exceptionsFile: string | undefined): Set<string> {
+    if (!exceptionsFile) {
+        return new Set();
+    }
+    const filePath = path.isAbsolute(exceptionsFile)
+        ? exceptionsFile
+        : path.resolve(process.cwd(), exceptionsFile);
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`Exceptions file not found: ${filePath}`);
+    }
+    let raw: unknown;
+    try {
+        raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+            `Invalid JSON in exceptions file ${filePath}: ${message}`,
+        );
+    }
+    const entries = Array.isArray(raw)
+        ? raw
+        : ((raw as { exceptions?: Array<{ file?: string; line?: number }> })
+              .exceptions ?? []);
+    const out = new Set<string>();
+    for (const entry of entries) {
+        const file = normalizeExceptionPath(entry?.file ?? "");
+        const line = entry?.line;
+        if (!file || typeof line !== "number" || line <= 0) {
+            continue;
+        }
+        out.add(`${file}:${line}`);
+    }
+    return out;
+}
+
+interface HeadScan {
+    focusedHits: string[];
+    skipHits: string[];
+    skips: number;
+}
+
+// Scan a changed test file's HEAD content for focused/skipped test markers,
+// honoring baseline exceptions and the empty-stub exclusion (matching
+// countSkips). Returns the focused/skip locations and the real skip count.
+function scanHeadTestFile(
+    relPath: string,
+    absPath: string,
+    exceptions: Set<string>,
+): HeadScan {
+    const focusedHits: string[] = [];
+    const skipHits: string[] = [];
+    let skips = 0;
+    const lines = fs.readFileSync(absPath, "utf8").split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        // A baseline exception (file:line) grandfathers whatever
+        // focused/skipped marker sits on that head line.
+        if (exceptions.has(exceptionKey(relPath, i + 1))) {
+            continue;
+        }
+        FOCUSED_RE.lastIndex = 0;
+        if (FOCUSED_RE.test(line)) {
+            focusedHits.push(`  ${relPath}:${i + 1}  ${line.trim()}`);
+        }
+        // Ignore empty stub bodies (`() => {}`) so the gate only trips on
+        // genuinely disabled tests, not key-gated/data-driven runtime skips.
+        if (EMPTY_SKIP_STUB_RE.test(line)) {
+            continue;
+        }
+        SKIP_RE.lastIndex = 0;
+        const skipsOnLine = line.match(SKIP_RE)?.length ?? 0;
+        if (skipsOnLine > 0) {
+            skips += skipsOnLine;
+            skipHits.push(`  ${relPath}:${i + 1}  ${line.trim()}`);
+        }
+    }
+    return { focusedHits, skipHits, skips };
+}
+
+// Count real skipped tests in a changed file's content at the merge base.
+// Returns 0 if the file did not exist there.
+function countBaseSkips(
+    repoRoot: string,
+    mergeBase: string,
+    basePath: string,
+): number {
+    try {
+        return countSkips(git(["show", `${mergeBase}:${basePath}`], repoRoot));
+    } catch {
+        return 0; // file did not exist at base
+    }
+}
+
 function runGate(opts: Options): number {
+    const exceptions = loadExceptionSet(opts.exceptionsFile);
     let repoRoot: string;
     let mergeBase: string;
     try {
@@ -611,6 +732,7 @@ function runGate(opts: Options): number {
     }
 
     const focusedHits: string[] = [];
+    const skipHits: string[] = [];
     let headSkips = 0;
     let baseSkips = 0;
 
@@ -620,34 +742,24 @@ function runGate(opts: Options): number {
         }
         const headAbs = path.resolve(repoRoot, e.head);
         if (fs.existsSync(headAbs)) {
-            const content = fs.readFileSync(headAbs, "utf8");
-            const lines = content.split(/\r?\n/);
-            for (let i = 0; i < lines.length; i++) {
-                FOCUSED_RE.lastIndex = 0;
-                if (FOCUSED_RE.test(lines[i])) {
-                    focusedHits.push(
-                        `  ${e.head}:${i + 1}  ${lines[i].trim()}`,
-                    );
-                }
-            }
-            headSkips += countSkips(content);
+            const scan = scanHeadTestFile(e.head, headAbs, exceptions);
+            focusedHits.push(...scan.focusedHits);
+            skipHits.push(...scan.skipHits);
+            headSkips += scan.skips;
         }
         if (e.base && isTestFile(e.base)) {
-            try {
-                const baseContent = git(
-                    ["show", `${mergeBase}:${e.base}`],
-                    repoRoot,
-                );
-                baseSkips += countSkips(baseContent);
-            } catch {
-                /* file did not exist at base */
-            }
+            baseSkips += countBaseSkips(repoRoot, mergeBase, e.base);
         }
     }
 
     console.log(
         `Gate: ${entries.length} changed source file(s)  |  skipped tests base ${baseSkips} -> head ${headSkips}`,
     );
+    if (exceptions.size > 0) {
+        console.log(
+            `  Baseline exceptions ignored: ${exceptions.size} (file:line).`,
+        );
+    }
 
     let failed = false;
     if (focusedHits.length > 0) {
@@ -655,7 +767,7 @@ function runGate(opts: Options): number {
         console.error(
             `\nGate FAILED: focused test(s) must not be committed (.only/fit/fdescribe):`,
         );
-        focusedHits.slice(0, 50).forEach((h) => console.error(h));
+        focusedHits.forEach((h) => console.error(h));
     }
     if (headSkips > baseSkips) {
         failed = true;
@@ -663,9 +775,17 @@ function runGate(opts: Options): number {
             `\nGate FAILED: changed files add ${headSkips - baseSkips} skipped test(s) ` +
                 "(.skip/xit/xdescribe). Un-skip or delete them.",
         );
+        if (skipHits.length > 0) {
+            console.error("Skipped tests in the changed files:");
+            skipHits.forEach((h) => console.error(h));
+        }
     }
 
     if (failed) {
+        console.error(
+            "\nWhy the test-debt gate exists — and how to reproduce & fix it " +
+                "locally: ts/tools/scripts/code/README.md#ci-gates",
+        );
         return 1;
     }
     console.log("Gate OK: no focused tests and no new skipped tests.");

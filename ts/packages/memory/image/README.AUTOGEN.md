@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=f414f7f3297989f2faa68c29d4288fabd4da292c35af00dd404f91a5aba7ed92 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=8ec8e95511b84ab88a7eb89a5b43a201559ff0d712324928783352f09a56b94e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # image-memory — AI-generated documentation
@@ -12,40 +12,41 @@
 
 ## Overview
 
-The `image-memory` package is an experimental TypeScript library designed to implement image memory using structured Retrieval-Augmented Generation (RAG). It leverages the `KnowPro` library to create an image collection that can be queried based on both knowledge content and metadata. This package is part of the TypeAgent monorepo and integrates with several other packages to provide its functionality.
+The `image-memory` package is an experimental TypeScript library designed to implement image memory using structured Retrieval-Augmented Generation (RAG). It leverages the `KnowPro` library to create an `ImageCollection` that can be queried using natural language. This package is part of the TypeAgent monorepo and integrates with other packages such as `@typeagent/aiclient`, `knowledge-processor`, and `memory-storage` to provide its functionality.
 
 ## What it does
 
-The `image-memory` package enables indexing and querying of images using natural language. It supports actions such as `importImages` to index images from a specified path and `indexingService` to start an indexing service for images. These capabilities allow users to create and manage a searchable image collection, where images can be queried based on their content and metadata.
+The primary goal of the `image-memory` package is to enable the indexing and querying of images based on their metadata and knowledge content. It provides tools to create an `ImageCollection` that can be populated with images and queried using natural language. The package supports the following key actions:
 
-Key actions include:
+- **`importImages`**: This action allows users to index images from a specified directory or file path. The images are processed to extract metadata and knowledge, which are then stored in an `ImageCollection`.
+- **`indexingService`**: This action starts a service to monitor a folder for changes and dynamically updates the indexed image collection. It also tracks metadata about the indexing process, such as progress and state.
 
-- `importImages`: Indexes images from a specified path, creating an `ImageCollection` that can be queried.
-- `indexingService`: Starts a service to index images and monitor changes in the indexed folder.
-
-By combining these features with the `KnowPro` library, the package allows users to ask natural language questions about the images and retrieve relevant results based on the knowledge extracted from the images and their metadata.
+By combining these actions with the `KnowPro` library, the package enables users to ask natural language questions about the images and retrieve relevant results. For example, users can search for images based on their content, metadata, or both.
 
 ## Setup
 
-To use the `image-memory` package, ensure the following setup steps are completed:
+To use the `image-memory` package, follow these steps:
 
-1. **Install dependencies**: The package relies on several internal and external dependencies, including `@azure-rest/maps-search`, `better-sqlite3`, `debug`, `get-folder-size`, and `typechat`. These dependencies will be installed automatically when you run `pnpm install` in the monorepo.
+1. **Install dependencies**: Run `pnpm install` in the monorepo root to install all required dependencies. The package depends on both internal and external libraries, including:
 
-2. **Environment variables**:
+   - Internal: `@typeagent/aiclient`, `knowledge-processor`, `knowPro`, `memory-storage`, `telemetry`, `typeagent`, and `typechat-utils`.
+   - External: `@azure-rest/maps-search`, `better-sqlite3`, `debug`, `get-folder-size`, and `typechat`.
+
+2. **Set environment variables**:
    - `DEBUG`: Set this variable to enable debug logging for development and troubleshooting purposes.
 
-For additional setup details, including any required API keys or external service configurations, refer to the hand-written README.
+For additional setup details, refer to the hand-written README.
 
 ## Key Files
 
 The `image-memory` package is organized into several key files, each responsible for specific functionality:
 
-- [index.ts](./src/index.ts): The main entry point of the package, exporting all public modules and functions.
-- [imageCollection.ts](./src/imageCollection.ts): Defines the `ImageCollection` class, which represents a collection of images and provides methods for indexing and querying.
-- [imageMeta.ts](./src/imageMeta.ts): Contains the `Image` and `ImageMeta` classes, which represent individual images and their associated metadata.
-- [importImages.ts](./src/importImages.ts): Implements the `importImages` function, which indexes images from a specified path and returns an `ImageCollection`.
-- [indexingService.ts](./src/indexingService.ts): Provides functionality to start and manage an indexing service for images, including monitoring changes in the indexed folder.
-- [tables.ts](./src/tables.ts): Defines database tables for storing image metadata, such as geographic and exposure information.
+- **[index.ts](./src/index.ts)**: The main entry point of the package, exporting all public modules and functions.
+- **[imageCollection.ts](./src/imageCollection.ts)**: Defines the `ImageCollection` class, which represents a collection of images and provides methods for indexing and querying.
+- **[imageMeta.ts](./src/imageMeta.ts)**: Contains the `Image` and `ImageMeta` classes, which represent individual images and their associated metadata.
+- **[importImages.ts](./src/importImages.ts)**: Implements the `importImages` function, which indexes images from a specified path and returns an `ImageCollection`.
+- **[indexingService.ts](./src/indexingService.ts)**: Provides functionality to start and manage an indexing service for images, including monitoring changes in the indexed folder.
+- **[tables.ts](./src/tables.ts)**: Defines database tables for storing image metadata, such as geographic and exposure information.
 
 ### Detailed File Responsibilities
 
@@ -107,6 +108,6 @@ External: `@azure-rest/maps-search`, `better-sqlite3`, `debug`, `get-folder-size
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-memory docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-memory docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

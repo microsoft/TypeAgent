@@ -37,6 +37,7 @@
  *   --out-dir <path>   Output directory (default tools/scripts/code/circular-report).
  *   --ratchet          CI gate: fail if changed code introduces new cycles vs --base.
  *   --base <ref>       Base git ref for --ratchet (default origin/main).
+ *   --exceptions-file <path>  Baseline exceptions (known cycles) ignored by --ratchet.
  *   --help             Show this help.
  */
 
@@ -148,6 +149,62 @@ function canonicalKey(cycle: string[]): string {
     return [...cycle.slice(minIdx), ...cycle.slice(0, minIdx)].join(" > ");
 }
 
+// Baseline exceptions: a JSON file of known cycles the ratchet should ignore.
+// Each entry is either a "cycle" (array of module paths) or a "key" string
+// ("a > b > c"); both are canonicalized the same way as detected cycles, so a
+// grandfathered cycle matches regardless of rotation. Lets a pre-existing cycle
+// that a refactor merely relocates pass without weakening the gate.
+function normalizeCycleNode(node: string): string {
+    return node
+        .trim()
+        .replace(/\\/g, "/")
+        .replace(/^\.\//, "")
+        .replace(/^ts\//, "");
+}
+
+function loadCycleExceptionSet(
+    exceptionsFile: string | undefined,
+): Set<string> {
+    if (!exceptionsFile) {
+        return new Set();
+    }
+    const filePath = path.isAbsolute(exceptionsFile)
+        ? exceptionsFile
+        : path.resolve(process.cwd(), exceptionsFile);
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`Exceptions file not found: ${filePath}`);
+    }
+    let raw: unknown;
+    try {
+        raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+            `Invalid JSON in exceptions file ${filePath}: ${message}`,
+        );
+    }
+    const entries = Array.isArray(raw)
+        ? raw
+        : ((raw as { exceptions?: Array<{ cycle?: string[]; key?: string }> })
+              .exceptions ?? []);
+    const out = new Set<string>();
+    for (const entry of entries) {
+        let nodes: string[] = [];
+        if (Array.isArray(entry?.cycle)) {
+            nodes = entry.cycle.map(normalizeCycleNode).filter(Boolean);
+        } else if (typeof entry?.key === "string") {
+            nodes = entry.key
+                .split(">")
+                .map(normalizeCycleNode)
+                .filter(Boolean);
+        }
+        if (nodes.length > 0) {
+            out.add(canonicalKey(nodes));
+        }
+    }
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // Argument parsing
 // ---------------------------------------------------------------------------
@@ -159,6 +216,7 @@ interface Options {
     top: number;
     ratchet: boolean;
     base: string;
+    exceptionsFile?: string;
     help: boolean;
 }
 
@@ -170,6 +228,7 @@ function parseArgs(argv: string[]): Options {
         top: 25,
         ratchet: false,
         base: "origin/main",
+        exceptionsFile: undefined,
         help: false,
     };
 
@@ -209,6 +268,14 @@ function parseArgs(argv: string[]): Options {
                     throw new Error("--base requires a git ref");
                 }
                 opts.base = next;
+                i++;
+                break;
+            case "--exceptions-file":
+            case "--exceptionsFile":
+                if (next === undefined) {
+                    throw new Error(`${arg} requires a path`);
+                }
+                opts.exceptionsFile = next;
                 i++;
                 break;
             case "--root":
@@ -251,6 +318,10 @@ Options:
   --out-dir <path>   Output directory (default: tools/scripts/code/circular-report).
   --ratchet          CI gate: fail if changed code introduces new cycles vs --base.
   --base <ref>       Base git ref for --ratchet (default origin/main).
+  --exceptions-file <path>
+                     Optional JSON baseline-exception file. Cycles listed in it
+                     (as a "cycle" node array or a "key" string) are ignored by
+                     the --ratchet gate.
   --help             Show this help.`;
 
 // ---------------------------------------------------------------------------
@@ -551,6 +622,7 @@ function git(args: string[], cwd: string): string {
 }
 
 async function runRatchet(opts: Options): Promise<number> {
+    const exceptions = loadCycleExceptionSet(opts.exceptionsFile);
     let repoRoot: string;
     let mergeBase: string;
     try {
@@ -600,7 +672,7 @@ async function runRatchet(opts: Options): Promise<number> {
 
     const newCycles: string[][] = [];
     for (const [key, cycle] of headKeys) {
-        if (!baseKeys.has(key)) {
+        if (!baseKeys.has(key) && !exceptions.has(key)) {
             newCycles.push(cycle);
         }
     }
@@ -608,12 +680,17 @@ async function runRatchet(opts: Options): Promise<number> {
     console.log(
         `Ratchet: cycles base ${baseKeys.size} -> head ${headKeys.size}`,
     );
+    if (exceptions.size > 0) {
+        console.log(
+            `  Baseline exceptions ignored: ${exceptions.size} cycle(s).`,
+        );
+    }
 
     if (newCycles.length > 0) {
         console.error(
             `\nRatchet FAILED: ${newCycles.length} new circular dependency(ies) introduced vs the base:`,
         );
-        for (const c of newCycles.slice(0, 50)) {
+        for (const c of newCycles) {
             console.error(`  ${c.join(" > ")}`);
         }
         console.error(

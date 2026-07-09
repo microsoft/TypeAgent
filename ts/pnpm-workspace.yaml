@@ -18,6 +18,16 @@ packages:
   - tools
   - tools/*
 
+# Require dependency versions to have been published at least 7 days
+# (10080 minutes) ago before pnpm will resolve them. This keeps freshly
+# published versions out of the lockfile until they have propagated to
+# downstream mirrors/feeds and satisfied the organization's minimum
+# package-age window, and it reduces exposure to compromised just-published
+# releases. The constraint is applied at resolution time to all direct and
+# transitive dependencies; installs from an existing frozen lockfile are not
+# re-resolved and are therefore unaffected.
+minimumReleaseAge: 10080
+
 onlyBuiltDependencies:
   - "@azure/msal-node-extensions"
   - "@azure/msal-node-runtime"

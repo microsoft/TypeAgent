@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7b5960683dbd896d1e3cb7b72065ebb223b818991ecf1fc439a0a5dded1bd6b5 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=ded13032b748700e08274f1ce1d068b1f3508bdeecb10de21a910854c7f1ade6 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/copilot-plugin — AI-generated documentation
@@ -12,68 +12,132 @@
 
 ## Overview
 
-The `@typeagent/copilot-plugin` package is a TypeAgent integration plugin for the GitHub Copilot CLI. It enables action requests such as calendar, email, music, and browser automation to be routed to TypeAgent before reaching the Copilot LLM.
+The `@typeagent/copilot-plugin` package is a TypeAgent integration plugin for the GitHub Copilot CLI. It enables the routing of action requests (e.g., calendar, email, music, browser automation) to TypeAgent for handling before they are passed to the Copilot LLM.
 
 ## What it does
 
-This plugin intercepts user inputs submitted through the `copilot-dev` CLI and determines whether the input is an action request or a question. Action requests are routed to TypeAgent, which can handle them directly or via the MCP server. Questions fall through to the Copilot LLM. The plugin supports two modes: direct mode and MCP mode. In direct mode, the plugin connects to TypeAgent over WebSocket and handles recognized actions directly. In MCP mode, the plugin injects directives into the prompt context, instructing the LLM to call TypeAgent's MCP tools.
+This plugin acts as a bridge between the GitHub Copilot CLI and TypeAgent. It intercepts user inputs and determines whether they are action requests or general questions. Based on the input type, the plugin routes the request as follows:
+
+- **Action Requests**: These are routed to TypeAgent, which can handle them directly or via the MCP server. If TypeAgent recognizes the action, it processes the request and returns a response, bypassing the Copilot LLM.
+- **General Questions**: These are passed through to the Copilot LLM for processing.
+
+The plugin supports two integration modes:
+
+1. **Direct Mode**: The plugin connects directly to TypeAgent over WebSocket. Recognized actions are handled by TypeAgent, and the response is returned directly to the user. This mode is faster and does not consume LLM tokens but does not support streaming output.
+2. **MCP Mode**: The plugin modifies the prompt to instruct the LLM to call the `typeagent-processCommand` MCP tool. This mode allows for streaming output and LLM-formatted responses but is slower and consumes LLM tokens.
+
+The plugin also provides hooks for various stages of user input processing, such as logging, debugging, and tracking interactions in TypeAgent history.
 
 ## Setup
 
-To set up the `@typeagent/copilot-plugin`, you need to configure several environment variables:
+To set up the `@typeagent/copilot-plugin`, follow these steps:
 
-- `CLAUDE_PLUGIN_DATA`
-- `HOOK_TYPE`
-- `TYPEAGENT_DEMO_STATE_PATH`
-- `TYPEAGENT_HOST`
-- `TYPEAGENT_MODE`
-- `TYPEAGENT_PLUGIN_DATA`
-- `TYPEAGENT_PORT`
+1. **Install Node.js and pnpm**:
 
-Additionally, ensure you have Node.js 24+ installed and the TypeAgent server running. The plugin connects to TypeAgent at `ws://localhost:8999` by default. You can override the connection settings using the `TYPEAGENT_PORT` and `TYPEAGENT_HOST` environment variables.
+   - Use Node.js 22+ and pnpm 10+ as specified in the workspace's `package.json` engines.
+   - On Windows, install Node.js via tools like `nvm-windows` or the Node.js installer.
+   - On WSL, use `nvm` to install and manage Node.js versions.
 
-For detailed setup instructions, see the hand-written README.
+2. **Start the TypeAgent Server**:
+
+   - The plugin connects to TypeAgent at `ws://localhost:8999` by default.
+   - Start the TypeAgent server from the workspace root:
+     ```bash
+     cd D:\repos\TypeAgent\ts
+     pnpm run start:agent-server
+     ```
+   - Optionally, override the connection settings using the `TYPEAGENT_PORT` and `TYPEAGENT_HOST` environment variables.
+
+3. **Set Environment Variables**:
+   Configure the following environment variables as needed:
+
+   - `CLAUDE_PLUGIN_DATA`
+   - `HOOK_TYPE`
+   - `TYPEAGENT_DEMO_STATE_PATH`
+   - `TYPEAGENT_HOST`
+   - `TYPEAGENT_MODE`
+   - `TYPEAGENT_PLUGIN_DATA`
+   - `TYPEAGENT_PORT`
+
+   Refer to the hand-written README for details on obtaining and setting these values.
+
+4. **Build the Plugin**:
+
+   - Install dependencies and build the plugin:
+     ```bash
+     cd /mnt/d/repos/TypeAgent/ts
+     pnpm install
+     pnpm run build
+     ```
+   - Alternatively, build only the plugin:
+     ```bash
+     cd /mnt/d/repos/TypeAgent/ts/packages/copilot-plugin
+     pnpm run build
+     ```
+
+5. **Test the Plugin**:
+   - Launch the Copilot CLI with the plugin:
+     ```powershell
+     copilot --plugin-dir D:\repos\TypeAgent\ts\packages\copilot-plugin
+     ```
+   - Verify the plugin is loaded by running:
+     ```powershell
+     copilot plugin list
+     ```
 
 ## Key Files
 
-The plugin's architecture consists of several key components:
+The `@typeagent/copilot-plugin` package is organized into several key files and directories:
 
-- **Hooks**: Located in the `src/hooks` directory, these files handle various stages of user input processing. Notable hooks include:
+- **[src/hooks](./src/hooks)**: Contains the main hook implementations for the plugin. Key files include:
 
-  - [hook-agent-stop.ts](./src/hooks/hook-agent-stop.ts): Handles the agent stop event.
+  - [hook-agent-stop.ts](./src/hooks/hook-agent-stop.ts): Handles the `agentStop` event and updates TypeAgent history.
   - [hook-debug.ts](./src/hooks/hook-debug.ts): Logs input for debugging purposes.
-  - [hook-direct.ts](./src/hooks/hook-direct.ts): Processes commands directly via TypeAgent.
-  - [hook-history.ts](./src/hooks/hook-history.ts): Tracks Copilot interactions in TypeAgent history.
+  - [hook-direct.ts](./src/hooks/hook-direct.ts): Processes commands directly via TypeAgent, bypassing the Copilot LLM.
   - [hook-mcp-redirect.ts](./src/hooks/hook-mcp-redirect.ts): Redirects action requests to the MCP server.
   - [hook-post-tool.ts](./src/hooks/hook-post-tool.ts): Tracks non-TypeAgent tool results in TypeAgent history.
-  - [hook-powershell.ts](./src/hooks/hook-powershell.ts): Integrates TypeAgent PowerShell guidance.
+  - [hook-powershell.ts](./src/hooks/hook-powershell.ts): Integrates TypeAgent PowerShell guidance for Windows.
 
-- **Configuration**: The plugin configuration is stored in `%USERPROFILE%\.typeagent-copilot\config.json` (Windows) or `~/.typeagent-copilot/config.json` (WSL/Linux). Environment variables can override the configuration file settings.
+- **[src/shared](./src/shared)**: Contains shared utilities and helper functions used across hooks, such as `typeagent-client.js` for managing connections to the TypeAgent server.
+
+- **Configuration Files**:
+  - `%USERPROFILE%\.typeagent-copilot\config.json` (Windows) or `~/.typeagent-copilot/config.json` (WSL/Linux): Stores plugin configuration.
+  - Environment variables can override settings in the configuration file.
 
 ## How to extend
 
-To extend the `@typeagent/copilot-plugin`, follow these steps:
+To extend the functionality of the `@typeagent/copilot-plugin`, follow these steps:
 
-1. **Open the relevant hook file**: Depending on the functionality you want to add or modify, open the corresponding hook file in the `src/hooks` directory.
+1. **Identify the Relevant Hook**:
 
-2. **Follow the existing patterns**: Each hook file follows a specific pattern for processing input and interacting with TypeAgent. Review the existing code to understand the structure and logic.
+   - Determine which hook corresponds to the functionality you want to modify or extend. For example:
+     - Use [hook-direct.ts](./src/hooks/hook-direct.ts) for direct handling of commands via TypeAgent.
+     - Use [hook-mcp-redirect.ts](./src/hooks/hook-mcp-redirect.ts) for MCP mode modifications.
 
-3. **Implement your changes**: Add your new functionality or modify the existing code as needed. Ensure your changes align with the overall architecture and flow of the plugin.
+2. **Understand the Existing Code**:
 
-4. **Test your changes**: Use the test scripts provided in the `package.json` to simulate hook invocation and verify your changes. For example, to test the direct mode hook, run:
+   - Review the existing code in the relevant hook file to understand its structure and logic.
+   - Refer to shared utilities in the [src/shared](./src/shared) directory for reusable components.
 
-   ```bash
-   cd /mnt/d/repos/SecretAgents/ts/packages/typeagent-plugin
-   pnpm run test:hook-direct
-   ```
+3. **Implement Changes**:
 
-5. **Run the plugin**: Launch the `copilot-dev` CLI with the plugin to test your changes in a real-world scenario:
+   - Add or modify functionality in the identified hook file. Follow the established patterns and ensure compatibility with the plugin's architecture.
 
-   ```powershell
-   copilot-dev --plugin-dir D:\repos\SecretAgents\ts\packages\typeagent-plugin
-   ```
+4. **Test Your Changes**:
 
-By following these steps, you can effectively extend the functionality of the `@typeagent/copilot-plugin` and ensure it integrates smoothly with the GitHub Copilot CLI and TypeAgent.
+   - Use the test scripts provided in the `package.json` to simulate hook invocation and verify your changes. For example:
+     ```bash
+     pnpm run test:hook-direct
+     ```
+   - Launch the Copilot CLI with the plugin to test your changes in a real-world scenario:
+     ```powershell
+     copilot --plugin-dir D:\repos\TypeAgent\ts\packages\copilot-plugin
+     ```
+
+5. **Update Documentation**:
+   - Document your changes in the appropriate files and update the hand-written README if necessary.
+
+By following these steps, you can effectively extend and customize the `@typeagent/copilot-plugin` to meet your specific requirements.
 
 ## Reference
 
@@ -111,6 +175,6 @@ _7 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-plugin docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-plugin docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

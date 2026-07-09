@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "schema": "taskflow",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T09:38:08.903Z",
+  "sourceHash": "sU2RyCiMZDKFtrqCyj8ByUlvRoeWJBM+qE39QM5AkZI=",
+  "actions": {
+    "listTaskFlows": [
+      "task",
+      "flow",
+      "process",
+      "workflow",
+      "sequence",
+      "automation",
+      "procedure",
+      "routine",
+      "operation",
+      "template",
+      "example",
+      "model",
+      "pattern",
+      "blueprint",
+      "system",
+      "method",
+      "plan",
+      "step",
+      "execution",
+      "setup",
+      "configuration"
+    ],
+    "deleteTaskFlow": [
+      "task",
+      "flow",
+      "process",
+      "workflow",
+      "sequence",
+      "procedure",
+      "automation",
+      "routine",
+      "operation",
+      "system",
+      "taskflow"
+    ]
+  }
+}

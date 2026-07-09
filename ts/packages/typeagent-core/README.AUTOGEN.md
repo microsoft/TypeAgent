@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=690c04e65ae16f5fde447aa1901a12a2c2347f4f8d3e3e77b2b07e84e845ba92 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=a3520ab61cbbc50a4c1b6f9e460d70a3ca037f1b5591c384bbe75d101fc4d2a0 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/core — AI-generated documentation
@@ -12,34 +12,34 @@
 
 ## Overview
 
-The `@typeagent/core` package is a foundational TypeScript library that provides shared functionality for TypeAgent Studio extensions. It serves as the engine for managing key subsystems such as sandbox lifecycles, federated corpora, structured event streams, feedback mechanisms, health rule engines, collision detection, corpus replay, and onboarding processes. This package is consumed by other components in the TypeAgent ecosystem, including `typeagent-studio`, `agr-language`, and `vscode-shell`.
+The `@typeagent/core` package is a shared TypeScript library that provides foundational functionality for TypeAgent Studio extensions. It acts as the engine for managing key subsystems such as sandbox lifecycles, federated corpora, structured event streams, feedback mechanisms, health monitoring, collision detection, corpus replay, and onboarding workflows. This package is consumed by other components in the TypeAgent ecosystem, including `typeagent-studio`, `agr-language`, and `vscode-shell`.
 
 ## What it does
 
-The package is organized into modular subsystems, each addressing a specific aspect of the TypeAgent Studio's functionality. These subsystems include:
+The package is modular, with each subsystem implemented in its own directory under `src/`. These subsystems provide the following capabilities:
 
-- **Events**: Provides tools for managing structured event streams, such as creating and logging events.
-- **Sandbox**: Manages the lifecycle of sandboxes, including creation and destruction.
-- **Corpus**: Handles federated corpora, enabling the creation and management of corpora and their associated documents.
-- **Feedback**: Implements feedback mechanisms for collecting and processing user feedback.
-- **Health**: Provides a rule engine for monitoring and maintaining the health of the system.
-- **Collisions**: Detects and manages collision events, including grammar-based and dispatcher-based collisions.
-- **Replay**: Supports replaying corpora for testing and debugging purposes.
-- **Onboarding Bridge**: Facilitates snapshot and restore operations for onboarding workflows.
+- **Events**: Manages structured event streams, including event creation, logging, and dispatching.
+- **Sandbox**: Handles the lifecycle of sandboxes, such as creation, destruction, and state management.
+- **Corpus**: Provides tools for managing federated corpora, including file-based corpus services, JSONL utilities, and unique identifier generation for corpus entries.
+- **Feedback**: Implements mechanisms for collecting and processing user feedback.
+- **Health**: Includes a rule engine for monitoring and maintaining the health of the system.
+- **Collisions**: Detects and manages collision events, supporting both dispatcher-based and grammar-based collision detection.
+- **Replay**: Facilitates corpus replay for testing and debugging purposes.
+- **Onboarding Bridge**: Manages snapshot and restore operations to support onboarding workflows.
 
-Each subsystem is implemented in its own directory under `src/`, with a clear separation of concerns. These modules are designed to be lightweight and reusable across the TypeAgent ecosystem.
+These subsystems are designed to be lightweight, reusable, and easily integrated into other parts of the TypeAgent ecosystem.
 
 ## Setup
 
 To use the `@typeagent/core` package, you need to configure the following environment variable:
 
-- `TYPEAGENT_USER_DATA_DIR`: This environment variable specifies the directory where user data is stored. Ensure that the directory exists and is accessible by the application. For more details on how to configure this variable, refer to the hand-written README.
+- `TYPEAGENT_USER_DATA_DIR`: Specifies the directory where user data is stored. Ensure that this directory exists and is accessible by the application. For more details on how to configure this variable, refer to the hand-written README.
 
 No additional setup steps are required beyond setting this environment variable.
 
 ## Key Files
 
-The `@typeagent/core` package is structured into several key directories and files, each responsible for specific functionalities:
+The `@typeagent/core` package is organized into several key directories and files, each responsible for specific functionalities:
 
 ### Core Modules
 
@@ -135,6 +135,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `ff379b098decfab4eb45f78b6fa318358d7fbd75` on `2026-07-01T09:05:58.471Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/core docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/core docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

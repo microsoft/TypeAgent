@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=75c47c2e2e833b8a591d6b846baa39d35d1ec16eeecacced2403394e18012454 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c6bac416a9391a63917e322b563aa8bb5d3da94732de8f49207eca0968bd94cc -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # studio-service — AI-generated documentation
@@ -12,19 +12,19 @@
 
 ## Overview
 
-The `studio-service` package is a standalone, per-workspace host for the TypeAgent Studio runtime (`@typeagent/core/runtime`) and its typed `agent-rpc` service channel. It is designed to operate independently within a developer's workspace, providing a dedicated environment for managing workspace state and facilitating communication between the Studio runtime and its clients. This service is typically launched by the `typeagent-studio` extension or the `typeagent-studio serve` CLI.
+The `studio-service` package is a standalone, per-workspace host for the TypeAgent Studio runtime (`@typeagent/core/runtime`) and its typed `agent-rpc` service channel. It is designed to operate within a developer's workspace, providing a dedicated environment for managing workspace state and facilitating communication between the Studio runtime and its clients. This service is typically launched by the `typeagent-studio` extension or the `typeagent-studio serve` CLI.
 
 ## What it does
 
 The `studio-service` package provides the following core functionalities:
 
-- **Hosting the Studio Runtime**: The package runs the Studio runtime, which is responsible for managing workspace state and executing actions within the developer's workspace.
-- **Typed Service Channel**: It establishes a typed `agent-rpc` service channel, enabling communication between the Studio runtime and its clients, such as the `studio` agent and the `typeagent-studio` extension.
+- **Hosting the Studio Runtime**: It runs the Studio runtime, which manages workspace state and executes actions within the developer's workspace.
+- **Typed Service Channel**: The package establishes a typed `agent-rpc` service channel, enabling communication between the Studio runtime and its clients, such as the `studio` agent and the `typeagent-studio` extension.
 - **Workspace State Management**: The service uses a durable, file-backed `StudioWorkspaceState` to persist runtime state across service restarts, ensuring continuity.
 - **Service Discovery and Registration**: The service includes mechanisms for announcing its availability, discovering its port and token, and enabling clients to connect securely.
 - **Proxy Client**: A minimal client is provided for the `studio` agent to forward read-only actions to the standalone Studio service.
 
-The package supports a range of actions, including workspace state management and communication with the Studio runtime. These actions are exposed through typed `agent-rpc` handlers, which are defined in the [studioRpcHandlers.ts](./src/studioRpcHandlers.ts) file.
+The package supports a range of actions, including workspace state management and communication with the Studio runtime. These actions are exposed through typed `agent-rpc` handlers, which are defined in [studioRpcHandlers.ts](./src/studioRpcHandlers.ts).
 
 ## Setup
 
@@ -97,6 +97,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `ff379b098decfab4eb45f78b6fa318358d7fbd75` on `2026-07-01T09:05:58.471Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter studio-service docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter studio-service docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

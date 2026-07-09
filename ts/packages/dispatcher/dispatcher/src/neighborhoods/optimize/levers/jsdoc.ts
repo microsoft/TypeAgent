@@ -7,7 +7,7 @@
 // so the explore smoke test can run real hypotheses end-to-end.
 //
 // The propose prompt is built around `schemaGuidelines` and the case's
-// current JSDoc/description. The load-bearing instruction is "WORK WITH
+// current JSDoc/description. The key instruction is "WORK WITH
 // THE LLM'S INTENT, NOT AGAINST IT": widen the right action to absorb the
 // misrouted intent rather than scolding the LLM away from the wrong one.
 

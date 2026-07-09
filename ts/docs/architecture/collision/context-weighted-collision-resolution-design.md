@@ -8,10 +8,12 @@
 (specific source files are cited inline where relevant)
 
 > **How to read this doc.** §1–§2 motivate the feature; §3 is the end-to-end architecture
-> diagram; §4 shows how it fits the existing dispatcher code. §5–§12 specify the design one
+> diagram; §4 shows how it fits the existing dispatcher code. §5–§11 specify the design one
 > component at a time (each opens with its locked decision, then the reasoning and the
-> alternatives weighed). §13 composes them into the v1 we ship; §14 walks two worked
-> examples; §15 archives the rejected alternatives.
+> alternatives weighed); §12 is the determinism checklist. §13 composes them into the v1 we
+> ship and defines how we prove it works — the two-tier benchmark, its control and net-gain
+> scorecard, and the layer ablation (§13.4–§13.6); §14 walks two worked examples; §15 archives
+> the rejected alternatives.
 
 ---
 
@@ -239,6 +241,11 @@ contextSelector covers the first and defers the second. `static` is a build-time
 
 ### Existing infrastructure we reuse
 
+- **Registry-first tiers** (`matchRequest.ts`, `collisionResolution.ts`) run _ahead of_ any
+  strategy, always, independent of `detect`: they short-circuit on **Tier-0** (a pending one-shot
+  pick from a resolved clarify card) or **Tier-1** (a learned/explicit preference), else raise a
+  **Tier-2** registry clarify. `contextSelector` slots in only _after_ registry-first returns
+  nothing — so it never overrides an explicit user choice.
 - **`resolvePreferenceClarify`** (`collisionResolution.ts`) is the shared resolution
   policy both stages already call for `preference-clarify` — the natural host if we
   later want both-stage coverage from a single change.
@@ -989,7 +996,8 @@ keyword pipeline does **not** violate G3.
 
 All of the above ship **together** as v1: no manifest change, no onboarding-LLM in the hot
 path, one integration point, a fixed correctness guard, and a trust-preserving affordance.
-Delivers the named excel↔list scenario.
+Delivers the named excel↔list scenario. Before `contextSelector.detect` flips on, a two-tier
+local benchmark must show a net gain over today's funnel with **zero regressions** (§13.4–§13.6).
 
 ### 13.2 Deferred to later (stretch goals, not in v1)
 
@@ -1013,17 +1021,137 @@ learned-preference bootstrap** (confirm-then-learn).
 
 ### 13.4 Rollout & validation
 
-No users / no production traffic, so there is **no real-traffic shadow phase**. Instead:
+No users and no production traffic, so there is **no real-traffic shadow phase**. The gate to
+ship is a local, two-tier benchmark:
 
-1. Ship with `detect: off` (a simple on/off feature gate).
-2. **Validate locally against fixtures** — labeled collision scenarios (the vampire↔list set
-   plus spreadsheet/calendar cases) — checking resolve/abstain behavior and calibrating the
-   evidence-gate thresholds (`minUniqueTokens` / `minMass` / `margin`). `λ=0.9` / `N=20` were
-   chosen up front (§8) and are likewise fixture-validated.
-3. Flip `detect: on` once the local benchmarks pass.
+1. **Ship dark.** Land with `contextSelector.detect: off` — a simple on/off feature gate,
+   invisible until flipped.
+2. **Calibrate on unit fixtures (deterministic, no LLM).** Replay labeled collision scenarios —
+   the `excel↔list` running example (§10, §14), the `calendar↔taskflow` case (§6.2), and the
+   adversarial `list↔vampire` cluster from the shipped registry — to check every resolve/abstain
+   decision and tune the evidence-gate thresholds (`minUniqueTokens` / `minMass` / `margin`).
+   `λ=0.9` and `N=20` are fixed up front (§8) and re-validated here.
+3. **Confirm net gain on the funnel benchmark (§13.5).** Run the end-to-end A/B/C and prove a net
+   gain (accuracy and/or cost) with zero regressions.
+4. **Flip `contextSelector.detect: on`** once both tiers pass.
 
-Telemetry (per-candidate score + the matched `token→weight` pairs) is emitted so the local
-benchmark output is explainable and exact.
+Every decision emits telemetry — per-candidate score plus the matched `token→weight` pairs — so
+both tiers are explainable and exact, not merely pass/fail.
+
+### 13.5 Measuring net gain — the control and the scorecard
+
+> **The one question this benchmark must answer: does adding `contextSelector` route more
+> collisions correctly (or as correctly, but cheaper) than the system does today — without ever
+> making a route it already gets right worse?**
+
+**The control is the whole current funnel, not `first-match` alone.** A colliding request already
+flows through several resolution layers before any answer comes back (§4):
+
+```
+grammar / cache match   (≥2 validated matches → collision)
+  1. registry-first     (always)     → Tier-0 one-shot · Tier-1 preference → resolve (cache path, no LLM)
+                                      · else Tier-2 registry clarify
+                                      · pick names an unmatched sibling → fall through ↓
+  2. contextSelector    (if detect)  → confident → resolve (cache path, no LLM)   ← inserts here
+                                      · abstain → defer to strategy (default) | escalate-to-llm ↓
+  3. collision strategy (if detect)  → first-match | score-rank | priority → resolve (cache path, no LLM)
+                                      · user-clarify → clarify card
+  ── only a registry fall-through, an escalate-to-llm abstain, or a Stage-1 miss continues: ──
+     cache-miss path → embedding pickInitialSchema (no LLM) → LLM translation
+```
+
+The shape matters for everything below: **most collisions resolve on the cache path with no
+LLM.** The `first-match` / `score-rank` / `priority` strategies each return a Stage-1 match
+(`matchCollision.ts`), so a collision reaches the translator only on a registry fall-through, an
+`escalate-to-llm` abstain, or a Stage-1 miss (§4).
+
+So the **control** is this exact funnel with `contextSelector` disabled (its slot abstains
+always). Because the default fallback — `first-match` — is itself LLM-free, the benchmark needs
+**two baselines, one per axis**: a silent accuracy baseline and an escalate-to-llm cost baseline.
+`user-clarify` is excluded from both — it interrupts the user, so it is not apples-to-apples with
+a silent selector (it is the correctness _ceiling_, not a control).
+
+**A/B/C configuration** (`grammarMatch.detect` on for all three — measure-only; with `first-match`
+the behavior is identical to legacy, `matchRequest.ts`):
+
+| Arm                      | `contextSelector` | fallback when unresolved | reaches LLM? | measures          |
+| ------------------------ | ----------------- | ------------------------ | ------------ | ----------------- |
+| **Control-A (accuracy)** | off               | `first-match`            | no           | accuracy baseline |
+| **Treatment-B**          | on                | `first-match` on abstain | no           | accuracy · cost   |
+| **Control-C (cost)**     | off               | `escalate-to-llm`        | yes          | cost baseline     |
+
+Control-C has no production code path — `escalate-to-llm` exists only as a `contextSelector`
+abstain mode (`matchRequest.ts`) — so arm C is a **benchmark-only harness toggle** that routes
+every slot-reaching collision to the translator, purely to give Cost Δ a denominator.
+
+**Scope the denominator honestly.** `contextSelector` runs _after_ registry-first and _ahead of_
+the configured strategy (`matchRequest.ts`); it can never override a Tier-0 one-shot or a Tier-1
+preference — those short-circuit upstream. So the measurable denominator is **N = collisions that
+reach the contextSelector slot** (they pass registry-first); report N with every result. Cases a
+preference / one-shot / registry already resolves are included only to prove **non-interference**
+(treatment ≡ control there by construction).
+
+**Ground truth** is the corpus's authored target per phrase — the same label `@collision corpus
+run` uses to classify CLEAN / TIGHT / MISROUTE. The scorecard is a three-way per collision,
+`groundTruth × outcome(control) × outcome(treatment)`, rolling up to three numbers:
+
+| Metric          | Question                                                                                          | Baseline | Target            |
+| --------------- | ------------------------------------------------------------------------------------------------- | -------- | ----------------- |
+| **Accuracy Δ**  | Did routing get _more_ correct than the silent control?                                           | A        | ≥ 0 (ideally > 0) |
+| **Cost Δ**      | How many LLM translations do confident picks eliminate? _(0 vs `first-match`, already LLM-free.)_ | C        | ≥ 0               |
+| **Regressions** | Control-right → treatment-wrong (a route we used to get right, now broken)                        | A        | **0 — hard gate** |
+
+**Ship if** regressions = 0 (vs A), accuracy does not drop, and at least one axis is a strict
+win — more correct routes (vs A) _or_ the same routes at fewer LLM calls (vs C). Net gain may come
+from **either** axis: the value proposition (§11) is a confident pick that routes well on the
+cache path _instead of_ escalating to the LLM. The regression count is the release gate — the
+abstain bias (§10) exists precisely to keep it at zero, so the benchmark's real job is to _prove_
+that, not merely to tally wins.
+
+**Controlling LLM noise.** The accuracy comparison (A vs B) is entirely LLM-free and therefore
+deterministic — its gate never rests on a stochastic run. Where the LLM _is_ in the loop (the cost
+arm C, registry fall-throughs, cache-miss translation), pin translation to temperature 0 with a
+fixed seed and count a regression only if it reproduces across replays. The deterministic unit
+tier (§13.4) carries the precise threshold calibration.
+
+Reuse the existing corpus pipeline (`@collision corpus run`) as the end-to-end harness, and the
+`firstMatchCandidate` telemetry field — already recorded on every collision (`matchCollision.ts`)
+— as the built-in `first-match` comparator.
+
+### 13.6 Layer ablation (secondary — apples-to-apples per layer)
+
+> **Lower priority than §13.5.** Net gain vs. the control is the release gate; the ablation is a
+> follow-on that tells us _which layers still earn their slot_ once `contextSelector` exists —
+> i.e. whether any can be simplified away.
+
+Because the layers form a cascade, a layer's value is **conditional on the layers downstream of
+it**, and leave-one-out deltas do **not** sum. So the useful artifact is not a single scalar but
+an **overlap matrix**: for each collision, record which layer _would_ resolve it and to what,
+scored against ground truth, then read off each layer's _unique_ contribution.
+
+| For a case a layer resolves correctly, it is also caught by… | reading                            |
+| ------------------------------------------------------------ | ---------------------------------- |
+| a cheaper upstream layer (e.g. `first-match`)                | redundant — **skip candidate**     |
+| only the LLM tail                                            | pure **cost** win (saves the call) |
+| **no other layer**                                           | **unique contribution — keep**     |
+
+**Concrete skip candidates to settle, per automatic layer:**
+
+| Layer                         | Question the ablation answers                                                                               |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `score-rank` vs `first-match` | Do they ever diverge, and is `score-rank` right when they do? (the open question in `collision-rollout.md`) |
+| `priority`                    | Does a static order still pay once `contextSelector` supplies a dynamic topical signal?                     |
+| `contextSelector`             | Unique correct routes over the LLM tail, or purely a cost optimization?                                     |
+| embedding `pickInitialSchema` | Is its pick ever consequential when the translator runs regardless?                                         |
+
+**Two guardrails on the ablation:**
+
+- **Do not ablate the user-intent layers on accuracy.** Tier-0 one-shot and Tier-1 learned
+  preferences encode _explicit user intent_ ("remember this choice"), not topical correctness —
+  their ground truth is the user's stated preference. They are constraints, not routers; hold them
+  fixed and scope the ablation to the automatic layers above.
+- **Results are corpus-dependent.** A layer that looks redundant on today's agent mix may matter
+  on another; always report the corpus and the denominator alongside any "skip" recommendation.
 
 ---
 

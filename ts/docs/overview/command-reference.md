@@ -370,6 +370,18 @@ Usage: `@config collision priority "list,player,calendar"`, `@config collision p
 
 Comma-separated agent names used by the `priority` resolution strategy (and as a tiebreaker for `score-rank`). Empty falls back to agent registration order.
 
+## @config collision contextSelector detect on|off - Toggle the context-weighted resolution tier
+
+Usage: `@config collision contextSelector detect on`, `@config collision contextSelector detect off`
+
+Enables the deterministic, LLM-free `contextSelector` tier on the `grammarMatch` path: it ranks colliding candidates by how closely their keyword vectors match the recent conversation, then resolves the collision on the cache path (avoiding the downstream LLM translation) or abstains. Off by default; independent of the other detection points.
+
+## @config collision contextSelector &lt;field&gt; &lt;value&gt; - Tune the contextSelector knobs
+
+Usage: `@config collision contextSelector windowTurns 20`, `@config collision contextSelector decay 0.9`, `@config collision contextSelector minMass 1.0`
+
+`<field>` is one of `windowTurns` (ring-buffer look-back over recent user turns, integer ≥ 1), `decay` (per-turn recency decay λ, 0 &lt; λ ≤ 1), `minUniqueTokens` (evidence gate: min distinct matched tokens, integer), `minMass` (evidence gate: min matched weight), or `margin` (min lead the winner needs over the runner-up). Each value is range-validated — a bad value is rejected rather than silently corrupting the decision math.
+
 ## @config collision telemetry emit on|off - Toggle the in-memory ring buffer + JSONL append
 
 Usage: `@config collision telemetry emit on`, `@config collision telemetry emit off`
@@ -398,6 +410,23 @@ Usage: `@collision events [-n &lt;limit&gt;] [-k &lt;kind&gt;]`
 - `-k, --kind <name>` - Filter by detection point: `static`, `grammarMatch`, `llmSelect`, or `fuzzy`.
 
 Renders an HTML table of the most recent collision events captured in the in-memory ring buffer (cap 50 events; older events live in `<sessionDir>/collision-events.jsonl`). Columns: relative timestamp, detection point, request, candidates (with schema badges), chosen winner, strategy, elapsed ms. A ⚡ marker flags events where the chosen candidate diverged from the `first-match` counterfactual — a real strategy divergence worth investigating. When telemetry capture is off, an inline reminder tells the tester how to opt in.
+
+## @collision keywords - Inspect / tune contextSelector keyword vectors
+
+Usage: `@collision keywords`, `@collision keywords <schema.action> [list|add|remove|clear] [words…]`
+
+With no target, lists all sidecar overrides. With a `<schema.action>` target: `list` shows the effective vector (the committed/derived baseline merged with overrides), `add`/`remove` edit the profile-scoped `collision-keywords.json` sidecar (Source 2), and `clear` reverts that action to its derived-only vector. Edits take effect on the next collision without a restart.
+
+## @collision keywords backfill - Generate / refresh committed keyword files
+
+Usage: `@collision keywords backfill [--llm] [--force] [<schema>…]`
+
+### Flags:
+
+- `--llm` - Use the preferred LLM distillation producer instead of the deterministic lexical floor.
+- `--force` - Allow a lexical run to overwrite an existing LLM-distilled file (preserved by default).
+
+Generates or refreshes the committed per-agent `<schema>.keywords.json` baseline vectors (Source 1) that the contextSelector reads. Each file is written beside its agent's schema source and the in-memory index is invalidated so fresh vectors apply immediately. Omit the schema args to backfill every loaded agent; inline/dynamic agents (echo, MCP) with no on-disk `.ts` source are skipped. `--llm` always overwrites; a lexical run preserves existing LLM-distilled files unless `--force`. Commit the regenerated files — they are checked-in artifacts, not build output.
 
 ## @config pen on - Turn on Surface Pen Click Handler
 
@@ -874,14 +903,85 @@ Arguments:
 
 - &lt;name&gt; - Name of the index (type: string)
 
-## @install - Install an agent
+## @package list - List installed agents
 
-Usage: `@install <name> <agent>`
+Usage: `@package list`
+
+Lists installed agent records only. Built-in, inline, system, and MCP agents are
+not shown. Each entry includes the agent name, the source it was installed from,
+and the recorded handle when available.
+
+## @package install - Install an agent
+
+Usage: `@package install <name> <ref> [--source <sourceName>]`
 
 ### Arguments:
 
-- &lt;name&gt; - Name of the agent (type: string)
-- &lt;agent&gt; - Path of agent package directory or tar file to install (type: string)
+- &lt;name&gt; - Dispatcher agent name to install (type: string)
+- &lt;ref&gt; - Source-specific reference: a path, catalog short name, or npm package specifier (type: string)
+
+### Flags:
+
+- --source &lt;sourceName&gt; : Resolve only against the named install source. Without this flag, TypeAgent walks the configured source order and uses the first source that resolves the reference.
+
+`<name>` must be a legal dispatcher agent identifier and must not already be in
+use by any installed, built-in, system, inline, or MCP provider. A source that
+matches the reference owns the install: if materialization fails, TypeAgent
+reports that failure instead of silently falling through to later sources.
+
+## @package update - Refresh or update an installed agent
+
+Usage: `@package update <name> [<range>]`
+
+### Arguments:
+
+- &lt;name&gt; - Installed agent name to update (type: string)
+- &lt;range&gt; - (optional) Version range for feed-installed agents, such as `^1.4`, `~2.0`, or `>=3 <4` (type: string)
+
+Updates re-resolve the installed record against its recorded source. Feed agents
+move to the newest matching version, path agents refresh from their recorded
+path, and catalog agents are looked up again by short name. If the recorded
+source is no longer configured, the installed agent can still load at runtime,
+but update fails until the source is added back or the agent is uninstalled.
+
+## @package uninstall - Uninstall an agent
+
+Usage: `@package uninstall <name>`
+
+### Arguments:
+
+- &lt;name&gt; - Installed agent name to uninstall (type: string)
+
+Uninstall removes the installed record and unloads the live agent from connected
+dispatchers. Feed package roots are reclaimed by best-effort garbage collection
+and startup orphan cleanup rather than by a synchronous `npm uninstall`.
+
+## @package source list | order | where | add | remove - Manage install sources
+
+Usage:
+
+```text
+@package source list
+@package source order <name>...
+@package source where <ref>
+@package source add feed <name> [--registry <url>] [--scope <scope>]...
+@package source add catalog <name> --catalog <path>
+@package source add path <name> [--baseDir <path>]
+@package source remove <name> [--force]
+```
+
+Install sources are tried in configured order. `where` reports which source would
+resolve a reference without installing it. `order` moves named sources to the
+front and keeps the rest in their current relative order. `add` appends a source
+after validating its configuration. `remove` refuses to remove a source still
+referenced by installed agents unless `--force` is supplied; forced removal keeps
+already-installed agents loadable but blocks future updates for those records
+until the source is re-added.
+
+Feed sources install from Azure Artifacts npm feeds. If `--registry` and
+`--scope` are omitted, the source reads `TYPEAGENT_FEED_REGISTRY` and
+`TYPEAGENT_FEED_SCOPES` from the host environment at resolve time and resolves
+nothing while they are unset.
 
 ## @oracle request - Send a request to the Oracle
 
@@ -1020,11 +1120,3 @@ Usage: `@shell trash restore`
 ## @shell trash flush - Permanently delete every message currently in the trash. They stay hidden and can no longer be restored
 
 Usage: `@shell trash flush`
-
-## @uninstall - Uninstall an agent
-
-Usage: `@uninstall <name>`
-
-### Arguments:
-
-- &lt;name&gt; - Name of the agent (type: string)

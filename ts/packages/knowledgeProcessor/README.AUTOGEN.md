@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=abaf6b68ab6ba84d04893937cd2f0a42fb02a252c2fdb932732d67990d6a4162 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=93c7b760174fba201408486b6444a47204c6d0af80148860fe21b9725a1d09ac -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # knowledge-processor — AI-generated documentation
@@ -12,34 +12,36 @@
 
 ## Overview
 
-The `knowledge-processor` package is a TypeScript library designed to explore early concepts in Structured Retrieval-Augmented Generation (RAG). It is primarily used by the TypeAgent Dispatcher to implement Agent Memory for the TypeAgent Shell. The package focuses on extracting, indexing, and utilizing knowledge from various sources such as conversations, documents, and images.
+The `knowledge-processor` package is a TypeScript library that explores early concepts in Structured Retrieval-Augmented Generation (RAG). It is primarily used by the TypeAgent Dispatcher to implement Agent Memory for the TypeAgent Shell. The package focuses on extracting, indexing, and utilizing knowledge from various sources such as conversations, documents, and images. While this package is considered sample code for early-stage ideas, it provides foundational tools for working with structured knowledge in the TypeAgent ecosystem.
 
 ## What it does
 
-The `knowledge-processor` package provides a set of tools and functionalities for working with knowledge extraction, indexing, and retrieval. Its primary capabilities include:
+The `knowledge-processor` package provides a range of capabilities for handling knowledge in structured and unstructured formats. Its key functionalities include:
 
-- **Knowledge Extraction**: Extracts structured knowledge from diverse sources, including conversations, transcripts, images, and documents. This is achieved through actions like `extractKnowledge`.
-- **Knowledge Indexing**: Organizes and stores extracted knowledge and source text for efficient retrieval. This includes text indexing, key-value indexing, and temporal indexing.
-- **Query Generation**: Translates natural language questions into structured queries to retrieve relevant knowledge. Actions like `searchKnowledge` facilitate this process.
-- **Answer Generation**: Uses query results to generate natural language answers to user questions. This is supported by actions such as `generateAnswer`.
-- **Conversation Management**: Manages conversation topics, tracks context, and generates responses. Actions like `createMessage` and `generateAnswer` are central to this functionality.
+- **Knowledge Extraction**: Extracts structured knowledge from diverse sources such as conversations, transcripts, images, and documents. This is facilitated by actions like `extractKnowledge`.
+- **Knowledge Indexing**: Organizes and stores extracted knowledge for efficient retrieval. This includes text indexing, key-value indexing, and temporal indexing.
+- **Query Generation**: Converts natural language questions into structured queries to retrieve relevant knowledge. Actions like `searchKnowledge` are central to this process.
+- **Answer Generation**: Uses query results to generate natural language answers to user questions. Actions such as `generateAnswer` support this functionality.
+- **Conversation Management**: Tracks conversation topics, manages context, and generates responses. Actions like `createMessage` and `generateAnswer` are integral to this feature.
 
-The package is designed to work in conjunction with other components of the TypeAgent ecosystem, such as the Dispatcher and Shell, to provide a cohesive solution for managing and utilizing knowledge.
+The package integrates with other components in the TypeAgent ecosystem, such as the Dispatcher and Shell, to provide a cohesive solution for knowledge management and utilization.
 
 ## Setup
 
-To use the `knowledge-processor` package, ensure the following prerequisites are met:
+To use the `knowledge-processor` package, follow these steps:
 
-1. **Install Dependencies**: The package depends on several workspace and external libraries, including:
+1. **Install Dependencies**:
 
-   - Workspace dependencies: `@typeagent/aiclient`, `@typeagent/config`, `typeagent`, and `typechat-utils`.
-   - External dependencies: `@azure-rest/maps-search`, `debug`, `exifreader`, `sharp`, and `typechat`.
+   - Run `pnpm install` to install the required dependencies.
+   - The package relies on workspace dependencies such as `@typeagent/aiclient`, `@typeagent/config`, `typeagent`, and `typechat-utils`.
+   - External dependencies include `@azure-rest/maps-search`, `debug`, `exifreader`, `sharp`, and `typechat`.
 
-   Use `pnpm install` to install the required dependencies.
+2. **Environment Variables**:
 
-2. **Environment Variables**: If the package requires any specific environment variables or API keys, refer to the hand-written README for detailed instructions on how to configure them.
+   - If specific environment variables or API keys are required (e.g., for external services like `@azure-rest/maps-search`), refer to the hand-written README for detailed setup instructions.
 
-3. **External Services**: Some functionalities, such as knowledge extraction from images or external APIs, may require additional setup. For example, you may need API keys for services like `@azure-rest/maps-search`. Check the hand-written README for guidance on obtaining and configuring these keys.
+3. **External Services**:
+   - Some features, such as image-based knowledge extraction or external API integrations, may require additional setup. Ensure you have the necessary API keys or service configurations in place.
 
 ## Key Files
 
@@ -74,7 +76,7 @@ The `knowledge-processor` package is organized into several modules, each respon
 
 ## How to extend
 
-To extend the `knowledge-processor` package, follow these steps:
+To contribute to or extend the `knowledge-processor` package, follow these steps:
 
 1. **Identify the Area to Extend**:
 
@@ -102,7 +104,7 @@ To extend the `knowledge-processor` package, follow these steps:
 6. **Document Your Changes**:
    - Update the documentation to reflect your changes, including any new actions, schemas, or files.
 
-By adhering to these guidelines, you can effectively contribute to and extend the `knowledge-processor` package.
+By following these steps, you can effectively extend the functionality of the `knowledge-processor` package while maintaining consistency with its existing design and purpose.
 
 ## Reference
 
@@ -143,6 +145,6 @@ External: `@azure-rest/maps-search`, `debug`, `exifreader`, `sharp`, `typechat`
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowledge-processor docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowledge-processor docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

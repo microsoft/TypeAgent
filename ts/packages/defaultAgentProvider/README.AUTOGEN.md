@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d734e2d04f0211bc3edf459edba467cb782cdc6a04296349258f294f74e00d72 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=29ead591eb371043439b48ab3de833f93958e420f5769d1685210aa67869a909 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # default-agent-provider — AI-generated documentation
@@ -12,73 +12,88 @@
 
 ## Overview
 
-The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent ecosystem. It is utilized by the shell and CLI to include both built-in agents and external agent providers, facilitating the initialization and configuration of agents within the framework.
+The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent ecosystem. It is a foundational component used by the shell and CLI to initialize and configure both built-in agents and external agent providers. This package ensures that the necessary agents and configurations are available for the proper functioning of the TypeAgent framework.
 
 ## What it does
 
-This package provides default implementations for various agent-related functionalities, including agent providers, agent installers, dispatcher options, and indexing service registries. It includes functions to retrieve default configurations and providers for both built-in and external agents. Key functionalities include:
+This package provides default implementations for various agent-related functionalities, including agent providers, the connected app-agent source, dispatcher options, and indexing service registries. It includes functions to retrieve default configurations and providers for both built-in and external agents. Key functionalities include:
 
-- `getDefaultAppAgentProviders`: Retrieves the default application agent providers.
-- `getDefaultAppAgentInstaller`: Provides the default application agent installer.
+- `getDefaultAppAgentProviders`: Retrieves the default (static) application agent providers.
+- `getDefaultAppAgentSource`: Provides the default connected app-agent source (owns the installed-agent record store and the host-owned `@package` agent).
 - `getDefaultDispatcherOptions`: Returns the default dispatcher options.
 - `getIndexingServiceRegistry`: Gets the indexing service registry.
 - `getDefaultConstructionProvider`: Provides the default construction provider.
 
-These functions are essential for initializing and configuring agents within the TypeAgent framework, ensuring that the necessary components are available for agent operations.
-
-Additionally, the package registers a small set of test agents whose purpose is to exercise dispatcher subsystems. These test agents are disabled by default in production sessions but can be enabled via session config when evaluating collision-resolution strategies. For example, the `vampire` agent deliberately collides with other agents to test the dispatcher's action collision detection subsystem.
+Additionally, the package includes operational scripts under the `collisions` directory. These scripts are used to test and validate the functionality of the dispatcher and agent providers. They include tools for running pipelines, generating and analyzing corpora, and testing collision detection mechanisms.
 
 ## Setup
 
-To set up the `default-agent-provider` package, follow these steps:
+To use the `default-agent-provider` package, follow these steps:
 
-1. Clone the repository and navigate to the package directory:
+1. **Clone the repository**:
 
    ```sh
    git clone <repository-url>
    cd ts/packages/defaultAgentProvider/
    ```
 
-2. Install the dependencies:
+2. **Install dependencies**:
 
    ```sh
    pnpm install
    ```
 
-3. Set the `TYPEAGENT_FEED_REGISTRY` environment variable. This variable is required for the package to function correctly. Refer to the hand-written README for detailed instructions on how to obtain and set this value.
-
-For detailed setup instructions, refer to the hand-written README.
+3. **Set environment variables**:
+   - Define the `TYPEAGENT_FEED_REGISTRY` environment variable. This variable is required for the package to function correctly.
+   - Refer to the hand-written README for detailed instructions on how to obtain and configure this value.
 
 ## Key Files
 
-The package is structured into several key files, each responsible for different aspects of the agent provider functionality:
+The `default-agent-provider` package is organized into several key files, each serving a specific purpose:
 
-- [index.ts](./src/index.ts): Exports the main functions for retrieving default providers and configurations.
-- [defaultAgentProviders.ts](./src/defaultAgentProviders.ts): Contains the logic for initializing and retrieving default agent providers.
-- [defaultConstructionProvider.ts](./src/defaultConstructionProvider.ts): Provides the default construction provider.
-- [mcpAgentProvider.ts](./src/mcpAgentProvider.ts): Defines the MCP (Model Context Protocol) agent provider.
+- [index.ts](./src/index.ts): The main entry point of the package, exporting core functions for retrieving default providers and configurations.
+- [defaultAgentProviders.ts](./src/defaultAgentProviders.ts): Contains the logic for initializing and retrieving default agent providers, including `getDefaultAppAgentProviders`, `getDefaultAppAgentInstaller`, and `getDefaultDispatcherOptions`.
+- [defaultConstructionProvider.ts](./src/defaultConstructionProvider.ts): Implements the default construction provider for agents.
+- [mcpAgentProvider.ts](./src/mcpAgentProvider.ts): Defines the Model Context Protocol (MCP) agent provider.
 - [mcpDefaultAgentProvider.ts](./src/mcpDefaultAgentProvider.ts): Initializes and retrieves the default MCP agent provider.
-- [utils/config.ts](./src/utils/config.ts): Handles the configuration logic, including reading and parsing configuration files.
-- [utils/getPackageFilePath.ts](./src/utils/getPackageFilePath.ts): Utility function to get the file path relative to the package root.
+- [utils/config.ts](./src/utils/config.ts): Handles configuration logic, including reading and parsing configuration files.
+- [utils/getPackageFilePath.ts](./src/utils/getPackageFilePath.ts): Utility function to resolve file paths relative to the package root.
 
-### Key Functions and Their Responsibilities
+### Collision Testing Scripts
 
-- `getDefaultAppAgentProviders`: Located in [defaultAgentProviders.ts](./src/defaultAgentProviders.ts), this function initializes and retrieves the default application agent providers.
-- `getDefaultAppAgentInstaller`: Also in [defaultAgentProviders.ts](./src/defaultAgentProviders.ts), this function provides the default application agent installer.
-- `getDefaultDispatcherOptions`: Found in [defaultAgentProviders.ts](./src/defaultAgentProviders.ts), this function returns the default dispatcher options.
-- `getIndexingServiceRegistry`: Located in [defaultAgentProviders.ts](./src/defaultAgentProviders.ts), this function gets the indexing service registry.
-- `getDefaultConstructionProvider`: Defined in [defaultConstructionProvider.ts](./src/defaultConstructionProvider.ts), this function provides the default construction provider.
+The `collisions` directory contains TypeScript scripts designed to test the dispatcher's functionality and the behavior of agents under various scenarios. These scripts include:
+
+- [expandedCorpusRunner.ts](./src/collisions/expandedCorpusRunner.ts): Runs an end-to-end pipeline for generating, probing, reanalyzing, and translating corpora.
+- [listModels.ts](./src/collisions/listModels.ts): Lists all chat models configured in the environment for multi-model phrase-corpus generation.
+- [optimizationRunner.ts](./src/collisions/optimizationRunner.ts): Executes a five-step optimization pipeline for collision handling.
+- [previewRunner.ts](./src/collisions/previewRunner.ts): Generates a preview of neighborhoods for a given corpus.
+- [probeRunner.ts](./src/collisions/probeRunner.ts): Runs single-phrase probes to test the embedding map without executing actions.
+- [smokeTest.ts](./src/collisions/smokeTest.ts): A smoke test for the `@collision` corpus handlers, ensuring proper wiring without invoking external services.
+
+These scripts are primarily used for operational testing and are not part of the primary user interface.
 
 ## How to extend
 
-To extend the `default-agent-provider` package, follow these steps:
+To extend the `default-agent-provider` package, you can add custom agent providers or modify existing ones. Here’s how to get started:
 
-1. Open the [defaultAgentProviders.ts](./src/defaultAgentProviders.ts) file. This is where the default agent providers are defined and initialized.
-2. Add your custom agent provider logic within the appropriate functions. For example, you can modify the `getDefaultNpmAppAgentProvider` function to include additional agents.
-3. Update the configuration files in the `./data/` directory to include your new agents and servers.
-4. Ensure your changes are tested by running the existing test suite or adding new tests in the `./test` directory.
+1. **Identify the relevant file**:
 
-By following these steps, you can customize and extend the default agent provider to suit your specific needs. This allows for the integration of new agents and configurations, enhancing the functionality of the TypeAgent framework.
+   - Most of the default agent provider logic is located in [defaultAgentProviders.ts](./src/defaultAgentProviders.ts). Start by reviewing this file to understand the existing structure.
+
+2. **Add a new agent provider**:
+
+   - Define your custom agent provider in a new file or within an existing provider file, depending on your use case.
+   - Update the `getDefaultAppAgentProviders` function in [defaultAgentProviders.ts](./src/defaultAgentProviders.ts) to include your new provider.
+
+3. **Update configurations**:
+
+   - If your custom agent requires specific configurations, update the relevant configuration files in the `./data/` directory.
+
+4. **Test your changes**:
+   - Add new test cases in the `./test` directory to validate your changes.
+   - Use the collision testing scripts in the `collisions` directory to ensure that your changes do not introduce any regressions or issues.
+
+By following these steps, you can effectively extend the `default-agent-provider` package to meet your specific requirements while maintaining compatibility with the TypeAgent framework.
 
 ## Reference
 
@@ -86,8 +101,8 @@ By following these steps, you can customize and extend the default agent provide
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
-- `./test` → [./dist/test/index.js](./dist/test/index.js)
+- default → `./dist/index.js` _(not found on disk)_
+- `./test` → `./dist/test/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -150,7 +165,7 @@ External: `@modelcontextprotocol/sdk`, `@modelcontextprotocol/server-filesystem`
 - [agent-server](../../packages/agentServer/server/README.md)
 - [agent-shell](../../packages/shell/README.md)
 - [cache-rest-endpoint](../../examples/cacheRESTEndpoint/README.md)
-- [schema-studio](../../examples/schemaStudio/README.md)
+- schema-studio
 
 ### Files of interest
 
@@ -164,6 +179,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

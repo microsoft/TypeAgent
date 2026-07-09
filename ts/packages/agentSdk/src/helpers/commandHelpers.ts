@@ -140,61 +140,90 @@ function getCommandHandler(
     return defaultSubCommand;
 }
 
+// Execute a resolved command against a handler table. Exposed directly (not
+// only via getCommandInterface) so a caller that already holds a table can
+// dispatch without allocating a wrapper interface.
+export async function executeCommandFromHandlers(
+    handlers: CommandDefinitions,
+    commands: string[],
+    params: ParsedCommandParams<ParameterDefinitions> | undefined,
+    context: ActionContext<unknown>,
+    attachments?: string[],
+): Promise<ActionResult | undefined> {
+    const handler = getCommandHandler(handlers, commands);
+
+    // Pass through the handler's return value so the dispatcher's
+    // command pipeline can post-process ActionResult fields. void is
+    // coerced to undefined.
+    if (isCommandHandlerNoParams(handler)) {
+        if (params !== undefined) {
+            throw new Error(
+                `Command '@${commands.join(" ")}' does not accept parameters`,
+            );
+        }
+        const result = await handler.run(context, undefined, attachments);
+        return result ?? undefined;
+    } else {
+        if (params === undefined) {
+            throw new Error(
+                `Command '@${commands.join(" ")}' expects parameters`,
+            );
+        }
+        const result = await handler.run(context, params, attachments);
+        return result ?? undefined;
+    }
+}
+
+// Provide completion for a partial command against a handler table. Returns an
+// empty completion set when the resolved handler has no completion support, so
+// callers can invoke it unconditionally.
+export async function getCommandCompletionFromHandlers(
+    handlers: CommandDefinitions,
+    commands: string[],
+    params: ParsedCommandParams<ParameterDefinitions>,
+    names: string[],
+    context: SessionContext<unknown>,
+    direction?: CompletionDirection,
+): Promise<CompletionGroups> {
+    const handler = getCommandHandler(handlers, commands);
+    return (
+        handler.getCompletion?.(context, params, names, direction) ?? {
+            groups: [],
+        }
+    );
+}
+
 export function getCommandInterface(
     handlers: CommandDefinitions,
 ): AppAgentCommandInterface {
     const commandInterface: AppAgentCommandInterface = {
         getCommands: async () => handlers,
-        executeCommand: async (
-            commands: string[],
-            params: ParsedCommandParams<ParameterDefinitions> | undefined,
-            context: ActionContext<unknown>,
-            attachments?: string[],
-        ): Promise<ActionResult | undefined> => {
-            const handler = getCommandHandler(handlers, commands);
-
-            // Pass through the handler's return value so the dispatcher's
-            // command pipeline can post-process ActionResult fields. void is
-            // coerced to undefined.
-            if (isCommandHandlerNoParams(handler)) {
-                if (params !== undefined) {
-                    throw new Error(
-                        `Command '@${commands.join(" ")}' does not accept parameters`,
-                    );
-                }
-                const result = await handler.run(
-                    context,
-                    undefined,
-                    attachments,
-                );
-                return result ?? undefined;
-            } else {
-                if (params === undefined) {
-                    throw new Error(
-                        `Command '@${commands.join(" ")}' expects parameters`,
-                    );
-                }
-                const result = await handler.run(context, params, attachments);
-                return result ?? undefined;
-            }
-        },
+        executeCommand: (commands, params, context, attachments) =>
+            executeCommandFromHandlers(
+                handlers,
+                commands,
+                params,
+                context,
+                attachments,
+            ),
     };
 
     if (hasCompletion(handlers)) {
-        commandInterface.getCommandCompletion = async (
-            commands: string[],
-            params: ParsedCommandParams<ParameterDefinitions>,
-            names: string[],
-            context: SessionContext<unknown>,
-            direction?: CompletionDirection,
-        ) => {
-            const handler = getCommandHandler(handlers, commands);
-            return (
-                handler.getCompletion?.(context, params, names, direction) ?? {
-                    groups: [],
-                }
+        commandInterface.getCommandCompletion = (
+            commands,
+            params,
+            names,
+            context,
+            direction,
+        ) =>
+            getCommandCompletionFromHandlers(
+                handlers,
+                commands,
+                params,
+                names,
+                context,
+                direction,
             );
-        };
     }
     return commandInterface;
 }

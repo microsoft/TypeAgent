@@ -1,0 +1,25 @@
+{
+  "description": "Workspace catalog of non-bundled agents",
+  "agents": {
+    "androidMobile": {
+      "name": "android-mobile-agent",
+      "path": "androidMobile"
+    },
+    "echo": {
+      "name": "echo",
+      "path": "../../examples/agentExamples/echo"
+    },
+    "measure": {
+      "name": "measure",
+      "path": "../../examples/agentExamples/measure"
+    },
+    "test": {
+      "name": "test-agent",
+      "path": "test"
+    },
+    "vampire": {
+      "name": "vampire-agent",
+      "path": "vampire"
+    }
+  }
+}

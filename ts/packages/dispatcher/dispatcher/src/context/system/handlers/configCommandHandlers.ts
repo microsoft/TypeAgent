@@ -2158,6 +2158,15 @@ function renderCollisionShowHTML(cfg: {
         registryFirst: boolean;
         remember: string;
     };
+    contextSelector: {
+        detect: boolean;
+        windowTurns: number;
+        decay: number;
+        minUniqueTokens: number;
+        minMass: number;
+        margin: number;
+        abstainFallback: string;
+    };
 }): string {
     const C_MUTED = "#777";
     const C_LABEL = "#555";
@@ -2253,13 +2262,24 @@ function renderCollisionShowHTML(cfg: {
                         : `<span style="color:#999;font-style:italic;">(no registry)</span>`
                 }
             </div>
+            <div style="margin-top:6px;">
+                <span style="color:${C_MUTED};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;margin-right:6px;">contextSelector</span>
+                detect ${statusPill(cfg.contextSelector.detect)}
+                window <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.windowTurns}</code>
+                decay <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.decay}</code>
+                minTokens <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.minUniqueTokens}</code>
+                minMass <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.minMass}</code>
+                margin <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.margin}</code>
+                abstain <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${escapeHtml(cfg.contextSelector.abstainFallback)}</code>
+            </div>
         </div>`;
 
     const anyOn =
         cfg.static.detect ||
         cfg.grammarMatch.detect ||
         cfg.llmSelect.detect ||
-        cfg.fuzzy.detect;
+        cfg.fuzzy.detect ||
+        cfg.contextSelector.detect;
     const summary = anyOn
         ? `<div style="font-size:11px;color:${C_MUTED};margin-bottom:10px;">Detection is <b style="color:#070;">active</b> on at least one point. Telemetry is captured when emit=on; remote upload requires <code>@config log db on</code>.</div>`
         : `<div style="font-size:11px;color:${C_MUTED};margin-bottom:10px;">All detection points are <b>off</b> — runtime behavior is byte-identical to legacy first-match. Opt in with <code>@config collision &lt;point&gt; detect on</code>.</div>`;
@@ -2315,6 +2335,15 @@ function renderCollisionShowText(cfg: {
         registryFirst: boolean;
         remember: string;
     };
+    contextSelector: {
+        detect: boolean;
+        windowTurns: number;
+        decay: number;
+        minUniqueTokens: number;
+        minMass: number;
+        margin: number;
+        abstainFallback: string;
+    };
 }): string[] {
     const onOff = (b: boolean) => (b ? "on" : "off");
     const expId = cfg.telemetry.experimentId
@@ -2330,6 +2359,7 @@ function renderCollisionShowText(cfg: {
         `  multipleActionBehavior: ${cfg.multipleActionBehavior}`,
         `  telemetry: emit=${onOff(cfg.telemetry.emit)} debugLog=${onOff(cfg.telemetry.debugLog)}${expId}`,
         `  preference: enabled=${onOff(cfg.preference.enabled)} source=${cfg.preference.ambiguitySource} registryFirst=${onOff(cfg.preference.registryFirst)} remember=${cfg.preference.remember} registry=${cfg.preference.registryPath ? `"${cfg.preference.registryPath}"` : "(empty)"}`,
+        `  contextSelector: detect=${onOff(cfg.contextSelector.detect)} window=${cfg.contextSelector.windowTurns} decay=${cfg.contextSelector.decay} minTokens=${cfg.contextSelector.minUniqueTokens} minMass=${cfg.contextSelector.minMass} margin=${cfg.contextSelector.margin} abstain=${cfg.contextSelector.abstainFallback}`,
     ];
 }
 
@@ -2679,6 +2709,143 @@ function getCollisionPointHandlers(point: CollisionPoint): CommandHandlerTable {
     };
 }
 
+// The runtime-tunable numeric knobs of the contextSelector tier (§8/§10). Each
+// maps to a `collision.contextSelector.<field>` in the session config; `spec`
+// carries the per-field validation (integer/range) so a bad value is rejected
+// rather than silently corrupting the decision math.
+type ContextSelectorNumericField =
+    | "windowTurns"
+    | "decay"
+    | "minUniqueTokens"
+    | "minMass"
+    | "margin";
+
+type NumericFieldSpec = {
+    description: string;
+    integer?: boolean;
+    min?: number;
+    max?: number;
+    // When true, `min` is exclusive (e.g. decay must be strictly > 0).
+    minExclusive?: boolean;
+};
+
+const CONTEXT_SELECTOR_FIELDS: Record<
+    ContextSelectorNumericField,
+    NumericFieldSpec
+> = {
+    windowTurns: {
+        description: "ring-buffer look-back N over recent user turns",
+        integer: true,
+        min: 1,
+    },
+    decay: {
+        description: "per-turn recency decay lambda (0 < lambda <= 1)",
+        min: 0,
+        minExclusive: true,
+        max: 1,
+    },
+    minUniqueTokens: {
+        description:
+            "evidence gate: min distinct distinguishing tokens the winner must match",
+        integer: true,
+        min: 0,
+    },
+    minMass: {
+        description: "evidence gate: min winner matched mass",
+        min: 0,
+    },
+    margin: {
+        description:
+            "clear-winner margin the winner must beat the runner-up by",
+        min: 0,
+    },
+};
+
+function validateNumericField(
+    value: number,
+    spec: NumericFieldSpec,
+): string | undefined {
+    if (!Number.isFinite(value)) {
+        return "must be a finite number";
+    }
+    if (spec.integer && !Number.isInteger(value)) {
+        return "must be an integer";
+    }
+    if (spec.min !== undefined) {
+        const bad = spec.minExclusive ? value <= spec.min : value < spec.min;
+        if (bad) {
+            return `must be ${spec.minExclusive ? ">" : ">="} ${spec.min}`;
+        }
+    }
+    if (spec.max !== undefined && value > spec.max) {
+        return `must be <= ${spec.max}`;
+    }
+    return undefined;
+}
+
+// Get/set one contextSelector numeric threshold. Omitting the value shows the
+// current setting; a valid value is persisted via changeContextConfig (session
+// delta) and takes effect on the next collision — matchContextSelector /
+// RingBufferSignalSource read the config fresh each turn.
+class ContextSelectorThresholdCommandHandler implements CommandHandler {
+    public readonly description: string;
+    public readonly parameters = {
+        args: {
+            value: {
+                description: "New value; omit to show the current value.",
+                type: "number",
+                optional: true,
+            },
+        },
+    } as const;
+
+    constructor(
+        private readonly field: ContextSelectorNumericField,
+        private readonly spec: NumericFieldSpec,
+    ) {
+        this.description = `Get/set contextSelector ${field} (${spec.description})`;
+    }
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const cs =
+            context.sessionContext.agentContext.session.getConfig().collision
+                .contextSelector;
+        if (params.args.value === undefined) {
+            displayResult(`${this.field} = ${cs[this.field]}`, context);
+            return;
+        }
+        const value = params.args.value;
+        const err = validateNumericField(value, this.spec);
+        if (err !== undefined) {
+            displayWarn(`Invalid ${this.field} "${value}": ${err}.`, context);
+            return;
+        }
+        await changeContextConfig(
+            {
+                collision: {
+                    contextSelector: { [this.field]: value },
+                },
+            } as SessionOptions,
+            context,
+        );
+        displayResult(`${this.field} = ${value}`, context);
+    }
+}
+
+function getContextSelectorThresholdHandlers(): Record<string, CommandHandler> {
+    const handlers: Record<string, CommandHandler> = {};
+    for (const [field, spec] of Object.entries(CONTEXT_SELECTOR_FIELDS)) {
+        handlers[field] = new ContextSelectorThresholdCommandHandler(
+            field as ContextSelectorNumericField,
+            spec,
+        );
+    }
+    return handlers;
+}
+
 function getCollisionCommandHandlers(): CommandHandlerTable {
     const pointHandlers: Record<string, CommandHandlerTable> = {};
     for (const point of COLLISION_POINTS) {
@@ -2756,6 +2923,26 @@ function getCollisionCommandHandlers(): CommandHandlerTable {
                         },
                     ),
                     experimentId: new CollisionExperimentIdCommandHandler(),
+                },
+            },
+            contextSelector: {
+                description:
+                    "Configure the context-weighted resolution tier (deterministic topical tiebreaker on the grammar path)",
+                commands: {
+                    detect: getToggleHandlerTable(
+                        "context-weighted resolution (contextSelector)",
+                        async (context, enable) => {
+                            await changeContextConfig(
+                                {
+                                    collision: {
+                                        contextSelector: { detect: enable },
+                                    },
+                                } as SessionOptions,
+                                context,
+                            );
+                        },
+                    ),
+                    ...getContextSelectorThresholdHandlers(),
                 },
             },
         },

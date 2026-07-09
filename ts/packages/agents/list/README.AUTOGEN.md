@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7c66e76fa860df7771beb0801435d7cc4788156ede6bd4870d5e489b7fb5cc18 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=e047fc6c53efb2f43df9b6d9817e97cee0409145c3c9b15f6c321f0afd407ab5 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # list-agent — AI-generated documentation
@@ -16,7 +16,7 @@ The `list-agent` package is a TypeAgent application agent designed to manage lis
 
 ## What it does
 
-The `list-agent` package supports six actions that allow users to interact with lists:
+The `list-agent` provides six key actions to manage lists effectively:
 
 - **`addItems`**: Adds one or more items to a specified list. If the list does not exist, it is created. This action requires the `items` (array of strings) and `listName` (string) parameters.
 - **`removeItems`**: Removes one or more items from a specified list. This action requires the `items` (array of strings) and `listName` (string) parameters.
@@ -25,24 +25,24 @@ The `list-agent` package supports six actions that allow users to interact with 
 - **`clearList`**: Clears all items from a specified list. This action requires the `listName` (string) parameter.
 - **`startEditList`**: Initiates the editing of a specified list. This action requires the `listName` (string) parameter.
 
-These actions are defined in the [listSchema.ts](./src/listSchema.ts) file and are implemented in the [listActionHandler.ts](./src/listActionHandler.ts) file. The agent uses a combination of schema definitions and grammar rules to interpret user input and map it to the appropriate actions.
+These actions are defined in the [listSchema.ts](./src/listSchema.ts) file and implemented in the [listActionHandler.ts](./src/listActionHandler.ts) file. The agent uses schema definitions and grammar rules to interpret user input and map it to the appropriate actions.
 
 ## Setup
 
-The `list-agent` package does not require any special setup beyond installing its dependencies. To get started, run the following command in the package directory:
+The `list-agent` package does not require any special setup beyond installing its dependencies. To get started, navigate to the package directory and run:
 
 ```sh
 pnpm install
 ```
 
-For additional setup details, refer to the hand-written README.
+For further details, refer to the hand-written README.
 
 ## Key Files
 
-The `list-agent` package is organized into several key files that define its functionality and behavior:
+The `list-agent` package is structured around several key files that define its behavior and functionality:
 
-- **[listManifest.json](./src/listManifest.json)**: This file contains metadata about the agent, including its description, emoji representation, and references to the schema and grammar files.
-- **[listSchema.ts](./src/listSchema.ts)**: Defines the action types and their parameters. This file is the core of the agent's functionality, specifying what actions the agent can perform and the data they require.
+- **[listManifest.json](./src/listManifest.json)**: Contains metadata about the agent, such as its description, emoji representation, and references to the schema and grammar files.
+- **[listSchema.ts](./src/listSchema.ts)**: Defines the action types and their parameters. This file is the core of the agent's functionality, specifying the actions the agent can perform and the data they require.
 - **[listSchema.agr](./src/listSchema.agr)**: Contains grammar rules that map user utterances to actions. These rules help the agent interpret natural language input and determine the appropriate action to execute.
 - **[listActionHandler.ts](./src/listActionHandler.ts)**: Implements the logic for handling the actions defined in the schema. This file is where the actual behavior of each action is coded.
 
@@ -124,6 +124,6 @@ _6 actions implemented by this agent, parsed deterministically from `./src/listS
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

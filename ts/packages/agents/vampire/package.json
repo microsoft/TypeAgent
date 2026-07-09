@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "description": "Vampire test agent — deliberately collides with other agents to exercise dispatcher action collision detection",
+  "keywords": [
+    "typeagent-agent"
+  ],
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
