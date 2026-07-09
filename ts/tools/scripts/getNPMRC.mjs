@@ -345,7 +345,8 @@ function printHelp() {
 ${chalk.bold("getNPMRC")} — provision the internal npm registry config + feed auth
 
 ${chalk.bold("Usage:")}
-  node getNPMRC.mjs [command] [options]
+  npm run getNPMRC -- [command] [options]
+  node tools/scripts/getNPMRC.mjs [command] [options]
 
 ${chalk.bold("Commands:")}
   pull    Download ts/.npmrc from Key Vault and set up feed auth (default)
