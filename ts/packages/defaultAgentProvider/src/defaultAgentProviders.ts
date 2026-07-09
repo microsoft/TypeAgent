@@ -22,6 +22,8 @@ import {
     InstallMatchKind,
     InstallPreview,
     InstallPreviewMatch,
+    InstallResult,
+    deriveMatchKind,
 } from "./installSources/config.js";
 import {
     createPackageAppAgentProvider,
@@ -823,15 +825,7 @@ export function createDefaultInstalledAgentSource(
             sourceName: string | undefined,
             issuingHost: AppAgentHost,
             onStatus?: SourceStatus,
-        ): Promise<{
-            name: string;
-            source: string;
-            matchedByName: boolean;
-            packageName?: string;
-            path?: string;
-            ref?: string;
-            warnings?: string[];
-        }> {
+        ): Promise<InstallResult> {
             const explicit = ref !== undefined;
             // Explicit (two-argument) mode knows the installed name up front, so
             // fail fast on a built-in / busy / draining name before resolving.
@@ -903,16 +897,7 @@ export function createDefaultInstalledAgentSource(
                 // Fan out the add to every connected session — including the
                 // issuing one — through each session's idle-gated applicator.
                 fanOutAdd(provider, issuingHost);
-                const result: {
-                    name: string;
-                    source: string;
-                    sourceKind?: string;
-                    matchedByName: boolean;
-                    packageName?: string;
-                    path?: string;
-                    ref?: string;
-                    warnings?: string[];
-                } = {
+                const result: InstallResult = {
                     name,
                     source: record.source,
                     matchedByName: resolved.matchedByName,
@@ -1337,11 +1322,10 @@ export function createDefaultInstalledAgentSource(
             const toMatch = (m: PreviewMatch): InstallPreviewMatch => {
                 // The registry only commits to name-vs-ref; the finer label is
                 // derived here from the resolved candidate's own fields.
-                const matchKind: InstallMatchKind = m.matchedByName
-                    ? "defaultAgentName"
-                    : m.candidate.path !== undefined
-                      ? "path"
-                      : "packageName";
+                const matchKind: InstallMatchKind = deriveMatchKind({
+                    matchedByName: m.matchedByName,
+                    path: m.candidate.path,
+                });
                 const im: {
                     source: string;
                     matchKind: InstallMatchKind;

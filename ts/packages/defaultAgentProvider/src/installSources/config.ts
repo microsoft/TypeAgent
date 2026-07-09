@@ -49,6 +49,15 @@ export interface ResolvedCandidate {
     // load handle (that is `ref`). ---
     // The user-facing npm package name for catalog and feed matches. Omitted for
     // path-only matches.
+    //
+    // NOTE: this is deliberately NOT the same field as `module`, even though the
+    // two carry the same value whenever both are set (feed matches and catalog
+    // module-only entries). `module` is the npm LOAD HANDLE and is undefined for
+    // a path-resolved candidate; `packageName` is the display IDENTITY and is
+    // also populated for a catalog `path` entry (read from its package.json
+    // `name`), where `module` stays undefined. Keeping them separate lets a
+    // path-resolved candidate advertise its package identity without ever
+    // becoming a module-resolved record.
     packageName?: string;
     // The package's declared `typeagent.defaultAgentName`, when the source can
     // discover it during lookup. Required whenever the installed name is
@@ -80,6 +89,23 @@ export interface AvailableInstallRow {
 export type InstallMatchKind = "defaultAgentName" | "packageName" | "path";
 
 /**
+ * Derive the finer user-facing {@link InstallMatchKind} from the binary
+ * name-vs-ref phase the registry commits to plus the resolved candidate's own
+ * `path`. Shared by the install success message and the dry-run preview so the
+ * three-way label is computed in exactly one place.
+ */
+export function deriveMatchKind(m: {
+    matchedByName: boolean;
+    path?: string | undefined;
+}): InstallMatchKind {
+    return m.matchedByName
+        ? "defaultAgentName"
+        : m.path !== undefined
+          ? "path"
+          : "packageName";
+}
+
+/**
  * One match in a `@package install --dry-run` preview: the source that would
  * match, how it matched, the name it would install as, and the user-facing
  * package identity / path when known.
@@ -101,6 +127,26 @@ export interface InstallPreviewMatch {
 export interface InstallPreview {
     readonly winner: InstallPreviewMatch;
     readonly matches: InstallPreviewMatch[];
+}
+
+/**
+ * The result of a committed `@package install` (one- or two-argument). Returned
+ * by `InstalledAgentSourceApi.install` and consumed by the command handler to
+ * build the success message. `name` is the installed dispatcher name (derived in
+ * infer mode, explicit in two-argument mode); `matchedByName` records which
+ * resolution phase won; `sourceKind` / `packageName` / `path` / `ref` are the
+ * user-facing identity fields, populated only when the winning source knows
+ * them.
+ */
+export interface InstallResult {
+    name: string; // installed dispatcher name (derived or explicit)
+    source: string;
+    sourceKind?: string; // path / catalog / feed, for the success message
+    matchedByName: boolean; // which phase won
+    packageName?: string; // user-facing package identity when known
+    path?: string; // present for a path match (for the match-kind line)
+    ref?: string; // durable handle, when it differs from the package
+    warnings?: string[];
 }
 
 /**

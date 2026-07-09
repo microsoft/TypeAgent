@@ -155,13 +155,13 @@ describe("InstallSourceRegistry resolution", () => {
         const registry = twoCatalogRegistry(["a", "b"]);
         await expect(
             registry.resolve("@scope/shared-pkg", undefined, "zzz"),
-        ).rejects.toThrow(/unknown source 'zzz'/);
+        ).rejects.toThrow(/Unknown source 'zzz'/);
     });
 
     it("errors listing the order when no source matches", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
         await expect(registry.resolve("missing")).rejects.toThrow(
-            /no source could resolve 'missing'/,
+            /No source could resolve 'missing'/,
         );
     });
 
@@ -184,13 +184,13 @@ describe("InstallSourceRegistry resolution", () => {
                 registry.resolve("x", undefined, undefined, (m) =>
                     first.push(m),
                 ),
-            ).rejects.toThrow(/no source could resolve 'x'/);
+            ).rejects.toThrow(/No source could resolve 'x'/);
             const second: string[] = [];
             await expect(
                 registry.resolve("x", undefined, undefined, (m) =>
                     second.push(m),
                 ),
-            ).rejects.toThrow(/no source could resolve 'x'/);
+            ).rejects.toThrow(/No source could resolve 'x'/);
             // The per-command sink hears the degrade on BOTH resolves...
             expect(first.length).toBeGreaterThan(0);
             expect(first[0]).toMatch(/catalog source 'bad'/);
@@ -353,6 +353,39 @@ describe("InstallSourceRegistry one-argument name resolution", () => {
         expect(preview!.winner.source).toBe("cat1");
         expect(preview!.winner.matchedByName).toBe(true);
         expect(preview!.matches.map((m) => m.source)).toEqual(["cat1", "cat2"]);
+    });
+
+    it("preview succeeds when a lower-priority shadow has no default agent name", async () => {
+        // The winner matches by default name (phase 1); a lower-priority source
+        // shadows it by PACKAGE name (phase 2) but declares no default agent
+        // name. The shadow's installed name is never shown, so requiring one for
+        // it must not abort the whole preview (regression).
+        const winner = catalogWithDefaultName("weather", {
+            catalogName: "cat1",
+        });
+        // A module-only entry whose package name is 'weather' with no default
+        // agent name: it matches phase-2 find but cannot infer a name.
+        const shadowDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-reg-cat-"));
+        const shadowCatalog = path.join(shadowDir, "agents.catalog.json");
+        fs.writeFileSync(
+            shadowCatalog,
+            JSON.stringify({ agents: { entry: { name: "weather" } } }),
+        );
+        const registry = createInstallSourceRegistry(
+            [
+                { kind: "catalog", name: "cat1", catalog: winner.catalog },
+                { kind: "catalog", name: "cat2", catalog: shadowCatalog },
+            ],
+            { installDir: tmpInstallDir() },
+        );
+        const preview = await registry.preview("weather");
+        expect(preview).toBeDefined();
+        expect(preview!.winner.source).toBe("cat1");
+        expect(preview!.winner.matchedByName).toBe(true);
+        expect(preview!.winner.name).toBe("weather");
+        // Both phases are reported; the nameless shadow does not abort the walk.
+        expect(preview!.matches.map((m) => m.source)).toEqual(["cat1", "cat2"]);
+        expect(preview!.matches[1].matchedByName).toBe(false);
     });
 
     it("source filter runs the two-phase walk over a one-source list", async () => {

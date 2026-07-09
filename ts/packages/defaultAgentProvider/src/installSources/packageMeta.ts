@@ -15,6 +15,31 @@ export function isLegalAgentName(name: string): boolean {
 }
 
 /**
+ * Build the "multiple packages declare the same default agent name" error a
+ * source raises from its `findName` when a one-argument default-name lookup is
+ * ambiguous within that source. `labels` are the user-facing package
+ * identities (package name / path) to list and suggest a two-argument install
+ * for. Shared by every enumerable source so the wording stays identical.
+ */
+export function ambiguousDefaultNameError(
+    sourceName: string,
+    name: string,
+    labels: string[],
+): Error {
+    const suggestions = labels
+        .map(
+            (label) =>
+                `'@package install ${label} <name> --source ${sourceName}'`,
+        )
+        .join(" or ");
+    return new Error(
+        `Source '${sourceName}' has multiple packages with default agent name '${name}': ${labels.join(
+            ", ",
+        )}. Use ${suggestions}.`,
+    );
+}
+
+/**
  * The metadata a source (or the registry) reads from a resolved package root's
  * `package.json` to support one-argument install: the npm package name and the
  * declared `typeagent.defaultAgentName`.

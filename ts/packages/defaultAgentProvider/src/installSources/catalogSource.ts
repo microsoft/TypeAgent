@@ -13,7 +13,7 @@ import {
     SourceWarning,
     AvailableInstallRow,
 } from "./config.js";
-import { readPackageMeta } from "./packageMeta.js";
+import { readPackageMeta, ambiguousDefaultNameError } from "./packageMeta.js";
 
 const debug = registerDebug("typeagent:dispatcher:installSource:catalog");
 
@@ -52,115 +52,139 @@ function loadCatalog(file: string): AgentCatalog {
 }
 
 // `catalog` source.
-//   find        = map lookup in the catalog JSON
+//   find        = package-name lookup in the in-memory catalog snapshot
 //   materialize = record data `path` (relative paths resolve against the
 //                 catalog dir) or `module`; carries execMode; stores the key
-//                 in `ref` so load can follow the current catalog entry
+//                 in `ref` so load can follow the catalog entry
 //   load        = re-look-up the catalog key carried in the record's `ref`
 // `ref` is an agent short name (the catalog key).
 //
 // A catalog entry with a `path` becomes a path-resolved record (omits
 // `module`); an entry with only a package `name` becomes a module-resolved
 // record (resolved at load time against the app bundle / install root).
+//
+// The catalog file and every `path` entry's package.json are read exactly ONCE,
+// when the source is built, into an in-memory snapshot. There is no live reload:
+// an edit to the catalog after startup is not picked up until the process
+// restarts. Reading once keeps `find` / `findName` / `listAgents` off the
+// filesystem entirely and avoids re-parsing every entry's package.json on each
+// resolve walk.
 export function createCatalogSource(
     config: CatalogSourceConfig,
 ): InstallSource {
     // The directory relative catalog `path` entries resolve against.
     const catalogDir = path.dirname(path.resolve(config.catalog));
 
-    // Catalog problems (a corrupt/unreadable file, a malformed entry) degrade
-    // to "no agents" / a dropped entry so the ordered resolve walk continues.
-    // The source reports each problem (debug trace + the caller's
-    // per-command `onWarn` callback, when supplied) every time it is hit; it holds
-    // no dedup state of its own. How often to show a repeat - once
-    // per command vs. once per process for the server log - is up to the caller
-    // (the registry adds process-lifetime console dedup).
-    function warn(message: string, onWarn?: SourceWarning): void {
-        debug(message);
-        onWarn?.(message);
-    }
-
-    // Re-read on each access so an edited catalog is picked up. A
-    // corrupt/unreadable catalog degrades to "no agents" so the ordered resolve
-    // walk in the registry continues to the next source instead of hard-failing.
-    function read(onWarn?: SourceWarning): AgentCatalog {
-        try {
-            return loadCatalog(config.catalog);
-        } catch (e) {
-            warn(
-                `catalog source '${config.name}': ${(e as Error).message}`,
-                onWarn,
-            );
-            return { agents: {} };
-        }
-    }
-
-    // Resolve a catalog entry to its single resolution handle - a `path`
-    // (relative paths resolve against the catalog dir) or a package `name`
-    // (-> module). A matched entry must carry exactly one handle; an entry
-    // with neither is a catalog authoring mistake. Rather than throw (which
-    // would break the whole resolve walk) it is warned and dropped, i.e.
-    // treated as a non-match - handled the same way as a corrupt file.
-    // Returns undefined for a dropped entry.
-    function entryHandle(
-        ref: string,
-        entry: { path?: string; name?: string },
-        onWarn?: SourceWarning,
-    ): { path?: string; module?: string } | undefined {
+    // Build the resolved candidate for one catalog entry, reading a `path`
+    // entry's package.json (once, at build time) so the candidate carries the
+    // user-facing package name and (when legal) the declared
+    // `typeagent.defaultAgentName`. The catalog key stays the durable `ref`
+    // (internal load handle). A malformed entry (neither `path` nor `name`)
+    // pushes a warning and returns undefined so it is dropped from the snapshot.
+    //
+    // `module` vs `packageName`: a `path` entry sets `packageName` (its display
+    // identity) but leaves `module` undefined - it is a path-resolved record. A
+    // `name`-only entry sets both to the same value (`module` is the load handle
+    // AND the display identity). They are kept as two fields so a path entry can
+    // still advertise its package identity without becoming module-resolved.
+    function buildCandidate(
+        key: string,
+        entry: { path?: string; name?: string; execMode?: string },
+        warnings: string[],
+    ): ResolvedCandidate | undefined {
         const resolvedPath = entry.path
             ? path.resolve(catalogDir, entry.path)
             : undefined;
         if (resolvedPath === undefined && entry.name === undefined) {
-            warn(
-                `catalog source '${config.name}': entry '${ref}' has neither 'path' nor 'name' - dropped`,
-                onWarn,
+            warnings.push(
+                `catalog source '${config.name}': entry '${key}' has neither 'path' nor 'name' - dropped`,
             );
             return undefined;
         }
-        return resolvedPath !== undefined
-            ? { path: resolvedPath }
-            : { module: entry.name! };
-    }
-
-    // Build the full resolved candidate for one catalog entry, reading the
-    // entry's package.json read-through for a `path` entry so the candidate
-    // carries the user-facing package name and (when legal) the declared
-    // `typeagent.defaultAgentName`. The catalog key stays the durable `ref`
-    // (internal load handle). Returns undefined for a malformed/dropped entry.
-    function candidateFor(
-        key: string,
-        entry: { path?: string; name?: string; execMode?: string },
-        onWarn?: SourceWarning,
-    ): ResolvedCandidate | undefined {
-        const handle = entryHandle(key, entry, onWarn);
-        if (handle === undefined) {
-            return undefined;
-        }
         const candidate: ResolvedCandidate = { source: config.name, ref: key };
-        if (handle.path !== undefined) {
-            candidate.path = handle.path;
-            const meta = readPackageMeta(handle.path);
+        if (resolvedPath !== undefined) {
+            candidate.path = resolvedPath;
+            const meta = readPackageMeta(resolvedPath);
             if (meta.packageName !== undefined) {
                 candidate.packageName = meta.packageName;
             }
             if (meta.defaultAgentName !== undefined) {
                 candidate.defaultAgentName = meta.defaultAgentName;
             } else if (meta.illegalDefaultAgentName !== undefined) {
-                warn(
+                warnings.push(
                     `catalog source '${config.name}': entry '${key}' declares an illegal default agent name '${meta.illegalDefaultAgentName}' - ignored`,
-                    onWarn,
                 );
             }
-        } else if (handle.module !== undefined) {
+        } else {
             // A module-only entry has no local package.json to read before
             // install, so it participates only in package-name (find) lookup.
-            candidate.module = handle.module;
-            candidate.packageName = handle.module;
+            candidate.module = entry.name!;
+            candidate.packageName = entry.name!;
         }
         if (entry.execMode !== undefined) {
             candidate.loaderConfig = { execMode: entry.execMode };
         }
         return candidate;
+    }
+
+    // The in-memory catalog snapshot, built once at startup. A
+    // corrupt/unreadable catalog degrades to an empty snapshot (with a
+    // `loadWarning`) so the ordered resolve walk in the registry continues to
+    // the next source instead of hard-failing.
+    interface CatalogSnapshot {
+        // Resolved candidate per catalog key (only entries with a valid handle).
+        readonly candidatesByKey: Map<string, ResolvedCandidate>;
+        // Whole-file corruption/unreadable message, when the catalog failed to
+        // load. Surfaced by every command (find/findName/listAgents).
+        readonly loadWarning?: string;
+        // Per-entry problems (a dropped malformed entry, an illegal declared
+        // default name). Surfaced only by enumeration (listAgents), matching the
+        // prior behavior where find/findName suppressed per-entry noise.
+        readonly entryWarnings: readonly string[];
+    }
+
+    function buildSnapshot(): CatalogSnapshot {
+        const entryWarnings: string[] = [];
+        let catalog: AgentCatalog;
+        try {
+            catalog = loadCatalog(config.catalog);
+        } catch (e) {
+            return {
+                candidatesByKey: new Map(),
+                loadWarning: `catalog source '${config.name}': ${(e as Error).message}`,
+                entryWarnings,
+            };
+        }
+        const candidatesByKey = new Map<string, ResolvedCandidate>();
+        for (const [key, entry] of Object.entries(catalog.agents)) {
+            const candidate = buildCandidate(key, entry, entryWarnings);
+            if (candidate !== undefined) {
+                candidatesByKey.set(key, candidate);
+            }
+        }
+        return { candidatesByKey, entryWarnings };
+    }
+
+    const snapshot = buildSnapshot();
+
+    // Surface the whole-file corruption warning (if any) to the triggering
+    // command. debug-trace it too so the server log shows it once per command
+    // (the registry adds process-lifetime dedup). Used by find/findName.
+    function warnLoad(onWarn?: SourceWarning): void {
+        if (snapshot.loadWarning !== undefined) {
+            debug(snapshot.loadWarning);
+            onWarn?.(snapshot.loadWarning);
+        }
+    }
+
+    // Surface the whole-file warning plus every per-entry warning. Used by
+    // enumeration (listAgents), where per-entry problems are worth reporting.
+    function warnAll(onWarn?: SourceWarning): void {
+        warnLoad(onWarn);
+        for (const message of snapshot.entryWarnings) {
+            debug(message);
+            onWarn?.(message);
+        }
     }
 
     return {
@@ -172,14 +196,11 @@ export function createCatalogSource(
         ): Promise<ResolvedCandidate | undefined> {
             // `find` matches the entry's PACKAGE NAME (not the internal catalog
             // key, not the entry path). The key stays the durable load handle.
-            // Per-entry malformed/illegal warnings are suppressed here (find
-            // iterates every entry, so warning per entry would be noisy); only
-            // the whole-file corruption warning surfaces (via read). Enumeration
-            // (listAgents) is where per-entry problems are reported.
-            const agents = read(onWarn).agents;
-            for (const [key, entry] of Object.entries(agents)) {
-                const candidate = candidateFor(key, entry);
-                if (candidate?.packageName === ref) {
+            // Only the whole-file corruption warning surfaces here; per-entry
+            // problems are reported by enumeration (listAgents).
+            warnLoad(onWarn);
+            for (const candidate of snapshot.candidatesByKey.values()) {
+                if (candidate.packageName === ref) {
                     return candidate;
                 }
             }
@@ -192,13 +213,11 @@ export function createCatalogSource(
             // Phase-1 lookup: match the entry's declared
             // `typeagent.defaultAgentName`. Two entries declaring the same
             // default agent name is a same-source ambiguity (fail, list the
-            // candidate packages). Per-entry warnings are suppressed here for the
-            // same reason as `find`.
-            const agents = read(onWarn).agents;
+            // candidate packages).
+            warnLoad(onWarn);
             const matches: ResolvedCandidate[] = [];
-            for (const [key, entry] of Object.entries(agents)) {
-                const candidate = candidateFor(key, entry);
-                if (candidate?.defaultAgentName === name) {
+            for (const candidate of snapshot.candidatesByKey.values()) {
+                if (candidate.defaultAgentName === name) {
                     matches.push(candidate);
                 }
             }
@@ -209,17 +228,7 @@ export function createCatalogSource(
                 const labels = matches.map(
                     (c) => c.packageName ?? c.path ?? c.ref ?? "?",
                 );
-                const suggestions = labels
-                    .map(
-                        (label) =>
-                            `'@package install ${label} <name> --source ${config.name}'`,
-                    )
-                    .join(" or ");
-                throw new Error(
-                    `Source '${config.name}' has multiple packages with default agent name '${name}': ${labels.join(
-                        ", ",
-                    )}. Use ${suggestions}.`,
-                );
+                throw ambiguousDefaultNameError(config.name, name, labels);
             }
             return matches[0];
         },
@@ -227,17 +236,17 @@ export function createCatalogSource(
             record: { ref?: string },
             onWarn?: SourceWarning,
         ): MaterializedInstallRecord | undefined {
+            warnLoad(onWarn);
             if (record.ref === undefined) {
                 throw new Error(
                     `catalog record has no key to load from (corrupt record).`,
                 );
             }
-            const entry = read(onWarn).agents[record.ref];
-            if (entry === undefined) {
-                return undefined;
-            }
-            const handle = entryHandle(record.ref, entry, onWarn);
-            if (handle === undefined) {
+            // Re-look-up the catalog key in the snapshot. A key that is no longer
+            // present (or was dropped as malformed) resolves to undefined so the
+            // provider reports the record unresolved.
+            const candidate = snapshot.candidatesByKey.get(record.ref);
+            if (candidate === undefined) {
                 return undefined;
             }
             const loaded: MaterializedInstallRecord = {
@@ -245,13 +254,13 @@ export function createCatalogSource(
                 source: config.name,
                 ref: record.ref,
             };
-            if (entry.execMode !== undefined) {
-                loaded.loaderConfig = { execMode: entry.execMode };
+            if (candidate.loaderConfig !== undefined) {
+                loaded.loaderConfig = candidate.loaderConfig;
             }
-            if (handle.path !== undefined) {
-                loaded.path = handle.path;
-            } else if (handle.module !== undefined) {
-                loaded.module = handle.module;
+            if (candidate.path !== undefined) {
+                loaded.path = candidate.path;
+            } else if (candidate.module !== undefined) {
+                loaded.module = candidate.module;
             }
             return loaded;
         },
@@ -289,16 +298,13 @@ export function createCatalogSource(
             onWarn?: SourceWarning,
         ): Promise<AvailableInstallRow[]> {
             // Only advertise entries with a valid resolution handle; malformed
-            // entries are warned + dropped here too (same as find), never listed.
-            // Each row carries the default agent name and/or package name a user
-            // can type; the catalog key rides along only as the dedup `ref`.
-            const agents = read(onWarn).agents;
+            // entries were warned + dropped when the snapshot was built and are
+            // reported here (warnAll). Each row carries the default agent name
+            // and/or package name a user can type; the catalog key rides along
+            // only as the dedup `ref`.
+            warnAll(onWarn);
             const rows: AvailableInstallRow[] = [];
-            for (const [key, entry] of Object.entries(agents)) {
-                const candidate = candidateFor(key, entry, onWarn);
-                if (candidate === undefined) {
-                    continue;
-                }
+            for (const [key, candidate] of snapshot.candidatesByKey) {
                 if (
                     candidate.defaultAgentName === undefined &&
                     candidate.packageName === undefined

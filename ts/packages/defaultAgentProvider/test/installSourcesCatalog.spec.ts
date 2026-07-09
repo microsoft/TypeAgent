@@ -298,4 +298,22 @@ describe("catalogSource", () => {
         });
         expect(source.update).toBeUndefined();
     });
+
+    it("reads the catalog once at startup and ignores later edits (no live reload)", async () => {
+        const file = writeCatalog({ player: { name: "music" } });
+        const source = createCatalogSource({
+            kind: "catalog",
+            name: "workspace",
+            catalog: file,
+        });
+        // Rewrite the catalog AFTER the source was built.
+        fs.writeFileSync(
+            file,
+            JSON.stringify({ agents: { player: { name: "renamed" } } }),
+        );
+        // The snapshot taken at startup still wins: the old name resolves and
+        // the edited name does not.
+        expect(await source.find("music")).toBeDefined();
+        expect(await source.find("renamed")).toBeUndefined();
+    });
 });

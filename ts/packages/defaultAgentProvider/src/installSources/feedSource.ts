@@ -15,7 +15,7 @@ import {
     AGENT_INSTALL_ROOTS_SUBDIR,
     AvailableInstallRow,
 } from "./config.js";
-import { isLegalAgentName } from "./packageMeta.js";
+import { isLegalAgentName, ambiguousDefaultNameError } from "./packageMeta.js";
 import {
     AzTokenRunner,
     getFeedAccessToken,
@@ -727,17 +727,7 @@ export function createFeedSource(
         }
         if (shortlist.length > 1) {
             const labels = shortlist.map((d) => d.packageName);
-            const suggestions = labels
-                .map(
-                    (label) =>
-                        `'@package install ${label} <name> --source ${config.name}'`,
-                )
-                .join(" or ");
-            throw new Error(
-                `Source '${config.name}' has multiple packages with default agent name '${name}': ${labels.join(
-                    ", ",
-                )}. Use ${suggestions}.`,
-            );
+            throw ambiguousDefaultNameError(config.name, name, labels);
         }
         const candidate = await find(shortlist[0].packageName);
         // The resolved version must still declare this exact default name.

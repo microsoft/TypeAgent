@@ -313,7 +313,7 @@ export function createInstallSourceRegistry(
         }
         const entry = entries.get(sourceName);
         if (entry === undefined) {
-            throw new Error(`unknown source '${sourceName}'`);
+            throw new Error(`Unknown source '${sourceName}'`);
         }
         if (deps.excludePathSources && entry.config.kind === "path") {
             // Path sources are unusable on this host (no local filesystem), so
@@ -489,7 +489,7 @@ export function createInstallSourceRegistry(
                       `'${target}' not found in ${describeSource(sourceName)}`,
                   )
                 : new Error(
-                      `no source could resolve '${target}'. order: [${resolutionSources()
+                      `No source could resolve '${target}'. Order: [${resolutionSources()
                           .map((s) => s.name)
                           .join(", ")}]`,
                   );
@@ -650,15 +650,24 @@ export function createInstallSourceRegistry(
             if (raw.length === 0) {
                 return undefined;
             }
-            const matches: PreviewMatch[] = raw.map((m) => ({
+            // Only the winner (index 0) needs a resolved installed name - it is
+            // the one that would actually install, and the only match whose
+            // `name` the caller displays. Requiring a name for a shadow would
+            // wrongly abort the whole preview when an incidental shadow matched
+            // by package name has no default agent name (a legal, common case).
+            // Shadows carry a best-effort name that is never shown.
+            const matches: PreviewMatch[] = raw.map((m, i) => ({
                 source: m.source.name,
                 matchedByName: m.matchedByName,
-                // EXPLICIT stamps the user-supplied name; INFER derives it from
-                // the resolved package (same rule as resolve).
+                // EXPLICIT stamps the user-supplied name; INFER derives the
+                // winner's name from the resolved package (same rule as
+                // resolve) and leaves shadows best-effort.
                 name:
                     ref !== undefined
                         ? nameOrTarget
-                        : requireInferredName(m.candidate, nameOrTarget),
+                        : i === 0
+                          ? requireInferredName(m.candidate, nameOrTarget)
+                          : (m.candidate.defaultAgentName ?? nameOrTarget),
                 candidate: m.candidate,
             }));
             return { winner: matches[0], matches };
@@ -669,11 +678,9 @@ export function createInstallSourceRegistry(
         ): Promise<void> {
             // Refresh cache-backed sources. A fetch failure throws (leaving the
             // prior cache intact) so the caller's --refresh fails the command.
-            const sources =
-                sourceName !== undefined
-                    ? sourcesFor(sourceName)
-                    : resolutionSources();
-            for (const source of sources) {
+            // `sourcesFor(undefined)` is the full resolution order, so no
+            // explicit-source special case is needed here.
+            for (const source of sourcesFor(sourceName)) {
                 if (source.refresh !== undefined) {
                     await source.refresh(onWarn);
                 }

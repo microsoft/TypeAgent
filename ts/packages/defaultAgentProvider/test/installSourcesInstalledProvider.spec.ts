@@ -2150,7 +2150,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await expect(
             installer.install("x", agentDir, "nosuch", host),
-        ).rejects.toThrow(/unknown source/);
+        ).rejects.toThrow(/Unknown source/);
     });
 
     it("named config exposes its fixed set via the bundled provider and writes no agents.json", () => {

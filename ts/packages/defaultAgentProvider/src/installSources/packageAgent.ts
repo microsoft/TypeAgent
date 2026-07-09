@@ -30,6 +30,8 @@ import {
     AvailableInstallRow,
     InstallMatchKind,
     InstallPreview,
+    InstallResult,
+    deriveMatchKind,
     SourceStatus,
     UninstallOutcomeStatus,
     UpdateOutcomeStatus,
@@ -65,16 +67,7 @@ export interface InstalledAgentSourceApi {
         sourceName: string | undefined,
         issuingHost: AppAgentHost,
         onStatus?: SourceStatus,
-    ): Promise<{
-        name: string; // installed dispatcher name (derived or explicit)
-        source: string;
-        sourceKind?: string; // path / catalog / feed, for the success message
-        matchedByName: boolean; // which phase won
-        packageName?: string; // user-facing package identity when known
-        path?: string; // present for a path match (for the match-kind line)
-        ref?: string; // durable handle, when it differs from the package
-        warnings?: string[];
-    }>;
+    ): Promise<InstallResult>;
     // Dry-run: report how a one/two-argument target would resolve (winning
     // source, match kind, installed name, and the full shadow set) without
     // installing anything. `--refresh` may still rewrite a cache-backed source's
@@ -446,11 +439,10 @@ class InstallCommandHandler implements CommandHandler {
         // token matched, as a separate follow-up line. A two-argument install
         // typed the name explicitly, so there is nothing to clarify.
         if (!explicit) {
-            const matchKind: InstallMatchKind = result.matchedByName
-                ? "defaultAgentName"
-                : result.path !== undefined
-                  ? "path"
-                  : "packageName";
+            const matchKind: InstallMatchKind = deriveMatchKind({
+                matchedByName: result.matchedByName,
+                path: result.path,
+            });
             displayResult(
                 `Matched ${this.describeMatch({
                     matchKind,
