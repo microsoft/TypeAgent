@@ -329,6 +329,7 @@ ${chalk.bold("Options:")}
   --auth-only   Skip the Key Vault download; just (re)install the feed tokenHelper
   --vault <n>   Key Vault name (default: ${config.vault})
   --secret <n>  Secret name (default: ${config.secret})
+  --commit      Write changes (default)
   --dry-run     Preview without writing
 
 Feed auth uses a pnpm tokenHelper backed by the Azure CLI — run 'az login' once
