@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "schema": "desktop.desktop-personalization",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T09:36:04.548Z",
+  "sourceHash": "7Ux3QEpQNwHNmezmY8mMMm1VWDxTn708IuXdZHFSaSo=",
+  "actions": {
+    "EnableTransparency": [
+      "transparency",
+      "effect",
+      "visual",
+      "appearance",
+      "setting",
+      "personalization",
+      "desktop",
+      "interface",
+      "theme",
+      "background",
+      "opacity",
+      "style",
+      "design"
+    ],
+    "ApplyColorToTitleBar": [
+      "title",
+      "bar",
+      "accent",
+      "color",
+      "personalization",
+      "setting",
+      "desktop",
+      "theme",
+      "appearance",
+      "visual",
+      "customization"
+    ],
+    "HighContrastTheme": [
+      "accessibility",
+      "contrast",
+      "theme",
+      "setting",
+      "visual",
+      "appearance",
+      "desktop",
+      "personalization",
+      "high"
+    ],
+    "SystemThemeMode": [
+      "theme",
+      "mode",
+      "system",
+      "desktop",
+      "appearance",
+      "light",
+      "dark",
+      "taskbar",
+      "menu",
+      "setting",
+      "personalization",
+      "interface",
+      "visual",
+      "style"
+    ]
+  }
+}
