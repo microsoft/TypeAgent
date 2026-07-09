@@ -1107,7 +1107,8 @@ async function runRatchet(opts: Options): Promise<number> {
                 "  - Mechanical rules (no-var, prefer-const) can be auto-fixed:\n" +
                 "      npm run code-lint -- --fix --changed\n" +
                 "  - Re-check with:\n" +
-                `      npm run code-lint -- --ratchet --base ${opts.base}`,
+                `      npm run code-lint -- --ratchet --base ${opts.base}\n` +
+                "  - Why this gate exists: ts/tools/scripts/code/README.md#ci-gates",
         );
         return 1;
     }

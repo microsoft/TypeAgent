@@ -1199,6 +1199,10 @@ async function runRatchet(opts: Options): Promise<number> {
         console.log("Ratchet: OK — changed files did not add complexity.");
         return 0;
     }
+    console.error(
+        "\nWhy the complexity ratchet exists — and how to reproduce & fix it " +
+            "locally: ts/tools/scripts/code/README.md#ci-gates",
+    );
     return 1;
 }
 

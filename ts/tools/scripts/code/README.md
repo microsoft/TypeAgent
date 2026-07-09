@@ -75,17 +75,53 @@ modes ignore it. Shape is `{ "exceptions": [ ... ] }` (a bare array also works):
 
 ## CI gates
 
-PR-only steps in `build-ts.yml`, after the build, each fetching the base ref:
+Four code-quality steps run in
+[`build-ts.yml`](../../../../.github/workflows/build-ts.yml), **on pull requests
+only**, sequenced after `Build` and before `Test`. They are skipped entirely
+unless the PR touches `ts/**` or the workflow file itself (a `dorny/paths-filter`
+guard), and — like the rest of the job — they run on every matrix cell
+(`ubuntu`/`windows`/`macos` × Node 22/24).
 
-1. **Complexity ratchet** — changed files may not add functions over the
-   cyclomatic/cognitive budget; new files held to a hard cap.
-2. **Lint ratchet** — changed files may not add violations; `no-var` /
-   `prefer-const` are zero-tolerance (must stay at 0).
-3. **Circular dependency ratchet** — the change may not introduce a new import
-   cycle (compares HEAD vs the merge base via a throwaway git worktree; heavier,
-   ~80s).
-4. **Test debt gate** — zero focused tests (`.only`/`.only.each`/`fit`/`fdescribe`),
-   no newly skipped tests (`.skip`/`.skip.each`/`xit`/`xdescribe`) in changed files.
+Each step is a **changed-files diff against the PR's base branch**: it first
+`git fetch --no-tags origin <base_ref>`, then passes `--base origin/<base_ref>`
+so only what the PR actually touches is judged. Two flavors:
+
+- **Ratchet** (`--ratchet`) — _stateless_: the base branch _is_ the baseline
+  (there is no committed baseline file), so the metric can only trend down.
+  Pre-existing debt is grandfathered; the PR simply may not add more in the code
+  it edits. The tool measures each changed file at both HEAD and the merge base
+  and fails only on a net increase, printing the offending `file:line`s.
+- **Gate** (`--gate`) — _zero-tolerance_: the thing must be absent regardless of
+  the baseline.
+
+| #   | Step (tool)                                 | Type        | Fails the PR when it…                                                                                                                                                                                                                                            |
+| --- | ------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Complexity ratchet** (`code-complexity`)  | ratchet     | leaves a changed file with more functions over the cyclomatic (25) or cognitive (30) budget than it had at the base; **any** function in a brand-new file over 25/30 also fails. Honors a baseline-exceptions file for rename false-positives.                   |
+| 2   | **Lint ratchet** (`code-lint`)              | ratchet     | adds net ESLint violations (`no-explicit-any`, `no-console`, `no-unused-vars`, `no-var`, `prefer-const`, `no-debugger`) in a changed file — syntactic rules only, so it's fast. `no-var`/`prefer-const` are effectively zero-tolerance (baseline is already 0).  |
+| 3   | **Circular dependency ratchet** (`code-circular`) | ratchet | introduces a runtime import cycle absent at the base. A whole-graph property, so it builds the cycle set for HEAD **and** the merge base (checked into a throwaway git worktree) — madge runs twice, ~80s, the heaviest step.                                   |
+| 4   | **Test debt gate** (`code-debt`)            | **gate**    | contains **any** focused test (`.only`/`.only.each`/`fit`/`fdescribe`), or newly skips a test (`.skip`/`.skip.each`/`xit`/`xdescribe`) in a changed file. TODO/FIXME/`@deprecated` are reported by this tool but not gated.                                       |
+
+### Reproduce a gate locally
+
+Run the same command against your base branch (usually `main`). Complexity has a
+canned parity script; the rest just take `--base`:
+
+```bash
+npm run code-complexity:ci                          # == the CI step (--base origin/main)
+npm run code-lint     -- --ratchet --base origin/main
+npm run code-circular -- --ratchet --base origin/main
+npm run code-debt     -- --gate    --base origin/main
+```
+
+`npm run lint` also runs the lint ratchet against `origin/main` as its final step.
+
+### When a ratchet fires on debt you didn't add
+
+A file move that git's rename detection misses can make pre-existing offenders
+look "new." Grandfather them in the step's `--exceptions-file` (see
+[Baseline exceptions](#baseline-exceptions)) instead of weakening the threshold;
+for complexity, regenerate that file with
+`npm run code-complexity:update-exceptions`.
 
 Dead-code is **not** gated yet — knip's numbers are inflated until
 [`knip.jsonc`](./knip.jsonc) declares the entry points it can't infer.
