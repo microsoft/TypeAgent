@@ -308,7 +308,9 @@ async function push() {
             chalk.green(`Secret '${secret}' updated in vault '${vault}'.`),
         );
     } catch (e) {
-        console.error(chalk.red(`Failed to write '${secret}': ${e.message}`));
+        console.error(
+            chalk.red(`Failed to write '${secret}': ${e?.message ?? String(e)}`),
+        );
         process.exitCode = 1;
     }
 }
