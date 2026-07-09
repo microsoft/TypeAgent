@@ -131,8 +131,8 @@ function registryToNerfDart(registryUrl) {
 // accepted by both pnpm and Windows, and safe from .npmrc backslash escaping).
 function writeTokenHelperScript() {
     fs.mkdirSync(typeagentDir, { recursive: true });
-    const azCmd = `az account get-access-token --resource ${config.adoResource} --query accessToken --output tsv`;
-    let helperPath;
+    const adoResource = process.env.TYPEAGENT_ADO_RESOURCE ?? config.adoResource;
+    const azCmd = `az account get-access-token --resource ${adoResource} --query accessToken --output tsv --only-show-errors`;
     if (process.platform === "win32") {
         helperPath = path.join(typeagentDir, "npmrc-token-helper.cmd");
         fs.writeFileSync(helperPath, `@echo off\r\ncall ${azCmd}\r\n`);
