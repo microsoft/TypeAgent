@@ -11,6 +11,7 @@ import {
     RulesPart,
     PhraseSetPart,
     CompiledSpacingMode,
+    CompiledValueNode,
     getCapturedVariableName,
     createRulesPart,
 } from "./grammarTypes.js";
@@ -494,6 +495,56 @@ function findSingleVariableBearingPart(
 }
 
 /**
+ * Derive the value expression for a rule that has no explicit `->` value:
+ * single-variable rules forward that variable, and factored multi-part
+ * rules (from `nfaSafeOptimizations`) forward their single variable-bearing
+ * part's value. Throws if ambiguous (2+ variable-bearing parts); if
+ * `requireValue` is set, also throws when no value can be derived at all.
+ */
+function deriveEffectiveValue(
+    rule: GrammarRule,
+    describeRule: () => string,
+    requireValue: boolean,
+): CompiledValueNode | undefined {
+    if (rule.value) {
+        return rule.value;
+    }
+    const singleVar = isSingleVariableRule(rule);
+    if (singleVar) {
+        return { type: "variable", name: singleVar.variable };
+    }
+    if (rule.parts.length <= 1) {
+        return undefined;
+    }
+    const singleVarPart = findSingleVariableBearingPart(rule);
+    if (singleVarPart === "ambiguous") {
+        throw new Error(
+            `${describeRule()} has ${rule.parts.length} terms but no value expression, ` +
+                `and more than one part carries a variable - the implicit value is ambiguous. ` +
+                `Multi-term rules must have an explicit value expression (using ->).`,
+        );
+    }
+    if (singleVarPart !== undefined) {
+        return { type: "variable", name: singleVarPart.variable };
+    }
+    if (!requireValue) {
+        return undefined;
+    }
+    const hasTailCall = rule.parts.some(
+        (p) => p.type === "rules" && p.tailCall,
+    );
+    throw new Error(
+        `${describeRule()} has ${rule.parts.length} terms but no value expression. ` +
+            `Multi-term rules must have an explicit value expression (using ->).` +
+            (hasTailCall
+                ? " This rule contains a tailCall RulesPart, which the NFA compiler " +
+                  "does not support - disable `tailFactoring` / `promoteTailRulesParts` " +
+                  "in the grammar optimizer (use `nfaSafeOptimizations`) for NFA/DFA paths."
+                : ""),
+    );
+}
+
+/**
  * Collect all variable names from a rule's parts
  * Returns them in order of appearance
  *
@@ -634,46 +685,12 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
     ) {
         const rule = normalizedGrammar.alternatives[ruleIndex];
 
-        // Check for single-variable rules like <ArtistName> = $(x:wildcard);
-        // These should implicitly produce their variable's value: -> x
-        let effectiveValue = rule.value;
-        if (!effectiveValue) {
-            const singleVar = isSingleVariableRule(rule);
-            if (singleVar) {
-                effectiveValue = { type: "variable", name: singleVar.variable };
-            } else if (rule.parts.length > 1) {
-                // factorCommonPrefixes (nfaSafeOptimizations) can leave
-                // a multi-part rule with no top-level value; forward
-                // the single variable-bearing part's value if possible.
-                const singleVarPart = findSingleVariableBearingPart(rule);
-                if (singleVarPart === "ambiguous") {
-                    throw new Error(
-                        `Grammar rule at index ${ruleIndex} has ${rule.parts.length} terms but no value expression, ` +
-                            `and more than one part carries a variable - the implicit value is ambiguous. ` +
-                            `Multi-term rules must have an explicit value expression (using ->).`,
-                    );
-                }
-                if (singleVarPart !== undefined) {
-                    effectiveValue = {
-                        type: "variable",
-                        name: singleVarPart.variable,
-                    };
-                } else {
-                    const hasTailCall = rule.parts.some(
-                        (p) => p.type === "rules" && p.tailCall,
-                    );
-                    throw new Error(
-                        `Grammar rule at index ${ruleIndex} has ${rule.parts.length} terms but no value expression. ` +
-                            `Multi-term rules must have an explicit value expression (using ->).` +
-                            (hasTailCall
-                                ? " This rule contains a tailCall RulesPart, which the NFA compiler " +
-                                  "does not support - disable `tailFactoring` / `promoteTailRulesParts` " +
-                                  "in the grammar optimizer (use `nfaSafeOptimizations`) for NFA/DFA paths."
-                                : ""),
-                    );
-                }
-            }
-        }
+        // Check for single-variable / factored rules with no explicit -> value.
+        const effectiveValue = deriveEffectiveValue(
+            rule,
+            () => `Grammar rule at index ${ruleIndex}`,
+            true,
+        );
 
         const ruleEntry = builder.createState(false);
 
@@ -1570,31 +1587,11 @@ function compileRulesPartWithSlots(
 
         // Compile and store the action value on the entry state FIRST
         // We need to know if there's a value before deciding about environments
-        // Passthrough normalization is done upfront, so rules already have explicit values
-        // Just check for single-variable rules like <ArtistName> = $(x:wildcard);
-        let effectiveValue = rule.value;
-        if (!effectiveValue) {
-            const singleVar = isSingleVariableRule(rule);
-            if (singleVar) {
-                effectiveValue = { type: "variable", name: singleVar.variable };
-            } else if (rule.parts.length > 1) {
-                // Same implicit-value forwarding as above, for nested rules.
-                const singleVarPart = findSingleVariableBearingPart(rule);
-                if (singleVarPart === "ambiguous") {
-                    throw new Error(
-                        `Nested grammar rule has ${rule.parts.length} terms but no value expression, ` +
-                            `and more than one part carries a variable - the implicit value is ambiguous. ` +
-                            `Multi-term rules must have an explicit value expression (using ->).`,
-                    );
-                }
-                if (singleVarPart !== undefined) {
-                    effectiveValue = {
-                        type: "variable",
-                        name: singleVarPart.variable,
-                    };
-                }
-            }
-        }
+        const effectiveValue = deriveEffectiveValue(
+            rule,
+            () => "Nested grammar rule",
+            false,
+        );
 
         let compiledValue: ValueExpression | undefined;
         let nestedCompletionActionName: string | undefined;
