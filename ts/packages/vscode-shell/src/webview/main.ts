@@ -1137,7 +1137,7 @@ window.addEventListener("message", (event) => {
         }
         case "speechTokenResponse": {
             const resolve = pendingSpeechToken.get(msg.id);
-            if (resolve) {
+            if (typeof resolve === "function") {
                 pendingSpeechToken.delete(msg.id);
                 resolve(msg.token);
             }
