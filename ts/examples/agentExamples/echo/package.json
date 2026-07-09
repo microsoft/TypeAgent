@@ -1,7 +1,6 @@
 {
-  "name": "echo",
+  "name": "@typeagent/echo",
   "version": "0.0.1",
-  "private": true,
   "description": "Echo example for TypeAgent",
   "keywords": [
     "typeagent-agent"
@@ -19,6 +18,11 @@
     "./agent/handlers": "./dist/echoActionHandler.js",
     "./agent/manifest": "./src/echoManifest.json"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",

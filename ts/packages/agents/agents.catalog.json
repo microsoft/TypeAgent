@@ -6,7 +6,7 @@
       "path": "androidMobile"
     },
     "echo": {
-      "name": "echo",
+      "name": "@typeagent/echo",
       "path": "../../examples/agentExamples/echo"
     },
     "measure": {
