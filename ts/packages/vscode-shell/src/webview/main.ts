@@ -112,10 +112,16 @@ const pendingSpeechToken = new Map<
     number,
     (token: SpeechToken | undefined) => void
 >();
-function requestSpeechToken(): Promise<SpeechToken | undefined> {
+function requestSpeechToken(timeoutMs = 15_000): Promise<SpeechToken | undefined> {
     const id = nextSpeechTokenId++;
     return new Promise<SpeechToken | undefined>((resolve) => {
-        pendingSpeechToken.set(id, resolve);
+        const timer = setTimeout(() => {
+            if (pendingSpeechToken.delete(id)) resolve(undefined);
+        }, timeoutMs);
+        pendingSpeechToken.set(id, (token) => {
+            clearTimeout(timer);
+            resolve(token);
+        });
         vscode.postMessage({ type: "getSpeechToken", id });
     });
 }
