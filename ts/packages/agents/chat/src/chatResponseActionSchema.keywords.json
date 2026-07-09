@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "schema": "chat",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T09:37:40.393Z",
+  "sourceHash": "v0k4isH67IDGw/dy2OkgKSoSv5zf8g3l+CjZ5iGl5PM=",
+  "actions": {
+    "generateResponse": [
+      "conversation",
+      "question",
+      "answer",
+      "information",
+      "response",
+      "chat",
+      "topic",
+      "subject",
+      "discussion",
+      "message",
+      "text",
+      "entity",
+      "file",
+      "attachment",
+      "internet",
+      "memory",
+      "request"
+    ],
+    "showImageFile": [
+      "image",
+      "file",
+      "picture",
+      "photo",
+      "jpeg",
+      "png",
+      "gif",
+      "bmp",
+      "media",
+      "visual",
+      "graphic",
+      "snapshot",
+      "photograph",
+      "illustration",
+      "icon",
+      "thumbnail",
+      "artwork",
+      "drawing",
+      "screenshot",
+      "gallery",
+      "album",
+      "portfolio"
+    ]
+  }
+}
