@@ -226,6 +226,7 @@ async function pull() {
         try {
             value = (await client.getSecret(secret)).value;
         } catch (e) {
+            const status = e?.statusCode ?? e?.status;
             console.error(
                 chalk.red(
                     `Failed to read '${secret}' from vault '${vault}': ${e?.message ?? String(e)}`,
@@ -233,7 +234,9 @@ async function pull() {
             );
             console.log(
                 chalk.yellow(
-                    `\nHint: seed it first with:  npm run getNPMRC -- push`,
+                    status === 404
+                        ? `\nHint: seed it first with:  npm run getNPMRC -- push`
+                        : `\nHint: if you don't have access to this vault, pass --vault/--secret to use your own (or ask a maintainer for access).`,
                 ),
             );
             process.exitCode = 1;
