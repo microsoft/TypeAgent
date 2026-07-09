@@ -309,7 +309,9 @@ async function push() {
         );
     } catch (e) {
         console.error(
-            chalk.red(`Failed to write '${secret}': ${e?.message ?? String(e)}`),
+            chalk.red(
+                `Failed to write '${secret}': ${e?.message ?? String(e)}`,
+            ),
         );
         process.exitCode = 1;
     }
