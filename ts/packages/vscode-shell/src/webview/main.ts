@@ -112,10 +112,18 @@ const pendingSpeechToken = new Map<
     number,
     (token: SpeechToken | undefined) => void
 >();
-function requestSpeechToken(): Promise<SpeechToken | undefined> {
+function requestSpeechToken(
+    timeoutMs = 15_000,
+): Promise<SpeechToken | undefined> {
     const id = nextSpeechTokenId++;
     return new Promise<SpeechToken | undefined>((resolve) => {
-        pendingSpeechToken.set(id, resolve);
+        const timer = setTimeout(() => {
+            if (pendingSpeechToken.delete(id)) resolve(undefined);
+        }, timeoutMs);
+        pendingSpeechToken.set(id, (token) => {
+            clearTimeout(timer);
+            resolve(token);
+        });
         vscode.postMessage({ type: "getSpeechToken", id });
     });
 }
@@ -211,10 +219,25 @@ const pendingBridgeRpc = new Map<
 function bridgeRpc(
     method: "getTemplateSchema" | "getTemplateCompletion" | "getDynamicDisplay",
     args: unknown[],
+    timeoutMs = 30_000,
 ): Promise<unknown> {
     const id = nextBridgeRpcId++;
     return new Promise<unknown>((resolve, reject) => {
-        pendingBridgeRpc.set(id, { resolve, reject });
+        const timer = setTimeout(() => {
+            if (pendingBridgeRpc.delete(id)) {
+                reject(new Error(`bridgeRpc '${method}' timed out`));
+            }
+        }, timeoutMs);
+        pendingBridgeRpc.set(id, {
+            resolve: (v) => {
+                clearTimeout(timer);
+                resolve(v);
+            },
+            reject: (e) => {
+                clearTimeout(timer);
+                reject(e);
+            },
+        });
         vscode.postMessage({ type: "bridgeRpcRequest", id, method, args });
     });
 }
@@ -275,10 +298,13 @@ function handleRequestInteraction(
                     value,
                 };
             }
-        } catch {
-            // Aborted (resolved/cancelled by another client or server
-            // timeout) — nothing to send.
+        } catch (e) {
+            // Aborted (resolved/cancelled by another client or server timeout)
+            // — nothing to send.
             activeInteractions.delete(interaction.interactionId);
+            if (!ac.signal.aborted) {
+                console.error("[requestInteraction] failed", e);
+            }
             return;
         }
         if (ac.signal.aborted) {
@@ -286,8 +312,8 @@ function handleRequestInteraction(
             return;
         }
         activeInteractions.delete(interaction.interactionId);
+        if (ac.signal.aborted) return;
         vscode.postMessage({ type: "interactionResponse", response });
-    })();
 }
 
 // Render a non-blocking choice card (yes/no, multi-select, or pick+remember)

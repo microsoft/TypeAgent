@@ -131,7 +131,7 @@ export class VsCodeAzureSpeechProvider implements SpeechInputProvider {
         this.cleanup();
     }
 
-    public setContinuous(): void {
+    public setContinuous(_on: boolean, _waitForWakeWord?: boolean): void {
         // Continuous / wake-word modes are not supported in the webview yet;
         // the mic button drives single-shot recognition only.
     }

@@ -91,7 +91,7 @@ internal class ActionDispatcher
             new PrivacySettingsHandler(registry),
             new SystemSettingsHandler(registry, process),
             new SystemActionHandler(process, debugger),
-            new ServiceActionHandler(serviceControl, logger)
+            new ServiceActionHandler(serviceControl)
         );
 
         var validator = new SchemaValidator(logger);
