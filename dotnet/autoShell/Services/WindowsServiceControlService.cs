@@ -34,7 +34,7 @@ internal sealed class WindowsServiceControlService : IServiceControlService
     }
 
     /// <inheritdoc/>
-    public ServiceControlResult RestartService(string identifier, bool matchByDescription)
+    public ServiceControlResult RestartService(string identifier, bool matchByDescription, bool elevate)
     {
         if (string.IsNullOrWhiteSpace(identifier))
         {
@@ -68,19 +68,26 @@ internal sealed class WindowsServiceControlService : IServiceControlService
             return ServiceControlResult.Confirm(match.ServiceName, match.DisplayName);
         }
 
-        return PerformRestart(match.ServiceName, match.DisplayName);
+        return PerformRestart(match.ServiceName, match.DisplayName, elevate);
     }
 
     /// <summary>
     /// Restarts the resolved service. Controlling a service requires administrator rights, so when
-    /// the host is not elevated the restart is delegated to an elevated PowerShell helper (which
-    /// prompts the user for consent via UAC) instead of failing with an opaque access error.
+    /// the host is not elevated the caller must first obtain the user's consent (<paramref name="elevate"/>);
+    /// only then is the restart delegated to an elevated PowerShell helper (which prompts via UAC).
     /// </summary>
-    private ServiceControlResult PerformRestart(string serviceName, string displayName)
+    private ServiceControlResult PerformRestart(string serviceName, string displayName, bool elevate)
     {
-        return IsElevated()
-            ? RestartInProcess(serviceName, displayName)
-            : RestartElevated(serviceName, displayName);
+        if (IsElevated())
+        {
+            return RestartInProcess(serviceName, displayName);
+        }
+
+        // Not elevated: only run the elevated helper once the user has agreed to it; otherwise ask
+        // the caller to obtain consent first.
+        return elevate
+            ? RestartElevated(serviceName, displayName)
+            : ServiceControlResult.Elevate(serviceName, displayName);
     }
 
     /// <summary>

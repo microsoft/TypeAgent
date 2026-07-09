@@ -19,13 +19,19 @@ internal interface IServiceControlService
     /// When <c>true</c>, locates the service by searching its description text; otherwise matches by
     /// service name or display name.
     /// </param>
+    /// <param name="elevate">
+    /// Whether the user has consented to running the restart with administrator privileges. When the
+    /// host is not elevated and this is <c>false</c>, the result has
+    /// <see cref="ServiceControlResult.NeedsElevation"/> set and nothing is restarted; the caller
+    /// should obtain consent and retry with this set to <c>true</c>.
+    /// </param>
     /// <returns>
     /// A <see cref="ServiceControlResult"/> describing the outcome. When the query resolves only to a
     /// fuzzy (approximate) match, the result has <see cref="ServiceControlResult.NeedsConfirmation"/>
     /// set and the service is <em>not</em> restarted; the caller should confirm with the user and retry
     /// using the resolved exact service name.
     /// </returns>
-    ServiceControlResult RestartService(string identifier, bool matchByDescription);
+    ServiceControlResult RestartService(string identifier, bool matchByDescription, bool elevate);
 }
 
 /// <summary>
@@ -48,11 +54,17 @@ internal sealed record ServiceControlResult
     /// </summary>
     public bool NeedsConfirmation { get; init; }
 
-    /// <summary>The exact service name of the fuzzy match, for use in a confirmed retry.</summary>
+    /// <summary>The exact service name of the resolved match, for use in a confirmed or elevated retry.</summary>
     public string ResolvedServiceName { get; init; }
 
-    /// <summary>The display name of the fuzzy match, for presenting to the user.</summary>
+    /// <summary>The display name of the resolved match, for presenting to the user.</summary>
     public string ResolvedDisplayName { get; init; }
+
+    /// <summary>
+    /// When <c>true</c>, the restart requires administrator privileges the host does not have. The
+    /// caller should confirm with the user and retry with elevation. No change has been made yet.
+    /// </summary>
+    public bool NeedsElevation { get; init; }
 
     /// <summary>Creates a successful result for the given service display name.</summary>
     public static ServiceControlResult Ok(string serviceDisplayName) =>
@@ -71,6 +83,19 @@ internal sealed record ServiceControlResult
         {
             Success = true,
             NeedsConfirmation = true,
+            ResolvedServiceName = resolvedServiceName,
+            ResolvedDisplayName = resolvedDisplayName,
+        };
+
+    /// <summary>
+    /// Creates a result indicating the restart needs administrator privileges the host lacks, so the
+    /// caller should obtain user consent and retry with elevation.
+    /// </summary>
+    public static ServiceControlResult Elevate(string resolvedServiceName, string resolvedDisplayName) =>
+        new()
+        {
+            Success = true,
+            NeedsElevation = true,
             ResolvedServiceName = resolvedServiceName,
             ResolvedDisplayName = resolvedDisplayName,
         };

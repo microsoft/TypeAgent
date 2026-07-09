@@ -277,6 +277,10 @@ export type RestartServiceAction = {
         // name or display name; "description" searches each service's
         // description text for the provided phrase.
         matchBy?: "name" | "description";
+        // Internal use only: set to true by the agent after the user has agreed to
+        // run the restart with administrator privileges. Never set this from the
+        // user's initial request — leave it unset so the agent asks for consent first.
+        elevate?: boolean;
     };
 };
 

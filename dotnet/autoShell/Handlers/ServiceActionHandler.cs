@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using autoShell.Handlers.Generated;
 using autoShell.Logging;
@@ -32,7 +33,8 @@ internal class ServiceActionHandler : ActionHandlerBase
         }
 
         bool matchByDescription = string.Equals(p.MatchBy, "description", StringComparison.OrdinalIgnoreCase);
-        ServiceControlResult result = _services.RestartService(p.Service, matchByDescription);
+        bool elevate = p.Elevate ?? false;
+        ServiceControlResult result = _services.RestartService(p.Service, matchByDescription, elevate);
 
         // A fuzzy match asks the caller (the TS agent) to confirm the resolved service with
         // the user before acting. Report success with a confirmation payload rather than
@@ -41,7 +43,16 @@ internal class ServiceActionHandler : ActionHandlerBase
         {
             return ActionResult.Ok(
                 $"Found a close match: '{result.ResolvedDisplayName}'. Awaiting confirmation before restarting.",
-                BuildConfirmationData(result.ResolvedServiceName, result.ResolvedDisplayName));
+                BuildConfirmationData("needsConfirmation", result.ResolvedServiceName, result.ResolvedDisplayName));
+        }
+
+        // The restart needs administrator rights the host lacks. Ask the TS agent to confirm the
+        // user is willing to run it elevated before doing anything.
+        if (result.NeedsElevation)
+        {
+            return ActionResult.Ok(
+                $"Restarting '{result.ResolvedDisplayName}' requires administrator privileges. Awaiting confirmation.",
+                BuildConfirmationData("needsElevation", result.ResolvedServiceName, result.ResolvedDisplayName));
         }
 
         return result.Success
@@ -49,15 +60,16 @@ internal class ServiceActionHandler : ActionHandlerBase
             : ActionResult.Fail(result.Error);
     }
 
-    private static JsonElement BuildConfirmationData(string resolvedServiceName, string resolvedDisplayName)
+    private static JsonElement BuildConfirmationData(string flag, string resolvedServiceName, string resolvedDisplayName)
     {
-        using var doc = JsonSerializer.SerializeToDocument(new
+        var payload = new Dictionary<string, object>
         {
-            needsConfirmation = true,
-            resolvedServiceName,
-            resolvedDisplayName,
-            operation = "restart",
-        });
+            [flag] = true,
+            ["resolvedServiceName"] = resolvedServiceName,
+            ["resolvedDisplayName"] = resolvedDisplayName,
+            ["operation"] = "restart",
+        };
+        using var doc = JsonSerializer.SerializeToDocument(payload);
         return doc.RootElement.Clone();
     }
 }
