@@ -51,16 +51,16 @@ export async function getSpeechToken(): Promise<SpeechToken | undefined> {
     // tokens must be passed verbatim, so keep endpoint empty for key-based auth.
     // Identity (AAD) tokens must include an endpoint so clients can format
     // `aad#<endpoint>#<token>` for the Speech SDK.
-    if (key.toLowerCase() === IdentityApiKey && !endpoint) {
-        debugError("identity-based speech tokens require SPEECH_SDK_ENDPOINT to be set");
-        return undefined;
-    }
-
     const endpoint =
         key.toLowerCase() === IdentityApiKey
             ? (process.env["SPEECH_SDK_ENDPOINT"] ?? "")
             : "";
-
+    if (key.toLowerCase() === IdentityApiKey && !endpoint) {
+        debugError(
+            "identity-based speech tokens require SPEECH_SDK_ENDPOINT to be set",
+        );
+        return undefined;
+    }
     try {
         let token: string;
         if (key.toLowerCase() === IdentityApiKey) {
