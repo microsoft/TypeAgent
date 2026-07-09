@@ -50,6 +50,13 @@ let paramVault = undefined;
 let paramSecret = undefined;
 let paramCommit = true;
 let paramAuthOnly = false;
+// Feed auth mechanism (default "azureauth"):
+//   azureauth    — tokenHelper using the azureauth CLI; an Entra ID token for
+//                  Azure DevOps, cached & silently refreshed via the OS broker
+//                  (WAM). No PAT stored, no rotation, CAE-aware.
+//   pat          — mint a rotating Azure DevOps PAT; Basic auth in ~/.npmrc.
+//   token-helper — az-backed tokenHelper (CAE-fragile; needs `az login`).
+let paramAuthMode = process.env.TYPEAGENT_NPM_AUTH ?? "azureauth";
 
 // --- identity (mirrors getKeys.mjs) --------------------------------------
 
@@ -106,6 +113,16 @@ async function getAzureCredential() {
     }
     printIdentity(token.token);
     return defaultCred;
+}
+
+// Cache the credential so we don't re-run the auth chain (or prompt twice) when
+// both the Key Vault pull and the PAT mint need a token in the same run.
+let cachedCredential;
+async function getCredential() {
+    if (!cachedCredential) {
+        cachedCredential = await getAzureCredential();
+    }
+    return cachedCredential;
 }
 
 // --- npmrc helpers -------------------------------------------------------
@@ -180,6 +197,173 @@ function upsertTokenHelper(nerfDart, helperPath) {
     fs.writeFileSync(userNpmrcPath, lines.join("\n") + "\n");
 }
 
+// Parse the Azure DevOps org and feed name from an npm registry URL. Supports
+// project-scoped and org-scoped feeds on both the modern and legacy hosts:
+//   https://pkgs.dev.azure.com/{org}/{project}/_packaging/{feed}/npm/registry/
+//   https://pkgs.dev.azure.com/{org}/_packaging/{feed}/npm/registry/
+//   https://{org}.pkgs.visualstudio.com/_packaging/{feed}/npm/registry/
+function parseAdoRegistry(registry) {
+    const u = new URL(registry);
+    const feed = u.pathname.match(/\/_packaging\/([^/]+)\//)?.[1];
+    let org;
+    const legacy = u.hostname.match(/^([^.]+)\.pkgs\.visualstudio\.com$/i);
+    if (legacy) {
+        org = legacy[1];
+    } else if (/^pkgs\.dev\.azure\.com$/i.test(u.hostname)) {
+        org = u.pathname.split("/").filter(Boolean)[0];
+    }
+    if (!org || !feed) {
+        throw new Error(
+            `Could not parse Azure DevOps org/feed from registry: ${registry}`,
+        );
+    }
+    return { org, feed };
+}
+
+// Mint an Azure DevOps Personal Access Token scoped to Packaging (read) via the
+// PATs REST API, authenticating with an AAD bearer token from `credential`.
+// Returns { token, validTo, authorizationId }. Never logs the token value.
+async function createFeedPat(credential, org, feed) {
+    const adoResource =
+        process.env.TYPEAGENT_ADO_RESOURCE ?? config.adoResource;
+    const at = await credential.getToken(`${adoResource}/.default`);
+    if (!at?.token) {
+        throw new Error("Could not acquire an Azure DevOps access token.");
+    }
+    const days = Number(process.env.TYPEAGENT_PAT_DAYS ?? config.patDays ?? 90);
+    const validTo = new Date(
+        Date.now() + days * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const url = `https://vssps.dev.azure.com/${encodeURIComponent(
+        org,
+    )}/_apis/tokens/pats?api-version=7.1-preview.1`;
+    const res = await fetch(url, {
+        method: "POST",
+        headers: {
+            authorization: `Bearer ${at.token}`,
+            "content-type": "application/json",
+        },
+        body: JSON.stringify({
+            displayName: `${feed} npm (getNPMRC ${new Date()
+                .toISOString()
+                .slice(0, 10)})`,
+            scope: "vso.packaging",
+            validTo,
+            allOrgs: false,
+        }),
+    });
+    const body = await res.text();
+    if (res.status === 401) {
+        throw new Error(
+            "Azure DevOps returned 401 while creating the PAT (token revoked or insufficient claims).",
+        );
+    }
+    if (!res.ok) {
+        throw new Error(
+            `PAT creation failed: HTTP ${res.status} ${res.statusText}. ${body.slice(0, 300)}`,
+        );
+    }
+    let data;
+    try {
+        data = JSON.parse(body);
+    } catch {
+        throw new Error(
+            `PAT API returned a non-JSON response (wrong tenant?): ${body.slice(0, 200)}`,
+        );
+    }
+    const token = data?.patToken?.token;
+    // Azure DevOps returns patTokenError: "none" on SUCCESS — only a value other
+    // than "none" is an actual error (e.g. a policy denial).
+    const patErr = data?.patTokenError;
+    if (patErr && patErr !== "none") {
+        throw new Error(
+            `PAT creation was denied (patTokenError=${patErr}). Your organization may restrict PAT creation — fall back to --auth token-helper.`,
+        );
+    }
+    if (!token) {
+        throw new Error(
+            `PAT API returned no token and no error (unexpected response): ${body.slice(0, 200)}`,
+        );
+    }
+    return {
+        token,
+        validTo: data.patToken?.validTo ?? validTo,
+        authorizationId: data.patToken?.authorizationId,
+    };
+}
+
+// Best-effort: revoke previously getNPMRC-created PATs for this feed (matched by
+// display-name prefix) except the one we just created, so rotation and any
+// earlier buggy runs don't leave orphaned tokens behind. Never throws.
+async function revokeOldFeedPats(credential, org, feed, keepAuthorizationId) {
+    const adoResource =
+        process.env.TYPEAGENT_ADO_RESOURCE ?? config.adoResource;
+    const prefix = `${feed} npm (getNPMRC`;
+    const base = `https://vssps.dev.azure.com/${encodeURIComponent(
+        org,
+    )}/_apis/tokens/pats?api-version=7.1-preview.1`;
+    try {
+        const at = await credential.getToken(`${adoResource}/.default`);
+        if (!at?.token) return 0;
+        const auth = { authorization: `Bearer ${at.token}` };
+        const res = await fetch(base, { headers: auth });
+        if (!res.ok) return 0;
+        const data = await res.json();
+        const pats = Array.isArray(data?.patTokens) ? data.patTokens : [];
+        let revoked = 0;
+        for (const p of pats) {
+            if (
+                p?.authorizationId &&
+                p.authorizationId !== keepAuthorizationId &&
+                typeof p.displayName === "string" &&
+                p.displayName.startsWith(prefix)
+            ) {
+                const del = await fetch(
+                    `${base}&authorizationId=${encodeURIComponent(
+                        p.authorizationId,
+                    )}`,
+                    { method: "DELETE", headers: auth },
+                ).catch(() => undefined);
+                if (del?.ok) revoked++;
+            }
+        }
+        return revoked;
+    } catch {
+        return 0; // best-effort
+    }
+}
+
+// Write PAT Basic-auth lines for the feed nerf-dart into ~/.npmrc, replacing any
+// prior auth entries (tokenHelper / _authToken / username / _password / email)
+// for the same registry. `_password` holds the base64-encoded PAT, per Azure
+// DevOps' npm convention.
+function upsertFeedBasicAuth(nerfDart, org, pat) {
+    const b64 = Buffer.from(pat, "utf8").toString("base64");
+    const entries = [
+        `${nerfDart}:username=${org}`,
+        `${nerfDart}:_password=${b64}`,
+        `${nerfDart}:email=npm-requires-email-not-used@example.com`,
+    ];
+    let lines = fs.existsSync(userNpmrcPath)
+        ? fs.readFileSync(userNpmrcPath, "utf8").split(/\r?\n/)
+        : [];
+    const esc = nerfDart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const stale = new RegExp(
+        `^\\s*${esc}:(?:_authToken|_auth|tokenHelper|username|_password|email)\\s*=`,
+    );
+    lines = lines.filter((l) => !stale.test(l));
+    while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
+    lines.push(...entries);
+    fs.writeFileSync(userNpmrcPath, lines.join("\n") + "\n");
+    if (process.platform !== "win32") {
+        try {
+            fs.chmodSync(userNpmrcPath, 0o600);
+        } catch {
+            // best-effort hardening; ignore where unsupported
+        }
+    }
+}
+
 // Quick, non-fatal check that the Azure CLI is available and signed in — the
 // feed tokenHelper depends on it at pnpm-install time.
 async function hasAzLogin() {
@@ -189,6 +373,74 @@ async function hasAzLogin() {
             stdio: "ignore",
             shell: process.platform === "win32",
         });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// True if the azureauth CLI (Microsoft's MSAL/WAM auth helper) is available.
+async function hasAzureAuth() {
+    try {
+        const { execFileSync } = await import("node:child_process");
+        execFileSync("azureauth", ["--version"], {
+            stdio: "ignore",
+            shell: process.platform === "win32",
+        });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// Write a tokenHelper that prints an Azure DevOps Entra token from azureauth.
+// azureauth caches and silently refreshes via the OS broker (WAM on Windows) and
+// answers CAE claims challenges, so no PAT is stored and there is no periodic
+// rotation. Returns the helper's absolute path (forward slashes).
+function writeAzureAuthTokenHelper() {
+    fs.mkdirSync(typeagentDir, { recursive: true });
+    let helperPath;
+    if (process.platform === "win32") {
+        helperPath = path.join(typeagentDir, "npmrc-azureauth-helper.cmd");
+        fs.writeFileSync(
+            helperPath,
+            `@echo off\r\nazureauth ado token --output token --mode broker --prompt-hint "typeagent-feed npm (pnpm)"\r\n`,
+        );
+    } else {
+        helperPath = path.join(typeagentDir, "npmrc-azureauth-helper.sh");
+        fs.writeFileSync(
+            helperPath,
+            `#!/bin/sh\nexport PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$PATH"\nexec azureauth ado token --output token --prompt-hint "typeagent-feed npm (pnpm)"\n`,
+        );
+        fs.chmodSync(helperPath, 0o755);
+    }
+    return helperPath.replace(/\\/g, "/");
+}
+
+// Run azureauth once (default broker→web mode) to sign in / warm the token cache
+// so the broker-only helper resolves silently during `pnpm install`. Returns
+// true on success. Never logs the token.
+async function primeAzureAuth() {
+    try {
+        const { execFileSync } = await import("node:child_process");
+        // NB: no spaces in the prompt-hint — with shell:true on Windows,
+        // execFileSync does not quote args, so a spaced value would be split.
+        execFileSync(
+            "azureauth",
+            [
+                "ado",
+                "token",
+                "--output",
+                "token",
+                "--prompt-hint",
+                "typeagent-feed-npm-setup",
+            ],
+            {
+                stdio: ["inherit", "ignore", "inherit"],
+                shell: process.platform === "win32",
+                timeout: 15 * 60 * 1000,
+            },
+        );
         return true;
     } catch {
         return false;
@@ -217,7 +469,7 @@ async function pull() {
         console.log(
             `Pulling ${chalk.cyanBright(secret)} from ${chalk.cyanBright(vault)} key vault...`,
         );
-        const credential = await getAzureCredential();
+        const credential = await getCredential();
         const client = new SecretClient(
             `https://${vault}.vault.azure.net`,
             credential,
@@ -258,8 +510,9 @@ async function pull() {
         }
     }
 
-    // Feed auth: install a pnpm tokenHelper that mints a fresh Azure DevOps
-    // token on demand (auto-refreshing) instead of a static, short-lived token.
+    // Feed auth (default 'azureauth'): install a tokenHelper backed by the
+    // azureauth CLI (Entra token, broker-cached, no PAT). 'pat' mints a rotating
+    // PAT (Basic auth); 'token-helper' uses an az-backed tokenHelper.
     const registry = parseRegistry(npmrcContent);
     if (!registry) {
         console.warn(
@@ -269,9 +522,7 @@ async function pull() {
     }
     if (!/^https:\/\//i.test(registry)) {
         console.error(
-            chalk.red(
-                `Registry must be https:// for tokenHelper auth: ${registry}`,
-            ),
+            chalk.red(`Registry must be https:// for feed auth: ${registry}`),
         );
         process.exitCode = 1;
         return;
@@ -279,25 +530,146 @@ async function pull() {
     const nerfDart = registryToNerfDart(registry);
     if (!paramCommit) {
         console.log(
-            `[dry-run] Would install a feed tokenHelper for ${chalk.cyanBright(registry)}.`,
+            `[dry-run] Would install feed auth (${paramAuthMode}) for ${chalk.cyanBright(registry)}.`,
         );
         return;
     }
-    const helperPath = writeTokenHelperScript();
-    upsertTokenHelper(nerfDart, helperPath);
+
+    if (paramAuthMode === "azureauth") {
+        if (!(await hasAzureAuth())) {
+            console.error(
+                chalk.red(
+                    "azureauth CLI not found. Install it (https://aka.ms/azureauth), or use\n" +
+                        "another mode: --auth pat  or  --auth token-helper.",
+                ),
+            );
+            process.exitCode = 1;
+            return;
+        }
+        const helperPath = writeAzureAuthTokenHelper();
+        upsertTokenHelper(nerfDart, helperPath);
+        console.log(
+            chalk.green(
+                `Feed azureauth tokenHelper installed in ${chalk.cyanBright(userNpmrcPath)} (no PAT; Entra token auto-refreshed via the OS broker).`,
+            ),
+        );
+        if (await primeAzureAuth()) {
+            console.log(
+                chalk.green(
+                    "Verified: azureauth returned an Azure DevOps token.",
+                ),
+            );
+        } else {
+            console.warn(
+                chalk.yellowBright(
+                    "Could not get a token non-interactively just now — the first `pnpm install`\n" +
+                        "may prompt once via the OS broker, then cache silently.",
+                ),
+            );
+        }
+        // Feed auth no longer uses a PAT: revoke any leftover getNPMRC-created
+        // PATs (best-effort). Their ~/.npmrc lines were already replaced above.
+        try {
+            const { org, feed } = parseAdoRegistry(registry);
+            const revoked = await revokeOldFeedPats(
+                await getCredential(),
+                org,
+                feed,
+                null,
+            );
+            if (revoked > 0) {
+                console.log(
+                    chalk.gray(
+                        `Revoked ${revoked} leftover getNPMRC PAT(s) for this feed.`,
+                    ),
+                );
+            }
+        } catch {
+            // best-effort cleanup; ignore
+        }
+        return;
+    }
+
+    if (paramAuthMode === "token-helper") {
+        const helperPath = writeTokenHelperScript();
+        upsertTokenHelper(nerfDart, helperPath);
+        console.log(
+            chalk.green(
+                `Feed tokenHelper installed in ${chalk.cyanBright(userNpmrcPath)} (auto-refreshes via az).`,
+            ),
+        );
+        if (!(await hasAzLogin())) {
+            console.warn(
+                chalk.yellowBright(
+                    "\nWARNING: `az` is not signed in (or not installed). Run `az login` so the\n" +
+                        "feed tokenHelper can mint tokens — otherwise `pnpm install` will 401.",
+                ),
+            );
+        }
+        return;
+    }
+
+    if (paramAuthMode !== "pat") {
+        console.error(
+            chalk.red(
+                `Unknown --auth mode '${paramAuthMode}'. Use 'azureauth', 'pat', or 'token-helper'.`,
+            ),
+        );
+        process.exitCode = 1;
+        return;
+    }
+
+    // PAT mode (default): mint a rotating Azure DevOps Personal Access Token and
+    // write Basic auth. Unlike an AAD access token, a PAT is not revoked
+    // mid-life by Continuous Access Evaluation, so `pnpm install` keeps working
+    // until the PAT expires — rotate by re-running this script.
+    const { org, feed } = parseAdoRegistry(registry);
+    let pat;
+    try {
+        const credential = await getCredential();
+        pat = await createFeedPat(credential, org, feed);
+    } catch (e) {
+        console.error(
+            chalk.red(`Failed to mint feed PAT: ${e?.message ?? String(e)}`),
+        );
+        console.log(
+            chalk.yellow(
+                "\nHints:\n" +
+                    "  • If your session was revoked (CAE) or you are not signed in, run `az login` and retry.\n" +
+                    "  • If your organization blocks PAT creation, use the helper instead:\n" +
+                    "      npm run getNPMRC -- --auth-only --auth token-helper",
+            ),
+        );
+        process.exitCode = 1;
+        return;
+    }
+    upsertFeedBasicAuth(nerfDart, org, pat.token);
+    const validUntil = pat.validTo
+        ? new Date(pat.validTo).toLocaleString()
+        : "the configured lifetime";
     console.log(
         chalk.green(
-            `Feed tokenHelper installed in ${chalk.cyanBright(userNpmrcPath)} (auto-refreshes via az).`,
+            `Feed PAT installed in ${chalk.cyanBright(userNpmrcPath)} (valid until ${validUntil}).`,
         ),
     );
-    if (!(await hasAzLogin())) {
-        console.warn(
-            chalk.yellowBright(
-                "\nWARNING: `az` is not signed in (or not installed). Run `az login` so the\n" +
-                    "feed tokenHelper can mint tokens — otherwise `pnpm install` will 401.",
+    const revoked = await revokeOldFeedPats(
+        await getCredential(),
+        org,
+        feed,
+        pat.authorizationId,
+    );
+    if (revoked > 0) {
+        console.log(
+            chalk.gray(
+                `Revoked ${revoked} older getNPMRC PAT(s) for this feed.`,
             ),
         );
     }
+    console.log(
+        chalk.gray(
+            "Re-run `npm run getNPMRC` before it expires to rotate the PAT.",
+        ),
+    );
 }
 
 async function push() {
@@ -369,14 +741,22 @@ ${chalk.bold("Commands:")}
   help    Show this help
 
 ${chalk.bold("Options:")}
-  --auth-only   Skip the Key Vault download; just (re)install the feed tokenHelper
+  --auth <mode> Feed auth: 'azureauth' (default), 'pat', or 'token-helper'
+  --auth-only   Skip the Key Vault download; just (re)install feed auth
   --vault <n>   Key Vault name (default: ${config.vault})
   --secret <n>  Secret name (default: ${config.secret})
   --commit      Write changes (default)
   --dry-run     Preview without writing
 
-Feed auth uses a pnpm tokenHelper backed by the Azure CLI — run 'az login' once
-and tokens refresh automatically.
+Feed auth modes:
+  azureauth (default) — tokenHelper using the azureauth CLI. Acquires an Entra ID
+      token for Azure DevOps, cached and silently refreshed via the OS broker
+      (WAM). No PAT stored, no rotation, CAE handled. Requires azureauth
+      (https://aka.ms/azureauth).
+  pat — mint a rotating Azure DevOps PAT (Packaging read), Basic auth in
+      ~/.npmrc. Org policy may cap its lifetime; re-run to rotate.
+  token-helper — az-backed tokenHelper; auto-refreshes but is CAE-fragile and
+      needs an interactive 'az login' when the session is revoked.
 `);
 }
 
@@ -399,6 +779,15 @@ const commands = ["push", "pull", "help"];
             paramSecret = process.argv[++i];
             if (paramSecret === undefined) {
                 throw new Error("Missing value for --secret");
+            }
+            continue;
+        }
+        if (arg === "--auth") {
+            paramAuthMode = process.argv[++i];
+            if (paramAuthMode === undefined) {
+                throw new Error(
+                    "Missing value for --auth (pat | token-helper)",
+                );
             }
             continue;
         }
