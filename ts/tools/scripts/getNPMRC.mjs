@@ -172,7 +172,7 @@ function upsertTokenHelper(nerfDart, helperPath) {
         : [];
     const esc = nerfDart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const stale = new RegExp(
-        `^\\s*${esc}:(?:_authToken|tokenHelper|username|_password|email)\\s*=`,
+        `^\\s*${esc}:(?:_authToken|_auth|tokenHelper|username|_password|email)\\s*=`,
     );
     lines = lines.filter((l) => !stale.test(l));
     while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
