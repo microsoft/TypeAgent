@@ -320,7 +320,7 @@ export function createInstallSourceRegistry(
             // an explicit --source path would resolve against the server's own
             // filesystem; reject it rather than honor it.
             throw new Error(
-                `source '${sourceName}' is not available on this host`,
+                `${describeSource(sourceName)} is not available on this host`,
             );
         }
         return [entry.source];
@@ -418,6 +418,15 @@ export function createInstallSourceRegistry(
         return out;
     }
 
+    // "<kind> source '<name>'" for user-facing messages (e.g. "catalog source
+    // 'workspace'"); falls back to just the name if the source is unknown.
+    function describeSource(name: string): string {
+        const kind = entries.get(name)?.config.kind;
+        return kind !== undefined
+            ? `${kind} source '${name}'`
+            : `source '${name}'`;
+    }
+
     // Derive the installed dispatcher name for a one-argument install from the
     // winning candidate: the candidate's own declared default name, backfilled
     // from the resolved path's package.json for a phase-2 path match. A missing
@@ -442,16 +451,16 @@ export function createInstallSourceRegistry(
         if (candidate.packageName !== undefined) {
             const pkg = candidate.packageName;
             throw new Error(
-                `'${pkg}' has no default agent name. Use '@package install ${pkg} <name>'.`,
+                `Package '${pkg}' from ${describeSource(candidate.source)} has no default agent name. Use '@package install ${pkg} <name>'.`,
             );
         }
         if (candidate.path !== undefined) {
             throw new Error(
-                `'${target}' resolved as a path, but no default agent name could be discovered. Use '@package install ${target} <name>'.`,
+                `Path '${target}' from ${describeSource(candidate.source)} has no default agent name. Use '@package install ${target} <name>'.`,
             );
         }
         throw new Error(
-            `'${target}' has no default agent name. Use '@package install ${target} <name>'.`,
+            `'${target}' from ${describeSource(candidate.source)} has no default agent name. Use '@package install ${target} <name>'.`,
         );
     }
 
@@ -476,7 +485,9 @@ export function createInstallSourceRegistry(
                   );
         if (match === undefined) {
             throw sourceName !== undefined
-                ? new Error(`'${target}' not found in source '${sourceName}'`)
+                ? new Error(
+                      `'${target}' not found in ${describeSource(sourceName)}`,
+                  )
                 : new Error(
                       `no source could resolve '${target}'. order: [${resolutionSources()
                           .map((s) => s.name)

@@ -68,6 +68,7 @@ export interface InstalledAgentSourceApi {
     ): Promise<{
         name: string; // installed dispatcher name (derived or explicit)
         source: string;
+        sourceKind?: string; // path / catalog / feed, for the success message
         matchedByName: boolean; // which phase won
         packageName?: string; // user-facing package identity when known
         path?: string; // present for a path match (for the match-kind line)
@@ -430,7 +431,13 @@ class InstallCommandHandler implements CommandHandler {
             result.packageName !== undefined
                 ? ` from package '${result.packageName}'`
                 : "";
-        let message = `Agent '${result.name}' installed${pkgPart} via source '${result.source}'; it will load in each session shortly.`;
+        // "<kind> source '<name>'" (e.g. "catalog source 'workspace'"), or just
+        // the name if the kind is unknown.
+        const sourceLabel =
+            result.sourceKind !== undefined
+                ? `${result.sourceKind} source '${result.source}'`
+                : `source '${result.source}'`;
+        let message = `Agent '${result.name}' installed${pkgPart} via ${sourceLabel}; it will load in each session shortly.`;
         if (result.ref !== undefined && result.ref !== result.packageName) {
             message += ` Durable ref: ${result.ref}.`;
         }

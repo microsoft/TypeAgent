@@ -147,7 +147,7 @@ describe("InstallSourceRegistry resolution", () => {
     it("explicit --source non-match is a hard error", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
         await expect(registry.resolve("nope", undefined, "a")).rejects.toThrow(
-            /not found in source 'a'/,
+            /not found in catalog source 'a'/,
         );
     });
 
@@ -287,7 +287,7 @@ describe("InstallSourceRegistry one-argument name resolution", () => {
             name: "@x/bare",
         });
         await expect(registry.resolve("./bare")).rejects.toThrow(
-            /resolved as a path, but no default agent name.*@package install \.\/bare <name>/s,
+            /Path '\.\/bare' from path source 'path' has no default agent name.*@package install \.\/bare <name>/s,
         );
     });
 
@@ -312,7 +312,7 @@ describe("InstallSourceRegistry one-argument name resolution", () => {
             { installDir: tmpInstallDir() },
         );
         await expect(registry.resolve("echo")).rejects.toThrow(
-            "'echo' has no default agent name. Use '@package install echo <name>'.",
+            "Package 'echo' from catalog source 'workspace' has no default agent name. Use '@package install echo <name>'.",
         );
     });
 

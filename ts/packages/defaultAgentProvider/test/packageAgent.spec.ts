@@ -529,6 +529,7 @@ describe("@package install one-argument, dry-run, and refresh", () => {
                 return {
                     name: "weather",
                     source: "typeagent",
+                    sourceKind: "feed",
                     matchedByName: true,
                     packageName: "@typeagent/weather-agent",
                 };
@@ -554,9 +555,9 @@ describe("@package install one-argument, dry-run, and refresh", () => {
         ]);
         const text = output();
         // The install confirmation and the match clarification are separate
-        // messages.
+        // messages. The confirmation names the source kind.
         expect(text).toContain(
-            "Agent 'weather' installed from package '@typeagent/weather-agent' via source 'typeagent';",
+            "Agent 'weather' installed from package '@typeagent/weather-agent' via feed source 'typeagent';",
         );
         expect(text).toContain("Matched as default agent name 'weather'.");
     });

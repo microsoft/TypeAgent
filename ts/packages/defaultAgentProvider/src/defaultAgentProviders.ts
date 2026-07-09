@@ -906,6 +906,7 @@ export function createDefaultInstalledAgentSource(
                 const result: {
                     name: string;
                     source: string;
+                    sourceKind?: string;
                     matchedByName: boolean;
                     packageName?: string;
                     path?: string;
@@ -916,6 +917,12 @@ export function createDefaultInstalledAgentSource(
                     source: record.source,
                     matchedByName: resolved.matchedByName,
                 };
+                // The source kind (path / catalog / feed) for user-facing
+                // messages; the built source knows its own kind.
+                const sourceKind = registry.get(record.source)?.kind;
+                if (sourceKind !== undefined) {
+                    result.sourceKind = sourceKind;
+                }
                 if (resolved.packageName !== undefined) {
                     result.packageName = resolved.packageName;
                 }
