@@ -68,7 +68,8 @@ function openDeleteMenu(
     menu.className = "chat-feedback-menu chat-delete-menu";
 
     const dismiss = (ev: MouseEvent) => {
-        if (!menu.contains(ev.target as Node) && ev.target !== anchor) {
+        const target = ev.target as Node;
+        if (!menu.contains(target) && !anchor.contains(target)) {
             menu.remove();
             document.removeEventListener("mousedown", dismiss, true);
         }
