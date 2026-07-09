@@ -133,7 +133,15 @@ function writeTokenHelperScript() {
     fs.mkdirSync(typeagentDir, { recursive: true });
     const adoResource =
         process.env.TYPEAGENT_ADO_RESOURCE ?? config.adoResource;
-    const azCmd = `az account get-access-token --resource ${adoResource} --query accessToken --output tsv --only-show-errors`;
+    if (
+        typeof adoResource !== "string" ||
+        !/^[0-9A-Za-z-.:/]+$/.test(adoResource)
+    ) {
+        throw new Error(
+            `Invalid adoResource '${adoResource}'. Use a GUID / URL-safe resource id.`,
+        );
+    }
+    const azCmd = `az account get-access-token --resource "${adoResource}" --query accessToken --output tsv --only-show-errors`;
 
     let helperPath;
     if (process.platform === "win32") {
