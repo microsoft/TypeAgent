@@ -298,10 +298,13 @@ function handleRequestInteraction(
                     value,
                 };
             }
-        } catch {
-            // Aborted (resolved/cancelled by another client or server
-            // timeout) — nothing to send.
+        } catch (e) {
+            // Aborted (resolved/cancelled by another client or server timeout)
+            // — nothing to send.
             activeInteractions.delete(interaction.interactionId);
+            if (!ac.signal.aborted) {
+                console.error("[requestInteraction] failed", e);
+            }
             return;
         }
         if (ac.signal.aborted) {
