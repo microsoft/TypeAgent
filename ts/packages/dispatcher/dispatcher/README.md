@@ -344,19 +344,21 @@ Each event carries `kind` (detection point), `strategy`, `candidates[]` (with pe
 
 Runtime opt-in via `@config collision …` and ring-buffer inspection via `@collision events`:
 
-| Command                                                            | Effect                                                                                                                                                                   |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@config collision`                                                | Render the current collision config as an HTML status table.                                                                                                             |
-| `@config collision <point> detect [on\|off]`                       | Toggle a detection point (`static` / `grammarMatch` / `llmSelect` / `fuzzy`). Persisted to `data.json`.                                                                  |
-| `@config collision contextSelector detect [on\|off]`               | Toggle the context-weighted resolution tier. Other `contextSelector` knobs (windowTurns / decay / evidence gates / margin / abstainFallback) are `data.json` hand-edits. |
-| `@collision keywords <schema.action> [add\|remove\|list\|clear] …` | Inspect / tune per-action keyword vectors used by `contextSelector` (edits the `collision-keywords.json` sidecar).                                                       |
-| `@config collision <point> strategy <name>`                        | Set the resolution strategy (`first-match` / `score-rank` / `priority` / `user-clarify`; static uses `warn` / `error`).                                                  |
-| `@config collision priority [<list>]`                              | Set / show the comma-separated `priorityOrder` used by the `priority` strategy.                                                                                          |
-| `@config collision telemetry emit [on\|off]`                       | Toggle the ring-buffer + JSONL capture.                                                                                                                                  |
-| `@config collision telemetry debugLog [on\|off]`                   | Toggle the `typeagent:dispatcher:collision` debug log.                                                                                                                   |
-| `@config collision telemetry experimentId [<id>]`                  | Stamp every emitted event with this tag. Use to slice Cosmos queries per experiment.                                                                                     |
-| `@collision events [-n <N>] [-k <kind>]`                           | Show recent events from the in-memory ring buffer with kind / strategy badges and a ⚡ marker on rows where the chosen candidate diverged from `first-match`.            |
-| `@config log db [on\|off]`                                         | Toggle DocumentDB upload (gates remote sink — independent of the per-session local capture).                                                                             |
+| Command                                                            | Effect                                                                                                                                                                                                             |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@config collision`                                                | Render the current collision config as an HTML status table.                                                                                                                                                       |
+| `@config collision <point> detect [on\|off]`                       | Toggle a detection point (`static` / `grammarMatch` / `llmSelect` / `fuzzy`). Persisted to `data.json`.                                                                                                            |
+| `@config collision contextSelector detect [on\|off]`               | Toggle the context-weighted resolution tier. The numeric knobs are set via `@config collision contextSelector <field> <value>` (below); non-numeric settings like `abstainFallback` remain `data.json` hand-edits. |
+| `@config collision contextSelector <field> <value>`                | Set a numeric `contextSelector` knob: `windowTurns` / `decay` / `minUniqueTokens` / `minMass` / `margin` (each range-validated).                                                                                   |
+| `@collision keywords backfill [--llm] [--force] [<schema>…]`       | Generate / refresh the committed `<schema>.keywords.json` baseline files (§5 Source 1). Lexical by default; `--llm` runs the preferred distillation pass. Omit schemas to do every loaded agent.                   |
+| `@collision keywords <schema.action> [add\|remove\|list\|clear] …` | Inspect / tune per-action keyword vectors used by `contextSelector` (edits the `collision-keywords.json` sidecar).                                                                                                 |
+| `@config collision <point> strategy <name>`                        | Set the resolution strategy (`first-match` / `score-rank` / `priority` / `user-clarify`; static uses `warn` / `error`).                                                                                            |
+| `@config collision priority [<list>]`                              | Set / show the comma-separated `priorityOrder` used by the `priority` strategy.                                                                                                                                    |
+| `@config collision telemetry emit [on\|off]`                       | Toggle the ring-buffer + JSONL capture.                                                                                                                                                                            |
+| `@config collision telemetry debugLog [on\|off]`                   | Toggle the `typeagent:dispatcher:collision` debug log.                                                                                                                                                             |
+| `@config collision telemetry experimentId [<id>]`                  | Stamp every emitted event with this tag. Use to slice Cosmos queries per experiment.                                                                                                                               |
+| `@collision events [-n <N>] [-k <kind>]`                           | Show recent events from the in-memory ring buffer with kind / strategy badges and a ⚡ marker on rows where the chosen candidate diverged from `first-match`.                                                      |
+| `@config log db [on\|off]`                                         | Toggle DocumentDB upload (gates remote sink — independent of the per-session local capture).                                                                                                                       |
 
 Calibration knobs (`classifier` / `topN` / `scoreDeltaThreshold` / `scorer` / `similarityThreshold`) are intentionally not exposed via `@config collision` — they're long-tail tuning, not opt-in toggles, and the same `data.json` accepts hand edits when needed.
 
@@ -459,13 +461,13 @@ A deterministic, LLM-free resolution tier on the **grammarMatch** path that rank
 How it works, per collision (all steps deterministic):
 
 1. **Context vector** — a decayed keyword-frequency map of the recent conversation, built from a `contextSelector`-owned ring buffer of the last `windowTurns` user requests, each weighted by `decay^age` (history-only: the current request is excluded). Tokens are canonicalized and **plural-stemmed** (a conservative, deterministic stemmer so conversational "vampires"/"items" match singular schema keywords "vampire"/"item"). Sourced behind the `ConversationSignalSource` seam so it can later read knowPro topics/entities instead of raw tokens.
-2. **Candidate keywords** — each `(schema, action)`'s effective keyword vector = a derived lexical floor (mined from the live schema text) layered with `collision-keywords.json` sidecar overrides.
+2. **Candidate keywords** — each `(schema, action)`'s effective keyword vector = a **committed baseline** (the per-agent `<schema>.keywords.json`, §5 Source 1 — LLM-distilled or lexical), falling back to a live-mined **lexical floor** when no file is present, then layered with `collision-keywords.json` sidecar overrides.
 3. **Score** — `TfIdfScorer` sums, per candidate, `contextWeight × candidate-local-IDF` over the overlapping tokens (shared tokens cancel, unique tokens distinguish). Behind the `CollisionScorer` seam so a knowPro-entity or embedding scorer can replace it.
 4. **Decide** — resolve only when a coverage guard, an evidence gate (`minUniqueTokens` + `minMass`), and a clear-winner `margin` all pass; otherwise abstain. Biased toward abstaining.
 
 On a resolve it emits a `context-weight` telemetry event and a non-blocking affordance (`↪ routed to <agent> — recent topic …`). On abstain it emits a `context-weight` event noting the reason and, per `abstainFallback`, either defers to the configured grammar strategy (default) or escalates the request to LLM translation. Detection is independent of `grammarMatch.detect` — with `detect: false` everywhere, behavior is byte-identical to legacy first-match.
 
-**v1 scope (keyword source).** This ships the design's **deterministic lexical floor** (keywords mined from the live schema text) plus the **manual sidecar** override layer. The design's other keyword layers — a preferred **LLM-distilled** baseline and the **auto-derived** sidecar layers (misroute mining, learned-preference deltas) — are follow-ups; the index/sidecar layering already accommodates them without a shape change. The thresholds (`minMass` / `margin` / `minUniqueTokens`) ship as conservative defaults to be calibrated on fixtures.
+**Keyword sources.** The baseline is the **committed per-agent keyword file** (`<schema>.keywords.json`, §5 Source 1), authored by the `@collision keywords backfill` pass — the preferred producer is **LLM distillation**, with the **deterministic lexical floor** (keywords mined from the live schema text) as the fallback and as the guaranteed vector for any action lacking a file. On top sits the **manual sidecar** override layer. The remaining **auto-derived** sidecar layers (misroute mining, learned-preference deltas) are follow-ups; the index/sidecar layering already accommodates them without a shape change. The thresholds (`minMass` / `margin` / `minUniqueTokens`) ship as conservative defaults to be calibrated on fixtures.
 
 Tune the discriminative keywords for the handful of actions that actually collide:
 
@@ -475,6 +477,17 @@ Tune the discriminative keywords for the handful of actions that actually collid
 @collision keywords excel.addRow list                       # show derived + overrides, merged
 @collision keywords excel.addRow clear                      # revert to derived-only
 ```
+
+Generate or refresh the committed baseline vectors — the `<schema>.keywords.json` files that ship beside each agent's schema — with the backfill command:
+
+```
+@collision keywords backfill --llm                # regenerate every loaded agent via LLM distillation (preferred)
+@collision keywords backfill --llm list calendar  # only these schemas
+@collision keywords backfill                      # deterministic lexical floor; preserves existing --llm files
+@collision keywords backfill --force list         # let a lexical run overwrite an existing --llm file
+```
+
+Each file is written beside its agent's schema source (`packages/agents/<name>/src/<schema>.keywords.json`) and the in-memory index is invalidated, so refreshed vectors take effect on the next collision without a restart. `--llm` always overwrites; a lexical run preserves existing LLM-distilled files unless `--force`. Inline/dynamic agents (echo, MCP) with no on-disk `.ts` source are skipped. Commit the regenerated files — they are checked-in artifacts, not build output.
 
 ### MultipleAction interaction
 

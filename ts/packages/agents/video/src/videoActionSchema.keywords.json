@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "schema": "video",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T09:38:02.231Z",
+  "sourceHash": "d1bnbOCf+DUeg1WDbreB5cNSFmTbFbBJoCG00UAr7lI=",
+  "actions": {
+    "createVideoAction": [
+      "video",
+      "description",
+      "caption",
+      "attachment",
+      "duration",
+      "media",
+      "clip",
+      "footage",
+      "visual",
+      "content",
+      "file",
+      "second",
+      "multimedia",
+      "creation",
+      "production",
+      "request"
+    ]
+  }
+}
