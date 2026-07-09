@@ -65,20 +65,24 @@ Because the marker is attached to the code it moves with it under reformatting
 non-empty, non-placeholder **reason is required** — an invalid marker is ignored
 and warned about, so it can't silently grandfather debt.
 
-| Tool | Marker | Placement |
-| --- | --- | --- |
-| `code-complexity` | `// code-complexity-allow: <reason>` | the function's declaration line, or a comment/decorator line directly above it |
-| `code-lint` | `// code-lint-allow <rule>[,<rule>]: <reason>` | trailing a line (applies to it) or standalone above it (next line); the **rule id is required** |
-| `code-debt` | `// code-debt-allow[(#issue)]: <reason>` | above (or trailing) the focused/skipped test; an issue ref is expected for temporary skips |
+| Tool              | Marker                                         | Placement                                                                                       |
+| ----------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `code-complexity` | `// code-complexity-allow: <reason>`           | the function's declaration line, or a comment/decorator line directly above it                  |
+| `code-lint`       | `// code-lint-allow <rule>[,<rule>]: <reason>` | trailing a line (applies to it) or standalone above it (next line); the **rule id is required** |
+| `code-debt`       | `// code-debt-allow[(#issue)]: <reason>`       | above (or trailing) the focused/skipped test; an issue ref is expected for temporary skips      |
 
 ```ts
 // code-complexity-allow: hand-written arg marshaller, inherently branchy
-function buildArgs(/* … */) { /* … */ }
+function buildArgs(/* … */) {
+  /* … */
+}
 
 const raw = payload as any; // code-lint-allow no-explicit-any: third-party shape
 
 // code-debt-allow(#1234): flaky on the CI windows runner, re-enable after fix
-it.skip("uploads large files", () => { /* … */ });
+it.skip("uploads large files", () => {
+  /* … */
+});
 ```
 
 **`--exceptions-file <path>` (deprecated).** The ratchet/gate tools also accept a
@@ -126,12 +130,12 @@ so only what the PR actually touches is judged. Two flavors:
 - **Gate** (`--gate`) — _zero-tolerance_: the thing must be absent regardless of
   the baseline.
 
-| #   | Step (tool)                                 | Type        | Fails the PR when it…                                                                                                                                                                                                                                            |
-| --- | ------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Complexity ratchet** (`code-complexity`)  | ratchet     | leaves a changed file with more functions over the cyclomatic (25) or cognitive (30) budget than it had at the base; **any** function in a brand-new file over 25/30 also fails. Pre-existing offenders are grandfathered by the stateless HEAD-vs-base diff; a `// code-complexity-allow` marker covers the rare rename-miss.                   |
-| 2   | **Lint ratchet** (`code-lint`)              | ratchet     | adds net ESLint violations (`no-explicit-any`, `no-console`, `no-unused-vars`, `no-var`, `prefer-const`, `no-debugger`) in a changed file — syntactic rules only, so it's fast. `no-var`/`prefer-const` are effectively zero-tolerance (baseline is already 0).  |
-| 3   | **Circular dependency ratchet** (`code-circular`) | ratchet | introduces a runtime import cycle absent at the base. A whole-graph property, so it builds the cycle set for HEAD **and** the merge base (checked into a throwaway git worktree) — madge runs twice, ~80s, the heaviest step.                                   |
-| 4   | **Test debt gate** (`code-debt`)            | **gate**    | contains **any** focused test (`.only`/`.only.each`/`fit`/`fdescribe`), or newly skips a test (`.skip`/`.skip.each`/`xit`/`xdescribe`) in a changed file. TODO/FIXME/`@deprecated` are reported by this tool but not gated.                                       |
+| #   | Step (tool)                                       | Type     | Fails the PR when it…                                                                                                                                                                                                                                                                                                          |
+| --- | ------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | **Complexity ratchet** (`code-complexity`)        | ratchet  | leaves a changed file with more functions over the cyclomatic (25) or cognitive (30) budget than it had at the base; **any** function in a brand-new file over 25/30 also fails. Pre-existing offenders are grandfathered by the stateless HEAD-vs-base diff; a `// code-complexity-allow` marker covers the rare rename-miss. |
+| 2   | **Lint ratchet** (`code-lint`)                    | ratchet  | adds net ESLint violations (`no-explicit-any`, `no-console`, `no-unused-vars`, `no-var`, `prefer-const`, `no-debugger`) in a changed file — syntactic rules only, so it's fast. `no-var`/`prefer-const` are effectively zero-tolerance (baseline is already 0).                                                                |
+| 3   | **Circular dependency ratchet** (`code-circular`) | ratchet  | introduces a runtime import cycle absent at the base. A whole-graph property, so it builds the cycle set for HEAD **and** the merge base (checked into a throwaway git worktree) — madge runs twice, ~80s, the heaviest step.                                                                                                  |
+| 4   | **Test debt gate** (`code-debt`)                  | **gate** | contains **any** focused test (`.only`/`.only.each`/`fit`/`fdescribe`), or newly skips a test (`.skip`/`.skip.each`/`xit`/`xdescribe`) in a changed file. TODO/FIXME/`@deprecated` are reported by this tool but not gated.                                                                                                    |
 
 ### Reproduce a gate locally
 

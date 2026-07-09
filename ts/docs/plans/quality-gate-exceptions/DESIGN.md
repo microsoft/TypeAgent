@@ -11,21 +11,21 @@
 
 Three of the four CI gates record their baseline exceptions by **`file:line`**:
 
-| Tool | Exception key | Where |
-| --- | --- | --- |
-| `code-complexity` | `file:line` | `complexityReport.ts` → `functionExceptionKey()` |
-| `code-lint` | `file:line` | `lintReport.ts` → `exceptionKey()` |
-| `code-debt` | `file:line` | `debtMarkersReport.ts` → `exceptionKey()` |
-| `code-circular` | canonical cycle path set | `circularDepsReport.ts` → `loadCycleExceptionSet()` |
+| Tool              | Exception key            | Where                                               |
+| ----------------- | ------------------------ | --------------------------------------------------- |
+| `code-complexity` | `file:line`              | `complexityReport.ts` → `functionExceptionKey()`    |
+| `code-lint`       | `file:line`              | `lintReport.ts` → `exceptionKey()`                  |
+| `code-debt`       | `file:line`              | `debtMarkersReport.ts` → `exceptionKey()`           |
+| `code-circular`   | canonical cycle path set | `circularDepsReport.ts` → `loadCycleExceptionSet()` |
 
-A `file:line` key is **positional**: any edit *above* the offender — a Prettier
+A `file:line` key is **positional**: any edit _above_ the offender — a Prettier
 reflow, a new import, an added comment — shifts its line number, the key stops
 matching, the grandfathered debt looks brand-new, and the ratchet/gate fails
 spuriously. The committed `complexity-baseline-exception.json` (301 entries) is
 also a standing merge-conflict magnet and goes stale the moment anyone reformats.
 
-`code-circular` already avoids this: it keys on the *set of module paths in the
-cycle*, canonicalized rotation-invariantly — an intrinsic property of the code,
+`code-circular` already avoids this: it keys on the _set of module paths in the
+cycle_, canonicalized rotation-invariantly — an intrinsic property of the code,
 not its position. That is the model to generalize.
 
 ## Goal
@@ -51,9 +51,9 @@ decisions below.
 ## Background — why exceptions exist at all
 
 The ratchet is **count-based and stateless**: for each changed file it lints
-HEAD and the merge base and fails only on a *net increase* per rule
+HEAD and the merge base and fails only on a _net increase_ per rule
 (`lintReport.ts` → `runRatchet()`). Pre-existing debt is grandfathered for free
-because it exists on *both* sides and cancels out.
+because it exists on _both_ sides and cancels out.
 
 The exceptions file is therefore **not** the primary debt suppressor — the
 HEAD-vs-base diff is. Its one real job is to cover the case where **git's rename
@@ -62,7 +62,7 @@ its path, its violations aren't subtracted, and pre-existing debt looks "new."
 
 That framing matters: because exceptions are a narrow fallback, we are free to
 switch their identity key to anything stable — and inline markers handle the
-rename case *better than the JSON file does*, because a marker **moves with the
+rename case _better than the JSON file does_, because a marker **moves with the
 file** when it's relocated. There is nothing to re-point after a move.
 
 ## Proposal — inline suppression markers
@@ -87,7 +87,9 @@ code-<tool>-allow[ <qualifier>]: <reason>
 
 ```ts
 // code-complexity-allow: large arg-marshaller, tracked in #1234
-function buildArgs(/* … */) { /* … */ }
+function buildArgs(/* … */) {
+  /* … */
+}
 ```
 
 When the tool finds an over-budget function, it scans upward from the function's
@@ -108,13 +110,15 @@ suppression to that one rule (preferred).
 
 ```ts
 // code-debt-allow: platform-specific, re-enable after #1234
-it.skip("windows-only path", () => { /* … */ });
+it.skip("windows-only path", () => {
+  /* … */
+});
 ```
 
 The regex scanner already reads line context; it checks the marker line the same
 way it counts the marker.
 
-**`code-circular`** — a cycle is a *whole-graph* property with no single line, so
+**`code-circular`** — a cycle is a _whole-graph_ property with no single line, so
 this is the weak fit. Two options: (a) **keep the structural JSON key** (it's
 already reformatting-proof — no change needed), or (b) additionally honor a
 marker on the single **import edge that closes the cycle**:
@@ -128,17 +132,17 @@ edge marker as an optional convenience.
 
 ### Measure vs. gate — the critical semantic
 
-There are two *different* things a suppression can mean, and the suite must keep
+There are two _different_ things a suppression can mean, and the suite must keep
 them distinct:
 
-| Mechanism | Effect | Use |
-| --- | --- | --- |
-| Native `// eslint-disable-next-line <rule>` | Removes the message from **ESLint output entirely** → the offender vanishes from CSV/JSON/HTML **and** the gate. | Avoid for gate exceptions — it hides the metric and makes the baseline dishonest. |
-| Tool marker `// code-<tool>-allow: …` | Offender is **still measured and reported**; excluded **only from the gate/ratchet**. | **Preferred.** Keeps the number honest and the debt visible while unblocking the PR. |
+| Mechanism                                   | Effect                                                                                                           | Use                                                                                  |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Native `// eslint-disable-next-line <rule>` | Removes the message from **ESLint output entirely** → the offender vanishes from CSV/JSON/HTML **and** the gate. | Avoid for gate exceptions — it hides the metric and makes the baseline dishonest.    |
+| Tool marker `// code-<tool>-allow: …`       | Offender is **still measured and reported**; excluded **only from the gate/ratchet**.                            | **Preferred.** Keeps the number honest and the debt visible while unblocking the PR. |
 
 Today neither ESLint gate sets `linterOptions.noInlineConfig`, so
 `eslint-disable` directives are **already silently honored** — which means they
-already remove offenders from the *reports*, not just the gates. The proposal
+already remove offenders from the _reports_, not just the gates. The proposal
 makes the intended path explicit: the tool marker filters at the **ratchet
 stage** (after measurement), so a suppressed function still appears in
 `complexity-report/` with its real 179/232 numbers; it simply doesn't trip the
@@ -162,16 +166,16 @@ Restore it without committing a file:
 
 ## Inline vs. sidecar JSON — tradeoffs
 
-| | Inline markers | `file:line` JSON (today) |
-| --- | --- | --- |
-| Survives Prettier / line shifts | ✅ anchored to AST node | ❌ breaks immediately |
-| Survives file move / rename | ✅ moves with the file | ❌ needs re-pointing (its main purpose today) |
-| Reason visible in review & blame | ✅ next to the code | ⚠️ in a separate file |
-| Auto-deleted when code is deleted | ✅ | ❌ goes stale |
-| Merge-conflict surface | ✅ none central | ❌ 301-entry hotspot |
-| One place to audit all debt | ⚠️ needs `--list-suppressions` | ✅ inherent |
-| Touches production source | ❌ adds comments to code | ✅ code untouched |
-| Fits a whole-graph metric (circular) | ❌ no single line | ✅ natural |
+|                                      | Inline markers                 | `file:line` JSON (today)                      |
+| ------------------------------------ | ------------------------------ | --------------------------------------------- |
+| Survives Prettier / line shifts      | ✅ anchored to AST node        | ❌ breaks immediately                         |
+| Survives file move / rename          | ✅ moves with the file         | ❌ needs re-pointing (its main purpose today) |
+| Reason visible in review & blame     | ✅ next to the code            | ⚠️ in a separate file                         |
+| Auto-deleted when code is deleted    | ✅                             | ❌ goes stale                                 |
+| Merge-conflict surface               | ✅ none central                | ❌ 301-entry hotspot                          |
+| One place to audit all debt          | ⚠️ needs `--list-suppressions` | ✅ inherent                                   |
+| Touches production source            | ❌ adds comments to code       | ✅ code untouched                             |
+| Fits a whole-graph metric (circular) | ❌ no single line              | ✅ natural                                    |
 
 ## Recommendation
 
@@ -183,8 +187,8 @@ Restore it without committing a file:
    edge marker as a convenience.
 4. Add **`--list-suppressions`** and **unused-suppression reporting** to preserve
    auditability and prevent rot.
-5. **Leave native `eslint-disable` honored** (parity with real builds); do *not*
-   set `noInlineConfig: true` yet. Instead, *report* `eslint-disable` of gated
+5. **Leave native `eslint-disable` honored** (parity with real builds); do _not_
+   set `noInlineConfig: true` yet. Instead, _report_ `eslint-disable` of gated
    rules in changed files so it can't be a silent bypass (see Decisions §4).
 
 ## Migration
@@ -192,8 +196,8 @@ Restore it without committing a file:
 ### Decision — retire the JSON, don't bulk-migrate
 
 The **only committed exception data was `complexity-baseline-exception.json`
-(301 entries)** — the sole exception file CI passed (`build-ts.yml` → *Complexity
-ratchet*). The other three gates support `--exceptions-file` but carry no
+(301 entries)** — the sole exception file CI passed (`build-ts.yml` → _Complexity
+ratchet_). The other three gates support `--exceptions-file` but carry no
 committed data.
 
 The obvious plan was to convert all 301 entries into inline markers. We built and
@@ -201,7 +205,7 @@ ran that converter (299 functions across 206 files) — then **reverted it**,
 because it produced a 200+-file diff for almost no benefit:
 
 - The complexity ratchet is **stateless**: it lints each changed file at HEAD
-  *and* the merge base and fails only on a net increase. **Pre-existing debt is
+  _and_ the merge base and fails only on a net increase. **Pre-existing debt is
   already grandfathered by the diff** — a function over budget on both sides
   cancels out. The JSON's only extra job was covering git rename-misses, and that
   job was already unreliable because it keyed on line numbers (the very fragility
@@ -218,7 +222,7 @@ because it produced a 200+-file diff for almost no benefit:
   grandfathers pre-existing complexity debt purely via its stateless diff.
 - **Add inline-marker support to all three ESLint/scan gates** (done and
   validated end-to-end), but **do not bulk-insert markers**. A marker is added
-  *reactively*, one file at a time, only where actually needed — a rename-miss
+  _reactively_, one file at a time, only where actually needed — a rename-miss
   false positive, or a deliberate one-off grandfather — matching the lightweight
   / AI-fixable goal.
 - **Keep the JSON loaders as a deprecated fallback for one release** — passing
@@ -236,12 +240,12 @@ debt via its stateless diff.
 
 Resolved in favor of the **lightweight / AI-fixable** goal above — every
 suppression should be a single local edit an agent can make at the offending
-line, and nothing here should ever block a PR from *adding* one.
+line, and nothing here should ever block a PR from _adding_ one.
 
 1. **Reason required; issue ref optional.** Every marker needs a non-empty
    `<reason>` (enforce a minimum length; reject placeholders like `temp`/`fixme`).
-   An issue reference is *optional* in general but *expected for `code-debt`
-   skips*, since those are inherently temporary; support an optional parsed form
+   An issue reference is _optional_ in general but _expected for `code-debt`
+   skips_, since those are inherently temporary; support an optional parsed form
    `code-debt-allow(#1234): reason`. Mandating a tracked issue everywhere is
    rejected — it spawns dead "won't-fix" tickets for permanent-by-design cases (a
    lexer, generated code), couples us to one tracker, and adds a round-trip an
@@ -249,19 +253,19 @@ line, and nothing here should ever block a PR from *adding* one.
 2. **Report the suppression count; do not ratchet it.** Trend the number in
    reports and rely on unused-suppression reporting to prevent rot. A hard budget
    ratchet is rejected: it conflicts with the feature's purpose (suppressions
-   exist to *unblock* a PR), is awkward on a changed-files diff (the new marker
+   exist to _unblock_ a PR), is awkward on a changed-files diff (the new marker
    lives in the PR's own files, so it's always +1), and would force an agent to
    delete unrelated markers to "pay" for a needed one — the opposite of
    lightweight. If sprawl is ever observed, add a soft PR-comment delta first.
 3. **Require the rule qualifier on `code-lint` markers.** `code-lint-allow
-   <rule>: reason`, allowing a comma-separated list for the rare multi-rule line.
-   Scoping keeps the gate precise — a *new*, unrelated violation on the same line
+<rule>: reason`, allowing a comma-separated list for the rare multi-rule line.
+   Scoping keeps the gate precise — a _new_, unrelated violation on the same line
    still fails — and mirrors ESLint's own idiom. The small extra friction is
    trivially AI-fixable: the agent already knows the rule id it is suppressing.
 4. **Do not flip `noInlineConfig` (for now).** Leave native `eslint-disable`
    honored so the gate stays in parity with real builds and the editor — no
    divergence, no double-annotation, nothing new for an agent to learn. To keep
-   it from being a *silent* bypass, detect and report `eslint-disable` of gated
+   it from being a _silent_ bypass, detect and report `eslint-disable` of gated
    rules in changed files (and use ESLint's `-- description` syntax to require a
    reason there too). Revisit `noInlineConfig: true` only if that reporting shows
    the escape hatch is being abused.
