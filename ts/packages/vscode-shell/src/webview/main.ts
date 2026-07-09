@@ -312,8 +312,8 @@ function handleRequestInteraction(
             return;
         }
         activeInteractions.delete(interaction.interactionId);
+        if (ac.signal.aborted) return;
         vscode.postMessage({ type: "interactionResponse", response });
-    })();
 }
 
 // Render a non-blocking choice card (yes/no, multi-select, or pick+remember)
