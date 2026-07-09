@@ -1352,10 +1352,9 @@ export class AgentServerBridge {
                         );
                     } else {
                         // getDynamicDisplay(appAgentName, type, displayId)
-                        const [appAgentName, type, id] =
-                            msg.args as Parameters<
-                                typeof dispatcher.getDynamicDisplay
-                            >;
+                        const [appAgentName, type, id] = msg.args as Parameters<
+                            typeof dispatcher.getDynamicDisplay
+                        >;
                         result = await dispatcher.getDynamicDisplay(
                             appAgentName,
                             type,
