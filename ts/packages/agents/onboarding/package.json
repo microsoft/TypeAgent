@@ -6,6 +6,9 @@
   "keywords": [
     "typeagent-agent"
   ],
+  "typeagent": {
+    "defaultAgentName": "onboarding"
+  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",

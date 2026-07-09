@@ -6,6 +6,9 @@
   "keywords": [
     "typeagent-agent"
   ],
+  "typeagent": {
+    "defaultAgentName": "ipconfig"
+  },
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
