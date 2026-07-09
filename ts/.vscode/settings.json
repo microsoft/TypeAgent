@@ -74,5 +74,5 @@
     "search.followSymlinks": false,
     "search.useIgnoreFiles": true,
     "search.useParentIgnoreFiles": true,
-    "typeagent.serverStartCommand": "pnpm --filter agent-server start"  
+    "typeagent.serverStartCommand": "pnpm --filter agent-server start"
 }
