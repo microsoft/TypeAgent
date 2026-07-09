@@ -203,10 +203,13 @@ internal sealed class WindowsServiceControlService : IServiceControlService
     private static void Restart(ServiceController controller)
     {
         // Dependent services must be stopped before the target service can stop.
+        // Remember which ones we stopped so we can restore them after restarting.
+        var dependentNamesToRestart = new List<string>();
         foreach (var dependent in controller.DependentServices)
         {
             if (dependent.Status != ServiceControllerStatus.Stopped)
             {
+                dependentNamesToRestart.Add(dependent.ServiceName);
                 dependent.Stop();
                 dependent.WaitForStatus(ServiceControllerStatus.Stopped, StatusTimeout);
             }
@@ -227,6 +230,17 @@ internal sealed class WindowsServiceControlService : IServiceControlService
 
         controller.Start();
         controller.WaitForStatus(ServiceControllerStatus.Running, StatusTimeout);
+
+        foreach (var name in dependentNamesToRestart)
+        {
+            using var dependent = new ServiceController(name);
+            dependent.Refresh();
+            if (dependent.Status != ServiceControllerStatus.Running)
+            {
+                dependent.Start();
+                dependent.WaitForStatus(ServiceControllerStatus.Running, StatusTimeout);
+            }
+        }
     }
 
     /// <summary>
