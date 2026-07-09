@@ -12,52 +12,56 @@
 
 ## Overview
 
-The `@typeagent/config` package is a TypeScript library that provides a layered YAML configuration loader for the TypeAgent ecosystem. It supports loading configuration from multiple sources, merging them in a defined order of precedence, and flattening nested structures into flat key-value pairs compatible with existing `process.env` consumers. The package also includes schema validation, CLI utilities, and integration with Azure Key Vault for secure configuration management.
+The `@typeagent/config` package is a TypeScript library designed to manage configuration for the TypeAgent ecosystem. It provides a layered approach to loading and merging configuration from multiple sources, including YAML files, environment variables, and `.env` files. The package also supports schema validation, configuration flattening, and integration with Azure Key Vault for secure storage and retrieval of sensitive data. It ensures backward compatibility with existing `process.env` consumers in the TypeAgent ecosystem.
 
 ## What it does
 
-The `@typeagent/config` package offers the following capabilities:
+The `@typeagent/config` package provides the following key features:
 
 1. **Layered Configuration Loading**:
 
-   - Reads configuration from multiple sources, including:
+   - Loads configuration from multiple sources, including:
      - `ts/config.defaults.yaml`: A committed default configuration file.
-     - `ts/config.local.yaml`: A local, gitignored file for overrides.
+     - `ts/config.local.yaml`: A local, gitignored file for environment-specific overrides.
      - `.env`: A legacy fallback for backward compatibility.
      - Environment variables: Runtime overrides with the highest precedence.
      - Azure Key Vault: Planned for future phases, with encrypted local caching.
 
 2. **Merge Precedence**:
-   Configuration values are merged in the following order (lowest to highest precedence):
+   Configuration values are merged in the following order (from lowest to highest precedence):
 
-   1. `.env` (legacy fallback)
+   1. `.env` (legacy fallback, lowest priority)
    2. `ts/config.defaults.yaml`
    3. _Future_: Key Vault YAML blob or encrypted cache
    4. `ts/config.local.yaml`
    5. `process.env` (runtime overrides)
 
-3. **Flattening Rules**:
-   Nested YAML structures are flattened into flat key-value pairs that align with the `EnvVars` convention. For example:
+3. **Flattening Nested Structures**:
 
-   - `azure.openai.api_key` → `AZURE_OPENAI_API_KEY`
-   - `azure.openai.deployments[].endpoint` (suffix=foo) → `AZURE_OPENAI_ENDPOINT_FOO`
-   - `extra.<KEY>` → `<KEY>` (passthrough for unknown keys)
+   - Converts nested YAML structures into flat key-value pairs that align with the `EnvVars` convention used by other TypeAgent packages.
+   - Example mappings:
+     - `azure.openai.api_key` → `AZURE_OPENAI_API_KEY`
+     - `azure.openai.deployments[].endpoint` (suffix=foo) → `AZURE_OPENAI_ENDPOINT_FOO`
+     - `extra.<KEY>` → `<KEY>` (passthrough for unknown keys)
 
 4. **Schema Validation**:
-   Uses `zod` to validate configuration settings, ensuring they conform to expected schemas.
+
+   - Uses `zod` to validate configuration settings, ensuring they conform to expected schemas.
 
 5. **CLI Utilities**:
-   Includes commands for importing `.env` files into YAML format and displaying the merged configuration.
 
-6. **Sensitive Data Redaction**:
-   Identifies and redacts sensitive values (e.g., API keys, secrets) in configuration data.
+   - Provides commands for importing `.env` files into YAML format and displaying the merged configuration.
+
+6. **Sensitive Data Handling**:
+
+   - Identifies and redacts sensitive values (e.g., API keys, secrets) in configuration data to prevent accidental exposure.
 
 7. **Backward Compatibility**:
-   Ensures existing TypeAgent packages relying on `process.env` continue to function without modification.
+   - Ensures that existing TypeAgent packages relying on `process.env` continue to function without modification.
 
 ## Setup
 
-To use the `@typeagent/config` package, ensure the following environment variables are set:
+To use the `@typeagent/config` package, you need to configure the following environment variables:
 
 - `AZURE_OPENAI_`: Used for Azure OpenAI configuration.
 - `JEST_WORKER_ID`: Utilized during Jest testing.
@@ -70,14 +74,14 @@ To use the `@typeagent/config` package, ensure the following environment variabl
 - `TYPEAGENT_DOTENV`: Path to the `.env` file.
 - `TYPEAGENT_USER_DATA_DIR`: Directory for user data.
 
-Refer to the hand-written README for detailed instructions on obtaining these values and configuring your environment.
+Refer to the hand-written README for additional details on obtaining these values and configuring your environment.
 
 ## Key Files
 
-The package's functionality is implemented across several key files:
+The core functionality of the `@typeagent/config` package is implemented across the following key files:
 
 - [index.ts](./src/index.ts): Exports the main functions and types, such as `loadConfig`, `flatten`, and `fetchKeyVaultConfig`.
-- [loader.ts](./src/loader.ts): Implements the core logic for loading and merging configuration settings from various sources.
+- [loader.ts](./src/loader.ts): Implements the logic for loading and merging configuration settings from various sources.
 - [flatten.ts](./src/flatten.ts): Handles the flattening of nested YAML structures into flat key-value pairs.
 - [keyVault.ts](./src/keyVault.ts): Provides functions for fetching configuration settings from Azure Key Vault.
 - [cli.ts](./src/cli.ts): Implements CLI commands for importing `.env` files and displaying the merged configuration.
@@ -87,19 +91,19 @@ The package's functionality is implemented across several key files:
 
 ## How to extend
 
-To extend the `@typeagent/config` package, follow these guidelines:
+To extend the functionality of the `@typeagent/config` package, consider the following approaches:
 
 1. **Adding New Configuration Sources**:
 
-   - Modify [loader.ts](./src/loader.ts) to include the new source and update the merging logic.
+   - Update [loader.ts](./src/loader.ts) to include the new source and modify the merging logic to incorporate it.
 
 2. **Customizing Flattening Rules**:
 
-   - Update [flatten.ts](./src/flatten.ts) to adjust how nested YAML structures are flattened into flat key-value pairs.
+   - Modify [flatten.ts](./src/flatten.ts) to adjust how nested YAML structures are flattened into flat key-value pairs.
 
 3. **Enhancing Schema Validation**:
 
-   - Add or modify validation rules in [schema.ts](./src/schema.ts) using `zod`.
+   - Add or update validation rules in [schema.ts](./src/schema.ts) using `zod` to enforce new configuration constraints.
 
 4. **Extending CLI Functionality**:
 
@@ -116,7 +120,7 @@ To extend the `@typeagent/config` package, follow these guidelines:
 7. **Typed Configuration Enhancements**:
    - Modify [runtime/build.ts](./src/runtime/build.ts) to support additional typed configuration structures or conventions.
 
-When extending the package, ensure that new functionality adheres to the existing patterns and conventions to maintain consistency and compatibility across the TypeAgent ecosystem.
+When making changes, ensure that new functionality adheres to the existing patterns and conventions to maintain consistency and compatibility across the TypeAgent ecosystem.
 
 ## Reference
 
@@ -168,6 +172,6 @@ _10 environment variables referenced from `./src/` (set in `ts/.env` or your she
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/config docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/config docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

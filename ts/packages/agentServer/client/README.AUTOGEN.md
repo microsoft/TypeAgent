@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4f539b70bf2cc0d73c62ce19b8696a39ddb31cfa2f4a0a580c078b7df86e8811 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c442b6548d5e51e2d03a61612a7dcffdacd90ec3e2447d7db1973d987b8bdb82 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-server-client — AI-generated documentation
@@ -12,17 +12,19 @@
 
 ## Overview
 
-The `@typeagent/agent-server-client` package is a TypeScript library that provides tools for connecting to and interacting with a running `agentServer`. It is a core component of the TypeAgent ecosystem, enabling clients such as the Shell, CLI, and other integrations to manage conversations and ensure the availability of the server.
+The `@typeagent/agent-server-client` package is a TypeScript library designed to facilitate communication with a running `agentServer`. It provides tools for managing WebSocket connections, handling conversations, and ensuring the availability of the server. This package is a key component of the TypeAgent ecosystem, used by clients such as the Shell, CLI, and other integrations.
 
 ## What it does
 
-This package offers a comprehensive set of features for managing connections and conversations with an `agentServer`:
+The `@typeagent/agent-server-client` package provides the following capabilities:
 
-- **Connection Management**: The `connectAgentServer` function establishes WebSocket connections to an `agentServer` and returns an `AgentServerConnection` object. This object provides methods for managing conversations and interacting with the server.
-- **Conversation Management**: The `AgentServerConnection` object supports operations such as creating, listing, renaming, and deleting conversations. It also allows clients to join and leave conversations.
+- **Connection Management**: The `connectAgentServer` function establishes WebSocket connections to an `agentServer` and returns an `AgentServerConnection` object. This object allows clients to interact with the server and manage conversations.
+- **Conversation Management**: The `AgentServerConnection` object includes methods for creating, listing, renaming, and deleting conversations. It also supports joining and leaving conversations.
 - **Server Management**: Functions like `ensureAgentServer` and `isServerRunning` help ensure that the `agentServer` is running, spawn it if necessary, and check its status.
-- **Convenience Wrappers**: Simplified methods like `ensureAndConnectConversation` combine multiple steps (e.g., ensuring the server is running, connecting, and joining a conversation) into a single call.
-- **Discovery**: The `discovery` module provides tools for locating the dynamically assigned port of an in-process agent, useful for external clients like browser extensions or IDE plugins.
+- **Convenience Wrappers**: Functions such as `ensureAndConnectConversation` combine multiple steps (e.g., ensuring the server is running, connecting, and joining a conversation) into a single call for ease of use.
+- **Discovery**: The `discovery` module provides tools for locating the dynamically assigned port of an in-process agent, which is particularly useful for external clients like browser extensions or IDE plugins.
+
+These features make the package essential for managing interactions with the `agentServer` and its conversation-based architecture.
 
 ## Setup
 
@@ -30,7 +32,7 @@ To use this package, you need to configure the following:
 
 - **Environment Variable**:
 
-  - `TYPEAGENT_TUNNEL_TOKEN`: This token is required for certain server interactions. Refer to the hand-written README for details on how to obtain and configure this value.
+  - `TYPEAGENT_TUNNEL_TOKEN`: This token is required for certain server interactions. If the hand-written README provides instructions for obtaining this token, refer to it for guidance. Otherwise, ensure the token is set in your environment or `.env` file.
 
 - **Installation**:
   Install the package and its dependencies using `pnpm`:
@@ -38,15 +40,15 @@ To use this package, you need to configure the following:
   pnpm install
   ```
 
-Ensure that the `TYPEAGENT_TUNNEL_TOKEN` environment variable is set in your shell or `.env` file before running any code that interacts with the `agentServer`.
+Ensure that the `TYPEAGENT_TUNNEL_TOKEN` environment variable is correctly set before running any code that interacts with the `agentServer`.
 
 ## Key Files
 
 The package is organized into several key files, each responsible for specific functionality:
 
-- **[index.ts](./src/index.ts)**: Serves as the main entry point, exporting the core functions and types for external use.
+- **[index.ts](./src/index.ts)**: The main entry point of the package, exporting core functions and types for external use.
 - **[agentServerClient.ts](./src/agentServerClient.ts)**: Implements the primary logic for connecting to the `agentServer`, managing conversations, and ensuring the server is running.
-- **[discovery.ts](./src/discovery.ts)**: Provides tools for discovering the dynamically assigned port of an in-process agent, useful for external clients.
+- **[discovery.ts](./src/discovery.ts)**: Provides tools for discovering the dynamically assigned port of an in-process agent, which is useful for external clients like browser extensions or IDE plugins.
 - **[conversation/index.ts](./src/conversation/index.ts)**: Consolidates shared conversation-lifecycle helpers for clients of the `agentServer`.
 - **[conversation/lifecycle.ts](./src/conversation/lifecycle.ts)**: Implements connection-level lifecycle helpers, such as joining or creating conversations safely.
 - **[conversation/manage.ts](./src/conversation/manage.ts)**: Implements the `manage-conversation` client-action surface, including subcommands like `new`, `list`, `rename`, and `delete`.
@@ -143,6 +145,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

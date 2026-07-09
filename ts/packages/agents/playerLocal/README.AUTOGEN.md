@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=99b7548fad28b062035f5ad75df7abf55145ad0b48f2d298ed7a06f16c055d75 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=5c6f34dc2ad2c52e7feb450939a807cac9497e95ba02ed953334882efc6fa1f3 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # music-local — AI-generated documentation
@@ -12,20 +12,20 @@
 
 ## Overview
 
-The `music-local` package is a TypeAgent application agent that enables playback and management of local audio files without relying on external streaming services. It supports a wide range of audio formats and provides features such as playback controls, queue management, volume adjustment, and file search. The agent is designed to work across multiple platforms, including Windows, macOS, and Linux, by leveraging the system's native audio capabilities.
+The `music-local` package is a TypeAgent application agent designed to play and manage local audio files without relying on external streaming services. It supports a wide range of audio formats and provides features such as playback controls, queue management, volume adjustment, and file search. The agent is cross-platform, working on Windows, macOS, and Linux by leveraging the system's native audio playback capabilities.
 
 ## What it does
 
-The `music-local` agent provides a comprehensive set of actions for managing and playing local audio files. These actions are grouped into the following categories:
+The `music-local` agent enables users to interact with their local music library through natural language commands. It supports the following key functionalities:
 
 - **Playback Controls**: Actions like `playFile`, `playFolder`, `pause`, `resume`, `stop`, `next`, and `previous` allow users to control audio playback.
-- **Queue Management**: Actions such as `addToQueue`, `clearQueue`, `showQueue`, and `playFromQueue` enable users to manage and interact with a playback queue.
-- **Volume Control**: Users can adjust the volume using actions like `setVolume`, `changeVolume`, `mute`, and `unmute`.
+- **Queue Management**: Users can manage playback queues with actions such as `addToQueue`, `clearQueue`, `showQueue`, and `playFromQueue`.
+- **Volume Control**: Adjustments to audio levels can be made using actions like `setVolume`, `changeVolume`, `mute`, and `unmute`.
 - **Shuffle and Repeat**: The `shuffle` and `repeat` actions allow users to toggle shuffle mode and set repeat preferences (off, one, or all).
-- **File Search and Listing**: Actions like `listFiles` and `searchFiles` help users browse and locate audio files in their music folder.
+- **File Search and Listing**: Actions like `listFiles` and `searchFiles` enable users to browse and locate audio files in their music folder.
 - **Status and Configuration**: Actions such as `status`, `setMusicFolder`, and `showMusicFolder` provide playback status and allow users to configure the default music folder.
 
-The agent uses platform-specific tools to handle audio playback:
+The agent uses platform-specific tools for audio playback:
 
 - **Windows**: PowerShell with Windows Media Player.
 - **macOS**: `afplay`.
@@ -37,8 +37,8 @@ To set up the `music-local` agent, follow these steps:
 
 1. **Set Environment Variables**:
 
-   - `XDG_CONFIG_HOME`: Specify the path to the configuration directory.
-   - `XDG_MUSIC_DIR`: Specify the path to your music directory.
+   - `XDG_CONFIG_HOME`: Path to the configuration directory.
+   - `XDG_MUSIC_DIR`: Path to your music directory.
 
 2. **Install Required Software**:
 
@@ -57,18 +57,18 @@ No external API keys or additional accounts are required for this agent.
 
 ## Key Files
 
-The `music-local` package is organized into several key files, each responsible for specific aspects of the agent's functionality:
+The `music-local` package is structured around several key files that define its functionality:
 
 - **[localPlayerManifest.json](./src/agent/localPlayerManifest.json)**: Contains metadata and schema definitions for the agent, including the description, schema file paths, and action/entity types.
 - **[localPlayerSchema.ts](./src/agent/localPlayerSchema.ts)**: Defines the actions supported by the agent, such as `playFile`, `pause`, and `setVolume`, along with their parameters.
 - **[localPlayerSchema.agr](./src/agent/localPlayerSchema.agr)**: Specifies the grammar rules for parsing natural language commands into actions.
 - **[localPlayerHandlers.ts](./src/agent/localPlayerHandlers.ts)**: Implements the logic for handling the defined actions, such as playing a file or managing the playback queue.
-- **[localPlayerCommands.ts](./src/agent/localPlayerCommands.ts)**: Defines the command interface and maps natural language commands to their corresponding actions.
+- **[localPlayerCommands.ts](./src/agent/localPlayerCommands.ts)**: Maps natural language commands to their corresponding actions and defines the command interface.
 - **[localPlayerService.ts](./src/localPlayerService.ts)**: Provides the core functionality for interacting with the system's media player, including platform-specific implementations for Windows, macOS, and Linux.
 
 ## How to extend
 
-To extend the `music-local` agent, you can add new actions, modify existing ones, or enhance the agent's capabilities. Here are the steps to follow:
+To extend the `music-local` agent, you can add new actions, modify existing ones, or enhance its capabilities. Here’s how:
 
 1. **Define New Actions**:
 
@@ -119,7 +119,7 @@ External: `chalk`, `debug`, `play-sound`
 
 ### Files of interest
 
-`./src/agent/localPlayerManifest.json`, `./src/agent/localPlayerSchema.agr`, `./src/agent/localPlayerSchema.ts`, …and 5 more under `./src/`.
+`./src/agent/localPlayerManifest.json`, `./src/agent/localPlayerSchema.agr`, `./src/agent/localPlayerSchema.ts`, …and 6 more under `./src/`.
 
 ### Environment variables
 
@@ -130,6 +130,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music-local docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music-local docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

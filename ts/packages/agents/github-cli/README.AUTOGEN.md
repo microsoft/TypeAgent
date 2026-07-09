@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=dff02fb5c9533ae5aff06886f4878724c48e2ae4bd41f8f66d16d0028bf713d3 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=271a7ec4f6a11f93a1902a623bcb2bc464ac99764c8a0e745ffe6412c48a3202 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # github-cli-agent — AI-generated documentation
@@ -12,16 +12,16 @@
 
 ## Overview
 
-The `github-cli-agent` is a TypeAgent application agent that integrates with the GitHub CLI (`gh`) to provide programmatic access to a wide range of GitHub functionalities. It enables users to manage repositories, issues, pull requests, workflows, and more through natural language commands mapped to CLI actions.
+The `github-cli-agent` is a TypeAgent application agent designed to interface with the GitHub CLI (`gh`). It enables users to perform a wide range of GitHub operations, such as managing repositories, issues, pull requests, workflows, and more, through natural language commands. By leveraging the GitHub CLI, this agent provides a streamlined way to interact with GitHub programmatically.
 
 ## What it does
 
-This agent acts as a bridge between natural language inputs and the GitHub CLI, supporting 64 distinct actions across various categories:
+The `github-cli-agent` supports 64 actions, grouped into several categories, allowing users to perform various GitHub operations. These actions are mapped to GitHub CLI commands and include:
 
-- **Authentication**: Actions like `authLogin`, `authLogout`, and `authStatus` allow users to manage their GitHub authentication state.
-- **Issues**: Includes actions such as `issueCreate`, `issueClose`, `issueDelete`, `issueReopen`, `issueList`, and `issueView` for comprehensive issue management.
-- **Pull Requests**: Actions like `prCreate`, `prClose`, `prMerge`, `prList`, `prView`, and `prCheckout` facilitate pull request workflows.
-- **Repositories**: Manage repositories with actions such as `repoCreate`, `repoClone`, `repoDelete`, `repoView`, `repoFork`, `starRepo`, and `searchRepos`.
+- **Authentication**: Manage GitHub authentication with actions like `authLogin`, `authLogout`, and `authStatus`.
+- **Issues**: Create, close, delete, reopen, list, and view issues using actions such as `issueCreate`, `issueClose`, `issueDelete`, `issueReopen`, `issueList`, and `issueView`.
+- **Pull Requests**: Manage pull requests with actions like `prCreate`, `prClose`, `prMerge`, `prList`, `prView`, and `prCheckout`.
+- **Repositories**: Perform repository operations such as `repoCreate`, `repoClone`, `repoDelete`, `repoView`, `repoFork`, `starRepo`, and `searchRepos`.
 - **Codespaces**: Create, delete, and list codespaces using `codespaceCreate`, `codespaceDelete`, and `codespaceList`.
 - **Gists**: Manage gists with `gistCreate`, `gistDelete`, and `gistList`.
 - **Projects**: Use `projectCreate`, `projectDelete`, and `projectList` to manage GitHub projects.
@@ -31,7 +31,7 @@ This agent acts as a bridge between natural language inputs and the GitHub CLI, 
 - **Workflows**: View workflow runs and details using `workflowView` and `runView`.
 - **Miscellaneous**: Includes actions like `cacheList`, `cacheDelete`, `configSet`, `sshKeyAdd`, and `statusPrint`.
 
-The agent also supports advanced features like color-coded output for Dependabot alerts, clickable hyperlinks in listings, and friendly confirmation messages for mutation actions.
+The agent enhances the user experience with features such as clickable hyperlinks in listings, color-coded output for Dependabot alerts, and friendly confirmation messages for mutation actions.
 
 ## Setup
 
@@ -44,15 +44,15 @@ The agent performs a `gh auth status` readiness check at startup and before exec
 
 ## Key Files
 
-The `github-cli-agent` is organized into several key files, each responsible for a specific aspect of the agent's functionality:
+The `github-cli-agent` is structured into several key files, each serving a specific purpose:
 
-- **[github-cliManifest.json](./src/github-cliManifest.json)**: Defines the agent's metadata, including its description, emoji, and schema details.
-- **[github-cliSchema.ts](./src/github-cliSchema.ts)**: Specifies the types and parameters for all supported actions.
-- **[github-cliSchema.agr](./src/github-cliSchema.agr)**: Maps natural language inputs to specific actions and parameters.
-- **[github-cliActionHandler.ts](./src/github-cliActionHandler.ts)**: Implements the logic for executing actions using the GitHub CLI.
-- **[setup.ts](./src/setup.ts)**: Handles installation and readiness checks for the GitHub CLI, including platform-specific setup logic.
+- **[github-cliManifest.json](./src/github-cliManifest.json)**: Contains metadata about the agent, including its description, emoji, and schema details.
+- **[github-cliSchema.ts](./src/github-cliSchema.ts)**: Defines the types and parameters for all supported actions.
+- **[github-cliSchema.agr](./src/github-cliSchema.agr)**: Maps natural language inputs to specific actions and their parameters.
+- **[github-cliActionHandler.ts](./src/github-cliActionHandler.ts)**: Implements the logic for executing actions using the GitHub CLI. This file is the core of the agent's functionality, translating actions into CLI commands and processing their output.
+- **[setup.ts](./src/setup.ts)**: Manages the installation and readiness checks for the GitHub CLI, including platform-specific setup logic.
 
-These files work together to define, interpret, and execute the agent's actions.
+These files collectively define the agent's capabilities, handle user inputs, and execute the corresponding GitHub CLI commands.
 
 ## How to extend
 
@@ -107,7 +107,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/github-cliActionHandler.ts`, `./src/github-cliManifest.json`, `./src/github-cliSchema.agr`, …and 3 more under `./src/`.
+`./src/github-cliActionHandler.ts`, `./src/github-cliManifest.json`, `./src/github-cliSchema.agr`, …and 4 more under `./src/`.
 
 ### Agent surface
 
@@ -156,6 +156,6 @@ _64 actions implemented by this agent, parsed deterministically from `./src/gith
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter github-cli-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter github-cli-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=1b248567a133b4a44aa5fab9e514a6cd1a0435c9569bce2888b4ad091e96bc44 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=8f079666fb865149f81c84a347251bd5f9883472773ff272c991fdfa7be2a688 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # calendar — AI-generated documentation
@@ -12,25 +12,35 @@
 
 ## Overview
 
-The `calendar` package is a TypeAgent application agent designed to manage calendar events by interacting with the Microsoft Graph API. It enables users to perform operations such as creating, updating, deleting, and finding calendar events. The agent leverages structured prompting and large language models (LLMs) to interpret user requests and execute corresponding actions. It integrates with the Outlook mail client and uses the `@microsoft/microsoft-graph-client` library for API communication.
+The `calendar` package is a TypeAgent application agent designed to manage calendar events by interacting with the Microsoft Graph API. It enables users to perform operations such as creating, updating, deleting, and finding calendar events. The agent uses structured prompting and large language models (LLMs) to interpret user requests and execute corresponding actions. It integrates with the Outlook mail client and leverages the `@microsoft/microsoft-graph-client` library for API communication.
 
 ## What it does
 
-The calendar agent provides a range of actions to manage calendar events. These actions include:
+The calendar agent provides a comprehensive set of actions to manage calendar events. These actions are grouped into two main categories:
 
-- **Event Management**:
+### Event Management
 
-  - `scheduleEvent`: Schedule a new event with details like description, date, time, location, and participants.
-  - `addEvent`: Add a new event to the calendar.
-  - `removeEvent`: Delete an existing event from the calendar.
-  - `findEvents`: Search for events based on criteria such as date, participant, or description.
+- **`scheduleEvent`**: Schedule a new event with details such as description, date, time, location, and participants.
+- **`addEvent`**: Add a new event to the calendar.
+- **`removeEvent`**: Delete an existing event from the calendar.
+- **`findEvents`**: Search for events based on criteria such as date, participant, or description.
 
-- **Event Modification**:
-  - `addParticipants`: Add participants to an existing event.
-  - `changeTime`: Update the time of an existing event.
-  - `changeDescription`: Modify the description of an existing event.
+### Event Modification
+
+- **`addParticipants`**: Add participants to an existing event.
+- **`changeTime`**: Update the time of an existing event.
+- **`changeDescription`**: Modify the description of an existing event.
 
 The agent uses the `graph-utils` library to implement these actions and relies on the `@microsoft/microsoft-graph-client` library for communication with the Microsoft Graph API. The agent also supports structured prompting through its schema and grammar definitions, enabling it to interpret natural language requests effectively.
+
+### Example User Requests
+
+The following are examples of user requests that the calendar agent can process:
+
+- "Create a code review meeting tomorrow at 11:00am."
+- "Add Alex and Megan to the meeting."
+- "Set up a dim sum lunch meeting next Friday at noon."
+- "Find all my meetings on Friday."
 
 ## Setup
 
@@ -38,7 +48,7 @@ To use the calendar agent, you need to configure access to the Microsoft Graph A
 
 1. **Create a Microsoft Graph Client Application**:
 
-   - Follow the Microsoft Graph quickstart guide to create a Graph client application and demo tenant.
+   - Follow the Microsoft Graph quickstart guide at `https://developer.microsoft.com/en-us/graph/quick-start?state=option-typescript` to create a Graph client application and demo tenant.
 
 2. **Set Environment Variables**:
 
@@ -53,7 +63,7 @@ To use the calendar agent, you need to configure access to the Microsoft Graph A
 
    - Run `pnpm install` to install the required dependencies.
 
-4. **Identity Cache Issues**:
+4. **Fix Identity Cache Issues**:
    - If you encounter issues with the identity cache, clear it by running the following commands:
      ```text
      cd %localappdata%/.IdentityService
@@ -137,7 +147,7 @@ External: `chalk`, `date-fns`, `debug`
 
 ### Files of interest
 
-`./src/calendarManifest.json`, `./src/calendarSchema.agr`, `./src/calendarActionHandlerV1.ts`, …and 10 more under `./src/`.
+`./src/calendarManifest.json`, `./src/calendarSchema.agr`, `./src/calendarActionHandlerV1.ts`, …and 11 more under `./src/`.
 
 ### Agent surface
 
@@ -146,6 +156,6 @@ External: `chalk`, `date-fns`, `debug`
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

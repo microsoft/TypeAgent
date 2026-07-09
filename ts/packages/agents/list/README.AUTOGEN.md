@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=e047fc6c53efb2f43df9b6d9817e97cee0409145c3c9b15f6c321f0afd407ab5 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=3b85260e2b269ce9bc55c9ca40fdd24fb1cc2fd1bec208c8282d3ed5426035ec -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # list-agent — AI-generated documentation
@@ -16,14 +16,14 @@ The `list-agent` package is a TypeAgent application agent designed to manage lis
 
 ## What it does
 
-The `list-agent` provides six key actions to manage lists effectively:
+The `list-agent` supports six primary actions for managing lists:
 
-- **`addItems`**: Adds one or more items to a specified list. If the list does not exist, it is created. This action requires the `items` (array of strings) and `listName` (string) parameters.
-- **`removeItems`**: Removes one or more items from a specified list. This action requires the `items` (array of strings) and `listName` (string) parameters.
-- **`createList`**: Creates a new list with the given name. This action requires the `listName` (string) parameter.
-- **`getList`**: Retrieves the contents of a specified list. This action is useful for queries like "What's on my grocery list?" or "What are the contents of my to-do list?" It requires the `listName` (string) parameter.
-- **`clearList`**: Clears all items from a specified list. This action requires the `listName` (string) parameter.
-- **`startEditList`**: Initiates the editing of a specified list. This action requires the `listName` (string) parameter.
+- **`addItems`**: Adds one or more items to a specified list. If the list does not exist, it is created. Parameters: `items` (array of strings) and `listName` (string).
+- **`removeItems`**: Removes one or more items from a specified list. Parameters: `items` (array of strings) and `listName` (string).
+- **`createList`**: Creates a new list with the given name. Parameter: `listName` (string).
+- **`getList`**: Retrieves the contents of a specified list. Useful for queries like "What's on my grocery list?" or "What are the contents of my to-do list?" Parameter: `listName` (string).
+- **`clearList`**: Clears all items from a specified list. Parameter: `listName` (string).
+- **`startEditList`**: Initiates the editing of a specified list. Parameter: `listName` (string).
 
 These actions are defined in the [listSchema.ts](./src/listSchema.ts) file and implemented in the [listActionHandler.ts](./src/listActionHandler.ts) file. The agent uses schema definitions and grammar rules to interpret user input and map it to the appropriate actions.
 
@@ -100,7 +100,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/listActionHandler.ts`, `./src/listManifest.json`, `./src/listSchema.agr`, …and 3 more under `./src/`.
+`./src/listActionHandler.ts`, `./src/listManifest.json`, `./src/listSchema.agr`, …and 4 more under `./src/`.
 
 ### Agent surface
 
@@ -124,6 +124,6 @@ _6 actions implemented by this agent, parsed deterministically from `./src/listS
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ddccfbed4237537057208c308a6c7941c23d6170652afe9cf8711e8bdc49c111 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=abe08dc25887cf6e97e9ba932ed8fe636200fe6ed1ae075170307d8caa3d126e -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # ipconfig-agent — AI-generated documentation
@@ -12,51 +12,93 @@
 
 ## Overview
 
-The `ipconfig-agent` package is a TypeAgent application agent designed to interact with the Windows IP configuration command-line tool, `ipconfig`. This agent allows users to perform various network configuration tasks through natural language commands, such as displaying network settings, releasing and renewing IP addresses, and managing DNS cache.
+The `ipconfig-agent` package is a TypeAgent application agent that provides a natural language interface to the Windows `ipconfig` command-line tool. It enables users to perform various network configuration tasks, such as managing IP addresses, DNS settings, and DHCP configurations, through conversational commands.
+
+This agent is particularly useful for automating common network management tasks, making it easier for users to interact with the `ipconfig` tool without needing to remember specific command-line syntax.
 
 ## What it does
 
-The `ipconfig-agent` package supports a range of actions related to network configuration. These actions include:
+The `ipconfig-agent` supports a comprehensive set of actions for managing network configurations. These actions are grouped into the following categories:
 
-- Displaying help messages (`displayHelpMessage`)
-- Showing full network configuration details (`displayFullConfigurationInformation`)
-- Releasing and renewing IPv4 and IPv6 addresses (`releaseIPv4Address`, `releaseIPv6Address`, `renewIPv4Address`, `renewIPv6Address`)
-- Purging the DNS resolver cache (`purgeDNSResolverCache`)
-- Refreshing DHCP leases and re-registering DNS names (`refreshDHCPLeasesAndReRegisterDNSNames`)
-- Displaying the contents of the DNS resolver cache (`displayDNSResolverCacheContents`)
-- Displaying and modifying DHCP class IDs for both IPv4 and IPv6 (`displayDHCPClassIDs`, `modifyDHCPClassID`, `displayIPv6DHCPClassIDs`, `modifyIPv6DHCPClassID`)
+- **Help and Information Display**:
 
-These actions enable users to manage their network settings efficiently using simple, conversational commands.
+  - `displayHelpMessage`: Displays the help message for the `ipconfig` command.
+  - `displayFullConfigurationInformation`: Shows detailed network configuration information.
+  - `displayDNSResolverCacheContents`: Displays the contents of the DNS resolver cache.
+  - `displayDHCPClassIDs`: Lists all DHCP class IDs for a specified adapter.
+  - `displayIPv6DHCPClassIDs`: Lists all IPv6 DHCP class IDs for a specified adapter.
+
+- **IP Address Management**:
+
+  - `releaseIPv4Address`: Releases the IPv4 address for a specified adapter.
+  - `releaseIPv6Address`: Releases the IPv6 address for a specified adapter.
+  - `renewIPv4Address`: Renews the IPv4 address for a specified adapter.
+  - `renewIPv6Address`: Renews the IPv6 address for a specified adapter.
+
+- **DNS and DHCP Management**:
+  - `purgeDNSResolverCache`: Clears the DNS resolver cache.
+  - `refreshDHCPLeasesAndReRegisterDNSNames`: Refreshes all DHCP leases and re-registers DNS names.
+  - `modifyDHCPClassID`: Updates the DHCP class ID for a specified adapter.
+  - `modifyIPv6DHCPClassID`: Updates the IPv6 DHCP class ID for a specified adapter.
+
+These actions allow users to manage their network settings effectively, whether they need to troubleshoot connectivity issues, update IP configurations, or manage DNS and DHCP settings.
 
 ## Setup
 
-The `ipconfig-agent` package does not require any special setup beyond installing the necessary dependencies. Ensure that you have `pnpm` installed and run the following command to install the dependencies:
+The `ipconfig-agent` package requires minimal setup. Follow these steps to get started:
 
-```sh
-pnpm install
-```
+1. Ensure you have `pnpm` installed on your system.
+2. Navigate to the package directory:
+   ```sh
+   cd ts/packages/agents/ipconfig/
+   ```
+3. Install the required dependencies:
+   ```sh
+   pnpm install
+   ```
 
-No additional environment variables or external accounts are needed for this package.
+No additional environment variables, API keys, or external accounts are required for this package.
 
 ## Key Files
 
-The package's functionality is distributed across several key files:
+The `ipconfig-agent` package is organized into several key files that define its functionality:
 
-- [ipconfigActionHandler.ts](./src/ipconfigActionHandler.ts): Contains the logic for handling the various `ipconfig` actions. It uses the `execFile` function to run `ipconfig` commands and processes the results.
-- [ipconfigManifest.json](./src/ipconfigManifest.json): Defines the agent's manifest, including its description, emoji character, and schema details.
-- [ipconfigSchema.ts](./src/ipconfigSchema.ts): Defines the types for the various actions supported by the agent.
-- [ipconfigSchema.agr](./src/ipconfigSchema.agr): Contains the grammar definitions for mapping natural language commands to specific actions.
+- **[ipconfigActionHandler.ts](./src/ipconfigActionHandler.ts)**: This file contains the core logic for handling the supported actions. It uses the `execFile` function to execute `ipconfig` commands and processes the output to generate responses.
+- **[ipconfigManifest.json](./src/ipconfigManifest.json)**: The manifest file defines the agent's metadata, including its description, emoji representation, and references to the schema and grammar files.
+- **[ipconfigSchema.ts](./src/ipconfigSchema.ts)**: This file defines the TypeScript types for the actions supported by the agent, including their names and parameters.
+- **[ipconfigSchema.agr](./src/ipconfigSchema.agr)**: Contains the natural language grammar rules that map user utterances to specific actions.
+- **[ipconfigSchema.keywords.json](./src/ipconfigSchema.keywords.json)**: Provides a list of keywords associated with each action, which helps in natural language understanding.
+
+These files work together to enable the agent to interpret user commands, execute the corresponding `ipconfig` operations, and return meaningful responses.
 
 ## How to extend
 
-To extend the `ipconfig-agent` package, follow these steps:
+To add new features or modify existing functionality in the `ipconfig-agent`, follow these steps:
 
-1. **Add a new action**: Define the new action type in [ipconfigSchema.ts](./src/ipconfigSchema.ts). Ensure it includes the necessary parameters and a description.
-2. **Update the grammar**: Add the corresponding grammar rules in [ipconfigSchema.agr](./src/ipconfigSchema.agr) to map user utterances to the new action.
-3. **Implement the handler**: Modify [ipconfigActionHandler.ts](./src/ipconfigActionHandler.ts) to include the logic for handling the new action. Use the `runCli` function to execute the appropriate `ipconfig` command.
-4. **Test the new action**: Write tests to verify the new action's functionality. Ensure that the agent correctly interprets user commands and performs the expected operations.
+1. **Define a new action**:
 
-By following these steps, you can add new capabilities to the `ipconfig-agent` package and enhance its functionality.
+   - Add a new action type in [ipconfigSchema.ts](./src/ipconfigSchema.ts). Include a descriptive name, parameters (if any), and a brief description of the action.
+
+2. **Update the grammar**:
+
+   - Add new grammar rules in [ipconfigSchema.agr](./src/ipconfigSchema.agr) to map user utterances to the new action. Use the existing grammar rules as a reference for syntax and structure.
+
+3. **Implement the action handler**:
+
+   - Extend the logic in [ipconfigActionHandler.ts](./src/ipconfigActionHandler.ts) to handle the new action. Use the `runCli` function to execute the appropriate `ipconfig` command and process the output.
+
+4. **Test the new functionality**:
+
+   - Write unit tests to ensure the new action works as expected. Verify that the agent correctly interprets user commands and performs the desired operation.
+
+5. **Update the manifest**:
+
+   - If necessary, update [ipconfigManifest.json](./src/ipconfigManifest.json) to include the new action in the agent's schema.
+
+6. **Regenerate the grammar and schema**:
+   - Use the appropriate TypeAgent tools to regenerate the compiled grammar and schema files. Ensure these files are up-to-date with your changes.
+
+By following these steps, you can extend the `ipconfig-agent` to support additional `ipconfig` commands or other related functionalities.
 
 ## Reference
 
@@ -65,7 +107,7 @@ By following these steps, you can add new capabilities to the `ipconfig-agent` p
 ### Entry points
 
 - `./agent/manifest` → [./src/ipconfigManifest.json](./src/ipconfigManifest.json)
-- `./agent/handlers` → [./dist/ipconfigActionHandler.js](./dist/ipconfigActionHandler.js)
+- `./agent/handlers` → `./dist/ipconfigActionHandler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -83,7 +125,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/ipconfigActionHandler.ts`, `./src/ipconfigManifest.json`, `./src/ipconfigSchema.agr`, …and 2 more under `./src/`.
+`./src/ipconfigActionHandler.ts`, `./src/ipconfigManifest.json`, `./src/ipconfigSchema.agr`, …and 3 more under `./src/`.
 
 ### Agent surface
 
@@ -114,6 +156,6 @@ _13 actions implemented by this agent, parsed deterministically from `./src/ipco
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter ipconfig-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter ipconfig-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

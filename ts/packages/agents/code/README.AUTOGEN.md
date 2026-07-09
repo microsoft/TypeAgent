@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=184f419d78d90e8f3fc215076bf7e2d4da186008c313b5081e380e05026a9285 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2a8f9ea58679244d9dddd4479087549111fd0f23a8077438d502b6d00fccad27 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # code-agent — AI-generated documentation
@@ -12,50 +12,85 @@
 
 ## Overview
 
-The `code-agent` package is a TypeAgent application agent designed to automate tasks within Visual Studio Code (VSCode). It acts as a dispatcher for various code-related actions, enabling users to interact with VSCode through natural language commands.
+The `code-agent` package is a TypeAgent application agent designed to automate tasks within Visual Studio Code (VSCode). It serves as a dispatcher for code-related actions, enabling users to interact with VSCode through natural language commands. This agent is integrated with the VSCode extension [coda](../../coda/README.md), which must be deployed to utilize its functionality.
 
 ## What it does
 
-The `code-agent` package primarily handles actions related to VSCode automation. Currently, it implements the `launchVSCode` action, which allows users to launch or start VSCode in different modes such as "last", "folder", or "workspace". The agent is integrated with the VSCode extension [coda](../../coda/README.md), which must be deployed to see the code agent in action.
+The `code-agent` currently implements the `launchVSCode` action, which allows users to launch or start VSCode in various modes:
 
-The package also defines several other actions in its schema, although they are not yet implemented. These include actions for changing the color theme, splitting the editor, changing the editor layout, and creating new files of various types.
+- **last**: Opens the last session.
+- **folder**: Opens a specific folder (requires a `path` parameter).
+- **workspace**: Opens a specific workspace (requires a `path` parameter).
+
+The agent is designed to handle a hierarchical set of actions, as defined in its schema. While only the `launchVSCode` action is implemented, the schema outlines additional actions that can be developed in the future, such as:
+
+- Changing the color theme of the editor.
+- Splitting the editor into multiple panes.
+- Adjusting the editor layout.
+- Creating new files (e.g., code files, markdown files, text files).
+
+These actions are not yet implemented but provide a roadmap for extending the agent's capabilities.
 
 ## Setup
 
-To set up the `code-agent`, you need to configure the environment variable `CODE_WEBSOCKET_PORT`. This variable specifies the port on which the WebSocket server will listen for connections from the VSCode extension.
+To set up the `code-agent`, follow these steps:
 
-1. Set the `CODE_WEBSOCKET_PORT` environment variable to the desired port number.
-2. Deploy the VSCode extension [coda](../../coda/README.md) to enable the code agent.
-3. Enable the code agent and its sub-agents using the TypeAgent CLI or shell commands:
-   ```sh
-   @config agent code*
-   @config agent code.code-debug
-   ```
+1. **Set the WebSocket Port**:
 
-For detailed setup instructions, see the hand-written README.
+   - Define the `CODE_WEBSOCKET_PORT` environment variable. This specifies the port on which the WebSocket server will listen for connections from the VSCode extension.
+
+2. **Deploy the VSCode Extension**:
+
+   - Deploy the [coda](../../coda/README.md) VSCode extension. This is required for the `code-agent` to function.
+
+3. **Enable the Agent**:
+   - Use the TypeAgent CLI or shell to enable the `code-agent` and its sub-agents:
+     ```sh
+     @config agent code*
+     @config agent code.code-debug
+     ```
+
+For more details on the setup process, refer to the hand-written README.
 
 ## Key Files
 
-The `code-agent` package is structured around several key components:
+The `code-agent` package is organized into several key files, each serving a specific purpose:
 
-- **Manifest**: The agent manifest is defined in [codeManifest.json](./src/codeManifest.json), which describes the agent and its sub-agents.
-- **Schema**: The action schema is defined in [codeActionsSchema.ts](./src/codeActionsSchema.ts), specifying the types and parameters for each action.
-- **Grammar**: The natural language interface for code editor actions is defined in [codeSchema.agr](./src/codeSchema.agr).
-- **Handler**: The action handler is implemented in [codeActionHandler.ts](./src/codeActionHandler.ts), which processes incoming actions and executes the corresponding commands.
-- **WebSocket Server**: The WebSocket server is implemented in [codeAgentWebSocketServer.ts](./src/codeAgentWebSocketServer.ts), facilitating communication between the code agent and the VSCode extension.
+- **[codeManifest.json](./src/codeManifest.json)**: Defines the agent's manifest, including its description, schema, and sub-agents.
+- **[codeActionsSchema.ts](./src/codeActionsSchema.ts)**: Specifies the schema for all actions, including their names, parameters, and types.
+- **[codeSchema.agr](./src/codeSchema.agr)**: Contains the natural language grammar for mapping user commands to actions.
+- **[codeActionHandler.ts](./src/codeActionHandler.ts)**: Implements the logic for handling actions, such as `launchVSCode`.
+- **[codeAgentWebSocketServer.ts](./src/codeAgentWebSocketServer.ts)**: Manages the WebSocket server that facilitates communication between the `code-agent` and the VSCode extension.
+- **[originAllowlist.ts](./src/originAllowlist.ts)**: Defines the origin allowlist for the WebSocket server, ensuring secure connections.
 
 ## How to extend
 
-To extend the `code-agent` package, follow these steps:
+To extend the `code-agent` package, you can add new actions or enhance existing functionality. Follow these steps:
 
-1. **Add a new action**: Define the new action in [codeActionsSchema.ts](./src/codeActionsSchema.ts). Specify the action name and parameters.
-2. **Update the grammar**: Add the new action to the grammar in [codeSchema.agr](./src/codeSchema.agr) to enable natural language processing for the action.
-3. **Implement the handler**: Extend the action handler in [codeActionHandler.ts](./src/codeActionHandler.ts) to process the new action and execute the corresponding commands.
-4. **Test the new action**: Add test cases for the new action in [codeSchema.tests.json](./src/codeSchema.tests.json) to ensure it works as expected.
+1. **Define a New Action**:
 
-Start by opening [codeActionsSchema.ts](./src/codeActionsSchema.ts) and [codeActionHandler.ts](./src/codeActionHandler.ts). Follow the existing patterns for defining and handling actions. Run the tests to verify your changes.
+   - Add the new action to [codeActionsSchema.ts](./src/codeActionsSchema.ts). Specify the action name and its parameters.
 
-By following these steps, you can add new capabilities to the `code-agent` package and enhance its functionality for automating tasks within VSCode.
+2. **Update the Grammar**:
+
+   - Modify [codeSchema.agr](./src/codeSchema.agr) to include the new action. This enables the agent to recognize natural language commands for the action.
+
+3. **Implement the Action Handler**:
+
+   - Extend the logic in [codeActionHandler.ts](./src/codeActionHandler.ts) to process the new action and execute the corresponding commands.
+
+4. **Test the New Action**:
+
+   - Add test cases for the new action in [codeSchema.tests.json](./src/codeSchema.tests.json). This ensures the action behaves as expected.
+
+5. **Update the Manifest**:
+
+   - If the new action is part of a sub-agent, update [codeManifest.json](./src/codeManifest.json) to include the sub-agent's schema and description.
+
+6. **Run Tests**:
+   - Use the existing test framework to validate your changes. Ensure that all tests pass before committing your updates.
+
+By following these steps, you can expand the capabilities of the `code-agent` to support additional VSCode automation tasks. Start by reviewing [codeActionsSchema.ts](./src/codeActionsSchema.ts) and [codeActionHandler.ts](./src/codeActionHandler.ts) to understand the existing patterns and structure.
 
 ## Reference
 
@@ -64,7 +99,7 @@ By following these steps, you can add new capabilities to the `code-agent` packa
 ### Entry points
 
 - `./agent/manifest` → [./src/codeManifest.json](./src/codeManifest.json)
-- `./agent/handlers` → [./dist/codeActionHandler.js](./dist/codeActionHandler.js)
+- `./agent/handlers` → `./dist/codeActionHandler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -85,7 +120,7 @@ External: `better-sqlite3`, `chalk`, `debug`, `ws`
 
 ### Files of interest
 
-`./src/codeActionHandler.ts`, `./src/codeActionsSchema.ts`, `./src/codeManifest.json`, …and 32 more under `./src/`.
+`./src/codeActionHandler.ts`, `./src/codeActionsSchema.ts`, `./src/codeManifest.json`, …and 40 more under `./src/`.
 
 ### Agent surface
 
@@ -110,6 +145,6 @@ _1 action implemented by this agent, parsed deterministically from `./src/codeAc
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

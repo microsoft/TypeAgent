@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4622ac0cdb2934142d59aef3555eeb6de379ddf65277f8fbe0233c0825188bdd -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6cd08161ced654d24d078a49680265d57095d8b6897e91360066292d2d38e576 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) entry point for the TypeAgent ecosystem. It is designed to demonstrate how to build interactive agents with natural language interfaces using structured prompting and large language models (LLMs). Acting as a personal agent, the shell processes user requests, performs actions, answers questions, and facilitates multi-conversation management. It integrates with other components of the TypeAgent system, such as the dispatcher and agent server, to provide a cohesive and interactive user experience.
+The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) entry point for the TypeAgent ecosystem. It is designed to demonstrate how to build interactive agents with natural language interfaces using structured prompting and large language models (LLMs). The shell acts as a personal agent, enabling users to issue requests, perform actions, answer questions, and manage multiple conversations. It integrates with other components of the TypeAgent system, such as the dispatcher and agent server, to provide a cohesive and interactive user experience.
 
 ## What it does
 
-The `agent-shell` package provides a rich set of features to enable users to interact with the TypeAgent system:
+The `agent-shell` package provides a range of features to facilitate interaction with the TypeAgent system:
 
 ### Conversation Management
 
@@ -170,6 +170,6 @@ _5 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

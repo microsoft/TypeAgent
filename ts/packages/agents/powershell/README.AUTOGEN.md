@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=595ace6ee3ef7a8d8c1d6fa42bf7cd784001391a3f9d5b4f80a074c9aac6ec6e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=8d57030d6f9e6533f13a242bc4f02a06b38dd22223a9d86ba0e1abff7ad08890 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # powershell-typeagent — AI-generated documentation
@@ -25,7 +25,7 @@ The `powershell-typeagent` package enables the execution of PowerShell scripts a
 - **Data Manipulation**: Actions like `readJson`, `writeJson`, `readCsv`, `writeCsv`, and `filterCsv` provide tools for working with structured data formats.
 - **Archive Management**: Actions such as `compress` and `expand` allow users to create and extract compressed files.
 
-The package also includes advanced features like script analysis using the Claude AI model and sandboxed execution of PowerShell scripts to ensure security and control over the execution environment.
+The package also includes features like script analysis using the Claude AI model and sandboxed execution of PowerShell scripts to ensure security and control over the execution environment.
 
 ## Setup
 
@@ -112,7 +112,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`
 - [./src/namespaces/services/servicesSchema.agr](./src/namespaces/services/servicesSchema.agr)
 - [./src/namespaces/system/systemSchema.agr](./src/namespaces/system/systemSchema.agr)
 - [./src/schema/allActionsSchema.ts](./src/schema/allActionsSchema.ts)
-- _…and 14 more under `./src/`._
+- _…and 15 more under `./src/`._
 
 ### Agent surface
 
@@ -127,6 +127,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter powershell-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter powershell-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

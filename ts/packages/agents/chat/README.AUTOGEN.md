@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=1b208f66acb97ba7bb73c99c2a8995d4e59b3ad29132ea0d545597153258fbbc -->
+<!-- AUTOGEN:DOCS:HASH:sha256=49e09d4b91a24c9fd317cd3475692d6e1d1fbd361801db2dcad8677b5918b721 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-agent — AI-generated documentation
@@ -12,22 +12,22 @@
 
 ## Overview
 
-The `chat-agent` package is a TypeAgent application agent designed to handle chat-based interactions. It uses structured prompting and large language models (LLMs) to generate responses and perform information lookups. This package serves as a sample implementation, demonstrating how to build a typed chat agent that integrates schema-based responses and external data lookups.
+The `chat-agent` package is a TypeAgent application agent designed to handle conversational interactions using structured prompting and large language models (LLMs). It serves as a sample implementation for building typed chat agents that leverage schemas to generate structured responses and perform external information lookups. This package demonstrates how to integrate LLMs with external data sources, such as Bing, to enhance the quality and relevance of responses.
 
 ## What it does
 
-The `chat-agent` is designed to facilitate conversational interactions by leveraging structured schemas and LLMs. It supports actions that allow the agent to generate responses and perform additional lookups for information when required. The agent can integrate with external data sources, such as Bing, to fetch supplementary information and provide more comprehensive responses.
+The `chat-agent` facilitates conversational interactions by processing user inputs and generating structured responses. It uses a schema-driven approach to ensure that all interactions are well-typed and consistent. The agent supports the following key actions:
 
-Key actions include:
+- **`generateResponse`**: This action generates a response based on the provided context or known information. It is used for general conversation, answering questions, and providing explanations.
+- **`showImageFile`**: This action displays images based on file entities provided in the request. It includes functionality to rehydrate images from storage and render them in the response.
 
-- `generateResponse`: Produces a response based on the provided context or known information. This action is used for general conversation and answering questions.
-- `showImageFile`: Displays images based on file entities provided in the request. This action supports rehydrating images from storage and rendering them in the response.
+The agent also supports external lookups for additional information. For example, it can query Bing to fetch supplementary data when the required information is not available in the chat history or application memory. If no external data source is configured, the agent gracefully handles such cases by returning a "No Information available" response.
 
-The agent is designed to work in conjunction with other agents, such as the `default-agent-provider`, `greeting-agent`, and `settings-agent`, to provide a cohesive and interactive user experience.
+The `chat-agent` is designed to work alongside other agents, such as the `default-agent-provider`, `greeting-agent`, and `settings-agent`, to provide a cohesive and interactive user experience.
 
 ## Setup
 
-To enable the lookup functionality, you need to configure the Bing API key. This key is required for the agent to perform external lookups using Bing. Follow these steps:
+To enable the external lookup functionality, you need to configure a Bing API key. This key allows the agent to perform lookups using Bing. Follow these steps to set up the key:
 
 1. Obtain a Bing API key from the Bing developer portal.
 2. Add the key to the root configuration file:
@@ -38,30 +38,46 @@ If the Bing API key is not provided, the agent will return a "No Information ava
 
 ## Key Files
 
-The `chat-agent` package is organized into several key files that define its functionality:
+The `chat-agent` package is organized into several key files that define its structure and functionality:
 
-- **[chatManifest.json](./src/chatManifest.json)**: This file serves as the agent's manifest, defining its description, schema, and available actions. It specifies the schema file and the types of actions the agent can perform, such as `generateResponse` and `showImageFile`.
-- **[chatResponseActionSchema.ts](./src/chatResponseActionSchema.ts)**: This file defines the structured schema for the agent's actions. It includes type definitions for actions like `GenerateResponseAction` and `ShowImageFileAction`, ensuring that all interactions are well-typed and consistent.
+- **[chatManifest.json](./src/chatManifest.json)**: This file serves as the agent's manifest, describing its purpose, schema, and available actions. It specifies the schema file and the types of actions the agent can perform, such as `generateResponse` and `showImageFile`.
 
-- **[chatResponseHandler.ts](./src/chatResponseHandler.ts)**: This file contains the core logic for handling actions and generating responses. It includes functions for executing actions, streaming partial responses, and performing lookups using external sources like Bing. It also handles tasks such as rehydrating images for the `showImageFile` action.
+- **[chatResponseActionSchema.ts](./src/chatResponseActionSchema.ts)**: This file defines the structured schema for the agent's actions. It includes type definitions for actions like `GenerateResponseAction` and `ShowImageFileAction`, ensuring that all interactions are well-typed and adhere to the expected structure.
 
-- **[index.ts](./src/index.ts)**: This is the main entry point for the package. It exports the agent instantiation function and key action execution functions, making them available for use by other parts of the system.
+- **[chatResponseHandler.ts](./src/chatResponseHandler.ts)**: This file contains the core logic for handling actions and generating responses. It includes:
+
+  - Functions for executing actions and streaming partial responses.
+  - Logic for performing external lookups using Bing.
+  - Code for rehydrating images for the `showImageFile` action.
+
+- **[index.ts](./src/index.ts)**: The main entry point for the package. It exports the agent instantiation function and key action execution functions, making them accessible to other parts of the system.
 
 ## How to extend
 
-To extend the functionality of the `chat-agent` package, you can add new actions, modify existing ones, or integrate additional data sources. Follow these steps:
+To customize or extend the `chat-agent` package, you can add new actions, modify existing ones, or integrate additional data sources. Here’s how to get started:
 
-1. **Start with the handler**: Open [chatResponseHandler.ts](./src/chatResponseHandler.ts). This file contains the logic for handling actions and generating responses. Use it as the starting point for implementing new functionality.
+1. **Understand the existing structure**: Begin by reviewing the key files, especially [chatResponseHandler.ts](./src/chatResponseHandler.ts) and [chatResponseActionSchema.ts](./src/chatResponseActionSchema.ts), to understand the current implementation.
 
-2. **Define new actions**: Add new action types to the [chatResponseActionSchema.ts](./src/chatResponseActionSchema.ts) file. Ensure the new actions are well-typed and follow the existing schema structure.
+2. **Add new actions**:
 
-3. **Implement action handling**: Add the logic for handling the new actions in [chatResponseHandler.ts](./src/chatResponseHandler.ts). Use the existing patterns for executing actions and generating responses as a guide.
+   - Define new action types in [chatResponseActionSchema.ts](./src/chatResponseActionSchema.ts). Ensure the new actions are well-typed and follow the existing schema structure.
+   - Update [chatManifest.json](./src/chatManifest.json) to include the new actions and update the schema if necessary.
 
-4. **Update the manifest**: Modify [chatManifest.json](./src/chatManifest.json) to include the new actions and update the schema if necessary. This ensures the agent recognizes and supports the new functionality.
+3. **Implement action handling**:
 
-5. **Test your changes**: Write and run tests to verify that the new actions work as expected. Add test cases to cover various scenarios and edge cases.
+   - Add the logic for handling the new actions in [chatResponseHandler.ts](./src/chatResponseHandler.ts). Use the existing patterns for executing actions and generating responses as a guide.
+   - If the new action requires external data, integrate the necessary data source (e.g., an API) into the handler.
 
-By following these steps, you can customize the `chat-agent` package to meet specific requirements or integrate additional capabilities, such as new data sources or response types.
+4. **Test your changes**:
+
+   - Write unit tests to verify the functionality of the new actions. Ensure that edge cases and error handling are adequately covered.
+   - Test the integration with external data sources, if applicable.
+
+5. **Update documentation**:
+   - Document the new actions and any changes to the schema or handler in the relevant files.
+   - Ensure the `chatManifest.json` file reflects the updated capabilities of the agent.
+
+By following these steps, you can extend the `chat-agent` package to meet specific requirements or integrate additional features, such as new response types or data sources.
 
 ## Reference
 
@@ -93,7 +109,7 @@ External: `typechat`
 
 ### Files of interest
 
-`./src/chatManifest.json`, `./src/chatResponseActionSchema.ts`, `./src/chatResponseHandler.ts`, …and 2 more under `./src/`.
+`./src/chatManifest.json`, `./src/chatResponseActionSchema.ts`, `./src/chatResponseHandler.ts`, …and 3 more under `./src/`.
 
 ### Agent surface
 
@@ -103,6 +119,6 @@ External: `typechat`
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=0b22757dee3f752244fa1554c4677a8177d6bd3ecb8a4ee3bb8e57ba07cad58f -->
+<!-- AUTOGEN:DOCS:HASH:sha256=484dce4ebdf6f63df3234940da50994f36d89bf826a20ad09e14dc9ca28d44b4 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-api — AI-generated documentation
@@ -12,18 +12,18 @@
 
 ## Overview
 
-The `agent-api` package is a TypeScript library that provides an HTTP and WebSocket API server for the TypeAgent sample code. It is designed to support the development of distributed interactive agents with natural language interfaces, leveraging structured prompting and large language models (LLMs). This package enables developers to extend the functionality of agents to web-enabled devices, including browsers, mobile devices, and IoT-connected systems.
+The `agent-api` package is a TypeScript library that provides an HTTP and WebSocket API server for the TypeAgent sample code. It is a core component of the TypeAgent ecosystem, designed to facilitate the development of distributed interactive agents with natural language interfaces. By leveraging structured prompting and large language models (LLMs), this package enables agents to interact with web-enabled devices such as browsers, mobile devices, and IoT-connected systems.
 
 ## What it does
 
-The `agent-api` package offers the following key capabilities:
+The `agent-api` package provides the following key functionalities:
 
-- **HTTP and WebSocket Server**: Provides an API server that supports both HTTP and WebSocket protocols, enabling real-time communication with agents.
-- **Storage Integration**: Includes support for multiple storage providers, such as AWS S3 and Azure Blob Storage, to manage remote files. Actions like `listRemoteFiles`, `downloadFile`, and `uploadFile` are implemented to interact with these storage systems.
-- **Web Dispatcher**: Facilitates the handling of actions and commands sent to agents via WebSocket connections.
-- **Configuration Management**: Relies on environment variables for configuring the server and storage providers, ensuring flexibility and adaptability to different deployment environments.
+- **HTTP and WebSocket API Server**: The package serves as a communication hub for TypeAgent, supporting both HTTP and WebSocket protocols. This allows for real-time interaction with agents and facilitates the exchange of data and commands.
+- **Storage Provider Integration**: The package supports multiple storage backends, including AWS S3 and Azure Blob Storage. It provides actions such as `listRemoteFiles`, `downloadFile`, and `uploadFile` to manage remote files.
+- **Web Dispatcher**: Handles incoming actions and commands sent to agents via WebSocket connections, enabling dynamic and interactive agent behavior.
+- **Configuration Management**: The package uses environment variables to configure the server and storage providers, making it adaptable to various deployment environments.
 
-The package integrates with other components in the TypeAgent ecosystem, such as `agent-cache`, `agent-dispatcher`, and `telemetry`, to provide a cohesive and extensible framework for building and managing interactive agents.
+The `agent-api` package integrates with other components in the TypeAgent ecosystem, such as `agent-cache`, `agent-dispatcher`, and `telemetry`, to provide a comprehensive framework for building and managing interactive agents.
 
 ## Setup
 
@@ -34,18 +34,18 @@ To use the `agent-api` package, you need to configure the following environment 
 - `AWS_S3_REGION`: The AWS region where your S3 bucket is located.
 - `AWS_SECRET_ACCESS_KEY`: Your AWS secret access key.
 
-These variables are required for the package to interact with AWS S3 for storage operations. You can set these variables in a `.env` file or directly in your shell environment. For more details on obtaining these values, refer to the hand-written README.
+These environment variables are required for the package to interact with AWS S3 for storage operations. You can set these variables in a `.env` file or directly in your shell environment. For detailed instructions on obtaining these values, refer to the hand-written README.
 
-Once the environment variables are configured, you can start the server locally using `npm run start` in the package directory. The server will be accessible at `http://localhost:3000`. To access the Shell interface, navigate to `http://localhost:3000/chatView.html`.
+Once the environment variables are set, you can start the server locally by running `npm run start` in the package directory. The server will be accessible at `http://localhost:3000`. To access the Shell interface, navigate to `http://localhost:3000/chatView.html`.
 
 Alternatively, you can deploy the server using the provided Docker image. This allows you to host the API locally or in a cloud environment, such as Azure App Service.
 
 ## Key Files
 
-The `agent-api` package is organized into several key files, each responsible for specific functionality:
+The `agent-api` package is organized into several key files, each serving a specific purpose:
 
 - **[index.ts](./src/index.ts)**: The main entry point of the package. It initializes and starts the TypeAgent server.
-- **[storageProvider.ts](./src/storageProvider.ts)**: Defines the `TypeAgentStorageProvider` interface, which outlines methods for interacting with remote storage, such as `listRemoteFiles`, `downloadFile`, and `uploadFile`.
+- **[storageProvider.ts](./src/storageProvider.ts)**: Defines the `TypeAgentStorageProvider` interface, which specifies methods for interacting with remote storage, such as `listRemoteFiles`, `downloadFile`, and `uploadFile`.
 - **[storageProviders/awsStorageProvider.ts](./src/storageProviders/awsStorageProvider.ts)**: Implements the `TypeAgentStorageProvider` interface for AWS S3, enabling file operations like listing, downloading, and uploading files.
 - **[storageProviders/azureStorageProvider.ts](./src/storageProviders/azureStorageProvider.ts)**: Implements the `TypeAgentStorageProvider` interface for Azure Blob Storage.
 - **[typeAgentServer.ts](./src/typeAgentServer.ts)**: Manages the initialization and configuration of the TypeAgent server, including the integration of storage providers and the web dispatcher.
@@ -54,7 +54,7 @@ The `agent-api` package is organized into several key files, each responsible fo
 
 ## How to extend
 
-To extend the functionality of the `agent-api` package, you can follow these steps:
+To customize and extend the `agent-api` package, follow these steps:
 
 1. **Add a new storage provider**:
 
@@ -65,7 +65,7 @@ To extend the functionality of the `agent-api` package, you can follow these ste
 2. **Update the server configuration**:
 
    - Modify [typeAgentServer.ts](./src/typeAgentServer.ts) to include your new storage provider.
-   - Update the server initialization logic to accommodate any new features or configurations.
+   - Update the server initialization logic to incorporate any new features or configurations.
 
 3. **Add new actions**:
 
@@ -74,9 +74,9 @@ To extend the functionality of the `agent-api` package, you can follow these ste
 
 4. **Test your changes**:
    - Write unit tests for your new features, including storage providers and actions.
-   - Run the tests to verify that your changes work as expected.
+   - Run the tests to ensure your changes work as intended.
 
-By following these guidelines, you can customize the `agent-api` package to meet your specific requirements and integrate it with additional systems or services.
+By following these steps, you can enhance the `agent-api` package to meet your specific needs and integrate it with additional systems or services.
 
 ## Reference
 
@@ -120,6 +120,6 @@ _4 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-api docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-api docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

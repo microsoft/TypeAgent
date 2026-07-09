@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ee14eeb625bbb18bd88c1be0ab4186a974451dbc8228795d5bc64a6b6a625bb1 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c058561d7cf2ec1ee5e7a42a8a052b09189ece680d5c98ab2977bdd4b2069d4f -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # utility-typeagent — AI-generated documentation
@@ -12,55 +12,92 @@
 
 ## Overview
 
-The `utility-typeagent` package is a TypeAgent application agent designed to perform utility operations such as web searches, web fetches, and file I/O within compiled task flows. It integrates with various external libraries and services to provide these functionalities, making it a versatile tool for handling various utility tasks in an automated manner.
+The `utility-typeagent` package is a TypeAgent application agent that provides utility operations for web search, web content fetching, file input/output, and text transformation using language models. It is designed to be integrated into compiled task flows, enabling automated workflows that require interaction with web content, file systems, and language model processing.
+
+This package leverages external libraries such as `puppeteer` for web scraping, `html-to-text` for content transformation, and `@anthropic-ai/claude-agent-sdk` for language model interactions. It is a core component of the TypeAgent ecosystem, supporting a variety of utility actions.
 
 ## What it does
 
-The `utility-typeagent` package supports several actions that can be used in task flows:
+The `utility-typeagent` package implements several key actions that enable it to perform a range of utility tasks:
 
-- `webSearch`: Performs a web search using a query string and returns the search results.
-- `webFetch`: Fetches the content of a specified URL.
-- `readFile`: Reads the contents of a file from the filesystem.
-- `writeFile`: Writes content to a specified file.
-- `llmTransform`: Transforms text or HTML using a language model, with options for JSON parsing and HTML output.
-- `claudeTask`: Executes tasks using the Claude language model.
+- **Web Search (`webSearch`)**: Executes a search query on the web and retrieves a list of search results.
+- **Web Fetch (`webFetch`)**: Fetches the content of a specified URL, such as a webpage or an online resource.
+- **File Operations**:
+  - `readFile`: Reads the content of a file from the local filesystem.
+  - `writeFile`: Writes specified content to a file on the local filesystem.
+- **Language Model Transformations**:
+  - `llmTransform`: Processes text or HTML using a language model, with options for JSON parsing and HTML output.
+  - `claudeTask`: Executes tasks or queries using the Claude language model.
 
-These actions enable the agent to interact with web content, perform file operations, and leverage language model transformations. The package integrates with external libraries such as `puppeteer`, `html-to-text`, and `@anthropic-ai/claude-agent-sdk` to provide these functionalities.
+These actions allow the agent to interact with external resources, process data, and perform file-based operations, making it a versatile tool for automating complex workflows.
 
 ## Setup
 
-To set up the `utility-typeagent` package, you need to configure several environment variables and dependencies. The required environment variables include:
+To use the `utility-typeagent` package, you need to configure the following:
 
-- `CLAUDE_API_KEY`: The API key for accessing the Claude language model.
+1. **Environment Variables**:
 
-Additionally, you need to install the necessary dependencies and configure the package settings. For detailed setup instructions, refer to the hand-written README.
+   - `CLAUDE_API_KEY`: Required to authenticate with the Claude language model. Obtain this key from the provider's developer portal.
+
+2. **Dependencies**:
+   - Ensure that all required dependencies are installed. These include `puppeteer`, `puppeteer-extra`, `puppeteer-extra-plugin-stealth`, `html-to-text`, and `@anthropic-ai/claude-agent-sdk`.
+
+For additional details on setup, including any specific configuration steps, refer to the hand-written README.
 
 ## Key Files
 
-The `utility-typeagent` package is structured as follows:
+The `utility-typeagent` package is organized into several key files, each serving a specific purpose:
 
-- **Grammar**: The grammar for the agent is defined in [utilitySchema.agr](./src/utilitySchema.agr). This file specifies the syntax for the supported actions.
-- **Schema**: The schema for the actions is defined in [utilitySchema.mts](./src/utilitySchema.mts). This file includes TypeScript types for each action.
-- **Action Handler**: The main logic for handling actions is implemented in [actionHandler.mts](./src/actionHandler.mts). This file contains the functions that execute the actions and return results.
-- **Manifest**: The agent's manifest is defined in [manifest.json](./manifest.json). This file includes metadata about the agent, such as its description, emoji, and schema files.
+- **[utilitySchema.agr](./src/utilitySchema.agr)**: Defines the grammar for the agent, specifying the syntax for supported actions such as `webSearch`, `webFetch`, `readFile`, and `writeFile`. This file is essential for parsing natural language inputs into structured actions.
+- **[utilitySchema.mts](./src/utilitySchema.mts)**: Contains the TypeScript definitions for the actions supported by the agent. Each action, such as `WebSearchAction` or `WriteFileAction`, is defined with its parameters and expected structure.
 
-### Key Files and Their Responsibilities
+- **[actionHandler.mts](./src/actionHandler.mts)**: Implements the logic for executing the defined actions. This file includes functions for performing web searches, fetching web content, reading and writing files, and interacting with the Claude language model.
 
-- [utilitySchema.agr](./src/utilitySchema.agr): Defines the grammar for the agent, specifying the syntax for actions like `webSearch`, `webFetch`, `readFile`, and `writeFile`.
-- [utilitySchema.mts](./src/utilitySchema.mts): Contains TypeScript types for each action, detailing the parameters and structure of actions such as `WebSearchAction`, `WebFetchAction`, `ReadFileAction`, `WriteFileAction`, `LlmTransformAction`, and `ClaudeTaskAction`.
-- [actionHandler.mts](./src/actionHandler.mts): Implements the logic for handling actions. This file includes functions to perform web searches, fetch web content, read and write files, and interact with the Claude language model.
-- [manifest.json](./manifest.json): Provides metadata about the agent, including its description, emoji, and schema files.
+- **[manifest.json](./manifest.json)**: Provides metadata about the agent, including its description, emoji, and references to the schema and grammar files. This file is essential for registering the agent within the TypeAgent ecosystem.
+
+- **[tsconfig.json](./src/tsconfig.json)**: Configures TypeScript compilation settings for the package, including the root directory and output directory.
+
+### File Responsibilities
+
+- **Grammar and Schema**: The combination of [utilitySchema.agr](./src/utilitySchema.agr) and [utilitySchema.mts](./src/utilitySchema.mts) defines the structure and syntax of the actions. These files ensure that the agent can interpret and validate the actions it receives.
+- **Action Logic**: [actionHandler.mts](./src/actionHandler.mts) is the core of the package, containing the implementation of all supported actions. For example:
+  - `webSearch` uses `puppeteer` and `puppeteer-extra` to perform web searches.
+  - `webFetch` retrieves content from a URL.
+  - `readFile` and `writeFile` handle file system operations using Node.js's `fs/promises` module.
+  - `llmTransform` and `claudeTask` interact with the Claude language model via the `@anthropic-ai/claude-agent-sdk`.
+- **Manifest**: [manifest.json](./manifest.json) ensures the agent is properly registered and provides metadata for integration with other components.
 
 ## How to extend
 
-To extend the `utility-typeagent` package, follow these steps:
+To add new functionality to the `utility-typeagent` package, follow these steps:
 
-1. **Add a new action**: Define the new action in [utilitySchema.mts](./src/utilitySchema.mts) by adding a new TypeScript type for the action.
-2. **Update the grammar**: Modify [utilitySchema.agr](./src/utilitySchema.agr) to include the syntax for the new action.
-3. **Implement the action handler**: Add the logic for the new action in [actionHandler.mts](./src/actionHandler.mts). Ensure that the handler processes the action and returns the appropriate result.
-4. **Test the new action**: Write tests to verify the functionality of the new action. Ensure that the tests cover various scenarios and edge cases.
+1. **Define a New Action**:
 
-By following these steps, you can extend the capabilities of the `utility-typeagent` package to support additional utility operations. For example, if you want to add a new action to perform image processing, you would define the new action type in the schema, update the grammar to recognize the new action, implement the logic in the action handler, and write tests to ensure it works correctly.
+   - Add a new TypeScript type for the action in [utilitySchema.mts](./src/utilitySchema.mts). Specify the `actionName` and the required parameters for the action.
+
+2. **Update the Grammar**:
+
+   - Modify [utilitySchema.agr](./src/utilitySchema.agr) to include the syntax for the new action. This ensures the agent can parse natural language inputs into the new action.
+
+3. **Implement the Action Logic**:
+
+   - Add the implementation for the new action in [actionHandler.mts](./src/actionHandler.mts). Use existing helper functions from `@typeagent/agent-sdk` or external libraries as needed.
+
+4. **Test the New Action**:
+
+   - Write unit tests to validate the new action's functionality. Ensure the tests cover various scenarios, including edge cases and error handling.
+
+5. **Update the Manifest**:
+   - If necessary, update [manifest.json](./manifest.json) to include metadata about the new action.
+
+For example, to add an action for image processing:
+
+- Define an `ImageProcessAction` type in the schema file.
+- Add grammar rules for the action in the grammar file.
+- Implement the image processing logic in the action handler.
+- Write tests to ensure the action works as expected.
+
+By following these steps, you can extend the `utility-typeagent` package to support additional utility operations, making it even more versatile for your task flows.
 
 ## Reference
 
@@ -69,7 +106,7 @@ By following these steps, you can extend the capabilities of the `utility-typeag
 ### Entry points
 
 - `./agent/manifest` → [./manifest.json](./manifest.json)
-- `./agent/handlers` → [./dist/actionHandler.mjs](./dist/actionHandler.mjs)
+- `./agent/handlers` → `./dist/actionHandler.mjs` _(not found on disk)_
 
 ### Dependencies
 
@@ -88,7 +125,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@types/html-to-text`, `html-to-text
 
 ### Files of interest
 
-`./src/utilitySchema.agr`, `./src/actionHandler.mts`, `./src/tsconfig.json`, …and 1 more under `./src/`.
+`./src/utilitySchema.agr`, `./src/actionHandler.mts`, `./src/tsconfig.json`, …and 2 more under `./src/`.
 
 ### Agent surface
 
@@ -96,6 +133,6 @@ External: `@anthropic-ai/claude-agent-sdk`, `@types/html-to-text`, `html-to-text
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter utility-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter utility-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

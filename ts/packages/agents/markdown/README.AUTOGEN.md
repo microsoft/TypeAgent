@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=67e5f8d8e2239c53527524511927e4acaa8b1f986abcdd6b9c9511b4a3e5e037 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=a8cae0a90f91e864a24f2278847850510ca200ef711d4f446303f2ce9047b5c1 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # markdown-agent — AI-generated documentation
@@ -12,60 +12,80 @@
 
 ## Overview
 
-The Markdown Agent is a TypeAgent application agent designed for creating and editing markdown documents. It supports various editing scenarios, including real-time collaboration and AI-assisted updates, making it a versatile tool for managing markdown content.
+The `markdown-agent` is a TypeAgent application agent designed to facilitate the creation, editing, and management of markdown documents. It supports a variety of use cases, including real-time collaboration, AI-assisted updates, and advanced markdown processing. By leveraging libraries such as `@milkdown/core` and `@typeagent/aiclient`, the agent provides a structured and extensible framework for handling markdown content in a collaborative and dynamic environment.
 
 ## What it does
 
-The Markdown Agent provides functionality for managing markdown documents through the following actions:
+The `markdown-agent` provides a set of actions to manage markdown documents effectively. These actions include:
 
-- `createDocument`: Creates a new markdown document.
-- `openDocument`: Opens an existing markdown document for editing.
-- `updateDocument`: Modifies a document by adding, removing, or editing its content.
-- `streamingUpdateDocument`: Updates a document with real-time AI streaming support, enabling dynamic and interactive editing.
+- **`createDocument`**: Creates a new markdown document with a specified name.
+- **`openDocument`**: Opens an existing markdown document for editing.
+- **`updateDocument`**: Allows modifications to a document, such as adding, removing, or editing content.
+- **`streamingUpdateDocument`**: Enables real-time updates to a document using AI streaming, allowing for dynamic and interactive editing.
 
-These actions allow users to efficiently manage markdown files, with support for collaborative editing using Yjs and advanced markdown processing through libraries like `@milkdown/core`. The agent also integrates with AI models to enhance document updates and formatting.
+The agent integrates with AI models to enhance document updates, including formatting and content generation. It also supports collaborative editing through Yjs, ensuring consistency across multiple users working on the same document.
 
 ## Setup
 
-To configure the Markdown Agent, you need to set the following environment variables:
+To set up the `markdown-agent`, you need to configure the following environment variables:
 
-- `MARKDOWN_FILE`: Specifies the path to the markdown file to be edited. This can be an absolute or relative path.
-- `TYPEAGENT_MARKDOWN_ROOT`: Defines the root directory for markdown files. This is used as the base directory for file operations.
+- **`MARKDOWN_FILE`**: The path to the markdown file to be edited. This can be an absolute or relative path.
+- **`TYPEAGENT_MARKDOWN_ROOT`**: The root directory for markdown files. This serves as the base directory for file operations.
 
-These variables can be set in your shell or in the `ts/.env` file. Refer to the hand-written README for additional details on obtaining and configuring these values.
+These environment variables can be set in your shell or defined in the `ts/.env` file. For additional details on obtaining and configuring these values, refer to the hand-written README.
 
 ## Key Files
 
-The Markdown Agent's implementation is organized into several key files, each responsible for specific aspects of the agent's functionality:
+The `markdown-agent` is organized into several key files, each responsible for specific functionality:
 
-- **Manifest**: The [markdownManifest.json](./src/agent/markdownManifest.json) file defines the agent's metadata, including its description, schema, and supported actions.
-- **Action Handlers**: The [markdownActionHandler.ts](./src/agent/markdownActionHandler.ts) file contains the core logic for executing actions such as `createDocument`, `openDocument`, `updateDocument`, and `streamingUpdateDocument`.
-- **Schemas**:
-  - [markdownActionSchema.ts](./src/agent/markdownActionSchema.ts): Defines the structure and types for the actions supported by the agent.
-  - [markdownOperationSchema.ts](./src/agent/markdownOperationSchema.ts): Specifies the types of document operations, such as insert, delete, replace, and format.
-- **Translator**: The [translator.ts](./src/agent/translator.ts) file integrates AI models and translates actions into document operations.
-- **Collaboration Manager**: The [collaborationManager.ts](./src/view/route/collaborationManager.ts) file manages server-side collaboration for document synchronization using Yjs.
+### Core Components
 
-### File Responsibilities
+- **[markdownManifest.json](./src/agent/markdownManifest.json)**: This file contains metadata about the agent, including its description, emoji identifier, and the schema file it uses. It also specifies the actions supported by the agent, such as `streamingUpdateDocument`.
+- **[markdownActionHandler.ts](./src/agent/markdownActionHandler.ts)**: Implements the core logic for handling actions. This includes functions like `executeMarkdownAction` and `streamPartialAction`, which process and execute the defined actions.
+- **[markdownActionSchema.ts](./src/agent/markdownActionSchema.ts)**: Defines the structure and parameters for the actions supported by the agent, such as `createDocument`, `openDocument`, `updateDocument`, and `streamingUpdateDocument`.
+- **[markdownOperationSchema.ts](./src/agent/markdownOperationSchema.ts)**: Specifies the types of document operations, such as `insert`, `delete`, `replace`, and `format`. These operations are used to modify markdown documents.
 
-- **[markdownManifest.json](./src/agent/markdownManifest.json)**: Contains metadata about the agent, including its emoji identifier, description, and the schema file it uses.
-- **[markdownActionHandler.ts](./src/agent/markdownActionHandler.ts)**: Implements the logic for handling actions, including validation, execution, and streaming updates.
-- **[markdownActionSchema.ts](./src/agent/markdownActionSchema.ts)**: Defines the types and parameters for actions like `createDocument` and `updateDocument`.
-- **[markdownOperationSchema.ts](./src/agent/markdownOperationSchema.ts)**: Details the types of operations (e.g., insert, delete) that can be performed on a markdown document.
-- **[translator.ts](./src/agent/translator.ts)**: Handles the integration with AI models, translating user actions into document operations.
-- **[collaborationManager.ts](./src/view/route/collaborationManager.ts)**: Manages collaborative editing sessions, ensuring consistency across clients using Yjs.
+### AI Integration
+
+- **[translator.ts](./src/agent/translator.ts)**: Integrates AI models to translate user actions into document operations. It uses the `TypeChat` library and supports models like `GPT_35_TURBO` and `GPT_4`.
+
+### Collaboration
+
+- **[collaborationManager.ts](./src/view/route/collaborationManager.ts)**: Manages server-side collaboration for document synchronization using Yjs. This ensures that multiple users can edit the same document simultaneously without conflicts.
+
+### Supporting Files
+
+- **[ipcTypes.ts](./src/agent/ipcTypes.ts)**: Defines inter-process communication (IPC) message types for communication between the agent and its view layer.
+- **[tsconfig.json](./src/agent/tsconfig.json)**: Configures TypeScript compilation settings for the agent.
 
 ## How to extend
 
-To extend the Markdown Agent, follow these steps:
+To extend the `markdown-agent`, follow these steps:
 
-1. **Define new actions**: Add new action types in [markdownActionSchema.ts](./src/agent/markdownActionSchema.ts). Ensure the new actions are well-structured and include all necessary parameters.
-2. **Implement action handlers**: Add logic for the new actions in [markdownActionHandler.ts](./src/agent/markdownActionHandler.ts). Update the `executeMarkdownAction` function to handle the new actions appropriately.
-3. **Update schemas**: Modify the schema files ([markdownActionSchema.ts](./src/agent/markdownActionSchema.ts) and [markdownOperationSchema.ts](./src/agent/markdownOperationSchema.ts)) to include new document operations or action types.
-4. **Test your changes**: Write unit tests to validate the new actions and their handlers. Ensure the agent behaves as expected with the new functionality.
-5. **Update the manifest**: If the new actions require changes to the agent's metadata, update [markdownManifest.json](./src/agent/markdownManifest.json) to reflect the additions.
+1. **Add new actions**:
 
-By following these steps, you can extend the Markdown Agent to support additional markdown editing scenarios, integrate new features, or enhance existing functionality.
+   - Define new action types in [markdownActionSchema.ts](./src/agent/markdownActionSchema.ts). Ensure the new actions are well-structured and include all necessary parameters.
+
+2. **Implement action handlers**:
+
+   - Add the logic for the new actions in [markdownActionHandler.ts](./src/agent/markdownActionHandler.ts). Update the `executeMarkdownAction` function to handle the new actions.
+
+3. **Update schemas**:
+
+   - Modify the schema files ([markdownActionSchema.ts](./src/agent/markdownActionSchema.ts) and [markdownOperationSchema.ts](./src/agent/markdownOperationSchema.ts)) to include new document operations or action types.
+
+4. **Integrate AI models**:
+
+   - If the new functionality requires AI support, update [translator.ts](./src/agent/translator.ts) to include the necessary logic for translating actions into document operations.
+
+5. **Test your changes**:
+
+   - Write unit tests to validate the new actions and their handlers. Ensure the agent behaves as expected with the new functionality.
+
+6. **Update the manifest**:
+   - If the new actions require changes to the agent's metadata, update [markdownManifest.json](./src/agent/markdownManifest.json) to reflect the additions.
+
+By following these steps, you can extend the `markdown-agent` to support additional markdown editing scenarios, integrate new features, or enhance existing functionality.
 
 ## Reference
 
@@ -95,7 +115,7 @@ _…and 8 more not shown._
 
 ### Files of interest
 
-`./src/agent/markdownManifest.json`, `./src/agent/markdownActionHandler.ts`, `./src/agent/markdownActionSchema.ts`, …and 28 more under `./src/`.
+`./src/agent/markdownManifest.json`, `./src/agent/markdownActionHandler.ts`, `./src/agent/markdownActionSchema.ts`, …and 29 more under `./src/`.
 
 ### Environment variables
 
@@ -106,6 +126,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter markdown-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter markdown-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

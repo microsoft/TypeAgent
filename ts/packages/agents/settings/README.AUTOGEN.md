@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7ffcd3d46298f951f133b8d826d3d0fc95df87b70f7ac7155e38c948f98ee43c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b2f2e15566301b5dfdf51d22bc7b989acee4cda9b5b3602fc502f2ca2b92dc67 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # settings-agent — AI-generated documentation
@@ -31,21 +31,22 @@ To set up the settings agent, follow these steps:
 
 1. **Install dependencies**: Ensure all required dependencies are installed. The package relies on both workspace dependencies (e.g., `@typeagent/agent-sdk`, `agent-dispatcher`, `chat-agent`) and external dependencies (`debug`, `typechat`).
 
-2. **Environment configuration**: No specific environment variables are mentioned in the hand-written README or source files. If additional configuration is required, refer to the hand-written README for details.
-
-3. **Build the project**: Run the following command from the root of the monorepo to build the package:
+2. **Build the project**: Run the following command from the root of the monorepo to build the package:
 
    ```bash
    pnpm build
    ```
 
-4. **Run the agent**: Use the appropriate TypeAgent runtime or integration to execute the settings agent and test its functionality.
+3. **Run the agent**: Use the appropriate TypeAgent runtime or integration to execute the settings agent and test its functionality.
+
+No specific environment variables or external configuration steps are required, as noted in the hand-written README.
 
 ## Key Files
 
 The settings agent's implementation is organized into several key files:
 
 - **[settingsManifest.json](./src/settingsManifest.json)**: Defines the agent's metadata, including its description, emoji character, and schema details. This file serves as the entry point for the agent's configuration.
+
 - **[settingsActionSchema.ts](./src/settingsActionSchema.ts)**: Specifies the schema for the actions the agent can handle. It defines the structure and parameters for actions like `dimBrightNessAction` and `adjustMultiMonitorLayoutAction`.
 
 - **[settingsCommandHandler.ts](./src/settingsCommandHandler.ts)**: Contains the core logic for handling actions. This file includes the `executeSettingsAction` function, which routes actions to the appropriate handler, and the `handleSettingsAction` function, which implements the specific logic for each action.
@@ -128,7 +129,7 @@ External: `debug`, `typechat`
 
 ### Files of interest
 
-`./src/settingsActionSchema.ts`, `./src/settingsCommandHandler.ts`, `./src/settingsManifest.json`, …and 1 more under `./src/`.
+`./src/settingsActionSchema.ts`, `./src/settingsCommandHandler.ts`, `./src/settingsManifest.json`, …and 2 more under `./src/`.
 
 ### Agent surface
 
@@ -138,6 +139,6 @@ External: `debug`, `typechat`
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter settings-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter settings-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=18f9eb22a1bc3f2a1e25641d9dbbe53c9009c5b2791405b802994017b1128af8 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=676a72b6c56b7189c65a16f12a236be540ebc2ede9cce94a56c321a368fb1a3e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # visualstudio-agent — AI-generated documentation
@@ -12,69 +12,94 @@
 
 ## Overview
 
-The `visualstudio-agent` package integrates TypeAgent with Visual Studio via the EnvDTE automation API. It enables various actions related to the editor, solution management, build processes, and debugging within Visual Studio. This package contains the Node-side agent, while the host-side VSIX that runs inside Visual Studio is located under the `host/` directory.
+The `visualstudio-agent` package integrates TypeAgent with Visual Studio using the EnvDTE automation API. It acts as the Node-side agent, enabling communication between TypeAgent and Visual Studio for actions related to editing, debugging, building, and managing solutions. The corresponding host-side VSIX, which runs inside Visual Studio, is located in the `host/` directory.
+
+This package facilitates a wide range of actions, such as managing breakpoints, controlling the debugger, performing file operations, building and running solutions, searching and navigating code, executing commands, and performing edit actions.
 
 ## What it does
 
-The `visualstudio-agent` package supports a range of actions that can be categorized into several groups:
+The `visualstudio-agent` provides a bridge between the TypeAgent system and Visual Studio, enabling the execution of various actions grouped into the following categories:
 
-- **breakpointsManagement**: `addBreakpoint`, `removeBreakpoint`
-- **debuggingControl**: `break`, `go`, `stepInto`, `stepOut`, `stepOver`, `stop`, `debug`
-- **fileOperations**: `openFile`, `closeAll`, `saveAll`
-- **buildAndRun**: `build`, `clean`, `run`
-- **searchAndNavigation**: `findInFiles`, `findText`, `gotoLine`
-- **commandExecution**: `executeCommand`
-- **editActions**: `redo`, `undo`
+- **Breakpoints Management**: Actions like `addBreakpoint` and `removeBreakpoint` allow users to manage breakpoints in their code.
+- **Debugging Control**: Actions such as `break`, `go`, `stepInto`, `stepOut`, `stepOver`, `stop`, and `debug` provide control over the debugging process.
+- **File Operations**: Includes actions like `openFile`, `closeAll`, and `saveAll` for managing files in the editor.
+- **Build and Run**: Actions like `build`, `clean`, and `run` enable solution-wide build and execution.
+- **Search and Navigation**: Actions such as `findInFiles`, `findText`, and `gotoLine` help users search and navigate through their codebase.
+- **Command Execution**: The `executeCommand` action allows users to run Visual Studio commands via the EnvDTE API.
+- **Edit Actions**: Includes `redo` and `undo` for basic editing operations.
 
-These actions allow users to manage breakpoints, control the debugger, perform file operations, build and run solutions, search and navigate code, execute commands, and perform edit actions within Visual Studio.
+The agent communicates with Visual Studio through two WebSocket channels:
+
+1. **Chat channel**: Used by the WebView2 inside the VSIX to communicate with the TypeAgent dispatcher.
+2. **Action bridge**: A WebSocket server owned by the agent, which the C# host connects to for dispatching actions through EnvDTE.
 
 ## Setup
 
-To set up the `visualstudio-agent`, you need to have Visual Studio 2022 (or later) with the **Visual Studio extension development** workload installed. Additionally, ensure you have Node.js ≥ 20 and pnpm ≥ 10.
+To set up the `visualstudio-agent`, follow these steps:
 
-The following environment variables need to be set:
+1. **Prerequisites**:
 
-- `VISUALSTUDIO_BRIDGE_PORT`: This variable can be used to pin the agent's bridge to a specific port when debugging.
-- `VISUALSTUDIO_BRIDGE_SEND_TIMEOUT_MS`: This variable sets the timeout for sending messages through the bridge.
+   - Install Visual Studio 2022 (or later) with the **Visual Studio extension development** workload.
+   - Install Node.js (version 20 or later) and pnpm (version 10 or later).
 
-For detailed setup instructions, see the hand-written README.
+2. **Environment Variables**:
+
+   - `VISUALSTUDIO_BRIDGE_PORT`: (Optional) Set this variable to pin the agent's bridge to a specific port for debugging purposes. If unset, the port will be assigned by the operating system.
+   - `VISUALSTUDIO_BRIDGE_SEND_TIMEOUT_MS`: Configure the timeout (in milliseconds) for sending messages through the bridge.
+
+3. **Build**:
+
+   - Build the agent using the monorepo's build command:
+     ```sh
+     pnpm run build visualStudio
+     ```
+   - For the host-side VSIX, follow the build instructions in the `host/README.md`.
+
+4. **Run**:
+   - Start the TypeAgent agent-server.
+   - Ensure the `visualstudio-agent` is enabled in the dispatcher configuration.
+   - Launch Visual Studio with the VSIX installed.
+   - Open the **TypeAgent Chat** panel in Visual Studio via **View → Other Windows → TypeAgent Chat**.
 
 ## Key Files
 
-The architecture of the `visualstudio-agent` involves two WebSocket channels:
+The `visualstudio-agent` package is organized as follows:
 
-- **Chat channel** (port 8999): The WebView2 inside the VSIX communicates with the dispatcher.
-- **Action bridge** (OS-assigned ephemeral port): The agent owns a `WebSocketServer`, and the C# host connects as a client to dispatch incoming actions through EnvDTE.
+- **[src/visualStudioActionHandler.ts](./src/visualStudioActionHandler.ts)**: Implements the WebSocket bridge server and action handlers. This is the core of the agent's functionality.
+- **[src/visualStudioSchema.ts](./src/visualStudioSchema.ts)**: Defines the types for all supported actions.
+- **[src/visualStudioSchema.agr](./src/visualStudioSchema.agr)**: Contains the grammar rules for parsing and mapping user intents to actions.
+- **[src/visualStudioManifest.json](./src/visualStudioManifest.json)**: Defines the agent's metadata, including its schema and default configuration.
 
-The project structure is as follows:
+The `host/` directory contains the Visual Studio extension (VSIX) project:
 
-```text
-packages/agents/visualStudio/
-├── src/
-│   ├── visualStudioActionHandler.ts   # AppAgent + WebSocket bridge server
-│   ├── visualStudioSchema.ts          # Action type definitions
-│   ├── visualStudioSchema.agr         # Grammar rules
-│   └── visualStudioManifest.json
-├── host/
-│   ├── csharp/                        # VSIX project (.NET / WPF)
-│   └── webview/                       # WebView2 chat content (TS + Vite)
-├── package.json
-└── README.md
-```
+- **host/csharp/**: The .NET/WPF project for the VSIX.
+- **host/webview/**: The WebView2-based chat interface, implemented in TypeScript and built with Vite.
 
 ## How to extend
 
-To extend the `visualstudio-agent`, follow these steps:
+To add new functionality to the `visualstudio-agent`, follow these steps:
 
-1. **Add new actions**: Define new action types in [visualStudioSchema.ts](./src/visualStudioSchema.ts). Ensure each action has a corresponding handler in [visualStudioActionHandler.ts](./src/visualStudioActionHandler.ts).
+1. **Define new actions**:
 
-2. **Update grammar rules**: Modify [visualStudioSchema.agr](./src/visualStudioSchema.agr) to include grammar rules for the new actions.
+   - Add new action types to [visualStudioSchema.ts](./src/visualStudioSchema.ts).
+   - Update the grammar rules in [visualStudioSchema.agr](./src/visualStudioSchema.agr) to map user intents to the new actions.
 
-3. **Implement handlers**: Implement the logic for the new actions in [visualStudioActionHandler.ts](./src/visualStudioActionHandler.ts). Ensure the actions are correctly dispatched through the WebSocket bridge.
+2. **Implement action handlers**:
 
-4. **Test the changes**: Run tests to verify the new actions work as expected. Ensure the agent-server is running and Visual Studio is connected to the appropriate WebSocket channels.
+   - Add the logic for the new actions in [visualStudioActionHandler.ts](./src/visualStudioActionHandler.ts). Use the `AppAgent` and `WebSocketServer` classes to handle communication with the Visual Studio host.
 
-By following these steps, you can extend the functionality of the `visualstudio-agent` to support additional actions and improve integration with Visual Studio.
+3. **Update the manifest**:
+
+   - Modify [visualStudioManifest.json](./src/visualStudioManifest.json) to include the new actions in the schema.
+
+4. **Test your changes**:
+
+   - Run the agent-server and ensure the new actions are correctly dispatched and executed. Use the Visual Studio **Output** window and agent-server logs for debugging.
+
+5. **Extend the VSIX (if needed)**:
+   - If the new actions require changes to the Visual Studio extension, update the relevant files in the `host/csharp/` or `host/webview/` directories.
+
+By following these steps, you can enhance the `visualstudio-agent` to support additional actions and improve its integration with Visual Studio.
 
 ## Reference
 
@@ -83,7 +108,7 @@ By following these steps, you can extend the functionality of the `visualstudio-
 ### Entry points
 
 - `./agent/manifest` → [./src/visualStudioManifest.json](./src/visualStudioManifest.json)
-- `./agent/handlers` → [./dist/visualStudioActionHandler.js](./dist/visualStudioActionHandler.js)
+- `./agent/handlers` → `./dist/visualStudioActionHandler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -102,7 +127,7 @@ External: `debug`, `ws`
 
 ### Files of interest
 
-`./src/visualStudioActionHandler.ts`, `./src/visualStudioManifest.json`, `./src/visualStudioSchema.agr`, …and 3 more under `./src/`.
+`./src/visualStudioActionHandler.ts`, `./src/visualStudioManifest.json`, `./src/visualStudioSchema.agr`, …and 4 more under `./src/`.
 
 ### Agent surface
 
@@ -124,6 +149,6 @@ _21 actions declared in the schema, none yet implemented in [`./src/visualStudio
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

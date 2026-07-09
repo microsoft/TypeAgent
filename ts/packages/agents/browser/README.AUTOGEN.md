@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=f2fd5d9bd7ba189b5d68e295147660a2d5058318f405c3674b7855d734c875d2 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=784bb8bbe14797cdc3f72648cf276b9479848c88231b49df60f68d82f6466d1b -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # browser-typeagent — AI-generated documentation
@@ -12,16 +12,16 @@
 
 ## Overview
 
-The `browser-typeagent` package is a TypeAgent application agent designed for browser automation and control. It enables interaction with browser windows, tabs, and web pages through a defined set of actions. This package integrates with the TypeAgent shell and CLI, allowing users to perform browser-related tasks programmatically or via natural language commands.
+The `browser-typeagent` package is a TypeAgent application agent designed for browser automation and control. It enables programmatic interaction with browser windows, tabs, and web pages through a defined set of actions. This package integrates with the TypeAgent shell and CLI, allowing users to perform browser-related tasks via commands or natural language inputs.
 
 ## What it does
 
-The `browser-typeagent` package provides a comprehensive set of browser automation capabilities, including:
+The `browser-typeagent` package provides a wide range of browser automation capabilities, grouped into the following categories:
 
-- **Navigation**: Actions like `openWebPage`, `goBack`, `goForward`, and `reloadPage` allow users to navigate between web pages and control browser tabs.
-- **Interaction**: Users can interact with web content using actions such as `clickOn`, `followLinkByText`, `scrollDown`, and `scrollUp`.
-- **Content Capture and Extraction**: Actions like `captureScreenshot`, `getHtmlFragments`, and `indexPage` enable users to extract and analyze web content.
-- **Tab Management**: Actions such as `changeTabs`, `closeWebPage`, and `closeAllWebPages` provide control over browser tabs.
+- **Navigation**: Actions such as `openWebPage`, `goBack`, `goForward`, and `reloadPage` allow users to navigate between web pages and control browser tabs.
+- **Interaction**: Users can interact with web content using actions like `clickOn`, `followLinkByText`, `scrollDown`, and `scrollUp`.
+- **Content Capture and Extraction**: Actions such as `captureScreenshot`, `getHtmlFragments`, and `indexPage` enable users to extract and analyze web content.
+- **Tab Management**: Actions like `changeTabs`, `closeWebPage`, and `closeAllWebPages` provide control over browser tabs.
 - **Advanced Features**: The package supports executing custom scripts (`executeAdHocScript`) and managing search providers (`changeSearchProvider`).
 
 The package operates through a WebSocket server (`AgentWebSocketServer`) that facilitates communication between the browser agent and its clients. Supported clients include a Chrome extension and the Electron-based TypeAgent shell. These clients can send commands to the browser agent, which executes the requested actions and returns results.
@@ -179,7 +179,7 @@ _…and 17 more not shown._
 - [./src/extension/contentScript/recording/index.ts](./src/extension/contentScript/recording/index.ts)
 - [./src/extension/serviceWorker/index.ts](./src/extension/serviceWorker/index.ts)
 - [./src/extension/webagent/crossword/crosswordSchema.agr](./src/extension/webagent/crossword/crosswordSchema.agr)
-- _…and 284 more under `./src/`._
+- _…and 289 more under `./src/`._
 
 ### Environment variables
 
@@ -190,6 +190,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

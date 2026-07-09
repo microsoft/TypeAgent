@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=2f409875052a04285b42ea3b965e51d9e818caa8566aebd16a316aac5a14f83b -->
+<!-- AUTOGEN:DOCS:HASH:sha256=e70a34de09e04d0701e2a11f057e8107bf406bb4ecff169a7fb214eb2f057f33 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # onboarding-agent — AI-generated documentation
@@ -12,18 +12,11 @@
 
 ## Overview
 
-The onboarding-agent is a TypeAgent application agent that automates the process of integrating new applications and APIs into the TypeAgent ecosystem. It breaks the onboarding workflow into seven distinct phases, each managed by a sub-agent. This agent is particularly suited for use with AI orchestrators like Claude Code and GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
+The `onboarding-agent` is a TypeAgent application agent designed to automate the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each managed by a sub-agent, and produces artifacts at every step. These artifacts are stored in a structured workspace directory, enabling the process to be paused and resumed as needed. The agent is optimized for use with AI orchestrators like Claude Code and GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
 
 ## What it does
 
-The onboarding-agent provides a structured approach to integrating new applications or APIs into TypeAgent. It supports the following actions:
-
-- `startOnboarding`: Begins the onboarding process for a new integration by specifying the integration name and optional details like a description or API type.
-- `resumeOnboarding`: Resumes an in-progress onboarding process, optionally starting from a specific phase such as discovery, schema generation, or testing.
-- `getOnboardingStatus`: Retrieves the current status of an ongoing integration, including the current phase and progress.
-- `listIntegrations`: Lists all integrations, optionally filtered by their status (e.g., in-progress or complete).
-
-The onboarding process is divided into seven phases:
+The `onboarding-agent` facilitates the onboarding of new integrations by breaking the process into the following seven phases:
 
 1. **Discovery**: Crawls documentation, parses OpenAPI specs, or analyzes CLI `--help` output to enumerate the API surface.
 2. **Phrase Generation**: Generates natural language sample phrases for each discovered action.
@@ -33,52 +26,74 @@ The onboarding process is divided into seven phases:
 6. **Testing**: Creates test cases and validates the generated artifacts through a phrase-to-action testing loop.
 7. **Packaging**: Packages the completed agent for distribution and registration within the TypeAgent ecosystem.
 
-Each phase produces artifacts that are saved to disk in a structured workspace directory, allowing the process to be paused and resumed as needed.
+The agent supports the following actions:
+
+- `startOnboarding`: Initiates the onboarding process for a new integration, requiring an `integrationName` and optional parameters like `description` and `apiType`.
+- `resumeOnboarding`: Resumes an in-progress onboarding process, optionally starting from a specific phase such as `discovery`, `schemaGen`, or `testing`.
+- `getOnboardingStatus`: Retrieves the current status of an ongoing integration, including the current phase and progress.
+- `listIntegrations`: Lists all integrations, optionally filtered by their status (e.g., `in-progress` or `complete`).
+
+The onboarding process is designed to be iterative and interactive, with each phase requiring approval before proceeding to the next. This ensures that the generated artifacts are validated and refined at every step.
 
 ## Setup
 
-To use the onboarding-agent, you need to configure the following environment variables:
+To use the `onboarding-agent`, you need to configure the following environment variables:
 
-- `TYPEAGENT_UIA_HELPER`: Required for the experimental UI Automation crawling feature, which is used to discover actions in Windows desktop applications. Refer to the hand-written README for details on how to set this up.
+- `TYPEAGENT_UIA_HELPER`: This is required for the experimental UI Automation crawling feature, which is used to discover actions in Windows desktop applications. Refer to the hand-written README for details on how to set this up.
 - `__PORT_ENV__`: Specifies the port environment for the agent. Ensure this is set to the appropriate value for your environment.
 
-For additional setup instructions, including configuring TypeAgent as an MCP server for integration with AI clients, refer to the hand-written README.
+Additionally, for optimal usage, it is recommended to set up TypeAgent as an MCP server. This allows AI clients like Claude Code or GitHub Copilot to communicate directly with the TypeAgent dispatcher. The hand-written README provides detailed instructions for this setup.
 
 ## Key Files
 
-The onboarding-agent's source code is organized into several key files and directories, each responsible for a specific aspect of the onboarding process:
+The `onboarding-agent` is organized into several key files and directories, each responsible for a specific aspect of the onboarding process:
 
-- **[onboardingManifest.json](./src/onboardingManifest.json)**: Defines the agent's metadata, including its schema and sub-agent configurations.
-- **[onboardingSchema.ts](./src/onboardingSchema.ts)**: Specifies the actions supported by the agent, including their names, parameters, and types.
+- **[onboardingManifest.json](./src/onboardingManifest.json)**: Contains metadata about the agent, including its schema and sub-agent configurations.
+- **[onboardingSchema.ts](./src/onboardingSchema.ts)**: Defines the actions supported by the agent, including their names, parameters, and types.
 - **[onboardingSchema.agr](./src/onboardingSchema.agr)**: Contains grammar rules for parsing user inputs into actionable commands.
 - **[onboardingActionHandler.ts](./src/onboardingActionHandler.ts)**: Implements the logic for handling the defined actions.
+
+### Sub-agent Files
+
+Each phase of the onboarding process is managed by a sub-agent with its own set of files:
+
 - **Discovery Phase**:
+
   - [discoveryHandler.ts](./src/discovery/discoveryHandler.ts): Manages the discovery phase, including crawling documentation and parsing OpenAPI specs.
   - [discoverySchema.ts](./src/discovery/discoverySchema.ts): Defines the schema for discovery-related actions.
   - [discoverySchema.agr](./src/discovery/discoverySchema.agr): Contains grammar rules specific to the discovery phase.
+
 - **Phrase Generation Phase**:
+
   - [grammarGenHandler.ts](./src/grammarGen/grammarGenHandler.ts): Handles the generation of natural language phrases for actions.
   - [grammarGenSchema.agr](./src/grammarGen/grammarGenSchema.agr): Defines grammar rules for phrase generation.
+
 - **Schema Generation Phase**:
+
   - [schemaGenHandler.ts](./src/schemaGen/schemaGenHandler.ts): Generates TypeScript action schemas.
+
 - **Scaffolding Phase**:
+
   - [scaffolderHandler.ts](./src/scaffolder/scaffolderHandler.ts): Creates the agent package infrastructure.
+
 - **Testing Phase**:
+
   - [testingHandler.ts](./src/testing/testingHandler.ts): Generates and executes test cases for the onboarding process.
+
 - **Packaging Phase**:
   - [packagingHandler.ts](./src/packaging/packagingHandler.ts): Packages the completed agent for deployment.
 
 ## How to extend
 
-To extend the onboarding-agent, you can add new actions or modify existing ones. Follow these steps:
+To extend the `onboarding-agent`, follow these steps:
 
-1. **Understand the existing schema**: Start by reviewing [onboardingSchema.ts](./src/onboardingSchema.ts) to understand the current actions and their parameters.
-2. **Define new actions**: Add new action definitions to the schema file, specifying their names, parameters, and types.
-3. **Update the grammar**: Modify [onboardingSchema.agr](./src/onboardingSchema.agr) to include grammar rules for the new actions. This ensures that user inputs can be correctly parsed into the new actions.
+1. **Review the existing schema**: Start by examining [onboardingSchema.ts](./src/onboardingSchema.ts) to understand the current actions and their parameters.
+2. **Add new actions**: Define new actions in the schema file, specifying their names, parameters, and types.
+3. **Update grammar rules**: Modify [onboardingSchema.agr](./src/onboardingSchema.agr) to include grammar rules for the new actions. This ensures that user inputs can be correctly parsed into the new actions.
 4. **Implement action handlers**: Add or update handler functions in [onboardingActionHandler.ts](./src/onboardingActionHandler.ts) to define the logic for the new actions.
-5. **Test your changes**: Write and run tests to validate the new actions. Use the testing framework provided in the onboarding-agent to ensure the new functionality works as expected.
+5. **Test your changes**: Use the testing framework provided in the onboarding-agent to validate the new functionality. Write test cases to ensure the new actions work as expected.
 
-By following these steps, you can enhance the onboarding-agent to support additional integration scenarios or improve its existing capabilities.
+By following these steps, you can enhance the `onboarding-agent` to support additional integration scenarios or improve its existing capabilities.
 
 ## Reference
 
@@ -122,7 +137,7 @@ External: `debug`, `typechat`
 - [./src/discovery/discoverySchema.ts](./src/discovery/discoverySchema.ts)
 - [./src/grammarGen/grammarGenHandler.ts](./src/grammarGen/grammarGenHandler.ts)
 - [./src/grammarGen/grammarGenSchema.agr](./src/grammarGen/grammarGenSchema.agr)
-- _…and 76 more under `./src/`._
+- _…and 84 more under `./src/`._
 
 ### Agent surface
 
@@ -151,6 +166,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/onboa
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `656444843518fd1f9bb1b157b6dbf6dcbcde3999` on `2026-07-09T09:05:44.186Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
