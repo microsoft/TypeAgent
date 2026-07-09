@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using autoShell.Handlers.Generated;
-using autoShell.Logging;
 using autoShell.Services;
 
 namespace autoShell.Handlers;
@@ -17,7 +16,7 @@ internal class ServiceActionHandler : ActionHandlerBase
 {
     private readonly IServiceControlService _services;
 
-    public ServiceActionHandler(IServiceControlService services, ILogger _)
+    public ServiceActionHandler(IServiceControlService services)
     {
         _services = services;
         AddAction<RestartServiceParams>("RestartService", HandleRestartService);

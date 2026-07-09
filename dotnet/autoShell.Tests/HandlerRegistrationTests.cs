@@ -51,7 +51,7 @@ public class HandlerRegistrationTests
             new PrivacySettingsHandler(registryMock.Object),
             new SystemSettingsHandler(registryMock.Object, processMock.Object),
             new SystemActionHandler(processMock.Object, debuggerMock.Object),
-            new ServiceActionHandler(serviceControlMock.Object, loggerMock.Object),
+            new ServiceActionHandler(serviceControlMock.Object),
         ];
     }
 

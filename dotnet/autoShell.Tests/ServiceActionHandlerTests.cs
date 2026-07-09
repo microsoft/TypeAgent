@@ -3,7 +3,6 @@
 
 using System.Text.Json;
 using autoShell.Handlers;
-using autoShell.Logging;
 using autoShell.Services;
 using Moq;
 
@@ -12,12 +11,11 @@ namespace autoShell.Tests;
 public class ServiceActionHandlerTests
 {
     private readonly Mock<IServiceControlService> _serviceMock = new();
-    private readonly Mock<ILogger> _loggerMock = new();
     private readonly ServiceActionHandler _handler;
 
     public ServiceActionHandlerTests()
     {
-        _handler = new ServiceActionHandler(_serviceMock.Object, _loggerMock.Object);
+        _handler = new ServiceActionHandler(_serviceMock.Object);
     }
 
     /// <summary>
