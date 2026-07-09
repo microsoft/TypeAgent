@@ -16,12 +16,13 @@ The `default-agent-provider` package is a TypeScript library that serves as the 
 
 ## What it does
 
-The `default-agent-provider` package provides a set of default implementations and utilities for managing agents within the TypeAgent framework. Its primary responsibilities include:
+This package provides default implementations for various agent-related functionalities, including agent providers, the connected app-agent source, dispatcher options, and indexing service registries. It includes functions to retrieve default configurations and providers for both built-in and external agents. Key functionalities include:
 
-- **Default Agent Providers**: Functions like `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` initialize and retrieve the default set of agents and their configurations.
-- **Dispatcher Options**: The `getDefaultDispatcherOptions` function provides default configurations for the dispatcher, which is responsible for routing actions to the appropriate agents.
-- **Indexing Service Registry**: The `getIndexingServiceRegistry` function manages the indexing service registry, which is used to organize and retrieve agent-related data.
-- **Test Agents**: The package includes a set of test agents, such as the `vampire` agent, which are designed to test the dispatcher's action collision detection subsystem. These agents are disabled by default in production but can be enabled for testing purposes.
+- `getDefaultAppAgentProviders`: Retrieves the default (static) application agent providers.
+- `getDefaultAppAgentSource`: Provides the default connected app-agent source (owns the installed-agent record store and the host-owned `@package` agent).
+- `getDefaultDispatcherOptions`: Returns the default dispatcher options.
+- `getIndexingServiceRegistry`: Gets the indexing service registry.
+- `getDefaultConstructionProvider`: Provides the default construction provider.
 
 Additionally, the package includes operational scripts under the `collisions` directory. These scripts are used to test and validate the functionality of the dispatcher and agent providers. They include tools for running pipelines, generating and analyzing corpora, and testing collision detection mechanisms.
 

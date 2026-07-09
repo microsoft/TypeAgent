@@ -33,6 +33,8 @@
  *     file), so violations in touched code can only trend down. Ratchet uses
  *     the syntactic rules only, so HEAD and the base (materialized to a temp
  *     dir, where the TS project is unavailable) are compared like-for-like.
+ *     On failure it prints where the new violations are — the file:line of the
+ *     regressed rules in each changed file.
  *
  * Outputs (written to --out-dir, default tools/scripts/code/lint-report):
  *   - violations.csv : every violation, ranked
@@ -54,6 +56,9 @@
  *   --base <ref>       Base git ref for --ratchet (default origin/main).
  *   --new-file-max <n> With --ratchet, also fail if any NEW file has more than
  *                      <n> violations (-1 = disabled, the default).
+ *   --fix              Apply the auto-fixable rules (no-var, prefer-const).
+ *   --changed          With --fix, only fix files changed since --base.
+ *   --exceptions-file <path>  Baseline exceptions (file:line) ignored by --ratchet.
  *   --help             Show this help.
  */
 
@@ -146,6 +151,8 @@ interface Options {
     base: string;
     newFileMax: number;
     fix: boolean;
+    changed: boolean;
+    exceptionsFile?: string;
     help: boolean;
 }
 
@@ -167,6 +174,8 @@ function parseArgs(argv: string[]): Options {
         base: "origin/main",
         newFileMax: -1,
         fix: false,
+        changed: false,
+        exceptionsFile: undefined,
         help: false,
     };
 
@@ -196,6 +205,17 @@ function parseArgs(argv: string[]): Options {
                 break;
             case "--fix":
                 opts.fix = true;
+                break;
+            case "--changed":
+                opts.changed = true;
+                break;
+            case "--exceptions-file":
+            case "--exceptionsFile":
+                if (next === undefined) {
+                    throw new Error(`${arg} requires a path`);
+                }
+                opts.exceptionsFile = next;
+                i++;
                 break;
             case "--top":
                 opts.top = parseIntArg(arg, next);
@@ -253,8 +273,13 @@ Options:
   --include-tests    Include test files (excluded by default).
   --type-aware       Also run type-aware rules (no-floating-promises,
                      no-misused-promises, no-deprecated). Slower; report only.
-  --fix              Apply the auto-fixable rules (no-var, prefer-const) to the
-                     tree in place. Review + rebuild before committing.
+  --fix              Apply the auto-fixable rules (no-var, prefer-const) in
+                     place. Review + rebuild before committing.
+  --changed          With --fix, only fix files changed since --base (instead
+                     of the whole tree). Keeps a PR self-contained.
+  --exceptions-file <path>
+                     Optional JSON baseline-exception file. Violations listed
+                     in it (by file:line) are ignored by the --ratchet gate.
   --top <n>          Number of worst offenders to print / embed (default 25).
   --root <path>      Directory to scan (default: the ts/ root).
   --out-dir <path>   Output directory (default: tools/scripts/code/lint-report).
@@ -737,7 +762,15 @@ function parseNameStatus(raw: string): DiffEntry[] {
     return entries;
 }
 
-async function runRatchet(opts: Options): Promise<number> {
+interface ChangedSources {
+    repoRoot: string;
+    mergeBase: string;
+    entries: DiffEntry[];
+}
+
+// Resolve the merge base against --base and collect the changed source files
+// (respecting ignores/tests). Returns null if the base ref cannot be resolved.
+function collectChangedSources(opts: Options): ChangedSources | null {
     let repoRoot: string;
     let mergeBase: string;
     try {
@@ -745,10 +778,10 @@ async function runRatchet(opts: Options): Promise<number> {
         mergeBase = git(["merge-base", opts.base, "HEAD"], opts.root).trim();
     } catch {
         console.error(
-            `Ratchet: could not resolve base ref "${opts.base}" via git. ` +
+            `Could not resolve base ref "${opts.base}" via git. ` +
                 "Pass --base <ref> (e.g. origin/main) and ensure it is fetched.",
         );
-        return 2;
+        return null;
     }
 
     const entries = parseNameStatus(
@@ -764,10 +797,169 @@ async function runRatchet(opts: Options): Promise<number> {
         return !relToRoot.startsWith("..") && !path.isAbsolute(relToRoot);
     });
 
+    return { repoRoot, mergeBase, entries };
+}
+
+// A rule that got worse in a specific changed file: the HEAD content has more
+// occurrences than the base did. These are the locations a PR introduced.
+interface RegressionGroup {
+    file: string;
+    rule: string;
+    delta: number;
+    locations: Violation[];
+}
+
+// Compute per-file, per-rule regressions: HEAD occurrences minus the base
+// occurrences (mapped through renames). Only positive deltas are regressions.
+function locateRegressions(
+    entries: DiffEntry[],
+    head: LintOutput,
+    base: LintOutput,
+): RegressionGroup[] {
+    const baseToHead = new Map<string, string>();
+    for (const e of entries) {
+        if (e.base) {
+            baseToHead.set(
+                e.base.replace(/\\/g, "/"),
+                e.head.replace(/\\/g, "/"),
+            );
+        }
+    }
+
+    const SEP = "\u0000";
+    const headByFileRule = new Map<string, Violation[]>();
+    for (const v of head.violations) {
+        const key = `${v.file}${SEP}${v.rule}`;
+        const list = headByFileRule.get(key);
+        if (list) {
+            list.push(v);
+        } else {
+            headByFileRule.set(key, [v]);
+        }
+    }
+
+    const baseCountByFileRule = new Map<string, number>();
+    for (const v of base.violations) {
+        const headFile = baseToHead.get(v.file) ?? v.file;
+        const key = `${headFile}${SEP}${v.rule}`;
+        baseCountByFileRule.set(key, (baseCountByFileRule.get(key) ?? 0) + 1);
+    }
+
+    const regressions: RegressionGroup[] = [];
+    for (const [key, locations] of headByFileRule) {
+        const delta = locations.length - (baseCountByFileRule.get(key) ?? 0);
+        if (delta > 0) {
+            const sep = key.indexOf(SEP);
+            regressions.push({
+                file: key.slice(0, sep),
+                rule: key.slice(sep + 1),
+                delta,
+                locations: [...locations].sort(
+                    (a, b) => a.line - b.line || a.column - b.column,
+                ),
+            });
+        }
+    }
+    regressions.sort(
+        (a, b) =>
+            b.delta - a.delta ||
+            a.file.localeCompare(b.file) ||
+            a.rule.localeCompare(b.rule),
+    );
+    return regressions;
+}
+
+// Print, per changed file, the rules that regressed and the HEAD locations to
+// look at. This answers "where is the regression?" without a committed baseline.
+// Everything is printed: the set is bounded by the files this PR changed, so a
+// developer can fix them all in one pass rather than re-running to find more.
+function printRegressionLocations(regressions: RegressionGroup[]): void {
+    if (regressions.length === 0) {
+        return;
+    }
+    const byFile = new Map<string, RegressionGroup[]>();
+    for (const g of regressions) {
+        const arr = byFile.get(g.file);
+        if (arr) {
+            arr.push(g);
+        } else {
+            byFile.set(g.file, [g]);
+        }
+    }
+
+    console.error("\nWhere the new violations are (changed files):");
+    for (const [file, groups] of byFile) {
+        console.error(`  ${file}`);
+        for (const g of groups) {
+            console.error(`    ${g.rule}  (+${g.delta})`);
+            for (const v of g.locations) {
+                console.error(`      ${v.line}:${v.column}  ${v.message}`);
+            }
+        }
+    }
+}
+
+// Baseline exceptions: a JSON file of { file, line } entries (or
+// { exceptions: [...] }) whose file:line violations the ratchet ignores. Lets a
+// known pre-existing violation — e.g. one surfaced by a file move that git
+// rename detection misses — be grandfathered without weakening the gate.
+function normalizeExceptionPath(file: string): string {
+    const normalized = file.replaceAll("\\", "/").replace(/^\.\//, "");
+    return normalized.replace(/^ts\//, "");
+}
+
+function exceptionKey(file: string, line: number): string {
+    return `${normalizeExceptionPath(file)}:${line}`;
+}
+
+function loadExceptionSet(exceptionsFile: string | undefined): Set<string> {
+    if (!exceptionsFile) {
+        return new Set();
+    }
+    const filePath = path.isAbsolute(exceptionsFile)
+        ? exceptionsFile
+        : path.resolve(process.cwd(), exceptionsFile);
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`Exceptions file not found: ${filePath}`);
+    }
+    let raw: unknown;
+    try {
+        raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+            `Invalid JSON in exceptions file ${filePath}: ${message}`,
+        );
+    }
+    const entries = Array.isArray(raw)
+        ? raw
+        : ((raw as { exceptions?: Array<{ file?: string; line?: number }> })
+              .exceptions ?? []);
+    const out = new Set<string>();
+    for (const entry of entries) {
+        const file = normalizeExceptionPath(entry?.file ?? "");
+        const line = entry?.line;
+        if (!file || typeof line !== "number" || line <= 0) {
+            continue;
+        }
+        out.add(`${file}:${line}`);
+    }
+    return out;
+}
+
+async function runRatchet(opts: Options): Promise<number> {
+    const changed = collectChangedSources(opts);
+    if (!changed) {
+        return 2;
+    }
+    const { repoRoot, mergeBase, entries } = changed;
+
     if (entries.length === 0) {
         console.log("Ratchet: no changed source files to check. OK.");
         return 0;
     }
+
+    const exceptions = loadExceptionSet(opts.exceptionsFile);
 
     const lintOpts = {
         typeAware: false,
@@ -814,6 +1006,18 @@ async function runRatchet(opts: Options): Promise<number> {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
 
+    // Baseline exceptions: drop known violations (by file:line) from both sides
+    // so they neither count toward the totals nor trip the new-file / zero-
+    // tolerance checks. Applied before any rollup below.
+    if (exceptions.size > 0) {
+        head.violations = head.violations.filter(
+            (v) => !exceptions.has(exceptionKey(v.file, v.line)),
+        );
+        base.violations = base.violations.filter(
+            (v) => !exceptions.has(exceptionKey(v.file, v.line)),
+        );
+    }
+
     // Compare per-rule and totals.
     const headTotal = head.violations.length;
     const baseTotal = base.violations.length;
@@ -824,6 +1028,11 @@ async function runRatchet(opts: Options): Promise<number> {
         `Ratchet: ${entries.length} changed source file(s)  |  ` +
             `violations base ${baseTotal} -> head ${headTotal}`,
     );
+    if (exceptions.size > 0) {
+        console.log(
+            `  Baseline exceptions ignored: ${exceptions.size} (file:line).`,
+        );
+    }
 
     const worsened: string[] = [];
     for (const rule of new Set([...headByRule.keys(), ...baseByRule.keys()])) {
@@ -855,6 +1064,8 @@ async function runRatchet(opts: Options): Promise<number> {
         }
     }
 
+    const regressions = locateRegressions(entries, head, base);
+
     let failed = false;
     if (headTotal > baseTotal) {
         failed = true;
@@ -883,14 +1094,20 @@ async function runRatchet(opts: Options): Promise<number> {
         failed = true;
         console.error(
             "\nRatchet FAILED: zero-tolerance rules present in changed files " +
-                "(auto-fixable — run `npm run code-lint -- --fix`):",
+                "(auto-fixable — run `npm run code-lint -- --fix --changed`):",
         );
         zeroToleranceFailures.forEach((w) => console.error(w));
     }
 
     if (failed) {
+        printRegressionLocations(regressions);
         console.error(
-            "\nRun `npm run code-lint` and fix the flagged lines in the files this PR changes.",
+            "\nNext steps:\n" +
+                "  - Fix the locations listed above in the files this PR changes.\n" +
+                "  - Mechanical rules (no-var, prefer-const) can be auto-fixed:\n" +
+                "      npm run code-lint -- --fix --changed\n" +
+                "  - Re-check with:\n" +
+                `      npm run code-lint -- --ratchet --base ${opts.base}`,
         );
         return 1;
     }
@@ -931,14 +1148,34 @@ function buildFixConfig(
 
 async function runFix(opts: Options): Promise<number> {
     const started = Date.now();
+
+    let cwd = opts.root;
+    let patterns: string[] = [SOURCE_GLOB];
+    let useIgnores = true;
+    if (opts.changed) {
+        const changed = collectChangedSources(opts);
+        if (!changed) {
+            return 2;
+        }
+        cwd = changed.repoRoot;
+        patterns = changed.entries
+            .map((e) => path.resolve(changed.repoRoot, e.head))
+            .filter((p) => fs.existsSync(p));
+        useIgnores = false;
+        if (patterns.length === 0) {
+            console.log("No changed source files to fix.");
+            return 0;
+        }
+    }
+
     const eslint = new ESLint({
-        cwd: opts.root,
+        cwd,
         errorOnUnmatchedPattern: false,
         overrideConfigFile: true,
-        overrideConfig: buildFixConfig(true, opts.includeTests),
+        overrideConfig: buildFixConfig(useIgnores, opts.includeTests),
         fix: true,
     });
-    const results = await eslint.lintFiles([SOURCE_GLOB]);
+    const results = await eslint.lintFiles(patterns);
     await ESLint.outputFixes(results);
 
     let fixedFiles = 0;
@@ -951,7 +1188,9 @@ async function runFix(opts: Options): Promise<number> {
     }
 
     console.log("");
-    console.log(`Lint auto-fix (rules: ${Object.keys(FIX_RULES).join(", ")})`);
+    console.log(
+        `Lint auto-fix (${opts.changed ? "changed files" : "whole tree"}; rules: ${Object.keys(FIX_RULES).join(", ")})`,
+    );
     console.log(
         `Rewrote ${num(fixedFiles)} file(s) in ${((Date.now() - started) / 1000).toFixed(1)}s.`,
     );
