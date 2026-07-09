@@ -7938,40 +7938,40 @@ packages:
     resolution: {integrity: sha512-d8aogKOul7a3eYG3UzTG8PB6A0D+6tlkFQCACmKQ7qTwB3XS6QmkSW1L0vYbVE9CfCRq/Zpb5sG3gNA6yJea/A==}
 
   '@github/copilot-darwin-arm64@1.0.54':
-    resolution: {integrity: sha1-Tt4k3R9TdXI2JUyqnyEjLnewS4M=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@github/copilot-darwin-arm64/-/copilot-darwin-arm64-1.0.54.tgz}
+    resolution: {integrity: sha512-ZRiKkxCvDccdGSNB/gmge4UkqMsWWZNIOr0pcim4/x2YUdHbh9cex9RZRjEMXijtUkBTzW5DP/cACuoAqTCyEg==}
     cpu: [arm64]
     os: [darwin]
     hasBin: true
 
   '@github/copilot-darwin-x64@1.0.54':
-    resolution: {integrity: sha1-hk8ER9ayHHVz00vqG5Ej0IM1T84=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@github/copilot-darwin-x64/-/copilot-darwin-x64-1.0.54.tgz}
+    resolution: {integrity: sha512-DGqs8x5r4y+SebMco890lNsPrqe6L4v2hCmV1IQ1pvYPvD1o1NMVSZPAQhkdvUeR5bqusOg8+0ugIZOQGTFpFQ==}
     cpu: [x64]
     os: [darwin]
     hasBin: true
 
   '@github/copilot-linux-arm64@1.0.54':
-    resolution: {integrity: sha1-Rxp8FCDqUhi/Gdmi10KGgUdUWOA=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@github/copilot-linux-arm64/-/copilot-linux-arm64-1.0.54.tgz}
+    resolution: {integrity: sha512-waVKu6RuG8YBvCoGrOgtsOxmnfLaUywvbqZXRgvMya1m4akRkMi5r9B2UDr3+egjChp+FIUJVbGIoXN6ZST0rQ==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
     hasBin: true
 
   '@github/copilot-linux-x64@1.0.54':
-    resolution: {integrity: sha1-zRod8B4aRKwYqnUp0T7g3Syv5IE=, tarball: https://ms-feed-12.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@github/copilot-linux-x64/-/copilot-linux-x64-1.0.54.tgz}
+    resolution: {integrity: sha512-u/ltZa+HDIuhMivkIwkkuylRdEMk5Lp0XjE9w/OityW+BPKjZ+VKAmJ1/1Xm/uUx1IUlZaE3TJnka52wVNOD0A==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
     hasBin: true
 
   '@github/copilot-linuxmusl-arm64@1.0.54':
-    resolution: {integrity: sha1-1Jo4wE7xfDN4DPcSwzAhNHKciOs=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@github/copilot-linuxmusl-arm64/-/copilot-linuxmusl-arm64-1.0.54.tgz}
+    resolution: {integrity: sha512-21LLjoQnD57Y1fvO56G1FGVbkt/ffZNDpHqVe2NW7C4r78Gn0hOTqwp+xWRUMpdmxrGZyKeFjX8jK6qox2uF5w==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
     hasBin: true
 
   '@github/copilot-linuxmusl-x64@1.0.54':
-    resolution: {integrity: sha1-oYp1iUN2fKOR3yW/qn2rdjcpe60=, tarball: https://ms-feed-17.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@github/copilot-linuxmusl-x64/-/copilot-linuxmusl-x64-1.0.54.tgz}
+    resolution: {integrity: sha512-sbeATKa9vaIetsY1vhQJO0PN/5FgoK48wkGBWCy4BpO8ER/kGYczT22qv6n96gBYrVmC2IZuTFTM4GFpC3bbBw==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
@@ -7986,13 +7986,13 @@ packages:
     engines: {node: '>=20.0.0'}
 
   '@github/copilot-win32-arm64@1.0.54':
-    resolution: {integrity: sha1-BvdQblp2bZXEOPIAqcfo0DNW7UQ=, tarball: https://ms-feed-25.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@github/copilot-win32-arm64/-/copilot-win32-arm64-1.0.54.tgz}
+    resolution: {integrity: sha512-muOX8qrJSi56BWQejkH0TgXpZYRO8Y9k1qIfMuRojZyLyATn1P4lIKb67ZqDCXJLkcPfVJ5eJYsSAeGwU3Qpww==}
     cpu: [arm64]
     os: [win32]
     hasBin: true
 
   '@github/copilot-win32-x64@1.0.54':
-    resolution: {integrity: sha1-4lqqYJ4w6kOP9Ya5wLUOEp5eVjs=, tarball: https://ms-feed-2.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@github/copilot-win32-x64/-/copilot-win32-x64-1.0.54.tgz}
+    resolution: {integrity: sha512-BheXmqrYFmfRXA0iveKkjKks/2wgK5glrEOARomzy3JCbvVMSPIE8YeK+3YysiOh2SUkWjahwJc09cxaBq4+qQ==}
     cpu: [x64]
     os: [win32]
     hasBin: true
