@@ -44,8 +44,10 @@ const handlers = {
                 "Returns a yes/no choice whose Yes leads to a second yes/no choice",
             run: async () =>
                 createYesNoChoiceResult(choiceManager, "first?", async () =>
-                    createYesNoChoiceResult(choiceManager, "second?", async () =>
-                        createActionResultFromTextDisplay("done"),
+                    createYesNoChoiceResult(
+                        choiceManager,
+                        "second?",
+                        async () => createActionResultFromTextDisplay("done"),
                     ),
                 ),
         },
