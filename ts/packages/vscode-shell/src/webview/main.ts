@@ -314,6 +314,7 @@ function handleRequestInteraction(
         activeInteractions.delete(interaction.interactionId);
         if (ac.signal.aborted) return;
         vscode.postMessage({ type: "interactionResponse", response });
+    })().catch((e) => console.error("[requestInteraction] failed", e));
 }
 
 // Render a non-blocking choice card (yes/no, multi-select, or pick+remember)
