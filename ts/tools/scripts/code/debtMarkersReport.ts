@@ -35,6 +35,7 @@
  *   --gate           CI gate: fail on focused tests / new skipped tests vs --base.
  *   --base <ref>     Base git ref for --gate (default origin/main).
  *   --exceptions-file <path>  Baseline exceptions (file:line) ignored by --gate.
+ *                    (Deprecated: prefer inline `// code-debt-allow: <reason>`.)
  *   --help           Show this help.
  */
 
@@ -232,7 +233,14 @@ Options:
   --exceptions-file <path>
                    Optional JSON baseline-exception file. Focused/skipped tests
                    listed in it (by file:line) are ignored by the --gate check.
-  --help           Show this help.`;
+                   (Deprecated: prefer inline markers below.)
+  --help           Show this help.
+
+Inline suppression (preferred over --exceptions-file):
+  Put "// code-debt-allow[(#issue)]: <reason>" above (or trailing) a focused or
+  skipped test to grandfather it out of --gate. The marker moves with the test
+  under reformatting; a non-placeholder reason is required and an issue ref is
+  expected for temporary skips. Report mode still counts the marker.`;
 
 // ---------------------------------------------------------------------------
 // Scanning
@@ -609,6 +617,10 @@ function loadExceptionSet(exceptionsFile: string | undefined): Set<string> {
     if (!exceptionsFile) {
         return new Set();
     }
+    console.warn(
+        "  Note: --exceptions-file is deprecated; prefer inline " +
+            "// code-debt-allow: <reason> markers.",
+    );
     const filePath = path.isAbsolute(exceptionsFile)
         ? exceptionsFile
         : path.resolve(process.cwd(), exceptionsFile);
@@ -640,10 +652,70 @@ function loadExceptionSet(exceptionsFile: string | undefined): Set<string> {
     return out;
 }
 
+// ---------------------------------------------------------------------------
+// Inline suppression markers
+// ---------------------------------------------------------------------------
+
+// A `// code-debt-allow[(#issue)]: <reason>` comment grandfathers the
+// focused/skipped test it annotates out of the --gate. Trailing on the test
+// line it applies to that line; as a standalone comment it applies to the next
+// line. A non-placeholder reason is required; an issue reference is optional but
+// expected for temporary skips. Report mode ignores markers entirely.
+const DEBT_ALLOW_TOKEN = "code-debt-allow";
+const PLACEHOLDER_REASON_RE = /^(temp|tbd|todo|fixme|xxx|n\/?a|\?+|-+|\.+)$/i;
+
+function isValidMarkerReason(reason: string): boolean {
+    const r = reason.trim();
+    return r.length >= 3 && !PLACEHOLDER_REASON_RE.test(r);
+}
+
+/** Whether a line carries a `code-debt-allow` marker, and if its reason is ok. */
+function parseDebtAllow(lineText: string): { valid: boolean } | undefined {
+    const i = lineText.indexOf(DEBT_ALLOW_TOKEN);
+    if (i < 0) {
+        return undefined;
+    }
+    const after = lineText
+        .slice(i + DEBT_ALLOW_TOKEN.length)
+        .replace(/\*\/\s*$/, "")
+        .replace(/^\s*\([^)]*\)/, ""); // optional (#issue) qualifier
+    const m = /^\s*:\s*(.*)$/.exec(after);
+    return { valid: m ? isValidMarkerReason(m[1]) : false };
+}
+
+// 1-based line numbers a valid marker grandfathers, plus the lines of any
+// malformed markers (for a warning). A standalone comment applies to the next
+// line; a trailing marker applies to its own line.
+function collectDebtAllowLines(lines: string[]): {
+    suppressed: Set<number>;
+    invalid: number[];
+} {
+    const suppressed = new Set<number>();
+    const invalid: number[] = [];
+    for (let idx = 0; idx < lines.length; idx++) {
+        const parsed = parseDebtAllow(lines[idx]);
+        if (!parsed) {
+            continue;
+        }
+        if (!parsed.valid) {
+            invalid.push(idx + 1);
+            continue;
+        }
+        const trimmed = lines[idx].trim();
+        const standalone =
+            trimmed.startsWith("//") ||
+            trimmed.startsWith("/*") ||
+            trimmed.startsWith("*");
+        suppressed.add(standalone ? idx + 2 : idx + 1);
+    }
+    return { suppressed, invalid };
+}
+
 interface HeadScan {
     focusedHits: string[];
     skipHits: string[];
     skips: number;
+    invalidMarkers: string[];
 }
 
 // Scan a changed test file's HEAD content for focused/skipped test markers,
@@ -658,11 +730,15 @@ function scanHeadTestFile(
     const skipHits: string[] = [];
     let skips = 0;
     const lines = fs.readFileSync(absPath, "utf8").split(/\r?\n/);
+    const markers = collectDebtAllowLines(lines);
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        // A baseline exception (file:line) grandfathers whatever
-        // focused/skipped marker sits on that head line.
-        if (exceptions.has(exceptionKey(relPath, i + 1))) {
+        // A baseline exception (file:line) or an inline code-debt-allow marker
+        // grandfathers whatever focused/skipped marker sits on that head line.
+        if (
+            exceptions.has(exceptionKey(relPath, i + 1)) ||
+            markers.suppressed.has(i + 1)
+        ) {
             continue;
         }
         FOCUSED_RE.lastIndex = 0;
@@ -681,7 +757,12 @@ function scanHeadTestFile(
             skipHits.push(`  ${relPath}:${i + 1}  ${line.trim()}`);
         }
     }
-    return { focusedHits, skipHits, skips };
+    return {
+        focusedHits,
+        skipHits,
+        skips,
+        invalidMarkers: markers.invalid.map((ln) => `  ${relPath}:${ln}`),
+    };
 }
 
 // Count real skipped tests in a changed file's content at the merge base.
@@ -733,6 +814,7 @@ function runGate(opts: Options): number {
 
     const focusedHits: string[] = [];
     const skipHits: string[] = [];
+    const invalidMarkers: string[] = [];
     let headSkips = 0;
     let baseSkips = 0;
 
@@ -745,6 +827,7 @@ function runGate(opts: Options): number {
             const scan = scanHeadTestFile(e.head, headAbs, exceptions);
             focusedHits.push(...scan.focusedHits);
             skipHits.push(...scan.skipHits);
+            invalidMarkers.push(...scan.invalidMarkers);
             headSkips += scan.skips;
         }
         if (e.base && isTestFile(e.base)) {
@@ -759,6 +842,13 @@ function runGate(opts: Options): number {
         console.log(
             `  Baseline exceptions ignored: ${exceptions.size} (file:line).`,
         );
+    }
+    if (invalidMarkers.length > 0) {
+        console.log(
+            `  WARNING: ${invalidMarkers.length} code-debt-allow marker(s) ` +
+                `ignored (need ": <reason>" with a real reason):`,
+        );
+        invalidMarkers.forEach((h) => console.log(h));
     }
 
     let failed = false;

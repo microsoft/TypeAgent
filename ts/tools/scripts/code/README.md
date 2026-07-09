@@ -43,19 +43,51 @@ Run any of these from `ts/`. All accept `--help`, `--root <path>`,
   `no-deprecated` — slower, report only), `--new-file-max <n>`.
 - **code-complexity:** `--cyclomatic <n>`, `--cognitive <n>`,
   `--new-file-cyclomatic <n>`, `--new-file-cognitive <n>`,
-  `--exceptions-file <path>` (optional baseline exceptions by `file:line`).
+  `--exceptions-file <path>` (deprecated JSON baseline by `file:line`; prefer
+  inline `// code-complexity-allow: <reason>` markers — see
+  [Suppressing a known offender](#suppressing-a-known-offender)).
   For local CI-parity runs, use `npm run code-complexity:ci`.
-  To refresh the baseline exception file from current code, use
-  `npm run code-complexity:update-exceptions`.
 - **code-deadcode:** `--config` (defaults to [`knip.jsonc`](./knip.jsonc)).
 
-### Baseline exceptions
+### Suppressing a known offender
 
-The ratchet/gate tools accept `--exceptions-file <path>` — an optional JSON file
-that grandfathers a specific set of known offenders so they don't trip the gate
-(useful when a file move that git rename detection misses makes pre-existing
-debt look new). Each file's `--ratchet`/`--gate` step honors it; the report
-modes ignore it. Shape is `{ "exceptions": [ ... ] }` (a bare array also works):
+Usually you don't need to. The complexity and lint ratchets are **stateless** —
+they compare each changed file against its own merge-base version — so
+pre-existing debt is grandfathered automatically (a function over budget on both
+sides cancels out). You only need an explicit suppression for an edge case, e.g.
+a file move that git's rename detection misses and that makes old debt look new.
+Two mechanisms, in order of preference.
+
+**Inline markers (preferred).** Put a comment next to the offending code; the
+`--ratchet`/`--gate` step skips it, but the report still measures and shows it.
+Because the marker is attached to the code it moves with it under reformatting
+(unlike a `file:line`) and travels with the file when it's relocated. A
+non-empty, non-placeholder **reason is required** — an invalid marker is ignored
+and warned about, so it can't silently grandfather debt.
+
+| Tool | Marker | Placement |
+| --- | --- | --- |
+| `code-complexity` | `// code-complexity-allow: <reason>` | the function's declaration line, or a comment/decorator line directly above it |
+| `code-lint` | `// code-lint-allow <rule>[,<rule>]: <reason>` | trailing a line (applies to it) or standalone above it (next line); the **rule id is required** |
+| `code-debt` | `// code-debt-allow[(#issue)]: <reason>` | above (or trailing) the focused/skipped test; an issue ref is expected for temporary skips |
+
+```ts
+// code-complexity-allow: hand-written arg marshaller, inherently branchy
+function buildArgs(/* … */) { /* … */ }
+
+const raw = payload as any; // code-lint-allow no-explicit-any: third-party shape
+
+// code-debt-allow(#1234): flaky on the CI windows runner, re-enable after fix
+it.skip("uploads large files", () => { /* … */ });
+```
+
+**`--exceptions-file <path>` (deprecated).** The ratchet/gate tools also accept a
+JSON file that grandfathers offenders by position. It remains the mechanism for
+`code-circular` (a cycle spans files, so it has no single line to annotate);
+`code-complexity`, `code-lint`, and `code-debt` still honor it as a fallback but
+emit a deprecation notice — prefer inline markers there. Shape is
+`{ "exceptions": [ ... ] }` (a bare array also works);
+`--ratchet`/`--gate` honor it, report modes ignore it:
 
 - **code-lint** / **code-complexity** / **code-debt:** entries are
   `{ "file": "packages/foo/src/bar.ts", "line": 42 }` (paths are normalized, so
@@ -96,7 +128,7 @@ so only what the PR actually touches is judged. Two flavors:
 
 | #   | Step (tool)                                 | Type        | Fails the PR when it…                                                                                                                                                                                                                                            |
 | --- | ------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Complexity ratchet** (`code-complexity`)  | ratchet     | leaves a changed file with more functions over the cyclomatic (25) or cognitive (30) budget than it had at the base; **any** function in a brand-new file over 25/30 also fails. Honors a baseline-exceptions file for rename false-positives.                   |
+| 1   | **Complexity ratchet** (`code-complexity`)  | ratchet     | leaves a changed file with more functions over the cyclomatic (25) or cognitive (30) budget than it had at the base; **any** function in a brand-new file over 25/30 also fails. Pre-existing offenders are grandfathered by the stateless HEAD-vs-base diff; a `// code-complexity-allow` marker covers the rare rename-miss.                   |
 | 2   | **Lint ratchet** (`code-lint`)              | ratchet     | adds net ESLint violations (`no-explicit-any`, `no-console`, `no-unused-vars`, `no-var`, `prefer-const`, `no-debugger`) in a changed file — syntactic rules only, so it's fast. `no-var`/`prefer-const` are effectively zero-tolerance (baseline is already 0).  |
 | 3   | **Circular dependency ratchet** (`code-circular`) | ratchet | introduces a runtime import cycle absent at the base. A whole-graph property, so it builds the cycle set for HEAD **and** the merge base (checked into a throwaway git worktree) — madge runs twice, ~80s, the heaviest step.                                   |
 | 4   | **Test debt gate** (`code-debt`)            | **gate**    | contains **any** focused test (`.only`/`.only.each`/`fit`/`fdescribe`), or newly skips a test (`.skip`/`.skip.each`/`xit`/`xdescribe`) in a changed file. TODO/FIXME/`@deprecated` are reported by this tool but not gated.                                       |
@@ -118,10 +150,9 @@ npm run code-debt     -- --gate    --base origin/main
 ### When a ratchet fires on debt you didn't add
 
 A file move that git's rename detection misses can make pre-existing offenders
-look "new." Grandfather them in the step's `--exceptions-file` (see
-[Baseline exceptions](#baseline-exceptions)) instead of weakening the threshold;
-for complexity, regenerate that file with
-`npm run code-complexity:update-exceptions`.
+look "new." Grandfather them with an inline marker — see
+[Suppressing a known offender](#suppressing-a-known-offender) — instead of
+weakening the threshold.
 
 Dead-code is **not** gated yet — knip's numbers are inflated until
 [`knip.jsonc`](./knip.jsonc) declares the entry points it can't infer.
