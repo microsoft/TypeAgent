@@ -65,11 +65,11 @@ Three kinds. All resolve an agent into the same `InstalledAgentRecord`; they
 differ only in how they acquire it and how cheaply they can answer _"can I
 resolve this `ref`?"_.
 
-| Kind      | Acquires by                                    | `ref` means          | `find` cost          | Enumerable  |
-| --------- | ---------------------------------------------- | -------------------- | -------------------- | ----------- |
-| `path`    | validating a filesystem path the user supplies | filesystem path      | stat (instant)       | no          |
-| `catalog` | looking up a JSON list, recording a path       | agent short name     | map lookup (instant) | yes         |
-| `feed`    | `npm install` against an Azure Artifacts feed  | npm specifier / name | registry metadata    | cached list |
+| Kind      | Acquires by                                    | `ref` means                       | `find` cost              | Enumerable         |
+| --------- | ---------------------------------------------- | --------------------------------- | ------------------------ | ------------------ |
+| `path`    | validating a filesystem path the user supplies | filesystem path                   | stat (instant)           | no                 |
+| `catalog` | looking up a JSON list, recording a path       | package name / default agent name | in-memory scan (instant) | yes                |
+| `feed`    | `npm install` against an Azure Artifacts feed  | npm specifier / name              | registry metadata        | cached descriptors |
 
 There is **no separate `builtin` kind**. The agents the app ships with are a
 static bundled provider ([`getDefaultAppAgentProviders`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/src/defaultAgentProviders.ts)),
@@ -93,8 +93,12 @@ packages — it can live in a repo or anywhere on disk:
 }
 ```
 
-Nothing in a catalog is installed automatically; a catalog only resolves a short
-name to a record on an explicit `@package install`.
+Nothing in a catalog is installed automatically; a catalog only resolves a
+package name or default agent name to a record on an explicit `@package install`
+(the catalog key is an internal durable handle, not a user-facing install
+target). The catalog file and each entry's `package.json` are read **once at
+startup** into an in-memory snapshot — there is no live reload, so an edit to the
+catalog is picked up on the next process launch.
 
 The source config types (`PathSourceConfig` / `CatalogSourceConfig` /
 `FeedSourceConfig`) live entirely in
@@ -133,6 +137,50 @@ persisted to instance config. First-match-wins gives the shadowing behavior:
 putting a `path`/`catalog` source ahead of a `feed` makes a
 local agent shadow the published one automatically.
 
+### One- and two-argument name resolution
+
+`@package install` takes one or two positional arguments, and the registry
+resolves them in **two phases** so a friendly agent name can win over a raw
+package/path ref. (For the user-facing syntax and flags see the
+[command reference](../../overview/command-reference.md#package-install---install-an-agent).)
+
+- **One argument** (`@package install <target>`) infers both the package and the
+  installed name. **Phase 1 — default agent name:** when `<target>` is a legal
+  agent name, each source is asked `findName(<target>)` in order, matching the
+  package's declared `typeagent.defaultAgentName`; the first match wins.
+  **Phase 2 — ref:** only if phase 1 matched nothing, each source is asked
+  `find(<target>)` in order, matching a package name or filesystem path. A
+  phase-1 match always beats a phase-2 match, so a stray local directory can
+  never shadow a package whose default name the user typed. The installed
+  dispatcher name is the resolved package's own `typeagent.defaultAgentName`.
+- **Two arguments** (`@package install <ref> <name>`) resolve `<ref>` by the
+  phase-2 ref walk only (default names are not consulted) and stamp `<name>` as
+  the explicit installed name.
+
+Sources that cannot answer a default-name lookup (the `path` source) omit
+`findName` and participate in phase 2 only; a one-argument path install reads
+`typeagent.defaultAgentName` from the resolved directory's `package.json` and
+fails with a two-argument hint when none is declared. The only one-argument
+ambiguity is **within a single source** — two entries declaring the same default
+agent name — which fails and lists the candidate packages; cross-source matches
+are resolved by order, not treated as ambiguous.
+
+Four distinct "name" concepts keep the rules well defined:
+
+| Concept                   | What it is                                                   | Used by                                                       |
+| ------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------- |
+| Catalog key               | The catalog's stable, source-owned entry identity            | Internal only (persisted `ref`, `load` handle)                |
+| Package name              | The npm package name (`package.json` `name`)                 | User (phase-2 ref); shown in listings                         |
+| Default agent name        | `typeagent.defaultAgentName` in the package's `package.json` | User (phase-1 target); source of truth for the installed name |
+| Installed dispatcher name | The name recorded in `agents.json`                           | Equals the default name unless overridden two-arg             |
+
+The registry commits only to **which phase won** (name vs. ref); the finer
+user-facing label (default agent name / package name / path) is derived at the
+display layer from the resolved candidate's own fields. `@package install
+--dry-run` reuses these exact walks to report the winning source, how it matched,
+the name it would install as, and every other source that would match in priority
+order — so an intentional shadow is visible without installing anything.
+
 **Status and degrade reporting.** The walk names each source as it is probed
 (shown by `@package install`, including `@package install --dry-run`). A source that
 cannot read its own backing store **degrades to a non-match** rather than
@@ -169,12 +217,21 @@ with a clear `az login` hint.
    manually, and a repo policy check enforces it (see
    [Publishing an agent to a feed](../../contributing/add-an-agent.md#publishing-to-a-feed)).
 
-The result is a **locally cached package list** (~1h TTL). `find` is a membership
-check against that list, followed by a lightweight live registry lookup to pin a
-concrete version — it never runs `npm install`. Offline, the cache is served
-as-is and the feed is skipped in the walk. Because the walk stops at the first
-match and cheap local sources answer first, the cold-cache cost is paid only when
-nothing local resolves the ref — which is why feeds are typically ordered last.
+The result is a **locally cached package descriptor list** (~1h TTL) — each entry
+carries the package name, its declared `typeagent.defaultAgentName`, and the
+latest version. `find` is a membership check against that list, followed by a
+lightweight live registry lookup to pin a concrete version — it never runs
+`npm install`. One-argument default-name lookup (`findName`) shortlists from the
+same descriptors (cache-only, no network for a miss) and then confirms the hit
+with the same live version resolution `find` uses; the cached default name is
+only a hint, so the installed name always comes from the resolved version's own
+metadata. Offline, the cache is served as-is and the feed is skipped in the walk.
+Because the walk stops at the first match and cheap local sources answer first,
+the cold-cache cost is paid only when nothing local resolves the ref — which is
+why feeds are typically ordered last. `@package install --refresh` (and
+`@package available --refresh`) refetches the descriptors and atomically swaps the
+cache in on success, leaving the prior cache intact and failing the command if the
+fetch fails rather than acting on stale data.
 
 **Env-backed registry.** A feed's `registry`/`scopes` are optional; when unset
 they are read from `TYPEAGENT_FEED_REGISTRY` / `TYPEAGENT_FEED_SCOPES` at resolve
@@ -292,6 +349,10 @@ same config stays portable to a host that does have a local file system.
   catalog/feed names fall through to the next source instead of throwing.
 - **A malformed catalog entry** (neither `path` nor package `name`) is dropped
   and reported; the rest of the catalog still resolves.
+- **Two entries in one source with the same `typeagent.defaultAgentName`** make a
+  one-argument name install fail as ambiguous (it lists the candidate packages
+  and suggests the two-argument form); cross-source matches are never ambiguous,
+  they are resolved by source order.
 - **A feed served offline** is skipped in the walk, not failed — the cached list
   answers `find`, and `materialize` is only reached after a match.
 - **Two feeds publishing the same package name** is last-writer-wins on disk
