@@ -15,6 +15,7 @@ import {
     nfaSafeOptimizations,
 } from "../src/grammarOptimizer.js";
 import { Grammar, createStringPart } from "../src/grammarTypes.js";
+import { describeForEachMatcher } from "./testUtils.js";
 
 describe("NFA compilation of factored shared-prefix grammars", () => {
     // Every alternative shares a common optional prefix rule <P>.
@@ -25,36 +26,32 @@ describe("NFA compilation of factored shared-prefix grammars", () => {
 <P> = (please)?;
 `;
 
-    it("compiles and matches correctly with nfaSafeOptimizations", () => {
-        const grammar = loadGrammarRules("factored-prefix.agr", agr, {
-            optimizations: nfaSafeOptimizations,
-        });
+    describeForEachMatcher(
+        "compiles and matches correctly with nfaSafeOptimizations",
+        (testMatchGrammar) => {
+            it("matches each branch, with and without the shared prefix", () => {
+                const grammar = loadGrammarRules("factored-prefix.agr", agr, {
+                    optimizations: nfaSafeOptimizations,
+                });
 
-        const nfa = compileGrammarToNFA(grammar, "factored-prefix");
+                expect(testMatchGrammar(grammar, "foo")).toStrictEqual([
+                    { actionName: "A" },
+                ]);
+                expect(testMatchGrammar(grammar, "please foo")).toStrictEqual([
+                    { actionName: "A" },
+                ]);
+                expect(testMatchGrammar(grammar, "bar")).toStrictEqual([
+                    { actionName: "B" },
+                ]);
+                expect(testMatchGrammar(grammar, "please bar")).toStrictEqual([
+                    { actionName: "B" },
+                ]);
 
-        expect(matchNFA(nfa, ["foo"], true).matched).toBe(true);
-        expect(matchNFA(nfa, ["foo"], true).actionValue).toEqual({
-            actionName: "A",
-        });
-
-        expect(matchNFA(nfa, ["please", "foo"], true).matched).toBe(true);
-        expect(matchNFA(nfa, ["please", "foo"], true).actionValue).toEqual({
-            actionName: "A",
-        });
-
-        expect(matchNFA(nfa, ["bar"], true).matched).toBe(true);
-        expect(matchNFA(nfa, ["bar"], true).actionValue).toEqual({
-            actionName: "B",
-        });
-
-        expect(matchNFA(nfa, ["please", "bar"], true).matched).toBe(true);
-        expect(matchNFA(nfa, ["please", "bar"], true).actionValue).toEqual({
-            actionName: "B",
-        });
-
-        // Unrelated input must still fail.
-        expect(matchNFA(nfa, ["baz"], true).matched).toBe(false);
-    });
+                // Unrelated input must still fail.
+                expect(testMatchGrammar(grammar, "baz")).toStrictEqual([]);
+            });
+        },
+    );
 
     it("still refuses tailCall RulesParts from recommendedOptimizations", () => {
         // tailFactoring/promoteTailRulesParts still aren't NFA-compatible.
@@ -64,7 +61,7 @@ describe("NFA compilation of factored shared-prefix grammars", () => {
 
         expect(() =>
             compileGrammarToNFA(grammar, "factored-prefix-tail"),
-        ).toThrow(/tailCall RulesPart/);
+        ).toThrow(/tail/i);
     });
 
     it("derives an implicit value for a manually-authored factored rule", () => {

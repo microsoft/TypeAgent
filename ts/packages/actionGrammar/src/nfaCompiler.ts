@@ -22,6 +22,7 @@ import {
     ValueExpression,
 } from "./environment.js";
 import { normalizeToken } from "./nfaMatcher.js";
+import { findSingleValueBearingPart } from "./grammarOptimizer.js";
 
 // Scripts that require a word-boundary separator between adjacent tokens.
 // CJK and other logographic/syllabic scripts are NOT included — no separator needed.
@@ -475,31 +476,13 @@ function isSingleVariableRule(rule: GrammarRule): { variable: string } | false {
 }
 
 /**
- * For a value-less multi-part rule, find its single variable-bearing
- * part so that part's value can be forwarded as the rule's effective
- * value (mirrors `getImplicitDefaultValue` in grammarOptimizer.ts).
- * Returns `"ambiguous"` if more than one part carries a variable, or
- * `undefined` if none do.
- */
-function findSingleVariableBearingPart(
-    rule: GrammarRule,
-): { variable: string } | "ambiguous" | undefined {
-    let found: string | undefined;
-    for (const part of rule.parts) {
-        const name = part.variable;
-        if (name === undefined) continue;
-        if (found !== undefined) return "ambiguous";
-        found = name;
-    }
-    return found !== undefined ? { variable: found } : undefined;
-}
-
-/**
  * Derive the value expression for a rule that has no explicit `->` value:
  * single-variable rules forward that variable, and factored multi-part
  * rules (from `nfaSafeOptimizations`) forward their single variable-bearing
- * part's value. Throws if ambiguous (2+ variable-bearing parts); if
- * `requireValue` is set, also throws when no value can be derived at all.
+ * part's value (via `findSingleValueBearingPart`, shared with the
+ * optimizer's `getImplicitDefaultValue`). Throws if ambiguous (2+
+ * variable-bearing parts); if `requireValue` is set, also throws when no
+ * value can be derived at all.
  */
 function deriveEffectiveValue(
     rule: GrammarRule,
@@ -516,7 +499,7 @@ function deriveEffectiveValue(
     if (rule.parts.length <= 1) {
         return undefined;
     }
-    const singleVarPart = findSingleVariableBearingPart(rule);
+    const singleVarPart = findSingleValueBearingPart(rule.parts);
     if (singleVarPart === "ambiguous") {
         throw new Error(
             `${describeRule()} has ${rule.parts.length} terms but no value expression, ` +

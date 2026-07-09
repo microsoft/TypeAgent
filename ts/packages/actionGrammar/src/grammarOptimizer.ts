@@ -3327,31 +3327,34 @@ function getImplicitDefaultValue(
     rule: GrammarRule,
 ): CompiledValueNode | undefined {
     if (rule.value !== undefined) return rule.value;
-    const parts = rule.parts;
-    if (parts.length === 0) return undefined;
-    if (parts.length === 1) {
-        // Single-part rule: matcher forwards the part's value.  For
-        // var-bearing parts we can express that as a variable
-        // reference; for unbound `string` / `phraseSet` (whose
-        // matcher value derives from the matched text) and unbound
-        // `rules` (whose value derives from the inner match) we
-        // can't reify the result without changing the AST, so bail.
-        const name = parts[0].variable;
-        return name !== undefined ? { type: "variable", name } : undefined;
-    }
-    // Multi-part: implicit default requires exactly one
-    // var-bearing part.  Same predicate as the inliner's
-    // binding-friendly check for multi-part children.
-    let theVar: string | undefined;
+    if (rule.parts.length === 0) return undefined;
+    const result = findSingleValueBearingPart(rule.parts);
+    return result !== "ambiguous" && result !== undefined
+        ? { type: "variable", name: result.variable }
+        : undefined;
+}
+
+/**
+ * Find the single part (if any) that carries a variable across a rule's
+ * parts, so its value can stand in for the whole rule's implicit value
+ * when the rule has no explicit `->` expression. Returns `"ambiguous"`
+ * when 2+ parts carry a variable, or `undefined` when none do.
+ *
+ * Shared by `getImplicitDefaultValue` (above) and the NFA compiler's
+ * equivalent forwarding logic for factored rules (see
+ * `deriveEffectiveValue` in nfaCompiler.ts).
+ */
+export function findSingleValueBearingPart(
+    parts: GrammarPart[],
+): { variable: string } | "ambiguous" | undefined {
+    let found: string | undefined;
     for (const p of parts) {
         const name = p.variable;
         if (name === undefined) continue;
-        if (theVar !== undefined) return undefined;
-        theVar = name;
+        if (found !== undefined) return "ambiguous";
+        found = name;
     }
-    return theVar !== undefined
-        ? { type: "variable", name: theVar }
-        : undefined;
+    return found !== undefined ? { variable: found } : undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

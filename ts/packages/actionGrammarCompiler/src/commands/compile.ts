@@ -8,6 +8,7 @@ import {
     grammarToJson,
     loadGrammarRulesNoThrow,
     nfaSafeOptimizations,
+    recommendedOptimizations,
     SchemaLoader,
 } from "@typeagent/action-grammar";
 import { parseSchemaSource } from "@typeagent/action-schema";
@@ -68,6 +69,11 @@ export default class Compile extends Command {
                 "Disable grammar optimizations (produces an unoptimized AST that preserves the 1:1 correspondence between top-level rules and the original source — useful for diagnostics).",
             default: false,
         }),
+        "nfa-safe": Flags.boolean({
+            description:
+                "Use the NFA-compatible optimization preset (excludes tailCall-producing passes) instead of the default recommended optimizations.",
+            default: false,
+        }),
     };
 
     async run(): Promise<void> {
@@ -86,9 +92,9 @@ export default class Compile extends Command {
                 : {
                       startValueRequired: true,
                       schemaLoader,
-                      // NFA is agent-server's default grammar system;
-                      // this preset avoids tailCall RulesParts it can't compile.
-                      optimizations: nfaSafeOptimizations,
+                      optimizations: flags["nfa-safe"]
+                          ? nfaSafeOptimizations
+                          : recommendedOptimizations,
                   },
         );
 
