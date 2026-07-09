@@ -573,7 +573,7 @@ export function openImpactReport(
                 versionB: msg.resolvedB,
                 ...(provenance ? { provenance } : {}),
             };
-            savePersistedRun(
+            await savePersistedRun(
                 context.workspaceState,
                 agent,
                 payload,

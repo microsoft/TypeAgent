@@ -70,8 +70,10 @@ export function loadPersistedRun(
     return state.get<PersistedRun>(runStoreKey(agent));
 }
 
-/** Persist a completed run (row-capped) as the agent's last run. */
-export function savePersistedRun(
+/** Persist a completed run (row-capped) as the agent's last run. Awaits the
+ *  underlying `Memento.update` so the write is durable before the caller
+ *  proceeds (the last run must survive a deactivate shortly after saving). */
+export async function savePersistedRun(
     state: vscode.Memento,
     agent: string,
     payload: StudioReplayResult,
@@ -79,7 +81,7 @@ export function savePersistedRun(
     provenance?: RunProvenance,
     versionA?: ResolvedVersion,
     versionB?: ResolvedVersion,
-): void {
+): Promise<void> {
     const bounded =
         payload.rows.length > MAX_PERSISTED_ROWS
             ? {
@@ -90,7 +92,7 @@ export function savePersistedRun(
                   ),
               }
             : payload;
-    void state.update(runStoreKey(agent), {
+    await state.update(runStoreKey(agent), {
         payload: bounded,
         runAt,
         ...(provenance ? { provenance } : {}),

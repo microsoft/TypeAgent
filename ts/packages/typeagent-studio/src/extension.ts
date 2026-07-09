@@ -533,7 +533,9 @@ export function activate(context: vscode.ExtensionContext): void {
                             result.files.length
                         } ${
                             result.files.length === 1 ? "file" : "files"
-                        }; skipped ${skippedTotal} duplicate.`,
+                        }; skipped ${skippedTotal} ${
+                            skippedTotal === 1 ? "duplicate" : "duplicates"
+                        }.`,
                     );
                 } catch (error) {
                     vscode.window.showErrorMessage(
@@ -895,7 +897,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     };
                     // Persist as the agent's last run so opening the Impact Report
                     // re-renders this run instead of a blank report.
-                    savePersistedRun(
+                    await savePersistedRun(
                         context.workspaceState,
                         agent,
                         result,
