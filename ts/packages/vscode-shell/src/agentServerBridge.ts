@@ -124,6 +124,16 @@ export class AgentServerBridge {
     /** In-flight session-join promise — serializes joinSpecificSession calls. */
     private joinInFlight: Promise<boolean> | undefined;
     private session: SessionDispatcher | undefined;
+    // Commands the user submitted before a session/dispatcher was ready.
+    // Buffered here (rather than dropped with a "no active session" notice)
+    // and flushed by flushPendingSends() once a session is established, in
+    // the order they were typed. Mirrors the Electron shell's pre-init send
+    // queue in chatPanelBridge.ts.
+    private pendingSends: Array<{
+        command: string;
+        requestId?: string;
+        attachments?: string[];
+    }> = [];
     private webviews: Set<vscode.Webview> = new Set();
     /**
      * Per-webview buffer for live broadcasts that arrive while the webview
@@ -468,6 +478,11 @@ export class AgentServerBridge {
                 this.lastReplayedSessionId = this.session.sessionId;
                 await this.replayHistory(this.session);
             }
+
+            // Flush any commands the user typed before the session was
+            // ready. Deferred until after history replay so they submit on
+            // a settled transcript, then run in the order they were typed.
+            void this.flushPendingSends();
         } catch (e: any) {
             const msg = e?.message ?? String(e);
             // Suppress per-attempt error toasts in the chat area; the
@@ -1808,17 +1823,12 @@ export class AgentServerBridge {
         // (reading 'dispatcher')" and the webview's stop button stays
         // stuck on screen.
         if (!this.session) {
-            this.broadcastToWebviews({
-                type: "commandComplete",
-                requestId: requestId ?? "",
-                result: null,
-            });
-            this.broadcastToWebviews({
-                type: "error",
-                message:
-                    "No active session — reconnect or pick a conversation.",
-                requestId: requestId ?? "",
-            });
+            // Session/dispatcher not ready yet (initial connect, reconnect,
+            // or a mid-send session swap). Queue the command instead of
+            // dropping it; flushPendingSends() replays it once a session is
+            // established. The webview bubble stays in its processing state
+            // so it reads as pending rather than erroring out.
+            this.pendingSends.push({ command, requestId, attachments });
             return;
         }
 
@@ -1876,6 +1886,22 @@ export class AgentServerBridge {
                     this.serverToClientRequestId.delete(serverId);
                 }
             }
+        }
+    }
+
+    /**
+     * Replay commands buffered while no session was ready (see
+     * `pendingSends`). Drained in one shot and submitted sequentially so
+     * they run in the order the user typed them. Fired from connectImpl()
+     * once a session is established and history has replayed.
+     */
+    private async flushPendingSends(): Promise<void> {
+        if (this.pendingSends.length === 0) {
+            return;
+        }
+        const buffered = this.pendingSends.splice(0);
+        for (const { command, requestId, attachments } of buffered) {
+            await this.sendCommand(command, requestId, attachments);
         }
     }
 
