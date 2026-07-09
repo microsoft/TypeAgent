@@ -281,6 +281,10 @@ function handleRequestInteraction(
             activeInteractions.delete(interaction.interactionId);
             return;
         }
+        if (ac.signal.aborted) {
+            activeInteractions.delete(interaction.interactionId);
+            return;
+        }
         activeInteractions.delete(interaction.interactionId);
         vscode.postMessage({ type: "interactionResponse", response });
     })();

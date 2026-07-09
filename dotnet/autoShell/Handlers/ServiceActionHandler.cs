@@ -16,12 +16,10 @@ namespace autoShell.Handlers;
 internal class ServiceActionHandler : ActionHandlerBase
 {
     private readonly IServiceControlService _services;
-    private readonly ILogger _logger;
 
-    public ServiceActionHandler(IServiceControlService services, ILogger logger)
+    public ServiceActionHandler(IServiceControlService services, ILogger _)
     {
         _services = services;
-        _logger = logger;
         AddAction<RestartServiceParams>("RestartService", HandleRestartService);
     }
 
