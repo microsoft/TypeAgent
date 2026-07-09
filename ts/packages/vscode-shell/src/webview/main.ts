@@ -217,10 +217,25 @@ const pendingBridgeRpc = new Map<
 function bridgeRpc(
     method: "getTemplateSchema" | "getTemplateCompletion" | "getDynamicDisplay",
     args: unknown[],
+    timeoutMs = 30_000,
 ): Promise<unknown> {
     const id = nextBridgeRpcId++;
     return new Promise<unknown>((resolve, reject) => {
-        pendingBridgeRpc.set(id, { resolve, reject });
+        const timer = setTimeout(() => {
+            if (pendingBridgeRpc.delete(id)) {
+                reject(new Error(`bridgeRpc '${method}' timed out`));
+            }
+        }, timeoutMs);
+        pendingBridgeRpc.set(id, {
+            resolve: (v) => {
+                clearTimeout(timer);
+                resolve(v);
+            },
+            reject: (e) => {
+                clearTimeout(timer);
+                reject(e);
+            },
+        });
         vscode.postMessage({ type: "bridgeRpcRequest", id, method, args });
     });
 }
