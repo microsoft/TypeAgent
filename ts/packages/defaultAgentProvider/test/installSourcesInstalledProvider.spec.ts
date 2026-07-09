@@ -480,14 +480,17 @@ describe("getDefaultAppAgentSource", () => {
                     if (config.name === "broken") {
                         throw new Error("source unavailable");
                     }
-                    return ["foo", "bar"];
+                    return [
+                        { source: config.name, ref: "foo", packageName: "foo" },
+                        { source: config.name, ref: "bar", packageName: "bar" },
+                    ];
                 },
             }),
         );
 
         await expect(built.testApi.listAvailableAgents()).resolves.toEqual([
-            { ref: "foo", source: "healthy" },
-            { ref: "bar", source: "healthy" },
+            { source: "healthy", ref: "foo", packageName: "foo" },
+            { source: "healthy", ref: "bar", packageName: "bar" },
         ]);
     });
 
@@ -2512,7 +2515,7 @@ describe("structural manifest check on install/update (5.3)", () => {
         const instanceDir = catalogModuleInstanceDir("cat", "cat-mod", false);
         const built = createDefaultInstalledAgentSource(instanceDir).testApi;
         await expect(
-            built.install("x", "cat", "cat", noopHost),
+            built.install("x", "cat-mod", "cat", noopHost),
         ).rejects.toThrow();
         // Nothing persisted: a broken agent is never recorded.
         expect(readAgentsJson(instanceDir)?.agents.x).toBeUndefined();
@@ -2522,14 +2525,14 @@ describe("structural manifest check on install/update (5.3)", () => {
     it("install of an npm-package source succeeds when the manifest reads", async () => {
         const instanceDir = catalogModuleInstanceDir("cat", "cat-mod", true);
         const built = createDefaultInstalledAgentSource(instanceDir).testApi;
-        await built.install("x", "cat", "cat", noopHost);
+        await built.install("x", "cat-mod", "cat", noopHost);
         expect(readAgentsJson(instanceDir)!.agents.x.module).toBe("cat-mod");
     });
 
     it("catalog update is unsupported and leaves v1 intact", async () => {
         const instanceDir = catalogModuleInstanceDir("cat", "cat-mod", true);
         const built = createDefaultInstalledAgentSource(instanceDir).testApi;
-        await built.install("x", "cat", "cat", noopHost);
+        await built.install("x", "cat-mod", "cat", noopHost);
         expect(readAgentsJson(instanceDir)!.agents.x.module).toBe("cat-mod");
 
         // Re-point the catalog key at a fresh, never-resolved (absent) module

@@ -11,7 +11,9 @@ import {
     MaterializedInstallRecord,
     ResolvedCandidate,
     SourceWarning,
+    AvailableInstallRow,
 } from "./config.js";
+import { readPackageMeta } from "./packageMeta.js";
 
 const debug = registerDebug("typeagent:dispatcher:installSource:catalog");
 
@@ -120,6 +122,47 @@ export function createCatalogSource(
             : { module: entry.name! };
     }
 
+    // Build the full resolved candidate for one catalog entry, reading the
+    // entry's package.json read-through for a `path` entry so the candidate
+    // carries the user-facing package name and (when legal) the declared
+    // `typeagent.defaultAgentName`. The catalog key stays the durable `ref`
+    // (internal load handle). Returns undefined for a malformed/dropped entry.
+    function candidateFor(
+        key: string,
+        entry: { path?: string; name?: string; execMode?: string },
+        onWarn?: SourceWarning,
+    ): ResolvedCandidate | undefined {
+        const handle = entryHandle(key, entry, onWarn);
+        if (handle === undefined) {
+            return undefined;
+        }
+        const candidate: ResolvedCandidate = { source: config.name, ref: key };
+        if (handle.path !== undefined) {
+            candidate.path = handle.path;
+            const meta = readPackageMeta(handle.path);
+            if (meta.packageName !== undefined) {
+                candidate.packageName = meta.packageName;
+            }
+            if (meta.defaultAgentName !== undefined) {
+                candidate.defaultAgentName = meta.defaultAgentName;
+            } else if (meta.illegalDefaultAgentName !== undefined) {
+                warn(
+                    `catalog source '${config.name}': entry '${key}' declares an illegal default agent name '${meta.illegalDefaultAgentName}' - ignored`,
+                    onWarn,
+                );
+            }
+        } else if (handle.module !== undefined) {
+            // A module-only entry has no local package.json to read before
+            // install, so it participates only in package-name (find) lookup.
+            candidate.module = handle.module;
+            candidate.packageName = handle.module;
+        }
+        if (entry.execMode !== undefined) {
+            candidate.loaderConfig = { execMode: entry.execMode };
+        }
+        return candidate;
+    }
+
     return {
         name: config.name,
         kind: "catalog",
@@ -127,26 +170,58 @@ export function createCatalogSource(
             ref: string,
             onWarn?: SourceWarning,
         ): Promise<ResolvedCandidate | undefined> {
-            const entry = read(onWarn).agents[ref];
-            if (entry === undefined) {
+            // `find` matches the entry's PACKAGE NAME (not the internal catalog
+            // key, not the entry path). The key stays the durable load handle.
+            // Per-entry malformed/illegal warnings are suppressed here (find
+            // iterates every entry, so warning per entry would be noisy); only
+            // the whole-file corruption warning surfaces (via read). Enumeration
+            // (listAgents) is where per-entry problems are reported.
+            const agents = read(onWarn).agents;
+            for (const [key, entry] of Object.entries(agents)) {
+                const candidate = candidateFor(key, entry);
+                if (candidate?.packageName === ref) {
+                    return candidate;
+                }
+            }
+            return undefined; // non-match: the ordered walk continues
+        },
+        async findName(
+            name: string,
+            onWarn?: SourceWarning,
+        ): Promise<ResolvedCandidate | undefined> {
+            // Phase-1 lookup: match the entry's declared
+            // `typeagent.defaultAgentName`. Two entries declaring the same
+            // default agent name is a same-source ambiguity (fail, list the
+            // candidate packages). Per-entry warnings are suppressed here for the
+            // same reason as `find`.
+            const agents = read(onWarn).agents;
+            const matches: ResolvedCandidate[] = [];
+            for (const [key, entry] of Object.entries(agents)) {
+                const candidate = candidateFor(key, entry);
+                if (candidate?.defaultAgentName === name) {
+                    matches.push(candidate);
+                }
+            }
+            if (matches.length === 0) {
                 return undefined; // non-match: the ordered walk continues
             }
-            const handle = entryHandle(ref, entry, onWarn);
-            if (handle === undefined) {
-                return undefined; // malformed entry dropped -> non-match
+            if (matches.length > 1) {
+                const labels = matches.map(
+                    (c) => c.packageName ?? c.path ?? c.ref ?? "?",
+                );
+                const suggestions = labels
+                    .map(
+                        (label) =>
+                            `'@package install ${label} <name> --source ${config.name}'`,
+                    )
+                    .join(" or ");
+                throw new Error(
+                    `Source '${config.name}' has multiple packages with default agent name '${name}': ${labels.join(
+                        ", ",
+                    )}. Use ${suggestions}.`,
+                );
             }
-            // `ref` carries the matched catalog key for installer-level naming
-            // and load refresh decisions.
-            const candidate: ResolvedCandidate = { source: config.name, ref };
-            if (handle.path !== undefined) {
-                candidate.path = handle.path;
-            } else if (handle.module !== undefined) {
-                candidate.module = handle.module;
-            }
-            if (entry.execMode !== undefined) {
-                candidate.loaderConfig = { execMode: entry.execMode };
-            }
-            return candidate;
+            return matches[0];
         },
         load(
             record: { ref?: string },
@@ -210,13 +285,34 @@ export function createCatalogSource(
             }
             return record;
         },
-        async listAgents(onWarn?: SourceWarning): Promise<string[]> {
+        async listAgents(
+            onWarn?: SourceWarning,
+        ): Promise<AvailableInstallRow[]> {
             // Only advertise entries with a valid resolution handle; malformed
             // entries are warned + dropped here too (same as find), never listed.
+            // Each row carries the default agent name and/or package name a user
+            // can type; the catalog key rides along only as the dedup `ref`.
             const agents = read(onWarn).agents;
-            return Object.keys(agents).filter(
-                (ref) => entryHandle(ref, agents[ref], onWarn) !== undefined,
-            );
+            const rows: AvailableInstallRow[] = [];
+            for (const [key, entry] of Object.entries(agents)) {
+                const candidate = candidateFor(key, entry, onWarn);
+                if (candidate === undefined) {
+                    continue;
+                }
+                if (
+                    candidate.defaultAgentName === undefined &&
+                    candidate.packageName === undefined
+                ) {
+                    continue;
+                }
+                rows.push({
+                    source: config.name,
+                    ref: key,
+                    defaultAgentName: candidate.defaultAgentName,
+                    packageName: candidate.packageName,
+                });
+            }
+            return rows;
         },
     };
 }

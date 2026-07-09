@@ -1,6 +1,6 @@
 # Package Install Name Resolution
 
-Status: proposed
+Status: implemented
 
 ## Motivation
 

@@ -20,10 +20,16 @@
  * succeed. Passed from `find` to `materialize`; not used outside this file.
  */
 export interface ResolvedCandidate {
-    source: string; // which source matched
+    // Which source matched.
+    source: string;
+
+    // --- Acquisition handles: what `materialize` / `load` use to obtain the
+    // agent. Which of these are set is source-owned: a feed sets
+    // `module` + `ref` + `version`; a catalog sets `path` (or `module`) + `ref`
+    // (the catalog key); a path source sets only `path`. ---
     module?: string; // package name (npm-resolved; omitted when path-resolved)
-    ref?: string; // feed specifier/version
-    path?: string; // catalog / path result
+    path?: string; // filesystem-resolved (catalog `path` entry / path source)
+    ref?: string; // durable handle: feed specifier / catalog key
     // The concrete package version this candidate resolves to, when the source
     // can determine it cheaply during `find`/`update`: the feed
     // source reads the packument during the membership check and pins the
@@ -37,6 +43,64 @@ export interface ResolvedCandidate {
     // record's `kind` (e.g. npm: `{ execMode }`). Interpreted by the owning
     // source/loader, not by generic code.
     loaderConfig?: Record<string, unknown>;
+
+    // --- User-facing identity: used for display (`@package available`, success
+    // messages) and one-argument install name inference, never as a durable
+    // load handle (that is `ref`). ---
+    // The user-facing npm package name for catalog and feed matches. Omitted for
+    // path-only matches.
+    packageName?: string;
+    // The package's declared `typeagent.defaultAgentName`, when the source can
+    // discover it during lookup. Required whenever the installed name is
+    // inferred (one-argument install, including path installs). A phase-2 path
+    // candidate may leave this unset for the registry to backfill from the
+    // resolved directory's package.json before materialization.
+    defaultAgentName?: string;
+}
+
+/**
+ * One enumerable install target advertised by a source for `@package available`
+ * and install completion. `ref` is the source's internal durable/identity
+ * handle used only to de-duplicate rows - it is never displayed. The invariant
+ * is that at least one of `defaultAgentName` / `packageName` is present, so
+ * every row has something the user can type into `@package install`.
+ */
+export interface AvailableInstallRow {
+    readonly source: string;
+    readonly ref: string; // internal durable/identity handle; dedup key only
+    readonly defaultAgentName?: string | undefined; // shown as the install name
+    readonly packageName?: string | undefined; // shown as the package; absent for path-only
+}
+
+/**
+ * How a one/two-argument install target matched, for user feedback. Derived at
+ * the display layer from the resolved candidate's own fields - the registry
+ * itself only commits to the binary name-vs-ref phase.
+ */
+export type InstallMatchKind = "defaultAgentName" | "packageName" | "path";
+
+/**
+ * One match in a `@package install --dry-run` preview: the source that would
+ * match, how it matched, the name it would install as, and the user-facing
+ * package identity / path when known.
+ */
+export interface InstallPreviewMatch {
+    readonly source: string;
+    readonly matchKind: InstallMatchKind;
+    readonly name: string; // dispatcher name it would install as
+    readonly packageName?: string;
+    readonly path?: string;
+    readonly ref?: string; // durable handle
+}
+
+/**
+ * A `@package install --dry-run` preview: the winning match plus every other
+ * match in priority order across both phases (so an incidental shadow is
+ * visible). Nothing is installed to produce it.
+ */
+export interface InstallPreview {
+    readonly winner: InstallPreviewMatch;
+    readonly matches: InstallPreviewMatch[];
 }
 
 /**
@@ -84,6 +148,21 @@ export interface InstalledAgentRecord {
 export type MaterializedInstallRecord = Omit<InstalledAgentRecord, "name">;
 
 /**
+ * The registry's `resolve` result: a fully-named record plus which resolution
+ * phase matched. `matchedByName` is `true` when the inferred default-agent-name
+ * walk (`findName`) won and `false` when the ref walk (`find`) won. That binary
+ * phase is all the registry commits to - the finer user-facing label (default
+ * agent name / package name / path) is derived at the display layer from the
+ * resolved candidate's own fields. `packageName` carries the user-facing package
+ * identity when the winning source populated it.
+ */
+export interface ResolveResult {
+    record: InstalledAgentRecord; // name already assigned
+    matchedByName: boolean;
+    packageName?: string;
+}
+
+/**
  * A source-owned update result. `updated` returns a freshly materialized record
  * that must be swapped in; `no-op` returns the record to persist without a
  * provider swap (e.g. a feed range that resolves to the currently installed
@@ -96,8 +175,8 @@ export type InstallSourceUpdateResult =
 /**
  * A per-command callback a source calls to report a non-fatal problem (e.g. a
  * corrupt catalog file or a dropped malformed entry) so the host can show it to
- * the user for the command that triggered it (`@package install`,
- * `@package source where`). Distinct from the source's own process-lifetime
+ * the user for the command that triggered it (`@package install`, including
+ * `--dry-run`). Distinct from the source's own process-lifetime
  * debug/console log: it is scoped to the current resolve, so the warning is
  * shown once per command rather than once per process.
  */
@@ -106,8 +185,8 @@ export type SourceWarning = (message: string) => void;
 /**
  * A per-command callback the registry's resolution walk calls to report
  * progress - which source it is currently probing - so the host can show a
- * live status line for the triggering command (`@package install`,
- * `@package source where`). Like {@link SourceWarning} it is scoped to the
+ * live status line for the triggering command (`@package install`, including
+ * `--dry-run`). Like {@link SourceWarning} it is scoped to the
  * current resolve, not the process.
  */
 export type SourceStatus = (message: string) => void;
@@ -217,6 +296,19 @@ export interface InstallSource {
         ref: string,
         onWarn?: SourceWarning,
     ): Promise<ResolvedCandidate | undefined>;
+    /**
+     * Optional default-agent-name lookup for one-argument install (phase 1).
+     * Matches the package's declared `typeagent.defaultAgentName`. Returning a
+     * candidate means this source owns a package whose default agent name equals
+     * `name`; returning `undefined` is a non-match and the ordered walk
+     * continues. Sources that cannot support default-name lookup (e.g. `path`)
+     * omit this. A source that has two entries declaring the same default agent
+     * name must throw (ambiguous) rather than pick one.
+     */
+    findName?(
+        name: string,
+        onWarn?: SourceWarning,
+    ): Promise<ResolvedCandidate | undefined>;
     /** Optional source-owned update capability. The common layer only performs
      * source lookup, locking, persistence, and provider swap/no-op orchestration;
      * the source decides whether records it owns are updateable, how `range`
@@ -243,6 +335,13 @@ export interface InstallSource {
     materialize(
         candidate: ResolvedCandidate,
     ): Promise<MaterializedInstallRecord>;
-    /** Sources that can list their agents (catalog, feed) implement this; `path` cannot. */
-    listAgents?(onWarn?: SourceWarning): Promise<string[]>;
+    /** Sources that can list their agents (catalog, feed) implement this; `path` cannot.
+     * Returns one row per default agent name and/or package name it can offer. */
+    listAgents?(onWarn?: SourceWarning): Promise<AvailableInstallRow[]>;
+    /** Optional cache-backed metadata refresh. Sources with a cache (feed) fetch
+     * fresh metadata and atomically swap it in on success. The prior cache is
+     * never destroyed up front, so a failed refresh leaves it intact; the source
+     * throws the fetch error so the command can fail rather than guess from stale
+     * data. Cacheless sources (path, catalog) omit this. */
+    refresh?(onWarn?: SourceWarning): Promise<void>;
 }

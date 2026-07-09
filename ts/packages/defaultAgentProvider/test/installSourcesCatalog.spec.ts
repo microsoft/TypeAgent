@@ -13,8 +13,33 @@ function writeCatalog(agents: object): string {
     return file;
 }
 
+// Write a catalog plus one or more sibling package directories (each with a
+// package.json) that `path` entries can resolve against. `find` matches the
+// package.json `name`; `findName` matches `typeagent.defaultAgentName`.
+function writeCatalogWithPackages(
+    agents: object,
+    packages: Record<string, { name?: string; defaultAgentName?: string }>,
+): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-catalog-"));
+    const file = path.join(dir, "agents.catalog.json");
+    fs.writeFileSync(file, JSON.stringify({ agents }));
+    for (const [sub, meta] of Object.entries(packages)) {
+        const pdir = path.join(dir, sub);
+        fs.mkdirSync(pdir, { recursive: true });
+        const pkg: Record<string, unknown> = {};
+        if (meta.name !== undefined) {
+            pkg.name = meta.name;
+        }
+        if (meta.defaultAgentName !== undefined) {
+            pkg.typeagent = { defaultAgentName: meta.defaultAgentName };
+        }
+        fs.writeFileSync(path.join(pdir, "package.json"), JSON.stringify(pkg));
+    }
+    return file;
+}
+
 describe("catalogSource", () => {
-    it("find looks up a module-only entry and records module", async () => {
+    it("find matches a module-only entry by package name and records module", async () => {
         const file = writeCatalog({
             player: { name: "music" },
         });
@@ -23,10 +48,13 @@ describe("catalogSource", () => {
             name: "workspace",
             catalog: file,
         });
-        const candidate = await source.find("player");
+        // Matched by PACKAGE NAME ("music"), not the internal key ("player").
+        const candidate = await source.find("music");
         expect(candidate).toBeDefined();
         expect(candidate!.source).toBe("workspace");
         expect(candidate!.module).toBe("music");
+        expect(candidate!.packageName).toBe("music");
+        expect(candidate!.ref).toBe("player"); // key kept as the durable handle
         expect(candidate!.path).toBeUndefined();
 
         const record = await source.materialize(candidate!);
@@ -35,25 +63,91 @@ describe("catalogSource", () => {
         expect(record.source).toBe("workspace");
     });
 
-    it("find resolves a path entry against the catalog dir and omits module", async () => {
-        const file = writeCatalog({
-            montage: { name: "montage-agent", path: "montage" },
-        });
+    it("does not match a catalog entry by its internal key", async () => {
+        const file = writeCatalog({ player: { name: "music" } });
         const source = createCatalogSource({
             kind: "catalog",
             name: "workspace",
             catalog: file,
         });
-        const candidate = await source.find("montage");
+        // The key is internal: it is never a user-facing find target.
+        expect(await source.find("player")).toBeUndefined();
+    });
+
+    it("find matches a path entry by its package.json name", async () => {
+        const file = writeCatalogWithPackages(
+            { montage: { path: "montage" } },
+            { montage: { name: "montage-agent" } },
+        );
+        const source = createCatalogSource({
+            kind: "catalog",
+            name: "workspace",
+            catalog: file,
+        });
+        const candidate = await source.find("montage-agent");
         expect(candidate).toBeDefined();
         expect(candidate!.path).toBe(
             path.resolve(path.dirname(file), "montage"),
         );
+        expect(candidate!.packageName).toBe("montage-agent");
         expect(candidate!.module).toBeUndefined();
 
         const record = await source.materialize(candidate!);
         expect(record.path).toBe(path.resolve(path.dirname(file), "montage"));
         expect(record.module).toBeUndefined();
+    });
+
+    it("findName matches a path entry by its default agent name", async () => {
+        const file = writeCatalogWithPackages(
+            { weatherKey: { path: "weather" } },
+            {
+                weather: {
+                    name: "@x/weather-agent",
+                    defaultAgentName: "weather",
+                },
+            },
+        );
+        const source = createCatalogSource({
+            kind: "catalog",
+            name: "workspace",
+            catalog: file,
+        });
+        const candidate = await source.findName!("weather");
+        expect(candidate).toBeDefined();
+        expect(candidate!.defaultAgentName).toBe("weather");
+        expect(candidate!.packageName).toBe("@x/weather-agent");
+        expect(candidate!.ref).toBe("weatherKey");
+    });
+
+    it("findName does not match a module-only entry (no local package.json)", async () => {
+        const file = writeCatalog({ player: { name: "music" } });
+        const source = createCatalogSource({
+            kind: "catalog",
+            name: "workspace",
+            catalog: file,
+        });
+        expect(await source.findName!("music")).toBeUndefined();
+    });
+
+    it("findName fails as ambiguous when two entries share a default agent name", async () => {
+        const file = writeCatalogWithPackages(
+            { a: { path: "a" }, b: { path: "b" } },
+            {
+                a: { name: "weather-agent", defaultAgentName: "weather" },
+                b: {
+                    name: "weather-preview-agent",
+                    defaultAgentName: "weather",
+                },
+            },
+        );
+        const source = createCatalogSource({
+            kind: "catalog",
+            name: "workspace",
+            catalog: file,
+        });
+        await expect(source.findName!("weather")).rejects.toThrow(
+            /multiple packages with default agent name 'weather'/,
+        );
     });
 
     it("find carries execMode from the catalog entry (Q6)", async () => {
@@ -65,11 +159,13 @@ describe("catalogSource", () => {
             name: "workspace",
             catalog: file,
         });
-        const record = await source.materialize((await source.find("chat"))!);
+        const record = await source.materialize(
+            (await source.find("chat-agent"))!,
+        );
         expect(record.loaderConfig?.execMode).toBe("dispatcher");
     });
 
-    it("find returns undefined for an unknown short name (non-match)", async () => {
+    it("find returns undefined for an unknown package name (non-match)", async () => {
         const file = writeCatalog({ player: { name: "music" } });
         const source = createCatalogSource({
             kind: "catalog",
@@ -79,7 +175,7 @@ describe("catalogSource", () => {
         expect(await source.find("nope")).toBeUndefined();
     });
 
-    it("drops an entry with neither path nor name (warn + non-match, Q17)", async () => {
+    it("drops an entry with neither path nor name (non-match, Q17)", async () => {
         const file = writeCatalog({
             broken: {},
             player: { name: "music" },
@@ -91,24 +187,38 @@ describe("catalogSource", () => {
         });
         // Malformed entry is dropped (non-match), not thrown, so the resolve
         // walk continues and the rest of the catalog stays usable.
-        expect(await source.find("broken")).toBeUndefined();
-        expect(await source.find("player")).toBeDefined();
-        // The dropped entry is never advertised.
-        expect(await source.listAgents!()).toEqual(["player"]);
+        expect(await source.find("music")).toBeDefined();
+        // The dropped entry is never advertised in the enumeration rows.
+        const rows = await source.listAgents!();
+        expect(rows.map((r) => r.packageName)).toEqual(["music"]);
     });
 
-    it("listAgents enumerates the catalog keys", async () => {
-        const file = writeCatalog({
-            player: { name: "music" },
-            calendar: { name: "calendar" },
-        });
+    it("listAgents enumerates install rows (name + package)", async () => {
+        const file = writeCatalogWithPackages(
+            { playerKey: { path: "player" }, calendar: { name: "calendar" } },
+            { player: { name: "@x/music", defaultAgentName: "music" } },
+        );
         const source = createCatalogSource({
             kind: "catalog",
             name: "workspace",
             catalog: file,
         });
-        const agents = await source.listAgents!();
-        expect(agents.sort()).toEqual(["calendar", "player"]);
+        const rows = (await source.listAgents!()).sort((a, b) =>
+            (a.packageName ?? "").localeCompare(b.packageName ?? ""),
+        );
+        expect(rows).toEqual([
+            {
+                source: "workspace",
+                ref: "playerKey",
+                defaultAgentName: "music",
+                packageName: "@x/music",
+            },
+            {
+                source: "workspace",
+                ref: "calendar",
+                packageName: "calendar",
+            },
+        ]);
     });
 
     it("degrades a corrupt user catalog to no agents (non-match, logged)", async () => {
@@ -152,7 +262,7 @@ describe("catalogSource", () => {
         expect(warnings[0]).toMatch(/not valid JSON/);
     });
 
-    it("forwards a dropped malformed entry to the per-command onWarn sink", async () => {
+    it("forwards a dropped malformed entry to the per-command onWarn sink during enumeration", async () => {
         const file = writeCatalog({ broken: {}, player: { name: "music" } });
         const source = createCatalogSource({
             kind: "catalog",
@@ -160,12 +270,7 @@ describe("catalogSource", () => {
             catalog: file,
         });
         const warnings: string[] = [];
-        expect(
-            await source.find("broken", (m) => warnings.push(m)),
-        ).toBeUndefined();
-        expect(
-            await source.find("player", (m) => warnings.push(m)),
-        ).toBeDefined();
+        await source.listAgents!((m) => warnings.push(m));
         expect(warnings).toEqual([
             "catalog source 'workspace': entry 'broken' has neither 'path' nor 'name' - dropped",
         ]);
@@ -178,7 +283,7 @@ describe("catalogSource", () => {
             name: "workspace",
             catalog: file,
         });
-        const candidate = await source.find("music");
+        const candidate = await source.find("music-agent");
         const record = await source.materialize(candidate!);
         expect(record.module).toBe("music-agent");
         expect(record.ref).toBe("music"); // key persisted for @update

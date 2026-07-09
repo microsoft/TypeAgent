@@ -40,11 +40,15 @@ const goodToken = async () =>
 beforeEach(() => clearTokenCacheForTest());
 
 describe("InstallSourceRegistry resolution", () => {
+    // Catalog entries are matched by PACKAGE NAME (find), not the internal key.
+    // Scoped package names are not legal agent names, so one-argument resolution
+    // skips phase-1 (findName) and goes straight to the phase-2 ref (find) walk -
+    // the same first-match-wins ordered walk the old key-based resolve used.
     function twoCatalogRegistry(orderNames: string[] = ["a", "b"]) {
-        const a = writeCatalog("a", { dup: { name: "module-a" } });
+        const a = writeCatalog("a", { entryA: { name: "@scope/shared-pkg" } });
         const b = writeCatalog("b", {
-            dup: { name: "module-b" },
-            onlyb: { name: "module-onlyb" },
+            entryB: { name: "@scope/shared-pkg" },
+            onlyb: { name: "@scope/onlyb-pkg" },
         });
         const byName: Record<string, InstallSourceConfig> = {
             a: { kind: "catalog", name: "a", catalog: a },
@@ -58,28 +62,28 @@ describe("InstallSourceRegistry resolution", () => {
 
     it("resolves to the first source in order that matches", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
-        const record = await registry.resolve("dup");
-        expect(record.module).toBe("module-a");
+        const { record } = await registry.resolve("x", "@scope/shared-pkg");
+        expect(record.module).toBe("@scope/shared-pkg");
         expect(record.source).toBe("a");
     });
 
     it("honors a changed order (first-match-wins)", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
         registry.setOrder(["b", "a"]);
-        const record = await registry.resolve("dup");
-        expect(record.module).toBe("module-b");
+        const { record } = await registry.resolve("x", "@scope/shared-pkg");
+        expect(record.source).toBe("b");
     });
 
     it("falls through non-matching sources to a later match", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
-        const record = await registry.resolve("onlyb");
-        expect(record.module).toBe("module-onlyb");
+        const { record } = await registry.resolve("x", "@scope/onlyb-pkg");
+        expect(record.module).toBe("@scope/onlyb-pkg");
         expect(record.source).toBe("b");
     });
 
     it("probes sources sequentially and stops at the first match", async () => {
-        // "dup" exists in both catalogs; with order [a, b] the walk must match
-        // 'a' and never probe 'b'.
+        // "@scope/shared-pkg" exists in both catalogs; with order [a, b] the
+        // walk must match 'a' and never probe 'b'.
         const registry = twoCatalogRegistry(["a", "b"]);
         const probed: string[] = [];
         const a = registry.get("a")!;
@@ -93,16 +97,20 @@ describe("InstallSourceRegistry resolution", () => {
         };
         wrapFind(a);
         wrapFind(b);
-        await registry.resolve("dup");
+        await registry.resolve("x", "@scope/shared-pkg");
         expect(probed).toEqual(["a"]);
     });
 
     it("reports each probed source to the status sink", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
         const status: string[] = [];
-        // "onlyb" only matches 'b', so both sources are probed in order.
-        await registry.resolve("onlyb", undefined, undefined, (m) =>
-            status.push(m),
+        // Two-argument ref walk: both sources are probed once in order.
+        await registry.resolve(
+            "x",
+            "@scope/onlyb-pkg",
+            undefined,
+            undefined,
+            (m) => status.push(m),
         );
         expect(status).toEqual([
             "Trying source 'a'...",
@@ -110,31 +118,44 @@ describe("InstallSourceRegistry resolution", () => {
         ]);
     });
 
-    it("reports the named source to the status sink for an explicit --source", async () => {
+    it("reports the named source to the status sink for an explicit ref", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
         const status: string[] = [];
-        await registry.resolve("dup", "b", undefined, (m) => status.push(m));
-        expect(status).toEqual(["Resolving 'dup' from source 'b'..."]);
+        // Two-argument form: resolve the ref from an explicit source, name it.
+        await registry.resolve(
+            "myname",
+            "@scope/shared-pkg",
+            "b",
+            undefined,
+            (m) => status.push(m),
+        );
+        expect(status).toEqual([
+            "Resolving '@scope/shared-pkg' from source 'b'...",
+        ]);
     });
 
     it("explicit --source bypasses the order", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
-        const record = await registry.resolve("dup", "b");
-        expect(record.module).toBe("module-b");
+        const { record } = await registry.resolve(
+            "x",
+            "@scope/shared-pkg",
+            "b",
+        );
+        expect(record.source).toBe("b");
     });
 
     it("explicit --source non-match is a hard error", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
-        await expect(registry.resolve("nope", "a")).rejects.toThrow(
+        await expect(registry.resolve("nope", undefined, "a")).rejects.toThrow(
             /not found in source 'a'/,
         );
     });
 
     it("unknown --source name is a hard error", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
-        await expect(registry.resolve("dup", "zzz")).rejects.toThrow(
-            /unknown source 'zzz'/,
-        );
+        await expect(
+            registry.resolve("@scope/shared-pkg", undefined, "zzz"),
+        ).rejects.toThrow(/unknown source 'zzz'/);
     });
 
     it("errors listing the order when no source matches", async () => {
@@ -160,14 +181,18 @@ describe("InstallSourceRegistry resolution", () => {
         try {
             const first: string[] = [];
             await expect(
-                registry.resolve("x", undefined, (m) => first.push(m)),
+                registry.resolve("x", undefined, undefined, (m) =>
+                    first.push(m),
+                ),
             ).rejects.toThrow(/no source could resolve 'x'/);
             const second: string[] = [];
             await expect(
-                registry.resolve("x", undefined, (m) => second.push(m)),
+                registry.resolve("x", undefined, undefined, (m) =>
+                    second.push(m),
+                ),
             ).rejects.toThrow(/no source could resolve 'x'/);
             // The per-command sink hears the degrade on BOTH resolves...
-            expect(first).toHaveLength(1);
+            expect(first.length).toBeGreaterThan(0);
             expect(first[0]).toMatch(/catalog source 'bad'/);
             expect(second).toEqual(first);
             // ...but the process-lifetime server-log warning fires only once.
@@ -177,19 +202,153 @@ describe("InstallSourceRegistry resolution", () => {
         }
     });
 
-    it("where reports the winning source without materializing", async () => {
+    it("preview reports the winning source without materializing", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
-        const candidate = await registry.where("dup");
-        expect(candidate).toBeDefined();
-        expect(candidate!.source).toBe("a");
+        const preview = await registry.preview("x", "@scope/shared-pkg");
+        expect(preview).toBeDefined();
+        expect(preview!.winner.source).toBe("a");
     });
 
     it("ignores unknown entries in the order (warn, not error)", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
         registry.setOrder(["ghost", "b", "a"]);
         expect(registry.list().map((s) => s.name)).toEqual(["b", "a"]);
-        const record = await registry.resolve("dup");
-        expect(record.module).toBe("module-b");
+        const { record } = await registry.resolve("x", "@scope/shared-pkg");
+        expect(record.source).toBe("b");
+    });
+});
+
+describe("InstallSourceRegistry one-argument name resolution", () => {
+    // A path source rooted at a temp dir plus a package subdir carrying a
+    // package.json with a name and (optionally) a default agent name.
+    function pathRegistryWithPackage(
+        sub: string,
+        meta: { name?: string; defaultAgentName?: string },
+    ) {
+        const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-reg-path-"));
+        const pkgDir = path.join(baseDir, sub);
+        fs.mkdirSync(pkgDir, { recursive: true });
+        const pkg: Record<string, unknown> = {};
+        if (meta.name !== undefined) {
+            pkg.name = meta.name;
+        }
+        if (meta.defaultAgentName !== undefined) {
+            pkg.typeagent = { defaultAgentName: meta.defaultAgentName };
+        }
+        fs.writeFileSync(
+            path.join(pkgDir, "package.json"),
+            JSON.stringify(pkg),
+        );
+        const registry = createInstallSourceRegistry(
+            [{ kind: "path", name: "path", baseDir }],
+            { installDir: tmpInstallDir() },
+        );
+        return { registry, pkgDir };
+    }
+
+    // A catalog whose single path entry resolves to a package with a default
+    // agent name (so the catalog can answer findName).
+    function catalogWithDefaultName(
+        name: string,
+        opts: { catalogName?: string } = {},
+    ): { catalogName: string; catalog: string } {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-reg-cat-"));
+        const pkgDir = path.join(dir, "pkg");
+        fs.mkdirSync(pkgDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(pkgDir, "package.json"),
+            JSON.stringify({
+                name: `@x/${name}-agent`,
+                typeagent: { defaultAgentName: name },
+            }),
+        );
+        const catalog = path.join(dir, "agents.catalog.json");
+        fs.writeFileSync(
+            catalog,
+            JSON.stringify({ agents: { entry: { path: "pkg" } } }),
+        );
+        return { catalogName: opts.catalogName ?? "catalog", catalog };
+    }
+
+    it("infers the installed name from a path package.json defaultAgentName", async () => {
+        const { registry, pkgDir } = pathRegistryWithPackage("weather", {
+            name: "@x/weather-agent",
+            defaultAgentName: "weather",
+        });
+        // A path-shaped target skips phase 1 and matches the path source's find.
+        const { record, matchedByName } = await registry.resolve("./weather");
+        expect(record.name).toBe("weather");
+        expect(record.path).toBe(pkgDir);
+        expect(matchedByName).toBe(false); // path is a phase-2 ref match
+    });
+
+    it("fails a one-argument path install with no default name and suggests two-arg", async () => {
+        const { registry } = pathRegistryWithPackage("bare", {
+            name: "@x/bare",
+        });
+        await expect(registry.resolve("./bare")).rejects.toThrow(
+            /resolved as a path, but no default agent name.*@package install \.\/bare <name>/s,
+        );
+    });
+
+    it("a phase-1 findName match beats a higher-priority path find", async () => {
+        // A 'weather' directory exists under the higher-priority path source AND
+        // a catalog offers default name 'weather'; the catalog wins because
+        // findName (phase 1) precedes the path find (phase 2).
+        const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-reg-path-"));
+        fs.mkdirSync(path.join(baseDir, "weather"), { recursive: true });
+        const { catalog } = catalogWithDefaultName("weather");
+        const registry = createInstallSourceRegistry(
+            [
+                { kind: "path", name: "path", baseDir },
+                { kind: "catalog", name: "catalog", catalog },
+            ],
+            { installDir: tmpInstallDir() },
+        );
+        const { record, matchedByName } = await registry.resolve("weather");
+        expect(matchedByName).toBe(true);
+        expect(record.source).toBe("catalog");
+        expect(record.name).toBe("weather");
+    });
+
+    it("preview lists every matching source across both phases in priority order", async () => {
+        // Two catalogs each declare default name 'weather'; phase-1 findName
+        // matches both, first-in-order wins and the shadow is reported.
+        const a = catalogWithDefaultName("weather", { catalogName: "cat1" });
+        const b = catalogWithDefaultName("weather", { catalogName: "cat2" });
+        const registry = createInstallSourceRegistry(
+            [
+                { kind: "catalog", name: "cat1", catalog: a.catalog },
+                { kind: "catalog", name: "cat2", catalog: b.catalog },
+            ],
+            { installDir: tmpInstallDir() },
+        );
+        const preview = await registry.preview("weather");
+        expect(preview).toBeDefined();
+        expect(preview!.winner.source).toBe("cat1");
+        expect(preview!.winner.matchedByName).toBe(true);
+        expect(preview!.matches.map((m) => m.source)).toEqual(["cat1", "cat2"]);
+    });
+
+    it("source filter runs the two-phase walk over a one-source list", async () => {
+        const { catalog } = catalogWithDefaultName("weather");
+        const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-reg-path-"));
+        fs.mkdirSync(path.join(baseDir, "weather"), { recursive: true });
+        const registry = createInstallSourceRegistry(
+            [
+                { kind: "path", name: "path", baseDir },
+                { kind: "catalog", name: "catalog", catalog },
+            ],
+            { installDir: tmpInstallDir() },
+        );
+        // Restricting to the catalog resolves by default agent name there only.
+        const { record } = await registry.resolve(
+            "weather",
+            undefined,
+            "catalog",
+        );
+        expect(record.source).toBe("catalog");
+        expect(record.name).toBe("weather");
     });
 });
 
@@ -364,8 +523,8 @@ describe("InstallSourceRegistry serializes concurrent install ops", () => {
         );
 
         await Promise.all([
-            registry.resolve("@typeagent/a-agent@1.0.0"),
-            registry.resolve("@typeagent/b-agent@1.0.0"),
+            registry.resolve("a", "@typeagent/a-agent@1.0.0"),
+            registry.resolve("b", "@typeagent/b-agent@1.0.0"),
         ]);
         expect(maxConcurrent).toBe(1);
     });

@@ -27,6 +27,9 @@ import {
 } from "agent-dispatcher";
 import chalk from "chalk";
 import {
+    AvailableInstallRow,
+    InstallMatchKind,
+    InstallPreview,
     SourceStatus,
     UninstallOutcomeStatus,
     UpdateOutcomeStatus,
@@ -57,12 +60,35 @@ export interface InstalledAgentSourceApi {
     // when supplied, is called as each source is probed during the sequential
     // resolution walk so the caller can show a live status line.
     install(
-        name: string,
-        ref: string,
+        nameOrTarget: string,
+        ref: string | undefined,
         sourceName: string | undefined,
         issuingHost: AppAgentHost,
         onStatus?: SourceStatus,
-    ): Promise<{ source: string; warnings?: string[] }>;
+    ): Promise<{
+        name: string; // installed dispatcher name (derived or explicit)
+        source: string;
+        matchedByName: boolean; // which phase won
+        packageName?: string; // user-facing package identity when known
+        path?: string; // present for a path match (for the match-kind line)
+        ref?: string; // durable handle, when it differs from the package
+        warnings?: string[];
+    }>;
+    // Dry-run: report how a one/two-argument target would resolve (winning
+    // source, match kind, installed name, and the full shadow set) without
+    // installing anything. `--refresh` may still rewrite a cache-backed source's
+    // cache, but no record is materialized or written.
+    preview(
+        nameOrTarget: string,
+        ref: string | undefined,
+        sourceName: string | undefined,
+        onStatus?: SourceStatus,
+    ): Promise<InstallPreview | undefined>;
+    // Refresh cache-backed source metadata (feed descriptor caches) before an
+    // install/preview/listing. When `sourceName` is given, only that source is
+    // refreshed. A fetch failure throws so the `--refresh` command fails rather
+    // than acting on stale data.
+    refresh(sourceName?: string): Promise<void>;
     // Drop the record (commit), then fan out `removeProvider` to every session —
     // including the issuing one — through its idle-gated applicator, each
     // notified. The teardown is coordinated by the same
@@ -96,14 +122,11 @@ export interface InstalledAgentSourceApi {
     listInstalled(): InstalledAgentInfo[];
     // Source names in resolution order (for `@package install --source`).
     listSources(): string[];
-    // Enumerable agent refs with source names. Optional source filter narrows
-    // results to one source.
-    listAvailableAgents(opts?: { sourceName?: string }): Promise<
-        {
-            ref: string;
-            source: string;
-        }[]
-    >;
+    // Enumerable install rows (default agent name + package name) with source
+    // names. Optional source filter narrows results to one source.
+    listAvailableAgents(opts?: {
+        sourceName?: string;
+    }): Promise<AvailableInstallRow[]>;
     // The host-owned source command table, nested under `@package source`.
     sourceCommands(): CommandHandlerTable;
 }
@@ -190,7 +213,7 @@ class ListInstalledCommandHandler implements CommandHandler {
 
 class ListAvailableCommandHandler implements CommandHandler {
     public readonly description =
-        "List available agent refs from configured install sources";
+        "List available agents from configured install sources";
     public readonly parameters = {
         flags: {
             source: {
@@ -198,6 +221,13 @@ class ListAvailableCommandHandler implements CommandHandler {
                 char: "s",
                 type: "string",
                 optional: true,
+            },
+            refresh: {
+                description:
+                    "Refresh cache-backed source metadata before listing",
+                char: "r",
+                type: "boolean",
+                default: false,
             },
         },
     } as const;
@@ -207,22 +237,35 @@ class ListAvailableCommandHandler implements CommandHandler {
     ) {
         const { source } = context.sessionContext.agentContext;
         const sourceName = params.flags?.source ?? undefined;
-        const refs = (
+        if (params.flags?.refresh) {
+            displayStatus("Refreshing source metadata...", context);
+            await source.refresh(sourceName);
+        }
+        const rows = (
             await source.listAvailableAgents(
                 sourceName !== undefined ? { sourceName } : undefined,
             )
         ).sort(
             (a, b) =>
-                a.ref.localeCompare(b.ref) || a.source.localeCompare(b.source),
+                (a.defaultAgentName ?? a.packageName ?? "").localeCompare(
+                    b.defaultAgentName ?? b.packageName ?? "",
+                ) || a.source.localeCompare(b.source),
         );
-        if (refs.length === 0) {
-            displayResult("No installable agent refs found.", context);
+        if (rows.length === 0) {
+            displayResult("No installable agents found.", context);
             return;
         }
 
-        const text: string[][] = [["Ref", "Source"]];
-        for (const ref of refs) {
-            text.push([chalk.cyanBright(ref.ref), chalk.gray(ref.source)]);
+        // Show only what can be typed into `@package install`: the default agent
+        // name and the package name. The internal catalog key / durable ref is
+        // never displayed.
+        const text: string[][] = [["Name", "Package", "Source"]];
+        for (const row of rows) {
+            text.push([
+                chalk.cyanBright(row.defaultAgentName ?? "—"),
+                row.packageName ? chalk.gray(row.packageName) : chalk.gray("—"),
+                chalk.gray(row.source),
+            ]);
         }
         context.actionIO.appendDisplay({
             type: "text",
@@ -253,14 +296,16 @@ class InstallCommandHandler implements CommandHandler {
     public readonly description = "Install an agent";
     public readonly parameters = {
         args: {
-            name: {
-                description: "Name of the agent",
+            target: {
+                description:
+                    "One-argument install: a default agent name, a package name, or a filesystem path. Two-argument install: the ref (path or package name) to install.",
                 type: "string",
             },
-            ref: {
+            name: {
                 description:
-                    "Reference to install: a filesystem path, a catalog short name, or a feed specifier. Interpreted by the matching source in the configured order.",
+                    "Optional explicit installed agent name. When given, the first argument is resolved only as a ref (path or package name); default agent names are not consulted.",
                 type: "string",
+                optional: true,
             },
         },
         flags: {
@@ -271,49 +316,143 @@ class InstallCommandHandler implements CommandHandler {
                 type: "string",
                 optional: true,
             },
+            "dry-run": {
+                description:
+                    "Preview how the target would resolve without installing.",
+                char: "n",
+                type: "boolean",
+                default: false,
+            },
+            refresh: {
+                description:
+                    "Refresh cache-backed source metadata before resolving.",
+                char: "r",
+                type: "boolean",
+                default: false,
+            },
         },
     } as const;
+
+    private describeMatch(m: InstallPreview["winner"]): string {
+        switch (m.matchKind) {
+            case "defaultAgentName":
+                return `as default agent name '${m.name}'`;
+            case "packageName":
+                return `as package '${m.packageName ?? "?"}'`;
+            case "path":
+                return `as path '${m.path ?? "?"}'`;
+        }
+    }
+
+    private matchKindLabel(
+        explicit: boolean,
+        matchedByName: boolean,
+        matchKind: InstallMatchKind,
+    ): string {
+        if (explicit) {
+            return "explicit name override";
+        }
+        if (matchedByName) {
+            return "matched default agent name";
+        }
+        return matchKind === "path" ? "matched path" : "matched package name";
+    }
+
     public async run(
         context: PackageActionContext,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const { appAgentHost, source } = context.sessionContext.agentContext;
         const { args, flags } = params;
-        const { name, ref } = args;
+        const { target, name } = args;
         const sourceName = flags.source ?? undefined;
+        const explicit = name !== undefined;
 
-        // Name validation runs before materialize so a bad name fails fast
-        // without touching disk or the feed. Name uniqueness
-        // is enforced at the record-store write.
-        if (!AGENT_NAME_RE.test(name)) {
+        // Two-argument form: the explicit installed name must be legal. This
+        // runs before any resolution so a bad name fails fast.
+        if (explicit && !AGENT_NAME_RE.test(name)) {
             throw new Error(
                 `'${name}' is not a legal agent name (letters, digits, '-' and '_'; must start with a letter).`,
             );
         }
 
-        displayStatus(`Resolving '${ref}'...`, context);
+        // Map the two command forms onto (nameOrTarget, ref):
+        //   one arg  -> install(target, undefined)
+        //   two args -> install(name, target)  (target is the ref)
+        const nameOrTarget = name ?? target;
+        const ref = explicit ? target : undefined;
+
+        // `--refresh` fetches fresh cache-backed metadata first; a fetch
+        // failure throws and fails the command rather than acting on stale data.
+        if (flags.refresh) {
+            displayStatus("Refreshing source metadata...", context);
+            await source.refresh(sourceName);
+        }
+
+        if (flags["dry-run"]) {
+            const preview = await source.preview(
+                nameOrTarget,
+                ref,
+                sourceName,
+                (message) => displayStatus(message, context),
+            );
+            if (preview === undefined) {
+                displayResult(`No source would resolve '${target}'.`, context);
+                return;
+            }
+            const { winner, matches } = preview;
+            let message = `'${target}' would resolve via source '${winner.source}' ${this.describeMatch(
+                winner,
+            )} and install as '${winner.name}'.`;
+            const shadows = matches.slice(1);
+            if (shadows.length > 0) {
+                const list = shadows
+                    .map(
+                        (m) =>
+                            `source '${m.source}' (${this.describeMatch(m)})`,
+                    )
+                    .join(", ");
+                message += ` Also matched: ${list}.`;
+            }
+            displayResult(message, context);
+            return;
+        }
+
+        displayStatus(`Resolving '${target}'...`, context);
         // The source resolves + writes the record + fans out to every connected
         // session. Resolve/materialize errors are thrown here
         // (it fails fast on the record commit); the apply then lands asynchronously
         // on every session — including this one — through its idle-gated
         // applicator, each honoring the agent's manifest default.
-        // The status callback reports which source is being probed as the
-        // sequential resolution walk advances.
-        const { source: resolvedSource, warnings } = await source.install(
-            name,
+        const result = await source.install(
+            nameOrTarget,
             ref,
             sourceName,
             appAgentHost,
             (message) => displayStatus(message, context),
         );
         // Show any non-fatal source warnings once, for this command.
-        for (const warning of warnings ?? []) {
+        for (const warning of result.warnings ?? []) {
             displayWarn(warning, context);
         }
-        displayResult(
-            `Agent '${name}' installed from source '${resolvedSource}'; it will load in each session shortly.`,
-            context,
-        );
+        const matchKind: InstallMatchKind = result.matchedByName
+            ? "defaultAgentName"
+            : result.path !== undefined
+              ? "path"
+              : "packageName";
+        const pkgPart =
+            result.packageName !== undefined
+                ? ` from package '${result.packageName}'`
+                : "";
+        let message = `Agent '${result.name}' installed${pkgPart} via source '${result.source}' (${this.matchKindLabel(
+            explicit,
+            result.matchedByName,
+            matchKind,
+        )}); it will load in each session shortly.`;
+        if (result.ref !== undefined && result.ref !== result.packageName) {
+            message += ` Durable ref: ${result.ref}.`;
+        }
+        displayResult(message, context);
     }
 
     public async getCompletion(
@@ -324,15 +463,23 @@ class InstallCommandHandler implements CommandHandler {
         const { source } = context.agentContext;
         const completions: CompletionGroup[] = [];
         for (const name of names) {
-            if (name === "ref") {
+            if (name === "target") {
+                // Complete default agent names and package names. The second
+                // argument (explicit installed name) is not completed.
                 const sourceName = params.flags?.source as string | undefined;
-                const refs = await source.listAvailableAgents(
+                const rows = await source.listAvailableAgents(
                     sourceName !== undefined ? { sourceName } : undefined,
                 );
-                completions.push({
-                    name,
-                    completions: [...new Set(refs.map((r) => r.ref))],
-                });
+                const values = new Set<string>();
+                for (const row of rows) {
+                    if (row.defaultAgentName !== undefined) {
+                        values.add(row.defaultAgentName);
+                    }
+                    if (row.packageName !== undefined) {
+                        values.add(row.packageName);
+                    }
+                }
+                completions.push({ name, completions: [...values] });
             } else if (name === "--source") {
                 completions.push({
                     name,

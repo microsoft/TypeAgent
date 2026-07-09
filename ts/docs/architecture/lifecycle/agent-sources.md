@@ -134,7 +134,7 @@ putting a `path`/`catalog` source ahead of a `feed` makes a
 local agent shadow the published one automatically.
 
 **Status and degrade reporting.** The walk names each source as it is probed
-(shown by `@package install` and `@package source where`). A source that
+(shown by `@package install`, including `@package install --dry-run`). A source that
 cannot read its own backing store **degrades to a non-match** rather than
 aborting the walk — an offline feed is skipped, a corrupt catalog file (or a
 single malformed entry) is dropped. Every degrade is _reported_: once per process
