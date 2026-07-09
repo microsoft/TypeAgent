@@ -47,7 +47,8 @@ internal class ActionDispatcher
             new WindowsDisplayService(logger),
             new WindowsWindowService(logger),
             new WindowsNetworkService(logger),
-            new WindowsVirtualDesktopService(logger)
+            new WindowsVirtualDesktopService(logger),
+            new WindowsServiceControlService(logger)
         );
     }
 
@@ -67,7 +68,8 @@ internal class ActionDispatcher
         IDisplayService display,
         IWindowService window,
         INetworkService network,
-        IVirtualDesktopService virtualDesktop)
+        IVirtualDesktopService virtualDesktop,
+        IServiceControlService serviceControl)
     {
         var dispatcher = new ActionDispatcher(logger);
 
@@ -88,7 +90,8 @@ internal class ActionDispatcher
             new FileExplorerSettingsHandler(registry),
             new PrivacySettingsHandler(registry),
             new SystemSettingsHandler(registry, process),
-            new SystemActionHandler(process, debugger)
+            new SystemActionHandler(process, debugger),
+            new ServiceActionHandler(serviceControl, logger)
         );
 
         var validator = new SchemaValidator(logger);

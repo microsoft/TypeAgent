@@ -45,6 +45,7 @@
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
     "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
+    "getNPMRC": "node tools/scripts/getNPMRC.mjs",
     "postinstall": "pnpm run postinstall:better-sqlite3-node-copy && pnpm run postinstall:better-sqlite3-node-restore",
     "install:ext:vscode": "fluid-build . -t install:ext:vscode",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",

@@ -28,6 +28,7 @@ export type DesktopActions =
     | PreviousDesktopAction
     | ToggleNotificationsAction
     | DebugAutoShellAction
+    | RestartServiceAction
     | SetTextSizeAction
     | SetScreenResolutionAction
     // Common settings actions
@@ -252,6 +253,31 @@ export type ToggleNotificationsAction = {
 export type DebugAutoShellAction = {
     actionName: "Debug";
     parameters: {};
+};
+
+// Restarts a Windows service (stops it and starts it again). The target can be
+// identified either by its service name / display name, or by a phrase found in
+// the service's description.
+//
+// Example:
+// User: restart the print spooler service
+// Agent: { actionName: "RestartService", parameters: { service: "Print Spooler", matchBy: "name" } }
+//
+// Example:
+// User: restart the service that manages windows updates
+// Agent: { actionName: "RestartService", parameters: { service: "windows update", matchBy: "description" } }
+export type RestartServiceAction = {
+    actionName: "RestartService";
+    parameters: {
+        // The Windows service name or display name (e.g. "Spooler" or "Print
+        // Spooler") when matchBy is "name"; or a phrase to search for within
+        // service descriptions when matchBy is "description".
+        service: string;
+        // How to locate the service. "name" (the default) matches the service
+        // name or display name; "description" searches each service's
+        // description text for the provided phrase.
+        matchBy?: "name" | "description";
+    };
 };
 
 // Changes the text size that appears throughout Windows and your apps

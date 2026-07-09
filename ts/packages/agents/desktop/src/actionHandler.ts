@@ -91,6 +91,9 @@ async function runAction(
         action.schemaName, // Pass schema name for disambiguation
     );
     if (result.success) {
+        if (isServiceConfirmationRequest(result.data)) {
+            return offerServiceConfirmation(context, action, result.data);
+        }
         const displayText = formatResultDisplay(
             action.actionName,
             result.message,
@@ -99,6 +102,76 @@ async function runAction(
         return createActionResult(displayText);
     }
     return { error: result.message };
+}
+
+// Shape of the confirmation payload emitted by autoShell when a service action
+// resolves to a fuzzy (non-exact) match and needs the user to confirm the target.
+type ServiceConfirmationData = {
+    needsConfirmation: true;
+    resolvedServiceName: string;
+    resolvedDisplayName: string;
+    operation?: string;
+};
+
+function isServiceConfirmationRequest(
+    data: unknown,
+): data is ServiceConfirmationData {
+    if (typeof data !== "object" || data === null) {
+        return false;
+    }
+    const d = data as Record<string, unknown>;
+    return (
+        d.needsConfirmation === true &&
+        typeof d.resolvedServiceName === "string" &&
+        typeof d.resolvedDisplayName === "string"
+    );
+}
+
+// When autoShell only fuzzily matches a service, ask the user to confirm the resolved
+// service before acting. On confirmation, re-run the original action targeting the
+// resolved service by its exact name — which matches exactly, so autoShell performs the
+// operation without prompting again.
+function offerServiceConfirmation(
+    context: ActionContext<DesktopActionContext>,
+    action: AppAction,
+    data: ServiceConfirmationData,
+): ActionResult {
+    const state = context.sessionContext.agentContext;
+    const operation = data.operation ?? "restart";
+    const requested = action.parameters?.service;
+    const query = typeof requested === "string" ? requested : "";
+    return createYesNoChoiceResult(
+        state.choiceManager,
+        `I couldn't find a service exactly matching "${query}". ` +
+            `The closest match is "${data.resolvedDisplayName}" (${data.resolvedServiceName}). ` +
+            `Should I ${operation} it?`,
+        async (confirmed: boolean) => {
+            if (!confirmed) {
+                return createActionResultFromTextDisplay(
+                    "Cancelled — no service was changed.",
+                );
+            }
+            const ctx = state.pendingChoiceContext ?? context;
+            const confirmedAction: AppAction = {
+                ...action,
+                parameters: {
+                    ...action.parameters,
+                    service: data.resolvedServiceName,
+                    matchBy: "name",
+                },
+            };
+            try {
+                return await runAction(confirmedAction, ctx);
+            } catch (e) {
+                if (e instanceof AutoShellMissingError) {
+                    return offerAutoShellBuild(ctx, e, confirmedAction);
+                }
+                return createActionResultFromError(
+                    e instanceof Error ? e.message : String(e),
+                );
+            }
+        },
+    );
 }
 
 function offerAutoShellBuild(
