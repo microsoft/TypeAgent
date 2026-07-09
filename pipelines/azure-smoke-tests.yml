@@ -39,6 +39,12 @@ trigger:
   branches:
     include:
       - main
+      # GitHub's merge queue pushes candidate commits to temporary branches
+      # named gh-readonly-queue/<base>/pr-<n>-<sha> and expects the required
+      # status checks to run against them. Azure Pipelines has no merge_group
+      # event, so include the queue branches in the CI trigger to make this
+      # pipeline run (and report back) while a PR sits in the queue for main.
+      - gh-readonly-queue/main/*
   paths:
     include:
       - ts/**
