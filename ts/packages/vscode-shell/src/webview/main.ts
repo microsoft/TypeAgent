@@ -112,7 +112,9 @@ const pendingSpeechToken = new Map<
     number,
     (token: SpeechToken | undefined) => void
 >();
-function requestSpeechToken(timeoutMs = 15_000): Promise<SpeechToken | undefined> {
+function requestSpeechToken(
+    timeoutMs = 15_000,
+): Promise<SpeechToken | undefined> {
     const id = nextSpeechTokenId++;
     return new Promise<SpeechToken | undefined>((resolve) => {
         const timer = setTimeout(() => {
