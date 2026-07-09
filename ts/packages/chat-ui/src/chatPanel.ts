@@ -1761,7 +1761,12 @@ export class ChatPanel {
         }
         const control = createDeleteControl((permanent) => {
             containerEl.classList.add("chat-message-trashed");
-            this.onDeleteMessage?.({ requestId }, target, permanent);
+            try {
+                this.onDeleteMessage?.({ requestId }, target, permanent);
+            } catch (e) {
+                containerEl.classList.remove("chat-message-trashed");
+                console.error("onDeleteMessage callback failed", e);
+            }
         });
         containerEl.appendChild(control);
     }
