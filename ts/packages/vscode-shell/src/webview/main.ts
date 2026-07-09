@@ -247,7 +247,7 @@ const templateServices: TemplateEditServices = {
             templateAgentName,
             templateName,
             data,
-        ]) as Promise<any>,
+        ]) as ReturnType<TemplateEditServices["getTemplateSchema"]>,
     getTemplateCompletion: (
         templateAgentName,
         templateName,
@@ -259,7 +259,7 @@ const templateServices: TemplateEditServices = {
             templateName,
             data,
             propertyName,
-        ]) as Promise<any>,
+        ]) as ReturnType<TemplateEditServices["getTemplateCompletion"]>,
 };
 
 // Render a server-driven interaction and reply with the user's response.

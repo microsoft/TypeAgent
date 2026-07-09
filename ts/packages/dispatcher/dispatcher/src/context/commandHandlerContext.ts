@@ -1009,7 +1009,7 @@ export async function initializeCommandHandlerContext(
                 : undefined,
         }));
         const originalLogModelRequest = promptLogger.logModelRequest;
-        promptLogger.logModelRequest = (requestContent: any) => {
+        promptLogger.logModelRequest = (requestContent: unknown) => {
             originalLogModelRequest(requestContent);
             devTrace.recordPrompt(requestContent);
         };

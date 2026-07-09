@@ -1326,17 +1326,40 @@ export class AgentServerBridge {
                     }
                     let result: unknown;
                     if (msg.method === "getTemplateSchema") {
-                        result = await (dispatcher.getTemplateSchema as any)(
-                            ...msg.args,
+                        const [templateAgentName, templateName, data] =
+                            msg.args as Parameters<
+                                typeof dispatcher.getTemplateSchema
+                            >;
+                        result = await dispatcher.getTemplateSchema(
+                            templateAgentName,
+                            templateName,
+                            data,
                         );
                     } else if (msg.method === "getTemplateCompletion") {
-                        result = await (
-                            dispatcher.getTemplateCompletion as any
-                        )(...msg.args);
+                        const [
+                            templateAgentName,
+                            templateName,
+                            data,
+                            propertyName,
+                        ] = msg.args as Parameters<
+                            typeof dispatcher.getTemplateCompletion
+                        >;
+                        result = await dispatcher.getTemplateCompletion(
+                            templateAgentName,
+                            templateName,
+                            data,
+                            propertyName,
+                        );
                     } else {
                         // getDynamicDisplay(appAgentName, type, displayId)
-                        result = await (dispatcher.getDynamicDisplay as any)(
-                            ...msg.args,
+                        const [appAgentName, type, id] =
+                            msg.args as Parameters<
+                                typeof dispatcher.getDynamicDisplay
+                            >;
+                        result = await dispatcher.getDynamicDisplay(
+                            appAgentName,
+                            type,
+                            id,
                         );
                     }
                     this.postToWebview(webview, {
@@ -1344,11 +1367,11 @@ export class AgentServerBridge {
                         id: msg.id,
                         result,
                     });
-                } catch (e: any) {
+                } catch (e) {
                     this.postToWebview(webview, {
                         type: "bridgeRpcResponse",
                         id: msg.id,
-                        error: e?.message ?? String(e),
+                        error: e instanceof Error ? e.message : String(e),
                     });
                 }
                 break;
