@@ -258,7 +258,9 @@ async function pull() {
     }
     if (!/^https:\/\//i.test(registry)) {
         console.error(
-            chalk.red(`Registry must be https:// for tokenHelper auth: ${registry}`),
+            chalk.red(
+                `Registry must be https:// for tokenHelper auth: ${registry}`,
+            ),
         );
         process.exitCode = 1;
         return;
