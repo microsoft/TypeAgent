@@ -47,11 +47,22 @@ export async function getSpeechToken(): Promise<SpeechToken | undefined> {
     }
 
     const key = process.env["SPEECH_SDK_KEY"] ?? IdentityApiKey;
-    const endpoint = process.env["SPEECH_SDK_ENDPOINT"] ?? "";
+    // Only identity/AAD tokens use the `aad#<endpoint>#` prefix; key-issued STS
+    // tokens must be passed verbatim, so keep endpoint empty for key-based auth.
+    const endpoint =
+        key.toLowerCase() === IdentityApiKey
+            ? (process.env["SPEECH_SDK_ENDPOINT"] ?? "")
+            : "";
 
     try {
         let token: string;
         if (key.toLowerCase() === IdentityApiKey) {
+            if (!endpoint) {
+                debugError(
+                    "identity-based speech token acquisition requires SPEECH_SDK_ENDPOINT",
+                );
+                return undefined;
+            }
             const result = await new DefaultAzureCredential().getToken(
                 CogServicesScope,
             );
