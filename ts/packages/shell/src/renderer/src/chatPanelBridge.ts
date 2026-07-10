@@ -118,6 +118,7 @@ function mapResult(result: any):
 // HistoryEntry[] for replayHistory(). Mirrors vscode-shell's
 // toHistoryReplayMessage + toChatPanelHistory, but works directly off the
 // DisplayLogEntry shape (using ridStr to normalize RequestId → client id).
+// code-complexity-allow: history-event replay mapper; one branch per DisplayLogEntry type
 function toHistoryEntries(entries: any[]): HistoryEntry[] {
     // First pass: derive per-request "first message" timing (elapsed ms from
     // the user request to the first real agent display message).
