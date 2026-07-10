@@ -32,7 +32,9 @@ minimumReleaseAge: 10080
 # replaced by `allowBuilds` (a map of package name -> true/false). Only the packages
 # listed here are allowed to run install/build (postinstall) scripts.
 # node-pty and protobufjs are intentionally set to false in pnpm v11, which
-# disables their install scripts even though pnpm v10 allowed them.
+# disables their install scripts even though pnpm v10 allowed them. We keep
+# them disabled to minimize install-time script execution in CI and local
+# bootstrap unless explicitly re-enabled.
 allowBuilds:
   "@azure/msal-node-extensions": true
   "@azure/msal-node-runtime": true
