@@ -1,0 +1,6 @@
+{
+  "vault": "aisystems",
+  "secret": "typeagent-npmrc",
+  "npmrcPath": "../../.npmrc",
+  "adoResource": "499b84ac-1321-427f-aa17-267ca6975798"
+}

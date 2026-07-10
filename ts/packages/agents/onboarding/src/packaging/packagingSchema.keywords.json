@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "schema": "onboarding.onboarding-packaging",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T09:38:56.177Z",
+  "sourceHash": "MXHWqxw4IhLnyBEtCmQNkitMDX4quVaTmVcPoQos6Xs=",
+  "actions": {
+    "packageAgent": [
+      "agent",
+      "package",
+      "distribution",
+      "register",
+      "dispatcher",
+      "integration",
+      "config",
+      "typeagent"
+    ],
+    "validatePackage": [
+      "package",
+      "integration",
+      "validation",
+      "distribution",
+      "dispatcher",
+      "agent",
+      "typeagent"
+    ],
+    "generateDemo": [
+      "demo",
+      "script",
+      "narration",
+      "agent",
+      "integration",
+      "duration",
+      "minute",
+      "presentation",
+      "showcase",
+      "example",
+      "overview",
+      "introduction",
+      "walkthrough",
+      "guide",
+      "tutorial",
+      "explanation",
+      "summary",
+      "highlight",
+      "feature",
+      "demonstration",
+      "session",
+      "preview",
+      "description"
+    ],
+    "generateReadme": [
+      "readme",
+      "documentation",
+      "agent",
+      "integration",
+      "package",
+      "distribution",
+      "dispatcher",
+      "typeagent",
+      "onboarding",
+      "guide",
+      "instruction",
+      "overview",
+      "summary",
+      "detail",
+      "description"
+    ]
+  }
+}

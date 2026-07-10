@@ -370,6 +370,18 @@ Usage: `@config collision priority "list,player,calendar"`, `@config collision p
 
 Comma-separated agent names used by the `priority` resolution strategy (and as a tiebreaker for `score-rank`). Empty falls back to agent registration order.
 
+## @config collision contextSelector detect on|off - Toggle the context-weighted resolution tier
+
+Usage: `@config collision contextSelector detect on`, `@config collision contextSelector detect off`
+
+Enables the deterministic, LLM-free `contextSelector` tier on the `grammarMatch` path: it ranks colliding candidates by how closely their keyword vectors match the recent conversation, then resolves the collision on the cache path (avoiding the downstream LLM translation) or abstains. Off by default; independent of the other detection points.
+
+## @config collision contextSelector &lt;field&gt; &lt;value&gt; - Tune the contextSelector knobs
+
+Usage: `@config collision contextSelector windowTurns 20`, `@config collision contextSelector decay 0.9`, `@config collision contextSelector minMass 1.0`
+
+`<field>` is one of `windowTurns` (ring-buffer look-back over recent user turns, integer ≥ 1), `decay` (per-turn recency decay λ, 0 &lt; λ ≤ 1), `minUniqueTokens` (evidence gate: min distinct matched tokens, integer), `minMass` (evidence gate: min matched weight), or `margin` (min lead the winner needs over the runner-up). Each value is range-validated — a bad value is rejected rather than silently corrupting the decision math.
+
 ## @config collision telemetry emit on|off - Toggle the in-memory ring buffer + JSONL append
 
 Usage: `@config collision telemetry emit on`, `@config collision telemetry emit off`
@@ -398,6 +410,23 @@ Usage: `@collision events [-n &lt;limit&gt;] [-k &lt;kind&gt;]`
 - `-k, --kind <name>` - Filter by detection point: `static`, `grammarMatch`, `llmSelect`, or `fuzzy`.
 
 Renders an HTML table of the most recent collision events captured in the in-memory ring buffer (cap 50 events; older events live in `<sessionDir>/collision-events.jsonl`). Columns: relative timestamp, detection point, request, candidates (with schema badges), chosen winner, strategy, elapsed ms. A ⚡ marker flags events where the chosen candidate diverged from the `first-match` counterfactual — a real strategy divergence worth investigating. When telemetry capture is off, an inline reminder tells the tester how to opt in.
+
+## @collision keywords - Inspect / tune contextSelector keyword vectors
+
+Usage: `@collision keywords`, `@collision keywords <schema.action> [list|add|remove|clear] [words…]`
+
+With no target, lists all sidecar overrides. With a `<schema.action>` target: `list` shows the effective vector (the committed/derived baseline merged with overrides), `add`/`remove` edit the profile-scoped `collision-keywords.json` sidecar (Source 2), and `clear` reverts that action to its derived-only vector. Edits take effect on the next collision without a restart.
+
+## @collision keywords backfill - Generate / refresh committed keyword files
+
+Usage: `@collision keywords backfill [--llm] [--force] [<schema>…]`
+
+### Flags:
+
+- `--llm` - Use the preferred LLM distillation producer instead of the deterministic lexical floor.
+- `--force` - Allow a lexical run to overwrite an existing LLM-distilled file (preserved by default).
+
+Generates or refreshes the committed per-agent `<schema>.keywords.json` baseline vectors (Source 1) that the contextSelector reads. Each file is written beside its agent's schema source and the in-memory index is invalidated so fresh vectors apply immediately. Omit the schema args to backfill every loaded agent; inline/dynamic agents (echo, MCP) with no on-disk `.ts` source are skipped. `--llm` always overwrites; a lexical run preserves existing LLM-distilled files unless `--force`. Commit the regenerated files — they are checked-in artifacts, not build output.
 
 ## @config pen on - Turn on Surface Pen Click Handler
 
