@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=1d1b7272558ce2fc4a7fd4c8677dfb498a3c021794be01ad78b81cda30efa87a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7012405f04774b8ac0a20ed160959ba1045b0808afcda89e896b183d47f04474 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # desktop-automation — AI-generated documentation
@@ -12,42 +12,42 @@
 
 ## Overview
 
-The `desktop-automation` package is a TypeAgent application agent designed to automate and manage desktop environments on Windows systems. It integrates with Windows shell APIs through a .NET component to perform tasks such as managing application windows, customizing desktop settings, and controlling system features. This package is a key part of the TypeAgent ecosystem, enabling users to issue natural language commands via the TypeAgent Shell or CLI to control their desktop environment.
+The `desktop-automation` package is a TypeAgent application agent designed to automate and manage desktop environments on Windows systems. It integrates with Windows shell APIs via a .NET component to perform tasks such as managing application windows, customizing desktop settings, and controlling system features. This package enables users to issue natural language commands through the TypeAgent Shell or CLI to control their desktop environment.
 
 ## What it does
 
-The `desktop-automation` package provides a wide range of actions for automating desktop tasks. These actions are defined in the [actionsSchema.ts](./src/actionsSchema.ts) file and processed by the [actionHandler.ts](./src/actionHandler.ts) file. The package communicates with the `autoShell.exe` binary, a .NET application that interfaces with Windows shell APIs, to execute these actions.
+The `desktop-automation` package provides a comprehensive set of actions for automating and managing various aspects of a Windows desktop environment. These actions are defined in the [actionsSchema.ts](./src/actionsSchema.ts) file and implemented in [actionHandler.ts](./src/actionHandler.ts). The package communicates with the `autoShell.exe` binary, a .NET application that interfaces with Windows shell APIs, to execute these actions.
 
 ### Key Capabilities
 
-- **Application Management**:
+1. **Application Management**:
 
-  - `LaunchProgram`: Start a specified application.
-  - `CloseProgram`: Close a running application.
-  - `SwitchToWindow`: Focus on a specific application window.
+   - `LaunchProgram`: Start a specified application.
+   - `CloseProgram`: Terminate a running application.
+   - `SwitchToWindow`: Focus on a specific application window.
 
-- **Window Management**:
+2. **Window Management**:
 
-  - `TileWindows`: Arrange windows side by side.
-  - `MaximizeWindow` and `MinimizeWindow`: Adjust window sizes.
-  - `MoveWindowToDesktop`: Move a window to a different virtual desktop.
+   - `TileWindows`: Arrange windows side by side.
+   - `MaximizeWindow` and `MinimizeWindow`: Adjust window sizes.
+   - `MoveWindowToDesktop`: Move a window to a different virtual desktop.
 
-- **System Settings**:
+3. **System Settings**:
 
-  - `SetVolume`, `MuteVolume`, and `AdjustVolume`: Control audio settings.
-  - `SetWallpaper`: Change the desktop background.
-  - `SetScreenResolution`: Adjust display resolution.
+   - `SetVolume`, `MuteVolume`, and `AdjustVolume`: Control audio settings.
+   - `SetWallpaper`: Change the desktop background.
+   - `SetScreenResolution`: Adjust display resolution.
 
-- **Network Management**:
+4. **Network Management**:
 
-  - `ConnectWifi` and `DisconnectWifi`: Manage Wi-Fi connections.
-  - `ToggleAirplaneMode`: Enable or disable airplane mode.
+   - `ConnectWifi` and `DisconnectWifi`: Manage Wi-Fi connections.
+   - `ToggleAirplaneMode`: Enable or disable airplane mode.
 
-- **Desktop Customization**:
-  - `ChangeThemeMode` and `ApplyTheme`: Modify desktop themes.
-  - `SetTextSize`: Adjust text scaling.
+5. **Desktop Customization**:
+   - `ChangeThemeMode` and `ApplyTheme`: Modify desktop themes.
+   - `SetTextSize`: Adjust text scaling.
 
-These actions are designed to provide comprehensive control over a Windows desktop environment, making it easier to automate repetitive tasks or customize the desktop to suit user preferences.
+These actions allow users to automate repetitive tasks, customize their desktop environment, and manage system settings efficiently.
 
 ## Setup
 
@@ -77,13 +77,13 @@ Once these steps are complete, the package will be ready to use with the TypeAge
 
 ## Key Files
 
-The `desktop-automation` package is structured into several key files, each serving a specific purpose:
+The `desktop-automation` package is organized into several key files, each with a specific role:
 
 - **[manifest.json](./src/manifest.json)**: Contains metadata about the agent, including its description, default settings, and references to schema and grammar files.
 - **[actionsSchema.ts](./src/actionsSchema.ts)**: Defines the TypeScript types for all supported actions, such as `LaunchProgram`, `SetVolume`, and `TileWindows`.
 - **[desktopSchema.agr](./src/desktopSchema.agr)**: Specifies the grammar for parsing user commands into structured actions.
 - **[actionHandler.ts](./src/actionHandler.ts)**: Implements the logic for processing actions. This file is the core of the agent's functionality, handling requests and interfacing with the .NET component.
-- **[connector.ts](./src/connector.ts)**: Manages the communication between the TypeAgent runtime and the `autoShell.exe` binary, ensuring that actions are executed correctly.
+- **[connector.ts](./src/connector.ts)**: Manages communication between the TypeAgent runtime and the `autoShell.exe` binary, ensuring that actions are executed correctly.
 - **[readiness.ts](./src/readiness.ts)**: Provides utility functions to verify the readiness of the `autoShell.exe` binary and ensure the environment is properly configured.
 
 ## How to extend
@@ -145,7 +145,7 @@ External: `body-parser`, `chalk`, `cors`, `debug`, `dotenv`, `find-config`, `typ
 
 ### Files of interest
 
-`./src/actionHandler.ts`, `./src/actionsSchema.ts`, `./src/desktopSchema.agr`, …and 20 more under `./src/`.
+`./src/actionHandler.ts`, `./src/actionsSchema.ts`, `./src/desktopSchema.agr`, …and 28 more under `./src/`.
 
 ### Agent surface
 
@@ -166,6 +166,6 @@ _31 actions declared in the schema, none yet implemented in [`./src/actionHandle
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter desktop-automation docs:verify-links` to spot-check._
+_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter desktop-automation docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
