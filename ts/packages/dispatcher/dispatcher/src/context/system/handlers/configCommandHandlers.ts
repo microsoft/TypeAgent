@@ -2709,6 +2709,143 @@ function getCollisionPointHandlers(point: CollisionPoint): CommandHandlerTable {
     };
 }
 
+// The runtime-tunable numeric knobs of the contextSelector tier (§8/§10). Each
+// maps to a `collision.contextSelector.<field>` in the session config; `spec`
+// carries the per-field validation (integer/range) so a bad value is rejected
+// rather than silently corrupting the decision math.
+type ContextSelectorNumericField =
+    | "windowTurns"
+    | "decay"
+    | "minUniqueTokens"
+    | "minMass"
+    | "margin";
+
+type NumericFieldSpec = {
+    description: string;
+    integer?: boolean;
+    min?: number;
+    max?: number;
+    // When true, `min` is exclusive (e.g. decay must be strictly > 0).
+    minExclusive?: boolean;
+};
+
+const CONTEXT_SELECTOR_FIELDS: Record<
+    ContextSelectorNumericField,
+    NumericFieldSpec
+> = {
+    windowTurns: {
+        description: "ring-buffer look-back N over recent user turns",
+        integer: true,
+        min: 1,
+    },
+    decay: {
+        description: "per-turn recency decay lambda (0 < lambda <= 1)",
+        min: 0,
+        minExclusive: true,
+        max: 1,
+    },
+    minUniqueTokens: {
+        description:
+            "evidence gate: min distinct distinguishing tokens the winner must match",
+        integer: true,
+        min: 0,
+    },
+    minMass: {
+        description: "evidence gate: min winner matched mass",
+        min: 0,
+    },
+    margin: {
+        description:
+            "clear-winner margin the winner must beat the runner-up by",
+        min: 0,
+    },
+};
+
+function validateNumericField(
+    value: number,
+    spec: NumericFieldSpec,
+): string | undefined {
+    if (!Number.isFinite(value)) {
+        return "must be a finite number";
+    }
+    if (spec.integer && !Number.isInteger(value)) {
+        return "must be an integer";
+    }
+    if (spec.min !== undefined) {
+        const bad = spec.minExclusive ? value <= spec.min : value < spec.min;
+        if (bad) {
+            return `must be ${spec.minExclusive ? ">" : ">="} ${spec.min}`;
+        }
+    }
+    if (spec.max !== undefined && value > spec.max) {
+        return `must be <= ${spec.max}`;
+    }
+    return undefined;
+}
+
+// Get/set one contextSelector numeric threshold. Omitting the value shows the
+// current setting; a valid value is persisted via changeContextConfig (session
+// delta) and takes effect on the next collision — matchContextSelector /
+// RingBufferSignalSource read the config fresh each turn.
+class ContextSelectorThresholdCommandHandler implements CommandHandler {
+    public readonly description: string;
+    public readonly parameters = {
+        args: {
+            value: {
+                description: "New value; omit to show the current value.",
+                type: "number",
+                optional: true,
+            },
+        },
+    } as const;
+
+    constructor(
+        private readonly field: ContextSelectorNumericField,
+        private readonly spec: NumericFieldSpec,
+    ) {
+        this.description = `Get/set contextSelector ${field} (${spec.description})`;
+    }
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const cs =
+            context.sessionContext.agentContext.session.getConfig().collision
+                .contextSelector;
+        if (params.args.value === undefined) {
+            displayResult(`${this.field} = ${cs[this.field]}`, context);
+            return;
+        }
+        const value = params.args.value;
+        const err = validateNumericField(value, this.spec);
+        if (err !== undefined) {
+            displayWarn(`Invalid ${this.field} "${value}": ${err}.`, context);
+            return;
+        }
+        await changeContextConfig(
+            {
+                collision: {
+                    contextSelector: { [this.field]: value },
+                },
+            } as SessionOptions,
+            context,
+        );
+        displayResult(`${this.field} = ${value}`, context);
+    }
+}
+
+function getContextSelectorThresholdHandlers(): Record<string, CommandHandler> {
+    const handlers: Record<string, CommandHandler> = {};
+    for (const [field, spec] of Object.entries(CONTEXT_SELECTOR_FIELDS)) {
+        handlers[field] = new ContextSelectorThresholdCommandHandler(
+            field as ContextSelectorNumericField,
+            spec,
+        );
+    }
+    return handlers;
+}
+
 function getCollisionCommandHandlers(): CommandHandlerTable {
     const pointHandlers: Record<string, CommandHandlerTable> = {};
     for (const point of COLLISION_POINTS) {
@@ -2805,6 +2942,7 @@ function getCollisionCommandHandlers(): CommandHandlerTable {
                             );
                         },
                     ),
+                    ...getContextSelectorThresholdHandlers(),
                 },
             },
         },

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "schema": "browser.lookupAndAnswer",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T09:35:04.456Z",
+  "sourceHash": "w0SuvUxSEgtnl69yLP9lQJNrMNfzVH6pp9CzjRkryjU=",
+  "actions": {
+    "lookupAndAnswerInternet": [
+      "information",
+      "fact",
+      "knowledge",
+      "internet",
+      "web",
+      "question",
+      "search",
+      "answer",
+      "data",
+      "detail",
+      "specific",
+      "entitie",
+      "site",
+      "result",
+      "response",
+      "contemporary"
+    ]
+  }
+}

@@ -1162,7 +1162,7 @@ async function runRatchet(opts: Options): Promise<number> {
         console.log("");
         console.log(title);
         console.log("   CC   Cog  Location");
-        for (const f of rows.slice(0, opts.top)) {
+        for (const f of rows) {
             console.log(
                 `  ${String(f.cyclomatic).padStart(3)}  ${String(
                     f.cognitive,

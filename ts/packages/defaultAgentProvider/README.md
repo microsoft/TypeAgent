@@ -8,6 +8,23 @@ The provider also registers a small set of agents whose only purpose is to exerc
 
 - [`vampire`](../agents/vampire) — deliberately collides with other agents (`play`, `addItems`, `removeItems`, `getList`, `createCalendarEvent`) to exercise the dispatcher's [action collision detection](../dispatcher/dispatcher/README.md#action-collision-detection) subsystem. Default-disabled; enable via session config when evaluating collision-resolution strategies.
 
+## Accessing non-bundled agents
+
+Some agents are intentionally not bundled in the default provider profile and should be installed on demand from the workspace catalog source.
+
+```text
+@package install androidMobile
+@package install vampire
+```
+
+Catalog source entries for these agents are defined in [../agents/agents.catalog.json](../agents/agents.catalog.json).
+
+If install fails because the catalog source is missing, run:
+
+```text
+@package source list
+```
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

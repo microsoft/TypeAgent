@@ -315,7 +315,7 @@ async function isAgentPackage(
     token: string,
     fetchFn: typeof fetch,
 ): Promise<boolean> {
-    const url = `${registry.replace(/\/$/, "")}/${packageName.replace("/", "%2F")}`;
+    const url = `${registry.replace(/\/$/, "")}/${packageName.replace(/\//g, "%2F")}`;
     const res = await fetchFn(url, {
         headers: { Authorization: `Bearer ${token}` },
     });
@@ -336,7 +336,7 @@ async function fetchPackument(
     token: string,
     fetchFn: typeof fetch,
 ): Promise<unknown | undefined> {
-    const url = `${registry.replace(/\/$/, "")}/${packageName.replace("/", "%2F")}`;
+    const url = `${registry.replace(/\/$/, "")}/${packageName.replace(/\//g, "%2F")}`;
     try {
         const res = await fetchFn(url, {
             headers: { Authorization: `Bearer ${token}` },

@@ -2,6 +2,17 @@
 
 Android mobile dispatcher agent. Used to perform actions on a mobile android device.
 
+## How to use
+
+This agent is not bundled by default. Install it from the workspace catalog source:
+
+```text
+@package source list
+@package install androidMobile
+```
+
+The catalog source entry for `androidMobile` lives in [../agents.catalog.json](../agents.catalog.json).
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

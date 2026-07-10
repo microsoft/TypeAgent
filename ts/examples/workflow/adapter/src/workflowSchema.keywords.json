@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "schema": "workflow",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T09:38:20.595Z",
+  "sourceHash": "70czOSNDc1VNrUI+5Lrr1Zk5zh5r5/V2xx8PgP0RXZQ=",
+  "actions": {
+    "noWorkflowsLoaded": [
+      "workflow",
+      "process",
+      "automation",
+      "task",
+      "procedure",
+      "sequence",
+      "operation",
+      "routine",
+      "job",
+      "system",
+      "flow",
+      "step",
+      "method",
+      "protocol",
+      "execution",
+      "function",
+      "activity",
+      "plan",
+      "schedule",
+      "management",
+      "control",
+      "configuration"
+    ]
+  }
+}
