@@ -246,9 +246,8 @@ A source resolves an agent into a single `InstalledAgentRecord`
 persisted to `agents.json` under the instance dir. A record carries **exactly one
 resolution handle**:
 
-- `module` (package name, npm-resolved) — a `feed` install or a bundled-catalog
-  entry. The provider picks which `node_modules` root to resolve it against from
-  the record's provenance.
+- `module` (package name, npm-resolved) — a `feed` install. The provider picks
+  which `node_modules` root to resolve it against from the record's provenance.
 - `path` (filesystem-resolved) — a `path` install or a `path`-style catalog
   entry. The package name is unused at load time.
 
@@ -273,10 +272,10 @@ The runtime `AppAgentProvider` contract
 [`agentProvider.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/agentProvider/agentProvider.ts))
 is unchanged from bundled agents. Each installed record becomes its **own
 single-agent provider**, resolved to a single module-resolution root — feed
-modules resolve from `installDir`, bundled-catalog modules from the app bundle,
-and `path` records from their explicit `path`. Building providers per record
-avoids a combined router and lets the lifecycle layer move agents one provider at
-a time (see [Agent lifecycle](./agent-lifecycle.md)).
+modules resolve from their content-addressed install root, bundled modules from
+the app bundle, and `path` records from their explicit `path`. Building providers
+per record avoids a combined router and lets the lifecycle layer move agents one
+provider at a time (see [Agent lifecycle](./agent-lifecycle.md)).
 
 Module resolution reads from **runtime roots, not the live source registry**, so
 already-installed records keep loading even if a host's configured sources differ
@@ -347,8 +346,8 @@ same config stays portable to a host that does have a local file system.
 
 - **A relative `ref` with no `baseDir` is a non-match**, not an error — so bare
   catalog/feed names fall through to the next source instead of throwing.
-- **A malformed catalog entry** (neither `path` nor package `name`) is dropped
-  and reported; the rest of the catalog still resolves.
+- **A malformed catalog entry** (missing `path`) is dropped and reported; the
+  rest of the catalog still resolves.
 - **Two entries in one source with the same `typeagent.defaultAgentName`** make a
   one-argument name install fail as ambiguous (it lists the candidate packages
   and suggests the two-argument form); cross-source matches are never ambiguous,

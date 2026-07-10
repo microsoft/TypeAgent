@@ -39,7 +39,7 @@ function writeCatalogWithPackages(
 }
 
 describe("catalogSource", () => {
-    it("find matches a module-only entry by package name and records module", async () => {
+    it("drops a catalog entry without a path", async () => {
         const file = writeCatalog({
             player: { name: "music" },
         });
@@ -48,23 +48,15 @@ describe("catalogSource", () => {
             name: "workspace",
             catalog: file,
         });
-        // Matched by PACKAGE NAME ("music"), not the internal key ("player").
-        const candidate = await source.find("music");
-        expect(candidate).toBeDefined();
-        expect(candidate!.source).toBe("workspace");
-        expect(candidate!.module).toBe("music");
-        expect(candidate!.packageName).toBe("music");
-        expect(candidate!.ref).toBe("player"); // key kept as the durable handle
-        expect(candidate!.path).toBeUndefined();
-
-        const record = await source.materialize(candidate!);
-        expect(record.module).toBe("music");
-        expect(record.path).toBeUndefined();
-        expect(record.source).toBe("workspace");
+        expect(await source.find("music")).toBeUndefined();
+        expect(await source.listAgents!()).toEqual([]);
     });
 
     it("does not match a catalog entry by its internal key", async () => {
-        const file = writeCatalog({ player: { name: "music" } });
+        const file = writeCatalogWithPackages(
+            { player: { path: "player" } },
+            { player: { name: "music" } },
+        );
         const source = createCatalogSource({
             kind: "catalog",
             name: "workspace",
@@ -119,7 +111,7 @@ describe("catalogSource", () => {
         expect(candidate!.ref).toBe("weatherKey");
     });
 
-    it("findName does not match a module-only entry (no local package.json)", async () => {
+    it("findName does not match an entry without path metadata", async () => {
         const file = writeCatalog({ player: { name: "music" } });
         const source = createCatalogSource({
             kind: "catalog",
@@ -151,9 +143,10 @@ describe("catalogSource", () => {
     });
 
     it("find carries execMode from the catalog entry (Q6)", async () => {
-        const file = writeCatalog({
-            chat: { name: "chat-agent", execMode: "dispatcher" },
-        });
+        const file = writeCatalogWithPackages(
+            { chat: { path: "chat", execMode: "dispatcher" } },
+            { chat: { name: "chat-agent" } },
+        );
         const source = createCatalogSource({
             kind: "catalog",
             name: "workspace",
@@ -166,7 +159,10 @@ describe("catalogSource", () => {
     });
 
     it("find returns undefined for an unknown package name (non-match)", async () => {
-        const file = writeCatalog({ player: { name: "music" } });
+        const file = writeCatalogWithPackages(
+            { player: { path: "player" } },
+            { player: { name: "music" } },
+        );
         const source = createCatalogSource({
             kind: "catalog",
             name: "workspace",
@@ -175,11 +171,14 @@ describe("catalogSource", () => {
         expect(await source.find("nope")).toBeUndefined();
     });
 
-    it("drops an entry with neither path nor name (non-match, Q17)", async () => {
-        const file = writeCatalog({
-            broken: {},
-            player: { name: "music" },
-        });
+    it("drops an entry with no path (non-match, Q17)", async () => {
+        const file = writeCatalogWithPackages(
+            {
+                broken: {},
+                player: { path: "player" },
+            },
+            { player: { name: "music" } },
+        );
         const source = createCatalogSource({
             kind: "catalog",
             name: "workspace",
@@ -195,8 +194,11 @@ describe("catalogSource", () => {
 
     it("listAgents enumerates install rows (name + package)", async () => {
         const file = writeCatalogWithPackages(
-            { playerKey: { path: "player" }, calendar: { name: "calendar" } },
-            { player: { name: "@x/music", defaultAgentName: "music" } },
+            { playerKey: { path: "player" }, calendar: { path: "calendar" } },
+            {
+                player: { name: "@x/music", defaultAgentName: "music" },
+                calendar: { name: "calendar" },
+            },
         );
         const source = createCatalogSource({
             kind: "catalog",
@@ -263,7 +265,10 @@ describe("catalogSource", () => {
     });
 
     it("forwards a dropped malformed entry to the per-command onWarn sink during enumeration", async () => {
-        const file = writeCatalog({ broken: {}, player: { name: "music" } });
+        const file = writeCatalogWithPackages(
+            { broken: {}, player: { path: "player" } },
+            { player: { name: "music" } },
+        );
         const source = createCatalogSource({
             kind: "catalog",
             name: "workspace",
@@ -272,12 +277,15 @@ describe("catalogSource", () => {
         const warnings: string[] = [];
         await source.listAgents!((m) => warnings.push(m));
         expect(warnings).toEqual([
-            "catalog source 'workspace': entry 'broken' has neither 'path' nor 'name' - dropped",
+            "catalog source 'workspace': entry 'broken' has no 'path' - dropped",
         ]);
     });
 
     it("materialize persists the catalog key as `ref` (its re-resolution handle)", async () => {
-        const file = writeCatalog({ music: { name: "music-agent" } });
+        const file = writeCatalogWithPackages(
+            { music: { path: "music" } },
+            { music: { name: "music-agent" } },
+        );
         const source = createCatalogSource({
             kind: "catalog",
             name: "workspace",
@@ -285,12 +293,16 @@ describe("catalogSource", () => {
         });
         const candidate = await source.find("music-agent");
         const record = await source.materialize(candidate!);
-        expect(record.module).toBe("music-agent");
+        expect(record.path).toBe(path.resolve(path.dirname(file), "music"));
+        expect(record.module).toBeUndefined();
         expect(record.ref).toBe("music"); // key persisted for @update
     });
 
     it("does not provide update capability", async () => {
-        const file = writeCatalog({ music: { name: "music-agent" } });
+        const file = writeCatalogWithPackages(
+            { music: { path: "music" } },
+            { music: { name: "music-agent" } },
+        );
         const source = createCatalogSource({
             kind: "catalog",
             name: "workspace",
@@ -300,7 +312,10 @@ describe("catalogSource", () => {
     });
 
     it("reads the catalog once at startup and ignores later edits (no live reload)", async () => {
-        const file = writeCatalog({ player: { name: "music" } });
+        const file = writeCatalogWithPackages(
+            { player: { path: "player" } },
+            { player: { name: "music" } },
+        );
         const source = createCatalogSource({
             kind: "catalog",
             name: "workspace",

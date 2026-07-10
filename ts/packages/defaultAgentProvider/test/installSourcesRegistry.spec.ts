@@ -27,6 +27,32 @@ function writeCatalog(name: string, agents: object): string {
     return file;
 }
 
+function writeCatalogWithPackages(
+    name: string,
+    agents: object,
+    packages: Record<string, { name?: string; defaultAgentName?: string }>,
+): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), `ta-reg-${name}-`));
+    const file = path.join(dir, "agents.catalog.json");
+    fs.writeFileSync(file, JSON.stringify({ agents }));
+    for (const [sub, meta] of Object.entries(packages)) {
+        const pkgDir = path.join(dir, sub);
+        fs.mkdirSync(pkgDir, { recursive: true });
+        const pkg: Record<string, unknown> = {};
+        if (meta.name !== undefined) {
+            pkg.name = meta.name;
+        }
+        if (meta.defaultAgentName !== undefined) {
+            pkg.typeagent = { defaultAgentName: meta.defaultAgentName };
+        }
+        fs.writeFileSync(
+            path.join(pkgDir, "package.json"),
+            JSON.stringify(pkg),
+        );
+    }
+    return file;
+}
+
 function tmpInstallDir(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), "ta-reg-install-"));
 }
@@ -45,11 +71,22 @@ describe("InstallSourceRegistry resolution", () => {
     // skips phase-1 (findName) and goes straight to the phase-2 ref (find) walk -
     // the same first-match-wins ordered walk the old key-based resolve used.
     function twoCatalogRegistry(orderNames: string[] = ["a", "b"]) {
-        const a = writeCatalog("a", { entryA: { name: "@scope/shared-pkg" } });
-        const b = writeCatalog("b", {
-            entryB: { name: "@scope/shared-pkg" },
-            onlyb: { name: "@scope/onlyb-pkg" },
-        });
+        const a = writeCatalogWithPackages(
+            "a",
+            { entryA: { path: "shared" } },
+            { shared: { name: "@scope/shared-pkg" } },
+        );
+        const b = writeCatalogWithPackages(
+            "b",
+            {
+                entryB: { path: "shared" },
+                onlyb: { path: "onlyb" },
+            },
+            {
+                shared: { name: "@scope/shared-pkg" },
+                onlyb: { name: "@scope/onlyb-pkg" },
+            },
+        );
         const byName: Record<string, InstallSourceConfig> = {
             a: { kind: "catalog", name: "a", catalog: a },
             b: { kind: "catalog", name: "b", catalog: b },
@@ -63,7 +100,8 @@ describe("InstallSourceRegistry resolution", () => {
     it("resolves to the first source in order that matches", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
         const { record } = await registry.resolve("x", "@scope/shared-pkg");
-        expect(record.module).toBe("@scope/shared-pkg");
+        expect(record.path).toBeDefined();
+        expect(record.module).toBeUndefined();
         expect(record.source).toBe("a");
     });
 
@@ -77,7 +115,8 @@ describe("InstallSourceRegistry resolution", () => {
     it("falls through non-matching sources to a later match", async () => {
         const registry = twoCatalogRegistry(["a", "b"]);
         const { record } = await registry.resolve("x", "@scope/onlyb-pkg");
-        expect(record.module).toBe("@scope/onlyb-pkg");
+        expect(record.path).toBeDefined();
+        expect(record.module).toBeUndefined();
         expect(record.source).toBe("b");
     });
 
@@ -363,13 +402,19 @@ describe("InstallSourceRegistry one-argument name resolution", () => {
         const winner = catalogWithDefaultName("weather", {
             catalogName: "cat1",
         });
-        // A module-only entry whose package name is 'weather' with no default
-        // agent name: it matches phase-2 find but cannot infer a name.
+        // A path-backed package whose package name is 'weather' with no
+        // default agent name: it matches phase-2 find but cannot infer a name.
         const shadowDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-reg-cat-"));
+        const shadowPkgDir = path.join(shadowDir, "pkg");
+        fs.mkdirSync(shadowPkgDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(shadowPkgDir, "package.json"),
+            JSON.stringify({ name: "weather" }),
+        );
         const shadowCatalog = path.join(shadowDir, "agents.catalog.json");
         fs.writeFileSync(
             shadowCatalog,
-            JSON.stringify({ agents: { entry: { name: "weather" } } }),
+            JSON.stringify({ agents: { entry: { path: "pkg" } } }),
         );
         const registry = createInstallSourceRegistry(
             [

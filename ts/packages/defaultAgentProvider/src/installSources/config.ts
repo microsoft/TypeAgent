@@ -25,8 +25,8 @@ export interface ResolvedCandidate {
 
     // --- Acquisition handles: what `materialize` / `load` use to obtain the
     // agent. Which of these are set is source-owned: a feed sets
-    // `module` + `ref` + `version`; a catalog sets `path` (or `module`) + `ref`
-    // (the catalog key); a path source sets only `path`. ---
+    // `module` + `ref` + `version`; a catalog sets `path` + `ref` (the catalog
+    // key); a path source sets only `path`. ---
     module?: string; // package name (npm-resolved; omitted when path-resolved)
     path?: string; // filesystem-resolved (catalog `path` entry / path source)
     ref?: string; // durable handle: feed specifier / catalog key
@@ -50,14 +50,12 @@ export interface ResolvedCandidate {
     // The user-facing npm package name for catalog and feed matches. Omitted for
     // path-only matches.
     //
-    // NOTE: this is deliberately NOT the same field as `module`, even though the
-    // two carry the same value whenever both are set (feed matches and catalog
-    // module-only entries). `module` is the npm LOAD HANDLE and is undefined for
-    // a path-resolved candidate; `packageName` is the display IDENTITY and is
-    // also populated for a catalog `path` entry (read from its package.json
-    // `name`), where `module` stays undefined. Keeping them separate lets a
-    // path-resolved candidate advertise its package identity without ever
-    // becoming a module-resolved record.
+    // NOTE: this is deliberately NOT the same field as `module`. `module` is
+    // the npm LOAD HANDLE and is undefined for a path-resolved candidate;
+    // `packageName` is the display IDENTITY and is also populated for a catalog
+    // `path` entry (read from its package.json `name`), where `module` stays
+    // undefined. Keeping them separate lets a path-resolved candidate advertise
+    // its package identity without ever becoming a module-resolved record.
     packageName?: string;
     // The package's declared `typeagent.defaultAgentName`, when the source can
     // discover it during lookup. Required whenever the installed name is

@@ -4,7 +4,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import registerDebug from "debug";
-import { NpmAppAgentInfo } from "dispatcher-node-providers";
 import {
     InstallSource,
     CatalogSourceConfig,
@@ -24,7 +23,7 @@ const debug = registerDebug("typeagent:dispatcher:installSource:catalog");
 // URLs are not supported.
 type AgentCatalog = {
     description?: string;
-    agents: Record<string, NpmAppAgentInfo>;
+    agents: Record<string, { path?: string; execMode?: string }>;
 };
 
 // Read + parse a catalog file, wrapping read/parse failures with the file path
@@ -54,14 +53,13 @@ function loadCatalog(file: string): AgentCatalog {
 // `catalog` source.
 //   find        = package-name lookup in the in-memory catalog snapshot
 //   materialize = record data `path` (relative paths resolve against the
-//                 catalog dir) or `module`; carries execMode; stores the key
-//                 in `ref` so load can follow the catalog entry
+//                 catalog dir); carries execMode; stores the key in `ref` so
+//                 load can follow the catalog entry
 //   load        = re-look-up the catalog key carried in the record's `ref`
 // `ref` is an agent short name (the catalog key).
 //
-// A catalog entry with a `path` becomes a path-resolved record (omits
-// `module`); an entry with only a package `name` becomes a module-resolved
-// record (resolved at load time against the app bundle / install root).
+// Catalog entries are path-resolved records. Catalogs do not acquire packages;
+// feed sources own npm acquisition and module records.
 //
 // The catalog file and every `path` entry's package.json are read exactly ONCE,
 // when the source is built, into an in-memory snapshot. There is no live reload:
@@ -79,47 +77,34 @@ export function createCatalogSource(
     // entry's package.json (once, at build time) so the candidate carries the
     // user-facing package name and (when legal) the declared
     // `typeagent.defaultAgentName`. The catalog key stays the durable `ref`
-    // (internal load handle). A malformed entry (neither `path` nor `name`)
-    // pushes a warning and returns undefined so it is dropped from the snapshot.
-    //
-    // `module` vs `packageName`: a `path` entry sets `packageName` (its display
-    // identity) but leaves `module` undefined - it is a path-resolved record. A
-    // `name`-only entry sets both to the same value (`module` is the load handle
-    // AND the display identity). They are kept as two fields so a path entry can
-    // still advertise its package identity without becoming module-resolved.
+    // (internal load handle). A malformed entry without `path` pushes a warning
+    // and returns undefined so it is dropped from the snapshot.
     function buildCandidate(
         key: string,
-        entry: { path?: string; name?: string; execMode?: string },
+        entry: { path?: string; execMode?: string },
         warnings: string[],
     ): ResolvedCandidate | undefined {
         const resolvedPath = entry.path
             ? path.resolve(catalogDir, entry.path)
             : undefined;
-        if (resolvedPath === undefined && entry.name === undefined) {
+        if (resolvedPath === undefined) {
             warnings.push(
-                `catalog source '${config.name}': entry '${key}' has neither 'path' nor 'name' - dropped`,
+                `catalog source '${config.name}': entry '${key}' has no 'path' - dropped`,
             );
             return undefined;
         }
         const candidate: ResolvedCandidate = { source: config.name, ref: key };
-        if (resolvedPath !== undefined) {
-            candidate.path = resolvedPath;
-            const meta = readPackageMeta(resolvedPath);
-            if (meta.packageName !== undefined) {
-                candidate.packageName = meta.packageName;
-            }
-            if (meta.defaultAgentName !== undefined) {
-                candidate.defaultAgentName = meta.defaultAgentName;
-            } else if (meta.illegalDefaultAgentName !== undefined) {
-                warnings.push(
-                    `catalog source '${config.name}': entry '${key}' declares an illegal default agent name '${meta.illegalDefaultAgentName}' - ignored`,
-                );
-            }
-        } else {
-            // A module-only entry has no local package.json to read before
-            // install, so it participates only in package-name (find) lookup.
-            candidate.module = entry.name!;
-            candidate.packageName = entry.name!;
+        candidate.path = resolvedPath;
+        const meta = readPackageMeta(resolvedPath);
+        if (meta.packageName !== undefined) {
+            candidate.packageName = meta.packageName;
+        }
+        if (meta.defaultAgentName !== undefined) {
+            candidate.defaultAgentName = meta.defaultAgentName;
+        } else if (meta.illegalDefaultAgentName !== undefined) {
+            warnings.push(
+                `catalog source '${config.name}': entry '${key}' declares an illegal default agent name '${meta.illegalDefaultAgentName}' - ignored`,
+            );
         }
         if (entry.execMode !== undefined) {
             candidate.loaderConfig = { execMode: entry.execMode };
@@ -259,8 +244,6 @@ export function createCatalogSource(
             }
             if (candidate.path !== undefined) {
                 loaded.path = candidate.path;
-            } else if (candidate.module !== undefined) {
-                loaded.module = candidate.module;
             }
             return loaded;
         },
@@ -286,11 +269,9 @@ export function createCatalogSource(
                 );
             }
             record.ref = candidate.ref;
-            // Exactly one resolution handle.
+            // Catalog entries are always path-resolved.
             if (candidate.path !== undefined) {
                 record.path = candidate.path;
-            } else if (candidate.module !== undefined) {
-                record.module = candidate.module;
             }
             return record;
         },
