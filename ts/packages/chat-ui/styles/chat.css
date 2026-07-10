@@ -1829,6 +1829,54 @@ span.ansi-bright-white-fg {
   background: #f3f5f7;
 }
 
+/* =========================================================================
+   Developer-mode per-message delete split button. Shown (on hover) only when
+   the host enables developer mode via ChatPanel.setDeveloperMode().
+   ========================================================================= */
+.chat-delete-control {
+  gap: 0;
+  opacity: 0;
+}
+.chat-message-container-agent:hover .chat-delete-control,
+.chat-message-container-user:hover .chat-delete-control {
+  opacity: 0.85;
+}
+.chat-delete-control:hover {
+  opacity: 1;
+}
+/* User bubbles are right-aligned; mirror the agent 30px inset on the right. */
+.chat-message-container-user .chat-delete-control {
+  margin: 2px 30px 6px 0;
+  justify-content: flex-end;
+}
+/* Join the primary + caret into one split control. */
+.chat-delete-primary {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.chat-delete-caret {
+  width: 16px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.chat-delete-caret i svg {
+  width: 12px;
+  height: 12px;
+}
+.chat-delete-primary:hover,
+.chat-delete-caret:hover {
+  color: #c83e3e;
+  background: rgba(200, 62, 62, 0.1);
+}
+/* Hide the control once its message is trashed/collapsing. */
+.chat-message-container-agent.chat-message-trashed > .chat-delete-control,
+.chat-message-container-user.chat-message-trashed > .chat-delete-control {
+  display: none;
+}
+.chat-delete-menu {
+  min-width: 200px;
+}
+
 /* Popover card */
 .chat-feedback-popover {
   background: #fff;

@@ -57,12 +57,23 @@
     },
     {
       "type": "shell",
+      "command": "pnpm run deploy:local",
+      "options": {
+        "cwd": "${workspaceFolder}/packages/vscode-chat"
+      },
+      "problemMatcher": [],
+      "label": "TypeAgent: Install Chat extension (local)",
+      "detail": "Package and install the vscode-chat extension from packages/vscode-chat"
+    },
+    {
+      "type": "shell",
       "label": "TypeAgent: Install local extensions",
-      "detail": "Install both the Coda and VS Code Shell extensions from this workspace",
+      "detail": "Install the Coda, VS Code Shell, and Chat extensions from this workspace",
       "dependsOrder": "sequence",
       "dependsOn": [
         "TypeAgent: Install Coda extension (local)",
-        "TypeAgent: Install VS Code Shell extension (local)"
+        "TypeAgent: Install VS Code Shell extension (local)",
+        "TypeAgent: Install Chat extension (local)"
       ],
       "problemMatcher": []
     },
