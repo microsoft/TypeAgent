@@ -18,6 +18,12 @@ import {
     UpdateOutcomeStatus,
     UninstallOutcomeStatus,
     AGENT_INSTALL_ROOTS_SUBDIR,
+    AvailableInstallRow,
+    InstallMatchKind,
+    InstallPreview,
+    InstallPreviewMatch,
+    InstallResult,
+    deriveMatchKind,
 } from "./installSources/config.js";
 import {
     createPackageAppAgentProvider,
@@ -48,6 +54,7 @@ import {
 import {
     createInstallSourceRegistry,
     type InstallSourceFactory,
+    type PreviewMatch,
 } from "./installSources/registry.js";
 import { getSourceCommands } from "./installSources/sourceCommands.js";
 import { createLimiter } from "@typeagent/common-utils";
@@ -813,37 +820,54 @@ export function createDefaultInstalledAgentSource(
 
     const source: InstalledAgentSourceApi = {
         async install(
-            name: string,
-            ref: string,
+            nameOrTarget: string,
+            ref: string | undefined,
             sourceName: string | undefined,
             issuingHost: AppAgentHost,
             onStatus?: SourceStatus,
-        ): Promise<{ source: string; warnings?: string[] }> {
-            if (isBuiltin(name)) {
-                throw new Error(
-                    `Agent '${name}' is built-in and cannot be shadowed by an install`,
-                );
+        ): Promise<InstallResult> {
+            const explicit = ref !== undefined;
+            // Explicit (two-argument) mode knows the installed name up front, so
+            // fail fast on a built-in / busy / draining name before resolving.
+            if (explicit) {
+                if (isBuiltin(nameOrTarget)) {
+                    throw new Error(
+                        `Agent '${nameOrTarget}' is built-in and cannot be shadowed by an install`,
+                    );
+                }
+                assertNameFree(nameOrTarget);
+                busy.add(nameOrTarget);
             }
-            // Serialize on the name; reject if it is draining or busy.
-            assertNameFree(name);
-            busy.add(name);
+            let inferredBusy: string | undefined;
             try {
                 // resolve + materialize is serialized by the registry's limiter.
-                // After it returns, we re-take the same shared
-                // limiter to write the record (sequential, not nested). Collect
+                // In infer mode this derives the installed name from the resolved
+                // package; in explicit mode it stamps the supplied name. Collect
                 // any non-fatal source warnings raised during resolve.
                 const warningSet = new Set<string>();
                 const resolved = await registry.resolve(
+                    nameOrTarget,
                     ref,
                     sourceName,
                     (m) => warningSet.add(m),
                     onStatus,
                 );
-                // The source assigns the authoritative dispatcher name. The
-                // source's `materialize` persists its own load/update handle
-                // (feed: the requested spec; catalog: the key; path: the path),
-                // so the host does not need source-specific key backfill.
-                const record: InstalledAgentRecord = { ...resolved, name };
+                const record = resolved.record;
+                const name = record.name;
+                // Infer (one-argument) mode learns the name only now: run the
+                // same built-in / busy / draining guards on the derived name.
+                // These are synchronous (no await between deriving the name and
+                // reserving it), so a concurrent op cannot slip in.
+                if (!explicit) {
+                    if (isBuiltin(name)) {
+                        throw new Error(
+                            `Agent '${name}' is built-in and cannot be shadowed by an install`,
+                        );
+                    }
+                    assertNameFree(name);
+                    busy.add(name);
+                    inferredBusy = name;
+                }
                 // Build the shared per-agent provider AND structurally validate
                 // its freshly-materialized manifest BEFORE persisting: a
                 // corrupt/unresolvable agent — from
@@ -853,7 +877,11 @@ export function createDefaultInstalledAgentSource(
                     name,
                     record,
                 );
-                // Persist the record under the same serialization domain.
+                // Persist the record under the same serialization domain. The
+                // serialized write is the true install-vs-install collision
+                // point: a second install (including another one-argument
+                // install that resolved to the same inferred name) cannot enter
+                // until the first commits, so the existing-agent check catches it.
                 await limiter(async () => {
                     const current = readAgentsJson(instanceDir) ?? {
                         agents: {},
@@ -868,18 +896,41 @@ export function createDefaultInstalledAgentSource(
                 entries.set(name, { status: "active", provider });
                 // Fan out the add to every connected session — including the
                 // issuing one — through each session's idle-gated applicator.
-                // Non-blocking: the record is already
-                // committed, so the load lands at each session's next idle and
-                // the terminal state is reported via the fan-out notification.
                 fanOutAdd(provider, issuingHost);
-                return {
+                const result: InstallResult = {
+                    name,
                     source: record.source,
-                    ...(warningSet.size > 0
-                        ? { warnings: [...warningSet] }
-                        : {}),
+                    matchedByName: resolved.matchedByName,
                 };
+                // The source kind (path / catalog / feed) for user-facing
+                // messages; the built source knows its own kind.
+                const sourceKind = registry.get(record.source)?.kind;
+                if (sourceKind !== undefined) {
+                    result.sourceKind = sourceKind;
+                }
+                if (resolved.packageName !== undefined) {
+                    result.packageName = resolved.packageName;
+                }
+                if (record.path !== undefined) {
+                    result.path = record.path;
+                }
+                // Only surface a durable ref for feed (`module`) installs, whose
+                // ref is the user-facing feed specifier. A catalog record's ref
+                // is the internal key, which is never shown.
+                if (record.module !== undefined && record.ref !== undefined) {
+                    result.ref = record.ref;
+                }
+                if (warningSet.size > 0) {
+                    result.warnings = [...warningSet];
+                }
+                return result;
             } finally {
-                busy.delete(name);
+                if (inferredBusy !== undefined) {
+                    busy.delete(inferredBusy);
+                }
+                if (explicit) {
+                    busy.delete(nameOrTarget);
+                }
             }
         },
         async uninstall(
@@ -1225,15 +1276,12 @@ export function createDefaultInstalledAgentSource(
             // completion.
             return registry.list().map((info) => info.name);
         },
-        async listAvailableAgents(opts?: { sourceName?: string }): Promise<
-            {
-                ref: string;
-                source: string;
-            }[]
-        > {
-            // Source-aware refs for `@package available` and filtered
+        async listAvailableAgents(opts?: {
+            sourceName?: string;
+        }): Promise<AvailableInstallRow[]> {
+            // Source-aware install rows for `@package available` and filtered
             // completion in `@package install`.
-            const rows: { ref: string; source: string }[] = [];
+            const rows: AvailableInstallRow[] = [];
             for (const info of registry.list()) {
                 if (
                     opts?.sourceName !== undefined &&
@@ -1241,20 +1289,74 @@ export function createDefaultInstalledAgentSource(
                 ) {
                     continue;
                 }
-                const source = registry.get(info.name);
-                if (source?.listAgents === undefined) {
+                const src = registry.get(info.name);
+                if (src?.listAgents === undefined) {
                     continue;
                 }
                 try {
-                    const refs = await source.listAgents();
-                    for (const ref of refs) {
-                        rows.push({ ref, source: info.name });
-                    }
+                    rows.push(...(await src.listAgents()));
                 } catch (e) {
                     debug(`listAgents failed for source '${info.name}': ${e}`);
                 }
             }
             return rows;
+        },
+        async preview(
+            nameOrTarget: string,
+            ref: string | undefined,
+            sourceName: string | undefined,
+            onStatus?: SourceStatus,
+        ): Promise<InstallPreview | undefined> {
+            // Dry-run: reuse the registry's pre-materialize walks so the preview
+            // can never drift from install; nothing is installed here.
+            const result = await registry.preview(
+                nameOrTarget,
+                ref,
+                sourceName,
+                undefined,
+                onStatus,
+            );
+            if (result === undefined) {
+                return undefined;
+            }
+            const toMatch = (m: PreviewMatch): InstallPreviewMatch => {
+                // The registry only commits to name-vs-ref; the finer label is
+                // derived here from the resolved candidate's own fields.
+                const matchKind: InstallMatchKind = deriveMatchKind({
+                    matchedByName: m.matchedByName,
+                    path: m.candidate.path,
+                });
+                const im: {
+                    source: string;
+                    matchKind: InstallMatchKind;
+                    name: string;
+                    packageName?: string;
+                    path?: string;
+                    ref?: string;
+                } = { source: m.source, matchKind, name: m.name };
+                if (m.candidate.packageName !== undefined) {
+                    im.packageName = m.candidate.packageName;
+                }
+                if (m.candidate.path !== undefined) {
+                    im.path = m.candidate.path;
+                }
+                if (
+                    m.candidate.module !== undefined &&
+                    m.candidate.ref !== undefined
+                ) {
+                    im.ref = m.candidate.ref;
+                }
+                return im;
+            };
+            return {
+                winner: toMatch(result.winner),
+                matches: result.matches.map(toMatch),
+            };
+        },
+        async refresh(sourceName?: string): Promise<void> {
+            // Refresh cache-backed source metadata; a fetch failure propagates
+            // so the `--refresh` command fails rather than acting on stale data.
+            await registry.refresh(sourceName);
         },
     };
 

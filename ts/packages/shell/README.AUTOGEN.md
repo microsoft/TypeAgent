@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4622ac0cdb2934142d59aef3555eeb6de379ddf65277f8fbe0233c0825188bdd -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6cd08161ced654d24d078a49680265d57095d8b6897e91360066292d2d38e576 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -12,33 +12,35 @@
 
 ## Overview
 
-The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) entry point for the TypeAgent ecosystem. It is designed to demonstrate how to build interactive agents with natural language interfaces using structured prompting and large language models (LLMs). Acting as a personal agent, the shell processes user requests, performs actions, answers questions, and facilitates multi-conversation management. It integrates with other components of the TypeAgent system, such as the dispatcher and agent server, to provide a cohesive and interactive user experience.
+The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) entry point for the TypeAgent ecosystem. It provides a personal agent interface for processing user requests, performing actions, answering questions, and managing conversations. Built on Electron, it integrates with other TypeAgent components, such as the dispatcher and agent server, to deliver a cohesive and interactive experience. The shell supports both text and voice input, multi-conversation management, and local or remote operation modes.
 
 ## What it does
 
-The `agent-shell` package provides a rich set of features to enable users to interact with the TypeAgent system:
+The `agent-shell` package offers the following key features:
 
 ### Conversation Management
 
-- **Multi-Conversation Support**: Users can create, switch, rename, and delete conversations. Conversations persist across sessions, and the shell supports full multi-conversation management when connected to an agent server.
-- **Default Conversation**: Upon connecting to the agent server, the shell automatically joins a default conversation named `"Shell"`. This conversation is persistent, and its history is replayed on reconnect.
-- **Conversation Commands**: Users can manage conversations using commands such as `/conversation list`, `/conversation new [name]`, `/conversation switch <id|name>`, `/conversation rename [id|name] <newName>`, and `/conversation delete <id|name>`. These commands can also be executed via natural language inputs.
-- **Request Queue Management**: The shell provides visual indicators for queued and running requests, allowing users to manage and cancel requests directly from the chat interface.
+- **Multi-Conversation Support**: Users can create, switch, rename, and delete conversations. Conversations persist across sessions, and history is replayed on reconnect.
+- **Default Conversation**: Automatically joins a default conversation named `"Shell"` when connected to the agent server.
+- **Commands for Conversation Management**: Users can manage conversations using commands like `/conversation list`, `/conversation new [name]`, `/conversation switch <id|name>`, and more. These commands can also be executed via natural language inputs.
+- **Request Queue Management**: Visual indicators for queued and running requests allow users to manage and cancel requests directly from the chat interface.
 
 ### Speech Input
-
-The shell supports voice input through:
 
 - **Azure Speech Services**: Enables speech-to-text functionality using Azure's cloud-based service.
 - **Local Whisper Service**: Provides an alternative for speech-to-text processing using a local service.
 
 ### Multi-Client Notifications
 
-The shell notifies users when other clients join or leave the same conversation, making it easier to manage collaborative interactions.
+- The shell notifies users when other clients join or leave the same conversation, facilitating collaborative interactions.
 
 ### Local Mode
 
-In the absence of an agent server, the shell operates in local mode, providing a single default conversation and hosting an in-process WebSocket for port discovery. This allows external clients, such as the browser agent, to connect to in-process agents.
+- In the absence of an agent server, the shell operates in local mode, providing a single default conversation and hosting an in-process WebSocket for port discovery. This allows external clients, such as the browser agent, to connect to in-process agents.
+
+### Integration with TypeAgent Ecosystem
+
+- The shell integrates with the TypeAgent dispatcher and agent server to route user requests to the appropriate agents for processing. It also supports external clients via WebSocket connections.
 
 ## Setup
 
@@ -93,9 +95,9 @@ The `agent-shell` package is organized into several key files, each responsible 
 
 To extend the functionality of the `agent-shell` package, follow these steps:
 
-1. **Familiarize Yourself with the Codebase**:
+1. **Understand the Codebase**:
 
-   - Start by reviewing [index.ts](./src/main/index.ts) to understand the initialization and configuration process of the shell.
+   - Begin by reviewing [index.ts](./src/main/index.ts) to understand the initialization and configuration process of the shell.
 
 2. **Add New Commands**:
 
@@ -170,6 +172,6 @@ _5 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

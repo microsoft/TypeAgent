@@ -91,6 +91,12 @@ async function runAction(
         action.schemaName, // Pass schema name for disambiguation
     );
     if (result.success) {
+        if (isServiceConfirmationRequest(result.data)) {
+            return offerServiceConfirmation(context, action, result.data);
+        }
+        if (isServiceElevationRequest(result.data)) {
+            return offerServiceElevation(context, action, result.data);
+        }
         const displayText = formatResultDisplay(
             action.actionName,
             result.message,
@@ -99,6 +105,145 @@ async function runAction(
         return createActionResult(displayText);
     }
     return { error: result.message };
+}
+
+// Shape of the confirmation payload emitted by autoShell when a service action
+// resolves to a fuzzy (non-exact) match and needs the user to confirm the target.
+type ServiceConfirmationData = {
+    needsConfirmation: true;
+    resolvedServiceName: string;
+    resolvedDisplayName: string;
+    operation?: string;
+};
+
+function isServiceConfirmationRequest(
+    data: unknown,
+): data is ServiceConfirmationData {
+    if (typeof data !== "object" || data === null) {
+        return false;
+    }
+    const d = data as Record<string, unknown>;
+    return (
+        d.needsConfirmation === true &&
+        typeof d.resolvedServiceName === "string" &&
+        typeof d.resolvedDisplayName === "string"
+    );
+}
+
+// When autoShell only fuzzily matches a service, ask the user to confirm the resolved
+// service before acting. On confirmation, re-run the original action targeting the
+// resolved service by its exact name — which matches exactly, so autoShell performs the
+// operation without prompting again.
+function offerServiceConfirmation(
+    context: ActionContext<DesktopActionContext>,
+    action: AppAction,
+    data: ServiceConfirmationData,
+): ActionResult {
+    const state = context.sessionContext.agentContext;
+    const operation = data.operation ?? "restart";
+    const requested = action.parameters?.service;
+    const query = typeof requested === "string" ? requested : "";
+    return createYesNoChoiceResult(
+        state.choiceManager,
+        `I couldn't find a service exactly matching "${query}". ` +
+            `The closest match is "${data.resolvedDisplayName}" (${data.resolvedServiceName}). ` +
+            `Should I ${operation} it?`,
+        async (confirmed: boolean) => {
+            if (!confirmed) {
+                return createActionResultFromTextDisplay(
+                    "Cancelled — no service was changed.",
+                );
+            }
+            const ctx = state.pendingChoiceContext ?? context;
+            const confirmedAction: AppAction = {
+                ...action,
+                parameters: {
+                    ...action.parameters,
+                    service: data.resolvedServiceName,
+                    matchBy: "name",
+                },
+            };
+            try {
+                return await runAction(confirmedAction, ctx);
+            } catch (e) {
+                if (e instanceof AutoShellMissingError) {
+                    return offerAutoShellBuild(ctx, e, confirmedAction);
+                }
+                return createActionResultFromError(
+                    e instanceof Error ? e.message : String(e),
+                );
+            }
+        },
+    );
+}
+
+// Shape of the payload emitted by autoShell when a service restart requires administrator
+// privileges that the (non-elevated) helper doesn't have.
+type ServiceElevationData = {
+    needsElevation: true;
+    resolvedServiceName: string;
+    resolvedDisplayName: string;
+    operation?: string;
+};
+
+function isServiceElevationRequest(
+    data: unknown,
+): data is ServiceElevationData {
+    if (typeof data !== "object" || data === null) {
+        return false;
+    }
+    const d = data as Record<string, unknown>;
+    return (
+        d.needsElevation === true &&
+        typeof d.resolvedServiceName === "string" &&
+        typeof d.resolvedDisplayName === "string"
+    );
+}
+
+// Controlling a Windows service requires administrator rights, and autoShell runs unelevated.
+// Ask the user for consent before running the restart elevated. On confirmation, re-run the
+// action with `elevate: true`; autoShell then performs the restart via an elevated helper, which
+// triggers a Windows User Account Control (UAC) prompt.
+function offerServiceElevation(
+    context: ActionContext<DesktopActionContext>,
+    action: AppAction,
+    data: ServiceElevationData,
+): ActionResult {
+    const state = context.sessionContext.agentContext;
+    const operation = data.operation ?? "restart";
+    return createYesNoChoiceResult(
+        state.choiceManager,
+        `Restarting the "${data.resolvedDisplayName}" (${data.resolvedServiceName}) service ` +
+            `requires administrator privileges. I'll run the ${operation} with elevation, which ` +
+            `shows a Windows User Account Control (UAC) prompt. Do you want to continue?`,
+        async (confirmed: boolean) => {
+            if (!confirmed) {
+                return createActionResultFromTextDisplay(
+                    `Cancelled — no changes were made to the "${data.resolvedDisplayName}" service.`,
+                );
+            }
+            const ctx = state.pendingChoiceContext ?? context;
+            const elevatedAction: AppAction = {
+                ...action,
+                parameters: {
+                    ...action.parameters,
+                    service: data.resolvedServiceName,
+                    matchBy: "name",
+                    elevate: true,
+                },
+            };
+            try {
+                return await runAction(elevatedAction, ctx);
+            } catch (e) {
+                if (e instanceof AutoShellMissingError) {
+                    return offerAutoShellBuild(ctx, e, elevatedAction);
+                }
+                return createActionResultFromError(
+                    e instanceof Error ? e.message : String(e),
+                );
+            }
+        },
+    );
 }
 
 function offerAutoShellBuild(

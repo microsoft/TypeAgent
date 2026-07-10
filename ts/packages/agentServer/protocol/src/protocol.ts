@@ -77,6 +77,21 @@ export type UserIdentity = {
     initial: string; // Single uppercase character for avatars
 };
 
+/**
+ * Short-lived Azure Speech authorization token, vended by the server (which
+ * owns the `speech:` config) to clients that render a microphone affordance
+ * (e.g. the VS Code shell webview). Clients build a
+ * `SpeechConfig.fromAuthorizationToken("aad#<endpoint>#<token>", region)` from
+ * these fields. The token expires after ~10 minutes; `expire` is the ms-since-
+ * epoch at which callers should request a fresh one.
+ */
+export type SpeechToken = {
+    token: string;
+    expire: number; // ms since epoch
+    region: string;
+    endpoint: string;
+};
+
 export type AgentServerInvokeFunctions = {
     joinConversation: (
         options?: DispatcherConnectOptions,
@@ -95,6 +110,13 @@ export type AgentServerInvokeFunctions = {
     deleteConversation: (conversationId: string) => Promise<void>;
     shutdown: () => Promise<void>;
     getUserIdentity: () => Promise<UserIdentity>;
+    /**
+     * Vend a short-lived Azure Speech authorization token from the server's
+     * `speech:` config. Returns `undefined` when speech is not configured or
+     * a token can't be acquired, so clients can gracefully hide/disable the
+     * mic affordance.
+     */
+    getSpeechToken: () => Promise<SpeechToken | undefined>;
 };
 
 /**

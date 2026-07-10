@@ -291,5 +291,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "desktop"
   }
 }
