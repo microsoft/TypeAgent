@@ -12,14 +12,17 @@
 // tests below don't reach the new implicit-derivation code path. The
 // hand-built-AST test further down is what directly exercises
 // `findSingleValueBearingPart`'s forwarding logic.
+//
+// NFA's rejection of tailCall RulesParts (still unsupported; see
+// `nfaSafeOptimizations`) is already covered by
+// grammarOptimizerTailFactoring.spec.ts ("NFA compile of a
+// tail-factored grammar throws a descriptive error") - not duplicated
+// here.
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchNFA } from "../src/nfaInterpreter.js";
-import {
-    recommendedOptimizations,
-    nfaSafeOptimizations,
-} from "../src/grammarOptimizer.js";
+import { nfaSafeOptimizations } from "../src/grammarOptimizer.js";
 import {
     Grammar,
     createStringPart,
@@ -62,37 +65,6 @@ describe("NFA compilation of factored shared-prefix grammars", () => {
             });
         },
     );
-
-    it("still refuses tailCall RulesParts from recommendedOptimizations", () => {
-        // tailFactoring/promoteTailRulesParts still aren't NFA-compatible.
-        const grammar = loadGrammarRules("factored-prefix.agr", agr, {
-            optimizations: recommendedOptimizations,
-        });
-
-        expect(() =>
-            compileGrammarToNFA(grammar, "factored-prefix-tail"),
-        ).toThrow(/tail/i);
-    });
-
-    it("evaluates an explicit -> value expression through a manually-factored shape", () => {
-        const agr2 = `
-<Start> = <a> | <b>;
-<a> = (please)? $(w:<Choice>) -> w;
-<Choice> = <foo> | <bar>;
-<foo> = foo -> { actionName: "A" };
-<bar> = bar -> { actionName: "B" };
-<b> = never_matches -> { actionName: "unused" };
-`;
-        const grammar = loadGrammarRules("manual-factored.agr", agr2, {});
-        const nfa = compileGrammarToNFA(grammar, "manual-factored");
-
-        expect(matchNFA(nfa, ["foo"], true).actionValue).toEqual({
-            actionName: "A",
-        });
-        expect(matchNFA(nfa, ["please", "bar"], true).actionValue).toEqual({
-            actionName: "B",
-        });
-    });
 
     it("forwards the single variable-bearing part's value for a value-less multi-term rule", () => {
         // Hand-built AST mirroring the actual bug shape: a value-less
