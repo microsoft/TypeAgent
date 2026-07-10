@@ -753,7 +753,9 @@ export function createFeedSource(
                         cwd: tempRoot,
                         registry,
                         userconfig,
-                        signal: abortSignal,
+                        ...(abortSignal !== undefined
+                            ? { signal: abortSignal }
+                            : {}),
                     });
                 } finally {
                     if (heartbeat !== undefined) {
