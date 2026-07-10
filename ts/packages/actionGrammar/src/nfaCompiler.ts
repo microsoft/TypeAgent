@@ -22,7 +22,7 @@ import {
     ValueExpression,
 } from "./environment.js";
 import { normalizeToken } from "./nfaMatcher.js";
-import { deriveImplicitValue } from "./grammarImplicitExtractor.js";
+import { deriveValue } from "./grammarValueDeriver.js";
 
 // Scripts that require a word-boundary separator between adjacent tokens.
 // CJK and other logographic/syllabic scripts are NOT included — no separator needed.
@@ -479,7 +479,7 @@ function isSingleVariableRule(rule: GrammarRule): { variable: string } | false {
  * Derive the value expression for a rule that has no explicit `->` value:
  * single-variable rules forward that variable, and factored multi-part
  * rules (e.g. from `factorCommonPrefixes`) forward their single
- * variable-bearing part's value (via the shared `deriveImplicitValue`,
+ * variable-bearing part's value (via the shared `deriveValue`,
  * also used by the optimizer's `getImplicitDefaultValue`). Not every rule
  * needs a value - only when `requireValue` is set (i.e. the value is
  * actually consumed: top-level action rules, or nested rules captured by
@@ -498,7 +498,7 @@ function deriveEffectiveValue(
     if (rule.parts.length <= 1) {
         return rule.value;
     }
-    const result = deriveImplicitValue(rule);
+    const result = deriveValue(rule);
     if (result.kind === "value") {
         return result.value;
     }

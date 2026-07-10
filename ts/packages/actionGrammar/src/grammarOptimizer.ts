@@ -23,9 +23,9 @@ import { leadingWordBoundaryScriptPrefix } from "./spacingScripts.js";
 import { leadingNonSeparatorRun } from "./grammarMatcher.js";
 import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
 import {
-    deriveImplicitValue,
+    deriveValue,
     findSingleValueBearingPart,
-} from "./grammarImplicitExtractor.js";
+} from "./grammarValueDeriver.js";
 import {
     globalPhraseSetRegistry,
     PhraseSetMatcher,
@@ -3196,7 +3196,7 @@ function checkForwardingPromotable(
     // always; rules / string / phraseSet only when bound; every
     // `GrammarPart` carries an optional `variable` field, so
     // `findSingleValueBearingPart` - the shared scan also used by
-    // `deriveImplicitValue` (grammarValueDeriver.ts) - covers the
+    // `deriveValue` (grammarValueDeriver.ts) - covers the
     // union). Promoting masks the baseline missing/multiple-default
     // throws at finalize time, so bail out unless the trailing
     // RulesPart is the sole contributor.
@@ -3315,13 +3315,13 @@ function trySubstituteMembers(
  *
  * Used by the value-substitution branch of `tryPromoteTrailing` to
  * fold each member's effective value into the parent's value
- * expression. See `deriveImplicitValue` (grammarImplicitValue.ts) for
+ * expression. See `deriveValue` (grammarValueDeriver.ts) for
  * the shared derivation logic, also used by the NFA compiler.
  */
 function getImplicitDefaultValue(
     rule: GrammarRule,
 ): CompiledValueNode | undefined {
-    const result = deriveImplicitValue(rule);
+    const result = deriveValue(rule);
     return result.kind === "value" ? result.value : undefined;
 }
 

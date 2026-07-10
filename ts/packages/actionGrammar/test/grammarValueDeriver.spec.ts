@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Direct unit tests for the pure helpers in grammarImplicitExtractor.ts,
+// Direct unit tests for the pure helpers in grammarValueDeriver.ts,
 // shared by grammarOptimizer.ts (`getImplicitDefaultValue`,
 // `checkForwardingPromotable`) and nfaCompiler.ts (`deriveEffectiveValue`).
 // The consumers' own spec files (grammarOptimizerPromoteTail.spec.ts,
@@ -11,8 +11,8 @@
 
 import {
     findSingleValueBearingPart,
-    deriveImplicitValue,
-} from "../src/grammarImplicitExtractor.js";
+    deriveValue,
+} from "../src/grammarValueDeriver.js";
 import {
     createStringPart,
     createWildcardPart,
@@ -64,7 +64,7 @@ describe("findSingleValueBearingPart", () => {
     });
 });
 
-describe("deriveImplicitValue", () => {
+describe("deriveValue", () => {
     it("returns the rule's explicit value when present, ignoring parts", () => {
         const rule: GrammarRule = {
             parts: [
@@ -73,7 +73,7 @@ describe("deriveImplicitValue", () => {
             ],
             value: { type: "literal", value: "explicit" },
         };
-        expect(deriveImplicitValue(rule)).toEqual({
+        expect(deriveValue(rule)).toEqual({
             kind: "value",
             value: { type: "literal", value: "explicit" },
         });
@@ -81,12 +81,12 @@ describe("deriveImplicitValue", () => {
 
     it('returns "none" for a rule with no parts and no value', () => {
         const rule: GrammarRule = { parts: [] };
-        expect(deriveImplicitValue(rule)).toEqual({ kind: "none" });
+        expect(deriveValue(rule)).toEqual({ kind: "none" });
     });
 
     it('returns "none" for a single part with no variable', () => {
         const rule: GrammarRule = { parts: [createStringPart(["foo"])] };
-        expect(deriveImplicitValue(rule)).toEqual({ kind: "none" });
+        expect(deriveValue(rule)).toEqual({ kind: "none" });
     });
 
     it("forwards a single part's variable as the implicit value", () => {
@@ -96,7 +96,7 @@ describe("deriveImplicitValue", () => {
                 createWildcardPart("x", "wildcard"),
             ],
         };
-        expect(deriveImplicitValue(rule)).toEqual({
+        expect(deriveValue(rule)).toEqual({
             kind: "value",
             value: { type: "variable", name: "x" },
         });
@@ -112,7 +112,7 @@ describe("deriveImplicitValue", () => {
         const rule: GrammarRule = {
             parts: [createStringPart(["prefix"]), nested],
         };
-        expect(deriveImplicitValue(rule)).toEqual({
+        expect(deriveValue(rule)).toEqual({
             kind: "value",
             value: { type: "variable", name: "chosen" },
         });
@@ -125,13 +125,13 @@ describe("deriveImplicitValue", () => {
                 createStringPart(["bar"], "y"),
             ],
         };
-        expect(deriveImplicitValue(rule)).toEqual({ kind: "ambiguous" });
+        expect(deriveValue(rule)).toEqual({ kind: "ambiguous" });
     });
 
     it('returns "none" for a multi-part rule where nothing carries a variable', () => {
         const rule: GrammarRule = {
             parts: [createStringPart(["foo"]), createStringPart(["bar"])],
         };
-        expect(deriveImplicitValue(rule)).toEqual({ kind: "none" });
+        expect(deriveValue(rule)).toEqual({ kind: "none" });
     });
 });

@@ -2,8 +2,9 @@
 // Licensed under the MIT License.
 
 /**
- * Structural derivation of a rule's *implicit* value expression when it
- * has no explicit `->` expression.
+ * Structural derivation of a rule's *effective* value expression: its
+ * explicit `->` expression when present, otherwise an implicit
+ * forwarding value derived from the rule's parts.
  *
  * A rule with exactly one variable-bearing part implicitly forwards that
  * part's value - this mirrors the AST matcher's implicit-default rule
@@ -42,11 +43,12 @@ export function findSingleValueBearingPart(
 }
 
 /**
- * Result of `deriveImplicitValue`: either a concrete forwarding value
- * (the rule's own `->` expression, or a single variable-bearing part's
- * value), `"ambiguous"` (2+ parts carry a variable - callers decide
- * whether that's an error), or `undefined` (no part carries a variable,
- * or the rule has no parts at all).
+ * Result of `deriveValue`: either a concrete value (the rule's own `->`
+ * expression, or a single variable-bearing part's implicitly forwarded
+ * value), `"ambiguous"` (2+ parts carry a variable and there is no
+ * explicit value - callers decide whether that's an error), or `"none"`
+ * (no explicit value and no part carries a variable, or the rule has no
+ * parts at all).
  */
 export type ImplicitValueResult =
     | { kind: "value"; value: CompiledValueNode }
@@ -54,10 +56,11 @@ export type ImplicitValueResult =
     | { kind: "none" };
 
 /**
- * Compute the value expression a rule would implicitly produce if it
- * has no explicit `->` expression (via `findSingleValueBearingPart`).
+ * Compute a rule's effective value expression: its explicit `->` value
+ * when present, otherwise the implicit value it would produce (via
+ * `findSingleValueBearingPart`).
  */
-export function deriveImplicitValue(rule: GrammarRule): ImplicitValueResult {
+export function deriveValue(rule: GrammarRule): ImplicitValueResult {
     if (rule.value !== undefined) {
         return { kind: "value", value: rule.value };
     }
