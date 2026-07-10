@@ -75,5 +75,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "localPlayer"
   }
 }

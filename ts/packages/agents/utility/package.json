@@ -81,5 +81,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "utility"
   }
 }

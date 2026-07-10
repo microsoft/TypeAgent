@@ -913,21 +913,29 @@ and the recorded handle when available.
 
 ## @package install - Install an agent
 
-Usage: `@package install <name> <ref> [--source <sourceName>]`
+Usage: `@package install <target> [<name>] [--source <sourceName>] [--dry-run] [--refresh]`
 
 ### Arguments:
 
-- &lt;name&gt; - Dispatcher agent name to install (type: string)
-- &lt;ref&gt; - Source-specific reference: a path, catalog short name, or npm package specifier (type: string)
+- &lt;target&gt; - One-argument install: a default agent name, a package name, or a filesystem path. Two-argument install: the ref (path or package name) to install (type: string)
+- &lt;name&gt; - (optional) Explicit installed agent name. When given, `<target>` is resolved only as a ref (path or package name); default agent names are not consulted (type: string)
 
 ### Flags:
 
-- --source &lt;sourceName&gt; : Resolve only against the named install source. Without this flag, TypeAgent walks the configured source order and uses the first source that resolves the reference.
+- --source &lt;sourceName&gt; : Resolve only against the named install source. Without this flag, TypeAgent walks the configured source order and uses the first source that resolves the target.
+- --dry-run (`-n`) : Preview how the target would resolve (winning source, match kind, installed name, and the full shadow set) without installing.
+- --refresh (`-r`) : Refresh cache-backed source metadata (feed descriptor caches) before resolving. A fetch failure fails the command rather than acting on stale data.
 
-`<name>` must be a legal dispatcher agent identifier and must not already be in
-use by any installed, built-in, system, inline, or MCP provider. A source that
-matches the reference owns the install: if materialization fails, TypeAgent
-reports that failure instead of silently falling through to later sources.
+With one argument, TypeAgent infers both the package and the installed agent
+name: a legal agent name is first matched against each source's default agent
+name (`typeagent.defaultAgentName`), then, if unmatched, the argument is resolved
+as a package name or filesystem path and the installed name is read from the
+resolved package. With two arguments, the second argument is the explicit
+installed name and overrides the package default. An explicit name must be a
+legal dispatcher agent identifier and must not already be in use by any
+installed, built-in, system, inline, or MCP provider. A source that matches owns
+the install: if materialization fails, TypeAgent reports that failure instead of
+silently falling through to later sources.
 
 ## @package update - Refresh or update an installed agent
 
@@ -956,27 +964,26 @@ Uninstall removes the installed record and unloads the live agent from connected
 dispatchers. Feed package roots are reclaimed by best-effort garbage collection
 and startup orphan cleanup rather than by a synchronous `npm uninstall`.
 
-## @package source list | order | where | add | remove - Manage install sources
+## @package source list | order | add | remove - Manage install sources
 
 Usage:
 
 ```text
 @package source list
 @package source order <name>...
-@package source where <ref>
 @package source add feed <name> [--registry <url>] [--scope <scope>]...
 @package source add catalog <name> --catalog <path>
 @package source add path <name> [--baseDir <path>]
 @package source remove <name> [--force]
 ```
 
-Install sources are tried in configured order. `where` reports which source would
-resolve a reference without installing it. `order` moves named sources to the
-front and keeps the rest in their current relative order. `add` appends a source
-after validating its configuration. `remove` refuses to remove a source still
-referenced by installed agents unless `--force` is supplied; forced removal keeps
-already-installed agents loadable but blocks future updates for those records
-until the source is re-added.
+Install sources are tried in configured order. To preview which source would
+resolve a target without installing, use `@package install --dry-run <target>`.
+`order` moves named sources to the front and keeps the rest in their current
+relative order. `add` appends a source after validating its configuration.
+`remove` refuses to remove a source still referenced by installed agents unless
+`--force` is supplied; forced removal keeps already-installed agents loadable but
+blocks future updates for those records until the source is re-added.
 
 Feed sources install from Azure Artifacts npm feeds. If `--registry` and
 `--scope` are omitted, the source reads `TYPEAGENT_FEED_REGISTRY` and

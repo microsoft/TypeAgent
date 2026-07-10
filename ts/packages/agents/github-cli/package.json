@@ -70,5 +70,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "github-cli"
   }
 }

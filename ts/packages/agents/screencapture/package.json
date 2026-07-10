@@ -77,5 +77,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "screencapture"
   }
 }

@@ -966,16 +966,18 @@ Usage: `@package list`
 
 ## @package install - Install an agent
 
-Usage: `@package install [--source <source>] <name> <ref>`
+Usage: `@package install [--source <source>] [--dry-run] [--refresh] <target> [<name>]`
 
 ### Arguments:
 
-- &lt;name&gt; - Name of the agent (type: string)
-- &lt;ref&gt; - Reference to install: a filesystem path, a catalog short name, or a feed specifier. Interpreted by the matching source in the configured order. (type: string)
+- &lt;target&gt; - One-argument install: a default agent name, a package name, or a filesystem path. Two-argument install: the ref (path or package name) to install. (type: string)
+- &lt;name&gt; - Optional explicit installed agent name. When given, the first argument is resolved only as a ref (path or package name); default agent names are not consulted. (type: string, optional)
 
 ### Flags:
 
 - --source &lt;source&gt; (-s) : Resolve only against this named source, bypassing the order. (optional)
+- --dry-run (-n) : Preview how the target would resolve without installing.
+- --refresh (-r) : Refresh cache-backed source metadata before resolving.
 
 ## @package update - Update an installed agent
 
@@ -1005,14 +1007,6 @@ Usage: `@package source order <names>...`
 ### Arguments:
 
 - &lt;names&gt; - Source names in priority order (first wins) (type: string)
-
-## @package source where - Report which source would resolve a ref, without installing
-
-Usage: `@package source where <ref>`
-
-### Arguments:
-
-- &lt;ref&gt; - Reference to resolve: a filesystem path, a catalog short name, or a feed specifier. (type: string)
 
 ## @package source remove - Remove an install source
 
