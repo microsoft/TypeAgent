@@ -30,6 +30,9 @@ export type BridgeToWebviewMessage =
           connected: boolean;
           sessionId?: string;
           sessionName?: string;
+          // Agent-server endpoint (host:port), shown in the connected
+          // indicator's tooltip so the user can confirm the target server.
+          endpoint?: string;
       }
     | { type: "sessionChanged"; sessionId: string; sessionName: string }
     | {

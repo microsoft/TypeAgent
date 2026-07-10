@@ -1,0 +1,1462 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<!--
+  Prototype: quieter alternatives to the conversation-bar "Connected · N client"
+  status pill.
+
+  Standalone preview (open directly in a browser) — NOT shipped. It reuses the
+  real chat-ui conversation-bar markup + CSS (copied verbatim from
+  packages/chat-ui/styles/chat.css) so each candidate reads exactly as it would
+  in the VS Code shell. Six candidates plus the current pill (as a baseline) are
+  shown so the loud green pill can be compared against lower-weight options.
+
+  Controls (top toolbar):
+    - State toggle .... flip every live bar between Connected ×1 / ×3 /
+                        Connecting / Disconnected to compare candidates in the
+                        same state.
+    - Theme toggle .... light vs. approximate VS Code dark.
+
+  The "connect icon + count badge" (Candidate 1) is the idea called out in the
+  request; the others explore progressively lighter footprints.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connection status — pill alternatives</title>
+    <style>
+      /* ============================================================
+         Page chrome (mock-only, not part of chat-ui)
+         ============================================================ */
+      :root {
+        --page-bg: #f3f3f3;
+        --page-fg: #1f1f1f;
+        --page-muted: #616161;
+        --card-bg: #ffffff;
+        --card-border: #e0e0e0;
+        --accent: #7b61ff;
+      }
+      body.theme-dark {
+        --page-bg: #1e1e1e;
+        --page-fg: #cccccc;
+        --page-muted: #9d9d9d;
+        --card-bg: #252526;
+        --card-border: #333333;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 24px 28px 80px;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: var(--page-bg);
+        color: var(--page-fg);
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 34px 0 4px;
+        border-bottom: 1px solid var(--card-border);
+        padding-bottom: 6px;
+      }
+      p.lead {
+        margin: 0 0 16px;
+        color: var(--page-muted);
+        font-size: 13px;
+        max-width: 820px;
+      }
+      .toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 14px;
+        align-items: center;
+        padding: 10px 0;
+        background: var(--page-bg);
+        border-bottom: 1px solid var(--card-border);
+        margin-bottom: 8px;
+      }
+      .toolbar .group {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .toolbar .group-label {
+        font-size: 12px;
+        color: var(--page-muted);
+      }
+      .toolbar button {
+        font: inherit;
+        font-size: 13px;
+        padding: 5px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--card-border);
+        background: var(--card-bg);
+        color: var(--page-fg);
+        cursor: pointer;
+      }
+      .toolbar button:hover {
+        border-color: var(--accent);
+      }
+      .toolbar button.active {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--accent);
+        font-weight: 600;
+      }
+
+      .callout {
+        max-width: 820px;
+        margin: 8px 0 4px;
+        padding: 10px 14px;
+        border: 1px solid var(--card-border);
+        border-left: 3px solid var(--accent);
+        border-radius: 6px;
+        background: var(--card-bg);
+        font-size: 12.5px;
+        line-height: 1.55;
+      }
+      .callout code {
+        background: rgba(127, 127, 127, 0.16);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 11px;
+      }
+
+      /* One candidate = heading + blurb + live bar on a card. */
+      .candidate {
+        margin: 16px 0;
+        max-width: 820px;
+      }
+      .candidate h3 {
+        font-size: 13.5px;
+        margin: 0 0 2px;
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .candidate h3 .tag {
+        font-size: 10.5px;
+        font-weight: 600;
+        color: var(--accent);
+        border: 1px solid var(--accent);
+        border-radius: 999px;
+        padding: 0 7px;
+        line-height: 16px;
+      }
+      .candidate .blurb {
+        font-size: 12px;
+        color: var(--page-muted);
+        margin: 0 0 8px;
+        line-height: 1.5;
+      }
+      .surface {
+        border: 1px solid var(--card-border);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      /* State matrix (compact, indicator-only). */
+      .cx-matrix {
+        display: grid;
+        grid-template-columns: 132px repeat(4, 1fr);
+        gap: 6px;
+        align-items: stretch;
+        max-width: 820px;
+        margin-top: 6px;
+      }
+      .cx-matrix .cx-colhead {
+        font-size: 11px;
+        color: var(--page-muted);
+        text-align: center;
+        padding-bottom: 2px;
+      }
+      .cx-matrix .cx-rowhead {
+        font-size: 12px;
+        color: var(--page-fg);
+        display: flex;
+        align-items: center;
+      }
+      .cx-cell {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 10px;
+        min-height: 38px;
+        background: var(--chat-conversation-background);
+        border: 1px solid var(--card-border);
+        border-radius: 6px;
+      }
+
+      /* ============================================================
+         Host theme token mappings (copied from the shells)
+         Light = chat-ui defaults. Dark = approximate VS Code dark.
+         ============================================================ */
+      body {
+        --chat-conversation-background: #f5f5f5;
+        --chat-conversation-border: #d0d0d0;
+        --chat-conversation-foreground: #1f1f1f;
+        --chat-conversation-muted-foreground: #666;
+        --chat-conversation-success-foreground: #16825d;
+        --chat-conversation-error-foreground: #c42b1c;
+        --chat-conversation-warning-foreground: #b26a00;
+        --chat-conversation-status-foreground: #fff;
+        --chat-conversation-button-background: #e8e8e8;
+        --chat-conversation-button-foreground: #1f1f1f;
+        --chat-conversation-button-border: transparent;
+        --chat-conversation-button-hover-background: #dcdcdc;
+        --chat-conversation-link-active-foreground: #0066bf;
+        --chat-conversation-focus-border: #7b61ff;
+      }
+      body.theme-dark {
+        --chat-conversation-background: #252526;
+        --chat-conversation-border: #2b2b2b;
+        --chat-conversation-foreground: #cccccc;
+        --chat-conversation-muted-foreground: #9d9d9d;
+        --chat-conversation-button-background: #313131;
+        --chat-conversation-button-foreground: #cccccc;
+        --chat-conversation-button-border: #3c3c3c;
+        --chat-conversation-button-hover-background: #3c3c3c;
+        --chat-conversation-link-active-foreground: #4daafc;
+        --chat-conversation-focus-border: #7b61ff;
+      }
+
+      /* ============================================================
+         chat-ui rules — copied verbatim from
+         packages/chat-ui/styles/chat.css (conversation bar + baseline
+         status pill). These style both the reference bar and every
+         candidate's surrounding chrome.
+         ============================================================ */
+      .conversation-name-bar {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 31px;
+        padding: 5px 8px;
+        background: var(--chat-conversation-background, #f5f5f5);
+        color: var(--chat-conversation-foreground, #1f1f1f);
+        font-family: inherit;
+      }
+      .conversation-name-label {
+        flex-shrink: 0;
+        color: var(--chat-conversation-muted-foreground, #666);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .conversation-name-btn {
+        min-width: 0;
+        flex: 1;
+        border: 0;
+        background: transparent;
+        color: var(--chat-conversation-foreground, #1f1f1f);
+        cursor: pointer;
+        overflow: hidden;
+        padding: 2px 4px;
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: inherit;
+        font-size: 12px;
+      }
+      .conversation-name-btn:hover {
+        color: var(--chat-conversation-link-active-foreground, #0066bf);
+      }
+      .conversation-actions {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .conversation-action-btn {
+        border: 1px solid var(--chat-conversation-button-border, transparent);
+        border-radius: 4px;
+        background: var(--chat-conversation-button-background, #e8e8e8);
+        color: var(--chat-conversation-button-foreground, #1f1f1f);
+        cursor: pointer;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-family: inherit;
+        font-size: 11px;
+        line-height: 1.2;
+      }
+      .conversation-action-btn:hover {
+        background: var(--chat-conversation-button-hover-background, #dcdcdc);
+      }
+
+      /* Baseline pill (the current design) — verbatim from chat.css. */
+      .conversation-status-summary {
+        flex-shrink: 0;
+        max-width: 55%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding: 2px 7px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--chat-conversation-muted-foreground, #666);
+        white-space: nowrap;
+      }
+      .conversation-status-summary.connected {
+        background: var(--chat-conversation-success-foreground, #16825d);
+      }
+      .conversation-status-summary.disconnected {
+        background: var(--chat-conversation-error-foreground, #c42b1c);
+      }
+      .conversation-status-summary.connecting {
+        background: var(--chat-conversation-warning-foreground, #b26a00);
+      }
+      .conversation-status-summary.connected,
+      .conversation-status-summary.disconnected,
+      .conversation-status-summary.connecting {
+        color: var(--chat-conversation-status-foreground, #fff);
+      }
+
+      /* ============================================================
+         Candidate styles (prototype-only — the bits that would move
+         into chat.css if one is adopted). Prefixed .cx-* so they never
+         collide with real chat-ui class names.
+         ============================================================ */
+
+      /* Shared inline-SVG icon box. SVG strokes use currentColor so state
+         tint is driven entirely by the parent's `color`. */
+      .cx-ico {
+        width: 16px;
+        height: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+      .cx-ico svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      /* Generic state tint (color drives icon stroke / dot / border via
+         currentColor). Chip variant overrides with a filled background. */
+      .cx-connect-btn.is-connected .cx-ico,
+      .cx-icononly.is-connected,
+      .cx-dotcount.is-connected,
+      .cx-ghost.is-connected,
+      .cx-expand.is-connected {
+        color: var(--chat-conversation-success-foreground, #16825d);
+      }
+      .cx-connect-btn.is-disconnected .cx-ico,
+      .cx-icononly.is-disconnected,
+      .cx-dotcount.is-disconnected,
+      .cx-ghost.is-disconnected,
+      .cx-expand.is-disconnected {
+        color: var(--chat-conversation-error-foreground, #c42b1c);
+      }
+      .cx-connect-btn.is-connecting .cx-ico,
+      .cx-icononly.is-connecting,
+      .cx-dotcount.is-connecting,
+      .cx-ghost.is-connecting,
+      .cx-expand.is-connecting {
+        color: var(--chat-conversation-warning-foreground, #b26a00);
+      }
+
+      @keyframes cx-pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.3;
+        }
+      }
+      .cx-pulse {
+        animation: cx-pulse 1.1s ease-in-out infinite;
+      }
+
+      /* ---- Candidate 1: connect icon button + count badge --------------- */
+      .cx-connect-btn {
+        position: relative;
+        overflow: visible;
+      }
+      .cx-badge {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        min-width: 15px;
+        height: 15px;
+        padding: 0 4px;
+        border-radius: 999px;
+        background: var(--chat-conversation-success-foreground, #16825d);
+        color: #fff;
+        font-size: 9px;
+        font-weight: 700;
+        line-height: 15px;
+        text-align: center;
+        /* punch-out ring so the badge reads as floating above the toolbar */
+        border: 1.5px solid var(--chat-conversation-background, #f5f5f5);
+      }
+
+      /* ---- Candidate 2: status dot + count (no background) -------------- */
+      .cx-dotcount {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        line-height: 1;
+      }
+      .cx-dotcount .cx-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: 0 0 auto;
+      }
+      .cx-dotcount .cx-count {
+        font-weight: 600;
+        color: var(--chat-conversation-foreground, #1f1f1f);
+      }
+
+      /* ---- Candidate 3: ghost / outline pill ---------------------------- */
+      .cx-ghost {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 1px 9px;
+        border-radius: 999px;
+        border: 1px solid currentColor;
+        background: transparent;
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      .cx-ghost .cx-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: 0 0 auto;
+      }
+      .cx-ghost .cx-label {
+        color: var(--chat-conversation-muted-foreground, #666);
+      }
+
+      /* ---- Candidate 4: icon only, color-coded (count in tooltip) ------- */
+      .cx-icononly {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        background: transparent;
+        padding: 3px;
+        border-radius: 4px;
+        cursor: pointer;
+        color: inherit;
+      }
+      .cx-icononly:hover {
+        background: var(--chat-conversation-button-hover-background, #dcdcdc);
+      }
+
+      /* ---- Candidate 5: compact chip, icon + count (no word) ------------ */
+      .cx-chip {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #fff;
+      }
+      .cx-chip .cx-ico {
+        width: 13px;
+        height: 13px;
+      }
+      .cx-chip.is-connected {
+        background: var(--chat-conversation-success-foreground, #16825d);
+      }
+      .cx-chip.is-disconnected {
+        background: var(--chat-conversation-error-foreground, #c42b1c);
+      }
+      .cx-chip.is-connecting {
+        background: var(--chat-conversation-warning-foreground, #b26a00);
+      }
+
+      /* ---- Candidate 6: dot that expands to a label on hover/focus ------ */
+      .cx-expand {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid transparent;
+        background: transparent;
+        border-radius: 999px;
+        padding: 3px 5px;
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+      }
+      .cx-expand .cx-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: 0 0 auto;
+      }
+      .cx-expand .cx-label {
+        max-width: 0;
+        opacity: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        color: var(--chat-conversation-foreground, #1f1f1f);
+        font-size: 11px;
+        transition:
+          max-width 0.25s ease,
+          opacity 0.2s ease,
+          margin 0.25s ease;
+      }
+      .cx-expand:hover,
+      .cx-expand:focus-visible {
+        border-color: currentColor;
+        outline: none;
+      }
+      .cx-expand:hover .cx-label,
+      .cx-expand:focus-visible .cx-label {
+        max-width: 160px;
+        opacity: 1;
+        margin-left: 6px;
+      }
+
+      /* ============================================================
+         Refinement: candidates 1 & 6 reworked as AMBIENT STATUS.
+         Never a <button>: no hover highlight, default cursor, no
+         focus ring — and placed away from the .conversation-actions
+         cluster so nothing reads as an extra button.
+         ============================================================ */
+      .cx-status {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        cursor: default;
+        user-select: none;
+      }
+
+      /* 1 · plug icon + count badge, static (no button chrome). */
+      .cx-badge-status {
+        position: relative;
+        padding: 2px;
+        color: inherit;
+      }
+      .cx-badge-status.is-connected .cx-ico {
+        color: var(--chat-conversation-success-foreground, #16825d);
+      }
+      .cx-badge-status.is-disconnected .cx-ico {
+        color: var(--chat-conversation-error-foreground, #c42b1c);
+      }
+      .cx-badge-status.is-connecting .cx-ico {
+        color: var(--chat-conversation-warning-foreground, #b26a00);
+      }
+
+      /* 6 · dot → expand on hover, static (no button chrome). */
+      .cx-expand-static {
+        padding: 2px 3px;
+        border-radius: 999px;
+      }
+      .cx-expand-static .cx-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: 0 0 auto;
+      }
+      .cx-expand-static .cx-label {
+        max-width: 0;
+        opacity: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        color: var(--chat-conversation-foreground, #1f1f1f);
+        font-size: 11px;
+        transition:
+          max-width 0.25s ease,
+          opacity 0.2s ease,
+          margin 0.25s ease;
+      }
+      .cx-expand-static:hover .cx-label {
+        max-width: 160px;
+        opacity: 1;
+        margin-left: 6px;
+      }
+      .cx-expand-static.is-connected {
+        color: var(--chat-conversation-success-foreground, #16825d);
+      }
+      .cx-expand-static.is-disconnected {
+        color: var(--chat-conversation-error-foreground, #c42b1c);
+      }
+      .cx-expand-static.is-connecting {
+        color: var(--chat-conversation-warning-foreground, #b26a00);
+      }
+
+      /* Groups the status with the title (placement: "name"). */
+      .conversation-name-group {
+        min-width: 0;
+        flex: 1;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .conversation-name-group .conversation-name-btn {
+        flex: 1;
+      }
+
+      /* Visual fence between the status and the action buttons
+         (placement: "right-divider"). */
+      .cx-divider {
+        flex: 0 0 auto;
+        width: 1px;
+        align-self: stretch;
+        margin: 4px 2px;
+        background: var(--chat-conversation-border, #d0d0d0);
+      }
+
+      /* ============================================================
+         Refinement 2: retry attempts as a (negative) badge, and the
+         plug becoming a clickable reconnect button once auto-retry
+         has stopped.
+         ============================================================ */
+      .cx-badge.cx-badge-attempt {
+        background: var(--chat-conversation-warning-foreground, #b26a00);
+      }
+      .cx-status-actions {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      /* The plug AS AN ACTION: clickable to reconnect (stopped state). */
+      .cx-connect-action {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        border: 0;
+        background: transparent;
+        padding: 3px;
+        border-radius: 4px;
+        cursor: pointer;
+        color: var(--chat-conversation-error-foreground, #c42b1c);
+      }
+      .cx-connect-action:hover {
+        background: var(--chat-conversation-button-hover-background, #dcdcdc);
+      }
+      .cx-connect-action:focus-visible {
+        outline: 2px solid currentColor;
+        outline-offset: 1px;
+      }
+      .cx-secondary-link {
+        padding: 1px 8px;
+        border: 1px solid currentColor;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--chat-conversation-error-foreground, #c42b1c);
+        font: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .cx-secondary-link:hover {
+        background: var(
+          --chat-connection-action-hover-background,
+          rgba(127, 127, 127, 0.25)
+        );
+      }
+      .action-log {
+        font-size: 11px;
+        color: var(--page-muted);
+        margin: 6px 2px 0;
+        min-height: 14px;
+        font-family: "Cascadia Code", Consolas, monospace;
+      }
+    </style>
+  </head>
+  <body class="theme-light">
+    <div class="toolbar">
+      <strong style="font-size: 13px">Pill alternatives</strong>
+      <span class="group">
+        <span class="group-label">State:</span>
+        <button type="button" data-state="connected-1" class="active">
+          Connected ×1
+        </button>
+        <button type="button" data-state="connected-3">Connected ×3</button>
+        <button type="button" data-state="connecting">Connecting</button>
+        <button type="button" data-state="disconnected">Disconnected</button>
+      </span>
+      <span class="group">
+        <button id="themeBtn" type="button">Switch to dark theme</button>
+      </span>
+    </div>
+
+    <h1>Conversation-bar status — quieter alternatives</h1>
+    <p class="lead">
+      Candidates to replace the current solid green
+      <code>Connected · 1 client</code> pill, which reads a bit large and loud.
+      Every bar below reuses the real conversation-bar markup and CSS. Use the
+      <b>State</b> toggle to flip all candidates at once; use
+      <b>Switch theme</b> to check light vs. VS Code dark. Icon tint carries the
+      state (green = connected, amber = connecting, red = disconnected); the
+      count carries the number of connected clients.
+    </p>
+
+    <div class="callout">
+      <b>Requested idea → Candidate 1.</b> A <code>connect</code> icon with a
+      small badge for the connection count — familiar and compact. Candidates
+      2–6 trade progressively more text/color for a smaller footprint. See the
+      <b>Refinement</b> section for 1 &amp; 6 reworked as <i>ambient status</i>
+      — a plain indicator (not a button), moved away from the rename/delete
+      cluster — since the connected/disconnected state shouldn't look clickable.
+    </div>
+
+    <h2>Reference — current pill</h2>
+    <div id="baselineHost"></div>
+
+    <h2>Candidates</h2>
+    <div id="candidateHost"></div>
+
+    <h2>Refinement — 1 &amp; 6 as ambient status (not buttons)</h2>
+    <p class="lead">
+      You liked <b>1</b> and <b>6</b>, but the connected/disconnected state
+      shouldn't read as clickable. Here both are rendered as a static indicator
+      — a plain <code>&lt;span&gt;</code>, no hover highlight, default cursor —
+      and moved out of the rename/delete cluster so nothing looks like an extra
+      button. Three placements each; the <b>State</b> toggle drives them too.
+    </p>
+    <div id="refineHost"></div>
+
+    <h2>State matrix</h2>
+    <p class="lead">
+      Every candidate across all four states at a glance (indicator only, so the
+      shapes are easy to compare side by side).
+    </p>
+    <div id="matrixHost"></div>
+
+    <h2>Refinement 2 — retry attempts as a badge + an actionable plug</h2>
+    <p class="lead">
+      Extending Candidate 1 to the reconnect states: <b>(1)</b> while auto-retry
+      runs, the attempt count rides the same badge but as a <i>negative</i>
+      number (<code>-1</code>, <code>-3</code>…) so it reads as “trouble” rather
+      than a healthy client count; <b>(2)</b> once auto-retry gives up, the plug
+      itself becomes a clickable reconnect button. Click the plugs below — the
+      fired <code>connectionAction</code> is logged under each bar.
+    </p>
+    <div id="retryHost"></div>
+
+    <script>
+      // ================================================================
+      // Inline SVG icons (Feather / Lucide geometry). currentColor lets
+      // the parent's `color` drive the tint. Kept tiny + stroke-based to
+      // match the crisp codicon look of the real toolbar.
+      // ================================================================
+      const ICON = {
+        // link (connected)
+        link: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
+        // unlink (disconnected)
+        unlink: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18.84 12.25 1.72-1.71h-.02a5.004 5.004 0 0 0-.12-7.07 5.006 5.006 0 0 0-6.95 0l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5.004 5.004 0 0 0 .12 7.07 5.006 5.006 0 0 0 6.95 0l1.71-1.71"/><line x1="8" x2="8" y1="2" y2="5"/><line x1="2" x2="5" y1="8" y2="8"/><line x1="16" x2="16" y1="19" y2="22"/><line x1="19" x2="22" y1="16" y2="16"/></svg>`,
+        // plug (connect affordance)
+        plug: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>`,
+        // unplug (disconnected connect affordance)
+        unplug: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 5 3-3"/><path d="m2 22 3-3"/><path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"/><path d="M7.5 13.5 10 11"/><path d="M10.5 16.5 13 14"/><path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z"/></svg>`,
+      };
+
+      // ================================================================
+      // State model. `label` mirrors the text the current pill shows.
+      // ================================================================
+      const STATES = {
+        "connected-1": {
+          kind: "connected",
+          clientCount: 1,
+          label: "Connected · 1 client",
+        },
+        "connected-3": {
+          kind: "connected",
+          clientCount: 3,
+          label: "Connected · 3 clients",
+        },
+        connecting: { kind: "connecting", label: "Connecting…" },
+        disconnected: { kind: "disconnected", label: "Disconnected" },
+      };
+      const STATE_ORDER = [
+        "connected-1",
+        "connected-3",
+        "connecting",
+        "disconnected",
+      ];
+      const STATE_HEAD = {
+        "connected-1": "Connected ×1",
+        "connected-3": "Connected ×3",
+        connecting: "Connecting",
+        disconnected: "Disconnected",
+      };
+
+      function el(tag, className) {
+        const e = document.createElement(tag);
+        if (className) e.className = className;
+        return e;
+      }
+      function resetState(node) {
+        node.classList.remove(
+          "is-connected",
+          "is-connecting",
+          "is-disconnected",
+        );
+      }
+
+      // ================================================================
+      // Candidates. Each create() returns { root, update, leadingAction }.
+      //   root ............ the status element to place in the bar.
+      //   update(state) ... paints the element for a given state.
+      //   leadingAction ... true → place it as the first .conversation-actions
+      //                     button (inline with rename/delete) instead of in
+      //                     the status slot before the actions group.
+      // ================================================================
+
+      // Baseline — the current pill, using the real chat-ui classes.
+      function ctlBaseline() {
+        const pill = el("span", "conversation-status-summary");
+        pill.setAttribute("aria-live", "polite");
+        function update(s) {
+          pill.className = "conversation-status-summary";
+          if (s.kind === "connected") {
+            pill.classList.add("connected");
+            pill.textContent = s.label;
+          } else if (s.kind === "connecting") {
+            pill.classList.add("connecting");
+            pill.textContent = "Connecting";
+          } else {
+            pill.classList.add("disconnected");
+            pill.textContent = "Disconnected";
+          }
+        }
+        return { root: pill, update };
+      }
+
+      // Candidate 1 — connect icon button + count badge (requested idea).
+      function ctlConnectBadge() {
+        const btn = el("button", "conversation-action-btn cx-connect-btn");
+        btn.type = "button";
+        const ico = el("span", "cx-ico");
+        const badge = el("span", "cx-badge");
+        btn.append(ico, badge);
+        function update(s) {
+          resetState(btn);
+          ico.classList.remove("cx-pulse");
+          if (s.kind === "connected") {
+            btn.classList.add("is-connected");
+            ico.innerHTML = ICON.plug;
+            badge.style.display = "";
+            badge.textContent = String(s.clientCount);
+            btn.title = s.label;
+          } else if (s.kind === "connecting") {
+            btn.classList.add("is-connecting");
+            ico.innerHTML = ICON.plug;
+            ico.classList.add("cx-pulse");
+            badge.style.display = "none";
+            btn.title = "Connecting…";
+          } else {
+            btn.classList.add("is-disconnected");
+            ico.innerHTML = ICON.unplug;
+            badge.style.display = "none";
+            btn.title = "Disconnected — click to connect";
+          }
+        }
+        return { root: btn, update, leadingAction: true };
+      }
+
+      // Candidate 2 — status dot + count, no background.
+      function ctlDotCount() {
+        const wrap = el("span", "cx-dotcount");
+        wrap.setAttribute("aria-live", "polite");
+        const dot = el("span", "cx-dot");
+        const count = el("span", "cx-count");
+        wrap.append(dot, count);
+        function update(s) {
+          resetState(wrap);
+          dot.classList.remove("cx-pulse");
+          if (s.kind === "connected") {
+            wrap.classList.add("is-connected");
+            count.style.display = "";
+            count.textContent = String(s.clientCount);
+            wrap.title = s.label;
+          } else if (s.kind === "connecting") {
+            wrap.classList.add("is-connecting");
+            dot.classList.add("cx-pulse");
+            count.style.display = "none";
+            wrap.title = "Connecting…";
+          } else {
+            wrap.classList.add("is-disconnected");
+            count.style.display = "none";
+            wrap.title = "Disconnected";
+          }
+        }
+        return { root: wrap, update };
+      }
+
+      // Candidate 3 — ghost / outline pill (colored border + dot, muted text).
+      function ctlGhost() {
+        const pill = el("span", "cx-ghost");
+        pill.setAttribute("aria-live", "polite");
+        const dot = el("span", "cx-dot");
+        const label = el("span", "cx-label");
+        pill.append(dot, label);
+        function update(s) {
+          resetState(pill);
+          dot.classList.remove("cx-pulse");
+          if (s.kind === "connected") {
+            pill.classList.add("is-connected");
+            label.textContent = "Connected · " + s.clientCount;
+            pill.title = s.label;
+          } else if (s.kind === "connecting") {
+            pill.classList.add("is-connecting");
+            dot.classList.add("cx-pulse");
+            label.textContent = "Connecting…";
+            pill.title = "Connecting…";
+          } else {
+            pill.classList.add("is-disconnected");
+            label.textContent = "Disconnected";
+            pill.title = "Disconnected";
+          }
+        }
+        return { root: pill, update };
+      }
+
+      // Candidate 4 — icon only, color-coded (count lives in the tooltip).
+      function ctlIconOnly() {
+        const btn = el("button", "cx-icononly");
+        btn.type = "button";
+        const ico = el("span", "cx-ico");
+        btn.appendChild(ico);
+        function update(s) {
+          resetState(btn);
+          ico.classList.remove("cx-pulse");
+          if (s.kind === "connected") {
+            btn.classList.add("is-connected");
+            ico.innerHTML = ICON.link;
+            btn.title = s.label;
+          } else if (s.kind === "connecting") {
+            btn.classList.add("is-connecting");
+            ico.innerHTML = ICON.link;
+            ico.classList.add("cx-pulse");
+            btn.title = "Connecting…";
+          } else {
+            btn.classList.add("is-disconnected");
+            ico.innerHTML = ICON.unlink;
+            btn.title = "Disconnected — click to connect";
+          }
+        }
+        return { root: btn, update };
+      }
+
+      // Candidate 5 — compact chip, icon + count, drops the word "Connected".
+      function ctlChip() {
+        const chip = el("span", "cx-chip");
+        chip.setAttribute("aria-live", "polite");
+        const ico = el("span", "cx-ico");
+        const count = el("span", "cx-count");
+        chip.append(ico, count);
+        function update(s) {
+          resetState(chip);
+          ico.classList.remove("cx-pulse");
+          if (s.kind === "connected") {
+            chip.classList.add("is-connected");
+            ico.innerHTML = ICON.link;
+            count.style.display = "";
+            count.textContent = String(s.clientCount);
+            chip.title = s.label;
+          } else if (s.kind === "connecting") {
+            chip.classList.add("is-connecting");
+            ico.innerHTML = ICON.link;
+            ico.classList.add("cx-pulse");
+            count.style.display = "none";
+            chip.title = "Connecting…";
+          } else {
+            chip.classList.add("is-disconnected");
+            ico.innerHTML = ICON.unlink;
+            count.style.display = "none";
+            chip.title = "Disconnected";
+          }
+        }
+        return { root: chip, update };
+      }
+
+      // Candidate 6 — dot that expands to the full label on hover / focus.
+      function ctlExpand() {
+        const pill = el("button", "cx-expand");
+        pill.type = "button";
+        pill.setAttribute("aria-live", "polite");
+        const dot = el("span", "cx-dot");
+        const label = el("span", "cx-label");
+        pill.append(dot, label);
+        function update(s) {
+          resetState(pill);
+          dot.classList.remove("cx-pulse");
+          if (s.kind === "connected") {
+            pill.classList.add("is-connected");
+            label.textContent = s.label;
+            pill.title = s.label;
+          } else if (s.kind === "connecting") {
+            pill.classList.add("is-connecting");
+            dot.classList.add("cx-pulse");
+            label.textContent = "Connecting…";
+            pill.title = "Connecting…";
+          } else {
+            pill.classList.add("is-disconnected");
+            label.textContent = "Disconnected";
+            pill.title = "Disconnected — click to connect";
+          }
+        }
+        return { root: pill, update };
+      }
+
+      const CANDIDATES = [
+        {
+          tag: "1",
+          name: "Connect icon + count badge",
+          blurb:
+            "A plug button inline with rename/delete, badged with the connection count. Icon tints by state; click to reconnect when down. Requested idea.",
+          create: ctlConnectBadge,
+        },
+        {
+          tag: "2",
+          name: "Status dot + count",
+          blurb:
+            "Bare colored dot plus the client number — no background at all. Lowest visual weight; full status in the tooltip.",
+          create: ctlDotCount,
+        },
+        {
+          tag: "3",
+          name: "Ghost / outline pill",
+          blurb:
+            "Same words as today but transparent fill with a thin colored border and dot, so it stops shouting.",
+          create: ctlGhost,
+        },
+        {
+          tag: "4",
+          name: "Icon only (tooltip count)",
+          blurb:
+            "Just a link / broken-link glyph, tinted by state. Cleanest option; the count moves entirely into the tooltip.",
+          create: ctlIconOnly,
+        },
+        {
+          tag: "5",
+          name: "Compact chip (icon + count)",
+          blurb:
+            "Keeps the at-a-glance color fill but drops the word — just a glyph and the number, so it's far narrower.",
+          create: ctlChip,
+        },
+        {
+          tag: "6",
+          name: "Dot, expand on hover",
+          blurb:
+            "A single dot by default; hover or focus reveals the full 'Connected · N clients' label. Compact but fully discoverable.",
+          create: ctlExpand,
+        },
+      ];
+
+      // ================================================================
+      // Build a full conversation bar around a control.
+      // ================================================================
+      function buildBar(name, ctl) {
+        const bar = el("div", "conversation-name-bar");
+        const label = el("span", "conversation-name-label");
+        label.textContent = "Conversation";
+        const nameBtn = el("button", "conversation-name-btn");
+        nameBtn.type = "button";
+        nameBtn.title = "Search conversations";
+        nameBtn.textContent = name;
+        const actions = el("div", "conversation-actions");
+        for (const [glyph, title] of [
+          ["✎", "Rename conversation"],
+          ["⌫", "Delete conversation"],
+        ]) {
+          const b = el("button", "conversation-action-btn");
+          b.type = "button";
+          b.title = title;
+          b.textContent = glyph;
+          actions.appendChild(b);
+        }
+        bar.append(label, nameBtn);
+        if (ctl.leadingAction) {
+          actions.insertBefore(ctl.root, actions.firstChild);
+          bar.appendChild(actions);
+        } else {
+          bar.appendChild(ctl.root);
+          bar.appendChild(actions);
+        }
+        return bar;
+      }
+
+      // ================================================================
+      // Render everything + wire the live state toggle.
+      // ================================================================
+      const liveUpdaters = [];
+      let currentKey = "connected-1";
+
+      // Reference bar.
+      (function () {
+        const ctl = ctlBaseline();
+        liveUpdaters.push(ctl.update);
+        const wrap = el("div", "candidate");
+        const h3 = el("h3");
+        h3.innerHTML = `<span class="tag">now</span> Current pill`;
+        const blurb = el("p", "blurb");
+        blurb.textContent =
+          "The shipping design: a solid, fully-colored pill with the full status text.";
+        const surface = el("div", "surface");
+        surface.appendChild(buildBar("VS Code", ctl));
+        wrap.append(h3, blurb, surface);
+        document.getElementById("baselineHost").appendChild(wrap);
+      })();
+
+      // Candidate bars.
+      const candidateHost = document.getElementById("candidateHost");
+      for (const cand of CANDIDATES) {
+        const ctl = cand.create();
+        liveUpdaters.push(ctl.update);
+        const wrap = el("div", "candidate");
+        const h3 = el("h3");
+        h3.innerHTML = `<span class="tag">${cand.tag}</span> ${cand.name}`;
+        const blurb = el("p", "blurb");
+        blurb.textContent = cand.blurb;
+        const surface = el("div", "surface");
+        surface.appendChild(buildBar("VS Code", ctl));
+        wrap.append(h3, blurb, surface);
+        candidateHost.appendChild(wrap);
+      }
+
+      // ================================================================
+      // Refinement: candidates 1 & 6 reworked as AMBIENT STATUS — a plain
+      // <span> (never a <button>), no hover highlight, default cursor —
+      // and placed away from the rename/delete buttons so nothing reads as
+      // an extra button.
+      // ================================================================
+
+      // 1 · plug icon + count badge, static (mirrors ctlConnectBadge, no button).
+      function ctlBadgeStatic() {
+        const root = el("span", "cx-status cx-badge-status");
+        root.setAttribute("aria-live", "polite");
+        const ico = el("span", "cx-ico");
+        const badge = el("span", "cx-badge");
+        root.append(ico, badge);
+        function update(s) {
+          resetState(root);
+          ico.classList.remove("cx-pulse");
+          if (s.kind === "connected") {
+            root.classList.add("is-connected");
+            ico.innerHTML = ICON.plug;
+            badge.style.display = "";
+            badge.textContent = String(s.clientCount);
+            root.title = s.label;
+          } else if (s.kind === "connecting") {
+            root.classList.add("is-connecting");
+            ico.innerHTML = ICON.plug;
+            ico.classList.add("cx-pulse");
+            badge.style.display = "none";
+            root.title = "Connecting…";
+          } else {
+            root.classList.add("is-disconnected");
+            ico.innerHTML = ICON.unplug;
+            badge.style.display = "none";
+            root.title = "Disconnected";
+          }
+        }
+        return { root, update };
+      }
+
+      // 6 · dot → expand on hover, static (mirrors ctlExpand, no button).
+      function ctlExpandStatic() {
+        const root = el("span", "cx-status cx-expand-static");
+        root.setAttribute("aria-live", "polite");
+        const dot = el("span", "cx-dot");
+        const label = el("span", "cx-label");
+        root.append(dot, label);
+        function update(s) {
+          resetState(root);
+          dot.classList.remove("cx-pulse");
+          if (s.kind === "connected") {
+            root.classList.add("is-connected");
+            label.textContent = s.label;
+            root.title = s.label;
+          } else if (s.kind === "connecting") {
+            root.classList.add("is-connecting");
+            dot.classList.add("cx-pulse");
+            label.textContent = "Connecting…";
+            root.title = "Connecting…";
+          } else {
+            root.classList.add("is-disconnected");
+            label.textContent = "Disconnected";
+            root.title = "Disconnected";
+          }
+        }
+        return { root, update };
+      }
+
+      // Build a bar with the status placed AWAY from the action buttons.
+      //   "left" .......... leading indicator, right after the label
+      //   "name" .......... presence dot grouped with the conversation title
+      //   "right-divider"   right side, fenced off from the buttons by a rule
+      function buildBarPlaced(name, ctl, placement) {
+        const bar = el("div", "conversation-name-bar");
+        const label = el("span", "conversation-name-label");
+        label.textContent = "Conversation";
+        const nameBtn = el("button", "conversation-name-btn");
+        nameBtn.type = "button";
+        nameBtn.title = "Search conversations";
+        nameBtn.textContent = name;
+        const actions = el("div", "conversation-actions");
+        for (const [glyph, title] of [
+          ["✎", "Rename conversation"],
+          ["⌫", "Delete conversation"],
+        ]) {
+          const b = el("button", "conversation-action-btn");
+          b.type = "button";
+          b.title = title;
+          b.textContent = glyph;
+          actions.appendChild(b);
+        }
+        bar.appendChild(label);
+        if (placement === "left") {
+          bar.append(ctl.root, nameBtn, actions);
+        } else if (placement === "name") {
+          const group = el("div", "conversation-name-group");
+          group.append(ctl.root, nameBtn);
+          bar.append(group, actions);
+        } else {
+          const divider = el("span", "cx-divider");
+          bar.append(nameBtn, ctl.root, divider, actions);
+        }
+        return bar;
+      }
+
+      const REFINEMENTS = [
+        {
+          tag: "1",
+          name: "Connect icon + count badge — as ambient status",
+          blurb:
+            "The plug icon + count badge from Candidate 1, but a plain <span>, not a <button>: no hover highlight, default cursor. The three placements below keep it clear of the rename/delete buttons.",
+          create: ctlBadgeStatic,
+        },
+        {
+          tag: "6",
+          name: "Dot → expand on hover — as ambient status",
+          blurb:
+            "The Candidate 6 dot that reveals the label on hover, as a plain <span>, not a <button>: no button chrome, default cursor.",
+          create: ctlExpandStatic,
+        },
+      ];
+      const PLACEMENTS = [
+        [
+          "left",
+          "Leading",
+          "Far left, right after the “Conversation” label — nowhere near the buttons.",
+        ],
+        [
+          "name",
+          "Beside the title",
+          "A presence dot grouped with the conversation name, like an online / offline marker.",
+        ],
+        [
+          "right-divider",
+          "Right, fenced",
+          "Kept on the right but separated from the rename/delete buttons by a thin divider.",
+        ],
+      ];
+
+      const refineHost = document.getElementById("refineHost");
+      for (const ref of REFINEMENTS) {
+        const wrap = el("div", "candidate");
+        const h3 = el("h3");
+        h3.innerHTML = `<span class="tag">${ref.tag}</span> ${ref.name}`;
+        const blurb = el("p", "blurb");
+        blurb.textContent = ref.blurb;
+        wrap.append(h3, blurb);
+        for (const [placement, plabel, pdesc] of PLACEMENTS) {
+          const cap = el("p", "blurb");
+          cap.style.margin = "12px 0 4px";
+          cap.innerHTML = `<b>${plabel}.</b> ${pdesc}`;
+          const ctl = ref.create();
+          liveUpdaters.push(ctl.update);
+          const surface = el("div", "surface");
+          surface.appendChild(buildBarPlaced("VS Code", ctl, placement));
+          wrap.append(cap, surface);
+        }
+        refineHost.appendChild(wrap);
+      }
+
+      // State matrix (indicator-only, static per cell).
+      (function () {
+        const matrix = el("div", "cx-matrix");
+        matrix.appendChild(el("div", "cx-colhead")); // corner
+        for (const key of STATE_ORDER) {
+          const head = el("div", "cx-colhead");
+          head.textContent = STATE_HEAD[key];
+          matrix.appendChild(head);
+        }
+        const rows = [{ tag: "now", name: "Current pill", create: ctlBaseline }].concat(
+          CANDIDATES,
+        );
+        for (const row of rows) {
+          const head = el("div", "cx-rowhead");
+          head.textContent = `${row.tag}. ${row.name}`;
+          matrix.appendChild(head);
+          for (const key of STATE_ORDER) {
+            const cell = el("div", "cx-cell");
+            const ctl = row.create();
+            ctl.update(STATES[key]);
+            cell.appendChild(ctl.root);
+            matrix.appendChild(cell);
+          }
+        }
+        document.getElementById("matrixHost").appendChild(matrix);
+      })();
+
+      function setState(key) {
+        currentKey = key;
+        const s = STATES[key];
+        for (const u of liveUpdaters) u(s);
+        document.querySelectorAll(".toolbar [data-state]").forEach((b) => {
+          b.classList.toggle("active", b.dataset.state === key);
+        });
+      }
+      document.querySelectorAll(".toolbar [data-state]").forEach((b) => {
+        b.addEventListener("click", () => setState(b.dataset.state));
+      });
+      setState(currentKey);
+
+      // Theme toggle.
+      const themeBtn = document.getElementById("themeBtn");
+      themeBtn.addEventListener("click", () => {
+        const dark = document.body.classList.toggle("theme-dark");
+        document.body.classList.toggle("theme-light", !dark);
+        themeBtn.textContent = dark
+          ? "Switch to light theme"
+          : "Switch to dark theme";
+      });
+
+      // ================================================================
+      // Refinement 2: retry attempts as a (negative) badge, and the plug
+      // becoming a clickable reconnect button once auto-retry has stopped.
+      // ================================================================
+      (function () {
+        const host = document.getElementById("retryHost");
+        if (!host) return;
+
+        function plugIcon(pulse) {
+          const i = el("span", "cx-ico" + (pulse ? " cx-pulse" : ""));
+          i.innerHTML = ICON.plug;
+          return i;
+        }
+
+        // Ambient (non-clickable) plug + optional badge.
+        function ambient(stateClass, badgeText, attempt, pulse, title) {
+          const root = el("span", "cx-status cx-badge-status " + stateClass);
+          root.title = title;
+          root.appendChild(plugIcon(pulse));
+          if (badgeText !== null) {
+            const b = el(
+              "span",
+              "cx-badge" + (attempt ? " cx-badge-attempt" : ""),
+            );
+            b.textContent = badgeText;
+            root.appendChild(b);
+          }
+          return root;
+        }
+
+        // Stopped: the plug itself is the reconnect button (+ optional Start).
+        function actionable(withStart, log) {
+          const wrap = el("span", "cx-status-actions");
+          const btn = el("button", "cx-connect-action");
+          btn.type = "button";
+          btn.title = "Disconnected — click to reconnect";
+          btn.appendChild(plugIcon(false));
+          btn.addEventListener("click", () => log("retry"));
+          wrap.appendChild(btn);
+          if (withStart) {
+            const link = el("button", "cx-secondary-link");
+            link.type = "button";
+            link.textContent = "Start server";
+            link.addEventListener("click", (e) => {
+              e.stopPropagation();
+              log("start");
+            });
+            wrap.appendChild(link);
+          }
+          return wrap;
+        }
+
+        const examples = [
+          {
+            cap: "<b>Connected · 1 client</b> — the client count as a normal (positive) green badge.",
+            make: () =>
+              ambient("is-connected", "1", false, false, "Connected · 1 client"),
+          },
+          {
+            cap: '<b>Reconnecting · attempt 1</b> — the attempt count as a <i>negative</i> amber badge (<code>-1</code>), plug pulsing.',
+            make: () =>
+              ambient(
+                "is-connecting",
+                "-1",
+                true,
+                true,
+                "Disconnected — retrying (attempt 1)…",
+              ),
+          },
+          {
+            cap: '<b>Reconnecting · attempt 3</b> — the badge grows more negative as attempts climb (<code>-3</code>).',
+            make: () =>
+              ambient(
+                "is-connecting",
+                "-3",
+                true,
+                true,
+                "Disconnected — retrying in 5s (attempt 3)",
+              ),
+          },
+          {
+            cap: "<b>Stopped · retry</b> — auto-retry gave up, so the plug itself becomes the reconnect button. Click it.",
+            make: (log) => actionable(false, log),
+          },
+          {
+            cap: "<b>Stopped · server down</b> — clickable plug (retry) plus a secondary <b>Start server</b> link.",
+            make: (log) => actionable(true, log),
+          },
+        ];
+
+        for (const ex of examples) {
+          const wrap = el("div", "candidate");
+          const cap = el("p", "blurb");
+          cap.innerHTML = ex.cap;
+          wrap.appendChild(cap);
+          const surface = el("div", "surface");
+          const logEl = el("div", "action-log");
+          const log = (action) => {
+            logEl.textContent = `▸ ${new Date().toLocaleTimeString()} — connectionAction("${action}") fired`;
+          };
+          const ctl = { root: ex.make(log) };
+          surface.appendChild(buildBarPlaced("VS Code", ctl, "right-divider"));
+          wrap.appendChild(surface);
+          wrap.appendChild(logEl);
+          host.appendChild(wrap);
+        }
+      })();
+    </script>
+  </body>
+</html>

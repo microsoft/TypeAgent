@@ -685,6 +685,10 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
 // broadcast from the host.
 let lastConnected = false;
 let demoSuffix: string | undefined;
+// Agent-server endpoint (host:port) surfaced in the connected indicator's
+// tooltip. Cached from `status` messages that carry it so it survives status
+// updates that omit it.
+let serverEndpoint: string | undefined;
 // Reconnect ribbon overlay shown while disconnected. Replaces the old
 // per-attempt error spam in the chat area with a single in-place
 // updating status (countdown, or a "stopped" state with Retry / Start
@@ -701,6 +705,7 @@ function updateConversationBarStatus(): void {
         switching: isSwitching,
         connection: connectionStatus,
         demoSuffix,
+        endpoint: isConnected ? serverEndpoint : undefined,
     });
 }
 
@@ -727,6 +732,9 @@ window.addEventListener("message", (event) => {
     const msg = event.data;
     switch (msg.type) {
         case "status":
+            if (msg.endpoint !== undefined) {
+                serverEndpoint = msg.endpoint;
+            }
             setStatus(msg.connected, msg.sessionId, msg.sessionName);
             if (msg.connected && msg.sessionId) {
                 currentSessionId = msg.sessionId;

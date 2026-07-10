@@ -317,6 +317,7 @@ export class AgentServerBridge {
             connected: this.isConnected,
             sessionId: this.session?.sessionId,
             sessionName: this.session ? this.getDisplayName() : undefined,
+            endpoint: this.currentEndpoint(),
         });
 
         return {
@@ -353,6 +354,23 @@ export class AgentServerBridge {
             this.connectInFlight = undefined;
         });
         return this.connectInFlight;
+    }
+
+    /**
+     * Current agent-server endpoint as `host:port`, parsed from the configured
+     * serverUrl. Surfaced in the webview's connected indicator tooltip so the
+     * user can confirm which server they're attached to. Undefined if the URL
+     * can't be parsed.
+     */
+    private currentEndpoint(): string | undefined {
+        const serverUrl = vscode.workspace
+            .getConfiguration("typeagent")
+            .get<string>("serverUrl", AGENT_SERVER_DEFAULT_URL);
+        try {
+            return new URL(serverUrl).host;
+        } catch {
+            return undefined;
+        }
     }
 
     private async connectImpl(): Promise<void> {
@@ -466,6 +484,7 @@ export class AgentServerBridge {
                 connected: true,
                 sessionId: this.session.sessionId,
                 sessionName: this.getDisplayName(),
+                endpoint: this.currentEndpoint(),
             });
             this.onStatusChanged?.();
             await this.postSessionList();
@@ -1165,6 +1184,7 @@ export class AgentServerBridge {
             connected: this.isConnected,
             sessionId: this.session?.sessionId,
             sessionName: this.session ? this.getDisplayName() : undefined,
+            endpoint: this.currentEndpoint(),
         });
 
         const session = this.session;

@@ -837,6 +837,14 @@ export function initializeInstance(
     const conversationBarEnabled = connect !== undefined;
     ipcMain.handle("conversation-bar-enabled", () => conversationBarEnabled);
 
+    // Endpoint (host:port) of the agent server the shell connects to
+    // (--connect), surfaced in the renderer's connected indicator tooltip so
+    // the user can confirm which server they're attached to. Undefined in
+    // standalone mode (in-process server).
+    const agentServerEndpoint =
+        connect !== undefined ? `localhost:${connect}` : undefined;
+    ipcMain.handle("agent-server-endpoint", () => agentServerEndpoint);
+
     // Watch user-settings.json so that changes made via @settings (e.g. from the
     // CLI or NL) hot-reload shell settings immediately without a restart.
     // The file may not exist yet if the user has never changed a setting.
@@ -1090,6 +1098,7 @@ export function initializeInstance(
         ensureCleanupInstance();
         cleanupConversationIpc();
         ipcMain.removeHandler("conversation-bar-enabled");
+        ipcMain.removeHandler("agent-server-endpoint");
         ipcMain.removeHandler("reconnect-retry");
         ipcMain.removeHandler("reconnect-start-server");
         userSettingsWatcher?.close();
