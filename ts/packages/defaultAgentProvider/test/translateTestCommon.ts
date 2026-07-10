@@ -142,6 +142,7 @@ function isTransientRequestError(error: string | undefined): boolean {
     return (
         msg.includes("no response") || // dropped connection ("fetch: No response")
         msg.includes("connection error") ||
+        msg.includes("terminated") || // undici wrapper for a reset socket ("read ECONNRESET")
         msg.includes("econnreset") ||
         msg.includes("etimedout") ||
         msg.includes("enotfound") ||
