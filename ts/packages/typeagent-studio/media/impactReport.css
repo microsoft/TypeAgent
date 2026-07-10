@@ -92,8 +92,20 @@ body {
 .codicon-arrow-right::before {
   content: "\ea9c";
 }
+.codicon-chevron-up::before {
+  content: "\eab7";
+}
+.codicon-search::before {
+  content: "\ea6d";
+}
 .codicon-list-filter::before {
   content: "\eb83";
+}
+.codicon-filter::before {
+  content: "\eaf1";
+}
+.codicon-filter-filled::before {
+  content: "\ebce";
 }
 .codicon-git-compare::before {
   content: "\eafd";
@@ -633,20 +645,35 @@ body {
   );
 }
 
-/* --- Scrolling content area ---------------------------------------------- */
+/* --- Content area: scrolling body + docked detail pane ------------------- */
 .content {
   flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.content-scroll {
+  flex: 1 1 auto;
   overflow: auto;
+  min-height: 0;
   padding: 0 0 16px;
 }
 
 /* --- Filter segmented control -------------------------------------------- */
 .filters {
   display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px 4px;
+}
+
+.filter-row {
+  display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 4px;
-  padding: 8px 12px 4px;
 }
 
 .filters-label {
@@ -654,9 +681,13 @@ body {
   align-items: center;
   gap: 4px;
   margin-right: 4px;
+  min-width: 52px;
   color: var(--vscode-descriptionForeground);
   font-size: 11px;
 }
+
+/* The utterance filter lives in the Utterance column header (a funnel icon), so
+ * the filter bar carries only the impact/status chips. */
 
 .filter-chip {
   display: inline-flex;
@@ -706,14 +737,111 @@ body {
   cursor: default;
 }
 
-/* A status dot mirrors the row status colour on each chip. The status-* classes
-   set the text colour; the dot fills from currentColor. */
+/* A colour dot mirrors each chip's row colour. The tone-* classes set fixed
+   fills so both the value verdicts and the structural statuses read at a glance. */
 .chip-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex: 0 0 auto;
   background: currentColor;
+}
+
+.chip-dot.tone-regression,
+.chip-dot.tone-lost-match {
+  background: var(--vscode-errorForeground);
+}
+
+.chip-dot.tone-improvement,
+.chip-dot.tone-new-match {
+  background: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+.chip-dot.tone-benign {
+  background: var(--vscode-descriptionForeground);
+}
+
+.chip-dot.tone-changed {
+  background: var(
+    --vscode-charts-yellow,
+    var(--vscode-editorWarning-foreground)
+  );
+}
+
+.chip-dot.tone-unchanged {
+  background: var(--vscode-descriptionForeground);
+  opacity: 0.5;
+}
+
+/* The verdict headline: the primary "did anything regress?" answer. */
+.verdict-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+}
+
+.verdict-banner[hidden] {
+  display: none;
+}
+
+.verdict-banner.is-regression {
+  border-color: var(--vscode-errorForeground);
+  background: var(--vscode-inputValidation-errorBackground, transparent);
+}
+
+.verdict-banner.is-regression .codicon {
+  color: var(--vscode-errorForeground);
+}
+
+.verdict-banner.is-clean .codicon {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+.verdict-headline {
+  font-weight: 600;
+}
+
+.verdict-detail {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+/* The Impact column: the red/green value judgment, as a coloured dot and a
+   lower-case word, kept in its own column beside the structural status. */
+.impact-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.impact-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: currentColor;
+}
+
+.impact-regression {
+  color: var(--vscode-errorForeground);
+}
+
+.impact-improvement {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+}
+
+.impact-benign {
+  color: var(--vscode-descriptionForeground);
+}
+
+.impact-neutral {
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.6;
 }
 
 /* --- Results list (styled like a native tree/list) ----------------------- */
@@ -743,6 +871,111 @@ thead th {
   white-space: nowrap;
 }
 
+/* A clickable, sortable column header. The label and the sort chevron sit on a
+   flex row so the chevron can pin to the far right of the column. */
+thead th.col-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+thead th.col-sortable .th-inner {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+thead th.col-sortable .th-label {
+  vertical-align: middle;
+}
+
+/* The sort chevron and (on the Utterance column) the filter funnel cluster to
+ * the right edge of the header. */
+thead th.col-sortable .th-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 8px;
+}
+
+thead th.col-sortable .sort-arrow {
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+/* The header-embedded utterance filter button, sitting just after the title. */
+thead th.col-sortable .th-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  padding: 2px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 120ms ease-out;
+}
+
+thead th.col-sortable .th-filter .codicon {
+  font-size: 13px;
+}
+
+thead th.col-sortable .th-filter:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-foreground);
+  opacity: 1;
+}
+
+thead th.col-sortable .th-filter:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+  opacity: 1;
+}
+
+/* An applied filter keeps the funnel lit in the link colour. */
+thead th.col-sortable .th-filter.is-active {
+  color: var(--vscode-textLink-foreground);
+  opacity: 1;
+}
+
+/* The idle chevron only hints at sortability — faint until hover or active. */
+thead th.col-sortable .sort-arrow-idle {
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+thead th.col-sortable:hover .sort-arrow-idle,
+thead th.col-sortable:focus-visible .sort-arrow-idle {
+  opacity: 0.5;
+}
+
+thead th.col-sortable:hover {
+  color: var(--vscode-foreground);
+}
+
+thead th.col-sortable.is-sorted {
+  color: var(--vscode-foreground);
+}
+
+thead th.col-sortable.is-sorted .sort-arrow {
+  color: var(--vscode-textLink-foreground);
+}
+
+thead th.col-sortable:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  thead th.col-sortable .sort-arrow-idle,
+  thead th.col-sortable .th-filter {
+    transition: none;
+  }
+}
+
 tbody td {
   padding: 0 10px;
   height: var(--ta-row-height);
@@ -759,6 +992,10 @@ tbody tr:hover td {
 }
 
 td.col-status {
+  white-space: nowrap;
+}
+
+td.col-impact {
   white-space: nowrap;
 }
 
@@ -821,25 +1058,33 @@ tr.row-open td.latency {
   color: var(--vscode-list-activeSelectionForeground);
 }
 
-/* --- Detail pane (a peek-style action diff) ------------------------------ */
+/* --- Detail pane (docked action diff) ------------------------------------ */
+/* Docked at the bottom of the content column so the selected row stays visible
+   above it; the pane scrolls internally when the diff is tall. */
 .detail-pane {
-  margin: 10px 12px 0;
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: var(--ta-radius);
+  flex: 0 0 auto;
+  max-height: 45%;
+  overflow: auto;
+  border: none;
+  border-top: 1px solid var(--vscode-panel-border);
   background: var(
     --vscode-editorWidget-background,
     var(--vscode-editor-background)
   );
-  box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
-  overflow: hidden;
 }
 
 .detail-header {
+  position: sticky;
+  top: 0;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 6px 8px 6px 12px;
   border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(
+    --vscode-editorWidget-background,
+    var(--vscode-editor-background)
+  );
 }
 
 .detail-title {

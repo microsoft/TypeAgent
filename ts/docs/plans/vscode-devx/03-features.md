@@ -209,7 +209,7 @@ These are the platform pieces the journeys all assume. Phase 4's MVP slice has t
   - **Pane 4 — Collisions delta** (rows from §10 detector).
 - **Drill-in:** any row → opens J5's Trace Viewer for that requestId (vA and vB shown side-by-side).
 
-### F4.4 — "Likely-bad change" predicate ✅ MVP
+### F4.4 — "Likely-regression" predicate ✅ MVP
 
 - Default predicate (open item §7.5 in journeys; final form decided in Phase 4): row is "red" if `(feedbackA.rating == up && actionA != actionB) || (feedbackB?.rating == down)`. Configurable per workspace.
 
@@ -349,7 +349,7 @@ Before proceeding to Phase 4 (MVP slice), confirm:
 - [ ] The MVP / post-MVP split per feature matches your ambition.
 - [ ] F4.6 (player corpus capture) belongs in MVP — without it, J4 cannot demo. If you disagree, J4 either drops to "light" depth or we pick a different anchor agent.
 - [ ] The "5 webviews after consolidation" target is acceptable.
-- [ ] The "likely-bad change" default predicate in F4.4 is the right starting point (it will be tuned during validation-gate work).
+- [ ] The "likely regression" default predicate in F4.4 is the right starting point (it will be tuned during validation-gate work).
 
 ---
 
