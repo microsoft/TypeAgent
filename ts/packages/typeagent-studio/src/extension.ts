@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-import { randomUUID } from "node:crypto";
 import * as path from "node:path";
 import { readFile } from "node:fs/promises";
 import { registerStudioCommands } from "./commands.js";
@@ -19,11 +18,6 @@ import { StudioServiceSandboxSource } from "./sandboxSource.js";
 import type { SandboxSource } from "./sandboxSource.js";
 import { CORPUS_VIEW_ID, CorpusTreeProvider } from "./corpusTreeProvider.js";
 import type { CorpusTreeNode } from "./corpusTreePresentation.js";
-import {
-    FEEDBACK_CATEGORY_CHOICES,
-    FEEDBACK_RATING_CHOICES,
-    buildFeedbackRecordInput,
-} from "./feedbackInputPresentation.js";
 import {
     buildReplayRowViews,
     formatReplaySummaryLine,
@@ -51,7 +45,16 @@ import {
     StudioServiceConnection,
     type StudioConnectionState,
 } from "./studioServiceConnection.js";
-import { openImpactReport } from "./impactReportView.js";
+import {
+    openImpactReport,
+    refreshOpenImpactReport,
+} from "./impactReportView.js";
+import { savePersistedRun } from "./impactReportStore.js";
+import { defaultGitExec, resolveVersionProvenance } from "./gitRefProvider.js";
+import type {
+    ResolvedVersion,
+    RunProvenance,
+} from "./webviewKit/replayViewModel.js";
 
 export function activate(context: vscode.ExtensionContext): void {
     // In-process runtime — retained ONLY for the onboarding command surface
@@ -327,96 +330,37 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     const corpusTree = new CorpusTreeProvider(serviceRuntime);
-    // The Corpora tree refreshes only on explicit in-extension actions (seeding
-    // an in-repo file, adding an external source, recording feedback) and the
-    // manual Refresh command -- each of those calls corpusTree.refresh()
-    // directly. We intentionally do not watch the filesystem for out-of-band
-    // edits to *.utterances.jsonl.
+    // The Corpora tree refreshes on explicit in-extension actions (seeding an
+    // in-repo file, adding an external source, recording feedback) and the
+    // manual Refresh command. It also refreshes when a `*.utterances.jsonl`
+    // file under the in-repo corpus folder is saved in the editor, so newly
+    // typed entries show up without a manual refresh. A single save listener is
+    // used rather than a filesystem watcher to keep activation light.
+    const corpusDir = repoRootInfo.repoRoot
+        ? path.join(repoRootInfo.repoRoot, "corpus")
+        : undefined;
+    // VS Code can report paths with an inconsistent drive-letter case on
+    // Windows, so compare the saved file's folder case-insensitively there.
+    const samePath = (a: string, b: string): boolean =>
+        process.platform === "win32"
+            ? a.toLowerCase() === b.toLowerCase()
+            : a === b;
+    context.subscriptions.push(
+        vscode.workspace.onDidSaveTextDocument((doc) => {
+            if (
+                corpusDir &&
+                doc.fileName.endsWith(".utterances.jsonl") &&
+                samePath(path.dirname(doc.fileName), corpusDir)
+            ) {
+                corpusTree.refresh();
+            }
+        }),
+    );
     context.subscriptions.push(
         corpusTree,
         vscode.window.registerTreeDataProvider(CORPUS_VIEW_ID, corpusTree),
         vscode.commands.registerCommand("typeagent-studio.refreshCorpora", () =>
             corpusTree.refresh(),
-        ),
-        vscode.commands.registerCommand(
-            "typeagent-studio.recordFeedback",
-            async () => {
-                const rating = await vscode.window.showQuickPick(
-                    FEEDBACK_RATING_CHOICES.map((choice) => ({
-                        label: choice.label,
-                        value: choice.value,
-                    })),
-                    {
-                        title: "Record feedback",
-                        placeHolder: "How was the response?",
-                    },
-                );
-                if (!rating) {
-                    return;
-                }
-                const utterance = await vscode.window.showInputBox({
-                    title: "Record feedback",
-                    prompt: "Utterance this feedback is about",
-                    placeHolder: "e.g. play some jazz",
-                    ignoreFocusOut: true,
-                });
-                if (utterance === undefined) {
-                    return;
-                }
-                const agent = await vscode.window.showInputBox({
-                    title: "Record feedback",
-                    prompt: "Agent (optional)",
-                    placeHolder: "e.g. player",
-                    ignoreFocusOut: true,
-                });
-                if (agent === undefined) {
-                    return;
-                }
-                let category;
-                if (rating.value === "down") {
-                    const categoryPick = await vscode.window.showQuickPick(
-                        FEEDBACK_CATEGORY_CHOICES.map((choice) => ({
-                            label: choice.label,
-                            value: choice.value,
-                        })),
-                        {
-                            title: "Record feedback",
-                            placeHolder: "What went wrong? (optional)",
-                        },
-                    );
-                    category = categoryPick?.value;
-                }
-                const comment = await vscode.window.showInputBox({
-                    title: "Record feedback",
-                    prompt: "Comment (optional)",
-                    ignoreFocusOut: true,
-                });
-                if (comment === undefined) {
-                    return;
-                }
-                try {
-                    await serviceRuntime.recordFeedback(
-                        buildFeedbackRecordInput({
-                            requestId: randomUUID(),
-                            rating: rating.value,
-                            agent,
-                            utterance,
-                            comment,
-                            category,
-                        }),
-                    );
-                    corpusTree.refresh();
-                    vscode.window.showInformationMessage(
-                        rating.value === "up"
-                            ? "Recorded positive feedback."
-                            : "Recorded negative feedback.",
-                    );
-                } catch (error) {
-                    vscode.window.showErrorMessage(
-                        `Failed to record feedback: ${describeError(error)}`,
-                    );
-                }
-            },
         ),
         vscode.commands.registerCommand(
             "typeagent-studio.seedInRepoCorpus",
@@ -461,6 +405,25 @@ export function activate(context: vscode.ExtensionContext): void {
             },
         ),
         vscode.commands.registerCommand(
+            "typeagent-studio.openCorpusFile",
+            async (node?: CorpusTreeNode) => {
+                const filePath = node?.filePath;
+                if (!filePath) {
+                    return;
+                }
+                try {
+                    const doc = await vscode.workspace.openTextDocument(
+                        vscode.Uri.file(filePath),
+                    );
+                    await vscode.window.showTextDocument(doc);
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to open corpus file: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
+        vscode.commands.registerCommand(
             "typeagent-studio.addExternalCorpus",
             async (node?: CorpusTreeNode) => {
                 const agent =
@@ -500,6 +463,83 @@ export function activate(context: vscode.ExtensionContext): void {
                 } catch (error) {
                     vscode.window.showErrorMessage(
                         `Failed to add external corpus: ${describeError(error)}`,
+                    );
+                }
+            },
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-studio.importCorpusFromLogs",
+            async () => {
+                const picked = await vscode.window.showOpenDialog({
+                    title: "Import corpus from interaction logs",
+                    canSelectMany: true,
+                    canSelectFiles: true,
+                    canSelectFolders: true,
+                    openLabel: "Import",
+                    filters: { "Display log": ["json"], "All files": ["*"] },
+                });
+                if (!picked || picked.length === 0) {
+                    return;
+                }
+                // A folder selection resolves to its displayLog.json.
+                const paths: string[] = [];
+                for (const uri of picked) {
+                    try {
+                        const stat = await vscode.workspace.fs.stat(uri);
+                        if (stat.type === vscode.FileType.Directory) {
+                            paths.push(
+                                vscode.Uri.joinPath(uri, "displayLog.json")
+                                    .fsPath,
+                            );
+                        } else {
+                            paths.push(uri.fsPath);
+                        }
+                    } catch {
+                        paths.push(uri.fsPath);
+                    }
+                }
+                const filter = await vscode.window.showInputBox({
+                    title: "Restrict to agents (optional)",
+                    prompt: "Comma-separated agent names to capture; leave blank for all.",
+                    placeHolder: "e.g. player, list",
+                    ignoreFocusOut: true,
+                });
+                if (filter === undefined) {
+                    return;
+                }
+                const agents = filter
+                    .split(",")
+                    .map((a) => a.trim())
+                    .filter((a) => a.length > 0);
+                try {
+                    const result = await serviceRuntime.importCorpusFromLogs({
+                        paths,
+                        ...(agents.length > 0 ? { agents } : {}),
+                    });
+                    corpusTree.refresh();
+                    const skippedTotal = Object.values(result.skipped).reduce(
+                        (sum, n) => sum + n,
+                        0,
+                    );
+                    const agentNames = Object.keys(result.perAgent);
+                    const where =
+                        agentNames.length > 0
+                            ? ` across ${agentNames.join(", ")}`
+                            : "";
+                    vscode.window.showInformationMessage(
+                        `Imported ${result.total} corpus ${
+                            result.total === 1 ? "entry" : "entries"
+                        }${where} into the shared in-repo corpus from ${
+                            result.files.length
+                        } ${
+                            result.files.length === 1 ? "file" : "files"
+                        }; skipped ${skippedTotal} ${
+                            skippedTotal === 1 ? "duplicate" : "duplicates"
+                        }.`,
+                    );
+                } catch (error) {
+                    vscode.window.showErrorMessage(
+                        `Failed to import corpus: ${describeError(error)}`,
                     );
                 }
             },
@@ -795,26 +835,90 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.commands.registerCommand(
             "typeagent-studio.replayCorpus",
-            async () => {
-                const agents = await serviceRuntime.listCorpusAgents();
-                if (agents.length === 0) {
-                    vscode.window.showInformationMessage(
-                        "No agents have a corpus to replay. Load an agent into a sandbox first.",
-                    );
-                    return;
-                }
-                const agent =
-                    agents.length === 1
-                        ? agents[0]
-                        : await vscode.window.showQuickPick(agents, {
-                              title: "Replay corpus",
-                              placeHolder: "Select an agent to replay",
-                          });
+            async (node?: { agent?: string }) => {
+                let agent = node?.agent;
                 if (!agent) {
-                    return;
+                    const agents = await serviceRuntime.listCorpusAgents();
+                    if (agents.length === 0) {
+                        vscode.window.showInformationMessage(
+                            "No agents have a corpus to replay. Load an agent into a sandbox first.",
+                        );
+                        return;
+                    }
+                    agent =
+                        agents.length === 1
+                            ? agents[0]
+                            : await vscode.window.showQuickPick(agents, {
+                                  title: "Replay corpus",
+                                  placeHolder: "Select an agent to replay",
+                              });
+                    if (!agent) {
+                        return;
+                    }
                 }
                 try {
-                    const result = await serviceRuntime.replayCorpus({ agent });
+                    // Compare the last commit against the working tree — the same
+                    // "did my edits change anything" check the Impact Report runs
+                    // by default (a working-tree self-compare would always be
+                    // all-equal). Pin each side to its concrete commit so the
+                    // report's provenance line stays truthful after a branch move.
+                    const versionA = { kind: "git", ref: "HEAD" } as const;
+                    const versionB = { kind: "workingTree" } as const;
+                    const exec =
+                        repoRootInfo.repoRoot !== undefined
+                            ? defaultGitExec(repoRootInfo.repoRoot)
+                            : undefined;
+                    const resolvedSides = exec
+                        ? await Promise.all([
+                              resolveVersionProvenance(versionA, exec),
+                              resolveVersionProvenance(versionB, exec),
+                          ])
+                        : undefined;
+                    const result = await serviceRuntime.replayCorpus({
+                        agent,
+                        versionA,
+                        versionB,
+                    });
+                    // Stamp the run at completion so the report's "Last run" time
+                    // (and provenance) reflects when the replay finished, not when
+                    // it was launched.
+                    const runAt = Date.now();
+                    const provenance: RunProvenance | undefined = resolvedSides
+                        ? { a: resolvedSides[0], b: resolvedSides[1], runAt }
+                        : undefined;
+                    // The report's launch controls this run maps to: HEAD (A) vs
+                    // the working tree (B) — matching the report's own defaults so
+                    // a report opened after this run restores the same dropdowns.
+                    const resolvedA: ResolvedVersion = {
+                        spec: { kind: "git", ref: "HEAD" },
+                        label: "HEAD",
+                        tooltip: "Last commit (HEAD).",
+                    };
+                    const resolvedB: ResolvedVersion = {
+                        spec: { kind: "workingTree" },
+                        label: "working tree",
+                        tooltip: "Your uncommitted edits in the working tree.",
+                    };
+                    // Persist as the agent's last run so opening the Impact Report
+                    // re-renders this run instead of a blank report.
+                    await savePersistedRun(
+                        context.workspaceState,
+                        agent,
+                        result,
+                        runAt,
+                        provenance,
+                        resolvedA,
+                        resolvedB,
+                    );
+                    // If a report for this agent is already open, refresh it in
+                    // place so the user sees this run without reopening.
+                    refreshOpenImpactReport(agent, {
+                        payload: result,
+                        runAt,
+                        versionA: resolvedA,
+                        versionB: resolvedB,
+                        ...(provenance ? { provenance } : {}),
+                    });
                     const line = formatReplaySummaryLine(result.summary);
                     if (result.rows.length === 0) {
                         vscode.window.showInformationMessage(

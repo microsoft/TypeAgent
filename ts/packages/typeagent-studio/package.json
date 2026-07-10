@@ -179,12 +179,6 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "typeagent-studio.recordFeedback",
-        "title": "Record feedback",
-        "category": "TypeAgent Studio",
-        "icon": "$(feedback)"
-      },
-      {
         "command": "typeagent-studio.replayCorpus",
         "title": "Replay corpus",
         "category": "TypeAgent Studio",
@@ -201,6 +195,18 @@
         "title": "Seed in-repo corpus",
         "category": "TypeAgent Studio",
         "icon": "$(new-file)"
+      },
+      {
+        "command": "typeagent-studio.openCorpusFile",
+        "title": "Open corpus file",
+        "category": "TypeAgent Studio",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "typeagent-studio.importCorpusFromLogs",
+        "title": "Import corpus from interaction logs",
+        "category": "TypeAgent Studio",
+        "icon": "$(cloud-download)"
       },
       {
         "command": "typeagent-studio.focusSandboxes",
@@ -334,19 +340,14 @@
           "group": "navigation@1"
         },
         {
-          "command": "typeagent-studio.recordFeedback",
+          "command": "typeagent-studio.addExternalCorpus",
           "when": "view == typeagentStudioCorpora",
           "group": "navigation@2"
         },
         {
-          "command": "typeagent-studio.replayCorpus",
+          "command": "typeagent-studio.importCorpusFromLogs",
           "when": "view == typeagentStudioCorpora",
           "group": "navigation@3"
-        },
-        {
-          "command": "typeagent-studio.addExternalCorpus",
-          "when": "view == typeagentStudioCorpora",
-          "group": "navigation@4"
         },
         {
           "command": "typeagent-studio.refreshEvents",
@@ -406,18 +407,28 @@
           "group": "inline@0"
         },
         {
-          "command": "typeagent-studio.addExternalCorpus",
-          "when": "view == typeagentStudioCorpora && viewItem == corpusAgent",
-          "group": "inline@1"
-        },
-        {
           "command": "typeagent-studio.openImpactReport",
           "when": "view == typeagentStudioCorpora && viewItem == corpusAgent",
           "group": "inline@0"
         },
         {
+          "command": "typeagent-studio.replayCorpus",
+          "when": "view == typeagentStudioCorpora && viewItem == corpusAgent",
+          "group": "inline@1"
+        },
+        {
+          "command": "typeagent-studio.addExternalCorpus",
+          "when": "view == typeagentStudioCorpora && viewItem == corpusAgent",
+          "group": "inline@2"
+        },
+        {
           "command": "typeagent-studio.seedInRepoCorpus",
           "when": "view == typeagentStudioCorpora && viewItem == corpusAgentSeed",
+          "group": "inline@0"
+        },
+        {
+          "command": "typeagent-studio.openCorpusFile",
+          "when": "view == typeagentStudioCorpora && viewItem == corpusFile",
           "group": "inline@0"
         }
       ]
@@ -486,10 +497,11 @@
     "onCommand:typeagent-studio.unloadAgent",
     "onCommand:typeagent-studio.refreshSandboxes",
     "onCommand:typeagent-studio.refreshCorpora",
-    "onCommand:typeagent-studio.recordFeedback",
     "onCommand:typeagent-studio.replayCorpus",
     "onCommand:typeagent-studio.addExternalCorpus",
     "onCommand:typeagent-studio.seedInRepoCorpus",
+    "onCommand:typeagent-studio.openCorpusFile",
+    "onCommand:typeagent-studio.importCorpusFromLogs",
     "onCommand:typeagent-studio.refreshEvents",
     "onCommand:typeagent-studio.clearEvents",
     "onCommand:typeagent-studio.refreshCollisions",

@@ -481,7 +481,7 @@ wraps the existing schema-to-grammar generator.
 This is the loop described at the top of this document. From the
 source-control gutter or the command palette, the developer kicks off a
 replay across two versions (working tree vs a git ref, or any two refs),
-gets the four-pane Impact Report, filters to "likely-bad change," drills
+gets the four-pane Impact Report, filters to "likely regression," drills
 into individual rows, and decides whether to ship.
 
 The Impact Report's panes:
