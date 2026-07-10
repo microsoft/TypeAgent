@@ -31,8 +31,8 @@ minimumReleaseAge: 10080
 # In pnpm v11 the `onlyBuiltDependencies` / `ignoredBuiltDependencies` settings were
 # replaced by `allowBuilds` (a map of package name -> true/false). Only the packages
 # listed here are allowed to run install/build (postinstall) scripts.
-# node-pty and protobufjs are set to false to preserve the pnpm v10 behavior, where
-# they were not in the build allowlist and therefore their scripts were not run.
+# node-pty and protobufjs are set to false to keep their install scripts disabled
+# under pnpm v11, even though they were previously in the pnpm v10 allowlist.
 allowBuilds:
   "@azure/msal-node-extensions": true
   "@azure/msal-node-runtime": true
