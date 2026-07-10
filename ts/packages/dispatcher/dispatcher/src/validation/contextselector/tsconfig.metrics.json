@@ -1,0 +1,21 @@
+{
+  "extends": "../../../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": [
+    "measureMetrics.mts",
+    "metricRoster.mts",
+    "metricCorpus.mts",
+    "metricRunner.mts",
+    "metricAdversary.mts",
+    "metricRealPairs.mts",
+    "metricRealisticDialogue.mts",
+    "compareLlm.mts"
+  ]
+}
