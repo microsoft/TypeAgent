@@ -52,6 +52,9 @@ export function createDispatcherRpcServer(
         getQueueSnapshot: async () => {
             return dispatcher.getQueueSnapshot();
         },
+        getDeveloperMode: async () => {
+            return dispatcher.getDeveloperMode();
+        },
         getDynamicDisplay: async (...args) => {
             return dispatcher.getDynamicDisplay(...args);
         },

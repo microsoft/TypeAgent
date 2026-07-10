@@ -352,8 +352,58 @@ async function runGh(args: string[], timeoutMs = 30_000): Promise<string> {
     return stdout.trim();
 }
 
+// Sentinel values that mean "no assignee". `gh issue list --assignee <x>`
+// treats <x> as a literal GitHub login, so "--assignee none" fails with
+// "Could not find an assignee with the login 'none'". The supported way to
+// list unassigned items is the search qualifier `--search "no:assignee"`.
+const UNASSIGNED_SENTINELS = new Set([
+    "none",
+    "unassigned",
+    "nobody",
+    "noone",
+    "no one",
+    "no-one",
+]);
+
+function isUnassignedAssignee(assignee: string): boolean {
+    return UNASSIGNED_SENTINELS.has(
+        assignee.trim().toLowerCase().replace(/^@/, ""),
+    );
+}
+
+// Build args for `gh issue list` / `gh pr list`. `state`, `label`, and a
+// concrete `assignee` map to the matching flags. "Unassigned" has no flag
+// equivalent — `gh ... list --assignee none` treats "none" as a literal
+// login and fails with "Could not find an assignee with the login 'none'" —
+// so it maps to the `no:assignee` search qualifier instead.
+//
+// gh honors `--search` alongside `--state` and `--label`, so a request like
+// "open unassigned issues labeled X" composes to
+// `--state open --label X --search no:assignee` and filters on all three.
+function buildListArgs(
+    kind: "issue" | "pr",
+    p: Record<string, unknown>,
+    jsonFields: string,
+): string[] {
+    const args = [kind, "list"];
+    if (p.repo) args.push("--repo", String(p.repo));
+    if (p.state) args.push("--state", String(p.state));
+    if (p.label) args.push("--label", String(p.label));
+
+    const assignee = p.assignee ? String(p.assignee) : "";
+    if (isUnassignedAssignee(assignee)) {
+        args.push("--search", "no:assignee");
+    } else if (assignee) {
+        args.push("--assignee", assignee);
+    }
+
+    if (p.limit) args.push("--limit", String(p.limit));
+    args.push("--json", jsonFields);
+    return args;
+}
+
 // Build gh CLI args from an action name and parameters.
-function buildArgs(
+export function buildArgs(
     action: TypeAgentAction<GithubCliActions>,
 ): string[] | undefined {
     const p = action.parameters as Record<string, unknown>;
@@ -462,16 +512,12 @@ function buildArgs(
             if (p.repo) args.push("--repo", String(p.repo));
             return args;
         }
-        case "issueList": {
-            const args = ["issue", "list"];
-            if (p.repo) args.push("--repo", String(p.repo));
-            if (p.state) args.push("--state", String(p.state));
-            if (p.label) args.push("--label", String(p.label));
-            if (p.assignee) args.push("--assignee", String(p.assignee));
-            if (p.limit) args.push("--limit", String(p.limit));
-            args.push("--json", "number,title,state,url,createdAt,labels");
-            return args;
-        }
+        case "issueList":
+            return buildListArgs(
+                "issue",
+                p,
+                "number,title,state,url,createdAt,labels",
+            );
         case "issueView": {
             const args = ["issue", "view"];
             if (p.number) args.push(String(p.number));
@@ -513,19 +559,12 @@ function buildArgs(
             if (p.mergeMethod) args.push(`--${String(p.mergeMethod)}`);
             return args;
         }
-        case "prList": {
-            const args = ["pr", "list"];
-            if (p.repo) args.push("--repo", String(p.repo));
-            if (p.state) args.push("--state", String(p.state));
-            if (p.label) args.push("--label", String(p.label));
-            if (p.assignee) args.push("--assignee", String(p.assignee));
-            if (p.limit) args.push("--limit", String(p.limit));
-            args.push(
-                "--json",
+        case "prList":
+            return buildListArgs(
+                "pr",
+                p,
                 "number,title,state,url,createdAt,headRefName,isDraft",
             );
-            return args;
-        }
         case "prView": {
             const args = ["pr", "view"];
             if (p.number) args.push(String(p.number));

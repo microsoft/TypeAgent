@@ -6,6 +6,7 @@ import * as os from "os";
 import {
     connectAgentServer,
     type AgentServerConnection,
+    type SpeechToken,
 } from "@typeagent/agent-server-client";
 import {
     findOrCreateNamedConversation,
@@ -123,6 +124,16 @@ export class AgentServerBridge {
     /** In-flight session-join promise — serializes joinSpecificSession calls. */
     private joinInFlight: Promise<boolean> | undefined;
     private session: SessionDispatcher | undefined;
+    // Commands the user submitted before a session/dispatcher was ready.
+    // Buffered here (rather than dropped with a "no active session" notice)
+    // and flushed by flushPendingSends() once a session is established, in
+    // the order they were typed. Mirrors the Electron shell's pre-init send
+    // queue in chatPanelBridge.ts.
+    private pendingSends: Array<{
+        command: string;
+        requestId?: string;
+        attachments?: string[];
+    }> = [];
     private webviews: Set<vscode.Webview> = new Set();
     /**
      * Per-webview buffer for live broadcasts that arrive while the webview
@@ -467,6 +478,11 @@ export class AgentServerBridge {
                 this.lastReplayedSessionId = this.session.sessionId;
                 await this.replayHistory(this.session);
             }
+
+            // Flush any commands the user typed before the session was
+            // ready. Deferred until after history replay so they submit on
+            // a settled transcript, then run in the order they were typed.
+            void this.flushPendingSends();
         } catch (e: any) {
             const msg = e?.message ?? String(e);
             // Suppress per-attempt error toasts in the chat area; the
@@ -1046,6 +1062,50 @@ export class AgentServerBridge {
                 loading: false,
             });
         }
+        // Push current developer-mode state so dev-only UI (the per-message
+        // delete button) reflects a server started with `--dev` on connect
+        // and session switches, without waiting for a `@config dev` toggle.
+        await this.pushDeveloperMode();
+
+        // TODO(reconnect-mid-confirmation): re-render pending interactions on
+        // rejoin. When `@config dev on --confirm` is active, a request can be
+        // blocked on a `proposeAction`/`question` (SharedDispatcher deferred
+        // promise, 10-min timeout). If the webview reconnects or switches to a
+        // session while that prompt is outstanding, the interaction is NOT
+        // replayed here, so the user sees a "working" request with no way to
+        // answer it until the server times out. The agent-server already
+        // tracks these (DisplayLog.logPendingInteraction, included in the
+        // join/JoinSessionResult) — surface them (e.g. a getPendingInteractions
+        // RPC or a field on the join result) and re-broadcast each as a
+        // `requestInteraction` after the history replay so the confirmation UI
+        // reappears and `respondToInteraction` can complete the request.
+    }
+
+    /**
+     * Query the current developer-mode flag from the dispatcher and forward
+     * it to the webview(s) so dev-only affordances toggle to match. Targets a
+     * single webview when provided (re-attach hydration), else broadcasts.
+     * Best-effort: silently skipped when the dispatcher predates
+     * `getDeveloperMode`.
+     */
+    private async pushDeveloperMode(webview?: vscode.Webview): Promise<void> {
+        const dispatcher = this.session?.dispatcher;
+        if (!dispatcher || typeof dispatcher.getDeveloperMode !== "function") {
+            return;
+        }
+        let enabled: boolean;
+        try {
+            enabled = await dispatcher.getDeveloperMode();
+        } catch (e) {
+            console.warn("[agentServerBridge] getDeveloperMode failed:", e);
+            return;
+        }
+        const message = { type: "developerMode" as const, enabled };
+        if (webview) {
+            this.postToWebview(webview, message);
+        } else {
+            this.broadcastToWebviews(message);
+        }
     }
 
     private async replayHistoryInner(
@@ -1155,6 +1215,9 @@ export class AgentServerBridge {
                         e,
                     );
                 }
+                // Seed dev-mode state so the per-message delete button
+                // reflects a `--dev` server on webview re-attach.
+                await this.pushDeveloperMode(webview);
             } catch (e) {
                 console.warn(
                     "[agentServerBridge] hydrateWebview replay failed:",
@@ -1191,7 +1254,144 @@ export class AgentServerBridge {
     ): Promise<void> {
         switch (msg.type) {
             case "sendCommand":
-                await this.sendCommand(msg.command, msg.requestId);
+                await this.sendCommand(
+                    msg.command,
+                    msg.requestId,
+                    msg.attachments,
+                );
+                break;
+            case "interactionResponse":
+                // Reply to a server-driven interactive prompt (dev-mode
+                // action confirmation / agent question). Resolves the
+                // dispatcher's pending proposeAction/question so the request
+                // can finish instead of blocking to the 10-min timeout.
+                try {
+                    await this.session?.dispatcher.respondToInteraction(
+                        msg.response,
+                    );
+                } catch (e) {
+                    console.warn(
+                        "[agentServerBridge] respondToInteraction failed:",
+                        e,
+                    );
+                }
+                break;
+            case "choiceResponse":
+                // Reply to an agent's non-blocking choice card
+                // (createYesNoChoiceResult / createMultiChoiceResult /
+                // createPickRememberChoiceResult). Resolves the dispatcher's
+                // pending choice route so the agent's handleChoice callback
+                // runs. Without this the card's buttons would do nothing.
+                try {
+                    await this.session?.dispatcher.respondToChoice(
+                        msg.choiceId,
+                        msg.response,
+                    );
+                } catch (e) {
+                    console.warn(
+                        "[agentServerBridge] respondToChoice failed:",
+                        e,
+                    );
+                }
+                break;
+            case "recordUserFeedback":
+                // Persist a user's thumbs up/down rating. Mirrors the
+                // deleteMessage -> recordUserHide path (same RequestId shape);
+                // the dispatcher broadcasts the result back via
+                // ClientIO.onUserFeedback so the bubble updates.
+                try {
+                    await this.session?.dispatcher.recordUserFeedback(
+                        { requestId: msg.requestId },
+                        msg.rating,
+                        msg.category,
+                        msg.comment,
+                        msg.includeContext,
+                    );
+                } catch (e) {
+                    console.warn(
+                        "[agentServerBridge] recordUserFeedback failed:",
+                        e,
+                    );
+                }
+                break;
+            case "bridgeRpcRequest": {
+                // Service call routed from the webview to the dispatcher:
+                // template-editor lookups (proposeAction edit flow) or
+                // getDynamicDisplay (live display refresh). Correlated by
+                // `id`; always answered so the webview promise settles.
+                const dispatcher = this.session?.dispatcher;
+                try {
+                    if (dispatcher === undefined) {
+                        throw new Error("No active session");
+                    }
+                    let result: unknown;
+                    if (msg.method === "getTemplateSchema") {
+                        const [templateAgentName, templateName, data] =
+                            msg.args as Parameters<
+                                typeof dispatcher.getTemplateSchema
+                            >;
+                        result = await dispatcher.getTemplateSchema(
+                            templateAgentName,
+                            templateName,
+                            data,
+                        );
+                    } else if (msg.method === "getTemplateCompletion") {
+                        const [
+                            templateAgentName,
+                            templateName,
+                            data,
+                            propertyName,
+                        ] = msg.args as Parameters<
+                            typeof dispatcher.getTemplateCompletion
+                        >;
+                        result = await dispatcher.getTemplateCompletion(
+                            templateAgentName,
+                            templateName,
+                            data,
+                            propertyName,
+                        );
+                    } else {
+                        // getDynamicDisplay(appAgentName, type, displayId)
+                        const [appAgentName, type, id] = msg.args as Parameters<
+                            typeof dispatcher.getDynamicDisplay
+                        >;
+                        result = await dispatcher.getDynamicDisplay(
+                            appAgentName,
+                            type,
+                            id,
+                        );
+                    }
+                    this.postToWebview(webview, {
+                        type: "bridgeRpcResponse",
+                        id: msg.id,
+                        result,
+                    });
+                } catch (e) {
+                    this.postToWebview(webview, {
+                        type: "bridgeRpcResponse",
+                        id: msg.id,
+                        error: e instanceof Error ? e.message : String(e),
+                    });
+                }
+                break;
+            }
+            case "deleteMessage":
+                // Developer-mode per-message delete. Reuse the feedback
+                // "hide" RPC: permanent=true is a non-recoverable hard delete;
+                // permanent=false is a recoverable soft delete (trash).
+                try {
+                    await this.session?.dispatcher.recordUserHide(
+                        { requestId: msg.requestId },
+                        true,
+                        msg.target,
+                        msg.permanent,
+                    );
+                } catch (e) {
+                    console.warn(
+                        "[agentServerBridge] deleteMessage failed:",
+                        e,
+                    );
+                }
                 break;
             case "cancelCommand":
                 // Forward to the dispatcher so an in-flight request can be
@@ -1251,6 +1451,27 @@ export class AgentServerBridge {
                     void vscode.env.openExternal(vscode.Uri.parse(msg.href));
                 }
                 break;
+            case "getSpeechToken": {
+                // Relay a speech-token request to the agent server (which owns
+                // the `speech:` config) so the webview can run Azure Speech
+                // recognition. Always answer so the webview promise settles;
+                // `token` is undefined when speech isn't configured.
+                let speechToken: SpeechToken | undefined;
+                try {
+                    speechToken = await this.rawConnection?.getSpeechToken();
+                } catch (e) {
+                    console.warn(
+                        "[agentServerBridge] getSpeechToken failed:",
+                        e,
+                    );
+                }
+                this.postToWebview(webview, {
+                    type: "speechTokenResponse",
+                    id: msg.id,
+                    token: speechToken,
+                });
+                break;
+            }
             case "connect":
                 // The webview posts `connect` once it has wired up its
                 // message listener — this is also our cue that it's ready
@@ -1610,6 +1831,7 @@ export class AgentServerBridge {
     private async sendCommand(
         command: string,
         requestId?: string,
+        attachments?: string[],
     ): Promise<void> {
         // Once the user actually engages with an ephemeral panel session,
         // promote it to a persistent named session so it survives panel
@@ -1623,17 +1845,12 @@ export class AgentServerBridge {
         // (reading 'dispatcher')" and the webview's stop button stays
         // stuck on screen.
         if (!this.session) {
-            this.broadcastToWebviews({
-                type: "commandComplete",
-                requestId: requestId ?? "",
-                result: null,
-            });
-            this.broadcastToWebviews({
-                type: "error",
-                message:
-                    "No active session — reconnect or pick a conversation.",
-                requestId: requestId ?? "",
-            });
+            // Session/dispatcher not ready yet (initial connect, reconnect,
+            // or a mid-send session swap). Queue the command instead of
+            // dropping it; flushPendingSends() replays it once a session is
+            // established. The webview bubble stays in its processing state
+            // so it reads as pending rather than erroring out.
+            this.pendingSends.push({ command, requestId, attachments });
             return;
         }
 
@@ -1645,7 +1862,7 @@ export class AgentServerBridge {
             const result = await awaitCommand(
                 this.session.dispatcher,
                 command,
-                undefined,
+                attachments,
                 options,
                 requestId,
             );
@@ -1691,6 +1908,22 @@ export class AgentServerBridge {
                     this.serverToClientRequestId.delete(serverId);
                 }
             }
+        }
+    }
+
+    /**
+     * Replay commands buffered while no session was ready (see
+     * `pendingSends`). Drained in one shot and submitted sequentially so
+     * they run in the order the user typed them. Fired from connectImpl()
+     * once a session is established and history has replayed.
+     */
+    private async flushPendingSends(): Promise<void> {
+        if (this.pendingSends.length === 0) {
+            return;
+        }
+        const buffered = this.pendingSends.splice(0);
+        for (const { command, requestId, attachments } of buffered) {
+            await this.sendCommand(command, requestId, attachments);
         }
     }
 

@@ -17,7 +17,7 @@
   "exceptions": [
     {
       "file": "packages/agents/github-cli/src/github-cliActionHandler.ts",
-      "line": 356,
+      "line": 406,
       "name": "Function 'buildArgs'",
       "cyclomatic": 179,
       "cognitive": 232,
@@ -125,7 +125,7 @@
     },
     {
       "file": "packages/vscode-shell/src/webview/main.ts",
-      "line": 487,
+      "line": 699,
       "name": "Arrow function",
       "cyclomatic": 81,
       "cognitive": 87,
@@ -197,7 +197,7 @@
     },
     {
       "file": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts",
-      "line": 921,
+      "line": 933,
       "name": "Async function 'initializeCommandHandlerContext'",
       "cyclomatic": 63,
       "cognitive": 33,
@@ -548,7 +548,7 @@
     },
     {
       "file": "packages/agents/github-cli/src/github-cliActionHandler.ts",
-      "line": 1244,
+      "line": 1283,
       "name": "Async function 'executeAction'",
       "cyclomatic": 43,
       "cognitive": 66,
@@ -593,7 +593,7 @@
     },
     {
       "file": "packages/vscode-shell/src/agentServerBridge.ts",
-      "line": 1188,
+      "line": 1251,
       "name": "Async method 'handleWebviewMessage'",
       "cyclomatic": 43,
       "cognitive": 17,
@@ -602,7 +602,7 @@
     },
     {
       "file": "packages/shell/src/renderer/src/chatPanelBridge.ts",
-      "line": 120,
+      "line": 121,
       "name": "Function 'toHistoryEntries'",
       "cyclomatic": 42,
       "cognitive": 44,
@@ -620,7 +620,7 @@
     },
     {
       "file": "packages/vscode-shell/src/webview/main.ts",
-      "line": 345,
+      "line": 557,
       "name": "Function 'toChatPanelHistory'",
       "cyclomatic": 42,
       "cognitive": 33,
@@ -629,7 +629,7 @@
     },
     {
       "file": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts",
-      "line": 1656,
+      "line": 1686,
       "name": "Async function 'changeContextConfig'",
       "cyclomatic": 42,
       "cognitive": 29,
@@ -1061,7 +1061,7 @@
     },
     {
       "file": "packages/agents/github-cli/src/github-cliActionHandler.ts",
-      "line": 842,
+      "line": 881,
       "name": "Function 'formatStatusOutput'",
       "cyclomatic": 33,
       "cognitive": 84,
@@ -1493,7 +1493,7 @@
     },
     {
       "file": "packages/chat-ui/src/chatPanel.ts",
-      "line": 205,
+      "line": 267,
       "name": "Function 'highlightJson'",
       "cyclomatic": 28,
       "cognitive": 34,
@@ -1952,7 +1952,7 @@
     },
     {
       "file": "packages/dispatcher/dispatcher/src/context/system/handlers/configCommandHandlers.ts",
-      "line": 220,
+      "line": 221,
       "name": "Function 'buildAgentStatusHtml'",
       "cyclomatic": 24,
       "cognitive": 42,
@@ -2033,7 +2033,7 @@
     },
     {
       "file": "packages/dispatcher/dispatcher/src/context/system/handlers/configCommandHandlers.ts",
-      "line": 311,
+      "line": 312,
       "name": "Async function 'showAgentStatus'",
       "cyclomatic": 23,
       "cognitive": 41,
@@ -2069,7 +2069,7 @@
     },
     {
       "file": "packages/dispatcher/dispatcher/src/context/system/handlers/configCommandHandlers.ts",
-      "line": 1872,
+      "line": 1873,
       "name": "Async function 'listModelsForProvider'",
       "cyclomatic": 23,
       "cognitive": 38,

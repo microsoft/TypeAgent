@@ -230,6 +230,14 @@ export interface Dispatcher {
     getQueueSnapshot(): Promise<QueueSnapshot>;
 
     /**
+     * Whether developer mode is currently on for this session. Clients call
+     * this after connecting so dev-only UI (e.g. the per-message delete
+     * button) reflects a server started with `--dev` without waiting for a
+     * `@config dev` toggle.
+     */
+    getDeveloperMode(): Promise<boolean>;
+
+    /**
      * Cancel the currently-running request (if any) and enqueue `text` at the
      * head of the queue so it runs next. The cancel-then-prepend pair is
      * atomic within the server's critical section so a racing `submitCommand`
