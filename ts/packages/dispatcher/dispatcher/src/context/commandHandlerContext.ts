@@ -799,7 +799,17 @@ export function emitAgentChangeNotification(
                   : enable
                     ? `Agent '${name}' was added — enabled.`
                     : `Agent '${name}' was added — disabled (\`@config agent ${name}\` to enable).`;
-        clientIO.notify(undefined, AppAgentEvent.Info, message, DispatcherName);
+        // Emit as an Inline notification (not Info) so the confirmation shows
+        // inline in the conversation — Info notifications are only collected in
+        // the shell's notifications tray, so the "agent added/removed/updated"
+        // message would otherwise never appear in the session. Inline events
+        // are both rendered inline (shell + CLI) and captured in the tray.
+        clientIO.notify(
+            undefined,
+            AppAgentEvent.Inline,
+            message,
+            DispatcherName,
+        );
     }
 }
 

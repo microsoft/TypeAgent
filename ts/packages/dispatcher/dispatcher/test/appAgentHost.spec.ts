@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { describe, it, expect } from "@jest/globals";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { createLimiter } from "@typeagent/common-utils";
 import { AppAgentProvider } from "../src/agentProvider/agentProvider.js";
 import {
@@ -865,14 +866,17 @@ describe("AppAgentManager.removeProvider", () => {
 describe("emitAgentChangeNotification (sibling system messages, )", () => {
     function captureClientIO() {
         const messages: string[] = [];
+        const events: string[] = [];
         return {
             messages,
+            events,
             clientIO: {
                 notify: (
                     _requestId: unknown,
-                    _event: unknown,
+                    event: string,
                     message: string,
                 ) => {
+                    events.push(event);
                     messages.push(message);
                 },
             } as any,
@@ -896,6 +900,12 @@ describe("emitAgentChangeNotification (sibling system messages, )", () => {
         const { messages, clientIO } = captureClientIO();
         emitAgentChangeNotification(clientIO, "add", fakeProvider("foo"), true);
         expect(messages).toEqual(["Agent 'foo' was added — enabled."]);
+    });
+
+    it("emits an Inline event so the message shows in the conversation", () => {
+        const { events, clientIO } = captureClientIO();
+        emitAgentChangeNotification(clientIO, "add", fakeProvider("foo"), true);
+        expect(events).toEqual([AppAgentEvent.Inline]);
     });
 
     it("a fanned-out remove reports removal", () => {
