@@ -218,23 +218,24 @@ function makePathAgentDir(emojiChar = "🧪"): string {
 }
 
 // Seed an instance dir whose config.json restricts install sources to a single
-// `catalog` source with one module-resolved entry (an npm-package-based source),
-// so an install/update produces a `module` record whose manifest the structural
-// check (5.3) reads. When `installModule` is true a resolvable agent
-// package (readable manifest) is laid under the instance's installDir; omitting
-// it leaves the module unresolvable, so the structural check fails.
-function catalogModuleInstanceDir(
+// `catalog` source with one path-resolved entry, so an install/update produces
+// a `path` record whose manifest the structural check (5.3) reads. When
+// `writeManifest` is true the catalog package has a readable manifest; omitting
+// it leaves the path package structurally invalid, so the check fails.
+function catalogPathInstanceDir(
     key: string,
-    moduleName: string,
-    installModule: boolean,
+    packageName: string,
+    writeManifest: boolean,
 ): string {
     const dir = tmpDir("ta-catalog-");
     const installDir = path.join(dir, "installedAgents");
     fs.mkdirSync(installDir, { recursive: true });
+    const pkgDir = path.join(dir, "catalog-package");
+    fs.mkdirSync(pkgDir, { recursive: true });
     const catalogPath = path.join(dir, "catalog.json");
     fs.writeFileSync(
         catalogPath,
-        JSON.stringify({ agents: { [key]: { name: moduleName } } }),
+        JSON.stringify({ agents: { [key]: { path: "catalog-package" } } }),
     );
     fs.writeFileSync(
         path.join(dir, "config.json"),
@@ -248,21 +249,15 @@ function catalogModuleInstanceDir(
             },
         }),
     );
-    if (installModule) {
-        fs.writeFileSync(
-            path.join(installDir, "package.json"),
-            JSON.stringify({ name: "ta-install-root", private: true }),
-        );
-        const pkgDir = path.join(installDir, "node_modules", moduleName);
-        fs.mkdirSync(pkgDir, { recursive: true });
-        fs.writeFileSync(
-            path.join(pkgDir, "package.json"),
-            JSON.stringify({
-                name: moduleName,
-                version: "1.0.0",
-                exports: { "./agent/manifest": "./manifest.json" },
-            }),
-        );
+    fs.writeFileSync(
+        path.join(pkgDir, "package.json"),
+        JSON.stringify({
+            name: packageName,
+            version: "1.0.0",
+            exports: { "./agent/manifest": "./manifest.json" },
+        }),
+    );
+    if (writeManifest) {
         fs.writeFileSync(
             path.join(pkgDir, "manifest.json"),
             JSON.stringify({ emojiChar: "🧪" }),
@@ -480,14 +475,17 @@ describe("getDefaultAppAgentSource", () => {
                     if (config.name === "broken") {
                         throw new Error("source unavailable");
                     }
-                    return ["foo", "bar"];
+                    return [
+                        { source: config.name, ref: "foo", packageName: "foo" },
+                        { source: config.name, ref: "bar", packageName: "bar" },
+                    ];
                 },
             }),
         );
 
         await expect(built.testApi.listAvailableAgents()).resolves.toEqual([
-            { ref: "foo", source: "healthy" },
-            { ref: "bar", source: "healthy" },
+            { source: "healthy", ref: "foo", packageName: "foo" },
+            { source: "healthy", ref: "bar", packageName: "bar" },
         ]);
     });
 
@@ -2147,7 +2145,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await expect(
             installer.install("x", agentDir, "nosuch", host),
-        ).rejects.toThrow(/unknown source/);
+        ).rejects.toThrow(/Unknown source/);
     });
 
     it("named config exposes its fixed set via the bundled provider and writes no agents.json", () => {
@@ -2508,43 +2506,59 @@ describe("startup orphan sweep (5.5 GC)", () => {
 // are feed-only; catalog/path update attempts fail as unsupported before any v2
 // manifest validation or teardown.
 describe("structural manifest check on install/update (5.3)", () => {
-    it("install of an npm-package source fails and records nothing when the manifest is unreadable", async () => {
-        const instanceDir = catalogModuleInstanceDir("cat", "cat-mod", false);
+    it("install of a catalog source fails and records nothing when the manifest is unreadable", async () => {
+        const instanceDir = catalogPathInstanceDir("cat", "cat-mod", false);
         const built = createDefaultInstalledAgentSource(instanceDir).testApi;
         await expect(
-            built.install("x", "cat", "cat", noopHost),
+            built.install("x", "cat-mod", "cat", noopHost),
         ).rejects.toThrow();
         // Nothing persisted: a broken agent is never recorded.
         expect(readAgentsJson(instanceDir)?.agents.x).toBeUndefined();
         expect(built.listInstalled().map((i) => i.name)).not.toContain("x");
     });
 
-    it("install of an npm-package source succeeds when the manifest reads", async () => {
-        const instanceDir = catalogModuleInstanceDir("cat", "cat-mod", true);
+    it("install of a catalog source succeeds when the manifest reads", async () => {
+        const instanceDir = catalogPathInstanceDir("cat", "cat-mod", true);
         const built = createDefaultInstalledAgentSource(instanceDir).testApi;
-        await built.install("x", "cat", "cat", noopHost);
-        expect(readAgentsJson(instanceDir)!.agents.x.module).toBe("cat-mod");
+        await built.install("x", "cat-mod", "cat", noopHost);
+        expect(readAgentsJson(instanceDir)!.agents.x.path).toBe(
+            path.join(instanceDir, "catalog-package"),
+        );
+        expect(readAgentsJson(instanceDir)!.agents.x.module).toBeUndefined();
     });
 
     it("catalog update is unsupported and leaves v1 intact", async () => {
-        const instanceDir = catalogModuleInstanceDir("cat", "cat-mod", true);
+        const instanceDir = catalogPathInstanceDir("cat", "cat-mod", true);
         const built = createDefaultInstalledAgentSource(instanceDir).testApi;
-        await built.install("x", "cat", "cat", noopHost);
-        expect(readAgentsJson(instanceDir)!.agents.x.module).toBe("cat-mod");
+        await built.install("x", "cat-mod", "cat", noopHost);
+        expect(readAgentsJson(instanceDir)!.agents.x.path).toBe(
+            path.join(instanceDir, "catalog-package"),
+        );
 
-        // Re-point the catalog key at a fresh, never-resolved (absent) module
-        // so v2's manifest cannot be read; the update must reject WITHOUT
-        // tearing v1 down (no barrier reached). A different module name avoids
-        // Node's module-resolution cache from v1's successful load.
+        // Re-point the catalog key at a fresh, manifest-less package so v2's
+        // manifest cannot be read; the update must reject as unsupported
+        // WITHOUT tearing v1 down (no barrier reached).
+        const brokenDir = path.join(instanceDir, "catalog-package-v2");
+        fs.mkdirSync(brokenDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(brokenDir, "package.json"),
+            JSON.stringify({
+                name: "cat-mod-absent",
+                version: "1.0.0",
+                exports: { "./agent/manifest": "./manifest.json" },
+            }),
+        );
         fs.writeFileSync(
             path.join(instanceDir, "catalog.json"),
-            JSON.stringify({ agents: { cat: { name: "cat-mod-absent" } } }),
+            JSON.stringify({ agents: { cat: { path: "catalog-package-v2" } } }),
         );
         await expect(built.update("x", undefined, noopHost)).rejects.toThrow(
             /only feed-sourced agents can be updated/i,
         );
         // v1's record is untouched and the name is still installed.
-        expect(readAgentsJson(instanceDir)!.agents.x.module).toBe("cat-mod");
+        expect(readAgentsJson(instanceDir)!.agents.x.path).toBe(
+            path.join(instanceDir, "catalog-package"),
+        );
         expect(built.listInstalled().map((i) => i.name)).toContain("x");
     });
 

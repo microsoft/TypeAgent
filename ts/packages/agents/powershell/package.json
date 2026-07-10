@@ -274,5 +274,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "powershell"
   }
 }

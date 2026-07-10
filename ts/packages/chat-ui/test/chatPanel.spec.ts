@@ -8,22 +8,12 @@ import { iconStop, iconJumpQueue, iconX } from "../src/icons.js";
 // chat-ui is DOM-rendering; these tests run under jsdom (see jest.config.cjs)
 // and assert the DOM produced by the status-rail / roadrunner affordances.
 
-type HiddenHook = (
-    requestId: { requestId: string },
-    target: "user" | "agent",
-    hidden: boolean,
-) => void;
-
-function makePanel(opts?: {
-    onCancel?: (requestId: string) => void;
-    onFeedbackHidden?: HiddenHook;
-}) {
+function makePanel(opts?: { onCancel?: (requestId: string) => void }) {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const panel = new ChatPanel(root, {
         platformAdapter: { handleLinkClick() {} },
         onCancel: opts?.onCancel,
-        onFeedbackHidden: opts?.onFeedbackHidden,
     });
     return { root, panel };
 }
@@ -119,10 +109,8 @@ describe("user status rail — queue state", () => {
     });
 
     it("no rail is rendered on an idle user bubble", () => {
-        const onFeedbackHidden = jest.fn();
-        // Even with a hide hook wired (used for agent-bubble trash), the
-        // user bubble shows no rail until there's a queue state.
-        const { root, panel } = makePanel({ onFeedbackHidden });
+        // An idle user bubble shows no rail until there's a queue state.
+        const { root, panel } = makePanel();
         panel.addUserMessage("hello", "req-1");
         expect(userRail(root, "req-1")).toBeNull();
     });

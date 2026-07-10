@@ -234,6 +234,9 @@ export async function interpretRequest(
     const systemContext = context.sessionContext.agentContext;
     const activeSchemaNames = systemContext.agents.getActiveSchemas();
 
+    // Developer-mode capture: start a fresh prompt buffer for this request.
+    systemContext.devTrace.beginTranslation();
+
     const tokenUsage: ai.CompletionUsageStats = {
         completion_tokens: 0,
         prompt_tokens: 0,
@@ -293,6 +296,24 @@ export async function interpretRequest(
             tokenUsage,
         });
     }
+
+    // Developer-mode capture: persist the history + complete translation
+    // prompt(s) for this request so it can be inspected/reconstructed later.
+    // No-op unless developer mode is on and the session is persisted.
+    await systemContext.devTrace.writeTranslationCapture({
+        request,
+        developerMode: systemContext.developerMode === true,
+        translationType: translateResult.type,
+        elapsedMs: translateResult.elapsedMs,
+        schemaNames: [...activeSchemaNames],
+        config: translateResult.config,
+        history,
+        attachmentCount: attachments?.length ?? 0,
+        actions: translateResult.requestAction.actions,
+        replacedAction,
+        allMatches: translateResult.allMatches,
+        tokenUsage,
+    });
 
     // Record this completed user turn into the contextSelector signal *after*
     // resolution, so it never contributes to its own context vector

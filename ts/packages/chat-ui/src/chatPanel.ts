@@ -27,6 +27,7 @@ import {
     FeedbackUIVariant,
     FeedbackWidget,
 } from "./feedbackWidget.js";
+import { createDeleteControl } from "./deleteControl.js";
 import { ChatContextMenu } from "./contextMenu.js";
 import {
     renderConnectionStatus,
@@ -66,6 +67,7 @@ import type {
     SpeechState,
     TtsProvider,
 } from "./providers.js";
+import { createWebSpeechProvider } from "./webSpeechProvider.js";
 import { openSettingsPopup, openHelpPopup } from "./popups.js";
 import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
@@ -175,6 +177,66 @@ export type HistoryEntry =
       }
     | { kind: "system"; text: string };
 
+/**
+ * Compute a human-friendly relative-time label for the history separator
+ * shown between replayed session history and new live messages (e.g.
+ * "a few minutes ago", "yesterday"). Uses the newest timestamp among the
+ * given entries; falls back to "earlier" when none carry a timestamp.
+ *
+ * Entries carry a numeric epoch-ms `timestamp` (the dispatcher display-log
+ * shape), which is distinct from `HistoryEntry.timestamp` (an ISO string).
+ */
+export function formatHistorySeparatorLabel(
+    entries: ReadonlyArray<{ timestamp?: number }>,
+): string {
+    let newestTimestamp: number | undefined;
+    for (const entry of entries) {
+        if (typeof entry.timestamp !== "number") continue;
+        if (
+            newestTimestamp === undefined ||
+            entry.timestamp > newestTimestamp
+        ) {
+            newestTimestamp = entry.timestamp;
+        }
+    }
+
+    if (newestTimestamp === undefined) {
+        return "earlier";
+    }
+
+    const diffMs = Math.max(0, Date.now() - newestTimestamp);
+    const diffMinutes = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMinutes < 2) {
+        return "a moment ago";
+    }
+    if (diffMinutes < 10) {
+        return "a few minutes ago";
+    }
+    if (diffMinutes < 60) {
+        return `${diffMinutes} minutes ago`;
+    }
+    if (diffHours < 2) {
+        return "an hour ago";
+    }
+    if (diffHours < 6) {
+        return "a few hours ago";
+    }
+    if (diffHours < 24) {
+        return `${diffHours} hours ago`;
+    }
+    if (diffDays < 2) {
+        return "yesterday";
+    }
+    if (diffDays < 7) {
+        return `${diffDays} days ago`;
+    }
+
+    return new Date(newestTimestamp).toLocaleDateString();
+}
+
 function formatDuration(ms: number): string {
     if (ms < 1) return `${ms.toFixed(2)}ms`;
     if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
@@ -202,6 +264,7 @@ function escapeHtml(s: string): string {
 // passes through.
 // Avoids pulling in highlight.js / Prism just to colorize the action
 // JSON popup.
+// code-complexity-allow: hand-rolled JSON scanner kept branchy to avoid regex backtracking
 function highlightJson(json: string): string {
     const escapeChar = (c: string): string =>
         c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c;
@@ -391,9 +454,10 @@ export interface ChatPanelOptions {
     feedbackUIVariant?: FeedbackUIVariant;
 
     /**
-     * Optional speech-to-text provider. When supplied, ChatPanel renders a
-     * microphone button (reflecting the provider's state) and a "listening"
-     * banner, and inserts recognized text into the input.
+     * Optional speech-to-text provider. The mic button renders by default
+     * using the browser's Web Speech API; supplying a provider overrides that
+     * default (e.g. the Electron shell's Azure/Whisper recognizer), driving
+     * the mic-button state, the "listening" banner, and recognized-text input.
      */
     speechProvider?: SpeechInputProvider;
     /**
@@ -402,9 +466,11 @@ export interface ChatPanelOptions {
      */
     ttsProvider?: TtsProvider;
     /**
-     * Optional image-capture provider. When supplied, ChatPanel renders an
-     * attach-file button (if pickFile present) and a camera button (if
-     * openCamera present) that feed the next message's attachments.
+     * Optional image-capture provider. The attach-file button renders by
+     * default using a web-native hidden file picker; supplying `pickFile`
+     * overrides that with a host-native picker (e.g. the Electron dialog).
+     * When `openCamera` is present, an in-app camera button is also rendered.
+     * Both feed the next message's attachments.
      */
     imageCaptureProvider?: ImageCaptureProvider;
     /**
@@ -418,14 +484,16 @@ export interface ChatPanelOptions {
      */
     helpPanel?: HelpPanelContent;
     /**
-     * Optional soft-hide ("trash") hook for the feedback widget. When
-     * supplied, the feedback footer shows a trash button that toggles the
-     * hidden state of the user or agent message for the given request.
+     * Optional developer-mode hook to delete a message. When supplied and
+     * developer mode is enabled (see `ChatPanel.setDeveloperMode`), each
+     * message bubble shows a split "delete" button: the primary action is a
+     * soft (recoverable) delete; the caret offers a permanent (hard) delete.
+     * `permanent` is `true` for the hard-delete choice.
      */
-    onFeedbackHidden?: (
+    onDeleteMessage?: (
         requestId: RequestId,
         target: "user" | "agent",
-        hidden: boolean,
+        permanent: boolean,
     ) => void;
 }
 
@@ -635,15 +703,19 @@ export class ChatPanel {
     private imageCaptureProvider?: ImageCaptureProvider;
     private settingsPanel?: SettingsPanelSchema;
     private helpPanel?: HelpPanelContent;
-    public onFeedbackHidden?: (
+    public onDeleteMessage?: (
         requestId: RequestId,
         target: "user" | "agent",
-        hidden: boolean,
+        permanent: boolean,
     ) => void;
+    private developerMode = false;
     // Input-bar affordances created only when the matching provider exists.
     private micButton?: HTMLButtonElement;
     private attachButton?: HTMLButtonElement;
     private cameraButton?: HTMLButtonElement;
+    // Hidden <input type="file"> backing the web-native default attach button
+    // (used when the host doesn't supply an imageCaptureProvider.pickFile).
+    private fileInput?: HTMLInputElement;
     private voiceBanner?: HTMLDivElement;
     private lightboxOverlay?: HTMLDivElement;
     private lightboxKeyHandler?: (ev: KeyboardEvent) => void;
@@ -667,7 +739,15 @@ export class ChatPanel {
         this.imageCaptureProvider = options.imageCaptureProvider;
         this.settingsPanel = options.settingsPanel;
         this.helpPanel = options.helpPanel;
-        this.onFeedbackHidden = options.onFeedbackHidden;
+        this.onDeleteMessage = options.onDeleteMessage;
+
+        // Web-native default: when the host doesn't inject a speech provider,
+        // fall back to the browser's Web Speech API so the mic button works
+        // out of the box. Resolves to undefined where the API is unavailable,
+        // in which case the mic affordance is simply not rendered.
+        if (!this.speechProvider) {
+            this.speechProvider = createWebSpeechProvider();
+        }
 
         // Build DOM structure
         const wrapper = document.createElement("div");
@@ -985,22 +1065,37 @@ export class ChatPanel {
 
     /**
      * Create the mic / attach / camera buttons and wire the speech
-     * provider's state callbacks. Only the affordances whose providers are
-     * present get rendered, so hosts that omit a provider see no change.
+     * provider's state callbacks. The attach-file and mic buttons render by
+     * default (web-native file picker + Web Speech API); the camera button
+     * renders only when the host supplies `imageCaptureProvider.openCamera`.
      */
     private setupProviderAffordances() {
-        // Attach-file + camera buttons (image capture provider).
-        if (this.imageCaptureProvider?.pickFile) {
-            this.attachButton = document.createElement("button");
-            this.attachButton.className =
-                "chat-input-button chat-attach-button";
-            this.attachButton.title = "Attach image";
-            this.attachButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 0 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6z"/></svg>`;
-            this.attachButton.addEventListener("click", () =>
-                this.handleAttachFile(),
-            );
-            this.inputArea.insertBefore(this.attachButton, this.sendButton);
-        }
+        // Attach-file button — always rendered. Uses the host's
+        // imageCaptureProvider.pickFile when supplied, otherwise a built-in
+        // web-native hidden <input type="file"> (see handleAttachFile).
+        this.fileInput = document.createElement("input");
+        this.fileInput.type = "file";
+        this.fileInput.accept = "image/*";
+        this.fileInput.multiple = true;
+        this.fileInput.style.display = "none";
+        this.fileInput.addEventListener("change", () => {
+            this.handleFileDrop(this.fileInput?.files);
+            // Reset so re-selecting the same file still fires "change".
+            if (this.fileInput) this.fileInput.value = "";
+        });
+        this.inputArea.appendChild(this.fileInput);
+
+        this.attachButton = document.createElement("button");
+        this.attachButton.className = "chat-input-button chat-attach-button";
+        this.attachButton.title = "Attach image";
+        this.attachButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 0 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6z"/></svg>`;
+        this.attachButton.addEventListener("click", () =>
+            this.handleAttachFile(),
+        );
+        this.inputArea.insertBefore(this.attachButton, this.sendButton);
+
+        // Camera button — only when the host supplies an in-app capture
+        // (there is no reliable web-native default for this yet).
         if (this.imageCaptureProvider?.openCamera) {
             this.cameraButton = document.createElement("button");
             this.cameraButton.className =
@@ -1089,13 +1184,20 @@ export class ChatPanel {
     }
 
     private async handleAttachFile() {
-        const urls = await this.imageCaptureProvider?.pickFile();
-        if (urls && urls.length > 0) {
-            for (const url of urls) {
-                this.pendingAttachments.push(url);
-                this.showAttachmentPreview(url);
+        // Prefer a host-supplied native picker (e.g. the Electron dialog).
+        if (this.imageCaptureProvider?.pickFile) {
+            const urls = await this.imageCaptureProvider.pickFile();
+            if (urls && urls.length > 0) {
+                for (const url of urls) {
+                    this.pendingAttachments.push(url);
+                    this.showAttachmentPreview(url);
+                }
             }
+            return;
         }
+        // Web-native default: open the hidden file input; the "change"
+        // handler reads the selection via handleFileDrop.
+        this.fileInput?.click();
     }
 
     private async handleCameraCapture() {
@@ -1608,6 +1710,69 @@ export class ChatPanel {
     }
 
     /**
+     * Toggle the developer-mode per-message delete affordance. When enabled,
+     * every message bubble that carries a requestId shows a split "delete"
+     * button offering soft (recoverable) or permanent delete. No-op unless the
+     * host wired `onDeleteMessage`.
+     */
+    public setDeveloperMode(enabled: boolean): void {
+        if (this.developerMode === enabled) {
+            return;
+        }
+        this.developerMode = enabled;
+        this.rootElement.classList.toggle("chat-developer-mode", enabled);
+        if (this.onDeleteMessage === undefined) {
+            return;
+        }
+        if (enabled) {
+            const containers = this.messageDiv.querySelectorAll<HTMLElement>(
+                ".chat-message-container-user[data-request-id]," +
+                    ".chat-message-container-agent[data-request-id]",
+            );
+            containers.forEach((c) => {
+                const target = c.classList.contains(
+                    "chat-message-container-user",
+                )
+                    ? "user"
+                    : "agent";
+                this.attachDeleteControl(c, c.dataset.requestId!, target);
+            });
+        } else {
+            this.messageDiv
+                .querySelectorAll(".chat-delete-control")
+                .forEach((el) => el.remove());
+        }
+    }
+
+    /**
+     * Attach the dev-mode delete split button to a message container, reading
+     * the requestId + target from it. No-op when developer mode is off, the
+     * host didn't wire `onDeleteMessage`, or a control is already present.
+     */
+    private attachDeleteControl(
+        containerEl: HTMLElement,
+        requestId: string,
+        target: "user" | "agent",
+    ): void {
+        if (!this.developerMode || this.onDeleteMessage === undefined) {
+            return;
+        }
+        if (containerEl.querySelector(":scope > .chat-delete-control")) {
+            return;
+        }
+        const control = createDeleteControl((permanent) => {
+            containerEl.classList.add("chat-message-trashed");
+            try {
+                this.onDeleteMessage?.({ requestId }, target, permanent);
+            } catch (e) {
+                containerEl.classList.remove("chat-message-trashed");
+                console.error("onDeleteMessage callback failed", e);
+            }
+        });
+        containerEl.appendChild(control);
+    }
+
+    /**
      * Display a user message bubble.
      *
      * `requestId` is stamped on the container as `data-request-id` so later
@@ -1856,6 +2021,9 @@ export class ChatPanel {
 
         const id = container.dataset.requestId!;
         this.userMessageById.set(id, container);
+        if (this.developerMode) {
+            this.attachDeleteControl(container, id, "user");
+        }
         if (!isRemote) {
             if (!this.suppressFirstMessageTracking) {
                 this.requestStartByRequestId.set(id, Date.now());
@@ -2131,6 +2299,10 @@ export class ChatPanel {
             anchor,
         );
         this.threadContainers.set(threadId, container);
+        container.div.dataset.requestId = threadId;
+        if (this.developerMode) {
+            this.attachDeleteControl(container.div, threadId, "agent");
+        }
         const requestContainers =
             this.requestAgentContainers.get(threadId) ?? [];
         requestContainers.push(container);
@@ -3360,7 +3532,12 @@ export class ChatPanel {
             const finish = (value: unknown) => {
                 setKeyHandler(undefined);
                 clearButtons();
-                actionContainer.remove();
+                // Remove the whole confirmation bubble, not just the inner
+                // template editor. Removing only `actionContainer` left an
+                // empty agent container ("dispatcher" bubble) behind after
+                // Accept/Cancel/Replace. The action's own result renders in
+                // its own bubble when it runs.
+                container.remove();
                 resolve(value);
             };
 
@@ -4076,12 +4253,6 @@ export class ChatPanel {
                 }
             },
         };
-        // Only expose the trash affordance when the host supplied a hide hook.
-        if (this.onFeedbackHidden) {
-            controller.setHidden = async (hidden, target) => {
-                this.onFeedbackHidden!(requestId, target ?? "agent", hidden);
-            };
-        }
         container.attachFeedbackController(controller, this._feedbackUIVariant);
         const existing = this.feedbackByRequestId.get(threadId);
         if (existing) {

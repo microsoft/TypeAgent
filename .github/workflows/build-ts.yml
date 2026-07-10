@@ -125,7 +125,7 @@ jobs:
         shell: bash
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
-          npm run code-circular -- --ratchet --base "origin/${{ github.base_ref }}"
+          npm run code-circular -- --ratchet --base "origin/${{ github.base_ref }}" --exceptions-file tools/scripts/code/circular-baseline-exception.json
       # Test-debt gate (PRs only): zero tolerance for focused tests
       # (.only/fit/fdescribe) and no newly skipped tests (.skip/xit/xdescribe)
       # in changed files.  A small, fixable problem -> a hard gate, not a ratchet.

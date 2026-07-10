@@ -183,7 +183,25 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
             });
         },
         appendDiagnosticData: () => {},
-        setDynamicDisplay: () => {},
+        // Live-updating display (agent set ActionResult.dynamicDisplayId).
+        // Forward to the webview, which registers a refresh timer via chat-ui's
+        // ChatPanel.setDynamicDisplay and polls back for fresh content through
+        // the `getDynamicDisplay` bridge RPC. Previously a no-op, so dynamic
+        // displays (e.g. the player "now playing" status) never refreshed.
+        setDynamicDisplay: (
+            _requestId: RequestId,
+            source: string,
+            _actionIndex: number,
+            displayId: string,
+            nextRefreshMs: number,
+        ) => {
+            ctx.broadcast({
+                type: "setDynamicDisplay",
+                source,
+                displayId,
+                nextRefreshMs,
+            });
+        },
         notify: (
             notificationId: string | RequestId | undefined,
             event: string,
@@ -191,6 +209,15 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
             source: string,
             seq?: number,
         ) => {
+            // Developer-mode toggle: forward as a dedicated message so the
+            // webview can flip dev-only UI affordances (per-message delete).
+            if (event === "developerMode") {
+                ctx.broadcast({
+                    type: "developerMode",
+                    enabled: data?.enabled === true,
+                });
+                return;
+            }
             const clientId = clientIdOf(notificationId);
             // For commandComplete, also attach the canonical server UUID
             // (when known) so the webview's cancellation dedupe can mark
@@ -222,10 +249,50 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
                 aliasRequestId,
             });
         },
-        requestChoice: () => {},
-        requestInteraction: (_interaction: PendingInteractionRequest) => {},
-        interactionResolved: () => {},
-        interactionCancelled: () => {},
+        // Non-blocking choice card (yes/no buttons, multi-select, or a
+        // single-select pick + "remember" checkbox). The dispatcher already
+        // rendered the prompt text as the action's displayContent
+        // (appendDisplay above); we forward the choice so the webview can add
+        // the interactive buttons to that same agent bubble and reply with a
+        // `choiceResponse`. Previously a no-op, which is why yes/no cards
+        // (e.g. github-cli install) never showed their buttons here.
+        requestChoice: (
+            requestId: RequestId,
+            choiceId: string,
+            type: "yesNo" | "multiChoice" | "pickRemember",
+            message: string,
+            choices: string[],
+            source: string,
+            checkboxLabel?: string,
+        ) => {
+            ctx.broadcast({
+                type: "requestChoice",
+                choiceId,
+                choiceType: type,
+                message,
+                choices,
+                source,
+                checkboxLabel,
+                requestId: clientIdOf(requestId),
+            });
+        },
+        // Forward server-driven interactive prompts (dev-mode action
+        // confirmation via `@config dev on --confirm`, or agent questions) to
+        // the webview, which renders them and replies with an
+        // `interactionResponse` (handled in agentServerBridge ->
+        // dispatcher.respondToInteraction). Without this the request blocks on
+        // the server until the 10-min proposeAction timeout.
+        requestInteraction: (interaction: PendingInteractionRequest) => {
+            ctx.broadcast({ type: "requestInteraction", interaction });
+        },
+        // Another connected client answered, or the server cancelled/timed
+        // out the interaction — tell the webview to tear down its prompt.
+        interactionResolved: (interactionId: string) => {
+            ctx.broadcast({ type: "interactionResolved", interactionId });
+        },
+        interactionCancelled: (interactionId: string) => {
+            ctx.broadcast({ type: "interactionCancelled", interactionId });
+        },
         takeAction: (requestId, action, data) => {
             if (action === "vscode-shell-action") {
                 ctx.handleShellAction(requestId, data).catch((e: any) => {
@@ -244,6 +311,16 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
             }
         },
         shutdown: () => {},
+
+        // User feedback (thumbs up/down) recorded by any client is fanned out
+        // here so every connected client's bubble stays in sync. Forward to the
+        // webview, which applies it via chat-ui's ChatPanel.applyFeedback. The
+        // entry is keyed by the client request id the originating client
+        // submitted (see recordUserFeedback in agentServerBridge), which
+        // matches the webview's bubble threadId.
+        onUserFeedback: (entry) => {
+            ctx.broadcast({ type: "userFeedback", entry });
+        },
 
         // Queue lifecycle push events. Forwarded straight to the webview
         // so the chat-ui can mirror state and dedupe the cancellation

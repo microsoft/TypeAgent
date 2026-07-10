@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=e047fc6c53efb2f43df9b6d9817e97cee0409145c3c9b15f6c321f0afd407ab5 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=3b85260e2b269ce9bc55c9ca40fdd24fb1cc2fd1bec208c8282d3ed5426035ec -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # list-agent — AI-generated documentation
@@ -16,7 +16,7 @@ The `list-agent` package is a TypeAgent application agent designed to manage lis
 
 ## What it does
 
-The `list-agent` provides six key actions to manage lists effectively:
+The `list-agent` supports six primary actions for managing lists:
 
 - **`addItems`**: Adds one or more items to a specified list. If the list does not exist, it is created. This action requires the `items` (array of strings) and `listName` (string) parameters.
 - **`removeItems`**: Removes one or more items from a specified list. This action requires the `items` (array of strings) and `listName` (string) parameters.
@@ -100,7 +100,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/listActionHandler.ts`, `./src/listManifest.json`, `./src/listSchema.agr`, …and 3 more under `./src/`.
+`./src/listActionHandler.ts`, `./src/listManifest.json`, `./src/listSchema.agr`, …and 4 more under `./src/`.
 
 ### Agent surface
 
@@ -124,6 +124,6 @@ _6 actions implemented by this agent, parsed deterministically from `./src/listS
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

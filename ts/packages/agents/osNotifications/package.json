@@ -79,5 +79,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "osNotifications"
   }
 }

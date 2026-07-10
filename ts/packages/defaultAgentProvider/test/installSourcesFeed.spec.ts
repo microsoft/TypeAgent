@@ -219,7 +219,9 @@ describe("feedSource.find", () => {
             }) as unknown as typeof fetch,
         });
         // A fresh cache answers membership without any network call.
-        expect(await source.listAgents!()).toContain("@typeagent/foo-agent");
+        expect(
+            (await source.listAgents!()).map((r) => r.packageName),
+        ).toContain("@typeagent/foo-agent");
     });
 
     it("ignores a malformed fresh cache and refreshes from the network", async () => {
@@ -242,7 +244,9 @@ describe("feedSource.find", () => {
             }),
         });
 
-        expect(await source.listAgents!()).toEqual(["@typeagent/fresh-agent"]);
+        expect((await source.listAgents!()).map((r) => r.packageName)).toEqual([
+            "@typeagent/fresh-agent",
+        ]);
     });
 
     it("serves a stale cache when offline (skips refresh failure)", async () => {
@@ -265,7 +269,7 @@ describe("feedSource.find", () => {
             }) as unknown as typeof fetch,
         });
         // Stale cache still answers membership (refresh failure is swallowed).
-        const agents = await source.listAgents!();
+        const agents = (await source.listAgents!()).map((r) => r.packageName);
         expect(agents).toContain("@typeagent/foo-agent");
         expect(agents).not.toContain("@typeagent/missing");
     });
@@ -479,6 +483,103 @@ describe("feedAuth", () => {
     });
 });
 
+// A fetch that answers the packument endpoint with a version carrying the
+// agent keyword and an optional typeagent.defaultAgentName, for
+// findName / default-name-derivation tests.
+function defaultNamePackumentFetch(defaultAgentName?: string): typeof fetch {
+    const version: Record<string, unknown> = {
+        version: "1.0.0",
+        keywords: ["typeagent-agent"],
+    };
+    if (defaultAgentName !== undefined) {
+        version.typeagent = { defaultAgentName };
+    }
+    return (async () =>
+        okJson({
+            keywords: ["typeagent-agent"],
+            versions: { "1.0.0": version },
+            "dist-tags": { latest: "1.0.0" },
+        })) as unknown as typeof fetch;
+}
+
+describe("feedSource.findName / default-name derivation", () => {
+    function descriptorCacheSource(
+        packages: Array<{ packageName: string; defaultAgentName?: string }>,
+        fetchFn: typeof fetch,
+    ) {
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        const cacheFilePath = path.join(installDir, "cache.json");
+        fs.writeFileSync(
+            cacheFilePath,
+            JSON.stringify({ fetchedAt: 1000, packages }),
+        );
+        return createFeedSource(CONFIG, {
+            installDir,
+            cacheFilePath,
+            now: () => 1000,
+            tokenRunner: goodToken,
+            fetchFn,
+        });
+    }
+
+    it("find annotates the candidate with the resolved version's default agent name", async () => {
+        const source = descriptorCacheSource(
+            [{ packageName: "@typeagent/weather-agent" }],
+            defaultNamePackumentFetch("weather"),
+        );
+        const candidate = await source.find("@typeagent/weather-agent");
+        expect(candidate).toBeDefined();
+        expect(candidate!.packageName).toBe("@typeagent/weather-agent");
+        expect(candidate!.defaultAgentName).toBe("weather");
+    });
+
+    it("findName matches a package by its default agent name via a live resolve", async () => {
+        const source = descriptorCacheSource(
+            [
+                {
+                    packageName: "@typeagent/weather-agent",
+                    defaultAgentName: "weather",
+                },
+            ],
+            defaultNamePackumentFetch("weather"),
+        );
+        const candidate = await source.findName!("weather");
+        expect(candidate).toBeDefined();
+        expect(candidate!.module).toBe("@typeagent/weather-agent");
+        expect(candidate!.defaultAgentName).toBe("weather");
+        expect(candidate!.version).toBe("1.0.0");
+    });
+
+    it("findName fails as ambiguous when two descriptors share a default name", async () => {
+        const source = descriptorCacheSource(
+            [
+                { packageName: "@typeagent/a", defaultAgentName: "weather" },
+                { packageName: "@typeagent/b", defaultAgentName: "weather" },
+            ],
+            defaultNamePackumentFetch("weather"),
+        );
+        await expect(source.findName!("weather")).rejects.toThrow(
+            /multiple packages with default agent name 'weather'/,
+        );
+    });
+
+    it("findName falls through when the resolved version's default name drifted from the cache", async () => {
+        // The cache says "weather" but the live packument resolves to a version
+        // whose default name is now "renamed": the cached hint is not
+        // authoritative, so this is a non-match (never installs a surprise name).
+        const source = descriptorCacheSource(
+            [
+                {
+                    packageName: "@typeagent/weather-agent",
+                    defaultAgentName: "weather",
+                },
+            ],
+            defaultNamePackumentFetch("renamed"),
+        );
+        expect(await source.findName!("weather")).toBeUndefined();
+    });
+});
+
 describe("feedSource.listAgents", () => {
     it("returns the enumerated agent package list", async () => {
         const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
@@ -498,9 +599,86 @@ describe("feedSource.listAgents", () => {
                 throw new Error("offline");
             }) as unknown as typeof fetch,
         });
-        expect((await source.listAgents!()).sort()).toEqual([
-            "@typeagent/a-agent",
-            "@typeagent/b-agent",
+        expect(
+            (await source.listAgents!()).map((r) => r.packageName).sort(),
+        ).toEqual(["@typeagent/a-agent", "@typeagent/b-agent"]);
+    });
+});
+
+describe("feedSource.refresh", () => {
+    // A fetch answering both the Azure packages endpoint and the packument, so
+    // enumerateFeedAgentDescriptors builds a descriptor with a default name.
+    function enumFetch(
+        packageName: string,
+        defaultAgentName: string,
+    ): typeof fetch {
+        return (async (input: any) => {
+            const url = String(input);
+            if (url.includes("/_apis/packaging/feeds/")) {
+                return okJson({ value: [{ normalizedName: packageName }] });
+            }
+            return okJson({
+                keywords: ["typeagent-agent"],
+                versions: {
+                    "1.0.0": {
+                        version: "1.0.0",
+                        keywords: ["typeagent-agent"],
+                        typeagent: { defaultAgentName },
+                    },
+                },
+                "dist-tags": { latest: "1.0.0" },
+            });
+        }) as unknown as typeof fetch;
+    }
+
+    it("refresh populates the descriptor cache with default names", async () => {
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        const source = createFeedSource(CONFIG, {
+            installDir,
+            cacheFilePath: path.join(installDir, "cache.json"),
+            now: () => 1000,
+            tokenRunner: goodToken,
+            fetchFn: enumFetch("@typeagent/weather-agent", "weather"),
+        });
+        await source.refresh!();
+        expect(await source.listAgents!()).toEqual([
+            {
+                source: "typeagent",
+                ref: "@typeagent/weather-agent",
+                packageName: "@typeagent/weather-agent",
+                defaultAgentName: "weather",
+            },
+        ]);
+    });
+
+    it("refresh throws and leaves the prior cache intact on fetch failure", async () => {
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        const cacheFilePath = path.join(installDir, "cache.json");
+        fs.writeFileSync(
+            cacheFilePath,
+            JSON.stringify({
+                fetchedAt: 1000,
+                packages: [
+                    {
+                        packageName: "@typeagent/old-agent",
+                        defaultAgentName: "old",
+                    },
+                ],
+            }),
+        );
+        const source = createFeedSource(CONFIG, {
+            installDir,
+            cacheFilePath,
+            now: () => 1000, // keeps the prior cache fresh
+            tokenRunner: goodToken,
+            fetchFn: (() => {
+                throw new Error("offline");
+            }) as unknown as typeof fetch,
+        });
+        await expect(source.refresh!()).rejects.toThrow(/offline/);
+        // The prior descriptor cache still serves.
+        expect((await source.listAgents!()).map((r) => r.packageName)).toEqual([
+            "@typeagent/old-agent",
         ]);
     });
 });

@@ -236,7 +236,7 @@ For `python -c`, arbitrary scripts, or untrusted code:
 {
   "container": {
     "enabled": true,
-    "image": "node:20-slim",
+    "image": "node:22-slim",
     "networkMode": "none",
     "deriveVolumesFromPolicy": true,
     "readOnly": true,
