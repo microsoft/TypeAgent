@@ -40,5 +40,8 @@ onlyBuiltDependencies:
   - exifreader
   - keytar
   - koffi
+  - node-pty
+  - onnxruntime-node
+  - protobufjs
   - puppeteer
   - sharp

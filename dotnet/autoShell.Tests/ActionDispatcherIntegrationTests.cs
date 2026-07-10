@@ -26,6 +26,7 @@ public class ActionDispatcherIntegrationTests
     private readonly Mock<IWindowService> _windowMock = new();
     private readonly Mock<INetworkService> _networkMock = new();
     private readonly Mock<IVirtualDesktopService> _virtualDesktopMock = new();
+    private readonly Mock<IServiceControlService> _serviceControlMock = new();
     private readonly Mock<ILogger> _loggerMock = new();
     private readonly ActionDispatcher _dispatcher;
 
@@ -43,7 +44,8 @@ public class ActionDispatcherIntegrationTests
             _displayMock.Object,
             _windowMock.Object,
             _networkMock.Object,
-            _virtualDesktopMock.Object);
+            _virtualDesktopMock.Object,
+            _serviceControlMock.Object);
     }
 
     /// <summary>

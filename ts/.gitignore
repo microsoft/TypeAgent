@@ -48,6 +48,14 @@ tools/scripts/code/debt-report/
 # Holds local endpoints, deployment names, and (in Phase 1) secrets.
 # Never commit.
 config.local.yaml
+config.local.yaml.bak
+
+# Per-developer npm registry config — points pnpm at the internal
+# "typeagent-feed" Azure Artifacts feed. Provisioned via `npm run getNPMRC`
+# from Azure Key Vault; never committed (internal feed URL, and external
+# contributors use their own registry). Root-anchored so packages/*/.npmrc
+# stay tracked.
+/.npmrc
 
 # Per-developer npm registry config — points pnpm at the internal
 # "typeagent-feed" Azure Artifacts feed. Provisioned via `npm run getNPMRC`

@@ -63,7 +63,22 @@
     }
 };
 
-<IssueList> = show open issues in $(repo:wildcard) -> {
+<IssueList> = show open unassigned issues in $(repo:wildcard) -> {
+    actionName: "issueList",
+    parameters: {
+        repo,
+        state: "open",
+        assignee: "none"
+    }
+}
+  | list unassigned issues in $(repo:wildcard) -> {
+    actionName: "issueList",
+    parameters: {
+        repo,
+        assignee: "none"
+    }
+}
+  | show open issues in $(repo:wildcard) -> {
     actionName: "issueList",
     parameters: {
         repo,
