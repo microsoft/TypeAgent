@@ -5,7 +5,7 @@
 // shares a common optional prefix used to fail to compile to an NFA
 // once `factorCommonPrefixes` hoisted the shared prefix out, leaving a
 // value-less multi-term rule. See nfaCompiler.ts (implicit value
-// derivation) and grammarOptimizer.ts (`nfaSafeOptimizations`).
+// derivation) and grammarOptimizer.ts (`factorCommonPrefixes`).
 //
 // Note: `factorCommonPrefixes`'s own output already stamps an
 // explicit `value` on the factored top-level rule, so grammar-source
@@ -13,16 +13,15 @@
 // hand-built-AST test further down is what directly exercises
 // `findSingleValueBearingPart`'s forwarding logic.
 //
-// NFA's rejection of tailCall RulesParts (still unsupported; see
-// `nfaSafeOptimizations`) is already covered by
-// grammarOptimizerTailFactoring.spec.ts ("NFA compile of a
-// tail-factored grammar throws a descriptive error") - not duplicated
-// here.
+// NFA's rejection of tailCall RulesParts (still unsupported) is
+// already covered by grammarOptimizerTailFactoring.spec.ts ("NFA
+// compile of a tail-factored grammar throws a descriptive error") -
+// not duplicated here.
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchNFA } from "../src/nfaInterpreter.js";
-import { nfaSafeOptimizations } from "../src/grammarOptimizer.js";
+import { recommendedOptimizations } from "../src/grammarOptimizer.js";
 import {
     Grammar,
     createStringPart,
@@ -40,11 +39,11 @@ describe("NFA compilation of factored shared-prefix grammars", () => {
 `;
 
     describeForEachMatcher(
-        "compiles and matches correctly with nfaSafeOptimizations",
+        "compiles and matches correctly with recommendedOptimizations",
         (testMatchGrammar) => {
             it("matches each branch, with and without the shared prefix", () => {
                 const grammar = loadGrammarRules("factored-prefix.agr", agr, {
-                    optimizations: nfaSafeOptimizations,
+                    optimizations: recommendedOptimizations,
                 });
 
                 expect(testMatchGrammar(grammar, "foo")).toStrictEqual([

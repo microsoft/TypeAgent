@@ -22,7 +22,7 @@ import {
     ValueExpression,
 } from "./environment.js";
 import { normalizeToken } from "./nfaMatcher.js";
-import { findSingleValueBearingPart } from "./grammarOptimizer.js";
+import { deriveImplicitValue } from "./grammarImplicitExtractor.js";
 
 // Scripts that require a word-boundary separator between adjacent tokens.
 // CJK and other logographic/syllabic scripts are NOT included — no separator needed.
@@ -478,32 +478,29 @@ function isSingleVariableRule(rule: GrammarRule): { variable: string } | false {
 /**
  * Derive the value expression for a rule that has no explicit `->` value:
  * single-variable rules forward that variable, and factored multi-part
- * rules (from `nfaSafeOptimizations`) forward their single variable-bearing
- * part's value (via `findSingleValueBearingPart`, shared with the
- * optimizer's `getImplicitDefaultValue`). Not every rule needs a value -
- * only when `requireValue` is set (i.e. the value is actually consumed:
- * top-level action rules, or nested rules captured by a parent variable)
- * do ambiguous (2+ variable-bearing parts) or missing values throw;
- * otherwise both cases just resolve to `undefined`.
+ * rules (e.g. from `factorCommonPrefixes`) forward their single
+ * variable-bearing part's value (via the shared `deriveImplicitValue`,
+ * also used by the optimizer's `getImplicitDefaultValue`). Not every rule
+ * needs a value - only when `requireValue` is set (i.e. the value is
+ * actually consumed: top-level action rules, or nested rules captured by
+ * a parent variable) do ambiguous (2+ variable-bearing parts) or missing
+ * values throw; otherwise both cases just resolve to `undefined`.
  */
 function deriveEffectiveValue(
     rule: GrammarRule,
     describeRule: () => string,
     requireValue: boolean,
 ): CompiledValueNode | undefined {
-    if (rule.value) {
-        return rule.value;
-    }
     const singleVar = isSingleVariableRule(rule);
     if (singleVar) {
         return { type: "variable", name: singleVar.variable };
     }
     if (rule.parts.length <= 1) {
-        return undefined;
+        return rule.value;
     }
-    const singleVarPart = findSingleValueBearingPart(rule.parts);
-    if (singleVarPart !== undefined && singleVarPart !== "ambiguous") {
-        return { type: "variable", name: singleVarPart.variable };
+    const result = deriveImplicitValue(rule);
+    if (result.kind === "value") {
+        return result.value;
     }
     // Not every rule needs a value - only rules whose value is actually
     // consumed (top-level action rules, or nested rules captured by a
@@ -512,7 +509,7 @@ function deriveEffectiveValue(
     if (!requireValue) {
         return undefined;
     }
-    if (singleVarPart === "ambiguous") {
+    if (result.kind === "ambiguous") {
         throw new Error(
             `${describeRule()} has ${rule.parts.length} terms but no value expression, ` +
                 `and more than one part carries a variable - the implicit value is ambiguous. ` +
@@ -528,7 +525,7 @@ function deriveEffectiveValue(
             (hasTailCall
                 ? " This rule contains a tailCall RulesPart, which the NFA compiler " +
                   "does not support - disable `tailFactoring` / `promoteTailRulesParts` " +
-                  "in the grammar optimizer (use `nfaSafeOptimizations`) for NFA/DFA paths."
+                  "in the grammar optimizer for NFA/DFA paths."
                 : ""),
     );
 }

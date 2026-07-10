@@ -23,6 +23,10 @@ import { leadingWordBoundaryScriptPrefix } from "./spacingScripts.js";
 import { leadingNonSeparatorRun } from "./grammarMatcher.js";
 import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
 import {
+    deriveImplicitValue,
+    findSingleValueBearingPart,
+} from "./grammarImplicitExtractor.js";
+import {
     globalPhraseSetRegistry,
     PhraseSetMatcher,
 } from "./builtInPhraseMatchers.js";
@@ -261,25 +265,6 @@ export const recommendedOptimizations: GrammarOptimizationOptions = {
     tailFactoring: true,
     dispatchifyAlternations: true,
     promoteTailRulesParts: true,
-};
-
-/**
- * NFA-compatible preset: all of `recommendedOptimizations` except
- * `tailFactoring` and `promoteTailRulesParts`, which emit
- * `RulesPart.tailCall` nodes the NFA compiler rejects. Use this preset
- * for any grammar that will be compiled to an NFA/DFA path (note: the
- * default `grammarSystem` for agent-server is `completionBased`/AST, not
- * NFA - this preset only matters when NFA/DFA is explicitly selected).
- *
- * TODO(#nfa-tail-support): Once the NFA compiler supports tailCall
- * RulesParts natively, this preset (and the `agc compile --nfa-safe`
- * flag that exposes it) should be removed in favor of always using
- * `recommendedOptimizations`.
- */
-export const nfaSafeOptimizations: GrammarOptimizationOptions = {
-    inlineSingleAlternatives: true,
-    factorCommonPrefixes: true,
-    dispatchifyAlternations: true,
 };
 
 /**
@@ -3209,15 +3194,18 @@ function checkForwardingPromotable(
     // Multi-part rule: matcher's implicit-default rule requires
     // exactly one variable-bearing contributor (wildcard / number
     // always; rules / string / phraseSet only when bound; every
-    // `GrammarPart` carries an optional `variable` field, so a
-    // single `p.variable !== undefined` test covers the union).
-    // Promoting masks the baseline missing/multiple-default throws
-    // at finalize time, so bail out unless the trailing RulesPart
-    // is the sole contributor.
-    for (let i = 0; i < parts.length - 1; i++) {
-        if (parts[i].variable !== undefined) return false;
-    }
-    return true;
+    // `GrammarPart` carries an optional `variable` field, so
+    // `findSingleValueBearingPart` - the shared scan also used by
+    // `deriveImplicitValue` (grammarValueDeriver.ts) - covers the
+    // union). Promoting masks the baseline missing/multiple-default
+    // throws at finalize time, so bail out unless the trailing
+    // RulesPart is the sole contributor.
+    const contributor = findSingleValueBearingPart(parts);
+    return (
+        contributor !== undefined &&
+        contributor !== "ambiguous" &&
+        contributor.variable === last.variable
+    );
 }
 
 /**
@@ -3327,40 +3315,14 @@ function trySubstituteMembers(
  *
  * Used by the value-substitution branch of `tryPromoteTrailing` to
  * fold each member's effective value into the parent's value
- * expression.
+ * expression. See `deriveImplicitValue` (grammarImplicitValue.ts) for
+ * the shared derivation logic, also used by the NFA compiler.
  */
 function getImplicitDefaultValue(
     rule: GrammarRule,
 ): CompiledValueNode | undefined {
-    if (rule.value !== undefined) return rule.value;
-    if (rule.parts.length === 0) return undefined;
-    const result = findSingleValueBearingPart(rule.parts);
-    return result !== "ambiguous" && result !== undefined
-        ? { type: "variable", name: result.variable }
-        : undefined;
-}
-
-/**
- * Find the single part (if any) that carries a variable across a rule's
- * parts, so its value can stand in for the whole rule's implicit value
- * when the rule has no explicit `->` expression. Returns `"ambiguous"`
- * when 2+ parts carry a variable, or `undefined` when none do.
- *
- * Shared by `getImplicitDefaultValue` (above) and the NFA compiler's
- * equivalent forwarding logic for factored rules (see
- * `deriveEffectiveValue` in nfaCompiler.ts).
- */
-export function findSingleValueBearingPart(
-    parts: GrammarPart[],
-): { variable: string } | "ambiguous" | undefined {
-    let found: string | undefined;
-    for (const p of parts) {
-        const name = p.variable;
-        if (name === undefined) continue;
-        if (found !== undefined) return "ambiguous";
-        found = name;
-    }
-    return found !== undefined ? { variable: found } : undefined;
+    const result = deriveImplicitValue(rule);
+    return result.kind === "value" ? result.value : undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

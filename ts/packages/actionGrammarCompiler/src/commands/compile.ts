@@ -7,7 +7,6 @@ import fs from "node:fs";
 import {
     grammarToJson,
     loadGrammarRulesNoThrow,
-    nfaSafeOptimizations,
     recommendedOptimizations,
     SchemaLoader,
 } from "@typeagent/action-grammar";
@@ -69,16 +68,6 @@ export default class Compile extends Command {
                 "Disable grammar optimizations (produces an unoptimized AST that preserves the 1:1 correspondence between top-level rules and the original source — useful for diagnostics).",
             default: false,
         }),
-        // TODO(#nfa-tail-support): Remove this flag once the NFA compiler
-        // supports tailCall-producing optimizations (tailFactoring /
-        // promoteTailRulesParts) directly, at which point
-        // `recommendedOptimizations` alone should be NFA-safe and this
-        // opt-in preset becomes unnecessary.
-        "nfa-safe": Flags.boolean({
-            description:
-                "Use the NFA-compatible optimization preset (excludes tailCall-producing passes) instead of the default recommended optimizations.",
-            default: false,
-        }),
     };
 
     async run(): Promise<void> {
@@ -97,9 +86,7 @@ export default class Compile extends Command {
                 : {
                       startValueRequired: true,
                       schemaLoader,
-                      optimizations: flags["nfa-safe"]
-                          ? nfaSafeOptimizations
-                          : recommendedOptimizations,
+                      optimizations: recommendedOptimizations,
                   },
         );
 
