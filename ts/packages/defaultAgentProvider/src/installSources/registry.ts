@@ -7,14 +7,16 @@ import {
     InstallSourceInfo,
     InstallSourceUpdateResult,
     InstalledAgentRecord,
-    MaterializedInstallRecord,
+    ResolveResult,
     ResolvedCandidate,
+    AvailableInstallRow,
     SourceStatus,
     SourceWarning,
 } from "./config.js";
 import { createPathSource } from "./pathSource.js";
 import { createCatalogSource } from "./catalogSource.js";
 import { createFeedSource } from "./feedSource.js";
+import { readPackageMeta, isLegalAgentName } from "./packageMeta.js";
 import { createLimiter, Limiter } from "@typeagent/common-utils";
 
 /**
@@ -25,6 +27,30 @@ import { createLimiter, Limiter } from "@typeagent/common-utils";
  * interface; it receives the `@package source` command table via
  * `InstalledAgentSourceApi.sourceCommands()`.
  */
+/**
+ * One match produced by a resolution walk, used by the dry-run preview to show
+ * the winner and the full shadow set. `matchedByName` is `true` for a phase-1
+ * default-agent-name (`findName`) match and `false` for a phase-2/explicit ref
+ * (`find`) match. `name` is the dispatcher name the install would use (the
+ * inferred default name, or the explicit override in two-argument mode).
+ */
+export interface PreviewMatch {
+    source: string;
+    matchedByName: boolean;
+    name: string;
+    candidate: ResolvedCandidate;
+}
+
+/**
+ * A dry-run preview: the winning match plus every other match in priority order
+ * across both phases (so an incidental shadow is visible). Produced without
+ * materializing; nothing is installed.
+ */
+export interface PreviewResult {
+    winner: PreviewMatch;
+    matches: PreviewMatch[];
+}
+
 export interface DefaultInstallSourceRegistry {
     // Host-rendered summaries for `@package source list`.
     list(): InstallSourceInfo[];
@@ -42,20 +68,42 @@ export interface DefaultInstallSourceRegistry {
         record: InstalledAgentRecord,
         onWarn?: SourceWarning,
     ): InstalledAgentRecord;
-    // resolve a ref: explicit source, else walk the configured order
-    // sequentially, first match wins. `onWarn`, when supplied, receives
-    // non-fatal source problem messages (e.g. a corrupt catalog) for the caller
-    // to show on the triggering command. `onStatus`, when supplied, is
-    // called with the name of each source as it is probed so the caller can
-    // show a live status line. `abortSignal`, when supplied, cancels a long
-    // install (the feed source's `npm install`) mid flight.
+    // Resolve an install. Overloaded on whether `ref` is supplied:
+    //  - `ref` omitted (one-argument `@package install <target>`): INFER mode -
+    //    `nameOrTarget` is the target; walk the two-phase inferred walk
+    //    (`findName` across sources first, then `find`) and derive the installed
+    //    name from the resolved package.
+    //  - `ref` defined (two-argument `@package install <ref> <name>`): EXPLICIT
+    //    mode - resolve `ref` via the ordered ref walk and stamp `nameOrTarget`
+    //    as the installed name.
+    // Either way the winning candidate is materialized into a named record.
+    // `onWarn`, when supplied, receives non-fatal source problem messages;
+    // `onStatus`, when supplied, reports each source as it is probed.
+    // `abortSignal`, when supplied, cancels a long install (the feed source's
+    // `npm install`) mid flight.
     resolve(
-        ref: string,
+        nameOrTarget: string,
+        ref?: string,
         sourceName?: string,
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
         abortSignal?: AbortSignal,
-    ): Promise<MaterializedInstallRecord>;
+    ): Promise<ResolveResult>;
+    // Dry-run: report which source would win (and the full shadow set) without
+    // materializing. Mirrors `resolve`'s arity: `ref` omitted runs the inferred
+    // two-phase walk; `ref` defined runs the explicit ref walk. Returns
+    // undefined when nothing would resolve.
+    preview(
+        nameOrTarget: string,
+        ref?: string,
+        sourceName?: string,
+        onWarn?: SourceWarning,
+        onStatus?: SourceStatus,
+    ): Promise<PreviewResult | undefined>;
+    // Refresh cache-backed source metadata (feed descriptor caches). When
+    // `sourceName` is given, only that source is refreshed. A fetch failure
+    // throws (the prior cache is left intact) so `--refresh` fails the command.
+    refresh(sourceName?: string, onWarn?: SourceWarning): Promise<void>;
     // Update a previously-installed record via its recorded source. The source
     // owns whether update is supported and how its persisted record is
     // interpreted; the registry only performs source lookup and limiter
@@ -68,19 +116,12 @@ export interface DefaultInstallSourceRegistry {
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
     ): Promise<InstallSourceUpdateResult>;
-    // dry-run: report which source would win without materializing. Walks the
-    // configured order sequentially like resolve().
-    where(
-        ref: string,
-        onWarn?: SourceWarning,
-        onStatus?: SourceStatus,
-    ): Promise<ResolvedCandidate | undefined>;
 }
 
 export async function listAvailableAgents(
     registry: DefaultInstallSourceRegistry,
     onError?: (sourceName: string, error: unknown) => void,
-): Promise<string[]> {
+): Promise<AvailableInstallRow[]> {
     const lists = await Promise.all(
         registry.list().map(async (info) => {
             const source = registry.get(info.name);
@@ -92,7 +133,19 @@ export async function listAvailableAgents(
             }
         }),
     );
-    return [...new Set(lists.flat())];
+    // De-duplicate by (source, ref): one source can surface the same entry
+    // under both its default agent name and its package name.
+    const seen = new Set<string>();
+    const rows: AvailableInstallRow[] = [];
+    for (const row of lists.flat()) {
+        const key = `${row.source}\u0000${row.ref}`;
+        if (seen.has(key)) {
+            continue;
+        }
+        seen.add(key);
+        rows.push(row);
+    }
+    return rows;
 }
 
 export interface RegistryDeps {
@@ -177,12 +230,16 @@ export function createInstallSourceRegistry(
     // access path - resolve, where, get()->listAgents - gets the server-log
     // dedup. Optional methods are only re-wrapped when the source provides them.
     function build(config: InstallSourceConfig): InstallSource {
-        const { find, update, load, listAgents, ...rest } =
+        const { find, findName, update, load, listAgents, refresh, ...rest } =
             sourceFactory(config);
         const wrapped: InstallSource = {
             ...rest,
             find: (ref, onWarn) => find(ref, composeWarn(onWarn)),
         };
+        if (findName !== undefined) {
+            wrapped.findName = (name, onWarn) =>
+                findName(name, composeWarn(onWarn));
+        }
         if (update !== undefined) {
             wrapped.update = (record, opts, onWarn) =>
                 update(record, opts, composeWarn(onWarn));
@@ -193,6 +250,9 @@ export function createInstallSourceRegistry(
         }
         if (listAgents !== undefined) {
             wrapped.listAgents = (onWarn) => listAgents(composeWarn(onWarn));
+        }
+        if (refresh !== undefined) {
+            wrapped.refresh = (onWarn) => refresh(composeWarn(onWarn));
         }
         return wrapped;
     }
@@ -246,63 +306,217 @@ export function createInstallSourceRegistry(
         persist();
     }
 
-    // Probe the sources sequentially in resolution (map iteration) order; first
-    // match wins, so a later source is never probed once an earlier one matches.
-    // Shared by the implicit resolve walk and `where` (dry-run).
-    async function walk(
+    // The ordered source list to walk for a resolution. With no explicit
+    // source, this is the full resolution priority order (respecting the
+    // runtime `excludePathSources` filter). An explicit source narrows to that
+    // single source, hard-failing on an unknown or host-unavailable name.
+    function sourcesFor(sourceName?: string): InstallSource[] {
+        if (sourceName === undefined) {
+            return resolutionSources();
+        }
+        const entry = entries.get(sourceName);
+        if (entry === undefined) {
+            throw new Error(`Unknown source '${sourceName}'`);
+        }
+        if (deps.excludePathSources && entry.config.kind === "path") {
+            // Path sources are unusable on this host (no local filesystem), so
+            // an explicit --source path would resolve against the server's own
+            // filesystem; reject it rather than honor it.
+            throw new Error(
+                `${describeSource(sourceName)} is not available on this host`,
+            );
+        }
+        return [entry.source];
+    }
+
+    // A single match yielded by a resolution walk. `matchedByName` is `true`
+    // for a phase-1 default-agent-name (`findName`) match and `false` for a
+    // phase-2 / explicit ref (`find`) match.
+    type WalkMatch = {
+        source: InstallSource;
+        candidate: ResolvedCandidate;
+        matchedByName: boolean;
+    };
+
+    // Lazily yield every ref (phase-2 / explicit) match across the sources in
+    // priority order. A consumer that stops after the first value stops the
+    // probing (first-match-wins); one that drains it gets the full shadow set.
+    // A ref match is never a name match, so `matchedByName` is always false
+    // (kept so this shares `inferMatches`' shape).
+    async function* refMatches(
         ref: string,
+        sourceName: string | undefined,
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
-    ): Promise<
-        { source: InstallSource; candidate: ResolvedCandidate } | undefined
-    > {
-        for (const source of resolutionSources()) {
-            onStatus?.(`Trying source '${source.name}'...`);
+    ): AsyncGenerator<WalkMatch> {
+        for (const source of sourcesFor(sourceName)) {
+            onStatus?.(
+                sourceName !== undefined
+                    ? `Resolving '${ref}' from source '${source.name}'...`
+                    : `Trying source '${source.name}'...`,
+            );
             const candidate = await source.find(ref, onWarn);
             if (candidate !== undefined) {
-                return { source, candidate };
+                yield { source, candidate, matchedByName: false };
             }
+        }
+    }
+
+    // Lazily yield the two-phase inferred matches for a one-argument install:
+    // phase 1 (`findName`, only when `target` is a legal agent name - which also
+    // avoids forcing a feed cache refresh just to reject a path) first, then
+    // phase 2 (`find`). A name match always precedes a ref match, so the first
+    // value yielded is the winner; a consumer that stops there gets
+    // first-match-wins, one that drains gets the full shadow set.
+    async function* inferMatches(
+        target: string,
+        sourceName: string | undefined,
+        onWarn?: SourceWarning,
+        onStatus?: SourceStatus,
+    ): AsyncGenerator<WalkMatch> {
+        const sources = sourcesFor(sourceName);
+        // Phase 1: default agent name.
+        if (isLegalAgentName(target)) {
+            for (const source of sources) {
+                if (source.findName === undefined) {
+                    continue;
+                }
+                onStatus?.(`Trying source '${source.name}'...`);
+                const candidate = await source.findName(target, onWarn);
+                if (candidate !== undefined) {
+                    yield { source, candidate, matchedByName: true };
+                }
+            }
+        }
+        // Phase 2: ref (package name / path).
+        for (const source of sources) {
+            onStatus?.(`Trying source '${source.name}'...`);
+            const candidate = await source.find(target, onWarn);
+            if (candidate !== undefined) {
+                yield { source, candidate, matchedByName: false };
+            }
+        }
+    }
+
+    // Take the first match a walk yields (first-match-wins), leaving the walk
+    // suspended so no later source is probed. Returns undefined for no match.
+    async function firstMatch(
+        matches: AsyncGenerator<WalkMatch>,
+    ): Promise<WalkMatch | undefined> {
+        for await (const match of matches) {
+            return match;
         }
         return undefined;
     }
 
+    // Drain every match a walk yields, in priority order (for the dry-run
+    // shadow set).
+    async function allMatches(
+        matches: AsyncGenerator<WalkMatch>,
+    ): Promise<WalkMatch[]> {
+        const out: WalkMatch[] = [];
+        for await (const match of matches) {
+            out.push(match);
+        }
+        return out;
+    }
+
+    // "<kind> source '<name>'" for user-facing messages (e.g. "catalog source
+    // 'workspace'"); falls back to just the name if the source is unknown.
+    function describeSource(name: string): string {
+        const kind = entries.get(name)?.config.kind;
+        return kind !== undefined
+            ? `${kind} source '${name}'`
+            : `source '${name}'`;
+    }
+
+    // Derive the installed dispatcher name for a one-argument install from the
+    // winning candidate: the candidate's own declared default name, backfilled
+    // from the resolved path's package.json for a phase-2 path match. A missing
+    // or illegal default name is a hard error whose message points at the
+    // two-argument form.
+    function requireInferredName(
+        candidate: ResolvedCandidate,
+        target: string,
+    ): string {
+        let defaultAgentName = candidate.defaultAgentName;
+        if (defaultAgentName === undefined && candidate.path !== undefined) {
+            defaultAgentName = readPackageMeta(candidate.path).defaultAgentName;
+        }
+        if (defaultAgentName !== undefined) {
+            return defaultAgentName;
+        }
+        // A user-facing package name means the target matched as a PACKAGE
+        // (catalog or feed) - even a catalog entry that resolves to a local
+        // `path` carries one, whereas a bare path-source match does not. Prefer
+        // the package wording so the message reflects how the target actually
+        // matched (the `path` branch is only for a genuine path-source match).
+        if (candidate.packageName !== undefined) {
+            const pkg = candidate.packageName;
+            throw new Error(
+                `Package '${pkg}' from ${describeSource(candidate.source)} has no default agent name. Use '@package install ${pkg} <name>'.`,
+            );
+        }
+        if (candidate.path !== undefined) {
+            throw new Error(
+                `Path '${target}' from ${describeSource(candidate.source)} has no default agent name. Use '@package install ${target} <name>'.`,
+            );
+        }
+        throw new Error(
+            `'${target}' from ${describeSource(candidate.source)} has no default agent name. Use '@package install ${target} <name>'.`,
+        );
+    }
+
     async function resolveUnlocked(
-        ref: string,
+        nameOrTarget: string,
+        ref: string | undefined,
         sourceName?: string,
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
         abortSignal?: AbortSignal,
-    ): Promise<MaterializedInstallRecord> {
-        if (sourceName !== undefined) {
-            const entry = entries.get(sourceName);
-            if (entry === undefined) {
-                throw new Error(`unknown source '${sourceName}'`);
-            }
-            if (deps.excludePathSources && entry.config.kind === "path") {
-                // Path sources are unusable on this host (no local filesystem),
-                // so an explicit --source path would resolve against the
-                // server's own filesystem; reject it rather than honor it.
-                throw new Error(
-                    `source '${sourceName}' is not available on this host`,
-                );
-            }
-            onStatus?.(`Resolving '${ref}' from source '${sourceName}'...`);
-            const candidate = await entry.source.find(ref, onWarn);
-            if (candidate === undefined) {
-                // Explicit --source non-match is a hard error.
-                throw new Error(`'${ref}' not found in source '${sourceName}'`);
-            }
-            return entry.source.materialize(candidate, onStatus, abortSignal);
-        }
-        const match = await walk(ref, onWarn, onStatus);
+    ): Promise<ResolveResult> {
+        // EXPLICIT (ref supplied) and INFER (ref omitted) modes differ only in
+        // which walk runs and how the installed name is chosen; the not-found
+        // error, materialize, and result shaping below are shared.
+        const target = ref ?? nameOrTarget;
+        const match =
+            ref !== undefined
+                ? await firstMatch(
+                      refMatches(ref, sourceName, onWarn, onStatus),
+                  )
+                : await firstMatch(
+                      inferMatches(nameOrTarget, sourceName, onWarn, onStatus),
+                  );
         if (match === undefined) {
-            throw new Error(
-                `no source could resolve '${ref}'. order: [${resolutionSources()
-                    .map((s) => s.name)
-                    .join(", ")}]`,
-            );
+            throw sourceName !== undefined
+                ? new Error(
+                      `'${target}' not found in ${describeSource(sourceName)}`,
+                  )
+                : new Error(
+                      `No source could resolve '${target}'. Order: [${resolutionSources()
+                          .map((s) => s.name)
+                          .join(", ")}]`,
+                  );
         }
-        return match.source.materialize(match.candidate, onStatus, abortSignal);
+        // EXPLICIT stamps the user-supplied name; INFER derives it from the
+        // resolved package (the two-argument override vs. one-argument inference).
+        const name =
+            ref !== undefined
+                ? nameOrTarget
+                : requireInferredName(match.candidate, nameOrTarget);
+        const record = await match.source.materialize(
+            match.candidate,
+            onStatus,
+            abortSignal,
+        );
+        const result: ResolveResult = {
+            record: { ...record, name },
+            matchedByName: match.matchedByName,
+        };
+        if (match.candidate.packageName !== undefined) {
+            result.packageName = match.candidate.packageName;
+        }
+        return result;
     }
 
     return {
@@ -364,17 +578,19 @@ export function createInstallSourceRegistry(
             return { ...loaded, name: record.name };
         },
         async resolve(
-            ref: string,
+            nameOrTarget: string,
+            ref?: string,
             sourceName?: string,
             onWarn?: SourceWarning,
             onStatus?: SourceStatus,
             abortSignal?: AbortSignal,
-        ): Promise<MaterializedInstallRecord> {
+        ): Promise<ResolveResult> {
             // The whole install op (resolve -> materialize) runs under the
             // shared limiter. The installer reuses the
             // same limiter for the record write.
             return limiter(() =>
                 resolveUnlocked(
+                    nameOrTarget,
                     ref,
                     sourceName,
                     onWarn,
@@ -418,15 +634,67 @@ export function createInstallSourceRegistry(
                 );
             });
         },
-        async where(
-            ref: string,
+        async preview(
+            nameOrTarget: string,
+            ref?: string,
+            sourceName?: string,
             onWarn?: SourceWarning,
             onStatus?: SourceStatus,
-        ): Promise<ResolvedCandidate | undefined> {
-            // Dry-run: report which source would win without materializing.
-            // Walks the sources sequentially in resolution order, first match
-            // wins, so it never probes a later source than the winner.
-            return (await walk(ref, onWarn, onStatus))?.candidate;
+        ): Promise<PreviewResult | undefined> {
+            // Dry-run: reuse the exact walks resolve uses, but DRAIN them
+            // (nothing is installed) to collect the full shadow set in priority
+            // order.
+            const raw =
+                ref !== undefined
+                    ? await allMatches(
+                          refMatches(ref, sourceName, onWarn, onStatus),
+                      )
+                    : await allMatches(
+                          inferMatches(
+                              nameOrTarget,
+                              sourceName,
+                              onWarn,
+                              onStatus,
+                          ),
+                      );
+            if (raw.length === 0) {
+                return undefined;
+            }
+            // Only the winner (index 0) needs a resolved installed name - it is
+            // the one that would actually install, and the only match whose
+            // `name` the caller displays. Requiring a name for a shadow would
+            // wrongly abort the whole preview when an incidental shadow matched
+            // by package name has no default agent name (a legal, common case).
+            // Shadows carry a best-effort name that is never shown.
+            const matches: PreviewMatch[] = raw.map((m, i) => ({
+                source: m.source.name,
+                matchedByName: m.matchedByName,
+                // EXPLICIT stamps the user-supplied name; INFER derives the
+                // winner's name from the resolved package (same rule as
+                // resolve) and leaves shadows best-effort.
+                name:
+                    ref !== undefined
+                        ? nameOrTarget
+                        : i === 0
+                          ? requireInferredName(m.candidate, nameOrTarget)
+                          : (m.candidate.defaultAgentName ?? nameOrTarget),
+                candidate: m.candidate,
+            }));
+            return { winner: matches[0], matches };
+        },
+        async refresh(
+            sourceName?: string,
+            onWarn?: SourceWarning,
+        ): Promise<void> {
+            // Refresh cache-backed sources. A fetch failure throws (leaving the
+            // prior cache intact) so the caller's --refresh fails the command.
+            // `sourcesFor(undefined)` is the full resolution order, so no
+            // explicit-source special case is needed here.
+            for (const source of sourcesFor(sourceName)) {
+                if (source.refresh !== undefined) {
+                    await source.refresh(onWarn);
+                }
+            }
         },
     };
 }

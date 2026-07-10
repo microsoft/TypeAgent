@@ -56,5 +56,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "image"
   }
 }

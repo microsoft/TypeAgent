@@ -202,6 +202,9 @@ export function makeStubConnection(
         },
 
         async shutdown() {},
+        async getSpeechToken() {
+            return undefined;
+        },
         async reconnect() {
             return true;
         },

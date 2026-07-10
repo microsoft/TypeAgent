@@ -19,6 +19,7 @@ import {
     createPromptLogger,
     PromptLoggerOptions,
 } from "telemetry";
+import { DevTrace } from "./devTrace.js";
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
 import {
@@ -232,6 +233,11 @@ export type CommandHandlerContext = {
     readonly copilotImport?: CopilotImporter | undefined;
     // Per activation configs
     developerMode?: boolean;
+    // When true, each translated request is confirmed via the client
+    // (clientIO.proposeAction) before it runs. Independent of developerMode
+    // so recording conversation data does not force an interactive prompt.
+    // Enabled with `@config dev on --confirm`; reset on restart.
+    confirmActions?: boolean;
     explanationAsynchronousMode: boolean;
     dblogging: boolean;
     clientIO: ClientIO;
@@ -275,6 +281,7 @@ export type CommandHandlerContext = {
     metricsManager?: RequestMetricsManager | undefined;
     commandProfiler?: Profiler | undefined;
     promptLogger?: PromptLogger | undefined;
+    devTrace: DevTrace;
 
     instanceDirLock: (() => Promise<void>) | undefined;
 
@@ -419,6 +426,11 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     // Additional integration options
     constructionProvider?: ConstructionProvider;
     explanationAsynchronousMode?: boolean; // default to true
+
+    // When true, developer mode starts enabled for the session (translation
+    // debug capture + dev-only UI affordances like per-message delete).
+    // Default false; can still be toggled at runtime via `@config dev`.
+    developerMode?: boolean;
 
     // Use for tests so that embedding can be cached without 'persistDir'
     embeddingCacheDir?: string | undefined; // default to 'cache' under 'persistDir' if specified
@@ -1044,6 +1056,21 @@ export async function initializeCommandHandlerContext(
             options?.agentInitOptions,
         );
         const constructionProvider = options?.constructionProvider;
+        const promptLogger = createPromptLogger(getCosmosFactories());
+        // Developer-mode capture: mirror every complete translation prompt into
+        // the dev trace so a translation can be inspected/reconstructed later.
+        const devTrace = new DevTrace(() => ({
+            enabled: context.developerMode === true,
+            sessionDirPath: context.session.sessionDirPath,
+            requestId: context.currentRequestId
+                ? requestIdToString(context.currentRequestId)
+                : undefined,
+        }));
+        const originalLogModelRequest = promptLogger.logModelRequest;
+        promptLogger.logModelRequest = (requestContent: unknown) => {
+            originalLogModelRequest(requestContent);
+            devTrace.recordPrompt(requestContent);
+        };
         const context: CommandHandlerContext = {
             agents,
             portRegistrar,
@@ -1059,6 +1086,8 @@ export async function initializeCommandHandlerContext(
             storageProvider,
             explanationAsynchronousMode,
             dblogging: options?.dblogging ?? true,
+            developerMode: options?.developerMode ?? false,
+            confirmActions: false,
             clientIO,
             getConversationList: options?.getConversationList,
             copilotImport: options?.copilotImport,
@@ -1090,7 +1119,8 @@ export async function initializeCommandHandlerContext(
             displayLog: await DisplayLog.load(persistDir),
             logger,
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
-            promptLogger: createPromptLogger(getCosmosFactories()),
+            promptLogger,
+            devTrace,
             batchMode: false,
             pendingChoiceRoutes: new Map(),
             instanceDirLock,

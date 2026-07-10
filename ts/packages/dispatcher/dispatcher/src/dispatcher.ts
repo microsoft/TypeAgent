@@ -6,7 +6,6 @@ import {
     DynamicDisplay,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
-import { displayError } from "@typeagent/agent-sdk/helpers/display";
 import type {
     ActionInfo,
     AgentSchemaInfo,
@@ -31,6 +30,7 @@ import {
 import { getDispatcherStatus, processCommand } from "./command/command.js";
 import { getCommandCompletion } from "./command/completion.js";
 import { getActionContext } from "./execute/actionContext.js";
+import { emitActionResult } from "./execute/actionHandlers.js";
 import {
     closeCommandHandlerContext,
     CommandHandlerContext,
@@ -372,6 +372,9 @@ export function createDispatcherFromContext(
         async getQueueSnapshot() {
             return context.requestQueue.getSnapshot();
         },
+        async getDeveloperMode() {
+            return context.developerMode === true;
+        },
         async interrupt(command, attachments, options, clientRequestId) {
             let entry;
             try {
@@ -658,14 +661,21 @@ export function createDispatcherFromContext(
                             actionContext,
                         );
                         if (result) {
-                            if (result.error !== undefined) {
-                                displayError(result.error, actionContext);
-                            } else if (result.displayContent !== undefined) {
-                                actionContext.actionIO.appendDisplay(
-                                    result.displayContent,
-                                    "block",
-                                );
-                            }
+                            // Run the same post-processing as the action
+                            // pipeline so a choice callback that returns a new
+                            // ActionResult renders fully — including a chained
+                            // `pendingChoice` (yes/no card). Without this, a
+                            // follow-up choice's message would show but its
+                            // interactive card would never appear.
+                            emitActionResult(
+                                result,
+                                actionContext,
+                                context,
+                                pending.requestId,
+                                pending.agentName,
+                                pending.actionIndex ?? 0,
+                                pending.agentName,
+                            );
                         }
                     } finally {
                         closeActionContext();

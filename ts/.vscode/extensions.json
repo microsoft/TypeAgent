@@ -4,6 +4,7 @@
     "Orta.vscode-jest",
     "ms-playwright.playwright",
     "aisystems.agent-coda",
-    "typeagent.vscode-shell"
+    "typeagent.vscode-shell",
+    "typeagent.vscode-chat"
   ]
 }

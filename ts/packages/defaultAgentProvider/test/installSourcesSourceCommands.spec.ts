@@ -98,14 +98,13 @@ function capturingContext(): { context: any; output: () => string } {
 }
 
 describe("getSourceCommands", () => {
-    it("exposes list, order, where, remove, and add subcommands", () => {
+    it("exposes list, order, remove, and add subcommands", () => {
         const table = getSourceCommands(makeDeps(makeRegistry()));
         expect(Object.keys(table.commands).sort()).toEqual([
             "add",
             "list",
             "order",
             "remove",
-            "where",
         ]);
         expect(table.defaultSubCommand).toBe("list");
     });
@@ -216,63 +215,6 @@ describe("getSourceCommands", () => {
             );
             expect(result.groups).toEqual([
                 { name: "names", completions: ["builtin"] },
-            ]);
-        });
-    });
-
-    describe("where", () => {
-        it("reports the resolving source without installing", async () => {
-            const registry = makeRegistry({
-                where: () => ({ source: "path", path: "/some/path" }),
-            });
-            const where = getSourceCommands(makeDeps(registry)).commands
-                .where as any;
-            const { context, output } = capturingContext();
-            await where.run(context, { args: { ref: "/some/path" } });
-            expect(registry.calls.where).toEqual(["/some/path"]);
-            expect(output()).toContain("source 'path'");
-        });
-
-        it("reports when no source would resolve the ref", async () => {
-            const registry = makeRegistry({ order: ["path"] });
-            const where = getSourceCommands(makeDeps(registry)).commands
-                .where as any;
-            const { context, output } = capturingContext();
-            await where.run(context, { args: { ref: "nope" } });
-            expect(output()).toContain("No source would resolve 'nope'");
-        });
-
-        it("completes ref with de-duplicated enumerable agent names", async () => {
-            const registry = makeRegistry({
-                infos: [
-                    { name: "feed", kind: "feed", detail: "<feed>" },
-                    { name: "builtin", kind: "catalog", detail: "<bundled>" },
-                ],
-                agents: { feed: ["foo", "bar"], builtin: ["bar", "baz"] },
-            });
-            const where = getSourceCommands(makeDeps(registry)).commands
-                .where as any;
-            const result = await where.getCompletion({}, {}, ["ref"]);
-            expect(result.groups).toEqual([
-                { name: "ref", completions: ["foo", "bar", "baz"] },
-            ]);
-        });
-
-        it("keeps ref completions from healthy sources when another source fails", async () => {
-            const registry = makeRegistry({
-                infos: [
-                    { name: "feed", kind: "feed", detail: "<feed>" },
-                    { name: "broken", kind: "feed", detail: "<broken>" },
-                    { name: "builtin", kind: "catalog", detail: "<bundled>" },
-                ],
-                agents: { feed: ["foo"], builtin: ["bar"] },
-                throwingSources: ["broken"],
-            });
-            const where = getSourceCommands(makeDeps(registry)).commands
-                .where as any;
-            const result = await where.getCompletion({}, {}, ["ref"]);
-            expect(result.groups).toEqual([
-                { name: "ref", completions: ["foo", "bar"] },
             ]);
         });
     });

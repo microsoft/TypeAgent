@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "schema": "studio",
+  "generatedBy": "llm",
+  "generatedAt": "2026-07-08T09:38:58.757Z",
+  "sourceHash": "h3catoRNB1CVF46/ftZMobtiS3xA4H3cCrPX5+wkWxo=",
+  "actions": {
+    "getStudioInfo": [
+      "studio",
+      "environment",
+      "repository",
+      "root",
+      "directorie",
+      "agent",
+      "package",
+      "location",
+      "scan",
+      "inspection",
+      "workspace",
+      "configuration",
+      "setup",
+      "structure",
+      "project",
+      "folder",
+      "source",
+      "codebase",
+      "context",
+      "overview",
+      "detail"
+    ],
+    "listCollisions": [
+      "studio",
+      "grammar",
+      "collision",
+      "schema",
+      "scan",
+      "validation",
+      "error",
+      "conflict",
+      "issue",
+      "report",
+      "list",
+      "environment",
+      "agent",
+      "event"
+    ],
+    "queryEvents": [
+      "studio",
+      "event",
+      "stream",
+      "sandbox",
+      "collision",
+      "replay",
+      "feedback",
+      "entry",
+      "log",
+      "history",
+      "record",
+      "recent"
+    ]
+  }
+}

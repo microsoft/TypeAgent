@@ -114,11 +114,28 @@ make a published package discoverable **as an agent**:
    that exposes `"./agent/manifest"` in its `exports` is missing the keyword, so
    the marker cannot be forgotten.
 
+3. **(Recommended) Declare a default agent name.** Add
+   `typeagent.defaultAgentName` to `package.json` so users can install by a
+   friendly name in one argument (`@package install echo`) instead of the full
+   package specifier. It must be a legal dispatcher agent identifier (letters,
+   digits, `-`/`_`, starting with a letter); an illegal or missing value simply
+   disables one-argument name install, and the package can still be installed
+   with the two-argument form (`@package install <package> <name>`). The same
+   field applies to `path` and catalog `path` entries, read from the resolved
+   directory's `package.json`.
+
+   ```jsonc
+   // package.json
+   {
+     "typeagent": { "defaultAgentName": "echo" },
+   }
+   ```
+
 Feed **installs** (by whoever runs `@package install`) additionally require
 `az login` on the installing machine and, unless the source is configured with an
 explicit `registry`/`scopes`, the `TYPEAGENT_FEED_REGISTRY` /
 `TYPEAGENT_FEED_SCOPES` environment values. See
 [Agent sources › the feed source](../architecture/lifecycle/agent-sources.md#the-feed-source)
 for how auth and enumeration work, and the
-[TypeAgent command reference](../overview/command-reference.md#package-source-list--order--where--add--remove---manage-install-sources)
+[TypeAgent command reference](../overview/command-reference.md#package-source-list--order--add--remove---manage-install-sources)
 for the `@package source` commands that configure and order sources.

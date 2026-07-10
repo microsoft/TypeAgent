@@ -101,4 +101,27 @@ describe("contextSelector/tokenize", () => {
         expect(stem(stem("vampires"))).toBe("vampire");
         expect(stem("vampire")).toBe("vampire");
     });
+
+    it("stem is idempotent, incl. -ses words that would double-stem", () => {
+        // "licenses" -> "licens" -> "licen": a second pass must not change the
+        // result, or a re-canonicalized keyword file would stop matching a
+        // once-tokenized conversation word.
+        for (const w of [
+            "licenses",
+            "responses",
+            "expenses",
+            "glasses",
+            "boxes",
+            "items",
+            "movies",
+            "spreadsheets",
+            "addresses",
+            "statuses",
+        ]) {
+            expect(stem(stem(w))).toBe(stem(w));
+        }
+        // Guarded plurals are unaffected (glasses/addresses keep their stem).
+        expect(stem("glasses")).toBe("glass");
+        expect(stem("addresses")).toBe("address");
+    });
 });

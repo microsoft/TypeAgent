@@ -1,23 +1,23 @@
 {
-  "generatedAt": "2026-07-08T00:19:36.857Z",
+  "generatedAt": "2026-07-09T23:25:01.371Z",
   "sourceReport": "tools/scripts/code/complexity-report/report.json",
-  "branch": "installsource",
-  "commit": "87a2da2b552af067c7685847c256d76dbe5974de",
+  "branch": "commands",
+  "commit": "4cda28c657ed32ef43864a6c1bc2edbe5ed05240",
   "thresholds": {
     "cyclomatic": 25,
     "cognitive": 30
   },
   "totals": {
-    "functionsAnalyzed": 26973,
-    "filesAnalyzed": 1952,
+    "functionsAnalyzed": 27002,
+    "filesAnalyzed": 1953,
     "overCyclomatic": 204,
-    "overCognitive": 258,
-    "totalExceptions": 301
+    "overCognitive": 255,
+    "totalExceptions": 300
   },
   "exceptions": [
     {
       "file": "packages/agents/github-cli/src/github-cliActionHandler.ts",
-      "line": 356,
+      "line": 406,
       "name": "Function 'buildArgs'",
       "cyclomatic": 179,
       "cognitive": 232,
@@ -125,7 +125,7 @@
     },
     {
       "file": "packages/vscode-shell/src/webview/main.ts",
-      "line": 487,
+      "line": 699,
       "name": "Arrow function",
       "cyclomatic": 81,
       "cognitive": 87,
@@ -197,7 +197,7 @@
     },
     {
       "file": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts",
-      "line": 921,
+      "line": 933,
       "name": "Async function 'initializeCommandHandlerContext'",
       "cyclomatic": 63,
       "cognitive": 33,
@@ -548,7 +548,7 @@
     },
     {
       "file": "packages/agents/github-cli/src/github-cliActionHandler.ts",
-      "line": 1244,
+      "line": 1283,
       "name": "Async function 'executeAction'",
       "cyclomatic": 43,
       "cognitive": 66,
@@ -593,7 +593,7 @@
     },
     {
       "file": "packages/vscode-shell/src/agentServerBridge.ts",
-      "line": 1188,
+      "line": 1251,
       "name": "Async method 'handleWebviewMessage'",
       "cyclomatic": 43,
       "cognitive": 17,
@@ -602,7 +602,7 @@
     },
     {
       "file": "packages/shell/src/renderer/src/chatPanelBridge.ts",
-      "line": 120,
+      "line": 121,
       "name": "Function 'toHistoryEntries'",
       "cyclomatic": 42,
       "cognitive": 44,
@@ -620,7 +620,7 @@
     },
     {
       "file": "packages/vscode-shell/src/webview/main.ts",
-      "line": 345,
+      "line": 557,
       "name": "Function 'toChatPanelHistory'",
       "cyclomatic": 42,
       "cognitive": 33,
@@ -629,7 +629,7 @@
     },
     {
       "file": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts",
-      "line": 1656,
+      "line": 1686,
       "name": "Async function 'changeContextConfig'",
       "cyclomatic": 42,
       "cognitive": 29,
@@ -1061,7 +1061,7 @@
     },
     {
       "file": "packages/agents/github-cli/src/github-cliActionHandler.ts",
-      "line": 842,
+      "line": 881,
       "name": "Function 'formatStatusOutput'",
       "cyclomatic": 33,
       "cognitive": 84,
@@ -1240,15 +1240,6 @@
       "overCognitive": false
     },
     {
-      "file": "extensions/agr-language/webview-dist/debugPanel.js",
-      "line": 502,
-      "name": "Arrow function",
-      "cyclomatic": 30,
-      "cognitive": 83,
-      "overCyclomatic": true,
-      "overCognitive": true
-    },
-    {
       "file": "packages/dispatcher/dispatcher/src/translation/translateRequest.ts",
       "line": 257,
       "name": "Async function 'pickInitialSchema'",
@@ -1339,6 +1330,15 @@
       "overCognitive": false
     },
     {
+      "file": "extensions/agr-language/webview-dist/debugPanel.js",
+      "line": 15,
+      "name": "Arrow function",
+      "cyclomatic": 30,
+      "cognitive": 4,
+      "overCyclomatic": true,
+      "overCognitive": false
+    },
+    {
       "file": "tools/docsAutogen/src/cli.ts",
       "line": 453,
       "name": "Async function 'renderSelected'",
@@ -1393,15 +1393,6 @@
       "overCognitive": true
     },
     {
-      "file": "extensions/agr-language/webview-dist/debugPanel.js",
-      "line": 2204,
-      "name": "Method '_derivedTraceData'",
-      "cyclomatic": 29,
-      "cognitive": 33,
-      "overCyclomatic": true,
-      "overCognitive": true
-    },
-    {
       "file": "packages/agents/browser/src/agent/knowledge/utils/graphologyLayoutEngine.mts",
       "line": 523,
       "name": "Function 'convertToCytoscapeElements'",
@@ -1416,6 +1407,15 @@
       "name": "Function 'buildGraphologyGraph'",
       "cyclomatic": 29,
       "cognitive": 26,
+      "overCyclomatic": true,
+      "overCognitive": false
+    },
+    {
+      "file": "extensions/agr-language/webview-dist/debugPanel.js",
+      "line": 624,
+      "name": "Method '_derivedTraceData'",
+      "cyclomatic": 29,
+      "cognitive": 2,
       "overCyclomatic": true,
       "overCognitive": false
     },
@@ -1493,7 +1493,7 @@
     },
     {
       "file": "packages/chat-ui/src/chatPanel.ts",
-      "line": 205,
+      "line": 267,
       "name": "Function 'highlightJson'",
       "cyclomatic": 28,
       "cognitive": 34,
@@ -1952,7 +1952,7 @@
     },
     {
       "file": "packages/dispatcher/dispatcher/src/context/system/handlers/configCommandHandlers.ts",
-      "line": 220,
+      "line": 221,
       "name": "Function 'buildAgentStatusHtml'",
       "cyclomatic": 24,
       "cognitive": 42,
@@ -2033,7 +2033,7 @@
     },
     {
       "file": "packages/dispatcher/dispatcher/src/context/system/handlers/configCommandHandlers.ts",
-      "line": 311,
+      "line": 312,
       "name": "Async function 'showAgentStatus'",
       "cyclomatic": 23,
       "cognitive": 41,
@@ -2069,7 +2069,7 @@
     },
     {
       "file": "packages/dispatcher/dispatcher/src/context/system/handlers/configCommandHandlers.ts",
-      "line": 1872,
+      "line": 1873,
       "name": "Async function 'listModelsForProvider'",
       "cyclomatic": 23,
       "cognitive": 38,
@@ -2325,15 +2325,6 @@
       "name": "Async function 'main'",
       "cyclomatic": 21,
       "cognitive": 31,
-      "overCyclomatic": false,
-      "overCognitive": true
-    },
-    {
-      "file": "extensions/agr-language/webview-dist/debugPanel.js",
-      "line": 562,
-      "name": "Constructor",
-      "cyclomatic": 20,
-      "cognitive": 66,
       "overCyclomatic": false,
       "overCognitive": true
     },
@@ -2699,7 +2690,7 @@
     },
     {
       "file": "packages/defaultAgentProvider/src/defaultAgentProviders.ts",
-      "line": 1369,
+      "line": 1471,
       "name": "Async function 'getIndexingServiceRegistry'",
       "cyclomatic": 12,
       "cognitive": 38,

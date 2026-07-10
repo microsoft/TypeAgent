@@ -3,5 +3,6 @@
 
 export * from "./types.js";
 export * from "./engine.js";
+export * from "./predicate.js";
 export * from "./missPolicyStore.js";
 export * from "./traceViews.js";
