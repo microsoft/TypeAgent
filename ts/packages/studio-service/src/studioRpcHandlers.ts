@@ -77,6 +77,9 @@ export function createStudioInvokeHandlers(
         async seedInRepoCorpus(repoRoot, agent) {
             return conn.getRuntime(repoRoot).seedInRepoCorpus(agent);
         },
+        async importCorpusFromLogs(repoRoot, request) {
+            return conn.getRuntime(repoRoot).importCorpusFromLogs(request);
+        },
         async addExternalCorpusSource(repoRoot, spec) {
             return conn.getRuntime(repoRoot).addExternalCorpusSource(spec);
         },

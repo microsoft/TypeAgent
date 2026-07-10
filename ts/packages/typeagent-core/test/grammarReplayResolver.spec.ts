@@ -154,6 +154,50 @@ describe("createGrammarReplayResolver (working tree)", () => {
         expect(res.action).toBeUndefined();
     });
 
+    it("carries a rating only when the side reproduces the rated action", async () => {
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+        });
+        // The rating was recorded against the "pause" action; "pause" still
+        // resolves to it here, so the rating pertains to this side.
+        const matched = await resolver.resolve(
+            {
+                ...entry("e3", "pause"),
+                expectedAction: { schemaName: "demo", actionName: "pause" },
+                feedback: { rating: "down", recordedAt: 0 },
+            },
+            { kind: "workingTree" },
+            "A",
+        );
+        expect(matched.action).toEqual({
+            schemaName: "demo",
+            actionName: "pause",
+        });
+        expect(matched.feedback).toEqual({ rating: "down", recordedAt: 0 });
+    });
+
+    it("drops a rating recorded against a now-different action", async () => {
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+        });
+        // "resume" resolves to the resume action, but the rating was recorded
+        // against a pause action — it says nothing about what resolved here.
+        const res = await resolver.resolve(
+            {
+                ...entry("e4", "resume"),
+                expectedAction: { schemaName: "demo", actionName: "pause" },
+                feedback: { rating: "down", recordedAt: 0 },
+            },
+            { kind: "workingTree" },
+            "A",
+        );
+        expect(res.action).toEqual({
+            schemaName: "demo",
+            actionName: "resume",
+        });
+        expect(res.feedback).toBeUndefined();
+    });
+
     it("prepare() throws ReplayVersionBuildError for an uncompilable side", async () => {
         writeFileSync(grammarPath, "this is @@@ not a grammar", "utf8");
         const resolver = createGrammarReplayResolver({
