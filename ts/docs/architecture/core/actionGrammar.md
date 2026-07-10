@@ -605,7 +605,14 @@ tail contract, so the non-tail wrapper builder is only reached when
 NFA-interpreter matcher (`grammarMatcher.ts`). The NFA compiler /
 DFA path (`nfaCompiler.ts`) explicitly throws on encountering one,
 so consumers that route through the NFA/DFA path must leave
-`tailFactoring` off.
+`tailFactoring` off (and `promoteTailRulesParts`, which produces the
+same tail-call shape). `grammarOptimizer.ts` exports
+`nfaSafeOptimizations` as the ready-made preset for this - all of
+`recommendedOptimizations` except those two passes - and `agc compile
+--nfa-safe` exposes it from the CLI. This is an interim opt-in: once
+the NFA compiler supports tailCall RulesParts natively, `agc compile`
+should go back to always using `recommendedOptimizations` and
+`nfaSafeOptimizations` / `--nfa-safe` should be removed.
 
 **No fixed-point loop.** Factoring is applied once per group of
 alternatives — the trie's grouping converges in a single pass and
@@ -1517,6 +1524,16 @@ matched text as a string. For example, `"hello"` produces `"hello"`.
 **No value** (`none` kind): Rules with multiple variable parts but no
 explicit value expression produce no value — the compiler warns about
 this because the output is ambiguous.
+
+The NFA compiler (`nfaCompiler.ts`) mirrors this same "no value unless
+actually needed" principle for rules reshaped by `factorCommonPrefixes`
+(see `nfaSafeOptimizations` above): `deriveEffectiveValue` forwards a
+factored rule's single variable-bearing part, and only treats an
+ambiguous or missing implicit value as a hard error when the value is
+actually required — i.e. for top-level action rules, or nested rules a
+parent captures via `$(name:<Rule>)`. A nested, uncaptured rule with an
+ambiguous shape is harmless (nothing reads its value) and silently
+resolves to "no value," exactly like the `none` kind above.
 
 ### Design Principles
 
