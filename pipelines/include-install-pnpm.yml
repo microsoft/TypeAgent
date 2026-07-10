@@ -13,7 +13,7 @@ parameters:
   # If set to false, the pnpm store will not be cached or restored from cache.
   - name: enableCache
     type: boolean
-    default: true
+    default: false #temporarily disabled robgruen 07.09.2026
 
   # The path to the pnpm store. The contents here will be cached and restored when using pnpm in a pipeline.
   - name: pnpmStorePath
