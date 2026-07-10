@@ -21,6 +21,7 @@ import {
 } from "./gitRefProvider.js";
 import { StudioServiceClient } from "./studioServiceClient.js";
 import type { StudioConnectionState } from "./studioServiceConnection.js";
+import { loadPersistedRun, savePersistedRun } from "./impactReportStore.js";
 import type { StudioReplayResult } from "@typeagent/core/runtime";
 
 const VIEW_TYPE = "typeagentStudio.impactReport";
@@ -34,6 +35,45 @@ export interface ImpactReportConnection {
     onStateChanged(listener: (state: StudioConnectionState) => void): {
         dispose(): void;
     };
+}
+
+/**
+ * A completed replay pushed into an already-open Impact Report from outside the
+ * panel (a Replay launched from the Corpora view), so the open report refreshes
+ * in place instead of only updating on the next reopen.
+ */
+export interface ImpactReportLiveUpdate {
+    payload: StudioReplayResult;
+    runAt: number;
+    provenance?: RunProvenance;
+    versionA: ResolvedVersion;
+    versionB: ResolvedVersion;
+}
+
+/** Live refreshers for open report panels, keyed by agent. Registered while a
+ *  panel is open and removed on dispose, so an external Replay can find and
+ *  update the matching open report. */
+const openReportRefreshers = new Map<
+    string,
+    (update: ImpactReportLiveUpdate) => void
+>();
+
+/**
+ * Push a freshly computed replay into the open Impact Report for `agent`, if one
+ * is open, so it re-renders in place. Returns true when a panel was updated.
+ * A no-op (returns false) when no report is open — the caller still persists the
+ * run to the durable store so the next reopen shows it.
+ */
+export function refreshOpenImpactReport(
+    agent: string,
+    update: ImpactReportLiveUpdate,
+): boolean {
+    const refresh = openReportRefreshers.get(agent);
+    if (!refresh) {
+        return false;
+    }
+    refresh(update);
+    return true;
 }
 
 /**
@@ -58,17 +98,21 @@ export function openImpactReport(
     let webviewReady = false;
     // Subscription to the shared connection's state, disposed with the panel.
     let stateSub: { dispose(): void } | undefined;
-    // The last completed result + its request id. Re-posted whenever the webview
-    // signals `ready` so a run whose result arrived before the webview was
-    // listening (e.g. the first load, or a full extension reload) is recovered
-    // on the next `ready` — the webview dedupes by request id. With the panel
-    // retaining context while hidden, navigate-away/back no longer reloads it,
-    // so this mainly guards the initial-load and extension-reload cases.
+    // Re-posted whenever the webview signals `ready` so a run whose result
+    // arrived before the webview was listening (e.g. the first load, or a full
+    // extension reload) is recovered on the next `ready` — the webview dedupes by
+    // request id. With the panel retaining context while hidden, navigate-away/back
+    // no longer reloads it, so this mainly guards the initial-load and
+    // extension-reload cases. When seeded from the durable per-agent store on
+    // open, `runAt` carries the original run time so the report labels it.
     let lastResult:
         | {
               requestId: number;
               payload: StudioReplayResult;
               provenance?: RunProvenance;
+              runAt?: number;
+              versionA?: ResolvedVersion;
+              versionB?: ResolvedVersion;
           }
         | undefined;
     // Per-panel ref caches so re-opening a version picker is instant. The local
@@ -77,6 +121,9 @@ export function openImpactReport(
     // panel's lifetime (re-open the panel to refresh it).
     let localRefsCache: ResolvedVersion[] | undefined;
     let remoteRefsCache: ResolvedVersion[] | undefined;
+    // The live utterance-filter input box, tracked so it can be torn down if the
+    // panel is disposed while it is still open.
+    let searchInputBox: vscode.InputBox | undefined;
 
     const panel = WebviewKitPanel.createOrReveal(context, {
         viewType: VIEW_TYPE,
@@ -91,8 +138,11 @@ export function openImpactReport(
         retainContextWhenHidden: true,
         onMessage: (raw) => void handleMessage(raw),
         onDispose: () => {
+            openReportRefreshers.delete(agent);
             stateSub?.dispose();
             stateSub = undefined;
+            searchInputBox?.dispose();
+            searchInputBox = undefined;
             client?.close();
             client = undefined;
             connecting = undefined;
@@ -100,6 +150,34 @@ export function openImpactReport(
     });
 
     const post = (message: HostToWebviewMessage) => panel.post(message);
+
+    // Let an external Replay (launched from the Corpora view) refresh this open
+    // report in place: adopt its result as this panel's last result (so a later
+    // reload/ready re-push shows it) and, when the webview is listening, post it
+    // as an external result the client accepts regardless of its own request-id
+    // sequence.
+    openReportRefreshers.set(agent, (update) => {
+        lastResult = {
+            requestId: 0,
+            payload: update.payload,
+            runAt: update.runAt,
+            versionA: update.versionA,
+            versionB: update.versionB,
+            ...(update.provenance ? { provenance: update.provenance } : {}),
+        };
+        if (webviewReady) {
+            post({
+                type: "result",
+                requestId: 0,
+                external: true,
+                payload: update.payload,
+                runAt: update.runAt,
+                versionA: update.versionA,
+                versionB: update.versionB,
+                ...(update.provenance ? { provenance: update.provenance } : {}),
+            });
+        }
+    });
 
     // Single-flight connect so concurrent ready/run don't open multiple sockets;
     // failures aren't cached (a later reconnect/run retries).
@@ -167,14 +245,44 @@ export function openImpactReport(
             available,
             canValidateWildcards,
         });
-        // Recover a result computed while the panel was hidden/reloaded.
+        // Recover a result computed while the panel was hidden/reloaded (this
+        // session), or restore the last persisted run from a previous session so
+        // reopening the report shows it (clearly labelled with its timestamp).
+        if (!lastResult) {
+            const persisted = loadPersistedRun(context.workspaceState, agent);
+            if (persisted) {
+                lastResult = {
+                    requestId: 0,
+                    payload: persisted.payload,
+                    runAt: persisted.runAt,
+                    ...(persisted.provenance
+                        ? { provenance: persisted.provenance }
+                        : {}),
+                    ...(persisted.versionA
+                        ? { versionA: persisted.versionA }
+                        : {}),
+                    ...(persisted.versionB
+                        ? { versionB: persisted.versionB }
+                        : {}),
+                };
+            }
+        }
         if (lastResult) {
             post({
                 type: "result",
                 requestId: lastResult.requestId,
                 payload: lastResult.payload,
+                ...(lastResult.runAt !== undefined
+                    ? { runAt: lastResult.runAt }
+                    : {}),
                 ...(lastResult.provenance
                     ? { provenance: lastResult.provenance }
+                    : {}),
+                ...(lastResult.versionA
+                    ? { versionA: lastResult.versionA }
+                    : {}),
+                ...(lastResult.versionB
+                    ? { versionB: lastResult.versionB }
                     : {}),
             });
         }
@@ -375,6 +483,31 @@ export function openImpactReport(
             await pickVersion(msg.side);
             return;
         }
+        if (msg.type === "searchUtterances") {
+            // A live input box: each keystroke posts the current text back so the
+            // report filters as the user types. Closing it (accept or Esc) keeps
+            // whatever is currently shown — no revert, since it was applied live.
+            // Only one is open at a time; opening a fresh one hides the previous.
+            searchInputBox?.dispose();
+            const input = vscode.window.createInputBox();
+            searchInputBox = input;
+            input.title = "Impact Report — filter utterances";
+            input.prompt = "Show only rows whose utterance contains this text";
+            input.placeholder = "Filter by utterance text";
+            input.value = msg.current;
+            input.onDidChangeValue((value) => {
+                post({ type: "utteranceSearch", query: value });
+            });
+            input.onDidAccept(() => input.hide());
+            input.onDidHide(() => {
+                input.dispose();
+                if (searchInputBox === input) {
+                    searchInputBox = undefined;
+                }
+            });
+            input.show();
+            return;
+        }
         // msg.type === "run"
         // A run may follow a commit or branch switch, so the cached local refs
         // could be stale — drop them so the next picker re-enumerates HEAD.
@@ -407,10 +540,9 @@ export function openImpactReport(
                 // agent rather than trusting the webview's echoed value.
                 agent,
                 // The launch controls choose the two versions to compare
-                // (default: HEAD → working tree, the "find a regression"
-                // journey). The static-grammar resolver builds each side and
-                // the deterministic `needs-explanation` policy keeps the run
-                // free of LLM calls.
+                // (default: HEAD → working tree). The static-grammar resolver
+                // builds each side and the deterministic `needs-explanation`
+                // policy keeps the run free of LLM calls.
                 versionA: msg.versionA,
                 versionB: msg.versionB,
                 // The webview's mode toggle selects which deterministic dispatch
@@ -423,17 +555,33 @@ export function openImpactReport(
                 validateWildcards: msg.validateWildcards,
                 missPolicy: "needs-explanation",
             });
+            const completedAt = Date.now();
             post({
                 type: "result",
                 requestId: msg.requestId,
                 payload,
+                runAt: completedAt,
+                versionA: msg.resolvedA,
+                versionB: msg.resolvedB,
                 ...(provenance ? { provenance } : {}),
             });
             lastResult = {
                 requestId: msg.requestId,
                 payload,
+                runAt: completedAt,
+                versionA: msg.resolvedA,
+                versionB: msg.resolvedB,
                 ...(provenance ? { provenance } : {}),
             };
+            await savePersistedRun(
+                context.workspaceState,
+                agent,
+                payload,
+                completedAt,
+                provenance,
+                msg.resolvedA,
+                msg.resolvedB,
+            );
         } catch (e) {
             post({
                 type: "error",

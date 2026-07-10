@@ -114,29 +114,13 @@ focus the Sandboxes view.
 
 The **Corpora** tree shows agents that currently have a corpus view.
 Once `player` is loaded, expand it to see entries grouped by source
-(`in-repo`, `captures`, `external`, `feedback`).
+(`in-repo`, `external`), with one row per backing file.
 
 In-repo entries are read from `corpus/<agent>.utterances.jsonl` if such a
 file exists. (At time of writing, `player` doesn't have an in-repo corpus
 yet — see §6 below.)
 
-### 4.5 Recording feedback
-
-In the Corpora view title bar, click **Record feedback**. A guided flow
-collects:
-
-1. Thumbs up / down
-2. The utterance the feedback is about
-3. (Optional) agent
-4. (Optional) category — for negative ratings: `wrong-agent`,
-   `didnt-understand`, `bad-response`, `other`
-5. (Optional) free-text comment
-
-After recording, watch the Event Log — a `feedback.recorded` event
-appears. If you supplied an utterance, it federates into the Corpora view
-under that agent's `feedback` source.
-
-### 4.6 The Collisions view
+### 4.5 The Collisions view
 
 The **Collisions** view title bar offers **Scan grammars for collisions**.
 This runs the real NFA overlap engine against every loaded agent's
@@ -151,30 +135,23 @@ compiled grammar.
 - **Click a participant** to jump to its grammar source — the authored
   `.agr` file when present, otherwise the compiled `.ag.json`.
 
-### 4.7 Replay corpus (the headline-but-incomplete experience)
+### 4.6 Replay corpus (quick check from the Corpora view)
 
-In the Corpora view title bar, click **Replay corpus**.
+On an agent row in the Corpora view, click the **Replay corpus** (rerun)
+icon.
 
-- Pick a loaded agent.
-- The runtime replays the agent's federated corpus through the replay
-  engine, evaluating each utterance against versions A and B and
-  classifying each row as **equal**, **changed**, **new match**, or
-  **lost match**.
-- A summary headline shows when the run finishes.
-- When differences exist, a quick-pick of rows opens — icon, utterance,
-  per-version cache state, and latency.
+- The runtime replays that agent's federated corpus through the replay
+  engine, comparing **HEAD** against your **working tree** (the same "did my
+  edits change anything" check the Impact Report runs) and classifying each
+  row as **equal**, **changed**, **new match**, or **lost match**.
+- A summary headline shows when the run finishes; when differences exist, a
+  quick-pick of rows opens — icon, utterance, per-version cache state, and
+  latency.
+- The run is saved as the agent's **last run**, so opening the **Impact
+  Report** (the graph icon on the same row) re-renders it with a **Last run**
+  timestamp instead of a blank report.
 
-> **What's missing today:** the result is a quick-pick, not a webview.
-> The Impact Report (the four-pane diff visualization that is the
-> headline UI described in [`DESIGN.md`](./DESIGN.md)) is not yet built.
-> See §6.
->
-> The default version-A vs version-B resolver is also currently an
-> _identity_ resolver — every utterance routes the same way on both
-> sides, so the all-equal baseline is what you'll see. Real per-version
-> build/dispatch is a future piece.
-
-### 4.8 Onboarding — the wizard backend
+### 4.7 Onboarding — the wizard backend
 
 The wizard webview itself isn't built yet, but the entire onboarding
 _backend_ is wired through commands:
