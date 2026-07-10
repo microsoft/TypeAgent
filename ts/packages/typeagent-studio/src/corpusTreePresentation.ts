@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import type { CorpusEntry, CorpusSource } from "@typeagent/core/corpus";
-import type { FeedbackRating } from "@typeagent/core/events";
 import { collapseAndTruncate } from "./textFormatting.js";
 import {
     noteTooltip,
@@ -31,21 +30,16 @@ export interface CorpusTreeNode {
     agent?: string;
     /** Present on `source` and `entry` nodes. */
     source?: CorpusSource;
+    /** Absolute path of the backing file on file-backed `source` nodes. */
+    filePath?: string;
     /** Present on `entry` nodes. */
     entryId?: string;
-    /** Present on `entry` nodes that carry feedback; drives the row icon. */
-    feedbackRating?: FeedbackRating;
     /** Whether the node should render as expandable. */
     hasChildren: boolean;
 }
 
-/** Fixed display order for federated corpus sources. */
-export const CORPUS_SOURCE_ORDER: CorpusSource[] = [
-    "in-repo",
-    "captures",
-    "external",
-    "feedback",
-];
+/** Order in which source groups appear beneath an agent. */
+export const CORPUS_SOURCE_ORDER: CorpusSource[] = ["in-repo", "external"];
 
 const MAX_UTTERANCE_LENGTH = 80;
 
@@ -80,72 +74,149 @@ export function buildCorpusAgentNodes(
         }));
 }
 
-/** Build the per-source group rows beneath a single agent. */
+/**
+ * Build the group rows beneath a single agent.
+ *
+ * File-backed sources (in-repo, external) render as one row per backing file,
+ * titled by the file name and carrying its path so the row can show the real
+ * file icon and an open-file action. In-repo always maps to the one
+ * `corpus/<agent>.utterances.jsonl` file; external can span several files.
+ *
+ * `inRepoFilePath`, when set, is the path of an existing in-repo corpus file.
+ * It makes an empty (0-entry) file still appear as a row so the user can open
+ * and fill it; without it, an agent with no entries falls back to the seed
+ * action row.
+ */
 export function buildCorpusSourceNodes(
     agent: string,
     entries: readonly CorpusEntry[],
+    inRepoFilePath?: string,
 ): CorpusTreeNode[] {
-    const counts = countBySource(entries);
-    const present = CORPUS_SOURCE_ORDER.filter(
-        (source) => (counts.get(source) ?? 0) > 0,
-    );
-
-    if (present.length === 0) {
-        return [
-            {
-                kind: "empty",
-                id: `corpus:agent:${agent}:empty`,
-                label: "Seed in-repo corpus\u2026",
-                description: "No entries yet — click to create a corpus file",
-                tooltip: noteTooltip(
-                    `Click to create corpus/${agent}.utterances.jsonl and open it so you can add labelled utterances for ${agent}.`,
-                ),
-                contextValue: "corpusAgentSeed",
-                agent,
-                hasChildren: false,
-            },
-        ];
+    const nodes: CorpusTreeNode[] = [];
+    for (const source of CORPUS_SOURCE_ORDER) {
+        const inSource = entries.filter((e) => e.source === source);
+        if (source === "in-repo") {
+            if (inSource.length > 0) {
+                // All in-repo entries live in the single canonical corpus file.
+                nodes.push(
+                    fileGroupNode(
+                        agent,
+                        source,
+                        inRepoFilePath ?? inSource[0].provenance.sourceUri,
+                        inSource.length,
+                    ),
+                );
+            } else if (inRepoFilePath) {
+                // The file exists but is empty: show it so it can be opened.
+                nodes.push(fileGroupNode(agent, source, inRepoFilePath, 0));
+            }
+            continue;
+        }
+        if (inSource.length === 0) {
+            continue;
+        }
+        // external: one row per distinct backing file.
+        const byFile = new Map<string, number>();
+        for (const e of inSource) {
+            const f = e.provenance.sourceUri;
+            byFile.set(f, (byFile.get(f) ?? 0) + 1);
+        }
+        for (const filePath of [...byFile.keys()].sort((a, b) =>
+            a.localeCompare(b),
+        )) {
+            nodes.push(
+                fileGroupNode(agent, source, filePath, byFile.get(filePath)!),
+            );
+        }
     }
-
-    return present.map((source) => {
-        const count = counts.get(source) ?? 0;
-        return {
-            kind: "source" as const,
-            id: `corpus:agent:${agent}:source:${source}`,
-            label: formatCorpusSource(source),
-            description: `${count} entr${count === 1 ? "y" : "ies"}`,
-            contextValue: "corpusSource",
-            agent,
-            source,
-            hasChildren: count > 0,
-        };
-    });
+    if (nodes.length === 0) {
+        return [seedAgentNode(agent)];
+    }
+    return nodes;
 }
 
-/** Build the entry rows for a single (agent, source) pair. */
-export function buildCorpusEntryNodes(
+function seedAgentNode(agent: string): CorpusTreeNode {
+    return {
+        kind: "empty",
+        id: `corpus:agent:${agent}:empty`,
+        label: "Create corpus file\u2026",
+        description: "No entries yet",
+        tooltip: noteTooltip(
+            `Click to create corpus/${agent}.utterances.jsonl and open it so you can add labelled utterances for ${agent}.`,
+        ),
+        contextValue: "corpusAgentSeed",
+        agent,
+        hasChildren: false,
+    };
+}
+
+function fileGroupNode(
     agent: string,
     source: CorpusSource,
+    filePath: string,
+    count: number,
+): CorpusTreeNode {
+    return {
+        kind: "source",
+        id: `corpus:agent:${agent}:file:${source}:${filePath}`,
+        label: fileNameOf(filePath),
+        description: count === 0 ? "No entries yet" : entryCountLabel(count),
+        tooltip: {
+            title: fileNameOf(filePath),
+            fields: [
+                {
+                    label: "Source",
+                    value:
+                        source === "in-repo"
+                            ? "Repository (shared, committed)"
+                            : "External",
+                },
+                { label: "Path", value: filePath, mono: true },
+                { label: "Entries", value: String(count) },
+            ],
+        },
+        contextValue: "corpusFile",
+        agent,
+        source,
+        filePath,
+        hasChildren: count > 0,
+    };
+}
+
+/** Build the entry rows for a single source group (a backing file). */
+export function buildCorpusEntryNodes(
+    group: CorpusTreeNode,
     entries: readonly CorpusEntry[],
 ): CorpusTreeNode[] {
+    const agent = group.agent ?? "";
     return entries
-        .filter((entry) => entry.source === source)
+        .filter((entry) => entryBelongsToGroup(entry, group))
         .map((entry) => ({
             kind: "entry" as const,
             id: `corpus:entry:${entry.id}`,
             label: truncateUtterance(entry.utterance),
-            // Feedback is conveyed by the row icon (thumbs up/down), so no
-            // description badge is needed.
             tooltip: buildEntryTooltip(entry),
             contextValue: "corpusEntry",
             agent,
-            source,
+            ...(group.source !== undefined ? { source: group.source } : {}),
             entryId: entry.id,
-            ...(entry.feedback
-                ? { feedbackRating: entry.feedback.rating }
-                : {}),
             hasChildren: false,
         }));
+}
+
+/** Whether an entry belongs under the given source group. */
+function entryBelongsToGroup(
+    entry: CorpusEntry,
+    group: CorpusTreeNode,
+): boolean {
+    if (entry.source !== group.source) {
+        return false;
+    }
+    // External entries are split per backing file; match the group's file.
+    if (group.source === "external") {
+        return entry.provenance.sourceUri === group.filePath;
+    }
+    return true;
 }
 
 export function formatCorpusSource(source: CorpusSource): string {
@@ -167,14 +238,14 @@ export function truncateUtterance(utterance: string): string {
     return collapseAndTruncate(utterance, MAX_UTTERANCE_LENGTH);
 }
 
-function countBySource(
-    entries: readonly CorpusEntry[],
-): Map<CorpusSource, number> {
-    const counts = new Map<CorpusSource, number>();
-    for (const entry of entries) {
-        counts.set(entry.source, (counts.get(entry.source) ?? 0) + 1);
-    }
-    return counts;
+function entryCountLabel(count: number): string {
+    return `${count} entr${count === 1 ? "y" : "ies"}`;
+}
+
+/** Last path segment, handling both POSIX and Windows separators. */
+function fileNameOf(filePath: string): string {
+    const parts = filePath.split(/[\\/]/);
+    return parts[parts.length - 1] || filePath;
 }
 
 function buildEntryTooltip(entry: CorpusEntry): TooltipModel {
@@ -189,12 +260,6 @@ function buildEntryTooltip(entry: CorpusEntry): TooltipModel {
             value: entry.provenance.requestId,
             mono: true,
         });
-    }
-    if (entry.feedback) {
-        fields.push({ label: "Feedback", value: entry.feedback.rating });
-        if (entry.feedback.comment) {
-            fields.push({ label: "Comment", value: entry.feedback.comment });
-        }
     }
     if (entry.tags && entry.tags.length > 0) {
         fields.push({ label: "Tags", value: entry.tags.join(", ") });

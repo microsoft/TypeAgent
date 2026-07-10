@@ -213,6 +213,8 @@ export type IssueListAction = {
 
         label?: string;
 
+        // Filter by assignee: a GitHub login (e.g. "octocat"), "@me" for the
+        // current user, or "none" to list only unassigned issues.
         assignee?: string;
 
         limit?: number;
@@ -293,6 +295,8 @@ export type PrListAction = {
 
         label?: string;
 
+        // Filter by assignee: a GitHub login (e.g. "octocat"), "@me" for the
+        // current user, or "none" to list only unassigned pull requests.
         assignee?: string;
 
         limit?: number;

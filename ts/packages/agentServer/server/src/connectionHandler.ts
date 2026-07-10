@@ -20,6 +20,7 @@ import type { Dispatcher } from "agent-dispatcher";
 import type { PortRegistrar } from "agent-dispatcher";
 import type { ConversationManager } from "./conversationManager.js";
 import { resolveTunnelUrlForDiscovery } from "./tunnelResolver.js";
+import { getSpeechToken } from "./speechToken.js";
 
 /**
  * Per-connection handler signature expected by transports (the WebSocket
@@ -218,6 +219,7 @@ export function createAgentServerConnectionHandler(
                 await shutdown();
             },
             getUserIdentity: async () => getUserIdentity(),
+            getSpeechToken: async () => getSpeechToken(),
         };
 
         // Clean up all conversations on disconnect

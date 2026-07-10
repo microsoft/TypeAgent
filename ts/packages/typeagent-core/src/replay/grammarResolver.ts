@@ -56,7 +56,11 @@ import {
 } from "../health/index.js";
 import type { CorpusEntry } from "../corpus/types.js";
 import type { VersionSpec } from "./types.js";
-import type { ReplayActionResolver, ReplayAgentResolution } from "./engine.js";
+import {
+    actionsEqual,
+    type ReplayActionResolver,
+    type ReplayAgentResolution,
+} from "./engine.js";
 import { normalizeAction } from "./replayActionShape.js";
 import type {
     ConstructionCacheLayer,
@@ -344,7 +348,7 @@ async function buildGrammar(
     // grammar-store path instead (the run reports method `static-grammar`). The
     // enrichability of a given schema source is deterministic across versions,
     // so the symmetric run-level `enriched` flag (computed by the resolver from
-    // both sides) stays consistent for the supported working-tree-vs-ref journey.
+    // both sides) stays consistent when comparing the working tree against a ref.
     let enriched = false;
     let parsedSchema: ReturnType<typeof parseActionSchemaSource> | undefined;
     if (target.schema !== undefined) {
@@ -504,8 +508,16 @@ export function createGrammarReplayResolver(
             side: "A" | "B",
         ): Promise<ReplayAgentResolution> {
             const t0 = now();
-            const feedback =
-                entry.feedback !== undefined
+            // A rating is observation-scoped: it judges the action that was on
+            // screen in the run where it was recorded (the action co-captured on
+            // this entry), not the utterance in the abstract. Attach it to a side
+            // only when that side reproduces that exact action; a rating for a
+            // now-different action says nothing about what this side resolved, so
+            // it is dropped and the structural delta decides.
+            const feedbackFor = (resolved: unknown) =>
+                entry.feedback !== undefined &&
+                entry.expectedAction !== undefined &&
+                actionsEqual(resolved, entry.expectedAction)
                     ? { feedback: entry.feedback }
                     : {};
 
@@ -523,7 +535,7 @@ export function createGrammarReplayResolver(
                         action: cacheAction,
                         cacheState: "hit",
                         latencyMs: now() - t0,
-                        ...feedback,
+                        ...feedbackFor(cacheAction),
                     };
                 }
             }
@@ -534,11 +546,11 @@ export function createGrammarReplayResolver(
             } catch {
                 // prepare() is expected to have surfaced build failures as a
                 // run-level error already; degrade safely here rather than throw
-                // (a throw would hang the engine's row stream).
+                // (a throw would hang the engine's row stream). No action
+                // resolved, so no rating can pertain to this side.
                 return {
                     cacheState: "needs-explanation",
                     latencyMs: now() - t0,
-                    ...feedback,
                 };
             }
 
@@ -578,7 +590,6 @@ export function createGrammarReplayResolver(
                 return {
                     cacheState: "needs-explanation",
                     latencyMs,
-                    ...feedback,
                 };
             }
             // When the live construction cache is in play, a grammar-only
@@ -586,7 +597,7 @@ export function createGrammarReplayResolver(
             // working-tree side's cache states faithful; otherwise it is a plain
             // grammar `hit` (unchanged grammar-match semantics).
             const cacheState = useConstruction ? "miss" : "hit";
-            return { action, cacheState, latencyMs, ...feedback };
+            return { action, cacheState, latencyMs, ...feedbackFor(action) };
         },
     };
 }

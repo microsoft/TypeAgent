@@ -43,6 +43,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayResult,
+    displaySuccess,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { alwaysEnabledAgents } from "../../appAgentManager.js";
@@ -2949,6 +2950,54 @@ function getCollisionCommandHandlers(): CommandHandlerTable {
     };
 }
 
+/**
+ * `@config dev on [--confirm]` — turn on developer mode.
+ *
+ * Developer mode records conversation + translation data (see DevTrace) and
+ * enables dev-only UI affordances (per-message delete). The optional
+ * `--confirm` flag additionally turns on per-request action confirmation
+ * (confirmTranslation -> clientIO.proposeAction), which is otherwise off so
+ * that recording data does not force an interactive Run/Cancel/Edit prompt.
+ */
+class DevModeOnCommandHandler implements CommandHandler {
+    public readonly description =
+        "Turn on development mode (records conversation + translation data)";
+    public readonly parameters = {
+        flags: {
+            confirm: {
+                description:
+                    "Also confirm each translated action via the client before running it",
+                char: "c",
+                type: "boolean",
+                default: false,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const confirm = params.flags.confirm === true;
+        systemContext.developerMode = true;
+        systemContext.confirmActions = confirm;
+        // Notify connected clients so dev-mode UI affordances (e.g. the
+        // per-message delete button) can toggle live.
+        systemContext.clientIO.notify(
+            undefined,
+            "developerMode",
+            { enabled: true },
+            "dispatcher",
+        );
+        displaySuccess(
+            confirm
+                ? "development mode is enabled (action confirmation on)."
+                : "development mode is enabled.",
+            context,
+        );
+    }
+}
+
 export function getConfigCommandHandlers(): CommandHandlerTable {
     return {
         description: "Configuration commands",
@@ -2992,12 +3041,34 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
             explainer: configExplainerCommandHandlers,
             execution: configExecutionCommandHandlers,
             modelProvider: new ConfigModelProviderCommandHandler(),
-            dev: getToggleHandlerTable(
-                "development mode",
-                async (context, enable) => {
-                    context.sessionContext.agentContext.developerMode = enable;
+            dev: {
+                description: "Toggle development mode",
+                defaultSubCommand: "on",
+                commands: {
+                    on: new DevModeOnCommandHandler(),
+                    off: {
+                        description: "Turn off development mode",
+                        run: async (
+                            context: ActionContext<CommandHandlerContext>,
+                        ) => {
+                            const systemContext =
+                                context.sessionContext.agentContext;
+                            systemContext.developerMode = false;
+                            systemContext.confirmActions = false;
+                            systemContext.clientIO.notify(
+                                undefined,
+                                "developerMode",
+                                { enabled: false },
+                                "dispatcher",
+                            );
+                            displaySuccess(
+                                "development mode is disabled.",
+                                context,
+                            );
+                        },
+                    },
                 },
-            ),
+            },
             log: {
                 description: "Toggle logging",
                 commands: {
