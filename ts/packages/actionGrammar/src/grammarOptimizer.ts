@@ -267,8 +267,14 @@ export const recommendedOptimizations: GrammarOptimizationOptions = {
  * NFA-compatible preset: all of `recommendedOptimizations` except
  * `tailFactoring` and `promoteTailRulesParts`, which emit
  * `RulesPart.tailCall` nodes the NFA compiler rejects. Use this preset
- * for any grammar that will be compiled to an NFA (the default
- * `grammarSystem` for agent-server).
+ * for any grammar that will be compiled to an NFA/DFA path (note: the
+ * default `grammarSystem` for agent-server is `completionBased`/AST, not
+ * NFA - this preset only matters when NFA/DFA is explicitly selected).
+ *
+ * TODO(#nfa-tail-support): Once the NFA compiler supports tailCall
+ * RulesParts natively, this preset (and the `agc compile --nfa-safe`
+ * flag that exposes it) should be removed in favor of always using
+ * `recommendedOptimizations`.
  */
 export const nfaSafeOptimizations: GrammarOptimizationOptions = {
     inlineSingleAlternatives: true,

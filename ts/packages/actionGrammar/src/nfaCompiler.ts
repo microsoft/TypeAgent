@@ -480,9 +480,11 @@ function isSingleVariableRule(rule: GrammarRule): { variable: string } | false {
  * single-variable rules forward that variable, and factored multi-part
  * rules (from `nfaSafeOptimizations`) forward their single variable-bearing
  * part's value (via `findSingleValueBearingPart`, shared with the
- * optimizer's `getImplicitDefaultValue`). Throws if ambiguous (2+
- * variable-bearing parts); if `requireValue` is set, also throws when no
- * value can be derived at all.
+ * optimizer's `getImplicitDefaultValue`). Not every rule needs a value -
+ * only when `requireValue` is set (i.e. the value is actually consumed:
+ * top-level action rules, or nested rules captured by a parent variable)
+ * do ambiguous (2+ variable-bearing parts) or missing values throw;
+ * otherwise both cases just resolve to `undefined`.
  */
 function deriveEffectiveValue(
     rule: GrammarRule,
@@ -501,6 +503,14 @@ function deriveEffectiveValue(
     }
     const singleVarPart = findSingleValueBearingPart(rule.parts);
     if (singleVarPart === "ambiguous") {
+        // Not every rule needs a value - only rules whose value is actually
+        // consumed (top-level action rules, or nested rules captured by a
+        // parent variable) do. If nothing downstream needs this rule's
+        // value, ambiguity is harmless: just report "no value", matching
+        // the `singleVarPart === undefined` case below.
+        if (!requireValue) {
+            return undefined;
+        }
         throw new Error(
             `${describeRule()} has ${rule.parts.length} terms but no value expression, ` +
                 `and more than one part carries a variable - the implicit value is ambiguous. ` +
