@@ -53,11 +53,26 @@
     },
     "files.watcherExclude": {
         "**/node_modules/**": true,
-        "**/.git/objects/**": true,
-        "**/dist/**": true
+        "**/.git/**": true,
+        "**/.pnpm/**": true,
+        "**/dist/**": true,
+        "**/build/**": true,
+        "**/out/**": true,
+        "**/coverage/**": true,
+        "**/*.tsbuildinfo": true
     },
     "search.exclude": {
         "**/node_modules": true,
-        "**/dist": true
-    }
+        "**/.pnpm": true,
+        "**/dist": true,
+        "**/build": true,
+        "**/out": true,
+        "**/coverage": true,
+        "**/*.tsbuildinfo": true,
+        "**/pnpm-lock.yaml": true
+    },
+    "search.followSymlinks": false,
+    "search.useIgnoreFiles": true,
+    "search.useParentIgnoreFiles": true,
+    "typeagent.serverStartCommand": "pnpm --filter agent-server start"
 }

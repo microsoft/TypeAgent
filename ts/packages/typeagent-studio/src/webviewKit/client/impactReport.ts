@@ -29,10 +29,16 @@ import {
     toImpactErrorLine,
     toSideMethodLabel,
     buildImpactFilterChips,
-    filterImpactRows,
-    defaultImpactFilters,
-    allStatusesActive,
-    impactFilterNote,
+    visibleImpactRows,
+    toggleFilterKey,
+    allRowIds,
+    allRowsVisible,
+    allRowsHidden,
+    sortImpactRowsByVerdict,
+    sortImpactRows,
+    IMPACT_FILTER_ORDER,
+    hiddenRowsNote,
+    toVerdictBanner,
     impactEmptyState,
     allRowsEqual,
     formatProvenanceLine,
@@ -40,13 +46,16 @@ import {
     toActionDiff,
     toFidelityMatrix,
     type ImpactRow,
+    type ImpactFilterKey,
+    type ImpactSort,
+    type ImpactSortColumn,
     type ReplayRowStatus,
     type ResolvedVersion,
     type RunProvenance,
     type FidelityCell,
 } from "../replayViewModel.js";
 
-/** Default base (A): the last commit — the baseline of the regression journey. */
+/** Default base (A): the last commit — the baseline the working tree is compared against. */
 const DEFAULT_VERSION_A: ResolvedVersion = {
     spec: { kind: "git", ref: "HEAD" },
     label: "HEAD",
@@ -64,7 +73,7 @@ interface PersistedResult {
     payload: StudioReplayResult;
     /** Resolved identity of both sides, captured at run time. */
     provenance?: RunProvenance;
-    /** Epoch ms the run completed, for the "restored" hint. */
+    /** Epoch ms the run completed, shown as the "Last run" timestamp. */
     runAt: number;
 }
 interface PanelState {
@@ -113,9 +122,17 @@ let openDetailId: string | undefined;
 // from openDetailId so equal rows — which have no A/B diff to show — can still
 // read as "selected" while the detail pane stays closed.
 let selectedId: string | undefined;
-// Active status filter; defaults to all statuses (the "All" pill is lit), so a
-// fresh report shows every row and the user narrows with the filter chips.
-const activeFilters = defaultImpactFilters();
+// Row-level filter state: the set of hidden utterance ids. Chips over the same
+// rows overlap, so visibility is tracked per row rather than per chip. Empty
+// means nothing is hidden (the "All" pill is lit); toggling a chip hides or
+// shows its rows and every chip's live count recomputes over what remains.
+let hiddenRowIds: Set<string> = new Set();
+// The current utterance search. Empty means the search is off (every row shows);
+// otherwise only rows whose utterance contains the query survive, and the chip
+// counts recompute over that narrowed set.
+let searchQuery = "";
+// The active column sort, or null to keep the default regression-first order.
+let sortState: ImpactSort | null = null;
 // The current selection driving a run. Versions are typed specs resolved by the
 // host's git picker (or the defaults); the agent is fixed for the panel (set
 // from the host `init`, shown read-only and in the tab title).
@@ -255,26 +272,35 @@ const validationEl = el("span", "validation-note");
 const statusEl = el("span", "status");
 subBar.append(provenanceEl, validationEl, statusEl);
 
-// The scrolling content region: an inline error notification, the per-side
-// fidelity matrix, the status filter, first-run guidance, the results list, and
-// the drill-in detail pane.
+// The content region is a flex column: a scrolling area holds the error
+// notification, the verdict banner, the per-side fidelity matrix, the impact
+// filter, first-run guidance, and the results list; the drill-in detail pane is
+// docked below it so a selected row and its diff stay visible together.
 const contentEl = el("div", "content");
+const scrollEl = el("div", "content-scroll");
 const notificationEl = el("div", "notification");
+const verdictBannerEl = el("div", "verdict-banner");
+verdictBannerEl.hidden = true;
 const fidelityEl = el("div", "fidelity-panel");
 fidelityEl.hidden = true;
 const filtersEl = el("div", "filters");
+// The chip row is rebuilt on every filter change. The utterance filter lives in
+// the Utterance column header (a funnel icon that opens a native input box).
+const filterChipsEl = el("div", "filter-chips");
+filtersEl.append(filterChipsEl);
 const emptyStateEl = el("div", "empty-state");
 const tableWrap = el("div", "table-wrap");
 const detailEl = el("div", "detail-pane");
 detailEl.hidden = true;
-contentEl.append(
+scrollEl.append(
     notificationEl,
+    verdictBannerEl,
     fidelityEl,
     filtersEl,
     emptyStateEl,
     tableWrap,
-    detailEl,
 );
+contentEl.append(scrollEl, detailEl);
 
 root.append(actionBar, subBar, contentEl);
 
@@ -349,15 +375,43 @@ window.addEventListener("message", (event: MessageEvent) => {
         case "versionPicked":
             applyVersionPick(msg.side, msg.resolved);
             break;
+        case "utteranceSearch":
+            // The host input box confirmed a new utterance filter. Apply it and
+            // recompute the chip counts and rows against it.
+            searchQuery = msg.query;
+            renderFilters();
+            renderTable();
+            break;
         case "result":
             // Accept the matching run, or — when no run has been issued since
             // this load (id still 0) — a host recovery re-push of the last
-            // result (the panel reloaded after the run finished). Adopt its id
-            // so a genuinely stale earlier result can't then overwrite it.
-            if (latestRequestId === 0 || msg.requestId === latestRequestId) {
-                latestRequestId = msg.requestId;
-                renderResult(msg.payload, false, msg.provenance);
-                persistResult(msg.payload, msg.provenance);
+            // result (the panel reloaded after the run finished, or a cached
+            // prior run seeded from the durable store on open). Adopt its id so a
+            // genuinely stale earlier result can't then overwrite it. An external
+            // push (a Replay launched from the Corpora view) is accepted
+            // regardless of this panel's own request-id sequence, without
+            // adopting its id, so a later in-panel run still dedupes normally.
+            if (
+                msg.external ||
+                latestRequestId === 0 ||
+                msg.requestId === latestRequestId
+            ) {
+                if (!msg.external) {
+                    latestRequestId = msg.requestId;
+                }
+                // Recover the launch controls to the run's versions. On a fresh
+                // panel (reopened after close) the webview's own getState is empty,
+                // so the host-carried selection is the only way to show which
+                // versions the restored run compared. Harmless on a live run (the
+                // echoed selection matches what's already shown).
+                if (msg.versionA && msg.versionB) {
+                    versionA = msg.versionA;
+                    versionB = msg.versionB;
+                    renderVersionButtons();
+                    persistState({ versionA, versionB });
+                }
+                renderResult(msg.payload, msg.provenance, msg.runAt);
+                persistResult(msg.payload, msg.provenance, msg.runAt);
                 setControlsEnabled(controlsAvailable);
             }
             break;
@@ -395,10 +449,12 @@ function runReplay(): void {
     clearNotification();
     provenanceEl.textContent = "";
     validationEl.textContent = "";
-    filtersEl.textContent = "";
+    filterChipsEl.textContent = "";
     filtersEl.hidden = true;
     emptyStateEl.hidden = true;
     currentRows = [];
+    hiddenRowIds = new Set();
+    resetSearchAndSort();
     currentRawById = new Map();
     closeDetail();
     tableWrap.textContent = "";
@@ -408,6 +464,8 @@ function runReplay(): void {
         agent,
         versionA: versionA.spec,
         versionB: versionB.spec,
+        resolvedA: versionA,
+        resolvedB: versionB,
         mode,
         validateWildcards,
     });
@@ -490,8 +548,8 @@ function swapVersions(): void {
 
 function renderResult(
     result: StudioReplayResult,
-    restored = false,
     provenance?: RunProvenance,
+    runAt?: number,
 ): void {
     lastRenderedResult = result;
     // Reset every output region first so a render fully *replaces* the previous
@@ -504,21 +562,25 @@ function renderResult(
     provenanceEl.textContent = "";
     validationEl.textContent = "";
     validationEl.classList.remove("is-degraded");
+    verdictBannerEl.textContent = "";
+    verdictBannerEl.hidden = true;
     fidelityEl.textContent = "";
     fidelityEl.hidden = true;
-    filtersEl.textContent = "";
+    filterChipsEl.textContent = "";
     filtersEl.hidden = true;
     emptyStateEl.hidden = true;
     tableWrap.textContent = "";
     statusEl.title = "";
     currentRows = [];
+    hiddenRowIds = new Set();
+    resetSearchAndSort();
     currentRawById = new Map(result.rows.map((r) => [r.utteranceId, r]));
     closeDetail();
     // A run-level error (a version that failed to build) aborts with an empty
     // summary — surface the failure instead of a misleading zero-row success.
     if (result.error) {
         showNotification(toImpactErrorLine(result.error));
-        setStatus(restored ? "Restored — replay aborted." : "Replay aborted.");
+        setStatus("Replay aborted.");
         return;
     }
 
@@ -547,19 +609,33 @@ function renderResult(
     // each version.
     renderFidelity(result.sideFidelity);
 
-    currentRows = toImpactRows(result.rows, result.methodA, result.methodB);
+    currentRows = sortImpactRowsByVerdict(
+        toImpactRows(result.rows, result.methodA, result.methodB),
+    );
+    hiddenRowIds = new Set();
+    resetSearchAndSort();
     currentTotal = result.summary.rowCount;
 
+    renderVerdictBanner();
     renderFilters();
     renderTable();
 
     const shown = currentRows.length;
     const ms = result.summary.duration;
-    setStatus(
-        restored
-            ? `Restored from last run — Run for live results (${shown} row(s)).`
-            : `Done — ${shown} row(s) \u00b7 ${ms}ms.`,
-    );
+    const lastRun =
+        runAt !== undefined
+            ? ` \u00b7 Last run: ${formatRunTimestamp(runAt)}`
+            : "";
+    setStatus(`Done — ${shown} row(s) \u00b7 ${ms}ms.${lastRun}`);
+}
+
+/** Format a run timestamp for the "Last run" status hint (local date + time). */
+function formatRunTimestamp(runAt: number): string {
+    try {
+        return new Date(runAt).toLocaleString();
+    } catch {
+        return "";
+    }
 }
 
 /** Paint the wildcard-validation outcome into the sub-bar, or clear it.
@@ -704,60 +780,82 @@ function fidelityStatusCell(cellInfo: FidelityCell): HTMLElement {
     return cell;
 }
 
-/** Paint the status filter chips for the rows of the current result. */
+/** Paint the impact filter bar: an "All" pill and a "None" pill, then one flat
+ *  list of chips (both structural statuses and value verdicts, no grouping).
+ *  Each chip shows a live count of the rows it matches among those still
+ *  visible; clicking a chip hides or shows its rows and every count recomputes.
+ *  Chips whose rows are all hidden read as deselected (count 0) but stay
+ *  clickable to bring them back; chips with no matching rows at all are inert. */
 function renderFilters(): void {
-    filtersEl.textContent = "";
-    const chips = buildImpactFilterChips(currentRows);
     // Nothing to filter (no rows, or an error/empty run) — keep the bar hidden.
     if (currentRows.length === 0) {
         filtersEl.hidden = true;
+        filterChipsEl.textContent = "";
         return;
     }
     filtersEl.hidden = false;
-
-    const label = el("span", "filters-label");
-    label.append(codicon("list-filter"), document.createTextNode("Filter"));
-    filtersEl.appendChild(label);
-
-    // The "All" pill resets the view to every row; it reads as active whenever
-    // nothing with rows is hidden.
-    filtersEl.appendChild(
+    filterChipsEl.textContent = "";
+    const chips = buildImpactFilterChips(
+        currentRows,
+        hiddenRowIds,
+        searchQuery,
+    );
+    const byKey = new Map(chips.map((chip) => [chip.key, chip]));
+    const row = el("div", "filter-row");
+    row.appendChild(filterLabel("Filter"));
+    row.appendChild(
         chipButton(
             "All",
-            currentRows.length,
-            allStatusesActive(chips, activeFilters),
+            undefined,
+            allRowsVisible(hiddenRowIds),
             false,
             selectAllFilters,
         ),
     );
+    row.appendChild(
+        chipButton(
+            "None",
+            undefined,
+            allRowsHidden(currentRows, hiddenRowIds),
+            false,
+            clearAllFilters,
+        ),
+    );
 
-    for (const chip of chips) {
-        const isActive = activeFilters.has(chip.status);
-        const isEmpty = chip.count === 0;
-        // A status with no rows is nothing to filter on — show it for context
-        // (a count of 0 is informative) but make it inert.
-        filtersEl.appendChild(
+    for (const key of IMPACT_FILTER_ORDER) {
+        const chip = byKey.get(key);
+        if (!chip) continue;
+        row.appendChild(
             chipButton(
                 chip.label,
                 chip.count,
-                isActive,
-                isEmpty,
-                () => toggleFilter(chip.status),
-                chip.status,
+                chip.selected,
+                chip.empty,
+                () => toggleFilter(chip.key),
+                chip.tone,
             ),
         );
     }
+    filterChipsEl.appendChild(row);
 }
 
-/** Build one filter pill button. Empty (zero-count) chips render inert. A
- *  `status` adds a colour dot mirroring the row status colour. */
+/** A leading label for the filter bar. */
+function filterLabel(labelText: string): HTMLElement {
+    const label = el("span", "filters-label");
+    label.append(codicon("list-filter"), document.createTextNode(labelText));
+    return label;
+}
+
+/** Build one filter pill button. A `count` renders a trailing count badge (the
+ *  "All"/"None" pills omit it). Empty (no matching rows) chips render inert. A
+ *  `dotClass` adds a colour dot mirroring the row's colour. */
 function chipButton(
     label: string,
-    count: number,
+    count: number | undefined,
     isActive: boolean,
     isEmpty: boolean,
     onClick: () => void,
-    status?: ReplayRowStatus,
+    dotClass?: string,
 ): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
@@ -766,15 +864,18 @@ function chipButton(
     if (isEmpty) classes.push("is-empty");
     button.className = classes.join(" ");
     button.setAttribute("aria-pressed", String(isActive));
-    if (status) {
-        const dot = el("span", `chip-dot status-${status}`);
+    if (dotClass) {
+        const dot = el("span", `chip-dot ${dotClass}`);
         button.appendChild(dot);
     }
     const text = document.createElement("span");
     text.textContent = label;
-    const countEl = el("span", "chip-count");
-    countEl.textContent = String(count);
-    button.append(text, countEl);
+    button.appendChild(text);
+    if (count !== undefined) {
+        const countEl = el("span", "chip-count");
+        countEl.textContent = String(count);
+        button.appendChild(countEl);
+    }
     if (isEmpty) {
         button.disabled = true;
     } else {
@@ -783,125 +884,307 @@ function chipButton(
     return button;
 }
 
-/** Reset the active filter to every status (the "All" view). */
+/** Show every row again (the "All" view). */
 function selectAllFilters(): void {
-    for (const status of defaultImpactFilters()) {
-        activeFilters.add(status);
-    }
+    hiddenRowIds = new Set();
     renderFilters();
     renderTable();
 }
 
-/** Toggle one status in the active filter and re-render the table in place. */
-function toggleFilter(status: ReplayRowStatus): void {
-    if (activeFilters.has(status)) {
-        activeFilters.delete(status);
+/** Hide every row, ready for the user to click a small subset of chips back on. */
+function clearAllFilters(): void {
+    hiddenRowIds = allRowIds(currentRows);
+    renderFilters();
+    renderTable();
+}
+
+/** Toggle one chip's rows in or out of view and re-render in place. */
+function toggleFilter(key: ImpactFilterKey): void {
+    hiddenRowIds = toggleFilterKey(currentRows, key, hiddenRowIds, searchQuery);
+    renderFilters();
+    renderTable();
+}
+
+/** Open the host's native input box to edit the utterance filter, seeded with
+ *  the filter currently applied. The host posts back an `utteranceSearch`
+ *  message with the confirmed text (or nothing on cancel). */
+function requestUtteranceSearch(): void {
+    vscode.postMessage({ type: "searchUtterances", current: searchQuery });
+}
+
+/** The funnel button in the Utterance column header. Opens the native input box
+ *  and shows an active state while a filter is applied. Its click is kept from
+ *  bubbling to the header so it never triggers a column sort. */
+function buildUtteranceFilterButton(): HTMLButtonElement {
+    const active = searchQuery.trim().length > 0;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = active ? "th-filter is-active" : "th-filter";
+    button.title = active
+        ? `Filtering utterances by “${searchQuery}”. Click to change (clear the box to remove).`
+        : "Filter utterances by text…";
+    button.setAttribute("aria-label", "Filter utterances");
+    button.setAttribute("aria-pressed", String(active));
+    button.appendChild(codicon(active ? "filter-filled" : "filter"));
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        requestUtteranceSearch();
+    });
+    button.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Enter" || event.key === " ") {
+            // The header handles Enter/Space for sorting; contain them here.
+            event.stopPropagation();
+        }
+    });
+    return button;
+}
+
+/** Clear the utterance filter and column sort back to their defaults. Called
+ *  when a fresh result arrives so a new run opens on the full, verdict-ordered
+ *  view. */
+function resetSearchAndSort(): void {
+    searchQuery = "";
+    sortState = null;
+}
+
+/** Sort by a column header. Clicking a new column sorts it ascending; clicking
+ *  the already-sorted column flips the direction. Descending on the active
+ *  column does not clear the sort — the arrow always shows the current order. */
+function toggleSort(column: ImpactSortColumn): void {
+    if (sortState?.column === column) {
+        sortState = {
+            column,
+            direction: sortState.direction === "asc" ? "desc" : "asc",
+        };
     } else {
-        activeFilters.add(status);
+        sortState = { column, direction: "asc" };
     }
-    renderFilters();
     renderTable();
 }
 
-/** Build the rows table from `currentRows`, honouring the active filter. */
+/** Paint the verdict headline: the primary "did anything regress?" answer. */
+function renderVerdictBanner(): void {
+    verdictBannerEl.textContent = "";
+    const banner = toVerdictBanner(currentRows);
+    if (!banner) {
+        verdictBannerEl.hidden = true;
+        return;
+    }
+    verdictBannerEl.hidden = false;
+    verdictBannerEl.classList.toggle(
+        "is-regression",
+        banner.tone === "regression",
+    );
+    verdictBannerEl.classList.toggle("is-clean", banner.tone === "clean");
+    verdictBannerEl.appendChild(
+        codicon(banner.tone === "regression" ? "warning" : "pass"),
+    );
+    const headline = el("span", "verdict-headline");
+    headline.textContent = banner.headline;
+    verdictBannerEl.appendChild(headline);
+    if (banner.detail) {
+        const detail = el("span", "verdict-detail");
+        detail.textContent = banner.detail;
+        verdictBannerEl.appendChild(detail);
+    }
+    verdictBannerEl.title =
+        "Heuristic verdict — the report's red/green judgment on each row.";
+}
+
+/** Build the rows table from `currentRows`, honouring the active filter, the
+ *  utterance search, and the chosen column sort. */
 function renderTable(): void {
     tableWrap.textContent = "";
-    const rows = filterImpactRows(currentRows, activeFilters);
+    let rows = visibleImpactRows(currentRows, hiddenRowIds, searchQuery);
+    if (sortState) {
+        rows = sortImpactRows(rows, sortState);
+    }
 
     const table = document.createElement("table");
     const thead = document.createElement("thead");
     const head = document.createElement("tr");
-    const headers: { label: string; title: string; ariaLabel?: string }[] = [
-        {
-            label: "Utterance",
-            title: "The corpus utterance that was replayed.",
-        },
-        {
-            label: "Status",
-            title: "How Base (A) and Compare (B) compare for this utterance.",
-        },
-        {
-            label: "Base (A)",
-            title: "How Base (A) resolved the utterance (cache state).",
-        },
-        {
-            label: "Compare (B)",
-            title: "How Compare (B) resolved the utterance (cache state).",
-        },
-        { label: "", title: LATENCY_TOOLTIP, ariaLabel: "Latency" },
-    ];
-    for (const h of headers) {
-        const th = document.createElement("th");
-        th.textContent = h.label || "Latency";
-        th.title = h.title;
-        if (h.ariaLabel) th.setAttribute("aria-label", h.ariaLabel);
-        head.appendChild(th);
+    for (const h of tableHeaders()) {
+        head.appendChild(buildHeaderCell(h));
     }
     thead.appendChild(head);
     table.appendChild(thead);
-    const tbody = document.createElement("tbody");
 
+    const tbody = document.createElement("tbody");
     for (const row of rows) {
-        const tr = document.createElement("tr");
-        tr.appendChild(cell(row.utterance));
-        tr.appendChild(statusCell(row.status, row.statusLabel));
-        tr.appendChild(
-            cell(
-                row.resolutionA,
-                "resolution",
-                resolutionTooltip(row.resolutionA),
-            ),
-        );
-        tr.appendChild(
-            cell(
-                row.resolutionB,
-                "resolution",
-                resolutionTooltip(row.resolutionB),
-            ),
-        );
-        tr.appendChild(latencyCell(row));
-        // Every row is clickable. Difference rows drill into an action A/B diff;
-        // equal rows have nothing to compare, so a click just clears any open
-        // detail pane.
-        if (currentRawById.has(row.utteranceId)) {
-            const isDiff = row.status !== "equal";
-            tr.classList.add("row-clickable");
-            if (row.utteranceId === selectedId) {
-                tr.classList.add("row-open");
-            }
-            tr.tabIndex = 0;
-            tr.setAttribute("role", "button");
-            tr.title = isDiff
-                ? "Show the action A/B diff for this utterance."
-                : "Equal row — click to close the detail diff.";
-            const activate = () =>
-                isDiff
-                    ? openDetail(row.utteranceId)
-                    : selectEqualRow(row.utteranceId);
-            tr.addEventListener("click", activate);
-            tr.addEventListener("keydown", (e: KeyboardEvent) => {
-                if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    activate();
-                }
-            });
-        }
-        tbody.appendChild(tr);
+        tbody.appendChild(buildTableRow(row));
     }
     table.appendChild(tbody);
     tableWrap.appendChild(table);
 
-    const chips = buildImpactFilterChips(currentRows);
+    appendTableNotes(rows);
+}
+
+interface HeaderSpec {
+    label: string;
+    title: string;
+    ariaLabel?: string;
+    sort?: ImpactSortColumn;
+    filter?: boolean;
+}
+
+// Built lazily as a function (not a module-level const) so it can reference
+// `LATENCY_TOOLTIP`, which is declared later in the file; a six-item literal
+// adds no meaningful cost per render.
+function tableHeaders(): HeaderSpec[] {
+    return [
+        {
+            label: "Utterance",
+            title: "The corpus utterance that was replayed.",
+            sort: "utterance",
+            filter: true,
+        },
+        {
+            label: "Status",
+            title: "How Base (A) and Compare (B) compare for this utterance.",
+            sort: "status",
+        },
+        {
+            label: "Impact",
+            title: "The report's red/green judgment on the change (heuristic).",
+            sort: "impact",
+        },
+        {
+            label: "Base (A)",
+            title: "How Base (A) resolved the utterance (cache state).",
+            sort: "resolutionA",
+        },
+        {
+            label: "Compare (B)",
+            title: "How Compare (B) resolved the utterance (cache state).",
+            sort: "resolutionB",
+        },
+        {
+            label: "",
+            title: LATENCY_TOOLTIP,
+            ariaLabel: "Latency",
+            sort: "latency",
+        },
+    ];
+}
+
+/** Tooltip suffix describing the sort affordance for a column header. */
+function sortHint(
+    active: boolean,
+    dir: ImpactSort["direction"] | undefined,
+): string {
+    if (!active) {
+        return " Click to sort.";
+    }
+    return dir === "asc"
+        ? " Click to sort (ascending; click for descending)."
+        : " Click to sort (descending; click for ascending).";
+}
+
+/** Build one `<th>`, wiring sort + filter affordances for sortable columns. */
+function buildHeaderCell(h: HeaderSpec): HTMLTableCellElement {
+    const th = document.createElement("th");
+    if (h.ariaLabel) th.setAttribute("aria-label", h.ariaLabel);
+    if (!h.sort) {
+        th.textContent = h.label || "Latency";
+        th.title = h.title;
+        return th;
+    }
+
+    const column = h.sort;
+    const active = sortState?.column === column;
+    const dir = active ? sortState!.direction : undefined;
+    th.className = active ? "col-sortable is-sorted" : "col-sortable";
+    th.tabIndex = 0;
+    th.setAttribute("role", "button");
+    th.title = h.title + sortHint(active, dir);
+
+    const inner = el("div", "th-inner");
+    const labelEl = el("span", "th-label");
+    labelEl.textContent = h.label || "Latency";
+    inner.appendChild(labelEl);
+    // The filter funnel sits right after the title, away from the sort chevron
+    // so the two controls don't crowd each other.
+    if (h.filter) {
+        inner.appendChild(buildUtteranceFilterButton());
+    }
+    const controls = el("div", "th-controls");
+    const arrow = codicon(
+        active && dir === "asc" ? "chevron-up" : "chevron-down",
+    );
+    arrow.classList.add("sort-arrow");
+    if (!active) arrow.classList.add("sort-arrow-idle");
+    controls.appendChild(arrow);
+    inner.appendChild(controls);
+    th.appendChild(inner);
+
+    const onSort = () => toggleSort(column);
+    th.addEventListener("click", onSort);
+    th.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSort();
+        }
+    });
+    return th;
+}
+
+/** Build one data `<tr>`, making it clickable when a raw delta backs the row. */
+function buildTableRow(row: ImpactRow): HTMLTableRowElement {
+    const tr = document.createElement("tr");
+    tr.appendChild(cell(row.utterance));
+    tr.appendChild(statusCell(row));
+    tr.appendChild(impactCell(row));
+    tr.appendChild(
+        cell(row.resolutionA, "resolution", resolutionTooltip(row.resolutionA)),
+    );
+    tr.appendChild(
+        cell(row.resolutionB, "resolution", resolutionTooltip(row.resolutionB)),
+    );
+    tr.appendChild(latencyCell(row));
+    // Every row is clickable. Difference rows drill into an action A/B diff;
+    // equal rows have nothing to compare, so a click just clears any open
+    // detail pane.
+    if (!currentRawById.has(row.utteranceId)) {
+        return tr;
+    }
+    const isDiff = row.status !== "equal";
+    tr.classList.add("row-clickable");
+    if (row.utteranceId === selectedId) {
+        tr.classList.add("row-open");
+    }
+    tr.tabIndex = 0;
+    tr.setAttribute("role", "button");
+    tr.title = isDiff
+        ? "Show the action A/B diff for this utterance."
+        : "Equal row — click to close the detail diff.";
+    const activate = () =>
+        isDiff ? openDetail(row.utteranceId) : selectEqualRow(row.utteranceId);
+    tr.addEventListener("click", activate);
+    tr.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            activate();
+        }
+    });
+    return tr;
+}
+
+/** Append the empty-state message and any truncation notes below the table. */
+function appendTableNotes(rows: ImpactRow[]): void {
     if (rows.length === 0) {
         // Distinguish "filtered everything out" from a genuinely all-equal run
-        // (the happy path of the regression journey: nothing changed).
+        // (nothing changed between the two versions).
         const empty = el("div", "truncation");
-        empty.textContent = allRowsEqual(currentRows)
-            ? `No differences — all ${currentRows.length} row(s) are equal between A and B.`
-            : "No rows match the active filter.";
+        if (allRowsEqual(currentRows)) {
+            empty.textContent = `No differences — all ${currentRows.length} row(s) are equal between A and B.`;
+        } else if (searchQuery.trim().length > 0) {
+            empty.textContent = `No rows match “${searchQuery.trim()}”.`;
+        } else {
+            empty.textContent = "No rows match the active filter.";
+        }
         tableWrap.appendChild(empty);
     } else {
-        const hiddenNote = impactFilterNote(chips, activeFilters);
+        const hiddenNote = hiddenRowsNote(currentRows.length, rows.length);
         if (hiddenNote) {
             const note = el("div", "truncation");
             note.textContent = hiddenNote;
@@ -932,7 +1215,10 @@ function openDetail(utteranceId: string): void {
     renderDetail(delta);
     // Re-render the table so the open row gets its highlight.
     renderTable();
-    detailEl.scrollIntoView({ block: "nearest" });
+    // Keep the selected row visible above the docked detail pane (scrolling the
+    // pane itself would push the row out of view on a long table).
+    const openRow = tableWrap.querySelector(".row-open");
+    openRow?.scrollIntoView({ block: "nearest" });
 }
 
 /** Select an equal row: it has no A/B diff, so just highlight it and close any
@@ -1057,8 +1343,8 @@ function restoreSelection(): void {
     if (state?.lastResult) {
         renderResult(
             state.lastResult.payload,
-            true,
             state.lastResult.provenance,
+            state.lastResult.runAt,
         );
     }
 }
@@ -1079,10 +1365,13 @@ function persistState(extra: Partial<PanelState>): void {
     }
 }
 
-/** Persist a completed result (row-capped) so a reload re-renders it. */
+/** Persist a completed result (row-capped) so a reload re-renders it. When
+ *  re-persisting a restored run, keep its original `runAt` rather than stamping
+ *  "now" so the timestamp shown stays truthful. */
 function persistResult(
     payload: StudioReplayResult,
     provenance?: RunProvenance,
+    runAt?: number,
 ): void {
     const bounded =
         payload.rows.length > MAX_PERSISTED_ROWS
@@ -1091,7 +1380,7 @@ function persistResult(
     persistState({
         lastResult: {
             payload: bounded,
-            runAt: Date.now(),
+            runAt: runAt ?? Date.now(),
             ...(provenance ? { provenance } : {}),
         },
     });
@@ -1199,18 +1488,44 @@ function statusIcon(status: ReplayRowStatus): string {
     }
 }
 
-/** The status cell: a coloured codicon + label, like VS Code's diff decorations. */
-function statusCell(
-    status: ReplayRowStatus,
-    label: string,
-): HTMLTableCellElement {
+/** The status cell: the structural diff decoration (colour + icon + label). */
+function statusCell(row: ImpactRow): HTMLTableCellElement {
     const td = document.createElement("td");
     td.className = "col-status";
-    td.title = STATUS_TOOLTIP[status];
-    const wrap = el("span", `status-cell status-${status}`);
-    wrap.append(codicon(statusIcon(status)), text(label));
+    td.title = STATUS_TOOLTIP[row.status];
+    const wrap = el("span", `status-cell status-${row.status}`);
+    wrap.append(codicon(statusIcon(row.status)), text(row.statusLabel));
     td.appendChild(wrap);
     return td;
+}
+
+/** The impact cell: the red/green value judgment on the change (a coloured dot
+ *  and lower-case word). Neutral (unchanged) rows show a muted dash. */
+function impactCell(row: ImpactRow): HTMLTableCellElement {
+    const td = document.createElement("td");
+    td.className = "col-impact";
+    if (row.verdict === "neutral") {
+        const none = el("span", "impact-cell impact-neutral");
+        none.textContent = "—";
+        td.appendChild(none);
+        return td;
+    }
+    const wrap = el("span", `impact-cell impact-${row.verdict}`);
+    wrap.append(el("span", "impact-dot"), text(row.impactLabel));
+    wrap.title = verdictTooltip(row);
+    td.appendChild(wrap);
+    return td;
+}
+
+/** Hover copy for the impact judgment: the label, its reason, and an honest
+ *  reminder that it is a heuristic. */
+function verdictTooltip(row: ImpactRow): string {
+    const base = row.verdictReason
+        ? `${row.impactLabel} — ${row.verdictReason}`
+        : row.impactLabel;
+    return row.verdictFromFeedback
+        ? base
+        : `${base}. Heuristic — confirm from the action diff.`;
 }
 
 /** The latency cell, with a faint expand chevron revealed on hover for rows that

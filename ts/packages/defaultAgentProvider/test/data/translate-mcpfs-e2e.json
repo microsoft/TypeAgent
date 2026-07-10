@@ -47,7 +47,7 @@
       }
     },
     {
-      "request": "can you rename that file to /data/world.txt.",
+      "request": "can you move that file to /data/world.txt.",
       "expected": {
         "anyof": [
           {

@@ -38,7 +38,7 @@
 - **The validation gate is Gate C** ([04-mvp-slice.md §3](./04-mvp-slice.md)): the Impact Report must agree with developer judgment on ≥ 80% of rows in a hand-labelled `player` regression set. Currently the only gate that can fail for tunable reasons.
 - **`player` was chosen as the anchor over `code` / `list`** to force the federated-corpus capture path to MVP quality from day one. The player corpus does not exist today; building it (F4.6) starts in P-1, not P-3, per the risk register.
 - **Five webviews after consolidation**, six new engine primitives, four extensions in the pack (`typeagent-core` shared library + `typeagent-studio` main extension + refactored `agr-language` and `vscode-shell`).
-- **PR #2341 (user feedback, just merged) is load-bearing**: feedback labels are what turn "the report shows different rows" into "the report shows likely-bad changes." Without that signal, J4 is a curiosity, not a decision-grade tool.
+- **PR #2341 (user feedback, just merged) is load-bearing**: feedback labels are what turn "the report shows different rows" into "the report shows likely regressions." Without that signal, J4 is a curiosity, not a decision-grade tool.
 
 ---
 
@@ -66,7 +66,7 @@ From [01-inventory.md §13](./01-inventory.md):
 Top items from [05-implementation-plan.md §13](./05-implementation-plan.md) (D1–D10), and 7 carried items from [02-journeys.md §7](./02-journeys.md):
 
 - D1 transport (socket/pipe/WS)
-- D7 exact `likely-bad change` predicate
+- D7 exact `likely regression` predicate
 - D10 Gate C threshold (currently 80%)
 - §7.1 player corpus capture UX
 - §7.7 health-check rule set (seed list in [05 §6.2](./05-implementation-plan.md))

@@ -29,6 +29,7 @@ public class HandlerRegistrationTests
         var windowMock = new Mock<IWindowService>();
         var networkMock = new Mock<INetworkService>();
         var virtualDesktopMock = new Mock<IVirtualDesktopService>();
+        var serviceControlMock = new Mock<IServiceControlService>();
         var loggerMock = new Mock<ILogger>();
 
         _handlers =
@@ -50,6 +51,7 @@ public class HandlerRegistrationTests
             new PrivacySettingsHandler(registryMock.Object),
             new SystemSettingsHandler(registryMock.Object, processMock.Object),
             new SystemActionHandler(processMock.Object, debuggerMock.Object),
+            new ServiceActionHandler(serviceControlMock.Object),
         ];
     }
 
