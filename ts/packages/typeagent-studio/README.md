@@ -85,8 +85,7 @@ the `FileCorpusService` federation from `@typeagent/core`:
 - Expanding an agent groups its federated entries by source (in-repo, captures,
   external, feedback), each with an entry count; only sources with entries are
   shown.
-- Expanding a source lists its entries by utterance, with a feedback badge when
-  the entry has recorded feedback.
+- Expanding a source lists its entries by utterance.
 - The view title offers **Refresh**; the tree also refreshes automatically when
   sandbox agents are loaded or unloaded.
 
@@ -94,35 +93,22 @@ Grouping and labelling live in the vscode-free `corpusTreePresentation.ts`
 module (unit-tested); `corpusTreeProvider.ts` is a thin `TreeDataProvider`
 adapter.
 
-## Feedback capture
-
-The Corpora view title also offers **Record feedback**:
-
-- A guided flow collects a thumbs up/down rating, the utterance the feedback is
-  about, an optional agent, an optional category (for negative ratings), and an
-  optional comment.
-- Recording emits a `feedback.recorded` event — visible live in the Event Log —
-  and caches the feedback row in `@typeagent/core`'s `CoreFeedbackService`.
-- Feedback that includes an utterance federates into the Corpora view under the
-  agent's `feedback` source, so corrective examples show up alongside in-repo
-  and capture corpora.
-
-Input shaping (trimming, blank omission, rating/category choices) lives in the
-vscode-free `feedbackInputPresentation.ts` module (unit-tested); the command in
-`extension.ts` is a thin VS Code wrapper.
-
 ## Replay & compare
 
-The Corpora view title also offers **Replay corpus** (F4.1):
+Each agent row in the Corpora view offers **Replay corpus** (the rerun icon),
+alongside **Open Impact Report** (the graph icon) which runs the same replay in
+a webview (F4.1):
 
-- Pick a loaded agent; the runtime replays its federated corpus through the
+- The runtime replays that agent's federated corpus through the
   `replayCorpus()` engine from `@typeagent/core`, evaluating each utterance
   against versions A and B and producing an `ActionDelta` per row.
 - Each row is classified as **equal**, **changed**, **new match**, or **lost
   match**; the run emits `replay.row`/`replay.summary` events that appear live
   in the Event Log, and a summary headline is shown when it finishes.
 - When the run finds differences, the result offers a quick pick of the rows
-  (icon, utterance, per-version cache state, and latency).
+  (icon, utterance, per-version cache state, and latency). The run is saved as
+  the agent's **last run**, so the Impact Report re-renders it (with a **Last
+  run** timestamp) when reopened.
 
 The engine is deterministic and dependency-injected: corpus access and the
 per-version action resolver are supplied by the caller. The default resolver
