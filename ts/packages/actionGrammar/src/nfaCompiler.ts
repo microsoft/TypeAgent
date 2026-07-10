@@ -502,26 +502,22 @@ function deriveEffectiveValue(
         return undefined;
     }
     const singleVarPart = findSingleValueBearingPart(rule.parts);
+    if (singleVarPart !== undefined && singleVarPart !== "ambiguous") {
+        return { type: "variable", name: singleVarPart.variable };
+    }
+    // Not every rule needs a value - only rules whose value is actually
+    // consumed (top-level action rules, or nested rules captured by a
+    // parent variable) do. If nothing downstream needs this rule's value,
+    // neither an ambiguous nor a missing implicit value is an error.
+    if (!requireValue) {
+        return undefined;
+    }
     if (singleVarPart === "ambiguous") {
-        // Not every rule needs a value - only rules whose value is actually
-        // consumed (top-level action rules, or nested rules captured by a
-        // parent variable) do. If nothing downstream needs this rule's
-        // value, ambiguity is harmless: just report "no value", matching
-        // the `singleVarPart === undefined` case below.
-        if (!requireValue) {
-            return undefined;
-        }
         throw new Error(
             `${describeRule()} has ${rule.parts.length} terms but no value expression, ` +
                 `and more than one part carries a variable - the implicit value is ambiguous. ` +
                 `Multi-term rules must have an explicit value expression (using ->).`,
         );
-    }
-    if (singleVarPart !== undefined) {
-        return { type: "variable", name: singleVarPart.variable };
-    }
-    if (!requireValue) {
-        return undefined;
     }
     const hasTailCall = rule.parts.some(
         (p) => p.type === "rules" && p.tailCall,
