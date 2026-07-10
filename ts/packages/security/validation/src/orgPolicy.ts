@@ -101,7 +101,7 @@ export interface ContainerPolicy {
     /** Enable container sandbox for bash execution */
     enabled: boolean;
 
-    /** Docker image to use (e.g., "node:20-slim", "python:3.12-slim") */
+    /** Docker image to use (e.g., "node:22-slim", "python:3.12-slim") */
     image: string;
 
     /** Container network mode */

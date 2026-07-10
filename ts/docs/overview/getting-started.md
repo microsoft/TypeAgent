@@ -17,8 +17,7 @@ Node and pnpm.
 
 ## Prerequisites
 
-- **Node ≥ 22** (the documented minimum; some tooling notes mention Node 20+,
-  but the monorepo targets Node 22+).
+- **Node ≥ 22** (the monorepo targets Node 22+).
 - **pnpm ≥ 10** (`npm i -g pnpm && pnpm setup`).
 - On Linux/WSL, see the [WSL2](./setup-wsl2.md) / [Linux](./setup-linux.md)
   guides for extra system requirements.

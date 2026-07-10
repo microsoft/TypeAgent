@@ -71,7 +71,6 @@
     "shell:start:package": "pnpm -C packages/shell run start:package",
     "shell:test": "pnpm -C packages/shell run shell:test",
     "start:agent-server": "pnpm -C packages/agentServer/server run start",
-    "start:agent-server:dev": "pnpm -C packages/agentServer/server run start:dev",
     "start:agent-server:tunnel": "pnpm -C packages/agentServer/server run start:tunnel",
     "start:mcp": "pnpm -C packages/commandExecutor run start",
     "stop:agent-server": "pnpm -C packages/agentServer/server run stop",
@@ -95,76 +94,9 @@
     "tsx": "^4.21.0",
     "typescript-eslint": "^8.62.1"
   },
-  "packageManager": "pnpm@10.34.4+sha512.8768be55200ae3f2226b6527fcca2687e14bc4e5f12d7721a0f25da3df47915177058648db4177baf348120fa0ba2752d8d8d93f6beaf1fe64ae18da8de961af",
+  "packageManager": "pnpm@11.9.0+sha512.bd682d5d03fe525ef7c9fd6780c6884d1e756ac4c9c9fe00c538782824310dcf90e3ddc4f53835f06dfaebd5085e41855e0bcbb3b60de2ac5bbab89e5036f03b",
   "engines": {
     "node": ">=22",
     "pnpm": ">=10"
-  },
-  "pnpm": {
-    "peerDependencyRules": {
-      "allowedVersions": {
-        "@azure/core-rest-pipeline": "*",
-        "jest": "*",
-        "zod": "*"
-      },
-      "ignoreMissing": [
-        "eslint",
-        "zod"
-      ]
-    },
-    "onlyBuiltDependencies": [
-      "@azure/msal-node-extensions",
-      "@azure/msal-node-runtime",
-      "@vscode/vsce-sign",
-      "better-sqlite3",
-      "canvas",
-      "electron",
-      "electron-winstaller",
-      "esbuild",
-      "exifreader",
-      "keytar",
-      "koffi",
-      "node-pty",
-      "onnxruntime-node",
-      "protobufjs",
-      "puppeteer",
-      "sharp"
-    ],
-    "allowedDeprecatedVersions": {
-      "@cliqz/adblocker": "*",
-      "@cliqz/adblocker-content": "*",
-      "@cliqz/adblocker-extended-selectors": "*",
-      "@cliqz/adblocker-puppeteer": "*",
-      "@xmldom/xmldom": "<0.9.9",
-      "abab": "*",
-      "boolean": "*",
-      "crx": "5",
-      "domexception": "*",
-      "glob": "<12",
-      "inflight": "*",
-      "lodash.isequal": "*",
-      "node-domexception": "*",
-      "prebuild-install": "*",
-      "rimraf": "<4",
-      "whatwg-encoding": "*"
-    },
-    "supportedArchitectures": {
-      "cpu": [
-        "x64",
-        "arm64"
-      ]
-    },
-    "overrides": {
-      "@azure/core-xml": ">=1.5.0 <2.0.0",
-      "express>path-to-regexp": "0.1.13",
-      "fast-xml-parser": ">=5.5.7 <6.0.0",
-      "hono": ">=4.12.8 <5.0.0",
-      "http-proxy-agent": ">=7.0.0 <8.0.0",
-      "node-forge": ">=1.4.0 <2.0.0",
-      "node-gyp": "^12.2.0",
-      "router>path-to-regexp": ">=8.4.0 <9.0.0",
-      "serialize-javascript": ">=7.0.5 <8.0.0"
-    },
-    "ignoredBuiltDependencies": []
   }
 }
