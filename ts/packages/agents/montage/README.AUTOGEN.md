@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=97de699385df79e294fb30dd3b991040ecc1c9064db518065e33f46b2cf92958 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=ff214e7c90fb5de07ffba6e760e9c4591d26ebb708609cb21024a01252c6f064 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # montage-agent — AI-generated documentation
@@ -12,26 +12,26 @@
 
 ## Overview
 
-The montage-agent package is a TypeAgent application agent designed to facilitate the creation and management of photo montages. It provides a collaborative environment where users and the agent work together to organize, edit, and display images in a montage format. The package includes backend logic for handling montage-related actions and a web-based interface for user interaction.
+The montage-agent package is a TypeAgent application agent designed to assist users in creating and managing photo montages. It provides a collaborative environment where users and the agent work together to organize, edit, and display images in a montage format. The package includes backend logic for handling montage-related actions and a web-based interface for user interaction.
 
 ## What it does
 
-The montage-agent supports a wide range of actions to enable users to create and manage photo montages effectively. These actions can be grouped into the following categories:
+The montage-agent supports a variety of actions that enable users to create, customize, and manage photo montages. These actions are grouped into the following categories:
 
 - **Montage Management**:
 
-  - Actions like `createMontage`, `deleteMontage`, and `listMontage` allow users to create new montages, delete existing ones, and view a list of available montages.
+  - Actions such as `createMontage`, `deleteMontage`, and `listMontage` allow users to create new montages, delete existing ones, and view a list of available montages.
 
 - **Photo Management**:
 
-  - Actions such as `addPhotos`, `removePhotos`, `selectPhotos`, and `clearSelection` enable users to add, remove, and manage photos within a montage.
+  - Actions like `addPhotos`, `removePhotos`, `selectPhotos`, and `clearSelection` enable users to add, remove, and manage photos within a montage.
 
 - **Customization**:
 
-  - Actions like `setMontageViewMode` and `changeTitle` allow users to customize the appearance and metadata of their montages.
+  - Actions such as `setMontageViewMode` and `changeTitle` allow users to customize the appearance and metadata of their montages.
 
 - **Advanced Features**:
-  - Actions such as `mergeMontage`, `startSlideShow`, and `setSearchParameters` provide advanced functionality for combining montages, creating slideshows, and filtering images.
+  - Actions like `mergeMontage`, `startSlideShow`, and `setSearchParameters` provide advanced functionality for combining montages, creating slideshows, and filtering images.
 
 The agent integrates with other system components, such as image storage, processing libraries, and knowledge processors, to perform these tasks. It also includes a web interface for users to interact with the montage creation process, making it accessible and user-friendly.
 
@@ -150,16 +150,16 @@ External: `body-parser`, `d3`, `d3-cloud`, `debug`, `express`, `express-rate-lim
 - [./src/agent/montageActionHandler.ts](./src/agent/montageActionHandler.ts)
 - [./src/agent/montageActionSchema.ts](./src/agent/montageActionSchema.ts)
 - [./src/site/index.ts](./src/site/index.ts)
+- [./src/agent/montageActionSchema.keywords.json](./src/agent/montageActionSchema.keywords.json)
 - [./src/agent/tsconfig.json](./src/agent/tsconfig.json)
 - [./src/route/originAllowlist.ts](./src/route/originAllowlist.ts)
 - [./src/route/route.ts](./src/route/route.ts)
 - [./src/route/tsconfig.json](./src/route/tsconfig.json)
 - [./src/site/index.html](./src/site/index.html)
-- [./src/site/photo.ts](./src/site/photo.ts)
-- _…and 2 more under `./src/`._
+- _…and 3 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter montage-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter montage-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
