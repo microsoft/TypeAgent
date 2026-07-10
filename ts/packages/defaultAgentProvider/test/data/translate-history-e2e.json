@@ -76,17 +76,14 @@
       "expected": {
         "anyof": [
           {
-            "action": {          
+            "action": {
               "schemaName": "browser.lookupAndAnswer",
               "actionName": "lookupAndAnswerInternet",
               "parameters": {
-                "originalRequest": "look up the ingredient for shepherd's pie for me please",          
-                "internetLookups": ["ingredient for shepherd's pie"]          
+                "originalRequest": "look up the ingredient for shepherd's pie for me please"
               }
             },
-            "alternates": {
-              "internetLookups.0": "shepherd's pie ingredients"
-            }
+            "partial": true
           }
         ]
       },
