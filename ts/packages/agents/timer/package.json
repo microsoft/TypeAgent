@@ -68,5 +68,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "timer"
   }
 }

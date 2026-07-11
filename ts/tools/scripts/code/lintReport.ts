@@ -35,6 +35,8 @@
  *     dir, where the TS project is unavailable) are compared like-for-like.
  *     On failure it prints where the new violations are — the file:line of the
  *     regressed rules in each changed file.
+ *     On failure it prints where the new violations are — the file:line of the
+ *     regressed rules in each changed file.
  *
  * Outputs (written to --out-dir, default tools/scripts/code/lint-report):
  *   - violations.csv : every violation, ranked
@@ -59,6 +61,7 @@
  *   --fix              Apply the auto-fixable rules (no-var, prefer-const).
  *   --changed          With --fix, only fix files changed since --base.
  *   --exceptions-file <path>  Baseline exceptions (file:line) ignored by --ratchet.
+ *                      (Deprecated: prefer inline `// code-lint-allow <rule>: <reason>`.)
  *   --help             Show this help.
  */
 
@@ -280,6 +283,7 @@ Options:
   --exceptions-file <path>
                      Optional JSON baseline-exception file. Violations listed
                      in it (by file:line) are ignored by the --ratchet gate.
+                     (Deprecated: prefer inline markers below.)
   --top <n>          Number of worst offenders to print / embed (default 25).
   --root <path>      Directory to scan (default: the ts/ root).
   --out-dir <path>   Output directory (default: tools/scripts/code/lint-report).
@@ -287,7 +291,13 @@ Options:
   --base <ref>       Base git ref for --ratchet (default origin/main).
   --new-file-max <n> With --ratchet, fail if any NEW file exceeds <n>
                      violations (-1 = disabled, the default).
-  --help             Show this help.`;
+  --help             Show this help.
+
+Inline suppression (preferred over --exceptions-file):
+  Put "// code-lint-allow <rule>[,<rule>]: <reason>" trailing a line (applies to
+  that line) or as a standalone comment above it (applies to the next line) to
+  grandfather those rule(s) there out of --ratchet. The rule qualifier and a
+  non-placeholder reason are required; report mode still counts the violation.`;
 
 // ---------------------------------------------------------------------------
 // ESLint plumbing
@@ -916,6 +926,10 @@ function loadExceptionSet(exceptionsFile: string | undefined): Set<string> {
     if (!exceptionsFile) {
         return new Set();
     }
+    console.warn(
+        "  Note: --exceptions-file is deprecated; prefer inline " +
+            "// code-lint-allow <rule>: <reason> markers.",
+    );
     const filePath = path.isAbsolute(exceptionsFile)
         ? exceptionsFile
         : path.resolve(process.cwd(), exceptionsFile);
@@ -945,6 +959,118 @@ function loadExceptionSet(exceptionsFile: string | undefined): Set<string> {
         out.add(`${file}:${line}`);
     }
     return out;
+}
+
+// ---------------------------------------------------------------------------
+// Inline suppression markers
+// ---------------------------------------------------------------------------
+
+// A `// code-lint-allow <rule>[,<rule>]: <reason>` comment grandfathers the
+// listed rule(s) on one line out of the --ratchet gate. Trailing on a code line
+// it applies to that line; as a standalone comment it applies to the next line
+// (like eslint-disable-next-line). The rule qualifier is required so a marker
+// can't mask an unrelated future violation on the same line, and the reason must
+// be non-empty and non-placeholder. Report mode ignores markers entirely.
+const LINT_ALLOW_TOKEN = "code-lint-allow";
+const PLACEHOLDER_REASON_RE = /^(temp|tbd|todo|fixme|xxx|n\/?a|\?+|-+|\.+)$/i;
+
+function isValidMarkerReason(reason: string): boolean {
+    const r = reason.trim();
+    return r.length >= 3 && !PLACEHOLDER_REASON_RE.test(r);
+}
+
+interface ParsedLintAllow {
+    rules: Set<string>;
+    valid: boolean;
+}
+
+function parseLintAllow(lineText: string): ParsedLintAllow | undefined {
+    const i = lineText.indexOf(LINT_ALLOW_TOKEN);
+    if (i < 0) {
+        return undefined;
+    }
+    const after = lineText
+        .slice(i + LINT_ALLOW_TOKEN.length)
+        .replace(/\*\/\s*$/, "");
+    const m = /^\s*([^:]*?)\s*:\s*(.*)$/.exec(after);
+    if (!m) {
+        return { rules: new Set(), valid: false };
+    }
+    const rules = new Set(
+        m[1]
+            .split(/[,\s]+/)
+            .map((s) => s.trim())
+            .filter(Boolean),
+    );
+    return { rules, valid: rules.size > 0 && isValidMarkerReason(m[2]) };
+}
+
+interface FileLintMarkers {
+    byLine: Map<number, Set<string>>; // 1-based target line -> allowed rules
+    invalidLines: number[];
+}
+
+function collectLintMarkers(lines: string[]): FileLintMarkers {
+    const byLine = new Map<number, Set<string>>();
+    const invalidLines: number[] = [];
+    for (let idx = 0; idx < lines.length; idx++) {
+        const parsed = parseLintAllow(lines[idx]);
+        if (!parsed) {
+            continue;
+        }
+        if (!parsed.valid) {
+            invalidLines.push(idx + 1);
+            continue;
+        }
+        const trimmed = lines[idx].trim();
+        const standalone =
+            trimmed.startsWith("//") ||
+            trimmed.startsWith("/*") ||
+            trimmed.startsWith("*");
+        const target = standalone ? idx + 2 : idx + 1;
+        const set = byLine.get(target) ?? new Set<string>();
+        for (const r of parsed.rules) {
+            set.add(r);
+        }
+        byLine.set(target, set);
+    }
+    return { byLine, invalidLines };
+}
+
+// Drop violations whose rule is allowed by a marker on their line. `linesOf`
+// returns a file's content lines (keyed by its repo-relative path) for the side
+// being filtered, or undefined when unavailable.
+function filterByLintMarkers(
+    violations: Violation[],
+    linesOf: (file: string) => string[] | undefined,
+): { kept: Violation[]; suppressed: number; invalid: string[] } {
+    const cache = new Map<string, FileLintMarkers | null>();
+    const markersFor = (file: string): FileLintMarkers | null => {
+        if (!cache.has(file)) {
+            const lines = linesOf(file);
+            cache.set(file, lines ? collectLintMarkers(lines) : null);
+        }
+        return cache.get(file) ?? null;
+    };
+    const kept: Violation[] = [];
+    let suppressed = 0;
+    for (const v of violations) {
+        const allowed = markersFor(v.file)?.byLine.get(v.line);
+        if (allowed && allowed.has(v.rule)) {
+            suppressed++;
+        } else {
+            kept.push(v);
+        }
+    }
+    const invalid: string[] = [];
+    for (const [file, m] of cache) {
+        if (m) {
+            for (const ln of m.invalidLines) {
+                invalid.push(`${file}:${ln}`);
+            }
+        }
+    }
+    return { kept, suppressed, invalid };
 }
 
 async function runRatchet(opts: Options): Promise<number> {
@@ -982,6 +1108,7 @@ async function runRatchet(opts: Options): Promise<number> {
         parseErrorFiles: 0,
         filesAnalyzed: 0,
     };
+    const baseLinesByRel = new Map<string, string[]>();
     try {
         const basePaths: string[] = [];
         for (const e of entries) {
@@ -998,6 +1125,7 @@ async function runRatchet(opts: Options): Promise<number> {
             fs.mkdirSync(path.dirname(dest), { recursive: true });
             fs.writeFileSync(dest, content, "utf8");
             basePaths.push(dest);
+            baseLinesByRel.set(e.base, content.split(/\r?\n/));
         }
         if (basePaths.length) {
             base = await lint(tmp, basePaths, lintOpts, opts.root);
@@ -1018,6 +1146,29 @@ async function runRatchet(opts: Options): Promise<number> {
         );
     }
 
+    // Inline markers: drop rule-scoped allowed violations from each side,
+    // reading each side's own content so a marker added in the PR relaxes HEAD
+    // while the still-unmarked base keeps counting.
+    const headLineCache = new Map<string, string[] | null>();
+    const headFiltered = filterByLintMarkers(head.violations, (file) => {
+        const abs = path.resolve(repoRoot, file);
+        if (!headLineCache.has(abs)) {
+            try {
+                headLineCache.set(
+                    abs,
+                    fs.readFileSync(abs, "utf8").split(/\r?\n/),
+                );
+            } catch {
+                headLineCache.set(abs, null);
+            }
+        }
+        return headLineCache.get(abs) ?? undefined;
+    });
+    head.violations = headFiltered.kept;
+    base.violations = filterByLintMarkers(base.violations, (file) =>
+        baseLinesByRel.get(file),
+    ).kept;
+
     // Compare per-rule and totals.
     const headTotal = head.violations.length;
     const baseTotal = base.violations.length;
@@ -1031,6 +1182,18 @@ async function runRatchet(opts: Options): Promise<number> {
     if (exceptions.size > 0) {
         console.log(
             `  Baseline exceptions ignored: ${exceptions.size} (file:line).`,
+        );
+    }
+    if (headFiltered.suppressed > 0) {
+        console.log(
+            `  Inline code-lint-allow markers honored: ${headFiltered.suppressed}.`,
+        );
+    }
+    if (headFiltered.invalid.length > 0) {
+        console.log(
+            `  WARNING: ${headFiltered.invalid.length} code-lint-allow ` +
+                `marker(s) ignored (need "<rule>: <reason>" with a real ` +
+                `reason): ${headFiltered.invalid.join(", ")}`,
         );
     }
 
@@ -1107,7 +1270,8 @@ async function runRatchet(opts: Options): Promise<number> {
                 "  - Mechanical rules (no-var, prefer-const) can be auto-fixed:\n" +
                 "      npm run code-lint -- --fix --changed\n" +
                 "  - Re-check with:\n" +
-                `      npm run code-lint -- --ratchet --base ${opts.base}`,
+                `      npm run code-lint -- --ratchet --base ${opts.base}\n` +
+                "  - Why this gate exists: ts/tools/scripts/code/README.md#ci-gates",
         );
         return 1;
     }

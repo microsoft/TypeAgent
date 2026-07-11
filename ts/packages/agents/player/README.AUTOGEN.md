@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ebab9a69af2d3b3a61d8c48f963997d5aec0a7c95a3f4102484c967bb52c22a4 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=161c4cfc25ae2a226654c06d3756d28fe10bb4be9936687d36b6f7e550e644fb -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # music — AI-generated documentation
@@ -12,23 +12,23 @@
 
 ## Overview
 
-The `music` package, located in the `ts/packages/agents/player/` directory, is a TypeAgent application agent that integrates with the Spotify API to provide music playback and control capabilities. It allows users to search for tracks, manage playlists, and control playback on active Spotify devices.
+The `music` package, located in the `ts/packages/agents/player/` directory, is a TypeAgent application agent that integrates with the Spotify API. It provides functionality for music playback, playlist management, and user-specific features such as playback control on active Spotify devices. This agent is designed to interact with Spotify's Web API and requires a one-time setup for authentication and authorization.
 
-This agent is designed to work with Spotify's Web API and requires a one-time setup to enable authentication and authorization. Once configured, it can perform a variety of music-related actions programmatically.
+Once configured, the agent enables users to control their Spotify experience programmatically, including searching for tracks, managing playlists, and controlling playback on active devices.
 
 ## What it does
 
-The `music` package enables interaction with Spotify through a set of predefined actions. These actions allow users to:
+The `music` package provides a wide range of actions to interact with Spotify. These actions are grouped into the following categories:
 
-- Control playback: `playTrack`, `pause`, `resume`, `next`, `previous`, `setVolume`, `changeVolume`, `shuffle`, and `selectDevice`.
-- Manage playlists: `createPlaylist`, `deletePlaylist`, `addCurrentTrackToPlaylist`, `addToPlaylistFromCurrentTrackList`, and `addSongsToPlaylist`.
-- Search and browse: `searchTracks`, `searchForPlaylists`, `searchArtists`, `searchAlbums`, and `searchGenres`.
-- Retrieve information: `getPlaylist`, `getFavorites`, `getQueue`, `getAlbum`, and `getFromCurrentPlaylistList`.
-- Play specific content: `playAlbum`, `playArtist`, `playGenre`, `playRandom`, and `playPlaylist`.
+- **Playback Control**: Actions such as `playTrack`, `pause`, `resume`, `next`, `previous`, `setVolume`, `changeVolume`, `shuffle`, and `selectDevice` allow users to control music playback on active Spotify devices.
+- **Playlist Management**: Users can create and delete playlists, as well as add tracks to playlists using actions like `createPlaylist`, `deletePlaylist`, `addCurrentTrackToPlaylist`, `addToPlaylistFromCurrentTrackList`, and `addSongsToPlaylist`.
+- **Search and Discovery**: Actions such as `searchTracks`, `searchForPlaylists`, `searchArtists`, `searchAlbums`, and `searchGenres` enable users to explore Spotify's vast music library.
+- **Information Retrieval**: Users can retrieve details about playlists, albums, and their listening history using actions like `getPlaylist`, `getFavorites`, `getQueue`, `getAlbum`, and `getFromCurrentPlaylistList`.
+- **Content Playback**: Actions like `playAlbum`, `playArtist`, `playGenre`, `playRandom`, and `playPlaylist` allow users to play specific content based on their preferences.
 
-The agent also supports user authentication via Spotify's OAuth flow, enabling access to personalized features such as playback control and playlist management. It stores tokens securely for subsequent use, ensuring a smooth user experience.
+The agent also supports Spotify's OAuth-based authentication, enabling access to personalized features. Tokens are securely stored for future use, so users only need to authenticate once.
 
-To use the agent effectively, an active Spotify client (desktop app, mobile app, or browser tab on `open.spotify.com`) must be running and signed in with the same user account.
+To use the agent effectively, an active Spotify client (such as the desktop app, mobile app, or a browser tab on `open.spotify.com`) must be running and signed in with the same user account.
 
 ## Setup
 
@@ -38,11 +38,11 @@ To enable Spotify integration, you need to configure a Spotify application and s
 
    - Visit the Spotify Developer Dashboard at `https://developer.spotify.com/dashboard`.
    - Log in with your Spotify account.
-   - Click "Create App" and fill out the form. Ensure the Redirect URI is set to `http://127.0.0.1:PORT/callback`, where `PORT` is a four-digit port number of your choice that is not already in use.
+   - Click "Create App" and complete the form. Ensure the Redirect URI is set to `http://127.0.0.1:PORT/callback`, where `PORT` is a four-digit port number of your choice that is not already in use.
 
 2. **Obtain Credentials**:
 
-   - After creating the app, go to its settings and copy the Client ID and Client Secret. You may need to click "View client secret" to reveal it.
+   - After creating the app, navigate to its settings and copy the Client ID and Client Secret. You may need to click "View client secret" to reveal it.
 
 3. **Set Environment Variables**:
 
@@ -62,7 +62,7 @@ For more detailed instructions, refer to the hand-written README.
 
 ## Key Files
 
-The `music` package is organized into several key files, each serving a specific purpose:
+The `music` package is structured into several key files, each with a specific role in the agent's functionality:
 
 - [playerManifest.json](./src/agent/playerManifest.json): Contains metadata about the agent, including its schema and description.
 - [playerSchema.agr](./src/agent/playerSchema.agr): Defines the grammar for parsing user commands related to music playback and control.
@@ -78,7 +78,7 @@ To add new features or modify existing functionality in the `music` package, fol
 
 1. **Understand the Current Implementation**:
 
-   - Start by reviewing the [playerHandlers.ts](./src/agent/playerHandlers.ts) file to see how existing actions are implemented.
+   - Review the [playerHandlers.ts](./src/agent/playerHandlers.ts) file to understand how existing actions are implemented.
    - Familiarize yourself with the [playerSchema.ts](./src/agent/playerSchema.ts) file, which defines the TypeScript types for actions and entities.
 
 2. **Add New Actions**:
@@ -128,7 +128,7 @@ External: `chalk`, `debug`, `dotenv`, `express`, `open`, `typechat`
 
 ### Files of interest
 
-`./src/agent/playerManifest.json`, `./src/agent/playerSchema.agr`, `./src/agent/playerSchema.ts`, …and 20 more under `./src/`.
+`./src/agent/playerManifest.json`, `./src/agent/playerSchema.agr`, `./src/agent/playerSchema.ts`, …and 21 more under `./src/`.
 
 ### Environment variables
 
@@ -140,6 +140,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music docs:verify-links` to spot-check._
+_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

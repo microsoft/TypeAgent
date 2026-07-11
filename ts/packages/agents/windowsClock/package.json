@@ -54,5 +54,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "windowsClock"
   }
 }

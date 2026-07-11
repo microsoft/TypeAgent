@@ -28,20 +28,71 @@ packages:
 # re-resolved and are therefore unaffected.
 minimumReleaseAge: 10080
 
-onlyBuiltDependencies:
-  - "@azure/msal-node-extensions"
-  - "@azure/msal-node-runtime"
-  - "@vscode/vsce-sign"
-  - better-sqlite3
-  - canvas
-  - electron
-  - electron-winstaller
-  - esbuild
-  - exifreader
-  - keytar
-  - koffi
-  - node-pty
-  - onnxruntime-node
-  - protobufjs
-  - puppeteer
-  - sharp
+# In pnpm v11 the `onlyBuiltDependencies` / `ignoredBuiltDependencies` settings were
+# replaced by `allowBuilds` (a map of package name -> true/false). Only the packages
+# listed here are allowed to run install/build (postinstall) scripts.
+# node-pty and protobufjs are intentionally set to false in pnpm v11, which
+# disables their install scripts even though pnpm v10 allowed them. We keep
+# them disabled to minimize install-time script execution in CI and local
+# bootstrap unless explicitly re-enabled.
+allowBuilds:
+  "@azure/msal-node-extensions": true
+  "@azure/msal-node-runtime": true
+  "@vscode/vsce-sign": true
+  better-sqlite3: true
+  canvas: true
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  exifreader: true
+  keytar: true
+  koffi: true
+  node-pty: false
+  onnxruntime-node: true
+  protobufjs: false
+  puppeteer: true
+  sharp: true
+
+# Moved out of the deprecated `pnpm` field in package.json (pnpm v11 no longer reads it).
+peerDependencyRules:
+  allowedVersions:
+    "@azure/core-rest-pipeline": "*"
+    jest: "*"
+    zod: "*"
+  ignoreMissing:
+    - eslint
+    - zod
+
+allowedDeprecatedVersions:
+  "@cliqz/adblocker": "*"
+  "@cliqz/adblocker-content": "*"
+  "@cliqz/adblocker-extended-selectors": "*"
+  "@cliqz/adblocker-puppeteer": "*"
+  "@xmldom/xmldom": "<0.9.9"
+  abab: "*"
+  boolean: "*"
+  crx: "5"
+  domexception: "*"
+  glob: "<12"
+  inflight: "*"
+  lodash.isequal: "*"
+  node-domexception: "*"
+  prebuild-install: "*"
+  rimraf: "<4"
+  whatwg-encoding: "*"
+
+supportedArchitectures:
+  cpu:
+    - x64
+    - arm64
+
+overrides:
+  "@azure/core-xml": ">=1.5.0 <2.0.0"
+  "express>path-to-regexp": "0.1.13"
+  fast-xml-parser: ">=5.5.7 <6.0.0"
+  hono: ">=4.12.8 <5.0.0"
+  http-proxy-agent: ">=7.0.0 <8.0.0"
+  node-forge: ">=1.4.0 <2.0.0"
+  node-gyp: "^12.2.0"
+  "router>path-to-regexp": ">=8.4.0 <9.0.0"
+  serialize-javascript: ">=7.0.5 <8.0.0"
