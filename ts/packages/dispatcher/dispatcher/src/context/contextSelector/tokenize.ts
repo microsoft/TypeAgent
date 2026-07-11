@@ -191,7 +191,52 @@ export type TokenizeOptions = {
     // Apply the conservative plural stemmer (default true). Off only for tests
     // that inspect raw tokenization.
     stem?: boolean;
+    // Suppress content tokens inside a negation scope (default false). Opt-in so
+    // keyword extraction (§6) stays byte-identical; the conversation signal (§7)
+    // enables it. See NEGATION_CUES below.
+    dropNegatedSpans?: boolean;
 };
+
+// Negation-scope handling for the conversation signal (§7). English negation
+// ("not the spreadsheet", "no pivot chart") makes the words that follow
+// *anti-signal* — the user is rejecting that topic, not requesting it. But the
+// cue words are stopwords, dropped before scoring, so the v1 extractor never saw
+// the negation and the negated words fired at full weight — the root cause of the
+// adversarial loaded-negation misroutes. When `dropNegatedSpans` is on, a scope
+// opens at a cue and content tokens inside it are suppressed. The scope closes at
+// the next clause boundary (punctuation), a reset connector ("but the config"),
+// or the end of the turn — so an idiom like "no problem, open the sheet" keeps
+// "sheet" (the comma closes the scope). Purely lexical and deterministic (§12);
+// contractions ("don't") are not handled in v1 — a parked lever. Off by default
+// so it never touches keyword vectors.
+const NEGATION_CUES: ReadonlySet<string> = new Set([
+    "not",
+    "no",
+    "never",
+    "without",
+    "cannot",
+    "nor",
+    "none",
+    "neither",
+]);
+const NEGATION_RESETS: ReadonlySet<string> = new Set([
+    "but",
+    "however",
+    "instead",
+    "though",
+    "although",
+    "yet",
+    "except",
+    "rather",
+]);
+// Clause punctuation that closes a negation scope, matched in the gap between two
+// consecutive tokens (the tokenizer discards punctuation, so it is inspected
+// here). The comma/period/etc. must abut whitespace to count — this excludes
+// intra-token punctuation that lands in the gap, e.g. a decimal ("2.5"), a time
+// ("3:30"), or a version ("v3.2"), whose "." / ":" would otherwise be mistaken
+// for a clause break and wrongly reopen the negated span. An em/double dash is a
+// clause separator regardless of surrounding spaces.
+const CLAUSE_BOUNDARY = /[,.;:!?]\s|\s[,.;:!?]|--|—/;
 
 // Conservative, deterministic plural stemmer (part of the §12 determinism
 // contract — pinned, snapshot-tested). It maps common English plurals to their
@@ -265,6 +310,7 @@ export function tokenize(text: string, options?: TokenizeOptions): string[] {
     const dropGenericVerbs = options?.dropGenericVerbs ?? true;
     const minLength = options?.minLength ?? 2;
     const applyStem = options?.stem ?? true;
+    const dropNegatedSpans = options?.dropNegatedSpans ?? false;
 
     if (!text) {
         return [];
@@ -272,15 +318,43 @@ export function tokenize(text: string, options?: TokenizeOptions): string[] {
     const normalized = text.normalize("NFKC").toLowerCase();
     const re = tokenRegExp();
     const out: string[] = [];
+    let negated = false;
+    let prevEnd = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(normalized)) !== null) {
+        // A negation scope closes at the first clause boundary (punctuation) in
+        // the untokenized gap before this token.
+        if (
+            dropNegatedSpans &&
+            negated &&
+            CLAUSE_BOUNDARY.test(normalized.slice(prevEnd, m.index))
+        ) {
+            negated = false;
+        }
+        prevEnd = re.lastIndex;
+
         const raw = m[0];
         const isProtected = raw.length > 0 && !/^[a-z0-9]+$/.test(raw);
         if (isProtected) {
+            if (dropNegatedSpans && negated) {
+                continue;
+            }
             out.push(raw);
             continue;
         }
         const token = applyStem ? stem(raw) : raw;
+        // Negation cues / resets are inspected before the vocabulary drops
+        // because the cues ("not", "no") are themselves stopwords.
+        if (dropNegatedSpans) {
+            if (NEGATION_CUES.has(token)) {
+                negated = true;
+                continue;
+            }
+            if (negated && NEGATION_RESETS.has(token)) {
+                negated = false;
+                continue;
+            }
+        }
         if (token.length < minLength) {
             continue;
         }
@@ -288,6 +362,9 @@ export function tokenize(text: string, options?: TokenizeOptions): string[] {
             continue;
         }
         if (dropGenericVerbs && GENERIC_VERBS.has(token)) {
+            continue;
+        }
+        if (dropNegatedSpans && negated) {
             continue;
         }
         out.push(token);

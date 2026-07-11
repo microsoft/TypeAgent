@@ -280,6 +280,10 @@ export type CollisionConfig = {
         minMass: number;
         // Clear-winner margin the winner must beat the runner-up by (default 0.5).
         margin: number;
+        // Suppress negated content words ("not the spreadsheet") from the context
+        // vector before scoring (default true). Guards the loaded-negation
+        // adversarial misroutes; purely lexical (§7 tokenize).
+        negationGuard: boolean;
         // On abstain: hand to the configured grammar strategy (default) or
         // escalate the request to the LLM translation path.
         abstainFallback: "defer-to-strategy" | "escalate-to-llm";
@@ -471,6 +475,7 @@ const defaultSessionConfig: SessionConfig = {
             minUniqueTokens: 2,
             minMass: 1.0,
             margin: 0.5,
+            negationGuard: true,
             abstainFallback: "defer-to-strategy",
         },
         priorityOrder: "",
