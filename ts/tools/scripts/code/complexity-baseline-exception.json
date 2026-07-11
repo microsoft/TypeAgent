@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-07-11T17:00:55.523Z",
+  "generatedAt": "2026-07-11T17:02:29.943Z",
   "sourceReport": "tools/scripts/code/complexity-report/report.json",
   "branch": "dev/robgruen/dogfooding4",
-  "commit": "cd58c07958fa070dc51b553ae981d5238718f051",
+  "commit": "8fc7af502688a06071ffcdeadfa057e2d14c848a",
   "thresholds": {
     "cyclomatic": 50,
     "cognitive": 60
