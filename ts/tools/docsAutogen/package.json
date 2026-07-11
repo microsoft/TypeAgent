@@ -25,6 +25,7 @@
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "docs:generate": "node ./dist/cli.js",
+    "docs:command-reference": "node ./dist/cli.js --command-reference",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
@@ -34,15 +35,17 @@
   },
   "dependencies": {
     "@typeagent/aiclient": "workspace:*",
+    "agent-dispatcher": "workspace:*",
     "chalk": "^5.4.1",
-    "debug": "^4.4.0"
+    "debug": "^4.4.0",
+    "default-agent-provider": "workspace:*",
+    "prettier": "^3.5.3"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
     "@types/node": "^22.10.5",
     "jest": "^29.7.0",
-    "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
   }
