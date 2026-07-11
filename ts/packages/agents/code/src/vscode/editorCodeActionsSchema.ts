@@ -9,6 +9,7 @@ export type EditorCodeActions =
     | EditorActionUpsertLines
     | EditorActionInsertComment
     | EditorActionGenerateWithCopilot
+    | EditorActionLaunchCopilotChat
     | EditorActionCreateFile
     | EditorActionSaveCurrentFile
     | EditorActionSaveAllFiles;
@@ -261,6 +262,30 @@ export type EditorActionGenerateWithCopilot = {
         autoAccept?: boolean;
         // Optional: let agent explain what Copilot might generate
         explanationMode?: boolean;
+    };
+};
+
+// Hand the current TypeAgent conversation (and optional developer-mode
+// captures + a screenshot) to native GitHub Copilot Chat in VS Code so it can
+// diagnose and fix the underlying problem. Opens the chat view pre-filled (the
+// user reviews before sending) via `workbench.action.chat.open`.
+export type EditorActionLaunchCopilotChat = {
+    actionName: "launchCopilotChat";
+    parameters: {
+        // The prompt to pre-fill in the Copilot Chat input.
+        query: string;
+        // Copilot chat mode. "agent" lets Copilot edit the workspace to apply a
+        // fix; "ask" is conversational only. Defaults to "agent".
+        mode?: "agent" | "ask";
+        // When true (default), the query is pre-filled but not auto-submitted so
+        // the user can review the (potentially large) attached context first.
+        isPartialQuery?: boolean;
+        // When true, attach a screenshot of the focused VS Code window as an
+        // image (no temp file, no file-permission prompt).
+        attachScreenshot?: boolean;
+        // Absolute paths to files (e.g., conversation.json and dev-capture JSON)
+        // to attach to the chat request.
+        attachFiles?: string[];
     };
 };
 

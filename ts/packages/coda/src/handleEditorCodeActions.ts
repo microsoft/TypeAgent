@@ -938,6 +938,87 @@ export async function handleUpsertLinesAction(
     }
 }
 
+// Build a fallback prompt for older VS Code builds that don't support inline
+// file attachments: reference the attachment file paths inside the query text.
+function buildFallbackCopilotQuery(
+    query: string,
+    attachFilePaths: string[],
+): string {
+    if (attachFilePaths.length === 0) {
+        return query;
+    }
+    const list = attachFilePaths.map((p) => `- ${p}`).join("\n");
+    return `${query}\n\nAttached context files:\n${list}`;
+}
+
+// Hand the current TypeAgent conversation (+ optional dev-captures and a
+// screenshot) to native GitHub Copilot Chat by opening the chat view
+// pre-filled via `workbench.action.chat.open`.
+export async function handleLaunchCopilotChatAction(
+    action: any,
+): Promise<ActionResult> {
+    const params = action.parameters ?? {};
+    const query: string = typeof params.query === "string" ? params.query : "";
+    const mode: string = params.mode === "ask" ? "ask" : "agent";
+    const isPartialQuery: boolean = params.isPartialQuery !== false;
+    const attachScreenshot: boolean = params.attachScreenshot === true;
+    const attachFilePaths: string[] = Array.isArray(params.attachFiles)
+        ? params.attachFiles.filter((p: unknown) => typeof p === "string")
+        : [];
+
+    if (!(await isCopilotEnabled())) {
+        return {
+            handled: true,
+            message:
+                "❌ GitHub Copilot is not available. Install and sign in to the GitHub Copilot extension, then try again.",
+        };
+    }
+
+    const attachFiles = attachFilePaths.map((p) => vscode.Uri.file(p));
+
+    // Preferred path: open the native Copilot Chat view with the conversation
+    // attached (and optionally a screenshot of the focused window).
+    try {
+        await vscode.commands.executeCommand("workbench.action.chat.open", {
+            query,
+            mode,
+            isPartialQuery,
+            attachScreenshot,
+            attachFiles,
+        });
+        return {
+            handled: true,
+            message:
+                "✅ Opened GitHub Copilot Chat with the conversation attached.",
+        };
+    } catch (err: any) {
+        // Older VS Code builds may not support attachScreenshot / attachFiles.
+        // Fall back to embedding the attachment paths in the query text.
+        try {
+            await vscode.commands.executeCommand(
+                "workbench.action.chat.open",
+                {
+                    query: buildFallbackCopilotQuery(query, attachFilePaths),
+                    mode,
+                    isPartialQuery,
+                },
+            );
+            return {
+                handled: true,
+                message:
+                    "✅ Opened GitHub Copilot Chat (attachments referenced by path — update VS Code for inline attachments).",
+            };
+        } catch (fallbackErr: any) {
+            return {
+                handled: true,
+                message: `❌ Failed to open GitHub Copilot Chat: ${
+                    fallbackErr?.message ?? String(fallbackErr)
+                }`,
+            };
+        }
+    }
+}
+
 export async function handleEditorCodeActions(
     action: any,
 ): Promise<ActionResult> {
@@ -980,6 +1061,10 @@ export async function handleEditorCodeActions(
 
         case "insertOrDeleteLines":
             actionResult = await handleUpsertLinesAction(action);
+            break;
+
+        case "launchCopilotChat":
+            actionResult = await handleLaunchCopilotChatAction(action);
             break;
 
         default:
