@@ -30,9 +30,150 @@ export interface TypedDisplayContent {
     alternates?: Array<{ type: DisplayType; content: MessageContent }>;
 }
 
+// ---------------------------------------------------------------------------
+// Structured content — a document of typed blocks (see
+// docs/plans/structured-output/PLAN.md). Agents author a semantic view-model
+// once; each client renders it at the highest fidelity it supports and falls
+// back to the SDK-derived markdown/text `alternates` otherwise.
+// ---------------------------------------------------------------------------
+
+// Tone for a badge cell / list badge. Clients map these to colors.
+export type BadgeTone = "neutral" | "info" | "success" | "warning" | "error";
+
+// Semantic type of a table cell. Controls how a rich client renders it.
+export type TableCellType =
+    | "text"
+    | "link"
+    | "badge"
+    | "number"
+    | "date"
+    | "code";
+
+export interface TableColumn {
+    id: string;
+    header: string;
+    type?: TableCellType; // default "text"
+    align?: "left" | "right" | "center";
+    sortable?: boolean; // per-column override of table.sortable
+}
+
+// A table cell is either a bare scalar (rendered per the column type) or a
+// rich object carrying a link target, badge tone, and/or tooltip.
+export type TableCell =
+    | string
+    | number
+    | {
+          text: string;
+          href?: string; // link target (cell type "link", or any cell)
+          badge?: BadgeTone; // badge tone (cell type "badge")
+          tooltip?: string;
+      };
+
+export interface TableBlock {
+    kind: "table";
+    columns: TableColumn[];
+    rows: TableCell[][];
+    caption?: string;
+    // Affordances — interactive by default.
+    sortable?: boolean; // default: true
+    filterable?: boolean; // default: false
+    readonly?: boolean; // lock order + content exactly as sent
+    // Reserved for v2 row-actions (open question #3). Carried, not wired up.
+    action?: unknown;
+}
+
+export interface HeadingBlock {
+    kind: "heading";
+    text: string;
+    level?: 1 | 2 | 3;
+}
+
+export interface TextBlock {
+    kind: "text";
+    text: MessageContent;
+    format?: "text" | "markdown"; // default "markdown"
+}
+
+export interface ListItem {
+    text: string;
+    href?: string;
+    subtitle?: string;
+    badges?: BadgeTone[];
+}
+
+export interface ListBlock {
+    kind: "list";
+    ordered?: boolean;
+    items: ListItem[];
+}
+
+export interface KeyValuePair {
+    label: string;
+    value: TableCell;
+}
+
+export interface KeyValueBlock {
+    kind: "keyValue";
+    pairs: KeyValuePair[];
+}
+
+export interface CardBlock {
+    kind: "card";
+    title?: string;
+    subtitle?: string;
+    fields?: KeyValuePair[];
+    href?: string;
+}
+
+export interface ImageBlock {
+    kind: "image";
+    src: string; // URL or dataURI; the agent rehydrates file paths
+    alt?: string;
+    caption?: string;
+    width?: number;
+    height?: number;
+}
+
+export interface CodeBlock {
+    kind: "code";
+    code: string;
+    language?: string;
+}
+
+export interface DividerBlock {
+    kind: "divider";
+}
+
+export type StructuredBlock =
+    | HeadingBlock
+    | TextBlock
+    | TableBlock
+    | ListBlock
+    | KeyValueBlock
+    | CardBlock
+    | ImageBlock
+    | CodeBlock
+    | DividerBlock;
+
+// An ordered document of typed blocks plus an optional machine-readable
+// `rawData` payload. Added to the DisplayContent union so it rides the
+// existing display plumbing with no new transport.
+export interface StructuredContent {
+    type: "structured";
+    blocks: StructuredBlock[];
+    rawData?: unknown; // machine-readable payload ("or otherwise" clients)
+    dataSchema?: unknown; // optional JSON Schema describing rawData (carried, not enforced)
+    kind?: DisplayMessageKind;
+    speak?: boolean;
+    // The SDK auto-derives a markdown/text alternate so clients that don't
+    // understand `type: "structured"` degrade gracefully via getContentForType.
+    alternates?: Array<{ type: DisplayType; content: MessageContent }>;
+}
+
 export type DisplayContent =
     | MessageContent // each string in the MessageContent is treated as DisplayType "text"
-    | TypedDisplayContent;
+    | TypedDisplayContent
+    | StructuredContent;
 
 // Optional message kind for client specific styling
 export type DisplayMessageKind =

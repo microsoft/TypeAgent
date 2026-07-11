@@ -8,8 +8,12 @@ import {
     ActionResultSuccessNoDisplay,
 } from "../action.js";
 import { ActionContext } from "../agentInterface.js";
-import { DisplayMessageKind } from "../display.js";
+import { DisplayMessageKind, StructuredBlock } from "../display.js";
 import { Entity } from "../memory.js";
+import {
+    createStructuredContent,
+    structuredToText,
+} from "./displayHelpers.js";
 import { ChoiceManager, PickRememberResponse } from "./choiceManager.js";
 export { ChoiceManager };
 
@@ -224,6 +228,39 @@ export function createPickRememberChoiceResult(
 export function createActionResultFromError(error: string): ActionResultError {
     return {
         error,
+    };
+}
+
+/**
+ * Create an ActionResultSuccess whose display is a structured block document.
+ * The SDK derives markdown/text `alternates` (for clients that don't
+ * understand `type: "structured"`) and, unless overridden, a plain-text
+ * `historyText` for memory/TTS. `rawData` carries the machine-readable payload
+ * for "or otherwise" (non-UI) clients.
+ */
+export function createStructuredResult(
+    blocks: StructuredBlock[],
+    options?: {
+        rawData?: unknown;
+        dataSchema?: unknown;
+        kind?: DisplayMessageKind;
+        speak?: boolean;
+        historyText?: string;
+        entities?: Entity[];
+        resultEntity?: Entity;
+    },
+): ActionResultSuccess {
+    const displayContent = createStructuredContent(blocks, {
+        rawData: options?.rawData,
+        dataSchema: options?.dataSchema,
+        kind: options?.kind,
+        speak: options?.speak,
+    });
+    return {
+        historyText: options?.historyText ?? structuredToText(blocks),
+        entities: options?.entities ?? [],
+        resultEntity: options?.resultEntity,
+        displayContent,
     };
 }
 

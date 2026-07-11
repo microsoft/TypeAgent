@@ -4,7 +4,7 @@ Working tracker for the plan in [PLAN.md](./PLAN.md). Update whenever a
 phase item is started, completed, or a follow-up surfaces. Keep entries
 terse — one line per item where possible.
 
-_Last updated: 2026-07-11 — plan drafted, not yet started._
+_Last updated: 2026-07-11 — Phase 1 (SDK foundation) implemented._
 
 ## Progress by phase
 
@@ -12,11 +12,11 @@ _Last updated: 2026-07-11 — plan drafted, not yet started._
 
 | Item | Description | Status |
 | ---- | ----------- | ------ |
-| 1a | `StructuredContent` + block types in `agentSdk/src/display.ts` | todo |
-| 1b | Builders: `createStructuredResult`, `createTable`, `fromRecords` | todo |
-| 1c | Fallback derivation: `structuredToMarkdown` / `structuredToText` / `getStructuredFallback` | todo |
-| 1d | Exports from `agentSdk/src/index.ts` | todo |
-| 1e | Unit tests (derivation + builders) | todo |
+| 1a | `StructuredContent` + block types in `agentSdk/src/display.ts` | done |
+| 1b | Builders: `createStructuredResult`, `createTable`, `fromRecords` | done |
+| 1c | Fallback derivation: `structuredToMarkdown` / `structuredToText` / `getStructuredFallback` | done |
+| 1d | Exports from `agentSdk/src/index.ts` | done |
+| 1e | Unit tests (derivation + builders) | done |
 
 ### Phase 2 — Renderer safety net *(after 1)*
 
