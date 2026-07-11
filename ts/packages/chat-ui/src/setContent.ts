@@ -173,8 +173,11 @@ function renderBlock(block: StructuredBlock): string {
                         : "";
                     const badges = (item.badges ?? [])
                         .map(
-                            (tone) =>
-                                `<span class="${esc(badgeClass(tone))}">${esc(tone)}</span>`,
+                            (tone) => {
+                                const label =
+                                    tone.charAt(0).toUpperCase() + tone.slice(1);
+                                return `<span class="${esc(badgeClass(tone))}">${esc(label)}</span>`;
+                            },
                         )
                         .join(" ");
                     return `<li>${label}${subtitle}${badges ? " " + badges : ""}</li>`;
