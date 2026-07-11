@@ -41,6 +41,11 @@ const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..", "..", "..");
 const CACHE_PATH = path.join(HERE, "llm-cache.json");
 const CFG: DecisionConfig = { minUniqueTokens: 2, minMass: 1.0, margin: 0.5 };
 
+// Mirror production (session.ts negationGuard default on) so the CS-ON arm here
+// matches the guarded scorer the main metrics use. CS_NEGATION_GUARD=0 replays
+// the pre-guard baseline, consistent with metricRunner.
+const NEGATION_GUARD = process.env.CS_NEGATION_GUARD !== "0";
+
 // Concise, accurate one-liners for the featured agents so the LLM knows what
 // each does (a stand-in for the schema/action descriptions the real translator
 // sees).
@@ -166,6 +171,7 @@ async function main() {
         const sig = new RingBufferSignalSource(() => ({
             windowTurns: 20,
             decay: 0.9,
+            negationGuard: NEGATION_GUARD,
         }));
         for (const t of s.dialogue) sig.recordRequest(t);
         const cands = [a, b].map((x) => ({

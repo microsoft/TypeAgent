@@ -798,5 +798,205 @@
   "s-empty-14": {
     "choice": "unclear",
     "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-empty-music": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-empty-schedule": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-empty-code": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-empty-photo": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-empty-web": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-empty-clock": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-empty-doc": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-empty-list": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-greet-1": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-greet-2": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-greet-3": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-greet-4": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-greet-5": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-greet-6": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-greet-7": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-greet-8": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-greet-9": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-greet-10": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-food-1": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-travel-1": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-family-1": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-feel-1": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-food-2": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-sport-1": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-family-2": {
+    "choice": "B",
+    "raw": "{\n  \"agent\": \"B\"\n}"
+  },
+  "nc-chores-1": {
+    "choice": "A",
+    "raw": "{\"agent\": \"A\"}"
+  },
+  "nc-weather-chat": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-hobby-1": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-travel-2": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-feel-2": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-food-3": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-family-3": {
+    "choice": "B",
+    "raw": "{\"agent\": \"B\"}"
+  },
+  "nc-work-1": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-feel-3": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-hobby-2": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-travel-3": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-family-4": {
+    "choice": "B",
+    "raw": "{\"agent\": \"B\"}"
+  },
+  "nc-pet-1": {
+    "choice": "A",
+    "raw": "{\n  \"agent\": \"A\"\n}"
+  },
+  "nc-meta-1": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-meta-2": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-meta-3": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-meta-4": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-meta-5": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-meta-6": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-meta-7": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
+  },
+  "nc-meta-8": {
+    "choice": "A",
+    "raw": "{\n  \"agent\": \"A\"\n}"
+  },
+  "nc-meta-9": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-meta-10": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-unrelated-garden": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "nc-unrelated-money": {
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   }
 }
