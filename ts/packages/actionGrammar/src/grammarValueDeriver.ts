@@ -18,6 +18,13 @@ import type {
 } from "./grammarTypes.js";
 
 /**
+ * A part that solely carries a rule's implicit value: the variable name
+ * it binds, and the `GrammarPart` itself (so callers that need more than
+ * the name - e.g. its type - don't have to re-scan `parts`).
+ */
+export type ValueBearingPart = { variable: string; part: GrammarPart };
+
+/**
  * Find the single part (if any) that carries a variable across a rule's
  * parts, so its value can stand in for the whole rule's implicit value
  * when the rule has no explicit `->` expression. Returns `"ambiguous"`
@@ -25,8 +32,8 @@ import type {
  */
 export function findSingleValueBearingPart(
     parts: GrammarPart[],
-): { variable: string; part: GrammarPart } | "ambiguous" | undefined {
-    let found: { variable: string; part: GrammarPart } | undefined;
+): ValueBearingPart | "ambiguous" | undefined {
+    let found: ValueBearingPart | undefined;
     for (const p of parts) {
         const name = p.variable;
         if (name === undefined) continue;

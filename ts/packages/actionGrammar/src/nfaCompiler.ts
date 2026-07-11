@@ -480,20 +480,20 @@ function deriveEffectiveValue(
     if (!requireValue) {
         return undefined;
     }
+    const termsDescription =
+        rule.parts.length === 1
+            ? "has 1 term"
+            : `has ${rule.parts.length} terms`;
     if (result.kind === "ambiguous") {
         throw new Error(
-            `${describeRule()} has ${rule.parts.length} terms but no value expression, ` +
+            `${describeRule()} ${termsDescription} but no value expression, ` +
                 `and more than one part carries a variable - the implicit value is ambiguous. ` +
-                `Multi-term rules must have an explicit value expression (using ->).`,
+                `Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.`,
         );
     }
     const hasTailCall = rule.parts.some(
         (p) => p.type === "rules" && p.tailCall,
     );
-    const termsDescription =
-        rule.parts.length === 1
-            ? "has 1 term"
-            : `has ${rule.parts.length} terms`;
     throw new Error(
         `${describeRule()} ${termsDescription} but no value expression, and no part carries a variable. ` +
             `Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.` +
