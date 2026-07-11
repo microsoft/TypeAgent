@@ -8,10 +8,14 @@ import {
     DisplayType,
     DisplayMessageKind,
     MessageContent,
+    StructuredBlock,
+    StructuredContent,
+    TableBlock,
+    TableCell,
+    BadgeTone,
 } from "@typeagent/agent-sdk";
 import {
     getContentForType,
-    getStructuredFallback,
     isStructuredContent,
 } from "@typeagent/agent-sdk/helpers/display";
 import DOMPurify from "dompurify";
@@ -23,6 +27,225 @@ ansiUpTextToHtml.use_classes = true;
 const ansiUpMarkdownToHtml = new AnsiUp();
 ansiUpMarkdownToHtml.use_classes = true;
 ansiUpMarkdownToHtml.escape_html = false;
+
+// ---------------------------------------------------------------------------
+// Structured-content HTML renderer (Phase 3a)
+// Converts a StructuredContent block document to an HTML string. DOMPurify
+// sanitizes it at the final sink in setContent(), so string concatenation here
+// is safe — we never set innerHTML before sanitization.
+// ---------------------------------------------------------------------------
+
+function esc(text: string): string {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function cellDisplayText(cell: TableCell): string {
+    if (cell === null || cell === undefined) return "";
+    if (typeof cell === "object") return cell.text;
+    return String(cell);
+}
+
+function badgeClass(tone: BadgeTone | undefined): string {
+    return `sc-badge sc-badge-${tone ?? "neutral"}`;
+}
+
+function renderTableCell(
+    cell: TableCell,
+    colType: string | undefined,
+): string {
+    const text = cellDisplayText(cell);
+    const obj = typeof cell === "object" && cell !== null ? cell : null;
+    const href = obj?.href ?? undefined;
+    const badge = obj?.badge ?? undefined;
+    const tooltip = obj?.tooltip ? ` title="${esc(obj.tooltip)}"` : "";
+    const effectiveType = badge ? "badge" : href ? "link" : colType ?? "text";
+
+    switch (effectiveType) {
+        case "link":
+            if (href) {
+                return `<a href="${esc(href)}" target="_blank"${tooltip}>${esc(text)}</a>`;
+            }
+            return esc(text);
+        case "badge": {
+            const tone = badge ?? "neutral";
+            return `<span class="${esc(badgeClass(tone))}"${tooltip}>${esc(text)}</span>`;
+        }
+        case "code":
+            return `<code${tooltip}>${esc(text)}</code>`;
+        case "number":
+            return `<span class="sc-cell-number"${tooltip}>${esc(text)}</span>`;
+        case "date":
+            return `<span class="sc-cell-date"${tooltip}>${esc(text)}</span>`;
+        default:
+            return tooltip ? `<span${tooltip}>${esc(text)}</span>` : esc(text);
+    }
+}
+
+function renderTableBlock(block: TableBlock): string {
+    const { columns, rows, caption, sortable, readonly } = block;
+    const sortAttr =
+        !readonly && sortable !== false ? ' data-sc-sortable="true"' : "";
+    const parts: string[] = [
+        `<div class="sc-table-wrap"><table class="sc-table"${sortAttr}>`,
+    ];
+    if (caption) {
+        parts.push(`<caption class="sc-caption">${esc(caption)}</caption>`);
+    }
+    parts.push("<thead><tr>");
+    for (const col of columns) {
+        const align =
+            col.align ? ` style="text-align:${esc(col.align)}"` : "";
+        const colSortable =
+            !readonly && (col.sortable ?? sortable ?? true) !== false;
+        const sortBtn = colSortable
+            ? ` <button class="sc-sort-btn" aria-label="sort by ${esc(col.header)}" data-sc-col="${esc(col.id)}" tabindex="0">↕</button>`
+            : "";
+        parts.push(`<th scope="col"${align}>${esc(col.header)}${sortBtn}</th>`);
+    }
+    parts.push("</tr></thead><tbody>");
+    for (const row of rows) {
+        parts.push("<tr>");
+        for (let ci = 0; ci < columns.length; ci++) {
+            const col = columns[ci];
+            const cell = row[ci] ?? "";
+            const align =
+                col.align ? ` style="text-align:${esc(col.align)}"` : "";
+            parts.push(`<td${align}>${renderTableCell(cell, col.type)}</td>`);
+        }
+        parts.push("</tr>");
+    }
+    parts.push("</tbody></table></div>");
+    return parts.join("");
+}
+
+function renderMarkdownToHtml(text: string): string {
+    const md = new MarkdownIt({ html: true });
+    const defaultRender =
+        md.renderer.rules.link_open ||
+        function (tokens: any, idx: any, options: any, _env: any, self: any) {
+            return self.renderToken(tokens, idx, options);
+        };
+    md.renderer.rules.link_open = (tokens: any, idx: any, options: any, env: any, self: any) => {
+        tokens[idx].attrSet("target", "_blank");
+        return defaultRender(tokens, idx, options, env, self);
+    };
+    const rendered = md.render(text);
+    return ansiUpMarkdownToHtml.ansi_to_html(rendered);
+}
+
+function renderBlock(block: StructuredBlock): string {
+    switch (block.kind) {
+        case "heading": {
+            const level = block.level ?? 1;
+            return `<h${level} class="sc-heading sc-heading-${level}">${esc(block.text)}</h${level}>`;
+        }
+        case "text": {
+            const raw =
+                typeof block.text === "string"
+                    ? block.text
+                    : Array.isArray(block.text) &&
+                        typeof block.text[0] === "string"
+                      ? (block.text as string[]).join("\n")
+                      : (block.text as string[][])
+                            .map((row) => row.join(" | "))
+                            .join("\n");
+            const fmt = block.format ?? "markdown";
+            if (fmt === "text") {
+                return `<p class="sc-text">${textToHtml(raw)}</p>`;
+            }
+            return `<div class="sc-text">${renderMarkdownToHtml(raw)}</div>`;
+        }
+        case "table":
+            return renderTableBlock(block);
+        case "list": {
+            const tag = block.ordered ? "ol" : "ul";
+            const items = block.items
+                .map((item) => {
+                    const label = item.href
+                        ? `<a href="${esc(item.href)}" target="_blank">${esc(item.text)}</a>`
+                        : esc(item.text);
+                    const subtitle = item.subtitle
+                        ? ` <span class="sc-list-subtitle">${esc(item.subtitle)}</span>`
+                        : "";
+                    const badges = (item.badges ?? [])
+                        .map(
+                            (tone) =>
+                                `<span class="${esc(badgeClass(tone))}">${esc(tone)}</span>`,
+                        )
+                        .join(" ");
+                    return `<li>${label}${subtitle}${badges ? " " + badges : ""}</li>`;
+                })
+                .join("");
+            return `<${tag} class="sc-list">${items}</${tag}>`;
+        }
+        case "keyValue": {
+            const rows = block.pairs
+                .map(
+                    (pair) =>
+                        `<tr><th scope="row" class="sc-kv-label">${esc(pair.label)}</th>` +
+                        `<td class="sc-kv-value">${renderTableCell(pair.value, undefined)}</td></tr>`,
+                )
+                .join("");
+            return `<table class="sc-kv-table"><tbody>${rows}</tbody></table>`;
+        }
+        case "card": {
+            const parts: string[] = [`<div class="sc-card">`];
+            if (block.title) {
+                const title = block.href
+                    ? `<a href="${esc(block.href)}" target="_blank">${esc(block.title)}</a>`
+                    : esc(block.title);
+                parts.push(`<div class="sc-card-title">${title}</div>`);
+            }
+            if (block.subtitle) {
+                parts.push(
+                    `<div class="sc-card-subtitle">${esc(block.subtitle)}</div>`,
+                );
+            }
+            if (block.fields && block.fields.length > 0) {
+                const rows = block.fields
+                    .map(
+                        (pair) =>
+                            `<tr><th scope="row" class="sc-kv-label">${esc(pair.label)}</th>` +
+                            `<td class="sc-kv-value">${renderTableCell(pair.value, undefined)}</td></tr>`,
+                    )
+                    .join("");
+                parts.push(
+                    `<table class="sc-kv-table sc-card-fields"><tbody>${rows}</tbody></table>`,
+                );
+            }
+            parts.push("</div>");
+            return parts.join("");
+        }
+        case "image": {
+            const widthAttr = block.width ? ` width="${block.width}"` : "";
+            const heightAttr = block.height ? ` height="${block.height}"` : "";
+            const img = `<img src="${esc(block.src)}" alt="${esc(block.alt ?? "")}"${widthAttr}${heightAttr} class="sc-image">`;
+            if (block.caption) {
+                return `<figure class="sc-figure">${img}<figcaption class="sc-caption">${esc(block.caption)}</figcaption></figure>`;
+            }
+            return `<figure class="sc-figure">${img}</figure>`;
+        }
+        case "code":
+            return `<pre class="sc-code"><code${block.language ? ` class="language-${esc(block.language)}"` : ""}>${esc(block.code)}</code></pre>`;
+        case "divider":
+            return `<hr class="sc-divider">`;
+        default:
+            return "";
+    }
+}
+
+/**
+ * Render a StructuredContent block document to an HTML string.
+ * The result is passed through DOMPurify at the sink before being written to
+ * the DOM, so concatenation here is safe.
+ */
+function renderStructuredContent(content: StructuredContent): string {
+    return content.blocks.map(renderBlock).join("\n");
+}
 
 function textToHtml(text: string): string {
     const value = ansiUpTextToHtml.ansi_to_html(text);
@@ -199,10 +422,9 @@ export function setContent(
         speak = false;
     } else {
         if (isStructuredContent(content)) {
-            // Use the SDK-derived markdown fallback so an unknown "structured"
-            // type never reaches processContent (which would throw).
-            type = "markdown";
-            message = getStructuredFallback(content, "markdown");
+            // Phase 3a: render blocks natively as HTML.
+            type = "html";
+            message = renderStructuredContent(content);
         } else {
             // Prefer HTML alternates when available
             const htmlContent = getContentForType(content, "html");

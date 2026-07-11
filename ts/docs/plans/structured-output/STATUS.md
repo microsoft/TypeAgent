@@ -4,7 +4,7 @@ Working tracker for the plan in [PLAN.md](./PLAN.md). Update whenever a
 phase item is started, completed, or a follow-up surfaces. Keep entries
 terse — one line per item where possible.
 
-_Last updated: 2026-07-11 — Phase 2 (renderer safety net) implemented._
+_Last updated: 2026-07-11 — Phase 3 (rich rendering) implemented._
 
 ## Progress by phase
 
@@ -32,8 +32,8 @@ _Last updated: 2026-07-11 — Phase 2 (renderer safety net) implemented._
 
 | Item | Description | Status |
 | ---- | ----------- | ------ |
-| 3a | `chat-ui/setContent.ts` blocks → HTML (table/badge/link/image/card/list/keyValue) + `chat.css` | todo |
-| 3b | `vscode-chat/displayRender.ts` blocks → markdown | todo |
+| 3a | `chat-ui/setContent.ts` blocks → HTML (table/badge/link/image/card/list/keyValue) + `chat.css` | done |
+| 3b | `vscode-chat/displayRender.ts` blocks → markdown | done |
 
 ### Phase 4 — Interactivity *(after 3a)*
 

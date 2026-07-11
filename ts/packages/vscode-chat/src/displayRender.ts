@@ -6,11 +6,13 @@ import type {
     DisplayContent,
     DisplayType,
     MessageContent,
+    StructuredBlock,
+    StructuredContent,
+    TableCell,
     TypedDisplayContent,
 } from "@typeagent/agent-sdk";
 import {
     getContentForType,
-    getStructuredFallback,
     isStructuredContent,
 } from "@typeagent/agent-sdk/helpers/display";
 import { AnsiUp } from "ansi_up";
@@ -24,10 +26,7 @@ export function renderDisplayToMarkdown(content: DisplayContent): string {
         return renderMessageContent(content, "text");
     if (Array.isArray(content)) return renderMessageContent(content, "text");
     if (isStructuredContent(content)) {
-        return applyKind(
-            renderMessageContent(getStructuredFallback(content, "markdown"), "markdown"),
-            content.kind,
-        );
+        return applyKind(renderStructuredToMarkdown(content), content.kind);
     }
     return renderTypedContent(content);
 }
@@ -36,10 +35,130 @@ export function renderDisplayToText(content: DisplayContent): string {
     if (typeof content === "string") return stripAnsi(content);
     if (Array.isArray(content)) return renderMessageContentAsText(content);
     if (isStructuredContent(content)) {
-        return renderMessageContentAsText(getStructuredFallback(content, "text"));
+        return renderMessageContentAsText(renderStructuredToMarkdown(content));
     }
     return renderTypedContentAsText(content);
 }
+
+// ---------------------------------------------------------------------------
+// Structured-content markdown renderer (Phase 3b)
+// Renders each block natively using this renderer's own helpers (tableToMarkdown
+// with proper pipe-escaping, processAnsiContent, etc.) rather than relying on
+// the pre-derived alternate stored in `alternates`.
+// ---------------------------------------------------------------------------
+
+function scCellText(cell: TableCell): string {
+    if (cell === null || cell === undefined) return "";
+    if (typeof cell === "object") return cell.text;
+    return String(cell);
+}
+
+function scCellMarkdown(cell: TableCell): string {
+    const text = scCellText(cell);
+    if (typeof cell === "object" && cell !== null && cell.href) {
+        return `[${text}](${cell.href})`;
+    }
+    return text;
+}
+
+function renderStructuredBlockToMarkdown(block: StructuredBlock): string {
+    switch (block.kind) {
+        case "heading": {
+            const prefix = "#".repeat(block.level ?? 1);
+            return `${prefix} ${block.text}`;
+        }
+        case "text": {
+            const raw =
+                typeof block.text === "string"
+                    ? block.text
+                    : Array.isArray(block.text) &&
+                        typeof block.text[0] === "string"
+                      ? (block.text as string[]).join("\n")
+                      : (block.text as string[][])
+                            .map((row) => row.join(" | "))
+                            .join("\n");
+            return processAnsiContent(raw, "markdown");
+        }
+        case "table": {
+            const { columns, rows, caption } = block;
+            const headers = columns.map((c) => escapeTableCell(c.header));
+            const dataRows = rows.map((row) =>
+                columns.map((_, ci) => escapeTableCell(scCellMarkdown(row[ci] ?? ""))),
+            );
+            const lines = [
+                `| ${headers.join(" | ")} |`,
+                `| ${headers.map(() => "---").join(" | ")} |`,
+                ...dataRows.map((row) => `| ${row.join(" | ")} |`),
+            ];
+            if (caption) {
+                lines.unshift(`**${caption}**`);
+            }
+            return lines.join("\n");
+        }
+        case "list": {
+            return block.items
+                .map((item, index) => {
+                    const marker = block.ordered ? `${index + 1}.` : "-";
+                    const label = item.href
+                        ? `[${item.text}](${item.href})`
+                        : item.text;
+                    const subtitle = item.subtitle ? ` — ${item.subtitle}` : "";
+                    return `${marker} ${label}${subtitle}`;
+                })
+                .join("\n");
+        }
+        case "keyValue":
+            return block.pairs
+                .map(
+                    (pair) => `- **${pair.label}:** ${scCellMarkdown(pair.value)}`,
+                )
+                .join("\n");
+        case "card": {
+            const lines: string[] = [];
+            if (block.title) {
+                lines.push(
+                    block.href
+                        ? `### [${block.title}](${block.href})`
+                        : `### ${block.title}`,
+                );
+            }
+            if (block.subtitle) {
+                lines.push(`*${block.subtitle}*`);
+            }
+            if (block.fields) {
+                lines.push(
+                    ...block.fields.map(
+                        (pair) =>
+                            `- **${pair.label}:** ${scCellMarkdown(pair.value)}`,
+                    ),
+                );
+            }
+            return lines.join("\n");
+        }
+        case "image": {
+            let md = `![${block.alt ?? ""}](${block.src})`;
+            if (block.caption) {
+                md += `\n\n*${block.caption}*`;
+            }
+            return md;
+        }
+        case "code":
+            return `\`\`\`${block.language ?? ""}\n${block.code}\n\`\`\``;
+        case "divider":
+            return "---";
+        default:
+            return "";
+    }
+}
+
+function renderStructuredToMarkdown(content: StructuredContent): string {
+    return content.blocks
+        .map(renderStructuredBlockToMarkdown)
+        .filter((s) => s.length > 0)
+        .join("\n\n");
+}
+
+// ---------------------------------------------------------------------------
 
 function renderMessageContentAsText(content: MessageContent): string {
     if (typeof content === "string") return stripAnsi(content);
