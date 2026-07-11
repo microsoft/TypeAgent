@@ -2259,3 +2259,45 @@ span.ansi-bright-white-fg {
 .chat-new-messages-pill:active {
   transform: translateX(-50%) scale(0.98);
 }
+
+/* Transient "Copied!" confirmation shown when a click-to-copy status badge
+   (see setContent.ts) writes its message to the clipboard. The caller sets
+   `left`/`top` in viewport coordinates; the transform centers it just above
+   the badge. Themable via --vscode-* with a dark-slate fallback for the
+   Electron shell / browser UI. */
+.chat-copied-toast {
+  position: fixed;
+  transform: translate(-50%, -120%);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--vscode-editorWidget-background, #1e293b);
+  color: var(--vscode-editorWidget-foreground, #ffffff);
+  border: 1px solid var(--vscode-widget-border, rgba(255, 255, 255, 0.15));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  z-index: 10000;
+  animation: chat-copied-toast-fade 1.2s ease forwards;
+}
+
+@keyframes chat-copied-toast-fade {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -100%);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -120%);
+  }
+  70% {
+    opacity: 1;
+    transform: translate(-50%, -120%);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -140%);
+  }
+}
