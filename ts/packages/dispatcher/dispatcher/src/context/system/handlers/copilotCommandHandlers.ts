@@ -100,6 +100,12 @@ function normalizeDevCaptureMode(value: string): DevCaptureMode {
     return "auto";
 }
 
+type ChatSessionLocation = "view" | "editor" | "window";
+
+function normalizeChatSessionLocation(value: string): ChatSessionLocation {
+    return value === "view" || value === "window" ? value : "editor";
+}
+
 // Sanitize a request id the same way DevTrace names capture files, so a
 // request id from the display log can be matched against the files on disk.
 function safeRequestId(requestId: string): string {
@@ -252,6 +258,24 @@ class FixWithCopilotCommandHandler implements CommandHandler {
                 type: "string",
                 default: "native",
             },
+            "no-send": {
+                description:
+                    "Pre-fill the Copilot prompt but do not auto-submit it (review before sending)",
+                type: "boolean",
+                default: false,
+            },
+            "reuse-session": {
+                description:
+                    "Send into the current Copilot Chat session instead of starting a new one",
+                type: "boolean",
+                default: false,
+            },
+            location: {
+                description:
+                    "Where to open the new session: 'editor' (new chat editor), 'view' (chat panel), or 'window' (separate chat window)",
+                type: "string",
+                default: "editor",
+            },
         },
     } as const;
 
@@ -282,6 +306,11 @@ class FixWithCopilotCommandHandler implements CommandHandler {
         const devCaptureMode = normalizeDevCaptureMode(
             params.flags["dev-captures"],
         );
+        const autoSend = params.flags["no-send"] !== true;
+        const newSession = params.flags["reuse-session"] !== true;
+        const newSessionLocation = normalizeChatSessionLocation(
+            params.flags.location,
+        );
 
         // 1. Raw conversation from the display log — the same source the chat
         // UI replays on reload.
@@ -297,8 +326,7 @@ class FixWithCopilotCommandHandler implements CommandHandler {
         // 2. Developer-mode translation captures for the failing request(s).
         const includeDevCaptures =
             devCaptureMode === "on" ||
-            (devCaptureMode === "auto" &&
-                systemContext.developerMode === true);
+            (devCaptureMode === "auto" && systemContext.developerMode === true);
         const sessionDirPath = systemContext.session.getSessionDirPath();
         const captureFiles =
             includeDevCaptures && sessionDirPath !== undefined
@@ -331,11 +359,13 @@ class FixWithCopilotCommandHandler implements CommandHandler {
             includeScreenshot,
         );
 
-        // Confirm before sending — the context can be large.
+        // Confirm before sending — the context can be large, and (with
+        // auto-send in agent mode) Copilot may start editing the workspace.
+        const sendNote = autoSend ? " It will be submitted automatically." : "";
         if (
             !(await askYesNoWithContext(
                 systemContext,
-                `Hand this conversation to GitHub Copilot Chat (${mode} mode)? ${describeAttachments(
+                `Hand this conversation to GitHub Copilot Chat (${mode} mode)?${sendNote} ${describeAttachments(
                     entries.length,
                     captureFiles.length,
                     includeScreenshot,
@@ -355,9 +385,11 @@ class FixWithCopilotCommandHandler implements CommandHandler {
             parameters: {
                 query,
                 mode,
-                isPartialQuery: true,
+                isPartialQuery: !autoSend,
                 attachScreenshot: includeScreenshot,
                 attachFiles,
+                newSession,
+                newSessionLocation,
             },
         };
 
@@ -376,10 +408,13 @@ class FixWithCopilotCommandHandler implements CommandHandler {
             return;
         }
 
-        displaySuccess(
-            "Opened GitHub Copilot Chat with the conversation attached. Review the prompt, then send it to let Copilot diagnose and fix the problem.",
-            context,
-        );
+        // Don't print a success line here. The definitive outcome (✅ opened /
+        // ❌ Copilot Chat unavailable / open failed) is only known inside the
+        // Coda handler, which renders it via the action display. The bridge
+        // collapses success and in-VS-Code failures into the same "no error"
+        // result, so a success message here could contradict a "❌ …" message
+        // from Coda. Leave the outcome messaging to the side that knows what
+        // actually happened.
     }
 }
 

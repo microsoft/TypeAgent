@@ -8,6 +8,7 @@ import {
     findMatchingFoldersByName,
     ActionResult,
     isCopilotEnabled,
+    isCopilotChatAvailable,
     getIndentationString,
     generateDocPromptLine,
     //getIndentContext,
@@ -952,62 +953,100 @@ function buildFallbackCopilotQuery(
 }
 
 // Hand the current TypeAgent conversation (+ optional dev-captures and a
-// screenshot) to native GitHub Copilot Chat by opening the chat view
-// pre-filled via `workbench.action.chat.open`.
+// screenshot) to native GitHub Copilot Chat via `workbench.action.chat.open`.
+// By default this starts a fresh chat session (in a new chat editor) and
+// auto-submits the request, so the handoff doesn't append to — or wait on —
+// whatever chat the user already had open.
 export async function handleLaunchCopilotChatAction(
     action: any,
 ): Promise<ActionResult> {
     const params = action.parameters ?? {};
     const query: string = typeof params.query === "string" ? params.query : "";
     const mode: string = params.mode === "ask" ? "ask" : "agent";
-    const isPartialQuery: boolean = params.isPartialQuery !== false;
+    // isPartialQuery=false means auto-send; true means pre-fill only. We open
+    // the chat pre-filled either way and drive the submit ourselves (below),
+    // so this just controls whether the prompt is auto-sent.
+    const autoSend: boolean = params.isPartialQuery !== true;
     const attachScreenshot: boolean = params.attachScreenshot === true;
     const attachFilePaths: string[] = Array.isArray(params.attachFiles)
         ? params.attachFiles.filter((p: unknown) => typeof p === "string")
         : [];
+    // Whether to start a fresh session, and where to open it.
+    const newSession: boolean = params.newSession !== false;
+    const newSessionLocation: "view" | "editor" | "window" =
+        params.newSessionLocation === "editor"
+            ? "editor"
+            : params.newSessionLocation === "window"
+              ? "window"
+              : "view";
 
-    if (!(await isCopilotEnabled())) {
+    if (!(await isCopilotChatAvailable())) {
+        // NOTE: `handled: true` marks that this handler recognized the action
+        // (see handleVSCodeActions' `results.find(r => r.handled)` selection) —
+        // it is not a success flag. Keep it true so this specific message is
+        // the one surfaced, rather than the generic "Did not handle" fallback.
         return {
             handled: true,
             message:
-                "❌ GitHub Copilot is not available. Install and sign in to the GitHub Copilot extension, then try again.",
+                "❌ GitHub Copilot Chat is not available. Install and sign in to the GitHub Copilot Chat extension, then try again.",
         };
+    }
+
+    // Optionally start a fresh chat session in the requested location BEFORE
+    // opening. `workbench.action.chat.open` targets the last-active chat widget
+    // (IChatWidgetService.revealWidget reveals the last active widget), so
+    // creating the new session first makes the handoff land there instead of
+    // appending to the user's current chat.
+    if (newSession) {
+        const newSessionCommand =
+            newSessionLocation === "editor"
+                ? "workbench.action.openChat" // New Chat Editor (editor area)
+                : newSessionLocation === "window"
+                  ? "workbench.action.newChatWindow" // New Chat Window
+                  : "workbench.action.chat.newChat"; // New chat in the panel view
+        try {
+            await vscode.commands.executeCommand(newSessionCommand);
+        } catch {
+            // Best-effort: older builds may lack the command. Fall through and
+            // open into the current/last chat instead of a new session.
+        }
     }
 
     const attachFiles = attachFilePaths.map((p) => vscode.Uri.file(p));
 
-    // Preferred path: open the native Copilot Chat view with the conversation
-    // attached (and optionally a screenshot of the focused window).
+    const openedWhere = !newSession
+        ? "GitHub Copilot Chat"
+        : newSessionLocation === "editor"
+          ? "a new GitHub Copilot Chat editor"
+          : newSessionLocation === "window"
+            ? "a new GitHub Copilot Chat window"
+            : "a new GitHub Copilot Chat session";
+    // Open the chat pre-filled first — this reliably reveals the target widget
+    // and adds the input + attachments — then drive the submit ourselves. We do
+    // NOT use chat.open's own auto-submit (isPartialQuery:false → acceptInput):
+    // on a freshly created chat editor/window that submit races widget/agent
+    // initialization and often leaves the prompt sitting unsent. Running
+    // `workbench.action.chat.submit` as a separate step after the widget is
+    // revealed is reliable.
+    let usedFallback = false;
     try {
         await vscode.commands.executeCommand("workbench.action.chat.open", {
             query,
             mode,
-            isPartialQuery,
+            isPartialQuery: true,
             attachScreenshot,
             attachFiles,
         });
-        return {
-            handled: true,
-            message:
-                "✅ Opened GitHub Copilot Chat with the conversation attached.",
-        };
     } catch (err: any) {
         // Older VS Code builds may not support attachScreenshot / attachFiles.
         // Fall back to embedding the attachment paths in the query text.
         try {
-            await vscode.commands.executeCommand(
-                "workbench.action.chat.open",
-                {
-                    query: buildFallbackCopilotQuery(query, attachFilePaths),
-                    mode,
-                    isPartialQuery,
-                },
-            );
-            return {
-                handled: true,
-                message:
-                    "✅ Opened GitHub Copilot Chat (attachments referenced by path — update VS Code for inline attachments).",
-            };
+            await vscode.commands.executeCommand("workbench.action.chat.open", {
+                query: buildFallbackCopilotQuery(query, attachFilePaths),
+                mode,
+                isPartialQuery: true,
+            });
+            usedFallback = true;
         } catch (fallbackErr: any) {
             return {
                 handled: true,
@@ -1017,6 +1056,33 @@ export async function handleLaunchCopilotChatAction(
             };
         }
     }
+
+    // Submit the pre-filled prompt when auto-send is requested. Best-effort: if
+    // the submit command is unavailable, leave the prompt ready to send.
+    let sent = false;
+    if (autoSend) {
+        try {
+            await vscode.commands.executeCommand(
+                "workbench.action.chat.submit",
+            );
+            sent = true;
+        } catch {
+            // Couldn't auto-submit; the prompt stays pre-filled for the user.
+        }
+    }
+
+    const attachNote = usedFallback
+        ? " (attachments referenced by path — update VS Code for inline attachments)"
+        : "";
+    const tail = !autoSend
+        ? ". Review the prompt, then send it to let Copilot diagnose and fix the problem."
+        : sent
+          ? " and sent the request to let Copilot diagnose and fix the problem."
+          : ". The prompt is ready — press Enter in the chat to send it to Copilot.";
+    return {
+        handled: true,
+        message: `✅ Opened ${openedWhere} with the conversation attached${attachNote}${tail}`,
+    };
 }
 
 export async function handleEditorCodeActions(

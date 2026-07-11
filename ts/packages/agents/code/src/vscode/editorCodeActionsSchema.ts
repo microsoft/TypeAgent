@@ -267,18 +267,20 @@ export type EditorActionGenerateWithCopilot = {
 
 // Hand the current TypeAgent conversation (and optional developer-mode
 // captures + a screenshot) to native GitHub Copilot Chat in VS Code so it can
-// diagnose and fix the underlying problem. Opens the chat view pre-filled (the
-// user reviews before sending) via `workbench.action.chat.open`.
+// diagnose and fix the underlying problem, via `workbench.action.chat.open`.
+// By default it starts a fresh chat session in a new chat editor and submits
+// the request automatically.
 export type EditorActionLaunchCopilotChat = {
     actionName: "launchCopilotChat";
     parameters: {
-        // The prompt to pre-fill in the Copilot Chat input.
+        // The prompt to send to the Copilot Chat input.
         query: string;
         // Copilot chat mode. "agent" lets Copilot edit the workspace to apply a
         // fix; "ask" is conversational only. Defaults to "agent".
         mode?: "agent" | "ask";
-        // When true (default), the query is pre-filled but not auto-submitted so
-        // the user can review the (potentially large) attached context first.
+        // When true, the query is pre-filled but not auto-submitted so the user
+        // can review the attached context first. When false (default for
+        // `@copilot fix`), the request is submitted automatically.
         isPartialQuery?: boolean;
         // When true, attach a screenshot of the focused VS Code window as an
         // image (no temp file, no file-permission prompt).
@@ -286,6 +288,14 @@ export type EditorActionLaunchCopilotChat = {
         // Absolute paths to files (e.g., conversation.json and dev-capture JSON)
         // to attach to the chat request.
         attachFiles?: string[];
+        // When true (default), start a fresh chat session for the handoff
+        // instead of appending to whatever chat is already open.
+        newSession?: boolean;
+        // Where to open the new session (only when newSession is true):
+        // "editor" (a new chat editor in the editor area, the default),
+        // "view" (the chat panel/side view), or "window" (a separate chat
+        // window).
+        newSessionLocation?: "view" | "editor" | "window";
     };
 };
 
