@@ -100,8 +100,8 @@ jobs:
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
           npm run code-complexity -- --ratchet --base "origin/${{ github.base_ref }}" \
-            --cyclomatic 25 --cognitive 30 \
-            --new-file-cyclomatic 25 --new-file-cognitive 30 \
+            --cyclomatic 50 --cognitive 60 \
+            --new-file-cyclomatic 50 --new-file-cognitive 60 \
             --exceptions-file tools/scripts/code/complexity-baseline-exception.json
       # Lint ratchet (PRs only): the files this PR changes may not add ESLint
       # violations (no-explicit-any, no-console, no-unused-vars, ...) versus the

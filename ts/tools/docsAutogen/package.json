@@ -24,8 +24,8 @@
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
-    "docs:generate": "node ./dist/cli.js",
     "docs:command-reference": "node ./dist/cli.js --command-reference",
+    "docs:generate": "node ./dist/cli.js",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
