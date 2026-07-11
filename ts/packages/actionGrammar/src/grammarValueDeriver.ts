@@ -7,14 +7,8 @@
  * forwarding value derived from the rule's parts.
  *
  * A rule with exactly one variable-bearing part implicitly forwards that
- * part's value - this mirrors the AST matcher's implicit-default rule
- * (see grammarMatcher.ts) and is the single source of truth shared by:
- *   - grammarOptimizer.ts's `getImplicitDefaultValue`, used by the
- *     value-substitution branch of `tryPromoteTrailing` to fold each
- *     member's effective value into the parent's value expression.
- *   - nfaCompiler.ts's `deriveEffectiveValue`, which additionally handles
- *     single-variable rules and decides whether an ambiguous/missing
- *     value should throw.
+ * part's value. This is the single source of truth for that
+ * derivation, kept independent of any particular compilation backend.
  */
 
 import type {

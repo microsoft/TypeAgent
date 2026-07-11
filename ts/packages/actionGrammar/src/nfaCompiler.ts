@@ -453,51 +453,22 @@ function stripDispatch(part: RulesPart): RulesPart {
 }
 
 /**
- * Check if a rule is a single-variable rule (e.g., <ArtistName> = $(x:wildcard);)
- * Such rules should implicitly produce their variable's value: -> $(x)
- */
-function isSingleVariableRule(rule: GrammarRule): { variable: string } | false {
-    // A single-variable rule has:
-    // 1. No explicit value expression
-    // 2. Single part that is a wildcard or number with a variable
-    if (rule.value) {
-        return false; // Has explicit value
-    }
-    if (rule.parts.length !== 1) {
-        return false; // Multiple parts
-    }
-    const part = rule.parts[0];
-    if (part.type === "wildcard" || part.type === "number") {
-        if (part.variable) {
-            return { variable: part.variable };
-        }
-    }
-    return false;
-}
-
-/**
  * Derive the value expression for a rule that has no explicit `->` value:
- * single-variable rules forward that variable, and factored multi-part
- * rules (e.g. from `factorCommonPrefixes`) forward their single
- * variable-bearing part's value (via the shared `deriveValue`,
- * also used by the optimizer's `getImplicitDefaultValue`). Not every rule
- * needs a value - only when `requireValue` is set (i.e. the value is
- * actually consumed: top-level action rules, or nested rules captured by
- * a parent variable) do ambiguous (2+ variable-bearing parts) or missing
- * values throw; otherwise both cases just resolve to `undefined`.
+ * a rule with exactly one variable-bearing part (whatever its type -
+ * wildcard, number, or a bound rules/string/phraseSet part) implicitly
+ * forwards that part's value, via the shared `deriveValue` - the single
+ * place that decides a rule's effective value, explicit or implicit.
+ * Not every rule needs a value - only when `requireValue` is set (i.e.
+ * the value is actually consumed: top-level action rules, or nested
+ * rules captured by a parent variable) do ambiguous (2+ variable-bearing
+ * parts) or missing values throw; otherwise both cases just resolve to
+ * `undefined`.
  */
 function deriveEffectiveValue(
     rule: GrammarRule,
     describeRule: () => string,
     requireValue: boolean,
 ): CompiledValueNode | undefined {
-    const singleVar = isSingleVariableRule(rule);
-    if (singleVar) {
-        return { type: "variable", name: singleVar.variable };
-    }
-    if (rule.parts.length <= 1) {
-        return rule.value;
-    }
     const result = deriveValue(rule);
     if (result.kind === "value") {
         return result.value;
@@ -519,9 +490,13 @@ function deriveEffectiveValue(
     const hasTailCall = rule.parts.some(
         (p) => p.type === "rules" && p.tailCall,
     );
+    const termsDescription =
+        rule.parts.length === 1
+            ? "has 1 term"
+            : `has ${rule.parts.length} terms`;
     throw new Error(
-        `${describeRule()} has ${rule.parts.length} terms but no value expression. ` +
-            `Multi-term rules must have an explicit value expression (using ->).` +
+        `${describeRule()} ${termsDescription} but no value expression, and no part carries a variable. ` +
+            `Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.` +
             (hasTailCall
                 ? " This rule contains a tailCall RulesPart, which the NFA compiler " +
                   "does not support - disable `tailFactoring` / `promoteTailRulesParts` " +

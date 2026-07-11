@@ -3195,9 +3195,8 @@ function checkForwardingPromotable(
     // exactly one variable-bearing contributor (wildcard / number
     // always; rules / string / phraseSet only when bound; every
     // `GrammarPart` carries an optional `variable` field, so
-    // `findSingleValueBearingPart` - the shared scan also used by
-    // `deriveValue` (grammarValueDeriver.ts) - covers the
-    // union). Promoting masks the baseline missing/multiple-default
+    // `findSingleValueBearingPart` - the shared scan used here -
+    // covers the union). Promoting masks the baseline missing/multiple-default
     // throws at finalize time, so bail out unless the trailing
     // RulesPart is the sole contributor.
     const contributor = findSingleValueBearingPart(parts);
@@ -3316,7 +3315,7 @@ function trySubstituteMembers(
  * Used by the value-substitution branch of `tryPromoteTrailing` to
  * fold each member's effective value into the parent's value
  * expression. See `deriveValue` (grammarValueDeriver.ts) for
- * the shared derivation logic, also used by the NFA compiler.
+ * the shared derivation logic.
  */
 function getImplicitDefaultValue(
     rule: GrammarRule,
