@@ -16,7 +16,7 @@ The `calendar` package is a TypeAgent application agent designed to manage calen
 
 ## What it does
 
-The calendar agent provides a comprehensive set of actions to manage calendar events. These actions are grouped into two main categories:
+The calendar agent provides a set of actions to manage and manipulate calendar events. These actions are grouped into two main categories:
 
 ### Event Management
 
@@ -33,13 +33,22 @@ The calendar agent provides a comprehensive set of actions to manage calendar ev
 
 The agent uses the `graph-utils` library to implement these actions and relies on the `@microsoft/microsoft-graph-client` library for communication with the Microsoft Graph API. The agent's schema and grammar definitions enable it to interpret natural language requests and map them to the appropriate actions.
 
+### Example User Requests
+
+The following are examples of natural language requests that the calendar agent can interpret and act upon:
+
+- "Create a code review meeting tomorrow at 11:00am."
+- "Add Alex and Megan to the meeting."
+- "Set up a dim sum lunch meeting next Friday at noon."
+- "Find all my meetings on Friday."
+
 ## Setup
 
 To use the calendar agent, you need to configure access to the Microsoft Graph API. Follow these steps:
 
 1. **Create a Microsoft Graph Client Application**:
 
-   - Follow the Microsoft Graph quickstart guide to create a Graph client application and demo tenant.
+   - Follow the Microsoft Graph quickstart guide at `https://developer.microsoft.com/en-us/graph/quick-start?state=option-typescript` to create a Graph client application and demo tenant.
 
 2. **Set Environment Variables**:
 
@@ -54,7 +63,7 @@ To use the calendar agent, you need to configure access to the Microsoft Graph A
 
    - Run `pnpm install` to install the required dependencies.
 
-4. **Identity Cache Issues**:
+4. **Fix Identity Cache Issues**:
    - If you encounter issues with the identity cache, clear it by running the following commands:
      ```text
      cd %localappdata%/.IdentityService
@@ -147,6 +156,6 @@ External: `chalk`, `date-fns`, `debug`
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-11T08:34:41.338Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -12,13 +12,11 @@
 
 ## Overview
 
-The Greeting Agent is a sample TypeAgent application designed to generate personalized and varied greeting messages using structured prompting and a language model (LLM). It demonstrates how to use schemas to structure LLM responses and how to enhance these responses with personalized information, such as details retrieved from a web search engine.
-
-This agent serves as an example of how to build a typed agent with structured prompting, showcasing the integration of external data sources and the generation of diverse, context-aware responses.
+The Greeting Agent is a sample TypeAgent application designed to generate personalized and varied greeting messages using structured prompting and a language model (LLM). It demonstrates how to use schemas to structure LLM responses and how to enhance these responses with personalized information, such as details retrieved from a web search engine. This agent serves as a practical example of building a typed agent with structured prompting, integrating external data sources, and generating diverse, context-aware responses.
 
 ## What it does
 
-The Greeting Agent is designed to handle the `personalizedGreetingAction`. This action enables the agent to generate multiple greeting options that vary in tone, length, cadence, delivery, and style. The greetings can convey a range of moods, such as friendly, enthusiastic, polite, cheerful, or lively. The agent also supports incorporating chat history into the generated greetings to make them more personalized and contextually relevant.
+The Greeting Agent handles the `personalizedGreetingAction`, which enables it to generate multiple greeting options that vary in tone, length, cadence, delivery, and style. These greetings can convey a range of moods, such as friendly, enthusiastic, polite, cheerful, or lively. The agent also supports incorporating chat history into the generated greetings to make them more personalized and contextually relevant.
 
 Key features include:
 
@@ -26,7 +24,7 @@ Key features include:
 - **Randomized Selection**: The agent generates multiple greeting options and selects one at random, ensuring diversity in the responses.
 - **Personalized Augmentation**: By integrating with a web search engine like Bing, the agent can enhance greetings with personalized information. If a Bing API key is not provided, the agent defaults to a generic "No Information available" response.
 
-This agent is a practical demonstration of how to combine LLM capabilities with external data sources to create engaging and context-aware interactions.
+This agent is a demonstration of how to combine LLM capabilities with external data sources to create engaging and context-aware interactions.
 
 ## Setup
 
@@ -120,6 +118,6 @@ External: `debug`, `typechat`
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter greeting-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-11T08:34:41.338Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter greeting-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

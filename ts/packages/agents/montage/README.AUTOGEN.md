@@ -12,40 +12,43 @@
 
 ## Overview
 
-The montage-agent package is a TypeAgent application agent designed to assist users in creating and managing photo montages. It provides a collaborative environment where users and the agent work together to organize, edit, and display images in a montage format. The package includes backend logic for handling montage-related actions and a web-based interface for user interaction.
+The `montage-agent` package is a TypeAgent application agent designed to assist users in collaboratively creating and managing photo montages. It provides a backend for handling montage-related actions and a web-based interface for user interaction. The agent integrates with other system components, such as image processing libraries and knowledge processors, to deliver a comprehensive solution for organizing, editing, and displaying photo montages.
 
 ## What it does
 
-The montage-agent supports a variety of actions that enable users to create, customize, and manage photo montages. These actions are grouped into the following categories:
+The `montage-agent` supports a wide range of actions that enable users to create, customize, and manage photo montages. These actions are grouped into the following categories:
 
 - **Montage Management**:
 
-  - Actions such as `createMontage`, `deleteMontage`, and `listMontage` allow users to create new montages, delete existing ones, and view a list of available montages.
+  - Actions like `createMontage`, `deleteMontage`, and `listMontage` allow users to create new montages, delete existing ones, and view a list of available montages.
 
 - **Photo Management**:
 
-  - Actions like `addPhotos`, `removePhotos`, `selectPhotos`, and `clearSelection` enable users to add, remove, and manage photos within a montage.
+  - Actions such as `addPhotos`, `removePhotos`, `selectPhotos`, and `clearSelection` enable users to add, remove, and manage photos within a montage.
 
 - **Customization**:
 
-  - Actions such as `setMontageViewMode` and `changeTitle` allow users to customize the appearance and metadata of their montages.
+  - Actions like `setMontageViewMode` and `changeTitle` allow users to customize the appearance and metadata of their montages.
 
 - **Advanced Features**:
-  - Actions like `mergeMontage`, `startSlideShow`, and `setSearchParameters` provide advanced functionality for combining montages, creating slideshows, and filtering images.
+  - Actions such as `mergeMontage`, `startSlideShow`, and `setSearchParameters` provide advanced functionality for combining montages, creating slideshows, and filtering images.
 
-The agent integrates with other system components, such as image storage, processing libraries, and knowledge processors, to perform these tasks. It also includes a web interface for users to interact with the montage creation process, making it accessible and user-friendly.
+The agent also includes a web interface for users to interact with the montage creation process. This interface allows users to perform actions such as uploading images, organizing them into montages, and customizing their appearance. The agent ensures secure and efficient handling of user requests through features like an origin allowlist and rate limiting.
 
 ## Setup
 
-To set up the montage-agent package, follow these steps:
+To set up the `montage-agent` package, follow these steps:
 
 1. **Install Dependencies**:
 
-   - Run `pnpm install` in the package directory to install all required dependencies.
+   - Navigate to the package directory and run the following command to install all required dependencies:
+     ```bash
+     pnpm install
+     ```
 
 2. **Configure Environment Variables**:
 
-   - Set the following environment variables:
+   - Set the following environment variables in your environment or `.env` file:
      - `PORT`: The port number on which the server will run.
      - `INDEX_CACHE_PATH`: The file path to the image index cache.
      - `ROOT_IMAGE_FOLDER`: The root directory where images are stored.
@@ -60,34 +63,35 @@ For additional setup details, refer to the hand-written README.
 
 ## Key Files
 
-The montage-agent package is organized into several key files, each serving a specific purpose:
+The `montage-agent` package is organized into several key files, each with a specific role in the agent's functionality:
 
-- **Agent Definition**:
+### Agent Definition
 
-  - **[montageManifest.json](./src/agent/montageManifest.json)**: Defines the agent's metadata, including its description, schema, and supported actions.
-  - **[montageActionSchema.ts](./src/agent/montageActionSchema.ts)**: Specifies the schema for the actions, activities, and entities supported by the agent. This file defines the structure and parameters for each action.
+- **[montageManifest.json](./src/agent/montageManifest.json)**: Defines the agent's metadata, including its description, schema, and supported actions.
+- **[montageActionSchema.ts](./src/agent/montageActionSchema.ts)**: Specifies the schema for the actions, activities, and entities supported by the agent. This file defines the structure and parameters for each action.
 
-- **Action Handling**:
+### Action Handling
 
-  - **[montageActionHandler.ts](./src/agent/montageActionHandler.ts)**: Implements the logic for handling montage-related actions, such as creating montages, adding photos, and managing view modes.
+- **[montageActionHandler.ts](./src/agent/montageActionHandler.ts)**: Implements the logic for handling montage-related actions, such as creating montages, adding photos, and managing view modes.
 
-- **Server and Routing**:
+### Server and Routing
 
-  - **[route.ts](./src/route/route.ts)**: Sets up the Express server, handles HTTP requests, and enforces security measures like origin allowlists.
-  - **[originAllowlist.ts](./src/route/originAllowlist.ts)**: Implements an origin allowlist to restrict access to the server, ensuring only authorized requests are processed.
+- **[route.ts](./src/route/route.ts)**: Configures the Express server, handles HTTP requests, and enforces security measures like origin allowlists.
+- **[originAllowlist.ts](./src/route/originAllowlist.ts)**: Implements an origin allowlist to restrict access to the server, ensuring only authorized requests are processed.
 
-- **Web Interface**:
+### Web Interface
 
-  - **[index.html](./src/site/index.html)**: The main HTML file for the web interface.
-  - **[index.ts](./src/site/index.ts)**: The TypeScript file that powers the web interface's functionality.
-  - `styles.css`: Provides styling for the web interface.
+- **[index.html](./src/site/index.html)**: The main HTML file for the web interface.
+- **[index.ts](./src/site/index.ts)**: The TypeScript file that powers the web interface's functionality.
+- `styles.css`: Provides styling for the web interface.
 
-- **Configuration**:
-  - **[tsconfig.json](./src/agent/tsconfig.json)** and **[tsconfig.json](./src/route/tsconfig.json)**: TypeScript configuration files for the agent and route components.
+### Configuration
+
+- **[tsconfig.json](./src/agent/tsconfig.json)** and **[tsconfig.json](./src/route/tsconfig.json)**: TypeScript configuration files for the agent and route components.
 
 ## How to extend
 
-To extend the montage-agent package, follow these steps:
+To extend the `montage-agent` package, follow these steps:
 
 1. **Define New Actions**:
 
@@ -113,7 +117,7 @@ To extend the montage-agent package, follow these steps:
 6. **Run and Verify**:
    - Start the server and test the new actions in a local environment. Use the web interface or API calls to verify the behavior of the new features.
 
-By following these steps, you can enhance the montage-agent package to meet additional requirements or support new use cases.
+By following these steps, you can enhance the `montage-agent` package to meet additional requirements or support new use cases.
 
 ## Reference
 
@@ -160,6 +164,6 @@ External: `body-parser`, `d3`, `d3-cloud`, `debug`, `express`, `express-rate-lim
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter montage-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-11T08:34:41.338Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter montage-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

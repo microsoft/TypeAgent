@@ -12,29 +12,29 @@
 
 ## Overview
 
-The `chat-agent` package is a TypeAgent application agent designed to handle conversational interactions. It serves as a sample implementation for building a typed chat agent that leverages structured prompting and large language models (LLMs). The agent uses a schema-driven approach to generate structured responses and can perform external lookups to provide additional information, such as web search results.
+The `chat-agent` package is a TypeAgent application agent designed to handle conversational interactions. It serves as a sample implementation for building a typed chat agent that leverages structured prompting and large language models (LLMs). The agent uses a schema-driven approach to generate structured responses and can perform external lookups, such as web searches, to provide additional information when needed.
 
-This package is part of the TypeAgent monorepo and integrates with other agents and utilities to deliver a cohesive conversational experience.
+This package is part of the TypeAgent monorepo and integrates with other agents and utilities to deliver a cohesive conversational experience. It is often used alongside other agents like the `default-agent-provider`, `greeting-agent`, and `settings-agent`.
 
 ## What it does
 
-The `chat-agent` facilitates natural language interactions by using structured schemas and LLMs. It supports two primary actions:
+The `chat-agent` provides a framework for handling natural language interactions using structured schemas and LLMs. It supports the following key actions:
 
-- **`generateResponse`**: This action generates a response based on the provided context or known information. It is used for general conversation, answering questions, and providing explanations.
-- **`showImageFile`**: This action displays images based on file entities provided in the request. It retrieves and rehydrates image files from storage and includes them in the response.
+- **`generateResponse`**: Generates a response based on the provided context or known information. This action is used for general conversation, answering questions, and providing explanations. It can also perform lookups using external data sources, such as Bing, to fetch supplementary information when required.
+- **`showImageFile`**: Displays images based on file entities provided in the request. This action retrieves and rehydrates image files from storage and includes them in the response.
 
-The agent is designed to handle scenarios where additional information is required to respond to user queries. For example, it can perform lookups using external data sources like Bing to fetch supplementary information. If no external data source is configured or available, the agent will return a "No Information available" response.
+The agent is designed to handle scenarios where additional information is required to respond to user queries. If no external data source is configured or available, the agent will return a "No Information available" response.
 
-The `chat-agent` is often used in conjunction with other agents, such as the `default-agent-provider`, `greeting-agent`, and `settings-agent`, to create a more comprehensive conversational system.
+The `chat-agent` demonstrates how to use schemas to enforce structured responses from LLMs, ensuring that the output adheres to predefined formats. This approach enables the agent to handle complex interactions, such as performing lookups for additional information, and ensures that responses are consistent and type-safe.
 
 ## Setup
 
 To enable the full functionality of the `chat-agent`, including its ability to perform external lookups, you need to configure a Bing API key. Follow these steps:
 
 1. Obtain a Bing API key from the Bing developer portal.
-2. Add the key to the appropriate configuration file:
+2. Add the key to one of the following configuration files:
    - If using `config.local.yaml`, add the key under the `bing.apiKey` field.
-   - Alternatively, you can add the key to a `.env` file with the key name `BING_API_KEY`.
+   - Alternatively, add the key to a `.env` file with the key name `BING_API_KEY`.
 
 If the Bing API key is not provided, the agent will still function but will return a "No Information available" response when a lookup is required.
 
@@ -42,14 +42,14 @@ If the Bing API key is not provided, the agent will still function but will retu
 
 The `chat-agent` package is organized into several key files that define its structure and functionality:
 
-- **[chatManifest.json](./src/chatManifest.json)**: This file serves as the agent's manifest. It defines the agent's description, the schema it uses, and the actions it supports. It also specifies whether actions are cached or streamed.
+- **[chatManifest.json](./src/chatManifest.json)**: This file serves as the agent's manifest. It provides metadata about the agent, including its description, the schema it uses, and the actions it supports. It also specifies whether actions are cached or streamed.
 
 - **[chatResponseActionSchema.ts](./src/chatResponseActionSchema.ts)**: This file defines the structured schema for the agent's actions. It includes type definitions for actions like `GenerateResponseAction` and `ShowImageFileAction`, ensuring that all interactions are type-safe and consistent.
 
-- **[chatResponseHandler.ts](./src/chatResponseHandler.ts)**: This file contains the core logic for handling actions and generating responses. It includes:
+- **[chatResponseHandler.ts](./src/chatResponseHandler.ts)**: This file contains the core logic for handling actions and generating responses. Key functions include:
 
-  - The `executeChatResponseAction` function, which processes actions like `generateResponse` and `showImageFile`.
-  - The `rehydrateImages` function, which retrieves and formats image files for the `showImageFile` action.
+  - `executeChatResponseAction`: Processes actions such as `generateResponse` and `showImageFile`.
+  - `rehydrateImages`: Retrieves and formats image files for the `showImageFile` action.
   - Integration with external data sources, such as Bing, for performing lookups.
 
 - **[index.ts](./src/index.ts)**: The main entry point for the package. It exports the agent instantiation function and key action execution functions, making them accessible to other parts of the system.
@@ -124,6 +124,6 @@ External: `typechat`
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-11T08:34:41.338Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

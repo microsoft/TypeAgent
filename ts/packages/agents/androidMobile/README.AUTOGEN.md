@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=96f164dd5f96bf4b5271ffc813badf2814b48471e0eb6b68959302ae7fa00854 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6915d257cecea0f43f7a390062fe4aeb623de2d2ae5f8085d8ab825f07f9fd79 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # android-mobile-agent — AI-generated documentation
@@ -12,41 +12,50 @@
 
 ## Overview
 
-The `android-mobile-agent` package is an Android mobile dispatcher agent designed to perform actions on an Android device. It is part of the TypeAgent monorepo and enables interaction with various mobile device functionalities, such as sending SMS messages, making phone calls, setting alarms, searching for nearby locations, and automating user interface tasks.
+The `android-mobile-agent` is an Android mobile dispatcher agent within the TypeAgent monorepo. It facilitates interaction with Android devices by enabling the execution of various mobile-specific actions, such as sending SMS messages, making phone calls, setting alarms, performing location-based searches, and automating user interface tasks.
+
+This agent is designed to integrate with the broader TypeAgent ecosystem, allowing developers to incorporate Android device operations into their workflows and applications.
 
 ## What it does
 
-This agent provides a set of actions that allow it to interact with and control an Android mobile device. The supported actions include:
+The `android-mobile-agent` provides a set of actions that allow it to control and interact with Android devices. These actions include:
 
-- **`sendSMS`**: Sends an SMS message to a specified phone number. This action requires the phone number and the message content as parameters.
-- **`callPhoneNumber`**: Initiates a phone call to a specified phone number. The phone number must be provided as a parameter.
-- **`setAlarm`**: Sets an alarm on the local mobile device. The time for the alarm must be specified in the format `YYYY-MM-DDTHH:mm:ss`.
-- **`searchNearby`**: Opens the maps application on the device and performs a location-based search using a specified search term.
-- **`automateUI`**: Automates user interface tasks on the phone, allowing the agent to perform actions on behalf of the user.
+- **`sendSMS`**: Sends an SMS message to a specified phone number. This action requires the `phoneNumber` and `message` parameters, along with the `originalRequest` for context.
+- **`callPhoneNumber`**: Initiates a phone call to a specified phone number. The `phoneNumber` parameter is required, along with the `originalRequest`.
+- **`setAlarm`**: Sets an alarm on the local Android device. The `time` parameter specifies the alarm time in the format `YYYY-MM-DDTHH:mm:ss`.
+- **`searchNearby`**: Opens the device's maps application and performs a search for a specified `searchTerm` in the vicinity.
+- **`automateUI`**: Automates user interface tasks on the Android device, enabling the agent to perform actions on behalf of the user. This action requires the `originalRequest` parameter.
 
-These actions enable the agent to integrate mobile device operations into broader workflows, making it a useful tool for automating tasks on Android devices.
+These actions are defined in the agent's schema and implemented in its action handler. They enable the agent to perform a variety of tasks, making it a useful tool for automating and managing Android device operations.
 
 ## Setup
 
-The `android-mobile-agent` package does not require any external API keys, OAuth configurations, or additional setup steps. To get started, simply install the package dependencies by running:
+The `android-mobile-agent` does not require any additional setup, such as API keys or external service configurations. To use this agent, follow these steps:
 
-```bash
-pnpm install
-```
+1. Ensure you have the necessary dependencies installed by running:
+   ```bash
+   pnpm install
+   ```
+2. Install the agent from the workspace catalog source:
+   ```text
+   @package source list
+   @package install androidMobile
+   ```
+   The catalog source entry for this agent is located in [../agents.catalog.json](../agents.catalog.json).
 
-For further details on the package's usage, refer to the hand-written README.
+For more details, refer to the hand-written README.
 
 ## Key Files
 
-The package is organized into several key files that define its functionality and structure:
+The `android-mobile-agent` package is structured around the following key files:
 
-- **[androidMobileManifest.json](./src/androidMobileManifest.json)**: This file contains metadata about the agent, including its description, emoji representation, and the schema file it uses. It serves as the entry point for the agent's configuration.
-- **[androidMobileSchema.ts](./src/androidMobileSchema.ts)**: This file defines the schema for the agent's actions, including the types and parameters required for each action. It is the source of truth for the agent's capabilities.
+- **[androidMobileManifest.json](./src/androidMobileManifest.json)**: This file contains metadata about the agent, including its description, emoji representation, and the schema file it uses. It serves as the configuration entry point for the agent.
+- **[androidMobileSchema.ts](./src/androidMobileSchema.ts)**: This file defines the schema for the agent's actions, specifying the action types and their required parameters. It is the authoritative source for the agent's capabilities.
 - **[androidMobileActionHandler.ts](./src/androidMobileActionHandler.ts)**: This file implements the logic for handling the actions defined in the schema. It includes functions for initializing the agent context, executing actions, and validating wildcard matches.
 
 ### File Responsibilities
 
-1. **Manifest**: The [androidMobileManifest.json](./src/androidMobileManifest.json) file specifies the agent's metadata and links to the schema file. It also includes a description of the agent's purpose.
+1. **Manifest**: The [androidMobileManifest.json](./src/androidMobileManifest.json) file defines the agent's metadata and links to the schema file. It describes the agent's purpose and capabilities.
 2. **Schema**: The [androidMobileSchema.ts](./src/androidMobileSchema.ts) file defines the structure of the actions, including their names and required parameters. For example:
    - `sendSMS` requires `originalRequest`, `phoneNumber`, and `message`.
    - `setAlarm` requires `originalRequest` and `time`.
@@ -54,13 +63,12 @@ The package is organized into several key files that define its functionality an
 
 ## How to extend
 
-To add new functionality to the `android-mobile-agent`, follow these steps:
+To add new actions or modify existing functionality in the `android-mobile-agent`, follow these steps:
 
 1. **Define a new action in the schema**:
 
    - Open [androidMobileSchema.ts](./src/androidMobileSchema.ts).
    - Add a new action type with its name and required parameters. For example:
-
      ```ts
      export type NewAction = {
        actionName: "newAction";
@@ -70,14 +78,12 @@ To add new functionality to the `android-mobile-agent`, follow these steps:
        };
      };
      ```
-
    - Update the `AndroidMobileAction` union type to include the new action.
 
 2. **Implement the action handler**:
 
    - Open [androidMobileActionHandler.ts](./src/androidMobileActionHandler.ts).
    - Add a case for the new action in the `handlePhotoAction` function. For example:
-
      ```ts
      async function handlePhotoAction(
        action: AndroidMobileAction,
@@ -96,10 +102,14 @@ To add new functionality to the `android-mobile-agent`, follow these steps:
      }
      ```
 
-3. **Test the new action**:
+3. **Update the manifest**:
+
+   - Add the new action to the [androidMobileManifest.json](./src/androidMobileManifest.json) file under the `schema` section, ensuring it is properly documented.
+
+4. **Test the new action**:
    - Write unit tests to verify the behavior of the new action. Use the existing test patterns as a guide to ensure the action is implemented correctly and integrates well with the rest of the agent.
 
-By following these steps, you can extend the `android-mobile-agent` to support additional actions and enhance its functionality.
+By following these steps, you can extend the `android-mobile-agent` to support additional actions or modify its existing functionality to meet your requirements.
 
 ## Reference
 
@@ -117,10 +127,6 @@ Workspace:
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 
 External: _None at runtime._
-
-### Used by
-
-- [default-agent-provider](../../../packages/defaultAgentProvider/README.md)
 
 ### Files of interest
 
@@ -146,6 +152,6 @@ _5 actions implemented by this agent, parsed deterministically from `./src/andro
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter android-mobile-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-11T08:34:41.338Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter android-mobile-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

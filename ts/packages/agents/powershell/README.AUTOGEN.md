@@ -12,38 +12,39 @@
 
 ## Overview
 
-The `powershell-typeagent` package is a TypeAgent application agent that facilitates the creation, management, and execution of PowerShell workflows. It provides a collection of reusable PowerShell scripts derived from reasoning traces, enabling automation of tasks such as file management, process control, system monitoring, and data manipulation. This package integrates with other TypeAgent components to support a wide range of actions and workflows.
+The `powershell-typeagent` package is a TypeAgent application agent designed to manage and execute PowerShell workflows. It provides a set of reusable PowerShell scripts derived from reasoning traces, enabling automation of tasks such as file management, process control, system monitoring, and data manipulation. This package integrates with other TypeAgent components to support a wide range of actions and workflows, making it a versatile tool for system-level operations.
 
 ## What it does
 
-The `powershell-typeagent` package provides a comprehensive set of actions for interacting with PowerShell scripts and managing system-level operations. These actions are organized into several functional categories:
+The `powershell-typeagent` package organizes its functionality into several key categories, each represented by a set of actions:
 
-- **PowerShell Workflow Management**: Includes actions such as `listPowerShellFlows`, `deletePowerShellFlow`, and `importPowerShellFlow` to manage PowerShell workflows. These actions allow users to list available workflows, delete existing ones, and import new PowerShell scripts for execution.
-- **File System Operations**: Actions like `listFiles`, `readFile`, `writeFile`, and `deleteFile` enable users to interact with the file system, including reading, writing, and managing files.
+- **PowerShell Workflow Management**: Actions like `listPowerShellFlows`, `deletePowerShellFlow`, and `importPowerShellFlow` allow users to manage PowerShell workflows. These actions enable listing available workflows, deleting existing ones, and importing new PowerShell scripts for execution.
 
-- **Process Management**: Actions such as `listProcesses`, `startProcess`, and `stopProcess` provide the ability to manage system processes, including starting and stopping processes.
+- **File System Operations**: Actions such as `listFiles`, `readFile`, `writeFile`, and `deleteFile` provide capabilities for interacting with the file system, including reading, writing, and managing files.
 
-- **System Information Retrieval**: Actions like `getDiskUsage`, `getUptime`, and `getEnvironmentVariables` allow users to query and retrieve system-level information.
+- **Process Management**: Actions like `listProcesses`, `startProcess`, and `stopProcess` enable users to manage system processes, including starting and stopping them.
 
-- **Data Manipulation**: Includes actions such as `readJson`, `writeJson`, `readCsv`, `writeCsv`, and `filterCsv` for working with structured data formats like JSON and CSV.
+- **System Information Retrieval**: Actions such as `getDiskUsage`, `getUptime`, and `getEnvironmentVariables` allow users to query and retrieve system-level information.
 
-- **Archive Management**: Actions such as `compress` and `expand` allow users to create and extract compressed files.
+- **Data Manipulation**: Actions like `readJson`, `writeJson`, `readCsv`, `writeCsv`, and `filterCsv` support working with structured data formats such as JSON and CSV.
 
-The package also includes features for analyzing PowerShell scripts using the Claude AI model and executing scripts in a controlled, sandboxed environment to ensure security and proper resource management.
+- **Archive Management**: Actions such as `compress` and `expand` enable users to create and extract compressed files.
+
+Additionally, the package includes features for analyzing PowerShell scripts using the Claude AI model and executing scripts in a controlled, sandboxed environment. This ensures secure and efficient script execution while providing insights into script optimization.
 
 ## Setup
 
 To use the `powershell-typeagent` package, you need to configure the following environment variable:
 
-- `TYPEAGENT_NO_SAMPLES`: This variable controls whether sample data is included in the agent's responses. Set it to `true` to disable sample data or `false` to enable it.
+- `TYPEAGENT_NO_SAMPLES`: This variable determines whether sample data is included in the agent's responses. Set it to `true` to disable sample data or `false` to enable it.
 
-Ensure that this environment variable is set in your environment before running the agent. If additional setup steps are required, refer to the hand-written README for further details.
+Ensure this environment variable is set in your environment before running the agent. If additional setup steps are required, refer to the hand-written README for further details.
 
 ## Key Files
 
-The `powershell-typeagent` package is structured into several key files, each serving a specific purpose:
+The `powershell-typeagent` package is organized into several key files and directories, each with specific responsibilities:
 
-- **[manifest.json](./src/manifest.json)**: Defines the agent's capabilities, including the core actions for managing PowerShell workflows and sub-action manifests for file operations, process management, and system information.
+- **[manifest.json](./src/manifest.json)**: Defines the agent's capabilities, including core actions for managing PowerShell workflows and sub-action manifests for file operations, process management, and system information.
 
 - **[powershellSchema.agr](./src/powershellSchema.agr)**: Contains the grammar rules for PowerShell actions, specifying how different actions are parsed and executed.
 
@@ -59,7 +60,7 @@ The `powershell-typeagent` package is structured into several key files, each se
 
 ## How to extend
 
-To add new functionality to the `powershell-typeagent` package, follow these steps:
+To extend the `powershell-typeagent` package with new functionality, follow these steps:
 
 1. **Define New Actions**:
 
@@ -83,7 +84,7 @@ To add new functionality to the `powershell-typeagent` package, follow these ste
 5. **Integrate with Other Components**:
    - If the new actions interact with other TypeAgent components, ensure proper integration and compatibility. Update any necessary dependencies or configurations.
 
-By following these steps, you can extend the `powershell-typeagent` package to support additional PowerShell actions and workflows. For further guidance, refer to the existing codebase and the hand-written README.
+By following these steps, you can enhance the `powershell-typeagent` package to support additional PowerShell actions and workflows. For further guidance, refer to the existing codebase and the hand-written README.
 
 ## Reference
 
@@ -137,6 +138,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter powershell-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-11T08:34:41.338Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter powershell-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

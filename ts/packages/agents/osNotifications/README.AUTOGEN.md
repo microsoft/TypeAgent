@@ -12,30 +12,32 @@
 
 ## Overview
 
-The `os-notifications-agent` package integrates OS-level notifications from Windows Action Center and Linux freedesktop into the TypeAgent chat system. These notifications are displayed as ephemeral toasts or inline messages, providing users with real-time updates from their operating system. Note that macOS is not supported. The agent is disabled by default and must be explicitly enabled.
+The `os-notifications-agent` package integrates operating system notifications from Windows Action Center and Linux freedesktop into the TypeAgent chat system. These notifications are displayed as ephemeral toasts or inline messages, providing real-time updates to users. Notifications are not persisted in the system's `displayLog.json` and are removed when dismissed at the OS level. Note that macOS is not supported.
+
+The agent is disabled by default and must be explicitly enabled using the `@config agent enable osNotifications` command.
 
 ## What it does
 
-This agent captures notifications from the operating system and forwards them to connected TypeAgent chat clients. Notifications are displayed as ephemeral messages, meaning they are not persisted in the `displayLog.json` and are removed when dismissed at the OS level. The agent supports two primary actions:
+The `os-notifications-agent` captures and processes OS-level notifications, forwarding them to connected TypeAgent chat clients. Notifications are displayed as ephemeral messages, which are temporary and disappear when dismissed at the OS level. The agent supports the following key actions:
 
-- **`syncOsNotifications`**: Re-emits currently-present notifications through the agent pipeline. This action is Windows-only, as Linux's freedesktop specification does not expose existing notifications.
-- **`testOsNotification`**: Injects a synthetic notification into the pipeline for testing purposes. This allows developers to verify the agent's functionality without relying on real OS notifications.
+- **`syncOsNotifications`**: Re-emits currently-present notifications through the agent pipeline. This action is only supported on Windows, as Linux's freedesktop specification does not provide access to existing notifications. If the required Windows helper executable is not available, the agent will prompt the user to build it.
+- **`testOsNotification`**: Injects a synthetic notification into the pipeline for testing purposes. This action is useful for verifying the agent's functionality without relying on real OS notifications.
 
-The agent applies several filters and controls to notifications, including:
+The agent applies several controls and filters to notifications:
 
-- **Application filtering**: Notifications can be allowed or blocked based on their originating application.
+- **Application filtering**: Notifications can be filtered using an allowlist or blocklist of application names.
 - **Rate limiting**: A rolling 60-second window limits the number of notifications to prevent spam.
 - **Timestamp gating**: Only new notifications (those received after the agent is enabled) are forwarded.
 - **Dismiss tracking**: Notifications are removed from the chat interface when dismissed at the OS level.
 
-Notifications are broadcast to all connected clients by default, but future updates may allow routing to specific conversations.
+Notifications are broadcast to all connected clients by default. Future updates may include the ability to route notifications to specific conversations.
 
 ## Setup
 
-To use the `os-notifications-agent`, follow these steps:
+To set up and use the `os-notifications-agent`, follow these steps:
 
 1. **Enable the agent**:
-   Run the following command in the TypeAgent chat interface:
+   Run the following command in the TypeAgent chat interface to enable the agent:
 
    ```shell
    @config agent enable osNotifications
@@ -49,18 +51,18 @@ To use the `os-notifications-agent`, follow these steps:
 3. **Linux-specific setup**:
    - No additional setup is required on Linux systems. The agent uses the D-Bus interface to monitor notifications.
 
-Refer to the hand-written README for detailed instructions on building and registering the Windows helper executable.
+For detailed instructions on building and registering the Windows helper executable, refer to the hand-written README.
 
 ## Key Files
 
-The package is organized into several key components:
+The `os-notifications-agent` package is organized into several key files:
 
-- **[osNotificationsManifest.json](./src/osNotificationsManifest.json)**: Defines the agent's metadata, including its schema and default settings.
-- **[osNotificationsSchema.ts](./src/osNotificationsSchema.ts)**: Specifies the structure of the actions supported by the agent, such as `syncOsNotifications` and `testOsNotification`.
-- **[osNotificationsSchema.agr](./src/osNotificationsSchema.agr)**: Contains the natural language grammar for triggering the agent's actions.
+- **[osNotificationsManifest.json](./src/osNotificationsManifest.json)**: Contains metadata about the agent, including its schema and default settings.
+- **[osNotificationsSchema.ts](./src/osNotificationsSchema.ts)**: Defines the structure of the actions supported by the agent, such as `syncOsNotifications` and `testOsNotification`.
+- **[osNotificationsSchema.agr](./src/osNotificationsSchema.agr)**: Specifies the natural language grammar for triggering the agent's actions.
 - **[osNotificationsActionHandler.ts](./src/osNotificationsActionHandler.ts)**: Implements the logic for handling the agent's actions, including notification filtering, rate limiting, and dismiss tracking.
 - **[osNotificationsConfig.ts](./src/osNotificationsConfig.ts)**: Provides user-configurable settings, such as notification display mode, routing, and filtering options.
-- **[watcherProtocol.ts](./src/watcherProtocol.ts)**: Defines the shared types and interfaces for communication between the platform-specific watchers and the agent.
+- **[watcherProtocol.ts](./src/watcherProtocol.ts)**: Defines shared types and interfaces for communication between the platform-specific watchers and the agent.
 - **[watchers/index.ts](./src/watchers/index.ts)**: Serves as the entry point for initializing the appropriate platform-specific watcher.
 - **Platform-specific watchers**:
   - **Windows**: [windowsWatcher.ts](./src/watchers/windowsWatcher.ts) — Implements the Windows notification watcher using a .NET helper executable.
@@ -68,7 +70,7 @@ The package is organized into several key components:
 
 ## How to extend
 
-To extend the functionality of the `os-notifications-agent`, follow these steps:
+To extend the `os-notifications-agent`, follow these steps:
 
 1. **Add a new action**:
 
@@ -133,6 +135,6 @@ External: `dbus-next`, `debug`
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter os-notifications-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-11T08:34:41.338Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter os-notifications-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

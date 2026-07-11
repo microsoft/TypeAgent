@@ -12,43 +12,109 @@
 
 ## Overview
 
-The `test-agent` package is a dispatch agent designed for testing purposes within the TypeAgent framework. It provides functionality to execute specific actions related to mathematical operations and random number generation.
+The `test-agent` package is a dispatch agent within the TypeAgent framework, designed for testing purposes. It provides a simple interface for executing mathematical operations and generating random numbers, making it a useful tool for testing and demonstration scenarios.
 
 ## What it does
 
-The `test-agent` package supports the following actions:
+The `test-agent` package supports two primary actions:
 
-- `add`: Performs addition of two numbers.
+- `add`: Adds two numbers and returns the result.
 - `random`: Generates a random number.
 
-These actions are defined in the [schema.ts](./src/schema.ts) file and handled in the [handler.ts](./src/handler.ts) file. The agent can process commands and return results based on the actions executed. The agent's metadata, including its emoji representation and description, is defined in the [manifest.json](./src/manifest.json) file.
+These actions are defined in the [schema.ts](./src/schema.ts) file and implemented in the [handler.ts](./src/handler.ts) file. The agent processes commands and executes the corresponding actions, returning results in a structured format.
+
+The agent's metadata, including its emoji representation (`➕`) and description, is defined in the [manifest.json](./src/manifest.json) file. This metadata provides context about the agent's purpose and capabilities.
 
 ## Setup
 
-To set up the `test-agent` package, follow these steps:
+Setting up the `test-agent` package is straightforward:
 
-1. Ensure you have the necessary dependencies installed by running `pnpm install`.
-2. No additional environment variables or external accounts are required for this package.
+1. Install the required dependencies by running `pnpm install` in the workspace root.
+2. No additional environment variables, API keys, or external accounts are required for this package.
+
+Once the dependencies are installed, the agent is ready to use.
 
 ## Key Files
 
-The `test-agent` package consists of the following key files:
+The `test-agent` package is organized into a few key files that define its functionality:
 
-- [manifest.json](./src/manifest.json): Defines the agent's metadata, including its emoji representation, description, and schema details.
-- [schema.ts](./src/schema.ts): Specifies the types for the actions supported by the agent.
-- [handler.ts](./src/handler.ts): Contains the logic for handling the actions defined in the schema. It includes the `RequestCommandHandler` class for processing commands and the `executeAction` function for executing actions.
+- [manifest.json](./src/manifest.json): Contains metadata about the agent, including its emoji, description, and schema details. This file is essential for registering the agent within the TypeAgent framework.
+- [schema.ts](./src/schema.ts): Defines the types for the actions supported by the agent. It includes the `TestActions` type, which enumerates the `add` and `random` actions.
+- [handler.ts](./src/handler.ts): Implements the logic for handling actions. This file includes:
+  - The `RequestCommandHandler` class, which defines a command interface for requesting tests.
+  - The `executeAction` function, which processes actions and executes the corresponding logic.
+  - The `handlers` object, which maps commands to their respective handlers.
+- [tsconfig.json](./src/tsconfig.json): Configures TypeScript compilation settings for the package.
 
-The agent is instantiated using the `instantiate` function, which sets up the command interface and action execution logic. The `handlers` object in the [handler.ts](./src/handler.ts) file defines the available commands and their handlers.
+These files collectively define the agent's behavior, from its metadata to its action handling logic.
 
 ## How to extend
 
 To extend the `test-agent` package, follow these steps:
 
-1. Open the [schema.ts](./src/schema.ts) file to define new action types or modify existing ones.
-2. Implement the logic for the new actions in the [handler.ts](./src/handler.ts) file. Add new cases to the `executeAction` function to handle the new actions.
-3. If you need to add new commands, update the `handlers` object in the [handler.ts](./src/handler.ts) file with new command handlers.
+1. **Define new actions**:
 
-After making changes, run tests to ensure the new functionality works as expected. You can add tests in a new file or update existing ones to cover the new actions and commands.
+   - Open the [schema.ts](./src/schema.ts) file.
+   - Add new action types to the `TestActions` union type. For example, to add a subtraction action, define a new type:
+     ```ts
+     type SubtractAction = {
+       actionName: "subtract";
+       parameters: {
+         a: number;
+         b: number;
+       };
+     };
+     ```
+     Then, include it in the `TestActions` union:
+     ```ts
+     export type TestActions = AddAction | RandomNumberAction | SubtractAction;
+     ```
+
+2. **Implement action logic**:
+
+   - Open the [handler.ts](./src/handler.ts) file.
+   - Add a new case to the `executeAction` function to handle the new action:
+     ```ts
+     case "subtract":
+         const { a, b } = action.parameters;
+         return createActionResult(`The difference between ${a} and ${b} is ${a - b}`);
+     ```
+
+3. **Add new commands (if needed)**:
+
+   - If the new action requires a command interface, update the `handlers` object in [handler.ts](./src/handler.ts) to include a new command handler. For example:
+
+     ```ts
+     class SubtractCommandHandler implements CommandHandler {
+       public readonly description = "Subtract two numbers";
+       public readonly parameters = {
+         args: {
+           a: { description: "First number" },
+           b: { description: "Second number" },
+         },
+       } as const;
+       public async run(
+         context: ActionContext<void>,
+         params: ParsedCommandParams<typeof this.parameters>,
+       ) {
+         const result = params.args.a - params.args.b;
+         context.actionIO.setDisplay(`The result is ${result}`);
+       }
+     }
+
+     const handlers = {
+       description: "Test App Agent Commands",
+       commands: {
+         request: new RequestCommandHandler(),
+         subtract: new SubtractCommandHandler(),
+       },
+     };
+     ```
+
+4. **Test your changes**:
+   - Add or update test cases to verify the new functionality. Ensure that the new actions and commands work as expected.
+
+By following these steps, you can extend the `test-agent` package to support additional actions and commands, tailoring it to your specific testing needs.
 
 ## Reference
 
@@ -57,7 +123,7 @@ After making changes, run tests to ensure the new functionality works as expecte
 ### Entry points
 
 - `./agent/manifest` → [./src/manifest.json](./src/manifest.json)
-- `./agent/handlers` → [./dist/handler.js](./dist/handler.js)
+- `./agent/handlers` → `./dist/handler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -77,6 +143,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter test-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-11T08:34:41.338Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter test-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

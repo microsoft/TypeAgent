@@ -12,19 +12,19 @@
 
 ## Overview
 
-The `visualstudio-agent` package integrates TypeAgent with Visual Studio using the EnvDTE automation API. It acts as the Node-side agent, enabling communication between the TypeAgent system and Visual Studio for tasks such as managing solutions, debugging, and performing editor operations. The corresponding host-side Visual Studio extension (VSIX) resides in the `host/` directory.
+The `visualstudio-agent` package integrates TypeAgent with Visual Studio through the EnvDTE automation API. It serves as the Node-side agent, enabling communication between the TypeAgent system and Visual Studio for tasks such as debugging, file operations, and solution management. The corresponding Visual Studio extension (VSIX) resides in the `host/` directory and acts as the host-side counterpart.
 
 ## What it does
 
-This package facilitates a wide range of actions within Visual Studio, grouped into the following categories:
+This package provides a bridge between TypeAgent and Visual Studio, enabling a variety of actions grouped into the following categories:
 
-- **breakpointsManagement**: Actions like `addBreakpoint` and `removeBreakpoint` allow for managing breakpoints in the Visual Studio debugger.
-- **debuggingControl**: Actions such as `break`, `go`, `stepInto`, `stepOut`, `stepOver`, `stop`, and `debug` provide basic debugging controls.
-- **fileOperations**: Includes actions like `openFile`, `closeAll`, and `saveAll` for managing files in the editor.
-- **buildAndRun**: Actions like `build`, `clean`, and `run` enable solution-wide build and execution operations.
-- **searchAndNavigation**: Actions such as `findInFiles`, `findText`, and `gotoLine` allow for searching and navigating through code.
-- **commandExecution**: The `executeCommand` action enables the execution of Visual Studio commands via the EnvDTE API.
-- **editActions**: Includes `redo` and `undo` for basic editing operations.
+- **breakpointsManagement**: Includes actions like `addBreakpoint` and `removeBreakpoint` for managing breakpoints in the Visual Studio debugger.
+- **debuggingControl**: Offers basic debugging operations such as `break`, `go`, `stepInto`, `stepOut`, `stepOver`, `stop`, and `debug`.
+- **fileOperations**: Supports actions like `openFile`, `closeAll`, and `saveAll` for managing files in the editor.
+- **buildAndRun**: Enables solution-wide operations such as `build`, `clean`, and `run`.
+- **searchAndNavigation**: Provides actions like `findInFiles`, `findText`, and `gotoLine` for searching and navigating through code.
+- **commandExecution**: Allows execution of Visual Studio commands via the `executeCommand` action.
+- **editActions**: Includes basic editing actions such as `redo` and `undo`.
 
 The agent communicates with the Visual Studio host through two WebSocket channels:
 
@@ -33,22 +33,38 @@ The agent communicates with the Visual Studio host through two WebSocket channel
 
 ## Setup
 
-To set up the `visualstudio-agent`, ensure the following prerequisites are met:
+To set up the `visualstudio-agent`, follow these steps:
 
-1. **Software Requirements**:
+1. **Install Required Software**:
 
-   - Visual Studio 2022 (or later) with the **Visual Studio extension development** workload installed.
-   - Node.js ≥ 20 and pnpm ≥ 10.
+   - Install Visual Studio 2022 (or later) with the **Visual Studio extension development** workload.
+   - Install Node.js (version 20 or later) and pnpm (version 10 or later).
 
-2. **Environment Variables**:
-   - `VISUALSTUDIO_BRIDGE_PORT`: (Optional) Specifies the port for the agent's WebSocket bridge. If not set, an OS-assigned ephemeral port will be used.
-   - `VISUALSTUDIO_BRIDGE_SEND_TIMEOUT_MS`: Configures the timeout for sending messages through the bridge.
+2. **Set Environment Variables**:
 
-For additional details on setting up the VSIX host, refer to the `host/README.md` file.
+   - `VISUALSTUDIO_BRIDGE_PORT` (optional): Specifies the port for the agent's WebSocket bridge. If not set, an OS-assigned ephemeral port will be used.
+   - `VISUALSTUDIO_BRIDGE_SEND_TIMEOUT_MS`: Configures the timeout (in milliseconds) for sending messages through the bridge.
+
+3. **Build the Agent**:
+
+   - Run the following command to build the agent:
+     ```sh
+     pnpm run build visualStudio
+     ```
+
+4. **Set Up the VSIX Host**:
+
+   - The VSIX host has its own build process, which includes building the WebView2 bundle and the MSBuild project. Refer to the `host/README.md` file for detailed instructions.
+
+5. **Run the Agent**:
+   - Start the TypeAgent agent-server.
+   - Ensure `visualstudio-agent` is enabled in your dispatcher configuration.
+   - Launch Visual Studio with the VSIX installed.
+   - Open the **TypeAgent Chat** panel via **View → Other Windows → TypeAgent Chat**.
 
 ## Key Files
 
-The `visualstudio-agent` package is structured as follows:
+The `visualstudio-agent` package is organized as follows:
 
 ```plaintext
 packages/agents/visualStudio/
@@ -144,6 +160,6 @@ _21 actions declared in the schema, none yet implemented in [`./src/visualStudio
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-11T08:34:41.338Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

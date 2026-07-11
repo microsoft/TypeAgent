@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4da45a27a69925f665974a4ddaf85a6604ed9bda10fa9aceea70073b3faaf6cc -->
+<!-- AUTOGEN:DOCS:HASH:sha256=82bd85fd42564ba62e5226e97ae96738eeac731fce659edbec8f5efe80cfb696 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -16,7 +16,7 @@ The TypeAgent Dispatcher is a core component of the TypeAgent repository, design
 
 ## What it does
 
-The Dispatcher acts as the central hub for interpreting and executing user requests. It uses large language models (LLMs) to translate natural language inputs into structured actions defined by application agent schemas. It also manages agent interactions, dynamically switching between them to handle diverse tasks.
+The Dispatcher serves as the central hub for interpreting and executing user requests. It leverages large language models (LLMs) to translate natural language inputs into structured actions defined by application agent schemas. It also manages agent interactions, dynamically switching between them to handle diverse tasks.
 
 ### Natural Language Requests
 
@@ -209,7 +209,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-r
 - [./src/context/dispatcher/schema/dispatcherActionSchema.ts](./src/context/dispatcher/schema/dispatcherActionSchema.ts)
 - [./src/context/dispatcher/schema/lookupActionSchema.ts](./src/context/dispatcher/schema/lookupActionSchema.ts)
 - [./src/context/dispatcher/schema/reasoningActionSchema.ts](./src/context/dispatcher/schema/reasoningActionSchema.ts)
-- _…and 202 more under `./src/`._
+- _…and 203 more under `./src/`._
 
 ### Environment variables
 
@@ -227,6 +227,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-11T08:34:41.338Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
