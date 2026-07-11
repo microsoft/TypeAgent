@@ -74,6 +74,14 @@ import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
 import { iconX, iconJumpQueue, iconStop } from "./icons.js";
 
 /**
+ * How long the transient "sent" acknowledgement stays on the user bubble
+ * before auto-dismissing. Kept short — it confirms the request left the queue
+ * and is being handled; the agent bubble's "working" rail then conveys
+ * in-progress state. The agent's first response dismisses it even sooner.
+ */
+const SENT_STATUS_TIMEOUT_MS = 1500;
+
+/**
  * Default per-agent emoji map used when a host calls add/replaceAgentMessage
  * without an explicit `sourceIcon`. Sourced from the manifest emojiChar values
  * in ts/packages/agents/* /src/*Manifest.json. Hosts can extend or override
@@ -538,6 +546,20 @@ export class ChatPanel {
      * appears once there's a visible bubble to anchor it to).
      */
     private agentRunningRequestIds = new Set<string>();
+    /**
+     * Per-request one-shot timers that auto-dismiss the transient "sent"
+     * acknowledgement on the user bubble (see setUserBubbleQueueStatus).
+     * Keyed by requestId; cleared when the ack is dismissed, the request
+     * completes, or the session resets.
+     */
+    private sentAckTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    /**
+     * Request ids whose transient "sent" acknowledgement has already been
+     * dismissed — either by its timer or early when the agent's first bubble
+     * materialized. Suppresses re-showing "sent" when the server re-broadcasts
+     * the still-`running` request on subsequent queue snapshots.
+     */
+    private sentAckConsumed = new Set<string>();
     /**
      * The threadId of the most-recent user request. Methods that take an
      * optional requestId/threadId default to this when no explicit id is
@@ -1842,9 +1864,13 @@ export class ChatPanel {
 
     /**
      * Stamp / clear the queue state on the user bubble's status rail. The
-     * rail carries a de-emphasized, state-tinted label ("sent" while the
-     * request is being processed, "queued" while it waits) on the left and
-     * controls on the right.
+     * rail carries a de-emphasized, state-tinted label on the left and
+     * controls on the right: "queued" persists while the request waits behind
+     * others, while "sent" (the `running` state) is a transient
+     * acknowledgement that auto-dismisses after SENT_STATUS_TIMEOUT_MS — or
+     * earlier, when the agent's first bubble materializes. It intentionally
+     * does NOT linger for the whole time the agent works; the agent bubble's
+     * own "working" rail conveys in-progress state.
      *
      * For queued entries, `onCancel` (when provided) renders a Remove (×)
      * button and `onPromote` renders a "run next" jump-the-queue button.
@@ -1868,6 +1894,27 @@ export class ChatPanel {
         // Nothing to do on a clear when no rail exists — avoids creating an
         // empty rail just to remove it.
         if (status === null) {
+            // Terminal/explicit clear — drop any pending "sent" auto-dismiss
+            // timer and the consumed marker so an id reused after @clear
+            // starts clean.
+            this.clearSentAckTimer(requestId);
+            this.sentAckConsumed.delete(requestId);
+            const container = this.userMessageById.get(requestId);
+            container
+                ?.querySelector(
+                    ".chat-message-user > .chat-message-status-rail",
+                )
+                ?.remove();
+            return;
+        }
+
+        // The `running` state renders as a transient "sent" acknowledgement.
+        // Once dismissed (by its timer or early via dismissSentAck when the
+        // agent responds), `sentAckConsumed` suppresses re-showing it: the
+        // server keeps the request `running` — and re-broadcasts it on every
+        // `queueStateChanged` snapshot — for the entire time the agent works,
+        // and those snapshots would otherwise resurrect the "sent" chip.
+        if (status === "running" && this.sentAckConsumed.has(requestId)) {
             const container = this.userMessageById.get(requestId);
             container
                 ?.querySelector(
@@ -1935,7 +1982,75 @@ export class ChatPanel {
                 });
                 controls.appendChild(btn);
             }
+        } else {
+            // running → transient "sent": schedule its auto-dismiss so the
+            // acknowledgement doesn't linger for the whole time the agent
+            // works. dismissSentAck (called by the timer, or earlier by
+            // getOrCreateAgentContainer) handles the removal + consumed mark.
+            this.startSentAckTimer(requestId);
         }
+    }
+
+    /**
+     * Start the one-shot timer that auto-dismisses the transient "sent"
+     * acknowledgement on the user bubble for `requestId`. No-op if a timer is
+     * already pending (so repeated `running` snapshots don't extend the
+     * visible window) or the ack was already consumed.
+     */
+    private startSentAckTimer(requestId: string): void {
+        if (
+            this.sentAckTimers.has(requestId) ||
+            this.sentAckConsumed.has(requestId)
+        ) {
+            return;
+        }
+        const timer = setTimeout(() => {
+            this.sentAckTimers.delete(requestId);
+            this.dismissSentAck(requestId);
+        }, SENT_STATUS_TIMEOUT_MS);
+        this.sentAckTimers.set(requestId, timer);
+    }
+
+    /** Clear any pending "sent" auto-dismiss timer for `requestId`. */
+    private clearSentAckTimer(requestId: string): void {
+        const timer = this.sentAckTimers.get(requestId);
+        if (timer !== undefined) {
+            clearTimeout(timer);
+            this.sentAckTimers.delete(requestId);
+        }
+    }
+
+    /**
+     * Dismiss the transient "sent" acknowledgement on the user bubble for
+     * `requestId` and mark it consumed so later `running` snapshots (which the
+     * server keeps broadcasting while the agent works) don't re-show it.
+     * Called by the auto-dismiss timer and — early, when the agent's first
+     * bubble materializes — by getOrCreateAgentContainer. Only removes the
+     * rail when it is showing the running ("sent") state; a "queued" rail is
+     * left intact. No-op when there's no user bubble for the id. Idempotent.
+     */
+    private dismissSentAck(requestId: string): void {
+        this.clearSentAckTimer(requestId);
+        const container = this.userMessageById.get(requestId);
+        if (container === undefined) {
+            return;
+        }
+        this.sentAckConsumed.add(requestId);
+        const rail = container.querySelector<HTMLElement>(
+            ".chat-message-user > .chat-message-status-rail",
+        );
+        if (rail?.dataset.status === "running") {
+            rail.remove();
+        }
+    }
+
+    /** Clear every pending "sent" timer and the consumed set (session reset). */
+    private clearAllSentAck(): void {
+        for (const timer of this.sentAckTimers.values()) {
+            clearTimeout(timer);
+        }
+        this.sentAckTimers.clear();
+        this.sentAckConsumed.clear();
     }
 
     /**
@@ -2238,6 +2353,8 @@ export class ChatPanel {
         this.threadContainers.delete(requestId);
         this.requestAgentContainers.delete(requestId);
         this.pendingThreadDisplayInfo.delete(requestId);
+        this.clearSentAckTimer(requestId);
+        this.sentAckConsumed.delete(requestId);
         if (this.currentUserThreadId === requestId) {
             this.currentUserThreadId = undefined;
         }
@@ -2309,6 +2426,13 @@ export class ChatPanel {
         // If this request is in-flight, stamp the "working" rail + Stop now
         // that there's a visible bubble to anchor it to.
         this.applyAgentRunning(threadId);
+        // The agent has started responding — dismiss the transient "sent"
+        // acknowledgement on the user bubble early (before its timer) so it
+        // doesn't overlap the agent bubble's "working" rail. Skipped during
+        // history replay, where no live "sent" chips exist.
+        if (!this.suppressFirstMessageTracking) {
+            this.dismissSentAck(threadId);
+        }
         // Capture the elapsed time from request send to first agent
         // bubble for this thread — drives the "First Message"
         // metric line on the agent metrics tooltip.
@@ -2497,6 +2621,7 @@ export class ChatPanel {
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
         this.agentRunningRequestIds.clear();
+        this.clearAllSentAck();
 
         // Suppress first-message timing tracking during replay — those
         // timestamps would reflect the speed of replay, not the original
@@ -2567,6 +2692,7 @@ export class ChatPanel {
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
         this.agentRunningRequestIds.clear();
+        this.clearAllSentAck();
         this.suppressFirstMessageTracking = true;
 
         try {
@@ -2845,6 +2971,7 @@ export class ChatPanel {
         this.requestStartByRequestId.clear();
         this.firstMessageMsByRequestId.clear();
         this.agentRunningRequestIds.clear();
+        this.clearAllSentAck();
         // Reset the up-arrow back stack too — `@clear` resets the chat, which
         // includes the command recall history seeded from prior-session
         // replayed commands. After clearing, recall starts empty until the
@@ -2968,6 +3095,12 @@ export class ChatPanel {
         // The request is done — drop the in-flight marker and remove the
         // "working" rail + Stop from its agent bubble.
         this.clearAgentRunning(threadId);
+        // Drop any pending "sent" auto-dismiss timer / consumed marker — the
+        // transient acknowledgement is moot once the request completes. The
+        // host's queue-chip clear also covers this, but completeRequest is
+        // reached on paths (history replay) that don't clear the chip.
+        this.clearSentAckTimer(threadId);
+        this.sentAckConsumed.delete(threadId);
         const requestContainers =
             this.requestAgentContainers.get(threadId) ?? [];
         const target =
