@@ -19,6 +19,10 @@ import type {
 import type { Dispatcher } from "@typeagent/dispatcher-types";
 import { awaitCommand } from "@typeagent/dispatcher-types";
 import { DisplayAppendMode } from "@typeagent/agent-sdk";
+import {
+    getStructuredFallback,
+    isStructuredContent,
+} from "@typeagent/agent-sdk/helpers/display";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -193,6 +197,10 @@ function createMcpClientIO(
                 }
                 if (typeof msg === "string") {
                     responseCollector.messages.push(stripAnsi(msg));
+                } else if (isStructuredContent(msg)) {
+                    responseCollector.messages.push(
+                        stripAnsi(String(getStructuredFallback(msg, "text"))),
+                    );
                 } else if (typeof msg === "object" && msg && "content" in msg) {
                     responseCollector.messages.push(
                         stripAnsi(String(msg.content)),
@@ -220,6 +228,10 @@ function createMcpClientIO(
                 }
                 if (typeof msg === "string") {
                     responseCollector.messages.push(stripAnsi(msg));
+                } else if (isStructuredContent(msg)) {
+                    responseCollector.messages.push(
+                        stripAnsi(String(getStructuredFallback(msg, "text"))),
+                    );
                 } else if (typeof msg === "object" && msg && "content" in msg) {
                     responseCollector.messages.push(
                         stripAnsi(String(msg.content)),

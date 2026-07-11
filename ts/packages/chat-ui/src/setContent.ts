@@ -9,7 +9,11 @@ import {
     DisplayMessageKind,
     MessageContent,
 } from "@typeagent/agent-sdk";
-import { getContentForType } from "@typeagent/agent-sdk/helpers/display";
+import {
+    getContentForType,
+    getStructuredFallback,
+    isStructuredContent,
+} from "@typeagent/agent-sdk/helpers/display";
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import { PlatformAdapter, ChatSettingsView } from "./platformAdapter.js";
@@ -194,14 +198,21 @@ export function setContent(
         message = content;
         speak = false;
     } else {
-        // Prefer HTML alternates when available
-        const htmlContent = getContentForType(content, "html");
-        if (htmlContent !== undefined && content.type !== "html") {
-            type = "html";
-            message = htmlContent;
+        if (isStructuredContent(content)) {
+            // Use the SDK-derived markdown fallback so an unknown "structured"
+            // type never reaches processContent (which would throw).
+            type = "markdown";
+            message = getStructuredFallback(content, "markdown");
         } else {
-            type = content.type;
-            message = content.content;
+            // Prefer HTML alternates when available
+            const htmlContent = getContentForType(content, "html");
+            if (htmlContent !== undefined && content.type !== "html") {
+                type = "html";
+                message = htmlContent;
+            } else {
+                type = content.type;
+                message = content.content;
+            }
         }
         kind = content.kind;
         speak = content.speak ?? false;

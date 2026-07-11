@@ -4,7 +4,7 @@ Working tracker for the plan in [PLAN.md](./PLAN.md). Update whenever a
 phase item is started, completed, or a follow-up surfaces. Keep entries
 terse — one line per item where possible.
 
-_Last updated: 2026-07-11 — Phase 1 (SDK foundation) implemented._
+_Last updated: 2026-07-11 — Phase 2 (renderer safety net) implemented._
 
 ## Progress by phase
 
@@ -22,11 +22,11 @@ _Last updated: 2026-07-11 — Phase 1 (SDK foundation) implemented._
 
 | Item | Description | Status |
 | ---- | ----------- | ------ |
-| 2a | `chat-ui/setContent.ts` — detect `"structured"`, use fallback (no throw) | todo |
-| 2b | `vscode-chat/displayRender.ts` — fallback | todo |
-| 2c | `cli/enhancedConsole.ts` — fallback | todo |
-| 2d | `commandExecutor/commandServer.ts` — fallback | todo |
-| 2e | `copilot-plugin/message-formatter.ts` — fallback | todo |
+| 2a | `chat-ui/setContent.ts` — detect `"structured"`, use fallback (no throw) | done |
+| 2b | `vscode-chat/displayRender.ts` — fallback | done |
+| 2c | `cli/enhancedConsole.ts` — fallback | done |
+| 2d | `commandExecutor/commandServer.ts` — fallback | done |
+| 2e | `copilot-plugin/message-formatter.ts` — fallback | done |
 
 ### Phase 3 — Rich rendering *(after 1)*
 

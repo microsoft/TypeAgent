@@ -8,7 +8,11 @@ import type {
     MessageContent,
     TypedDisplayContent,
 } from "@typeagent/agent-sdk";
-import { getContentForType } from "@typeagent/agent-sdk/helpers/display";
+import {
+    getContentForType,
+    getStructuredFallback,
+    isStructuredContent,
+} from "@typeagent/agent-sdk/helpers/display";
 import { AnsiUp } from "ansi_up";
 
 const ansiUpTextToHtml = new AnsiUp();
@@ -19,12 +23,21 @@ export function renderDisplayToMarkdown(content: DisplayContent): string {
     if (typeof content === "string")
         return renderMessageContent(content, "text");
     if (Array.isArray(content)) return renderMessageContent(content, "text");
+    if (isStructuredContent(content)) {
+        return applyKind(
+            renderMessageContent(getStructuredFallback(content, "markdown"), "markdown"),
+            content.kind,
+        );
+    }
     return renderTypedContent(content);
 }
 
 export function renderDisplayToText(content: DisplayContent): string {
     if (typeof content === "string") return stripAnsi(content);
     if (Array.isArray(content)) return renderMessageContentAsText(content);
+    if (isStructuredContent(content)) {
+        return renderMessageContentAsText(getStructuredFallback(content, "text"));
+    }
     return renderTypedContentAsText(content);
 }
 

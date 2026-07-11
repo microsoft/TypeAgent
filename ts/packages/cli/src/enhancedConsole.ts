@@ -18,7 +18,11 @@ import {
     DisplayContent,
     MessageContent,
 } from "@typeagent/agent-sdk";
-import { getContentForType } from "@typeagent/agent-sdk/helpers/display";
+import {
+    getContentForType,
+    getStructuredFallback,
+    isStructuredContent,
+} from "@typeagent/agent-sdk/helpers/display";
 import type {
     RequestId,
     ClientIO,
@@ -709,14 +713,20 @@ export function createEnhancedClientIO(
         if (typeof content === "string" || Array.isArray(content)) {
             message = content;
         } else {
-            // CLI prefers text alternates when available
-            const textContent = getContentForType(content, "text");
-            if (textContent !== undefined && content.type !== "text") {
-                message = textContent;
+            if (isStructuredContent(content)) {
+                // CLI gets the text fallback; no interactive table rendering yet.
+                message = getStructuredFallback(content, "text");
                 contentType = "text";
             } else {
-                message = content.content;
-                contentType = content.type || "text";
+                // CLI prefers text alternates when available
+                const textContent = getContentForType(content, "text");
+                if (textContent !== undefined && content.type !== "text") {
+                    message = textContent;
+                    contentType = "text";
+                } else {
+                    message = content.content;
+                    contentType = content.type || "text";
+                }
             }
             switch (content.kind) {
                 case "status":
