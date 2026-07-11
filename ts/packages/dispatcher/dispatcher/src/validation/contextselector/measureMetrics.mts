@@ -472,8 +472,11 @@ function md(): string {
         );
         L.push("");
     }
+    const adversarialWrong = dialogueRows.filter(
+        (r) => r.difficulty === "extra-hard" && r.outcome === "wrong-target",
+    ).length;
     L.push(
-        "**Reading the trend:** the tier gets *safer-but-quieter* as difficulty climbs — perfect on simple/realistic, conservative safe-misses on hard, and only the adversarial tier (built to defeat lexical matching) produces real misroutes. Wrong-target is **0 on simple, realistic, and hard**, and jumps to 13 only under the adversarial attacks (loaded negation, sarcasm, quoted speech), which need a semantic/LLM tier to catch.\n",
+        `**Reading the trend:** the tier gets *safer-but-quieter* as difficulty climbs — perfect on simple/realistic, conservative safe-misses on hard, and only the adversarial tier (built to defeat lexical matching) produces real misroutes. Wrong-target is **0 on simple, realistic, and hard**, and jumps to ${adversarialWrong} only under the adversarial attacks (loaded negation, sarcasm, quoted speech), which need a semantic/LLM tier to catch.\n`,
     );
 
     // ---- Realistic dialogue (normal + hard) — the safety claim ----

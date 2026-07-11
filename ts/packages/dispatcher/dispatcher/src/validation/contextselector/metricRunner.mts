@@ -42,6 +42,11 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
     windowTurns: 20,
 };
 
+// Negation-scope guard (§7): production default is ON (session.ts negationGuard).
+// The benchmark mirrors production; set CS_NEGATION_GUARD=0 to replay the
+// pre-guard baseline for a before/after comparison.
+const NEGATION_GUARD = process.env.CS_NEGATION_GUARD !== "0";
+
 type Decision =
     | { kind: "resolve"; target: string }
     | { kind: "abstain"; reason: string };
@@ -55,6 +60,7 @@ function contextFor(prelude: string[], thresholds: Thresholds): ContextVector {
     const signal = new RingBufferSignalSource(() => ({
         windowTurns: thresholds.windowTurns,
         decay: thresholds.decay,
+        negationGuard: NEGATION_GUARD,
     }));
     for (const turn of prelude) {
         signal.recordRequest(turn);

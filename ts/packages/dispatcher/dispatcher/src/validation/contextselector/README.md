@@ -213,32 +213,88 @@ tier is guarded several ways:
    true — a genuine ≥2-candidate grammar ambiguity. Single-match requests never
    reach it.
 3. **Abstention-biased gates** (`decision.ts`): `minUniqueTokens=2`, `minMass=1.0`,
-   `margin=0.5` catch thin / tie / stale / no-context inputs → abstain. (They do
-   NOT catch loaded negation — negated words clear the gates.)
-4. **Abstain fallback** (`abstainFallback`): on abstain it defers to the
+   `margin=0.5` catch thin / tie / stale / no-context inputs → abstain.
+4. **Negation-scope guard** (`negationGuard`, default on): suppresses content words
+   inside a negation scope so "not the spreadsheet" no longer deposits `spreadsheet`
+   — see Improvements below.
+5. **Abstain fallback** (`abstainFallback`): on abstain it defers to the
    configured strategy (first-match) or, if set to `escalate-to-llm`, hands the
    collision to the LLM. Either way an abstain is never worse than today.
 
 ## Improvements (prioritized)
 
-- **P0 — negation guard (measured).** `"not"`/`"no"` are stopwords
-  (`tokenize.ts:57-58`), dropped before scoring, so the scorer never sees the
-  negation and the negated words fire. A lexical negation-scope guard (suppress
-  content tokens after a negation cue until a clause-reset word) is prototyped in
-  the benchmark: it cuts adversarial **wrong-target 14 → 7** with **0 newly broken**
-  cases. Cheap, deterministic, fits the §12 contract.
+- **P0 — negation guard (SHIPPED, measured).** `"not"`/`"no"` are stopwords
+  (`tokenize.ts`), dropped before scoring, so the pre-guard scorer never saw the
+  negation and the negated words fired. The lexical negation-scope guard
+  (`tokenize.ts` `dropNegatedSpans`, enabled by the conversation signal via
+  `contextSelector.negationGuard`, default on) suppresses content tokens from a
+  negation cue to the next clause boundary / reset connector. Measured on this
+  benchmark (`CS_NEGATION_GUARD=0` replays the pre-guard baseline):
+
+  | adversarial tier      | guard off | guard on  |
+  | --------------------- | --------- | --------- |
+  | wrong-target resolves | 13        | **8**     |
+  | resolution accuracy   | 7.1%      | **20.0%** |
+  | retrieval share       | 32.7%     | **56.6%** |
+  | combined wrong-target | 0         | **0**     |
+
+  Zero safe-tier regressions (simple / no-context / realistic unchanged, hard
+  wrong-target still 0; one hard scenario shifts correct→abstain, a safe miss).
+  Cheap, deterministic, fits the §12 contract.
+
 - **P1 — `escalate-to-llm` on abstain.** The LLM comparison shows the LLM is far
   better on hard/adversarial input; routing abstains to it (instead of
   first-match) captures that value safely.
 - **P1 — quoted-speech suppression.** Discount discriminating tokens inside quotes
-  or after reporting verbs (`said`, `insists`) — would catch the 4 quoted misroutes.
-- **P2 — global (roster-wide) IDF.** disc is candidate-local; a global term-rarity
-  weight would down-weight broad words (`media`, `file`) and cut third-agent
-  distractor spurious resolves.
+  or after reporting verbs (`said`, `insists`) — would catch the quoted misroutes.
+- **P2 — global (roster-wide) IDF.** Tried and **measured net-negative** on this
+  corpus (hard-tier spurious 0 → 2, adversarial wrong-target 8 → 9, accuracy
+  20% → 10%; adversarial spurious barely moved 18 → 17). Root cause: the spurious
+  resolves are driven by _rare_ third-agent distractor tokens, not broad ones, so
+  a broadness weight can't target them and disturbs legitimate resolves. Reverted.
+  The real third-agent fix is current-request token weighting or entity attribution
+  (a larger change), not global IDF.
 - **P3 — sarcasm** can't be caught lexically; keep the tier conservative and let it
   fall through to the LLM.
 - **Rollout:** ship behind the `detect` flag with the existing collision telemetry,
   monitor wrong-resolution rate on real traffic, roll back if it spikes.
+
+## Methodology & relationship to the static-collision benchmark
+
+This benchmark is the **Tier-2 (end-to-end, scorer-level)** half of the collision
+project's two-tier validation standard (design §13.4–13.5):
+
+- **Tier 1 — deterministic unit fixtures (CI-gated):** the jest specs under
+  `test/contextSelector*.spec.ts` (signal, tokenize, scorer, decision, strategy,
+  scenarios) with **Gate A = zero wrong-target** and **Gate B = determinism**. Run
+  by `pnpm run test:local` in CI.
+- **Tier 2 — this offline benchmark:** replays the 250 labeled dialogues through
+  the real signal → strategy → decision pipeline and rolls up the three metrics per
+  difficulty tier. Deterministic, but **run manually** (not CI-gated).
+
+It is a deliberately **different instrument** from the repo's other collision
+benchmark, the **static-collision corpus probe** (`@collision corpus run`,
+`packages/defaultAgentProvider/src/collisions/`), which measures a different stage
+of the funnel. Key differences (see the standalone comparison report for the full
+table + implications):
+
+|                       | static-collision corpus (`@collision corpus`)                   | this contextSelector benchmark                                  |
+| --------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
+| **signal under test** | embedding cosine similarity (the `static`/`llmSelect` ranker)   | lexical TF-IDF over a decayed conversation vector               |
+| **unit**              | one single-turn phrase                                          | a multi-turn dialogue (prelude + collision)                     |
+| **ground truth**      | LLM-authored phrase → its authoring action                      | hand-authored dialogue → labeled resolve/abstain                |
+| **taxonomy**          | CLEAN / TIGHT / MISROUTE (top-1 correctness + margin, `Δ<0.05`) | resolve/abstain × correct / wrong-target / spurious / safe-miss |
+| **determinism**       | non-deterministic (LLM authoring + embedding API)               | fully deterministic (no LLM, no network)                        |
+| **execution**         | operational, manual, read-only session                          | offline script; jest half is CI-gated                           |
+| **baseline**          | 9.8% CLEAN / 46.6% TIGHT / 43.6% MISROUTE (4258 phrases)        | per-tier yield / accuracy / abstention / wrong-target           |
+
+The design intended `@collision corpus run` to double as the contextSelector's
+end-to-end harness (§13.5); this benchmark instead re-implements a deterministic,
+lexical, multi-turn sibling. The implication (detailed in the report) is that the
+two are **complementary, not interchangeable**: the corpus probe measures the
+embedding ranker's raw discrimination on single phrases, while this benchmark
+measures the lexical context tier's resolve/abstain quality over conversations —
+and only the latter is deterministic enough to gate in CI.
 
 ## Caveats
 
