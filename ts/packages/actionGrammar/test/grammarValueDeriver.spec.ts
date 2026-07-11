@@ -30,20 +30,22 @@ describe("findSingleValueBearingPart", () => {
         expect(findSingleValueBearingPart(parts)).toBeUndefined();
     });
 
-    it("returns the variable of the single variable-bearing part", () => {
-        const parts = [
-            createStringPart(["foo"]),
-            createWildcardPart("x", "wildcard"),
-        ];
-        expect(findSingleValueBearingPart(parts)).toEqual({ variable: "x" });
+    it("returns the variable and part of the single variable-bearing part", () => {
+        const wildcardPart = createWildcardPart("x", "wildcard");
+        const parts = [createStringPart(["foo"]), wildcardPart];
+        expect(findSingleValueBearingPart(parts)).toEqual({
+            variable: "x",
+            part: wildcardPart,
+        });
     });
 
     it("finds the variable-bearing part regardless of position", () => {
-        const parts = [
-            createWildcardPart("x", "wildcard"),
-            createStringPart(["foo"]),
-        ];
-        expect(findSingleValueBearingPart(parts)).toEqual({ variable: "x" });
+        const wildcardPart = createWildcardPart("x", "wildcard");
+        const parts = [wildcardPart, createStringPart(["foo"])];
+        expect(findSingleValueBearingPart(parts)).toEqual({
+            variable: "x",
+            part: wildcardPart,
+        });
     });
 
     it('returns "ambiguous" when 2+ parts carry a variable', () => {

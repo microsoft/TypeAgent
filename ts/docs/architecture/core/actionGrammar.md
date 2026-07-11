@@ -1521,14 +1521,15 @@ explicit value expression produce no value — the compiler warns about
 this because the output is ambiguous.
 
 The NFA compiler (`nfaCompiler.ts`) mirrors this same "no value unless
-actually needed" principle for rules reshaped by `factorCommonPrefixes`:
-`deriveEffectiveValue` forwards a
-factored rule's single variable-bearing part, and only treats an
-ambiguous or missing implicit value as a hard error when the value is
-actually required — i.e. for top-level action rules, or nested rules a
-parent captures via `$(name:<Rule>)`. A nested, uncaptured rule with an
-ambiguous shape is harmless (nothing reads its value) and silently
-resolves to "no value," exactly like the `none` kind above.
+actually needed" principle via the shared `deriveValue`
+(`grammarValueDeriver.ts`): `deriveEffectiveValue` forwards a rule's
+single variable-bearing part (whatever its shape - a single-part rule,
+or a multi-part rule reshaped by `factorCommonPrefixes`), and only
+treats an ambiguous or missing implicit value as a hard error when the
+value is actually required — i.e. for top-level action rules, or nested
+rules a parent captures via `$(name:<Rule>)`. A nested, uncaptured rule
+with an ambiguous shape is harmless (nothing reads its value) and
+silently resolves to "no value," exactly like the `none` kind above.
 
 ### Design Principles
 

@@ -25,15 +25,15 @@ import type {
  */
 export function findSingleValueBearingPart(
     parts: GrammarPart[],
-): { variable: string } | "ambiguous" | undefined {
-    let found: string | undefined;
+): { variable: string; part: GrammarPart } | "ambiguous" | undefined {
+    let found: { variable: string; part: GrammarPart } | undefined;
     for (const p of parts) {
         const name = p.variable;
         if (name === undefined) continue;
         if (found !== undefined) return "ambiguous";
-        found = name;
+        found = { variable: name, part: p };
     }
-    return found !== undefined ? { variable: found } : undefined;
+    return found;
 }
 
 /**
