@@ -143,6 +143,23 @@ export type BridgeToWebviewMessage =
           clientRequestId?: string;
       }
     | { type: "queueStateChanged"; snapshot: QueueSnapshot }
+    // Connection dropped mid-request: the dispatcher's completion push can no
+    // longer reach us, so the webview marks the bubble "status unknown" (a
+    // muted rail, no spinner/Stop) instead of leaving it stuck "working". On
+    // reconnect the host re-checks each against a fresh queue snapshot and
+    // sends `requestStatusResume` (still running/queued) or `commandComplete`
+    // (finished while we were away).
+    | { type: "requestStatusUnknown"; requestId: string }
+    | {
+          type: "requestStatusResume";
+          requestId: string;
+          status: "running" | "queued";
+      }
+    // Offline send buffered in the host's pendingSends queue (not yet
+    // submitted to any dispatcher). Stamps a "queued" chip on the bubble
+    // immediately; the dispatcher snapshot reconciles it once it flushes on
+    // reconnect.
+    | { type: "queuePending"; requestId: string }
     | {
           type: "demoState";
           running: boolean;

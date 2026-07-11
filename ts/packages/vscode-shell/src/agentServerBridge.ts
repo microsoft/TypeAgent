@@ -45,6 +45,7 @@ import type { CompletionDirection } from "@typeagent/agent-sdk";
 import type {
     UserContext,
     ProcessCommandOptions,
+    QueueSnapshot,
 } from "@typeagent/dispatcher-types";
 
 // Internal-only message type unions; re-export for any future consumers.
@@ -394,6 +395,12 @@ export class AgentServerBridge {
                     );
                 }
                 this.session = undefined;
+                // Mark any in-flight / queued request bubbles "status unknown"
+                // rather than finalizing them: the request may still be
+                // running server-side, and its completion push can no longer
+                // reach us on the dead channel. recheckInterruptedRequests()
+                // resolves each against a fresh snapshot once we reconnect.
+                this.markInFlightRequestsUnknownOnDisconnect();
                 this.clearRequestIdMaps();
                 this.updateStatusBar(false);
                 this.broadcastToWebviews({
@@ -497,6 +504,11 @@ export class AgentServerBridge {
                 this.lastReplayedSessionId = this.session.sessionId;
                 await this.replayHistory(this.session);
             }
+
+            // Resolve any requests marked "status unknown" when the previous
+            // connection dropped: restore the ones still running / queued and
+            // finalize the ones that finished while we were disconnected.
+            await this.recheckInterruptedRequests();
 
             // Flush any commands the user typed before the session was
             // ready. Deferred until after history replay so they submit on
@@ -1824,6 +1836,105 @@ export class AgentServerBridge {
     }
 
     /**
+     * Requests that were acked (queued + running) when the connection
+     * dropped, stashed as clientRequestId → serverRequestId so their true
+     * state can be re-checked against a fresh queue snapshot on reconnect.
+     * Populated by markInFlightRequestsUnknownOnDisconnect(), drained by
+     * recheckInterruptedRequests().
+     */
+    private interruptedRequests = new Map<string, string>();
+
+    /**
+     * On disconnect, mark every acked (queued + running) request "status
+     * unknown" instead of finalizing it. Its dispatcher completion push can no
+     * longer reach us on the dead channel, but the request may still be
+     * running server-side — so we stash it and resolve its true state on
+     * reconnect (recheckInterruptedRequests) rather than guessing. Called
+     * before the id maps are cleared.
+     */
+    private markInFlightRequestsUnknownOnDisconnect(): void {
+        for (const [clientRid, serverRid] of this.clientToServerRequestId) {
+            this.interruptedRequests.set(clientRid, serverRid);
+            this.broadcastToWebviews({
+                type: "requestStatusUnknown",
+                requestId: clientRid,
+            });
+        }
+    }
+
+    /**
+     * After a reconnect, resolve the requests marked "unknown" on disconnect
+     * against a fresh queue snapshot: still running / queued → re-seed the
+     * cross-ref and tell the webview to resume that state; no longer present
+     * → it finished (or was dropped) while we were away, so finalize the
+     * bubble. Then push the authoritative snapshot so queued user-bubble chips
+     * reconcile to match the server.
+     */
+    private async recheckInterruptedRequests(): Promise<void> {
+        if (this.interruptedRequests.size === 0) {
+            return;
+        }
+        const interrupted = this.interruptedRequests;
+        this.interruptedRequests = new Map();
+        if (
+            !this.session ||
+            typeof this.session.dispatcher.getQueueSnapshot !== "function"
+        ) {
+            // Can't verify — finalize each so no bubble is stuck "unknown".
+            for (const clientRid of interrupted.keys()) {
+                this.broadcastToWebviews({
+                    type: "commandComplete",
+                    requestId: clientRid,
+                    result: null,
+                });
+            }
+            return;
+        }
+        let snapshot: QueueSnapshot | undefined;
+        try {
+            snapshot = await this.session.dispatcher.getQueueSnapshot();
+        } catch {
+            snapshot = undefined;
+        }
+        const runningServerRid = snapshot?.running?.requestId;
+        const queuedServerRids = new Set(
+            (snapshot?.queued ?? []).map((e) => e.requestId),
+        );
+        for (const [clientRid, serverRid] of interrupted) {
+            const isRunning = serverRid === runningServerRid;
+            const isQueued = queuedServerRids.has(serverRid);
+            if (isRunning || isQueued) {
+                // Still live — re-seed the cross-ref so cancel + subsequent
+                // display / queue events route to the right bubble, then swap
+                // the "unknown" rail back to its live state in the webview.
+                this.clientToServerRequestId.set(clientRid, serverRid);
+                this.serverToClientRequestId.set(serverRid, clientRid);
+                this.broadcastToWebviews({
+                    type: "requestStatusResume",
+                    requestId: clientRid,
+                    status: isRunning ? "running" : "queued",
+                });
+            } else {
+                // Finished (or dropped) while disconnected — its completion
+                // push is gone, so finalize the bubble.
+                this.broadcastToWebviews({
+                    type: "commandComplete",
+                    requestId: clientRid,
+                    result: null,
+                });
+            }
+        }
+        // Push the authoritative snapshot so queued user-bubble chips reconcile
+        // (restored / cleared) to match the server after the reconnect.
+        if (snapshot) {
+            this.broadcastToWebviews({
+                type: "queueStateChanged",
+                snapshot,
+            });
+        }
+    }
+
+    /**
      * Gather user context from VS Code (active editor, workspace, etc.)
      */
     private gatherUserContext(): UserContext {
@@ -1868,9 +1979,19 @@ export class AgentServerBridge {
             // Session/dispatcher not ready yet (initial connect, reconnect,
             // or a mid-send session swap). Queue the command instead of
             // dropping it; flushPendingSends() replays it once a session is
-            // established. The webview bubble stays in its processing state
-            // so it reads as pending rather than erroring out.
+            // established.
             this.pendingSends.push({ command, requestId, attachments });
+            // Stamp a "queued" chip on the bubble right away. There is no
+            // dispatcher yet to emit queueStateChanged, so without this the
+            // offline-typed message reads as a plain bubble until it flushes
+            // on reconnect. The dispatcher snapshot reconciles it (running /
+            // still queued / done) once flushed.
+            if (requestId !== undefined) {
+                this.broadcastToWebviews({
+                    type: "queuePending",
+                    requestId,
+                });
+            }
             return;
         }
 
@@ -1933,17 +2054,28 @@ export class AgentServerBridge {
 
     /**
      * Replay commands buffered while no session was ready (see
-     * `pendingSends`). Drained in one shot and submitted sequentially so
-     * they run in the order the user typed them. Fired from connectImpl()
-     * once a session is established and history has replayed.
+     * `pendingSends`). Fired from connectImpl() once a session is established
+     * and history has replayed.
+     *
+     * Submit them in order but do NOT await each one's COMPLETION. Awaiting
+     * (the previous behavior) ran them strictly one-at-a-time, so the
+     * dispatcher never held more than a single request at once and never
+     * emitted the queue-lifecycle events that drive the per-bubble "queued"
+     * chips. Firing them in order lets the dispatcher enqueue the tail behind
+     * the first and surface the queued state. Mirrors the Electron shell's
+     * fire-and-forget flush (chatPanelBridge.ts dispatcherInitialized).
      */
     private async flushPendingSends(): Promise<void> {
         if (this.pendingSends.length === 0) {
             return;
         }
         const buffered = this.pendingSends.splice(0);
+        // Promote the ephemeral session once up front so the concurrent sends
+        // below don't each race to rename it (promoteEphemeralIfNeeded is a
+        // no-op for everyone after the first once the id is cleared).
+        await this.promoteEphemeralIfNeeded();
         for (const { command, requestId, attachments } of buffered) {
-            await this.sendCommand(command, requestId, attachments);
+            void this.sendCommand(command, requestId, attachments);
         }
     }
 
@@ -2891,6 +3023,23 @@ export class AgentServerBridge {
     private replayBuffer: BridgeToWebviewMessage[] | undefined;
     private replayBufferOverflowed = false;
 
+    /**
+     * Message types that must NOT be held in the per-webview hydration buffer.
+     * Queue-status events drive the per-bubble "queued" / "sent" / "status
+     * unknown" chips, which attach to already-rendered user bubbles rather
+     * than the replayed transcript. Buffering them behind a webview's history
+     * fetch just delays the chips — the "queued bubbles show up late" symptom
+     * — so they bypass the hydration queue and post immediately. (The global
+     * replayBuffer already excludes these for the same reason.)
+     */
+    private static readonly HYDRATION_PASSTHROUGH_TYPES: ReadonlySet<string> =
+        new Set([
+            "queueStateChanged",
+            "requestStatusUnknown",
+            "requestStatusResume",
+            "queuePending",
+        ]);
+
     private broadcastToWebviews(msg: BridgeToWebviewMessage): void {
         if (
             this.replayBuffer !== undefined &&
@@ -2911,10 +3060,17 @@ export class AgentServerBridge {
             return;
         }
         for (const webview of this.webviews) {
-            // If this webview is mid-hydration, queue the live message
-            // until history replay has been delivered (see hydrateWebview).
+            // If this webview is mid-hydration, queue the live message until
+            // history replay has been delivered (see hydrateWebview) — EXCEPT
+            // queue-status events (chips), which attach to already-rendered
+            // user bubbles, not the transcript. Buffering those just makes the
+            // "queued" chips appear late once history finishes loading, so pass
+            // them through immediately.
             const queue = this.hydratingWebviews.get(webview);
-            if (queue !== undefined) {
+            if (
+                queue !== undefined &&
+                !AgentServerBridge.HYDRATION_PASSTHROUGH_TYPES.has(msg.type)
+            ) {
                 queue.push(msg);
                 continue;
             }

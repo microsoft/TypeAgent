@@ -53,8 +53,10 @@ const rootEl = document.getElementById("chat-root")!;
 
 // Track the higher-level disabled reasons so we can reconcile them when
 // any one of them flips. ChatPanel.setEnabled honors switching/history
-// loading internally, but we additionally require the websocket to be
-// connected before the input is enabled.
+// loading internally. Connection state does NOT gate the input: the user
+// may type while disconnected, and the extension host queues those sends
+// (AgentServerBridge.pendingSends) and flushes them once a session is
+// ready — mirroring the Electron shell's pre-init send queue.
 let isConnected = false;
 let isSwitching = false;
 let currentSessionId: string | undefined;
@@ -725,7 +727,9 @@ function setStatus(
         connectionStatus = undefined;
     }
     updateConversationBarStatus();
-    chatPanel.setEnabled(connected);
+    // Keep the input usable regardless of connection so the user can type
+    // while (re)connecting; the host queues sends until a session is ready.
+    chatPanel.setEnabled(true);
 }
 
 window.addEventListener("message", (event) => {
@@ -951,8 +955,9 @@ window.addEventListener("message", (event) => {
                 errorText: undefined,
             });
             chatPanel.setSwitching(msg.switching, msg.targetName);
-            // Re-apply connection-derived enable state when the switch ends.
-            if (!msg.switching) chatPanel.setEnabled(isConnected);
+            // Re-enable input when the switch ends (connection state no
+            // longer gates input — sends queue on the host while offline).
+            if (!msg.switching) chatPanel.setEnabled(true);
             break;
         case "historyReplay": {
             // Stream the replay in chunks so the browser can paint between
@@ -972,7 +977,7 @@ window.addEventListener("message", (event) => {
                     );
                 }
                 chatPanel.setHistoryLoading(false);
-                chatPanel.setEnabled(isConnected);
+                chatPanel.setEnabled(true);
             });
             break;
         }
@@ -981,7 +986,7 @@ window.addEventListener("message", (event) => {
             break;
         case "historyLoading":
             chatPanel.setHistoryLoading(msg.loading);
-            if (!msg.loading) chatPanel.setEnabled(isConnected);
+            if (!msg.loading) chatPanel.setEnabled(true);
             break;
         case "conversationNotification":
             // Conversation-management feedback. We add a fresh agent
@@ -1130,6 +1135,28 @@ window.addEventListener("message", (event) => {
             reconcileQueueChips(result.previous, msg.snapshot);
             break;
         }
+        case "requestStatusUnknown":
+            // Connection dropped mid-request — show a muted "status unknown"
+            // rail instead of a stuck "working" spinner. Resolved on reconnect
+            // via requestStatusResume / commandComplete.
+            chatPanel.setRequestUnknown(msg.requestId);
+            break;
+        case "requestStatusResume":
+            // Reconnect confirmed the request is still live: restore the
+            // working rail (running) or just clear the unknown rail (queued —
+            // its user-bubble chip is reconciled from the pushed snapshot).
+            if (msg.status === "running") {
+                chatPanel.resumeRunning(msg.requestId);
+            } else {
+                chatPanel.clearRequestUnknown(msg.requestId);
+            }
+            break;
+        case "queuePending":
+            // Offline send buffered in the host's pendingSends — mark the
+            // bubble "queued" right away; the dispatcher snapshot reconciles
+            // it (running / still queued / done) once it flushes on reconnect.
+            chatPanel.setUserBubbleQueueStatus(msg.requestId, "queued");
+            break;
         case "requestInteraction":
             handleRequestInteraction(msg.interaction);
             break;

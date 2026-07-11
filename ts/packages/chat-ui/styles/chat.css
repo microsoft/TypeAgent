@@ -1509,6 +1509,11 @@ table.table-message td {
 .chat-message-status-rail[data-status="queued"] {
   background: #eabf63;
 }
+/* Muted gray for "unknown" — the connection dropped mid-request, so the
+   status is uncertain until it is re-checked on reconnect. */
+.chat-message-status-rail[data-status="unknown"] {
+  background: #b8b8b8;
+}
 
 /* Square off the top of the content so the rail and content read as one
    bubble. The rail only exists while a state is showing. */
@@ -1547,7 +1552,8 @@ table.table-message td {
   user-select: none;
 }
 .chat-status-state[data-status="running"],
-.chat-status-state[data-status="queued"] {
+.chat-status-state[data-status="queued"],
+.chat-status-state[data-status="unknown"] {
   color: #2c2c2c;
 }
 

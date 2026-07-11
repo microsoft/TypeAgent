@@ -1723,6 +1723,59 @@ export class ChatPanel {
     }
 
     /**
+     * Mark a request's agent bubble as "status unknown" — used when the
+     * connection drops mid-request. Stops the "working" affordance (spinner +
+     * Stop) without finalizing the bubble, since the request may still be
+     * running server-side; the host re-checks and resolves it on reconnect
+     * (resumeRunning / clearRequestUnknown / completeRequest). No-op on the
+     * agent side for a request whose bubble hasn't materialized yet (e.g. a
+     * still-queued request), which is fine — its queued chip is reconciled
+     * from the authoritative snapshot on reconnect.
+     */
+    public setRequestUnknown(threadId: string): void {
+        // Stop treating it as in-flight so a later bubble-materialize doesn't
+        // re-stamp the working rail.
+        this.agentRunningRequestIds.delete(threadId);
+        // If it was the active request, restore the input's Send button — the
+        // Stop button can't cancel across a dead channel.
+        if (this.activeRequestId === threadId) {
+            this.activeRequestId = undefined;
+            this.stopButton.style.display = "none";
+            this.sendButton.style.display = "";
+        }
+        this.threadContainers.get(threadId)?.setUnknown();
+        const all = this.requestAgentContainers.get(threadId);
+        if (all) {
+            for (const c of all) c.setUnknown();
+        }
+    }
+
+    /**
+     * Restore the "working" affordance on a request whose status was marked
+     * unknown (see {@link setRequestUnknown}) once a reconnect confirms it is
+     * still running. Re-marks it in-flight and re-applies the agent bubble's
+     * working rail + input Stop button.
+     */
+    public resumeRunning(threadId: string): void {
+        this.setProcessing(threadId);
+    }
+
+    /**
+     * Remove the "status unknown" rail from a request's agent bubble without
+     * finalizing it — used on reconnect when the request turns out to be
+     * (still) queued rather than running. The user bubble's queued chip is
+     * restored separately from the authoritative queue snapshot.
+     */
+    public clearRequestUnknown(threadId: string): void {
+        this.agentRunningRequestIds.delete(threadId);
+        this.threadContainers.get(threadId)?.clearRunning();
+        const all = this.requestAgentContainers.get(threadId);
+        if (all) {
+            for (const c of all) c.clearRunning();
+        }
+    }
+
+    /**
      * Returns the in-flight requestId, or undefined when idle. Used by
      * hosts to gate document-level interrupt gestures.
      */
@@ -4988,6 +5041,9 @@ class AgentMessageContainer {
             this.statusRail = rail;
         }
         const rail = this.statusRail;
+        // Ensure the rail reads as "running" even if it was previously showing
+        // the muted "unknown" state (setUnknown reuses this same rail element).
+        rail.dataset.status = "running";
         const stateZone = rail.querySelector<HTMLElement>(
             ":scope > .chat-status-state-zone",
         )!;
@@ -5027,6 +5083,49 @@ class AgentMessageContainer {
     public clearRunning() {
         this.statusRail?.remove();
         this.statusRail = undefined;
+    }
+
+    /**
+     * Swap the "working" rail for a muted "status unknown" state: no spinner,
+     * no Stop button. Used when the connection drops mid-request — we can't
+     * know whether the agent is still working, so we stop implying active
+     * progress without finalizing the bubble. Reuses the same rail element as
+     * setRunning, so clearRunning() removes it.
+     */
+    public setUnknown(label: string = "status unknown") {
+        if (!this.statusRail) {
+            const rail = document.createElement("div");
+            rail.className = "chat-message-status-rail";
+            const stateZone = document.createElement("span");
+            stateZone.className = "chat-status-state-zone";
+            const controls = document.createElement("span");
+            controls.className = "chat-status-rail-controls";
+            rail.append(stateZone, controls);
+            this.bodyDiv.insertBefore(rail, this.bodyDiv.firstChild);
+            this.statusRail = rail;
+        }
+        const rail = this.statusRail;
+        rail.dataset.status = "unknown";
+        const stateZone = rail.querySelector<HTMLElement>(
+            ":scope > .chat-status-state-zone",
+        )!;
+        const controls = rail.querySelector<HTMLElement>(
+            ":scope > .chat-status-rail-controls",
+        )!;
+        stateZone.replaceChildren();
+        const state = document.createElement("span");
+        state.className = "chat-status-state";
+        state.dataset.status = "unknown";
+        const dot = document.createElement("span");
+        dot.className = "chat-status-dot";
+        dot.setAttribute("aria-hidden", "true");
+        const labelSpan = document.createElement("span");
+        labelSpan.textContent = label;
+        state.append(dot, labelSpan);
+        stateZone.appendChild(state);
+        // No controls: an "unknown" request can't be meaningfully stopped
+        // (the channel is down), so drop the Stop button.
+        controls.replaceChildren();
     }
 
     /**
