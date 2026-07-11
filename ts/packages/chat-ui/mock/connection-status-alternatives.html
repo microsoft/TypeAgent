@@ -751,11 +751,12 @@
     <h2>Refinement 2 — retry attempts as a badge + an actionable plug</h2>
     <p class="lead">
       Extending Candidate 1 to the reconnect states: <b>(1)</b> while auto-retry
-      runs, the attempt count rides the same badge but as a <i>negative</i>
-      number (<code>-1</code>, <code>-3</code>…) so it reads as “trouble” rather
-      than a healthy client count; <b>(2)</b> once auto-retry gives up, the plug
-      itself becomes a clickable reconnect button. Click the plugs below — the
-      fired <code>connectionAction</code> is logged under each bar.
+      runs, the attempt count rides the same badge but as a
+      <i>negative</i> number (<code>-1</code>, <code>-3</code>…) so it reads as
+      “trouble” rather than a healthy client count; <b>(2)</b> once auto-retry
+      gives up, the plug itself becomes a clickable reconnect button. Click the
+      plugs below — the fired <code>connectionAction</code> is logged under each
+      bar.
     </p>
     <div id="retryHost"></div>
 
@@ -1309,9 +1310,9 @@
           head.textContent = STATE_HEAD[key];
           matrix.appendChild(head);
         }
-        const rows = [{ tag: "now", name: "Current pill", create: ctlBaseline }].concat(
-          CANDIDATES,
-        );
+        const rows = [
+          { tag: "now", name: "Current pill", create: ctlBaseline },
+        ].concat(CANDIDATES);
         for (const row of rows) {
           const head = el("div", "cx-rowhead");
           head.textContent = `${row.tag}. ${row.name}`;
@@ -1406,10 +1407,16 @@
           {
             cap: "<b>Connected · 1 client</b> — the client count as a normal (positive) green badge.",
             make: () =>
-              ambient("is-connected", "1", false, false, "Connected · 1 client"),
+              ambient(
+                "is-connected",
+                "1",
+                false,
+                false,
+                "Connected · 1 client",
+              ),
           },
           {
-            cap: '<b>Reconnecting · attempt 1</b> — the attempt count as a <i>negative</i> amber badge (<code>-1</code>), plug pulsing.',
+            cap: "<b>Reconnecting · attempt 1</b> — the attempt count as a <i>negative</i> amber badge (<code>-1</code>), plug pulsing.",
             make: () =>
               ambient(
                 "is-connecting",
@@ -1420,7 +1427,7 @@
               ),
           },
           {
-            cap: '<b>Reconnecting · attempt 3</b> — the badge grows more negative as attempts climb (<code>-3</code>).',
+            cap: "<b>Reconnecting · attempt 3</b> — the badge grows more negative as attempts climb (<code>-3</code>).",
             make: () =>
               ambient(
                 "is-connecting",
