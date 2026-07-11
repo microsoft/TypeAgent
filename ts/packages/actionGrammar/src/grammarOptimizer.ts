@@ -3191,20 +3191,12 @@ function checkForwardingPromotable(
 ): boolean {
     if (parts.length <= 1) return true;
     if (last.variable === undefined) return false;
-    // Multi-part rule: matcher's implicit-default rule requires
-    // exactly one variable-bearing contributor (wildcard / number
-    // always; rules / string / phraseSet only when bound; every
-    // `GrammarPart` carries an optional `variable` field, so
-    // `findSingleValueBearingPart` - the shared scan used here -
-    // covers the union). Promoting masks the baseline missing/multiple-default
-    // throws at finalize time, so bail out unless the trailing
-    // RulesPart is the sole contributor.
-    const contributor = findSingleValueBearingPart(parts);
-    return (
-        contributor !== undefined &&
-        contributor !== "ambiguous" &&
-        contributor.variable === last.variable
-    );
+    // Multi-part rule: matcher's implicit-default rule requires exactly
+    // one variable-bearing contributor. `last` already carries a
+    // variable, so the shared scan can only return "ambiguous" (2+
+    // contributors) or `last` itself - bail out on "ambiguous" so
+    // baseline missing/multiple-default throws stay observable.
+    return findSingleValueBearingPart(parts) !== "ambiguous";
 }
 
 /**
