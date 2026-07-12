@@ -12,20 +12,18 @@
 
 ## Overview
 
-The `ipconfig-agent` package is a TypeAgent application agent that provides a natural language interface to the Windows `ipconfig` command-line tool. It enables users to perform various network configuration tasks, such as managing IP addresses, DNS settings, and DHCP configurations, through conversational commands.
-
-This agent is particularly useful for automating common network management tasks, making it easier for users to interact with the `ipconfig` utility without needing to remember specific command-line syntax.
+The `ipconfig-agent` is a TypeAgent application agent that provides a conversational interface to the Windows `ipconfig` command-line tool. It allows users to perform a variety of network configuration tasks, such as managing IP addresses, DNS settings, and DHCP configurations, using natural language commands. This agent simplifies network management by abstracting the complexity of command-line syntax, making it accessible to users without technical expertise.
 
 ## What it does
 
-The `ipconfig-agent` supports a comprehensive set of actions related to network configuration. These actions are grouped into the following categories:
+The `ipconfig-agent` supports a wide range of actions related to network configuration. These actions are grouped into the following categories:
 
 - **Help and Information Display**:
 
   - `displayHelpMessage`: Displays the help message for the `ipconfig` command.
-  - `displayFullConfigurationInformation`: Shows detailed network configuration information, including IP addresses, DNS settings, and adapter details.
-  - `displayDNSResolverCacheContents`: Displays the current contents of the DNS resolver cache.
-  - `displayDHCPClassIDs` and `displayIPv6DHCPClassIDs`: Show the DHCP class IDs for IPv4 and IPv6 adapters, respectively.
+  - `displayFullConfigurationInformation`: Provides detailed network configuration information, including IP addresses, DNS settings, and adapter details.
+  - `displayDNSResolverCacheContents`: Shows the current contents of the DNS resolver cache.
+  - `displayDHCPClassIDs` and `displayIPv6DHCPClassIDs`: Display the DHCP class IDs for IPv4 and IPv6 adapters, respectively.
 
 - **IP Address Management**:
 
@@ -37,30 +35,31 @@ The `ipconfig-agent` supports a comprehensive set of actions related to network 
   - `refreshDHCPLeasesAndReRegisterDNSNames`: Refreshes all DHCP leases and re-registers DNS names.
   - `modifyDHCPClassID` and `modifyIPv6DHCPClassID`: Modify the DHCP class ID for IPv4 and IPv6 adapters, respectively.
 
-These actions allow users to manage their network settings efficiently, whether they need to troubleshoot connectivity issues, update IP configurations, or manage DNS and DHCP settings.
+These actions enable users to perform common network management tasks, such as troubleshooting connectivity issues, updating IP configurations, and managing DNS and DHCP settings, all through natural language interactions.
 
 ## Setup
 
-The `ipconfig-agent` package requires no special setup beyond installing its dependencies. To get started:
+The `ipconfig-agent` requires minimal setup. Follow these steps to get started:
 
-1. Ensure you have `pnpm` installed.
-2. Run the following command to install the package's dependencies:
+1. Ensure you have `pnpm` installed on your system.
+2. Navigate to the package directory: `ts/packages/agents/ipconfig/`.
+3. Install the package dependencies by running:
 
    ```sh
    pnpm install
    ```
 
-No additional environment variables, API keys, or external accounts are required.
+No additional environment variables, API keys, or external accounts are required for this package.
 
 ## Key Files
 
-The package's functionality is implemented across several key files:
+The `ipconfig-agent` is implemented using the following key files:
 
 - **[ipconfigActionHandler.ts](./src/ipconfigActionHandler.ts)**:
 
-  - This file contains the core logic for handling the supported actions.
-  - It uses the `execFile` function to execute `ipconfig` commands and processes the output to generate responses.
-  - The `runCli` function is responsible for invoking the `ipconfig` command with the appropriate arguments.
+  - Contains the core logic for handling actions.
+  - The `runCli` function executes the `ipconfig` command with the appropriate arguments and processes the output.
+  - The `buildArgs` function maps actions and their parameters to the corresponding `ipconfig` command-line arguments.
 
 - **[ipconfigManifest.json](./src/ipconfigManifest.json)**:
 
@@ -68,16 +67,14 @@ The package's functionality is implemented across several key files:
 
 - **[ipconfigSchema.ts](./src/ipconfigSchema.ts)**:
 
-  - Specifies the TypeScript types for all actions supported by the agent.
-  - Each action is defined with its name, parameters, and a description of its functionality.
+  - Defines the TypeScript types for all supported actions, including their names, parameters, and descriptions.
 
 - **[ipconfigSchema.agr](./src/ipconfigSchema.agr)**:
 
-  - Contains the natural language grammar rules that map user utterances to specific actions.
-  - For example, phrases like "Show me the full network configuration details" are mapped to the `displayFullConfigurationInformation` action.
+  - Contains natural language grammar rules that map user utterances to specific actions. For example, phrases like "Show me the full network configuration details" are mapped to the `displayFullConfigurationInformation` action.
 
 - **[tsconfig.json](./src/tsconfig.json)**:
-  - Configures the TypeScript compiler for the project, including paths for source and output files.
+  - Configures the TypeScript compiler for the project, specifying paths for source and output files.
 
 ## How to extend
 
@@ -85,11 +82,11 @@ To add new functionality to the `ipconfig-agent`, follow these steps:
 
 1. **Define a new action**:
 
-   - Add a new action type in [ipconfigSchema.ts](./src/ipconfigSchema.ts). Include the action name, parameters, and a description of its purpose.
+   - Add a new action type in [ipconfigSchema.ts](./src/ipconfigSchema.ts). Specify the action name, parameters, and a description of its purpose.
 
 2. **Update the grammar**:
 
-   - Add new grammar rules in [ipconfigSchema.agr](./src/ipconfigSchema.agr) to map user utterances to the new action. Ensure the grammar captures a variety of ways users might phrase their requests.
+   - Add new grammar rules in [ipconfigSchema.agr](./src/ipconfigSchema.agr) to map user utterances to the new action. Ensure the grammar captures various ways users might phrase their requests.
 
 3. **Implement the handler logic**:
 
@@ -103,8 +100,8 @@ To add new functionality to the `ipconfig-agent`, follow these steps:
 
    - If necessary, update [ipconfigManifest.json](./src/ipconfigManifest.json) to include the new action in the schema.
 
-6. **Regenerate the schema and grammar**:
-   - Use the appropriate tools from the TypeAgent monorepo (e.g., `@typeagent/action-schema-compiler` and `@typeagent/action-grammar-compiler`) to regenerate the schema and grammar files.
+6. **Regenerate schema and grammar**:
+   - Use the TypeAgent tools, such as `@typeagent/action-schema-compiler` and `@typeagent/action-grammar-compiler`, to regenerate the schema and grammar files.
 
 By following these steps, you can extend the `ipconfig-agent` to support additional `ipconfig` commands or other related functionality. Be sure to test your changes thoroughly to ensure they work as expected.
 
@@ -164,6 +161,6 @@ _13 actions implemented by this agent, parsed deterministically from `./src/ipco
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter ipconfig-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-12T08:45:00.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter ipconfig-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

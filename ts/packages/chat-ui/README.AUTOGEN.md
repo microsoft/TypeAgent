@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=6a022a7933d64a9e5e3bec8053d32ce0f9482edc34e4bdf024f502cb0631f8fb -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4f998090d75dd40aa9ec5137b127e82173800f22ecc38553159383703b44d115 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-ui — AI-generated documentation
@@ -12,27 +12,27 @@
 
 ## Overview
 
-The `chat-ui` package provides a shared, framework-free chat user interface for TypeAgent applications, including the VS Code shell extension and the browser extension chat panel. It is designed to handle user and agent interactions, support streaming updates, manage chat history, and provide features like command completions, feedback collection, and connection status indicators. The package is built to be flexible and reusable across different host environments.
+The `chat-ui` package provides a shared, framework-free chat user interface for TypeAgent applications. It is used across multiple platforms, including the VS Code shell extension, the browser extension chat panel, and the Visual Studio extension webview. The package is designed to handle user and agent interactions, support real-time updates, manage chat history, and provide additional features like command completions, feedback collection, and connection status indicators. It is built with reusability and platform-agnostic design in mind, making it a core component of the TypeAgent ecosystem.
 
 ## What it does
 
-The `chat-ui` package offers the following key features:
+The `chat-ui` package offers a range of features to support interactive chat experiences:
 
-- **ChatPanel**: The core component for rendering the chat interface. It supports user input, agent messages, streaming updates, and history replay. Key methods include:
-  - `addAgentMessage`: Adds a new message from the agent.
-  - `setDisplayInfo`: Updates the display with metadata like source and action.
-  - `replayHistory`: Replays a list of historical chat entries.
-- **FeedbackWidget**: A component for collecting user feedback on chat interactions. It supports thumbs-up/thumbs-down ratings, comments, and context inclusion.
+- **ChatPanel**: The primary component for rendering the chat interface. It provides methods for:
+  - `addAgentMessage`: Displaying agent messages with metadata like source and icons.
+  - `setDisplayInfo`: Updating the display with contextual information such as the source and action.
+  - `replayHistory`: Replaying a list of historical chat entries for continuity.
+- **FeedbackWidget**: A component for collecting user feedback on chat interactions. It supports thumbs-up/thumbs-down ratings, comments, and the inclusion of contextual information.
 - **PartialCompletion**: Integrates with the `@typeagent/completion-ui` package to handle command completions, including input updates, acceptance, and dismissal.
-- **Connection Status Management**: Provides a shared model and UI for displaying the connection status between the chat client and the server. It includes reconnect options and error handling.
+- **Connection Status Management**: Provides a shared model and UI for displaying the connection status between the chat client and the server. This includes reconnect options, error handling, and backoff timers.
 - **PlatformAdapter**: Abstracts platform-specific behaviors, such as handling link clicks and settings, to ensure compatibility across different environments.
 - **Shared Styles**: Includes a CSS file (`styles/chat.css`) to ensure a consistent appearance for the chat UI across all host applications.
 
-The package is used by multiple TypeAgent components, such as the VS Code shell, the browser extension, and the Visual Studio extension webview.
+The package is designed to be lightweight and does not rely on any external UI frameworks. It uses DOM manipulation and a small set of external libraries (`ansi_up`, `dompurify`, and `markdown-it`) to provide its functionality.
 
 ## Setup
 
-To use the `chat-ui` package in your project, follow these steps:
+To integrate the `chat-ui` package into your project, follow these steps:
 
 1. **Install the package**: Add `chat-ui` to your project dependencies using your package manager.
 2. **Install required dependencies**: Ensure the following workspace dependencies are installed:
@@ -102,10 +102,10 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/chatPanel.ts`, `./src/connectionStatus.ts`, …and 10 more under `./src/`.
+`./src/index.ts`, `./src/chatPanel.ts`, `./src/connectionStatus.ts`, …and 12 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-12T08:45:00.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

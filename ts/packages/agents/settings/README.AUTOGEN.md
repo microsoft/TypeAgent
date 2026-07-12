@@ -12,7 +12,7 @@
 
 ## Overview
 
-The settings agent is a sample TypeAgent application designed to explore how a system settings agent could function on a Windows host. It demonstrates the use of structured schemas to interact with a language model, enabling the agent to process system settings actions and generate responses, including HTML-based response cards. This package is part of the TypeAgent monorepo and integrates with other components in the ecosystem, such as `@typeagent/agent-sdk` and `aiclient`.
+The settings agent is a sample TypeAgent application designed to demonstrate how a system settings agent could function on a Windows host. It showcases the use of structured schemas to interact with a language model, enabling the agent to process system settings actions and generate responses, including HTML-based response cards. This package is part of the TypeAgent monorepo and integrates with other components such as `@typeagent/agent-sdk`, `@typeagent/aiclient`, and `telemetry`.
 
 ## What it does
 
@@ -53,11 +53,11 @@ No specific environment variables or external API keys are required for this pac
 
 The settings agent's implementation is organized into the following key files:
 
-- **[settingsManifest.json](./src/settingsManifest.json)**: This file defines the agent's metadata, including its description, emoji character, and schema details. It serves as the entry point for the agent's configuration.
+- **[settingsManifest.json](./src/settingsManifest.json)**: Defines the agent's metadata, including its description, emoji character, and schema details. It serves as the entry point for the agent's configuration.
 
-- **[settingsActionSchema.ts](./src/settingsActionSchema.ts)**: This file specifies the schema for the actions the agent can handle. It defines the structure and parameters for actions such as `dimBrightNessAction` and `adjustMultiMonitorLayoutAction`.
+- **[settingsActionSchema.ts](./src/settingsActionSchema.ts)**: Specifies the schema for the actions the agent can handle. It defines the structure and parameters for actions such as `dimBrightNessAction` and `adjustMultiMonitorLayoutAction`.
 
-- **[settingsCommandHandler.ts](./src/settingsCommandHandler.ts)**: This file contains the core logic for handling actions. It includes the `executeSettingsAction` function, which routes actions to the appropriate handler, and the `handleSettingsAction` function, which implements the specific logic for each action.
+- **[settingsCommandHandler.ts](./src/settingsCommandHandler.ts)**: Contains the core logic for handling actions. It includes the `executeSettingsAction` function, which routes actions to the appropriate handler, and the `handleSettingsAction` function, which implements the specific logic for each action.
 
 - **HTML templates**: The agent uses HTML files, such as `adjustMultiMonitorLayout.html`, to generate response cards. These files are located in the `settings/cards/` directory and are read dynamically by the handler.
 
@@ -148,6 +148,6 @@ External: `debug`, `typechat`
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter settings-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-12T08:45:00.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter settings-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

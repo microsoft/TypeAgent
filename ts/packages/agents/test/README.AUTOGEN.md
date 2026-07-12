@@ -12,43 +12,116 @@
 
 ## Overview
 
-The `test-agent` package is a dispatch agent designed for testing purposes within the TypeAgent framework. It provides functionality to execute specific actions related to mathematical operations and random number generation.
+The `test-agent` package is a dispatch agent within the TypeAgent framework, designed specifically for testing purposes. It provides a simple interface for executing predefined actions, such as performing mathematical operations and generating random numbers. This agent is primarily used for testing and demonstration purposes within the broader TypeAgent ecosystem.
 
 ## What it does
 
-The `test-agent` package supports the following actions:
+The `test-agent` supports two primary actions:
 
-- `add`: Performs addition of two numbers.
-- `random`: Generates a random number.
+- **`add`**: This action takes two numbers as input parameters (`a` and `b`) and returns their sum. It is useful for testing basic arithmetic operations.
+- **`random`**: This action generates a random number. It does not require any input parameters and is useful for testing random number generation functionality.
 
-These actions are defined in the [schema.ts](./src/schema.ts) file and handled in the [handler.ts](./src/handler.ts) file. The agent can process commands and return results based on the actions executed. The agent's metadata, including its emoji representation and description, is defined in the [manifest.json](./src/manifest.json) file.
+These actions are defined in the [schema.ts](./src/schema.ts) file, which specifies the structure and types of the actions. The logic for handling these actions is implemented in the [handler.ts](./src/handler.ts) file. The agent's metadata, including its emoji representation and description, is defined in the [manifest.json](./src/manifest.json) file.
+
+The agent also includes a command interface, allowing users to interact with it using commands. For example, the `request` command, handled by the `RequestCommandHandler` class, allows users to request a test and display the result.
 
 ## Setup
 
-To set up the `test-agent` package, follow these steps:
+Setting up the `test-agent` package is straightforward:
 
-1. Ensure you have the necessary dependencies installed by running `pnpm install`.
-2. No additional environment variables or external accounts are required for this package.
+1. Ensure you have the necessary dependencies installed by running:
+   ```bash
+   pnpm install
+   ```
+2. No additional environment variables, API keys, or external accounts are required for this package.
+
+Once the dependencies are installed, the agent is ready to use.
 
 ## Key Files
 
-The `test-agent` package consists of the following key files:
+The `test-agent` package is organized into the following key files:
 
-- [manifest.json](./src/manifest.json): Defines the agent's metadata, including its emoji representation, description, and schema details.
-- [schema.ts](./src/schema.ts): Specifies the types for the actions supported by the agent.
-- [handler.ts](./src/handler.ts): Contains the logic for handling the actions defined in the schema. It includes the `RequestCommandHandler` class for processing commands and the `executeAction` function for executing actions.
+- **[manifest.json](./src/manifest.json)**: This file defines the agent's metadata, including its emoji representation (`➕`), description, and schema details. It also specifies the schema file and type used by the agent.
+- **[schema.ts](./src/schema.ts)**: This file defines the `TestActions` type, which includes the structure and parameters for the supported actions:
 
-The agent is instantiated using the `instantiate` function, which sets up the command interface and action execution logic. The `handlers` object in the [handler.ts](./src/handler.ts) file defines the available commands and their handlers.
+  - `AddAction`: Represents the `add` action, which requires two numeric parameters (`a` and `b`).
+  - `RandomNumberAction`: Represents the `random` action, which does not require any parameters.
+
+- **[handler.ts](./src/handler.ts)**: This file contains the core logic for the agent. Key components include:
+  - `RequestCommandHandler`: A class that defines the `request` command, allowing users to request a test and display the result.
+  - `handlers` object: Defines the available commands and their corresponding handlers.
+  - `executeAction` function: Implements the logic for executing the `add` and `random` actions. For example:
+    - The `add` action calculates the sum of two numbers and returns the result.
+    - The `random` action generates and returns a random number.
+  - `instantiate` function: Sets up the agent by combining the command interface and action execution logic.
 
 ## How to extend
 
-To extend the `test-agent` package, follow these steps:
+To extend the functionality of the `test-agent`, follow these steps:
 
-1. Open the [schema.ts](./src/schema.ts) file to define new action types or modify existing ones.
-2. Implement the logic for the new actions in the [handler.ts](./src/handler.ts) file. Add new cases to the `executeAction` function to handle the new actions.
-3. If you need to add new commands, update the `handlers` object in the [handler.ts](./src/handler.ts) file with new command handlers.
+1. **Define new actions**:
 
-After making changes, run tests to ensure the new functionality works as expected. You can add tests in a new file or update existing ones to cover the new actions and commands.
+   - Open the [schema.ts](./src/schema.ts) file.
+   - Add new action types to the `TestActions` union type. For example:
+     ```ts
+     type MultiplyAction = {
+       actionName: "multiply";
+       parameters: {
+         a: number;
+         b: number;
+       };
+     };
+     ```
+     Update the `TestActions` type to include the new action:
+     ```ts
+     export type TestActions = AddAction | RandomNumberAction | MultiplyAction;
+     ```
+
+2. **Implement action logic**:
+
+   - Open the [handler.ts](./src/handler.ts) file.
+   - Add a new case to the `executeAction` function to handle the new action. For example:
+     ```ts
+     case "multiply":
+         const { a, b } = action.parameters;
+         return createActionResult(`The product of ${a} and ${b} is ${a * b}`);
+     ```
+
+3. **Add new commands (if needed)**:
+
+   - If the new action requires a command, update the `handlers` object in the [handler.ts](./src/handler.ts) file. Define a new `CommandHandler` for the command and add it to the `commands` object. For example:
+
+     ```ts
+     class MultiplyCommandHandler implements CommandHandler {
+       public readonly description = "Multiply two numbers";
+       public readonly parameters = {
+         args: {
+           a: { description: "First number" },
+           b: { description: "Second number" },
+         },
+       } as const;
+       public async run(
+         context: ActionContext<void>,
+         params: ParsedCommandParams<typeof this.parameters>,
+       ) {
+         const result = params.args.a * params.args.b;
+         context.actionIO.setDisplay(`The product is ${result}`);
+       }
+     }
+
+     const handlers = {
+       description: "Test App Agent Commands",
+       commands: {
+         request: new RequestCommandHandler(),
+         multiply: new MultiplyCommandHandler(),
+       },
+     };
+     ```
+
+4. **Test your changes**:
+   - Add or update test cases to verify the new functionality. Ensure that the new actions and commands work as expected.
+
+By following these steps, you can extend the `test-agent` package to support additional actions and commands, making it more versatile for testing purposes.
 
 ## Reference
 
@@ -57,7 +130,7 @@ After making changes, run tests to ensure the new functionality works as expecte
 ### Entry points
 
 - `./agent/manifest` → [./src/manifest.json](./src/manifest.json)
-- `./agent/handlers` → [./dist/handler.js](./dist/handler.js)
+- `./agent/handlers` → `./dist/handler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -77,6 +150,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter test-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-12T08:45:00.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter test-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `video-agent` package is a TypeAgent application agent designed to handle video generation tasks. It leverages the Sora-2 model on Azure OpenAI to create videos based on user-provided descriptions, captions, and optional parameters like duration and related files. This package serves as a sample implementation for integrating video generation APIs into a TypeAgent-based system.
+The `video-agent` package is a TypeAgent application agent designed to handle video generation tasks. It integrates with the Sora-2 model on Azure OpenAI to create videos based on user-provided descriptions, captions, and optional parameters such as duration and related files. This package serves as a sample implementation for incorporating video generation capabilities into a TypeAgent-based system.
 
 ## What it does
 
@@ -136,6 +136,6 @@ _1 action implemented by this agent, parsed deterministically from `./src/videoA
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter video-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-12T08:45:00.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter video-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

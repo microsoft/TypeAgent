@@ -12,41 +12,41 @@
 
 ## Overview
 
-The `discord-agent` package is a TypeAgent application agent that enables interaction with Discord servers through natural language commands. It integrates with the Discord REST API v10 to perform a variety of server management and communication tasks, such as sending messages, listing channels, creating invites, and more. By leveraging this agent, users can manage their Discord servers and interact with members using intuitive, conversational commands.
+The `discord-agent` package is a TypeAgent application agent that facilitates interaction with Discord servers using natural language commands. It leverages the Discord REST API v10 to perform a variety of tasks, such as sending messages, managing channels, creating invites, and retrieving user or server information. This agent is designed to simplify server management and communication by allowing users to issue intuitive commands.
 
 ## What it does
 
-The `discord-agent` provides a set of actions to interact with Discord servers. These actions are designed to simplify common tasks and include:
+The `discord-agent` provides a range of actions to interact with Discord servers. These actions are grouped into the following categories:
 
-- **Message Management**:
+### Message Management
 
-  - `createMessage`: Send a specific message to a channel.
-  - `craftMessage`: Generate a message using an LLM based on a high-level intent and post it to a channel.
-  - `getChannelMessages`: Retrieve messages from a specific channel.
+- **`createMessage`**: Sends a specific message to a channel. This action is used when the user provides the exact content of the message.
+- **`craftMessage`**: Drafts a message using an LLM based on a high-level intent and posts it to a channel. This is useful when the user describes the purpose or intent of the message rather than providing the exact text.
+- **`getChannelMessages`**: Retrieves messages from a specified channel, with optional filters for the number of messages and time range.
 
-- **User and Server Management**:
+### User and Server Management
 
-  - `getCurrentUser`: Retrieve details about the bot's account.
-  - `setGuild`: Set the default Discord server (guild) for all operations.
+- **`getCurrentUser`**: Fetches details about the bot's account, such as its username, discriminator, and ID.
+- **`setGuild`**: Sets the default Discord server (guild) for all operations. This action also triggers a refresh of the channel cache.
 
-- **Channel Management**:
+### Channel Management
 
-  - `listChannels`: List all channels in the current Discord server.
-  - `refreshChannels`: Refresh the cached list of channels from the server.
+- **`listChannels`**: Lists all channels in the current Discord server, grouped by categories.
+- **`refreshChannels`**: Refreshes the cached list of channels from the server, ensuring the agent has the latest information.
 
-- **Invite Management**:
-  - `createChannelInvite`: Generate a new invite link for a specific channel.
+### Invite Management
 
-These actions allow users to perform tasks such as sending messages, managing channels, and creating invites without needing to interact directly with the Discord interface. The agent also supports natural language processing to interpret user commands and execute the appropriate actions.
+- **`createChannelInvite`**: Creates a new invite link for a specific channel, with options for expiration time, usage limits, and temporary membership.
+
+These actions enable users to perform a wide range of tasks, from sending messages to managing server settings, all through natural language commands. The agent also supports channel name resolution, allowing users to refer to channels by name or `#name` syntax instead of using channel IDs.
 
 ## Setup
 
 To use the `discord-agent`, you need to configure a Discord bot and set up the required environment variables. Follow these steps:
 
-1. **Prerequisites**:
+1. **Install Prerequisites**:
 
-   - Install Node.js (version 20 or higher) and pnpm (version 10 or higher).
-   - Create a Discord account and have access to a Discord server (guild) that you manage.
+   - Ensure you have Node.js (version 20 or higher) and pnpm (version 10 or higher) installed.
 
 2. **Create and Configure a Discord Bot**:
 
@@ -78,10 +78,10 @@ To use the `discord-agent`, you need to configure a Discord bot and set up the r
 
 ## Key Files
 
-The `discord-agent` package is structured around the TypeAgent framework, with key files that define its functionality:
+The `discord-agent` package is organized into several key files that define its functionality:
 
-- [src/discordActionHandler.ts](./src/discordActionHandler.ts): Implements the logic for handling the supported actions, such as sending messages, creating invites, and managing channels.
-- [src/discordManifest.json](./src/discordManifest.json): The agent's manifest file, which describes the agent's purpose, schema, and default settings.
+- [src/discordActionHandler.ts](./src/discordActionHandler.ts): Contains the implementation of the agent's actions, such as sending messages, creating invites, and managing channels.
+- [src/discordManifest.json](./src/discordManifest.json): The manifest file that describes the agent's purpose, schema, and default settings.
 - [src/discordSchema.ts](./src/discordSchema.ts): Defines the TypeScript types and structures for the actions supported by the agent.
 - [src/discordSchema.agr](./src/discordSchema.agr): Contains the grammar definitions for parsing natural language commands into actionable intents.
 
@@ -176,6 +176,6 @@ _8 actions implemented by this agent, parsed deterministically from `./src/disco
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-12T08:45:00.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

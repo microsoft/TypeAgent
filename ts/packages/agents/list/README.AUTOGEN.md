@@ -16,7 +16,7 @@ The `list-agent` package is a TypeAgent application agent designed to manage lis
 
 ## What it does
 
-The `list-agent` supports six primary actions for managing lists:
+The `list-agent` provides six key actions to manage lists effectively:
 
 - **`addItems`**: Adds one or more items to a specified list. If the list does not exist, it is created. This action requires the `items` (array of strings) and `listName` (string) parameters.
 - **`removeItems`**: Removes one or more items from a specified list. This action requires the `items` (array of strings) and `listName` (string) parameters.
@@ -124,6 +124,6 @@ _6 actions implemented by this agent, parsed deterministically from `./src/listS
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-12T08:45:00.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

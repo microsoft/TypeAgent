@@ -12,17 +12,17 @@
 
 ## Overview
 
-The `image-agent` package is an image dispatcher agent that processes user requests for creating and editing images. It leverages Azure OpenAI's `gpt-image-1` endpoints to generate and transform images based on user-provided descriptions and prompts. This package is part of the TypeAgent monorepo and is located in the `ts/packages/agents/image/` directory.
+The `image-agent` is an application agent within the TypeAgent monorepo designed to handle image-related tasks. It provides functionality for creating and editing images based on user input, leveraging Azure OpenAI's `gpt-image-1` endpoints for image generation and transformation. This agent is located in the `ts/packages/agents/image/` directory and is a sample implementation showcasing how to integrate external APIs for image processing.
 
 ## What it does
 
-The `image-agent` provides two primary actions for image-related tasks:
+The `image-agent` supports two primary actions:
 
-- **`createImageAction`**: This action generates new images based on a user-provided description, caption, and the desired number of images. It uses the Azure OpenAI API to create the requested images and returns them to the user. For example, a user might request, "Create 3 images of a sunset over mountains with the caption 'Nature's Beauty'".
+- **`createImageAction`**: This action generates new images based on user-provided input. Users can specify a description of the desired image, a caption, and the number of images to generate. For example, a user might request, "Create 3 images of a sunset over mountains with the caption 'Nature's Beauty'." The agent processes the request and returns the generated images.
 
-- **`editImageAction`**: This action allows users to modify or transform an existing image. The user provides an edit prompt (e.g., "make this a watercolor painting") and the source image to be edited. The agent processes the request and applies the specified transformation using the Azure OpenAI API. This action is suitable for tasks like stylizing images or applying artistic effects.
+- **`editImageAction`**: This action allows users to modify or transform an existing image. Users provide an edit prompt (e.g., "make this a watercolor painting") and the source image to be edited. The agent applies the specified transformation to the image and returns the result. This action is ideal for tasks such as stylizing images or applying artistic effects.
 
-These actions enable the `image-agent` to handle a variety of use cases, from generating new images to creatively transforming existing ones.
+These actions enable the `image-agent` to handle a variety of use cases, from generating new images to creatively transforming existing ones. The agent is designed to interpret natural language inputs and map them to the appropriate actions using a defined grammar.
 
 ## Setup
 
@@ -36,25 +36,23 @@ For identity-based authentication to your Azure OpenAI endpoint, specify the key
 
 ## Key Files
 
-The `image-agent` package is structured around several key files that define its functionality:
+The `image-agent` package is organized into several key files that define its functionality:
 
-- **[src/imageManifest.json](./src/imageManifest.json)**: This file serves as the agent's manifest, containing metadata such as the description, emoji representation, and schema details.
+- **[src/imageManifest.json](./src/imageManifest.json)**: This manifest file contains metadata about the agent, including its description, emoji representation, and schema details.
 
-- **[src/imageActionSchema.ts](./src/imageActionSchema.ts)**: This file defines the schema for the two implemented actions, `createImageAction` and `editImageAction`. It specifies the structure and parameters required for each action, such as `originalRequest`, `caption`, `numImages`, and `editPrompt`.
+- **[src/imageActionSchema.ts](./src/imageActionSchema.ts)**: This file defines the schema for the two implemented actions, `createImageAction` and `editImageAction`. It specifies the structure and required parameters for each action, such as `originalRequest`, `caption`, `numImages`, and `editPrompt`.
 
-- **[src/imageActionHandler.ts](./src/imageActionHandler.ts)**: This file implements the logic for handling the defined actions. It processes user requests and interacts with the Azure OpenAI API to generate or edit images. The `executePhotoAction` function is the main entry point for executing actions.
+- **[src/imageActionHandler.ts](./src/imageActionHandler.ts)**: This file contains the core logic for handling the defined actions. It processes user requests and interacts with the Azure OpenAI API to generate or edit images. The `executePhotoAction` function is the main entry point for executing actions.
 
-- **[src/imageSchema.agr](./src/imageSchema.agr)**: This file contains the grammar rules for parsing user requests into actionable commands. It ensures that natural language inputs are correctly interpreted and mapped to the appropriate actions.
+- **[src/imageSchema.agr](./src/imageSchema.agr)**: This file defines the grammar rules for parsing user requests into actionable commands. It ensures that natural language inputs are correctly interpreted and mapped to the appropriate actions.
 
-- **[src/imageSchema.tests.json](./src/imageSchema.tests.json)**: This file provides test cases to validate the grammar and action handling. These tests ensure that user requests are correctly mapped to the appropriate actions and that the agent behaves as expected.
-
-The core functionality of the agent is implemented in the [imageActionHandler.ts](./src/imageActionHandler.ts) file, which processes the `createImageAction` and `editImageAction` requests.
+- **[src/imageSchema.tests.json](./src/imageSchema.tests.json)**: This file includes test cases to validate the grammar and action handling. These tests ensure that user requests are correctly mapped to the appropriate actions and that the agent behaves as expected.
 
 ## How to extend
 
-To extend the `image-agent` with new capabilities, follow these steps:
+To add new features or actions to the `image-agent`, follow these steps:
 
-1. **Define new actions**: Add new action types and their associated parameters to the [imageActionSchema.ts](./src/imageActionSchema.ts) file. Ensure each action has a unique name and a clear purpose.
+1. **Define new actions**: Add new action types and their associated parameters to the [imageActionSchema.ts](./src/imageActionSchema.ts) file. Clearly define the purpose and structure of each new action.
 
 2. **Update the grammar**: Modify the [imageSchema.agr](./src/imageSchema.agr) file to include grammar rules for the new actions. This ensures that user inputs can be correctly parsed into the new actions.
 
@@ -113,6 +111,6 @@ _2 actions implemented by this agent, parsed deterministically from `./src/image
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-12T08:45:00.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter image-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

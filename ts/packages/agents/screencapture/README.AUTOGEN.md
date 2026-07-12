@@ -12,14 +12,14 @@
 
 ## Overview
 
-The `screencapture-agent` is a TypeAgent application agent designed for screen capture and recording tasks. It supports taking screenshots and recording the screen on Windows and Linux (X11), with the ability to target specific programs or windows by name. This agent integrates with the TypeAgent ecosystem, enabling users to perform screen capture actions through natural language commands.
+The `screencapture-agent` is a TypeAgent application agent designed for screen capture and recording tasks. It enables users to take screenshots and record their screens on Windows and Linux (X11), with the option to target specific programs or windows by name. This agent integrates with the TypeAgent ecosystem, allowing users to perform these actions through natural language commands.
 
 ## What it does
 
-The `screencapture-agent` provides the following key functionalities:
+The `screencapture-agent` provides the following capabilities:
 
 - **`takeScreenshot`**: Captures a screenshot of the entire screen or a specific window. If a `target` parameter is provided, the agent attempts to match the name to a visible window (e.g., "Chrome" or "Visual Studio").
-- **`startRecording`**: Initiates a screen recording of the entire screen or a specific window. Only one recording can be active at a time.
+- **`startRecording`**: Begins a screen recording of the entire screen or a specific window. Only one recording can be active at a time.
 - **`stopRecording`**: Stops the currently active screen recording.
 - **`listWindows`**: Lists all currently visible windows, allowing users to identify and target them by name.
 - **`recording`**: Tracks the activity of an ongoing recording, including details such as the target, output path, and start time.
@@ -163,6 +163,6 @@ _5 actions implemented by this agent, parsed deterministically from `./src/scree
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter screencapture-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-12T08:45:00.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter screencapture-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

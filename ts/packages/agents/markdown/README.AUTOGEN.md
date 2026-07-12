@@ -12,22 +12,28 @@
 
 ## Overview
 
-The Markdown Agent is a TypeAgent application agent designed to facilitate the creation, editing, and management of markdown documents. It supports a variety of editing scenarios, including real-time collaboration, AI-assisted updates, and advanced markdown processing. This agent is particularly useful for scenarios involving GitHub-flavored markdown and integrates with libraries like `@milkdown/core` and `@typeagent/aiclient` to enhance its functionality.
+The `markdown-agent` is a TypeAgent application agent designed to facilitate the creation, editing, and management of markdown documents. It supports a variety of editing scenarios, including real-time collaboration, AI-assisted updates, and advanced markdown processing. This agent is particularly suited for handling GitHub-flavored markdown and leverages a range of libraries such as `@milkdown/core`, `@typeagent/aiclient`, and Yjs to provide a feature-rich editing experience.
 
 ## What it does
 
-The Markdown Agent provides a set of actions to manage markdown documents effectively. These actions include:
+The `markdown-agent` provides a set of actions to manage markdown documents effectively. These actions include:
 
 - **`createDocument`**: Creates a new markdown document with a specified name.
 - **`openDocument`**: Opens an existing markdown document for editing.
 - **`updateDocument`**: Updates a document by adding, removing, or modifying its content. This action supports operations such as inserting, deleting, replacing, and formatting text.
 - **`streamingUpdateDocument`**: Enables real-time updates to a document using AI streaming support, allowing for dynamic and interactive editing.
 
-The agent leverages advanced libraries such as `@milkdown/core` for markdown processing, Yjs for collaborative editing, and AI models for intelligent content updates. These capabilities make it suitable for both individual and collaborative markdown editing workflows.
+The agent integrates with advanced libraries to enhance its functionality:
+
+- **Markdown processing**: Utilizes `@milkdown/core` and related plugins for rendering and editing markdown content.
+- **Real-time collaboration**: Employs Yjs for collaborative editing, enabling multiple users to work on the same document simultaneously.
+- **AI-assisted updates**: Leverages AI models via `@typeagent/aiclient` to provide intelligent suggestions and real-time content updates.
+
+These capabilities make the `markdown-agent` a versatile tool for both individual and collaborative markdown editing workflows.
 
 ## Setup
 
-To configure the Markdown Agent, you need to set the following environment variables:
+To configure the `markdown-agent`, you need to set the following environment variables:
 
 - **`MARKDOWN_FILE`**: Specifies the path to the markdown file to be edited. This can be an absolute or relative path.
 - **`TYPEAGENT_MARKDOWN_ROOT`**: Defines the root directory for markdown files. This is used as the base directory for file operations.
@@ -36,40 +42,37 @@ These variables can be set in your shell or in the `ts/.env` file. If additional
 
 ## Key Files
 
-The implementation of the Markdown Agent is organized into several key files, each responsible for specific aspects of its functionality:
+The `markdown-agent` is implemented across several key files, each responsible for specific aspects of its functionality:
 
-- **Manifest**:
+### Manifest
 
-  - [markdownManifest.json](./src/agent/markdownManifest.json): Contains metadata about the agent, including its description, supported actions, and schema details.
+- **[markdownManifest.json](./src/agent/markdownManifest.json)**: Contains metadata about the agent, including its description, supported actions, and schema details.
 
-- **Action Handlers**:
+### Action Handlers
 
-  - [markdownActionHandler.ts](./src/agent/markdownActionHandler.ts): Implements the logic for handling actions such as `createDocument`, `openDocument`, `updateDocument`, and `streamingUpdateDocument`. This file is the core of the agent's functionality.
+- **[markdownActionHandler.ts](./src/agent/markdownActionHandler.ts)**: Implements the logic for handling actions such as `createDocument`, `openDocument`, `updateDocument`, and `streamingUpdateDocument`. This file is the core of the agent's functionality.
 
-- **Schemas**:
+### Schemas
 
-  - [markdownActionSchema.ts](./src/agent/markdownActionSchema.ts): Defines the structure and parameters for the actions supported by the agent.
-  - [markdownOperationSchema.ts](./src/agent/markdownOperationSchema.ts): Specifies the types of document operations, such as insert, delete, replace, and format.
+- **[markdownActionSchema.ts](./src/agent/markdownActionSchema.ts)**: Defines the structure and parameters for the actions supported by the agent.
+- **[markdownOperationSchema.ts](./src/agent/markdownOperationSchema.ts)**: Specifies the types of document operations, such as insert, delete, replace, and format.
 
-- **Translator**:
+### Translator
 
-  - [translator.ts](./src/agent/translator.ts): Integrates AI models and translates user actions into document operations. This file is critical for enabling AI-assisted updates.
+- **[translator.ts](./src/agent/translator.ts)**: Integrates AI models and translates user actions into document operations. This file is critical for enabling AI-assisted updates.
 
-- **Collaboration Manager**:
-  - [collaborationManager.ts](./src/view/route/collaborationManager.ts): Manages server-side collaboration for real-time document synchronization using Yjs.
+### Collaboration Manager
 
-### File Responsibilities
+- **[collaborationManager.ts](./src/view/route/collaborationManager.ts)**: Manages server-side collaboration for real-time document synchronization using Yjs.
 
-- **[markdownManifest.json](./src/agent/markdownManifest.json)**: Defines the agent's metadata, including its emoji identifier, description, and the schema file it uses.
-- **[markdownActionHandler.ts](./src/agent/markdownActionHandler.ts)**: Contains the main logic for executing and validating actions, as well as handling streaming updates.
-- **[markdownActionSchema.ts](./src/agent/markdownActionSchema.ts)**: Specifies the types and parameters for actions like `createDocument` and `updateDocument`.
-- **[markdownOperationSchema.ts](./src/agent/markdownOperationSchema.ts)**: Details the types of operations (e.g., insert, delete) that can be performed on a markdown document.
-- **[translator.ts](./src/agent/translator.ts)**: Handles the integration with AI models, translating user actions into document operations.
-- **[collaborationManager.ts](./src/view/route/collaborationManager.ts)**: Ensures consistency across clients during collaborative editing sessions.
+### Additional Files
+
+- **[ipcTypes.ts](./src/agent/ipcTypes.ts)**: Defines inter-process communication (IPC) message types for communication between the agent and its view.
+- **[tsconfig.json](./src/agent/tsconfig.json)**: Configuration file for TypeScript compilation, specifying project-specific settings.
 
 ## How to extend
 
-To extend the Markdown Agent, follow these steps:
+To extend the `markdown-agent`, follow these steps:
 
 1. **Define new actions**:
 
@@ -94,7 +97,7 @@ To extend the Markdown Agent, follow these steps:
 6. **Add collaboration support (if needed)**:
    - If the new functionality involves real-time collaboration, update [collaborationManager.ts](./src/view/route/collaborationManager.ts) to handle the new operations.
 
-By following these steps, you can enhance the Markdown Agent to support additional markdown editing scenarios, integrate new features, or improve existing functionality.
+By following these steps, you can enhance the `markdown-agent` to support additional markdown editing scenarios, integrate new features, or improve existing functionality.
 
 ## Reference
 
@@ -135,6 +138,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter markdown-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-12T08:45:00.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter markdown-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

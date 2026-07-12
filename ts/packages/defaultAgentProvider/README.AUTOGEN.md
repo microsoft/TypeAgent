@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=9f349bed71fc130bbf43b0f4f0c61a4d23ebeaf850b27e133e72ad4f70af905c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=136471a7a82eb1caa8743602a733020585d6fd70fcbdd7a0a5302d2ebb07ad7b -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # default-agent-provider — AI-generated documentation
@@ -12,20 +12,20 @@
 
 ## Overview
 
-The `default-agent-provider` package is a TypeScript library that acts as the default agent provider for the TypeAgent framework. It is a core component used by the shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents and configurations are available for the proper operation of the TypeAgent ecosystem.
+The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent framework. It is a foundational component used by the shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents and configurations are available for the proper functioning of the TypeAgent ecosystem.
 
 ## What it does
 
-The `default-agent-provider` package provides a set of default implementations and utilities for managing agents and their configurations. It is responsible for:
+The `default-agent-provider` package provides a comprehensive set of utilities and default implementations for managing agents and their configurations. Its primary responsibilities include:
 
-- **Default Agent Providers**: Functions like `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` provide pre-configured agent providers and construction mechanisms for initializing agents.
-- **Agent Source Management**: The `getDefaultAppAgentSource` function manages the connected app-agent source, which includes the installed-agent record store and the host-owned `@package` agent.
-- **Dispatcher Options**: The `getDefaultDispatcherOptions` function provides default configurations for the dispatcher, which is responsible for routing actions to the appropriate agents.
-- **Indexing Service Registry**: The `getIndexingServiceRegistry` function manages the indexing service registry, which is used for organizing and retrieving agent-related data.
+- **Default Agent Providers**: Functions such as `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` supply pre-configured agent providers and construction mechanisms for initializing agents.
+- **Agent Source Management**: The `getDefaultAppAgentSource` function manages the app-agent source, which includes the installed-agent record store and the host-owned `@package` agent.
+- **Dispatcher Configuration**: The `getDefaultDispatcherOptions` function provides default configurations for the dispatcher, which routes actions to the appropriate agents.
+- **Indexing Service Registry**: The `getIndexingServiceRegistry` function organizes and retrieves agent-related data.
 
-Additionally, the package includes a set of operational scripts under the `collisions` directory. These scripts are used to test and validate the functionality of the dispatcher and agent providers. They include tools for running pipelines, generating and analyzing corpora, and testing collision detection mechanisms.
+The package also includes a set of test agents, such as the `vampire` agent, which is used to test dispatcher subsystems like action collision detection. These agents are disabled by default in production but can be enabled for testing purposes.
 
-The package also supports test agents, such as the `vampire` agent, which is used to test dispatcher subsystems like action collision detection. These agents are disabled by default in production but can be enabled for testing purposes.
+Additionally, the package includes operational scripts in the `collisions` directory. These scripts are used to test and validate dispatcher functionality and agent behavior under various scenarios. They include tools for running pipelines, generating and analyzing corpora, and testing collision detection mechanisms.
 
 ## Setup
 
@@ -38,8 +38,8 @@ To use the `default-agent-provider` package, follow these steps:
 
 2. **Set environment variables**:
 
-   - `TYPEAGENT_FEED_REGISTRY`: This variable specifies the registry for the agent feed. Refer to the hand-written README for details on how to configure this value.
-   - `TYPEAGENT_FEED_SCOPES`: This variable defines the scopes for the agent feed. Ensure it is set appropriately for your environment.
+   - `TYPEAGENT_FEED_REGISTRY`: Specifies the registry for the agent feed. Refer to the hand-written README for details on how to configure this value.
+   - `TYPEAGENT_FEED_SCOPES`: Defines the scopes for the agent feed. Ensure it is set appropriately for your environment.
 
 3. **Optional setup for non-bundled agents**:
    - Some agents, such as `androidMobile` and `vampire`, are not included in the default provider profile. To install these agents, use the following commands:
@@ -170,7 +170,7 @@ External: `@modelcontextprotocol/sdk`, `@modelcontextprotocol/server-filesystem`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/collisions/expandedCorpusRunner.ts`, `./src/collisions/listModels.ts`, …and 27 more under `./src/`.
+`./src/index.ts`, `./src/collisions/expandedCorpusRunner.ts`, `./src/collisions/listModels.ts`, …and 28 more under `./src/`.
 
 ### Environment variables
 
@@ -181,6 +181,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-12T08:45:00.858Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
