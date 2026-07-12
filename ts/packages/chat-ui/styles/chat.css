@@ -1049,6 +1049,24 @@ table.sc-table tbody tr:nth-child(even) {
   opacity: 1;
 }
 
+/* Filter input (Phase 4a) */
+.sc-filter-input {
+  background: var(--vscode-input-background, #fff);
+  border: 1px solid var(--vscode-input-border, #ccc);
+  border-radius: 3px;
+  color: var(--vscode-input-foreground, inherit);
+  display: block;
+  font-size: 0.85em;
+  margin-bottom: 4px;
+  padding: 3px 7px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sc-filter-input::placeholder {
+  color: var(--vscode-input-placeholderForeground, #999);
+}
+
 /* --- Badges -------------------------------------------------------------- */
 
 .sc-badge {

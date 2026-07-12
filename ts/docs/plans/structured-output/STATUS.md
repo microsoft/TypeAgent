@@ -4,7 +4,7 @@ Working tracker for the plan in [PLAN.md](./PLAN.md). Update whenever a
 phase item is started, completed, or a follow-up surfaces. Keep entries
 terse — one line per item where possible.
 
-_Last updated: 2026-07-11 — Phase 3 (rich rendering) implemented._
+_Last updated: 2026-07-12 — Phase 4 (sort/filter interactivity) + Phase 5 (github-cli adopter) implemented._
 
 ## Progress by phase
 
@@ -39,16 +39,16 @@ _Last updated: 2026-07-11 — Phase 3 (rich rendering) implemented._
 
 | Item | Description | Status |
 | ---- | ----------- | ------ |
-| 4a | Client-side sort/filter on `TableBlock` honoring `readonly`/`sortable`/`filterable` | todo |
+| 4a | Client-side sort/filter on `TableBlock` honoring `readonly`/`sortable`/`filterable` | done |
 
 ### Phase 5 — First adopter: github-cli *(after 1)*
 
 | Item | Description | Status |
 | ---- | ----------- | ------ |
-| 5a | `prList` / `issueList` / `myPullRequests` / `searchRepos` → table blocks + rawData | todo |
-| 5b | `dependabotAlerts` + contributors → table blocks | todo |
-| 5c | `repoView` → keyValue block | todo |
-| 5d | Update handler unit tests | todo |
+| 5a | `prList` / `issueList` / `myAssignedIssues` / `searchRepos` → table blocks + rawData | done |
+| 5b | `dependabotAlerts` + contributors → table blocks | done |
+| 5c | `repoView` → keyValue block | done |
+| 5d | Update handler unit tests | done |
 
 ### Phase 6 — Programmatic "or otherwise" *(after 1 + 5)*
 

@@ -8,6 +8,11 @@ import {
     ActionResult,
     ActionResultSuccess,
     ReadinessReport,
+    BadgeTone,
+    TableCell,
+    TableBlock,
+    KeyValuePair,
+    StructuredBlock,
 } from "@typeagent/agent-sdk";
 import {
     ChoiceManager,
@@ -17,6 +22,11 @@ import {
     createMultiChoiceResult,
     createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
+import {
+    ColumnSpec,
+    createStructuredContent,
+    createTable,
+} from "@typeagent/agent-sdk/helpers/display";
 import { GithubCliActions } from "./github-cliSchema.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -1036,77 +1046,491 @@ function formatPrView(data: Record<string, unknown>): string {
     return header + bodySection;
 }
 
-function formatListResults(
+// ============================================================================
+// Phase 5 — structured-content list results (replaces formatListResults)
+// ============================================================================
+
+// Map a PR record to a badge tone for the state column.
+function prBadge(pr: Record<string, unknown>): BadgeTone {
+    if (pr.isDraft) return "warning";
+    const s = String(pr.state ?? "").toUpperCase();
+    if (s === "OPEN") return "info";
+    if (s === "MERGED") return "success";
+    return "neutral";
+}
+
+// Map an issue state string to a badge tone.
+function issueBadge(state: string): BadgeTone {
+    const s = state.toUpperCase();
+    if (s === "OPEN") return "info";
+    return "neutral";
+}
+
+// Map a Dependabot severity string to a badge tone.
+function severityBadge(sev: string): BadgeTone {
+    switch (sev.toUpperCase()) {
+        case "CRITICAL":
+        case "HIGH":
+            return "error";
+        case "MEDIUM":
+            return "warning";
+        default:
+            return "neutral";
+    }
+}
+
+// Build a TableBlock from ColumnSpec + records, then wrap it with a heading
+// in a properly-derived StructuredContent (alternates computed from all blocks).
+function makeStructuredTable<T>(
+    objects: T[],
+    colSpecs: ColumnSpec<T>[],
+    headingText: string,
+    tableOptions?: { sortable?: boolean; filterable?: boolean; readonly?: boolean },
+): ActionResultSuccess {
+    const columns = colSpecs.map(({ value: _v, ...col }) => col);
+    const rows: TableCell[][] = objects.map((obj) =>
+        colSpecs.map((col) => col.value(obj)),
+    );
+    const table: TableBlock = createTable(columns, rows, tableOptions);
+    const blocks: StructuredBlock[] = [
+        { kind: "heading", level: 3, text: headingText },
+        table,
+    ];
+    return {
+        historyText: headingText,
+        entities: [],
+        displayContent: createStructuredContent(blocks, { rawData: objects }),
+    };
+}
+
+// Build a heading + table StructuredContent for a list action. Returns
+// undefined for action names that have no structured template.
+//
+// Exported for unit tests.
+export function buildStructuredListResult(
     items: Record<string, unknown>[],
     actionName: string,
-): string | undefined {
-    if (items.length === 0) return "No results found.";
+    label: string,
+): ActionResultSuccess | undefined {
+    const count = items.length;
+    const headingText = `${label} — ${count} result${count === 1 ? "" : "s"}`;
 
-    // Issues
-    if (actionName === "issueList" && "number" in items[0]) {
-        return items
-            .map((i) => {
-                const labels = Array.isArray(i.labels)
-                    ? (i.labels as Record<string, unknown>[])
-                          .map((l) => l.name)
-                          .join(", ")
-                    : "";
-                const labelStr = labels ? ` \`${labels}\`` : "";
-                return `- [#${i.number} ${i.title}](${i.url}) — ${i.state}${labelStr}`;
-            })
-            .join("\n");
+    if (count === 0) {
+        return {
+            historyText: headingText,
+            entities: [],
+            displayContent: createStructuredContent(
+                [
+                    { kind: "heading", level: 3, text: headingText },
+                    { kind: "text", text: "No results found." },
+                ],
+            ),
+        };
     }
 
     // Pull requests
     if (actionName === "prList" && "number" in items[0]) {
-        return items
-            .map((pr) => {
-                const status = pr.isDraft ? "DRAFT" : String(pr.state);
-                const branch = pr.headRefName ? ` \`${pr.headRefName}\`` : "";
-                return `- [#${pr.number} ${pr.title}](${pr.url}) — ${status}${branch}`;
-            })
-            .join("\n");
+        type PrRecord = {
+            number: unknown;
+            title: unknown;
+            state: unknown;
+            isDraft: unknown;
+            headRefName: unknown;
+            url: unknown;
+            createdAt: unknown;
+        };
+        const cols: ColumnSpec<PrRecord>[] = [
+            {
+                id: "number",
+                header: "#",
+                type: "link",
+                align: "right",
+                value: (pr) => ({
+                    text: String(pr.number ?? ""),
+                    href: String(pr.url ?? ""),
+                }),
+            },
+            {
+                id: "title",
+                header: "Title",
+                value: (pr) => String(pr.title ?? ""),
+            },
+            {
+                id: "state",
+                header: "State",
+                type: "badge",
+                value: (pr): TableCell => {
+                    const tone = prBadge(pr as Record<string, unknown>);
+                    const lbl = pr.isDraft
+                        ? "Draft"
+                        : String(pr.state ?? "").charAt(0).toUpperCase() +
+                          String(pr.state ?? "").slice(1).toLowerCase();
+                    return { text: lbl, badge: tone };
+                },
+            },
+            {
+                id: "branch",
+                header: "Branch",
+                type: "code",
+                value: (pr) => String(pr.headRefName ?? ""),
+            },
+            {
+                id: "created",
+                header: "Created",
+                type: "date",
+                value: (pr) => {
+                    const d = pr.createdAt
+                        ? new Date(String(pr.createdAt))
+                        : null;
+                    return d ? d.toLocaleDateString() : "";
+                },
+            },
+        ];
+        return makeStructuredTable(
+            items as unknown as PrRecord[],
+            cols,
+            headingText,
+            { sortable: true },
+        );
+    }
+
+    // Issues
+    if (actionName === "issueList" && "number" in items[0]) {
+        type IssueRecord = {
+            number: unknown;
+            title: unknown;
+            state: unknown;
+            url: unknown;
+            createdAt: unknown;
+            labels: unknown;
+        };
+        const cols: ColumnSpec<IssueRecord>[] = [
+            {
+                id: "number",
+                header: "#",
+                type: "link",
+                align: "right",
+                value: (i) => ({
+                    text: String(i.number ?? ""),
+                    href: String(i.url ?? ""),
+                }),
+            },
+            {
+                id: "title",
+                header: "Title",
+                value: (i) => String(i.title ?? ""),
+            },
+            {
+                id: "state",
+                header: "State",
+                type: "badge",
+                value: (i): TableCell => ({
+                    text:
+                        String(i.state ?? "").charAt(0).toUpperCase() +
+                        String(i.state ?? "").slice(1).toLowerCase(),
+                    badge: issueBadge(String(i.state ?? "")),
+                }),
+            },
+            {
+                id: "labels",
+                header: "Labels",
+                value: (i) =>
+                    Array.isArray(i.labels)
+                        ? (i.labels as Record<string, unknown>[])
+                              .map((l) => String(l.name ?? ""))
+                              .filter(Boolean)
+                              .join(", ")
+                        : "",
+            },
+            {
+                id: "created",
+                header: "Created",
+                type: "date",
+                value: (i) => {
+                    const d = i.createdAt
+                        ? new Date(String(i.createdAt))
+                        : null;
+                    return d ? d.toLocaleDateString() : "";
+                },
+            },
+        ];
+        return makeStructuredTable(
+            items as unknown as IssueRecord[],
+            cols,
+            headingText,
+            { sortable: true },
+        );
     }
 
     // Issues assigned to the current user (gh search issues --assignee @me)
     if (actionName === "myAssignedIssues" && "number" in items[0]) {
-        return items
-            .map((it) => {
-                const repo = it.repository as
-                    | Record<string, unknown>
-                    | undefined;
-                const repoFull =
-                    (repo?.nameWithOwner as string | undefined) ??
-                    (repo?.name as string | undefined) ??
-                    "";
-                const labels = Array.isArray(it.labels)
-                    ? (it.labels as Record<string, unknown>[])
-                          .map((l) => l.name)
-                          .filter(Boolean)
-                          .join(", ")
-                    : "";
-                const labelStr = labels ? ` _[${labels}]_` : "";
-                const repoPrefix = repoFull ? `${repoFull} ` : "";
-                return `- ${repoPrefix}[#${it.number} ${it.title}](${it.url})${labelStr}`;
-            })
-            .join("\n");
+        type AssignedIssue = {
+            number: unknown;
+            title: unknown;
+            url: unknown;
+            repository: unknown;
+            state: unknown;
+            updatedAt: unknown;
+            labels: unknown;
+        };
+        const cols: ColumnSpec<AssignedIssue>[] = [
+            {
+                id: "repo",
+                header: "Repo",
+                value: (i) => {
+                    const repo = i.repository as
+                        | Record<string, unknown>
+                        | undefined;
+                    return (
+                        (repo?.nameWithOwner as string | undefined) ??
+                        (repo?.name as string | undefined) ??
+                        ""
+                    );
+                },
+            },
+            {
+                id: "number",
+                header: "#",
+                type: "link",
+                align: "right",
+                value: (i) => ({
+                    text: String(i.number ?? ""),
+                    href: String(i.url ?? ""),
+                }),
+            },
+            {
+                id: "title",
+                header: "Title",
+                value: (i) => String(i.title ?? ""),
+            },
+            {
+                id: "labels",
+                header: "Labels",
+                value: (i) =>
+                    Array.isArray(i.labels)
+                        ? (i.labels as Record<string, unknown>[])
+                              .map((l) => String(l.name ?? ""))
+                              .filter(Boolean)
+                              .join(", ")
+                        : "",
+            },
+            {
+                id: "updated",
+                header: "Updated",
+                type: "date",
+                value: (i) => {
+                    const d = i.updatedAt
+                        ? new Date(String(i.updatedAt))
+                        : null;
+                    return d ? d.toLocaleDateString() : "";
+                },
+            },
+        ];
+        return makeStructuredTable(
+            items as unknown as AssignedIssue[],
+            cols,
+            headingText,
+            { sortable: true },
+        );
     }
 
     // Search repos
     if (actionName === "searchRepos" && "fullName" in items[0]) {
-        return items
-            .map((r) => {
-                const stars =
-                    r.stargazersCount || r.stargazerCount
-                        ? ` ⭐ ${r.stargazersCount ?? r.stargazerCount}`
-                        : "";
-                const desc = r.description ? ` — ${r.description}` : "";
-                return `- [${r.fullName}](${r.url})${stars}${desc}`;
-            })
-            .join("\n");
+        type RepoRecord = {
+            fullName: unknown;
+            description: unknown;
+            stargazersCount: unknown;
+            url: unknown;
+            updatedAt: unknown;
+        };
+        const cols: ColumnSpec<RepoRecord>[] = [
+            {
+                id: "name",
+                header: "Repository",
+                type: "link",
+                value: (r) => ({
+                    text: String(r.fullName ?? ""),
+                    href: String(r.url ?? ""),
+                }),
+            },
+            {
+                id: "stars",
+                header: "Stars",
+                type: "number",
+                align: "right",
+                value: (r) => {
+                    const n = Number(r.stargazersCount ?? 0);
+                    return n ? String(n) : "";
+                },
+            },
+            {
+                id: "description",
+                header: "Description",
+                value: (r) => String(r.description ?? ""),
+            },
+            {
+                id: "updated",
+                header: "Updated",
+                type: "date",
+                value: (r) => {
+                    const d = r.updatedAt
+                        ? new Date(String(r.updatedAt))
+                        : null;
+                    return d ? d.toLocaleDateString() : "";
+                },
+            },
+        ];
+        return makeStructuredTable(
+            items as unknown as RepoRecord[],
+            cols,
+            headingText,
+            { sortable: true },
+        );
     }
 
     return undefined;
+}
+
+// Build a structured result for `gh repo view` (repoView action).
+//
+// Exported for unit tests.
+export function buildStructuredRepoView(
+    data: Record<string, unknown>,
+    label: string,
+): ActionResultSuccess {
+    const pairs: KeyValuePair[] = [];
+    const push = (lbl: string, val: TableCell) => {
+        const text =
+            typeof val === "string"
+                ? val
+                : typeof val === "number"
+                  ? String(val)
+                  : val.text;
+        if (text) pairs.push({ label: lbl, value: val });
+    };
+
+    const repoName = data.owner
+        ? `${formatValue(data.owner)}/${String(data.name ?? "")}`
+        : String(data.name ?? "");
+    push("Repository", { text: repoName, href: String(data.url ?? "") });
+    if (data.description) push("Description", String(data.description));
+    push("Visibility", String(data.visibility ?? ""));
+    if (data.primaryLanguage)
+        push("Language", formatValue(data.primaryLanguage));
+    push("Stars", String(data.stargazerCount ?? 0));
+    push("Forks", String(data.forkCount ?? 0));
+    if (data.watchers) push("Watchers", formatValue(data.watchers));
+    if (data.defaultBranchRef)
+        push("Default branch", formatValue(data.defaultBranchRef));
+    if (data.createdAt) {
+        const d = new Date(String(data.createdAt));
+        push("Created", d.toLocaleDateString());
+    }
+    if (data.updatedAt) {
+        const d = new Date(String(data.updatedAt));
+        push("Updated", d.toLocaleDateString());
+    }
+
+    const blocks: StructuredBlock[] = [
+        { kind: "heading", level: 3, text: label },
+        { kind: "keyValue", pairs },
+    ];
+    return {
+        historyText: label,
+        entities: [],
+        displayContent: createStructuredContent(blocks, { rawData: data }),
+    };
+}
+
+// Build a structured result for Dependabot alerts (security_advisory shape).
+//
+// Exported for unit tests.
+export function buildStructuredDependabotResult(
+    arr: Record<string, unknown>[],
+): ActionResultSuccess {
+    const headerText = `🔒 ${arr.length} Dependabot alert${arr.length === 1 ? "" : "s"}`;
+    type AlertRecord = Record<string, unknown>;
+    const cols: ColumnSpec<AlertRecord>[] = [
+        {
+            id: "severity",
+            header: "Severity",
+            type: "badge",
+            value: (a): TableCell => {
+                const adv = a.security_advisory as
+                    | Record<string, unknown>
+                    | undefined;
+                const sev = String(adv?.severity ?? "unknown").toUpperCase();
+                return { text: sev, badge: severityBadge(sev) };
+            },
+        },
+        {
+            id: "package",
+            header: "Package",
+            type: "code",
+            value: (a): TableCell => {
+                const dep = a.dependency as
+                    | Record<string, unknown>
+                    | undefined;
+                const pkg = dep?.package as
+                    | Record<string, unknown>
+                    | undefined;
+                return String(pkg?.name ?? "unknown");
+            },
+        },
+        {
+            id: "advisory",
+            header: "Advisory",
+            type: "link",
+            value: (a): TableCell => {
+                const adv = a.security_advisory as
+                    | Record<string, unknown>
+                    | undefined;
+                return {
+                    text: String(adv?.summary ?? ""),
+                    href: String(a.html_url ?? ""),
+                };
+            },
+        },
+    ];
+    return makeStructuredTable(arr, cols, headerText, { sortable: true });
+}
+
+// Build a structured result for contributor lists (login + contributions shape).
+//
+// Exported for unit tests.
+export function buildStructuredContributorsResult(
+    arr: Record<string, unknown>[],
+): ActionResultSuccess {
+    const headerText =
+        arr.length === 1 ? "Top contributor" : `Top ${arr.length} contributors`;
+    const columns = [
+        { id: "rank", header: "#", type: "number" as const, align: "right" as const },
+        { id: "login", header: "Contributor", type: "link" as const },
+        {
+            id: "contributions",
+            header: "Contributions",
+            type: "number" as const,
+            align: "right" as const,
+        },
+    ];
+    const rows: TableCell[][] = arr.map((u, i) => [
+        String(i + 1),
+        {
+            text: String(u.login ?? ""),
+            href: `https://github.com/${String(u.login ?? "")}`,
+        },
+        String(u.contributions ?? "0"),
+    ]);
+    const table: TableBlock = createTable(columns, rows, { sortable: true });
+    const blocks: StructuredBlock[] = [
+        { kind: "heading", level: 3, text: headerText },
+        table,
+    ];
+    return {
+        historyText: headerText,
+        entities: [],
+        displayContent: createStructuredContent(blocks, { rawData: arr }),
+    };
 }
 
 // Friendly success messages for mutation actions that return no output
@@ -1382,11 +1806,13 @@ async function executeAction(
 
                 // Array results: issues, PRs, search repos
                 if (Array.isArray(data)) {
-                    const rows = formatListResults(data, action.actionName);
-                    if (rows) {
-                        return createActionResultFromMarkdownDisplay(
-                            `**${cmdLabel}** — ${data.length} result${data.length === 1 ? "" : "s"}\n\n${rows}`,
-                        );
+                    const result = buildStructuredListResult(
+                        data as Record<string, unknown>[],
+                        action.actionName,
+                        cmdLabel,
+                    );
+                    if (result) {
+                        return result;
                     }
                 }
 
@@ -1404,7 +1830,12 @@ async function executeAction(
                     );
                 }
 
-                // Single object (e.g., repo view)
+                // Repo view — structured key-value block
+                if (action.actionName === "repoView") {
+                    return buildStructuredRepoView(data, cmdLabel);
+                }
+
+                // Single object fallback
                 const lines = Object.entries(data)
                     .map(([k, v]) => `- **${k}**: ${formatValue(v)}`)
                     .join("\n");
@@ -1435,60 +1866,12 @@ async function executeAction(
 
                 // Dependabot alerts
                 if (arr.length > 0 && "security_advisory" in arr[0]) {
-                    const rows = arr
-                        .map((a) => {
-                            const adv = a.security_advisory as Record<
-                                string,
-                                unknown
-                            >;
-                            const sev = String(
-                                adv.severity ?? "unknown",
-                            ).toUpperCase();
-                            const pkg = a.dependency
-                                ? (a.dependency as Record<string, unknown>)
-                                      .package
-                                    ? (
-                                          (
-                                              a.dependency as Record<
-                                                  string,
-                                                  unknown
-                                              >
-                                          ).package as Record<string, unknown>
-                                      ).name
-                                    : "unknown"
-                                : "unknown";
-                            const sevEmoji =
-                                sev === "CRITICAL"
-                                    ? "🔴"
-                                    : sev === "HIGH"
-                                      ? "🟠"
-                                      : sev === "MEDIUM"
-                                        ? "🟡"
-                                        : "🟢";
-                            return `- ${sevEmoji} **${sev}** — \`${pkg}\` — [${adv.summary}](${a.html_url})`;
-                        })
-                        .join("\n");
-                    const header = `🔒 **${arr.length} Dependabot alert${arr.length === 1 ? "" : "s"}**`;
-                    return createActionResultFromMarkdownDisplay(
-                        `${header}\n\n${rows}`,
-                    );
+                    return buildStructuredDependabotResult(arr);
                 }
 
                 // Contributors
                 if (arr.length > 0 && "login" in arr[0]) {
-                    const rows = arr
-                        .map(
-                            (u, i) =>
-                                `${i + 1}. [**${u.login}**](https://github.com/${u.login}) — ${u.contributions} contributions`,
-                        )
-                        .join("\n");
-                    const header =
-                        arr.length === 1
-                            ? "Top contributor"
-                            : `Top ${arr.length} contributors`;
-                    return createActionResultFromMarkdownDisplay(
-                        `**${header}**\n\n${rows}`,
-                    );
+                    return buildStructuredContributorsResult(arr);
                 }
             } catch {
                 // Fall through to raw output

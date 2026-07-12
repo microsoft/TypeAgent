@@ -86,11 +86,13 @@ function renderTableCell(
 }
 
 function renderTableBlock(block: TableBlock): string {
-    const { columns, rows, caption, sortable, readonly } = block;
+    const { columns, rows, caption, sortable, filterable, readonly } = block;
     const sortAttr =
         !readonly && sortable !== false ? ' data-sc-sortable="true"' : "";
+    const filterAttr =
+        !readonly && filterable ? ' data-sc-filterable="true"' : "";
     const parts: string[] = [
-        `<div class="sc-table-wrap"><table class="sc-table"${sortAttr}>`,
+        `<div class="sc-table-wrap"><table class="sc-table"${sortAttr}${filterAttr}>`,
     ];
     if (caption) {
         parts.push(`<caption class="sc-caption">${esc(caption)}</caption>`);
@@ -248,6 +250,135 @@ function renderBlock(block: StructuredBlock): string {
  */
 function renderStructuredContent(content: StructuredContent): string {
     return content.blocks.map(renderBlock).join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4a — client-side sort + filter for sc-table elements
+// ---------------------------------------------------------------------------
+
+/**
+ * Wire up sort buttons and filter inputs for every `.sc-table` found inside
+ * `root`.  Called after innerHTML is written so the elements are live in the
+ * DOM.
+ */
+function attachTableInteractivity(root: HTMLElement): void {
+    root.querySelectorAll<HTMLTableElement>("table.sc-table").forEach(
+        (table) => {
+            const canSort = table.dataset.scSortable === "true";
+            const canFilter = table.dataset.scFilterable === "true";
+            if (!canSort && !canFilter) return;
+
+            const tbody =
+                table.querySelector<HTMLTableSectionElement>("tbody");
+            if (!tbody) return;
+
+            // Snapshot original row order so we can restore it on "none" sort.
+            const originalRows = Array.from(
+                tbody.querySelectorAll<HTMLTableRowElement>("tr"),
+            );
+            originalRows.forEach(
+                (row, idx) => (row.dataset.scIdx = String(idx)),
+            );
+
+            // Per-table sort state.
+            let sortColId: string | null = null;
+            let sortDir: "asc" | "desc" | "none" = "none";
+
+            if (canSort) {
+                table
+                    .querySelectorAll<HTMLButtonElement>(".sc-sort-btn")
+                    .forEach((btn) => {
+                        btn.addEventListener("click", () => {
+                            const colId = btn.dataset.scCol ?? "";
+                            // Cycle: none → asc → desc → none
+                            if (sortColId !== colId) {
+                                sortColId = colId;
+                                sortDir = "asc";
+                            } else if (sortDir === "asc") {
+                                sortDir = "desc";
+                            } else {
+                                sortDir = "none";
+                                sortColId = null;
+                            }
+
+                            // Update all sort-button icons in this table.
+                            table
+                                .querySelectorAll<HTMLButtonElement>(
+                                    ".sc-sort-btn",
+                                )
+                                .forEach((b) => {
+                                    if (b !== btn || sortDir === "none") {
+                                        b.textContent = "↕";
+                                        b.dataset.scSortDir = "none";
+                                    } else {
+                                        b.textContent =
+                                            sortDir === "asc" ? "↑" : "↓";
+                                        b.dataset.scSortDir = sortDir;
+                                    }
+                                });
+
+                            const th = btn.closest<HTMLTableCellElement>("th");
+                            if (!th) return;
+                            const colIdx = th.cellIndex;
+
+                            const rows = Array.from(
+                                tbody.querySelectorAll<HTMLTableRowElement>(
+                                    "tr",
+                                ),
+                            );
+                            if (sortDir === "none") {
+                                // Restore original order.
+                                originalRows.forEach((row) =>
+                                    tbody.appendChild(row),
+                                );
+                            } else {
+                                rows.sort((a, b) => {
+                                    const ca =
+                                        a.cells[colIdx]?.textContent?.trim() ??
+                                        "";
+                                    const cb =
+                                        b.cells[colIdx]?.textContent?.trim() ??
+                                        "";
+                                    const cmp = ca.localeCompare(
+                                        cb,
+                                        undefined,
+                                        {
+                                            numeric: true,
+                                            sensitivity: "base",
+                                        },
+                                    );
+                                    return sortDir === "asc" ? cmp : -cmp;
+                                });
+                                rows.forEach((row) => tbody.appendChild(row));
+                            }
+                        });
+                    });
+            }
+
+            if (canFilter) {
+                const wrap = table.closest<HTMLElement>(".sc-table-wrap");
+                const input = document.createElement("input");
+                input.type = "text";
+                input.placeholder = "Filter rows…";
+                input.className = "sc-filter-input";
+                const container = wrap ?? table.parentElement;
+                if (container) {
+                    container.insertBefore(input, table);
+                }
+
+                input.addEventListener("input", () => {
+                    const query = input.value.trim().toLowerCase();
+                    tbody
+                        .querySelectorAll<HTMLTableRowElement>("tr")
+                        .forEach((row) => {
+                            const text = row.textContent?.toLowerCase() ?? "";
+                            row.style.display =
+                                query && !text.includes(query) ? "none" : "";
+                        });
+                });
+            }
+        },
+    );
 }
 
 function textToHtml(text: string): string {
@@ -572,6 +703,9 @@ export function setContent(
                 });
             }
         });
+
+        // Phase 4a — wire sort + filter on any sc-table elements just added.
+        attachTableInteractivity(contentElm);
     }
 
     if (!speak) {
