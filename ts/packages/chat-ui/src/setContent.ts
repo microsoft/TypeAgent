@@ -361,8 +361,8 @@ function attachTableInteractivity(root: HTMLElement): void {
                 input.type = "text";
                 input.placeholder = "Filter rows…";
                 input.className = "sc-filter-input";
-                // `container` is null only if the table isn't attached to the
-                // DOM yet; the `if` guard below handles that gracefully.
+                // Insert the filter input before the table (or its wrapper).
+                // `container` is null if neither a wrapper nor a parent exists.
                 const container = wrap ?? table.parentElement;
                 if (container) {
                     container.insertBefore(input, table);
