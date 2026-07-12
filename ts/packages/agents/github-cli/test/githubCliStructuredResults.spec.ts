@@ -246,6 +246,18 @@ describe("buildStructuredListResult — searchRepos", () => {
         expect(t.columns[starsIdx].type).toBe("number");
         expect(t.rows[0][starsIdx]).toBe("1200");
     });
+
+    test("zero stars renders as '0' not empty", () => {
+        const zeroStarRepo = [{ ...repos[0], stargazersCount: 0 }];
+        const result = buildStructuredListResult(
+            zeroStarRepo,
+            "searchRepos",
+            "search",
+        );
+        const t = table(result);
+        const starsIdx = t.columns.findIndex((c: any) => c.id === "stars");
+        expect(t.rows[0][starsIdx]).toBe("0");
+    });
 });
 
 // ---------------------------------------------------------------------------

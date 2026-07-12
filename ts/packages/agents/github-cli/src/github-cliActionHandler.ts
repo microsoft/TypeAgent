@@ -1358,10 +1358,7 @@ export function buildStructuredListResult(
                 header: "Stars",
                 type: "number",
                 align: "right",
-                value: (r) => {
-                    const n = Number(r.stargazersCount ?? 0);
-                    return n ? String(n) : "";
-                },
+                value: (r) => String(Number(r.stargazersCount ?? 0)),
             },
             {
                 id: "description",
