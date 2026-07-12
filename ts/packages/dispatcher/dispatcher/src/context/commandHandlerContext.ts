@@ -1254,6 +1254,7 @@ export async function initializeCommandHandlerContext(
         // report agents that appeared/disappeared while it
         // was offline, and record the baseline for the next load.
         reconcileKnownAgents(context);
+
         debug("Context initialized");
         return context;
     } catch (e) {
@@ -1284,6 +1285,32 @@ export async function initializeCommandHandlerContext(
             await instanceDirLock();
         }
         throw e;
+    }
+}
+
+/**
+ * Prewarm the configured reasoning engine's CLI in the background so the first
+ * reasoning request doesn't pay the cold-start cost. Best-effort and
+ * non-blocking (fire-and-forget).
+ *
+ * Intentionally NOT called from initializeCommandHandlerContext: the reasoning
+ * module load (e.g. @github/copilot-sdk) plus CLI subprocess spawn are heavy and
+ * would compete with the conversation reload during startup. Hosts call this
+ * AFTER the conversation has finished reloading so the initial load stays fast.
+ *
+ * The dynamic imports avoid a static import cycle (the reasoning modules import
+ * commandHandlerContext).
+ */
+export function prewarmReasoning(context: CommandHandlerContext): void {
+    const reasoningEngine = context.session.getConfig().execution.reasoning;
+    if (reasoningEngine === "copilot") {
+        void import("../reasoning/copilot.js")
+            .then((m) => m.prewarmCopilotReasoning(context))
+            .catch(() => {});
+    } else if (reasoningEngine === "claude") {
+        void import("../reasoning/claude.js")
+            .then((m) => m.prewarmClaudeReasoning(context))
+            .catch(() => {});
     }
 }
 

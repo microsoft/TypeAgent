@@ -738,10 +738,16 @@ export async function createConversationManager(
                 await manager.resolveConversationId(undefined);
             const record = conversations.get(conversationId)!;
             cancelIdleTimer(record);
-            await ensureDispatcher(record);
+            const sharedDispatcher = await ensureDispatcher(record);
             debugConversation(
                 `Pre-warmed dispatcher for conversation "${record.name}" (${conversationId})`,
             );
+            // Now that the conversation has finished reloading, kick off the
+            // reasoning engine prewarm in the background. Doing this here (rather
+            // than inside dispatcher init) keeps the reasoning module load + CLI
+            // spawn off the conversation-reload critical path, so the initial
+            // load stays fast.
+            sharedDispatcher.prewarmReasoning();
         },
 
         async joinConversation(

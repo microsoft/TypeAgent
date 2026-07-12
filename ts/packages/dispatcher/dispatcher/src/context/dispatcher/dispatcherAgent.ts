@@ -17,6 +17,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../commandHandlerContext.js";
 import {
+    createActionResultFromError,
     createActionResultFromMarkdownDisplay,
     createActionResultFromTextDisplay,
     createActionResultNoDisplay,
@@ -53,6 +54,11 @@ import {
     executeReasoning as executeCopilotReasoning,
 } from "../../reasoning/copilot.js";
 import { ReasonCommandHandler } from "./handlers/reasonCommandHandler.js";
+import registerDebug from "debug";
+
+const debugConversationAnswer = registerDebug(
+    "typeagent:dispatcher:conversationAnswer",
+);
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
@@ -65,6 +71,36 @@ const dispatcherHandlers: CommandHandlerTable = {
         explain: new ExplainCommandHandler(),
     },
 };
+
+/**
+ * Run the configured reasoning engine to answer a request. Returns undefined
+ * when reasoning is unavailable — either disabled for this request
+ * (noReasoning) or the engine is set to "none" — so callers can fall back to
+ * another path. Sets the engine-specific display icon for the duration of the
+ * call so reasoning bubbles show the engine brand instead of the dispatcher.
+ */
+async function runReasoningFallback(
+    context: ActionContext<CommandHandlerContext>,
+    request: string,
+): Promise<ActionResult | undefined> {
+    const systemContext = context.sessionContext.agentContext;
+    const engine = systemContext.session.getConfig().execution.reasoning;
+    if (systemContext.noReasoning || engine === "none") {
+        return undefined;
+    }
+    const reasoningIcons: Record<string, string> = {
+        claude: "\uD83E\uDDE0",
+        copilot: "\u2728",
+    };
+    systemContext.reasoningSourceIcon = reasoningIcons[engine] ?? undefined;
+    const reason =
+        engine === "copilot" ? executeCopilotReasoning : executeClaudeReasoning;
+    try {
+        return await reason(request, context);
+    } finally {
+        systemContext.reasoningSourceIcon = undefined;
+    }
+}
 
 async function executeDispatcherAction(
     action: TypeAgentAction<
@@ -97,33 +133,85 @@ async function executeDispatcherAction(
         case "dispatcher.lookup":
             switch (action.actionName) {
                 case "lookupAndAnswerConversation": {
-                    const lookupResult = await lookupAndAnswer(action, context);
+                    const systemContext =
+                        context.sessionContext.agentContext;
+                    const config = systemContext.session.getConfig();
+                    const strategy = config.execution.conversationAnswer;
+                    const reasoningAvailable =
+                        !systemContext.noReasoning &&
+                        config.execution.reasoning !== "none";
+
+                    // reasoning-first / reasoning-only: hand the request to the
+                    // reasoning agent, which already receives recent chat
+                    // context in-prompt and can call search_memory on demand.
+                    // If reasoning throws, degrade to the resilient lookup path
+                    // below rather than surfacing a raw error.
+                    //
+                    // TODO (deferred): "conditional-eager" hybrid — best-effort
+                    // pre-run the conversation-memory lookup here using the
+                    // translator's structured `question`, and inject the answer
+                    // into the reasoning prompt only on success (swallowing
+                    // errors), so reasoning-first does not depend on the agent
+                    // remembering to call search_memory. Revisit if measurement
+                    // shows the agent under-uses memory for older history.
+                    let reasoningTried = false;
+                    let reasoningError: unknown;
+                    if (strategy !== "lookup" && reasoningAvailable) {
+                        reasoningTried = true;
+                        try {
+                            return await runReasoningFallback(
+                                context,
+                                action.parameters.originalRequest,
+                            );
+                        } catch (e) {
+                            // Reasoning is the primary path for this strategy
+                            // but it failed (e.g. the engine is unreachable or
+                            // needs re-authentication). Remember the error so we
+                            // can surface it if the lookup fallback also can't
+                            // answer, and degrade to the lookup meanwhile.
+                            reasoningError = e;
+                            debugConversationAnswer(
+                                `reasoning-first failed; falling back to conversation lookup: ${
+                                    e instanceof Error ? e.message : String(e)
+                                }`,
+                            );
+                        }
+                    }
+
+                    // lookup mode, or a fallback when reasoning is unavailable
+                    // or threw: run the conversation-memory lookup, but never
+                    // let a transient failure surface raw — treat a thrown
+                    // error the same as a returned error result and fall back
+                    // to reasoning when it has not already been tried.
+                    let lookupResult: ActionResult;
+                    try {
+                        lookupResult = await lookupAndAnswer(action, context);
+                    } catch (e) {
+                        lookupResult = createActionResultFromError(
+                            e instanceof Error ? e.message : String(e),
+                        );
+                    }
                     if (lookupResult.error !== undefined) {
-                        // Conversation lookup found nothing — fall back to reasoning
-                        const systemContext =
-                            context.sessionContext.agentContext;
-                        if (!systemContext.noReasoning) {
-                            const engine =
-                                systemContext.session.getConfig().execution
-                                    .reasoning;
-                            const reasoningIcons: Record<string, string> = {
-                                claude: "🧠",
-                                copilot: "✨",
-                            };
-                            systemContext.reasoningSourceIcon =
-                                reasoningIcons[engine] ?? undefined;
-                            const reason =
-                                engine === "copilot"
-                                    ? executeCopilotReasoning
-                                    : executeClaudeReasoning;
-                            try {
-                                return await reason(
-                                    action.parameters.originalRequest,
-                                    context,
-                                );
-                            } finally {
-                                systemContext.reasoningSourceIcon = undefined;
+                        if (reasoningAvailable && !reasoningTried) {
+                            const reasoningResult = await runReasoningFallback(
+                                context,
+                                action.parameters.originalRequest,
+                            );
+                            if (reasoningResult !== undefined) {
+                                return reasoningResult;
                             }
+                        }
+                        // If reasoning was the intended primary path and it
+                        // threw, surface that failure (the real problem)
+                        // instead of the lookup's misleading "not answered".
+                        if (reasoningError !== undefined) {
+                            return createActionResultFromError(
+                                `Reasoning failed: ${
+                                    reasoningError instanceof Error
+                                        ? reasoningError.message
+                                        : String(reasoningError)
+                                }`,
+                            );
                         }
                     }
                     return lookupResult;
@@ -355,12 +443,14 @@ async function clarifyWithLookup(
     context: ActionContext<CommandHandlerContext>,
 ): Promise<ActionResult | undefined> {
     const systemContext = context.sessionContext.agentContext;
-    const agents = systemContext.agents;
+    // Entity-reference clarification consults conversation memory directly and
+    // builds its own translator, so it does not depend on the dispatcher.lookup
+    // action being active in translation — which the "reasoning-only" answer
+    // strategy disables. Only bail when there is no conversation memory at all.
     if (
-        !agents.isSchemaActive("dispatcher.lookup") ||
-        !agents.isActionActive("dispatcher.lookup")
+        systemContext.conversationMemory === undefined &&
+        systemContext.conversationManager === undefined
     ) {
-        // lookup is disabled either for translation or action. Just ask the user.
         return undefined;
     }
 

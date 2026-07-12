@@ -532,6 +532,14 @@ export class ChatPanel {
      */
     private threadContainers = new Map<string, AgentMessageContainer>();
     /**
+     * For reasoning "step" bubbles: the div of the most recently committed
+     * step bubble per thread. New step/temporary bubbles anchor on it so
+     * successive phases render top-to-bottom in chronological order under the
+     * column-reverse layout — instead of stacking newest-first on the user
+     * bubble. Stale entries self-heal via a parentElement liveness check.
+     */
+    private lastStepAnchorByThread = new Map<string, HTMLElement>();
+    /**
      * All agent bubbles ever created for a request/thread id, in creation
      * order. Step-mode reasoning intentionally creates multiple bubbles per
      * request; this lets us clear stale running rails and still finalize
@@ -2243,9 +2251,14 @@ export class ChatPanel {
         // simply omit the line rather than printing "not reported".
         const leftLines: string[] = [];
         if (tokenUsage) {
+            const cachedPart =
+                tokenUsage.cached_tokens !== undefined &&
+                tokenUsage.cached_tokens > 0
+                    ? `+${tokenUsage.cached_tokens} cached`
+                    : "";
             leftLines.push(
                 `${label} Tokens: <b>${tokenUsage.total_tokens}</b> ` +
-                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens})`,
+                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens}${cachedPart})`,
             );
         }
         metricsDiv.innerHTML = sanitize(
@@ -2344,21 +2357,64 @@ export class ChatPanel {
             this.statusContainer = undefined;
         }
 
-        // "step" mode — force a new bubble for each reasoning phase so
-        // thinking, tool calls, tool results, and final text each appear
-        // as distinct first-class chat messages instead of being appended
-        // into a single monolithic bubble.
+        // "step" mode — each reasoning phase (thinking, tool call, tool
+        // result, final text) becomes its own first-class bubble. Reuse the
+        // current streaming/temporary bubble as this phase's finalized bubble
+        // so the streamed content is not duplicated, then close it so the NEXT
+        // phase gets a fresh bubble chained directly below it (chronological
+        // order under the column-reverse layout).
         if (appendMode === "step") {
-            // Detach the existing container for this request (if any) so
-            // getOrCreateAgentContainer will spin up a fresh one.
-            if (requestId) {
-                const threadId = this.resolveThreadId(requestId);
-                // Mark the previous step bubble as done immediately when we
-                // advance to the next phase, rather than waiting for the
-                // whole command to complete.
-                this.threadContainers.get(threadId)?.clearRunning();
-                this.threadContainers.delete(threadId);
+            const threadId = this.resolveThreadId(requestId);
+            let stepContainer = this.threadContainers.get(threadId);
+            if (stepContainer === undefined) {
+                stepContainer = this.getOrCreateAgentContainer(
+                    source,
+                    sourceIcon,
+                    requestId,
+                );
+            } else if (sourceIcon) {
+                // The bubble may have been created by an earlier dispatcher
+                // status ("Executing action…") before the reasoning engine
+                // icon was known — refresh it to the engine icon.
+                stepContainer.setIcon(sourceIcon);
             }
+            // Reasoning step bubbles carry the engine provenance
+            // ("dispatcher.reasoningAction.<engine>") as their authoritative
+            // label. The first step can inherit the enclosing action's name via
+            // setDisplayInfo (e.g. lookupAndAnswerConversation) — force the
+            // reasoning source so every step is labeled consistently.
+            if (
+                typeof source === "string" &&
+                source.startsWith("dispatcher.reasoningAction")
+            ) {
+                stepContainer.overrideSource(source, sourceIcon);
+            }
+            if (requestId) {
+                const start = this.requestStartByRequestId.get(requestId);
+                if (start !== undefined) {
+                    stepContainer.setElapsedBadge(Date.now() - start);
+                }
+            }
+            // setMessage("block") flushes the streamed "temporary" content, so
+            // the reused bubble shows the finalized phase exactly once.
+            stepContainer.setMessage(content, source, "block");
+            // Keep the "working" rail on the CURRENT step bubble (the request
+            // is still in progress) while clearing it from any PRIOR step
+            // bubbles for this thread, so only the latest phase reads as
+            // running. completeRequest clears them all when the request ends.
+            const priorSteps = this.requestAgentContainers.get(threadId);
+            if (priorSteps) {
+                for (const prior of priorSteps) {
+                    if (prior !== stepContainer) {
+                        prior.clearRunning();
+                    }
+                }
+            }
+            this.threadContainers.delete(threadId);
+            this.lastStepAnchorByThread.set(threadId, stepContainer.div);
+            this.extractUserMarker(this.messageDiv);
+            this.scrollToBottom();
+            return;
         }
 
         const container = this.getOrCreateAgentContainer(
@@ -2367,20 +2423,7 @@ export class ChatPanel {
             requestId,
         );
 
-        // For step bubbles, stamp elapsed time since the request started.
-        if (appendMode === "step" && requestId) {
-            const start = this.requestStartByRequestId.get(requestId);
-            if (start !== undefined) {
-                const elapsed = Date.now() - start;
-                container.setElapsedBadge(elapsed);
-            }
-        }
-
-        container.setMessage(
-            content,
-            source,
-            appendMode === "step" ? "block" : appendMode,
-        );
+        container.setMessage(content, source, appendMode);
 
         // Speak the agent's reply when a TTS provider is enabled. Only
         // "block" (full reply) content is spoken — inline/temporary status
@@ -2406,6 +2449,7 @@ export class ChatPanel {
         this.threadContainers.delete(requestId);
         this.requestAgentContainers.delete(requestId);
         this.pendingThreadDisplayInfo.delete(requestId);
+        this.lastStepAnchorByThread.delete(requestId);
         this.clearSentAckTimer(requestId);
         this.sentAckConsumed.delete(requestId);
         if (this.currentUserThreadId === requestId) {
@@ -2451,16 +2495,21 @@ export class ChatPanel {
         const effectiveIcon = pending
             ? (pending.sourceIcon ?? this.iconForSource(effectiveSource))
             : (sourceIcon ?? this.iconForSource(effectiveSource));
-        // Anchor on the user bubble so the agent's response renders
-        // directly below it (column-reverse: DOM-before = visually-after).
-        // Liveness check guards against detached anchors. Falls through
-        // to default placement for ad-hoc / system / agent-N threads
-        // with no user bubble.
+        // Chain step bubbles: when a prior committed reasoning-step bubble
+        // exists for this thread, anchor the new bubble on it so successive
+        // phases render top-to-bottom in order. Otherwise anchor on the user
+        // bubble so the agent's response renders directly below the question
+        // (column-reverse: DOM-before = visually-after). Liveness checks guard
+        // against detached anchors; falls through to default placement for
+        // ad-hoc / system / agent-N threads with no user bubble.
+        const lastStep = this.lastStepAnchorByThread.get(threadId);
         const mappedBubble = this.userMessageById.get(threadId);
         const anchor =
-            mappedBubble?.parentElement === this.messageDiv
-                ? mappedBubble
-                : undefined;
+            lastStep?.parentElement === this.messageDiv
+                ? lastStep
+                : mappedBubble?.parentElement === this.messageDiv
+                  ? mappedBubble
+                  : undefined;
         const container = this.createAgentContainer(
             effectiveSource ?? "assistant",
             effectiveIcon,
@@ -4751,10 +4800,16 @@ class AgentMessageContainer {
         if (tokenUsage) {
             // Compact form: "Action Tokens: 14356 (14257+99)" — the long
             // "(prompt N, completion M)" form overflowed the metrics
-            // tooltip in narrow webview sidebars.
+            // tooltip in narrow webview sidebars. Cache hits, when reported,
+            // are appended as a distinct "+N cached" term.
+            const cachedPart =
+                tokenUsage.cached_tokens !== undefined &&
+                tokenUsage.cached_tokens > 0
+                    ? `+${tokenUsage.cached_tokens} cached`
+                    : "";
             leftLines.push(
                 `${actionLabel} Tokens: <b>${tokenUsage.total_tokens}</b> ` +
-                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens})`,
+                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens}${cachedPart})`,
             );
         } else {
             leftLines.push(`${actionLabel} Tokens: <b>not reported</b>`);
@@ -4926,10 +4981,33 @@ class AgentMessageContainer {
         this.div.classList.remove("chat-message-hidden");
     }
 
+    public setIcon(icon: string) {
+        if (icon) {
+            this.iconDiv.textContent = icon;
+        }
+    }
+
     public updateSource(source: string, icon?: string) {
         if (!this.actionDerivedName) {
             this.nameSpan.textContent = source;
         }
+        if (icon) {
+            this.iconDiv.textContent = icon;
+        }
+    }
+
+    /**
+     * Force the source label + icon onto this bubble, overriding any
+     * action-derived name. Used for reasoning "step" bubbles: the first step
+     * can inherit the enclosing action's setDisplayInfo name (e.g.
+     * "dispatcher.lookup.lookupAndAnswerConversation"), but the reasoning
+     * engine provenance ("dispatcher.reasoningAction.<engine>") is the correct
+     * label for every step. Locks the name so a later setMessage(source) with
+     * the same value doesn't revert it.
+     */
+    public overrideSource(source: string, icon?: string) {
+        this.nameSpan.textContent = source;
+        this.actionDerivedName = source;
         if (icon) {
             this.iconDiv.textContent = icon;
         }

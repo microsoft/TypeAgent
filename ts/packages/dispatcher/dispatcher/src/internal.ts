@@ -6,6 +6,7 @@ export { createDispatcherFromContext } from "./dispatcher.js";
 export {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
+    prewarmReasoning,
 } from "./context/commandHandlerContext.js";
 export type { CommandHandlerContext } from "./context/commandHandlerContext.js";
 export { collectCommandReferenceMarkdown } from "./command/commandReference.js";
