@@ -372,18 +372,9 @@ describe("Grammar Optimizer - tailFactoring + NFA compatibility", () => {
         );
     });
 
-    // Regression test for a shape that previously escaped the
-    // (now-removed) tailCall diagnostic embedded in
-    // `deriveEffectiveValue`: a rule whose *entire* `parts` array is
-    // just the tailCall RulesPart (no preceding prefix parts). Such a
-    // rule is `isPassthroughRule`-eligible and gets stamped with an
-    // explicit `value` during normalization *before* value-derivation
-    // ever runs, so a tailCall check embedded only in the
-    // "missing value" throw path would never fire for it - it would
-    // silently fall through to the later, differently-worded throw in
-    // `compileRulesPart`/`compileRulesPartWithSlots` instead. The
-    // check now lives in `normalizeRule`, ahead of that transform, so
-    // it catches this shape too with the same message.
+    // Regression test: a rule whose entire `parts` array is just the
+    // tailCall RulesPart (no prefix) is `isPassthroughRule`-eligible, so
+    // it must be caught before that normalization transform runs.
     it("NFA compile of a single-part tailCall rule throws the same descriptive error", async () => {
         const { compileGrammarToNFA } = await import("../src/nfaCompiler.js");
         const memberA: GrammarRule = {

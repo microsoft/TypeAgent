@@ -354,14 +354,10 @@ function normalizeRule(
     rule: GrammarRule,
     cache: Map<GrammarRule[], GrammarRule[]>,
 ): GrammarRule {
-    // tailCall is a structural NFA/DFA backend gap (NYI, not fundamental -
-    // see `tailCallNotYetSupportedMessage`), unrelated to value derivation
-    // or rule normalization. `normalizeRule` recursively visits every
-    // rule exactly once (top-level and nested, via the cache-based walk
-    // in `normalizeRulesArray`) before any compilation begins, making
-    // this the single earliest point to reject it - fails fast, and
-    // lets every downstream consumer (including `deriveEffectiveValue`)
-    // stay unaware tailCall exists at all.
+    // tailCall is an NYI NFA/DFA backend gap, unrelated to value
+    // derivation. Checked here since normalizeRule visits every rule
+    // exactly once (top-level and nested) before compilation begins -
+    // the single earliest point to reject it.
     const tailCallPart = rule.parts.find(
         (p): p is RulesPart => p.type === "rules" && !!p.tailCall,
     );
@@ -469,14 +465,9 @@ function stripDispatch(part: RulesPart): RulesPart {
 }
 
 /**
- * Message for the NFA/DFA backend's tailCall gap, shared by every throw
- * site so they report consistent wording. This is a known NYI gap, not
- * a fundamental limitation: tail-call RulesParts let the AST-walking
- * matcher share the parent's stack frame and forward a member's value
- * directly as the parent rule's value (see `RulesPart.tailCall` in
- * grammarTypes.ts) - NFAs are naturally well-suited to sharing prefix
- * states, but the equivalent frame-sharing/variable-forwarding wiring
- * for this state-machine backend hasn't been built yet.
+ * Message for the NFA/DFA backend's tailCall gap (NYI, not a fundamental
+ * limitation - see `RulesPart.tailCall` in grammarTypes.ts), shared by
+ * every throw site for consistent wording.
  */
 function tailCallNotYetSupportedMessage(partName: string | undefined): string {
     return (

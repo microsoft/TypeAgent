@@ -3236,10 +3236,6 @@ function trySubstituteMembers(
     let bailed = false;
     const rewriteOne = (m: GrammarRule): GrammarRule => {
         const renamed = renameAllChildBindings(m.parts, m.value, renameState);
-        // requireValue: false - a member without a structurally-expressible
-        // default (e.g. an unbound single-part `phraseSet` / `string`)
-        // resolves to `undefined` here instead of throwing, so it can
-        // signal a local bailout below rather than aborting compilation.
         const effective =
             renamed.value !== undefined
                 ? renamed.value
