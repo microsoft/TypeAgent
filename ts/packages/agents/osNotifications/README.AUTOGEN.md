@@ -12,27 +12,27 @@
 
 ## Overview
 
-The `os-notifications-agent` package integrates OS-level notifications from Windows Action Center and Linux freedesktop into the TypeAgent chat system. These notifications are displayed as ephemeral toasts or inline messages, providing users with real-time updates from their operating system. Note that macOS is not supported. The agent is disabled by default and must be explicitly enabled.
+The `os-notifications-agent` package integrates operating system notifications from Windows Action Center and Linux freedesktop into the TypeAgent chat system. These notifications are displayed as ephemeral toasts or inline messages, providing real-time updates to users. Notifications are not persisted and are removed from the chat interface when dismissed at the OS level. Note that macOS is not supported.
 
 ## What it does
 
-This agent captures notifications from the operating system and forwards them to connected TypeAgent chat clients. Notifications are displayed as ephemeral messages, meaning they are not persisted in the `displayLog.json` and are removed when dismissed at the OS level. The agent supports two primary actions:
+The `os-notifications-agent` captures and processes OS-level notifications, forwarding them to connected TypeAgent chat clients. Notifications are ephemeral and are not stored in the `displayLog.json`. The agent supports the following key actions:
 
-- **`syncOsNotifications`**: Re-emits currently-present notifications through the agent pipeline. This action is Windows-only, as Linux's freedesktop specification does not expose existing notifications.
-- **`testOsNotification`**: Injects a synthetic notification into the pipeline for testing purposes. This allows developers to verify the agent's functionality without relying on real OS notifications.
+- **`syncOsNotifications`**: Re-emits currently-present notifications through the agent pipeline. This action is Windows-only, as Linux's freedesktop specification does not support querying existing notifications. If the required Windows helper executable is not available, the agent will prompt the user to build it.
+- **`testOsNotification`**: Generates a synthetic notification and processes it through the agent pipeline. This is useful for testing the agent's functionality without relying on actual OS notifications.
 
-The agent applies several filters and controls to notifications, including:
+The agent applies several processing steps to notifications before forwarding them:
 
-- **Application filtering**: Notifications can be allowed or blocked based on their originating application.
-- **Rate limiting**: A rolling 60-second window limits the number of notifications to prevent spam.
-- **Timestamp gating**: Only new notifications (those received after the agent is enabled) are forwarded.
-- **Dismiss tracking**: Notifications are removed from the chat interface when dismissed at the OS level.
+1. **Application Filtering**: Notifications can be filtered based on an allowlist or blocklist of application names.
+2. **Rate Limiting**: A rolling 60-second window limits the number of notifications to prevent spam (default: 20 notifications per minute).
+3. **Timestamp Gating**: Only notifications received after the agent is enabled are forwarded.
+4. **Dismiss Tracking**: Notifications are removed from the chat interface when dismissed at the OS level.
 
 Notifications are broadcast to all connected clients by default, but future updates may allow routing to specific conversations.
 
 ## Setup
 
-To use the `os-notifications-agent`, follow these steps:
+To enable and configure the `os-notifications-agent`, follow these steps:
 
 1. **Enable the agent**:
    Run the following command in the TypeAgent chat interface:
@@ -53,9 +53,9 @@ Refer to the hand-written README for detailed instructions on building and regis
 
 ## Key Files
 
-The package is organized into several key components:
+The package is structured around several key files, each responsible for a specific aspect of the agent's functionality:
 
-- **[osNotificationsManifest.json](./src/osNotificationsManifest.json)**: Defines the agent's metadata, including its schema and default settings.
+- **[osNotificationsManifest.json](./src/osNotificationsManifest.json)**: Defines the agent's metadata, including its schema, description, and default settings.
 - **[osNotificationsSchema.ts](./src/osNotificationsSchema.ts)**: Specifies the structure of the actions supported by the agent, such as `syncOsNotifications` and `testOsNotification`.
 - **[osNotificationsSchema.agr](./src/osNotificationsSchema.agr)**: Contains the natural language grammar for triggering the agent's actions.
 - **[osNotificationsActionHandler.ts](./src/osNotificationsActionHandler.ts)**: Implements the logic for handling the agent's actions, including notification filtering, rate limiting, and dismiss tracking.
@@ -68,20 +68,20 @@ The package is organized into several key components:
 
 ## How to extend
 
-To extend the functionality of the `os-notifications-agent`, follow these steps:
+To extend the `os-notifications-agent`, you can add new actions, modify configurations, or support additional platforms. Here’s how:
 
-1. **Add a new action**:
+1. **Adding a new action**:
 
    - Define the new action in [osNotificationsSchema.ts](./src/osNotificationsSchema.ts).
    - Update the natural language grammar in [osNotificationsSchema.agr](./src/osNotificationsSchema.agr) to include triggers for the new action.
    - Implement the action's logic in [osNotificationsActionHandler.ts](./src/osNotificationsActionHandler.ts).
 
-2. **Modify configuration**:
+2. **Modifying configuration**:
 
    - Add new configuration options to [osNotificationsConfig.ts](./src/osNotificationsConfig.ts).
    - Ensure the new options are respected in the action handler and watcher logic.
 
-3. **Support additional platforms**:
+3. **Supporting additional platforms**:
 
    - Create a new watcher implementation in the `watchers` directory for the target platform.
    - Update [index.ts](./src/watchers/index.ts) to include the new watcher.
@@ -133,6 +133,6 @@ External: `dbus-next`, `debug`
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter os-notifications-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter os-notifications-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
