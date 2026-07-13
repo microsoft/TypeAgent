@@ -115,6 +115,52 @@ const embeddingCacheDir = path.join(os.tmpdir(), ".typeagent", "cache");
 // etc.). The product manifests are intentionally left untouched.
 const flowOnlySchemas = ["utility"];
 
+// Per-attempt Jest timeout budget for a single request translation.
+const perAttemptTimeoutMs = 30000;
+
+// When a request comes back with a transient infrastructure error (a dropped
+// connection such as "fetch: No response", throttling, or a 5xx/gateway
+// timeout) rather than a real translation mismatch, re-issue it instead of
+// failing the test. Live endpoints occasionally drop a call; retrying keeps
+// these tests from flaking on infrastructure hiccups. A genuine wrong action
+// is NOT retried here — only errors that never produced a translation.
+const maxTransientRetries = 4;
+const transientRetryBaseDelayMs = 1000;
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Matches network/service error signatures surfaced via CommandResult.lastError
+// (see aiclient restClient.ts). Deliberately excludes deterministic failures
+// like auth (401/403) or bad-request (400) which retrying cannot fix.
+function isTransientRequestError(error: string | undefined): boolean {
+    if (error === undefined) {
+        return false;
+    }
+    const msg = error.toLowerCase();
+    return (
+        msg.includes("no response") || // dropped connection ("fetch: No response")
+        msg.includes("connection error") ||
+        msg.includes("terminated") || // undici wrapper for a reset socket ("read ECONNRESET")
+        msg.includes("econnreset") ||
+        msg.includes("etimedout") ||
+        msg.includes("enotfound") ||
+        msg.includes("eai_again") ||
+        msg.includes("socket hang up") ||
+        msg.includes("the operation was aborted") ||
+        msg.includes("aborterror") ||
+        msg.includes("timed out") ||
+        msg.includes("too many requests") ||
+        msg.includes("rate limit") ||
+        msg.includes("overloaded") ||
+        msg.includes("internal server error") ||
+        msg.includes("bad gateway") ||
+        msg.includes("service unavailable") ||
+        msg.includes("gateway timeout")
+    );
+}
+
 export async function defineTranslateTest(
     name: string,
     dataFiles: string[],
@@ -248,7 +294,11 @@ export async function defineTranslateTest(
                         }
                     });
                 },
-                30000 * Math.round(repeat / concurrency),
+                // Base budget per repeat, plus headroom for transient-error
+                // retries so a dropped API call that gets re-issued doesn't
+                // trip the Jest timeout.
+                perAttemptTimeoutMs * Math.round(repeat / concurrency) +
+                    maxTransientRetries * perAttemptTimeoutMs,
             );
         });
         afterAll(async () => {
@@ -293,7 +343,24 @@ async function setupOneStep(
 
 async function runOneStep(step: TranslateTestStep, dispatcher: Dispatcher) {
     const { request, attachments } = step;
-    return await awaitCommand(dispatcher, request, attachments);
+    let result = await awaitCommand(dispatcher, request, attachments);
+    // Retry only on transient infrastructure errors (dropped API call, throttle,
+    // gateway timeout) so a single lost request doesn't flake the test. A real
+    // translation mismatch returns actions (no lastError) and is validated below.
+    for (
+        let attempt = 1;
+        attempt <= maxTransientRetries &&
+        isTransientRequestError(result?.lastError);
+        attempt++
+    ) {
+        console.warn(
+            `Transient infra error on request '${request}' ` +
+                `(retry ${attempt}/${maxTransientRetries}): ${result?.lastError}`,
+        );
+        await delay(transientRetryBaseDelayMs * attempt);
+        result = await awaitCommand(dispatcher, request, attachments);
+    }
+    return result;
 }
 
 function validateCommandResult(

@@ -1470,6 +1470,7 @@ export function createDefaultInstalledAgentSource(
  * @param configName - Optional config name to load specific configuration file (e.g. "test" to load "config.test.json"). If not provided, it will load "config.json".
  * @returns IndexingServiceRegistry containing all registered indexing services
  */
+// code-complexity-allow: aggregates indexing services across all agent providers
 export async function getIndexingServiceRegistry(
     instanceDirOrConfigProvider?: string | InstanceConfigProvider,
     configName?: string,

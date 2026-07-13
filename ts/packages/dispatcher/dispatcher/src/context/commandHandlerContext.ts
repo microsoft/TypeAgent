@@ -988,6 +988,51 @@ function hostNotifyReplace(
     );
 }
 
+/**
+ * The consolidated sibling notification for a {@link AppAgentHost.replaceProvider}
+ * swap: one message for the swap's net effect instead of the raw remove-then-add
+ * pair. `op` is "update" (a new version replaced the old — report "updated"),
+ * "remove" (the old version was uninstalled with no replacement — report
+ * "removed"), or undefined (a rollback restored the old version — nothing
+ * changed, stay silent). The enabled state is read from the session's own config
+ * so each session's message reflects its local preference (preserved across a
+ * version bump).
+ */
+function hostNotifyReplace(
+    context: CommandHandlerContext,
+    op: "update" | "remove" | undefined,
+    oldProvider: AppAgentProvider,
+    newProvider: AppAgentProvider | undefined,
+) {
+    if (op === undefined) {
+        // Rollback: the old version was restored, so nothing changed for this
+        // session — no message.
+        return;
+    }
+    if (op === "remove") {
+        emitAgentChangeNotification(
+            context.clientIO,
+            "remove",
+            oldProvider,
+            false,
+        );
+        return;
+    }
+    // Update: report the agent as updated, carrying this session's own
+    // enabled state (the preference is preserved across the version bump).
+    if (newProvider === undefined) {
+        return;
+    }
+    const name = newProvider.getAppAgentNames()[0];
+    emitAgentChangeNotification(
+        context.clientIO,
+        "update",
+        newProvider,
+        isAgentEnabled(context, name),
+    );
+}
+
+// code-complexity-allow: context bootstrap wiring many optional subsystems
 export async function initializeCommandHandlerContext(
     hostName: string,
     options?: DispatcherOptions,
@@ -1743,6 +1788,7 @@ export async function reloadSessionOnCommandHandlerContext(
     await setSessionOnCommandHandlerContext(context, session);
 }
 
+// code-complexity-allow: applies every session-config toggle; one branch per option
 export async function changeContextConfig(
     options: SessionOptions,
     context: ActionContext<CommandHandlerContext>,

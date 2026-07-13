@@ -261,7 +261,14 @@ Options:
   --exceptions-file <path>
                      Optional JSON baseline-exception file. Functions listed in
                      it are ignored for over-budget counts and ratchet checks.
-  --help             Show this help.`;
+                     (Deprecated: prefer inline markers below.)
+  --help             Show this help.
+
+Inline suppression (preferred over --exceptions-file):
+  Put "// code-complexity-allow: <reason>" on a function's declaration line or a
+  comment/decorator line directly above it to grandfather it out of --ratchet.
+  The marker moves with the code under reformatting; report mode still measures
+  and shows the function. A non-empty, non-placeholder reason is required.`;
 
 // ---------------------------------------------------------------------------
 // Analysis
@@ -315,6 +322,10 @@ function loadExceptionSet(opts: Options): Set<string> {
     if (!opts.exceptionsFile) {
         return new Set();
     }
+    console.warn(
+        "  Note: --exceptions-file is deprecated; prefer inline " +
+            "// code-complexity-allow: <reason> markers.",
+    );
 
     const filePath = path.isAbsolute(opts.exceptionsFile)
         ? opts.exceptionsFile
@@ -346,6 +357,113 @@ function loadExceptionSet(opts: Options): Set<string> {
         out.add(functionExceptionKey(file, line));
     }
     return out;
+}
+
+// ---------------------------------------------------------------------------
+// Inline suppression markers
+// ---------------------------------------------------------------------------
+
+// A `// code-complexity-allow: <reason>` comment on a function's declaration
+// line, or on a contiguous comment/decorator line directly above it,
+// grandfathers that function out of the --ratchet gate. Because the comment is
+// attached to the function it moves with the code under reformatting, unlike the
+// file:line JSON baseline. Report mode ignores markers (every function is still
+// measured and shown); only --ratchet honors them. A marker needs a non-empty,
+// non-placeholder reason or it is ignored (and warned about) so it cannot
+// silently grandfather debt.
+const COMPLEXITY_ALLOW_TOKEN = "code-complexity-allow";
+const PLACEHOLDER_REASON_RE = /^(temp|tbd|todo|fixme|xxx|n\/?a|\?+|-+|\.+)$/i;
+
+function isValidMarkerReason(reason: string): boolean {
+    const r = reason.trim();
+    return r.length >= 3 && !PLACEHOLDER_REASON_RE.test(r);
+}
+
+/** Extract the reason text following a marker token on a comment line. */
+function complexityMarkerReason(lineText: string): string {
+    const i = lineText.indexOf(COMPLEXITY_ALLOW_TOKEN);
+    if (i < 0) {
+        return "";
+    }
+    return lineText
+        .slice(i + COMPLEXITY_ALLOW_TOKEN.length)
+        .replace(/^\s*:?/, "") // optional leading colon
+        .replace(/\*\/\s*$/, "") // trailing block-comment terminator
+        .trim();
+}
+
+/** True if a line is a comment or decorator (part of a function's preamble). */
+function isPreambleLine(trimmed: string): boolean {
+    return (
+        trimmed.startsWith("//") ||
+        trimmed.startsWith("/*") ||
+        trimmed.startsWith("*") ||
+        trimmed.endsWith("*/") ||
+        trimmed.startsWith("@")
+    );
+}
+
+interface MarkerScan {
+    suppressed: boolean;
+    invalid: boolean; // marker present but reason missing/placeholder
+}
+
+// Scan a function's declaration line and the contiguous comment/decorator lines
+// directly above it for a valid allow-marker.
+function scanComplexityMarker(
+    lines: string[],
+    funcLine1Based: number,
+): MarkerScan {
+    const idx = funcLine1Based - 1;
+    if (idx < 0 || idx >= lines.length) {
+        return { suppressed: false, invalid: false };
+    }
+    const classify = (text: string): MarkerScan | undefined => {
+        if (!text.includes(COMPLEXITY_ALLOW_TOKEN)) {
+            return undefined;
+        }
+        return isValidMarkerReason(complexityMarkerReason(text))
+            ? { suppressed: true, invalid: false }
+            : { suppressed: false, invalid: true };
+    };
+    const trailing = classify(lines[idx]);
+    if (trailing) {
+        return trailing;
+    }
+    for (let i = idx - 1; i >= 0; i--) {
+        const t = lines[i].trim();
+        if (t === "" || !isPreambleLine(t)) {
+            break;
+        }
+        const res = classify(lines[i]);
+        if (res) {
+            return res;
+        }
+    }
+    return { suppressed: false, invalid: false };
+}
+
+// For the given functions, return the file:line keys of those carrying a valid
+// marker plus the list of those whose marker was malformed (for a warning).
+function collectComplexitySuppressions(
+    functions: FuncRecord[],
+    linesOf: (f: FuncRecord) => string[] | undefined,
+): { suppressed: Set<string>; invalid: FuncRecord[] } {
+    const suppressed = new Set<string>();
+    const invalid: FuncRecord[] = [];
+    for (const f of functions) {
+        const lines = linesOf(f);
+        if (!lines) {
+            continue;
+        }
+        const scan = scanComplexityMarker(lines, f.line);
+        if (scan.suppressed) {
+            suppressed.add(toFunctionExceptionKey(f));
+        } else if (scan.invalid) {
+            invalid.push(f);
+        }
+    }
+    return { suppressed, invalid };
 }
 
 /** Load the optional sonarjs plugin, returning undefined if unavailable. */
@@ -1045,6 +1163,10 @@ async function runRatchet(opts: Options): Promise<number> {
 
     const sonar = await loadSonar();
 
+    const isOver = (f: FuncRecord): boolean =>
+        f.cyclomatic > opts.cyclomaticBudget ||
+        f.cognitive > opts.cognitiveBudget;
+
     // HEAD side: the changed files as they are in the working tree.
     const headPaths = entries
         .map((e) => path.resolve(repoRoot, e.head))
@@ -1059,12 +1181,39 @@ async function runRatchet(opts: Options): Promise<number> {
           )
         : EMPTY_LINT;
 
+    // Inline allow-markers on the HEAD files, read from the working tree.
+    // Computed per side (see the base side below) so a marker added in the PR
+    // suppresses HEAD while the still-unmarked base keeps counting.
+    const headLineCache = new Map<string, string[] | null>();
+    const headMarkers = collectComplexitySuppressions(
+        head.functions.filter(isOver),
+        (f) => {
+            const abs = path.resolve(repoRoot, f.file);
+            if (!headLineCache.has(abs)) {
+                try {
+                    headLineCache.set(
+                        abs,
+                        fs.readFileSync(abs, "utf8").split(/\r?\n/),
+                    );
+                } catch {
+                    headLineCache.set(abs, null);
+                }
+            }
+            return headLineCache.get(abs) ?? undefined;
+        },
+    );
+
     // BASE side: the same files' content at the merge base, materialized into a
     // temp dir so we compare like-for-like without any committed baseline.
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "complexity-base-"));
     let base: LintOutput = EMPTY_LINT;
+    let baseMarkers: { suppressed: Set<string>; invalid: FuncRecord[] } = {
+        suppressed: new Set(),
+        invalid: [],
+    };
     try {
         const basePaths: string[] = [];
+        const baseLinesByRel = new Map<string, string[]>();
         for (const e of entries) {
             if (!e.base || !isReportableSource(e.base, opts.includeTests)) {
                 continue;
@@ -1079,6 +1228,7 @@ async function runRatchet(opts: Options): Promise<number> {
             fs.mkdirSync(path.dirname(dest), { recursive: true });
             fs.writeFileSync(dest, content, "utf8");
             basePaths.push(dest);
+            baseLinesByRel.set(e.base, content.split(/\r?\n/));
         }
         if (basePaths.length) {
             base = await lintToFunctions(
@@ -1088,13 +1238,22 @@ async function runRatchet(opts: Options): Promise<number> {
                 false,
                 opts.includeTests,
             );
+            baseMarkers = collectComplexitySuppressions(
+                base.functions.filter(isOver),
+                (f) => baseLinesByRel.get(f.file),
+            );
         }
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
 
-    const headOver = countOver(head.functions, opts, exceptions);
-    const baseOver = countOver(base.functions, opts, exceptions);
+    // Fold inline markers into the per-side exception sets (JSON baseline plus
+    // markers). Report mode is unaffected; this only relaxes the gate.
+    const headExceptions = new Set([...exceptions, ...headMarkers.suppressed]);
+    const baseExceptions = new Set([...exceptions, ...baseMarkers.suppressed]);
+
+    const headOver = countOver(head.functions, opts, headExceptions);
+    const baseOver = countOver(base.functions, opts, baseExceptions);
     const dCyc = headOver.overCyclomatic - baseOver.overCyclomatic;
     const dCog = headOver.overCognitive - baseOver.overCognitive;
     const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
@@ -1130,7 +1289,7 @@ async function runRatchet(opts: Options): Promise<number> {
               .filter(
                   (f) =>
                       newFiles.has(f.file) &&
-                      !exceptions.has(toFunctionExceptionKey(f)) &&
+                      !headExceptions.has(toFunctionExceptionKey(f)) &&
                       ((opts.newCyclomaticCap > 0 &&
                           f.cyclomatic > opts.newCyclomaticCap) ||
                           (opts.newCognitiveCap > 0 &&
@@ -1157,6 +1316,22 @@ async function runRatchet(opts: Options): Promise<number> {
             `  Baseline exceptions ignored: ${fmt(exceptions.size)} (file:line).`,
         );
     }
+    if (headMarkers.suppressed.size > 0) {
+        console.log(
+            `  Inline code-complexity-allow markers honored: ` +
+                `${fmt(headMarkers.suppressed.size)}.`,
+        );
+    }
+    if (headMarkers.invalid.length > 0) {
+        console.log(
+            `  WARNING: ${fmt(headMarkers.invalid.length)} ` +
+                `code-complexity-allow marker(s) ignored (missing or ` +
+                `placeholder reason — add a real reason after the colon):`,
+        );
+        for (const f of headMarkers.invalid) {
+            console.log(`    ${f.file}:${f.line}  ${f.name}`);
+        }
+    }
 
     const printTable = (title: string, rows: FuncRecord[]): void => {
         console.log("");
@@ -1179,7 +1354,7 @@ async function runRatchet(opts: Options): Promise<number> {
                 (f) =>
                     (f.cyclomatic > opts.cyclomaticBudget ||
                         f.cognitive > opts.cognitiveBudget) &&
-                    !exceptions.has(toFunctionExceptionKey(f)),
+                    !headExceptions.has(toFunctionExceptionKey(f)),
             )
             .sort((a, b) => b.cyclomatic - a.cyclomatic);
         printTable(
@@ -1199,6 +1374,10 @@ async function runRatchet(opts: Options): Promise<number> {
         console.log("Ratchet: OK — changed files did not add complexity.");
         return 0;
     }
+    console.error(
+        "\nWhy the complexity ratchet exists — and how to reproduce & fix it " +
+            "locally: ts/tools/scripts/code/README.md#ci-gates",
+    );
     return 1;
 }
 

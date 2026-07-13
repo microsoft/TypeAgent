@@ -12,13 +12,11 @@
 
 ## Overview
 
-The `windowsclock-agent` package is a TypeAgent application agent designed to automate interactions with the Windows Alarms & Clock app. It provides a framework for performing tasks such as setting alarms, starting timers, managing the stopwatch, and adding world clocks through UI automation.
-
-This agent is part of the TypeAgent ecosystem and integrates with other components like the `@typeagent/agent-sdk` and `onboarding-agent` to facilitate UI automation and action handling.
+The `windowsclock-agent` is a TypeAgent application agent designed to automate interactions with the Windows Alarms & Clock app. It provides a structured framework for performing tasks such as setting alarms, starting timers, managing the stopwatch, and adding world clocks through UI automation. This agent is part of the TypeAgent ecosystem and integrates with other components like `@typeagent/agent-sdk` and `onboarding-agent` to facilitate action handling and UI automation playback.
 
 ## What it does
 
-The `windowsclock-agent` defines a set of actions that enable programmatic control over the Windows Alarms & Clock app. These actions are grouped into categories based on their functionality:
+The `windowsclock-agent` defines a set of actions that enable programmatic control over the Windows Alarms & Clock app. These actions are grouped into several functional categories:
 
 - **World Clock Management**:
 
@@ -47,29 +45,49 @@ The `windowsclock-agent` defines a set of actions that enable programmatic contr
 - **Focus Session Management**:
   - `setFocusSessionRunning`: Start or stop a focus session.
 
-These actions are defined in the schema file [windowsClockSchema.ts](./src/windowsClockSchema.ts) and are intended to be implemented in the handler file [windowsClockActionHandler.ts](./src/windowsClockActionHandler.ts). While the schema defines the structure and parameters of each action, the handler is responsible for executing the corresponding logic.
+These actions are defined in the schema file [windowsClockSchema.ts](./src/windowsClockSchema.ts) and are intended to be implemented in the handler file [windowsClockActionHandler.ts](./src/windowsClockActionHandler.ts). While the schema specifies the structure and parameters of each action, the handler is responsible for executing the corresponding logic using UI automation.
 
 ## Setup
 
-To set up the `windowsclock-agent` package, follow these steps:
+To set up the `windowsclock-agent`, follow these steps:
 
-1. **Install Dependencies**: Run `pnpm install` in the root of the repository to install all required dependencies.
-2. **Environment Variables**: Ensure that any required environment variables are set. Refer to the hand-written README for details on specific variables or configurations.
-3. **Build the Project**: Use the `pnpm build` command to compile the TypeScript files into JavaScript.
-4. **UI Automation Helper**: The agent relies on the `onboarding-agent` package for UI automation playback. Ensure that the helper binary required for UI automation is built and available. The helper binary can be built using the `buildHelperBinary` function from the `onboarding-agent` package.
+1. **Install Dependencies**:
+
+   - Run `pnpm install` in the root of the repository to install all required dependencies.
+
+2. **Build the Project**:
+
+   - Use the `pnpm build` command to compile the TypeScript files into JavaScript.
+
+3. **UI Automation Helper**:
+
+   - The agent relies on the `onboarding-agent` package for UI automation playback. Ensure that the helper binary required for UI automation is built and available. The helper binary can be built using the `buildHelperBinary` function from the `onboarding-agent` package.
+
+4. **Environment Variables**:
+   - If any environment variables are required, ensure they are set. Refer to the hand-written README for details on specific variables or configurations.
 
 ## Key Files
 
-The `windowsclock-agent` package is organized into several key files:
+The `windowsclock-agent` package is organized into several key files, each serving a specific purpose:
 
-- **[windowsClockManifest.json](./src/windowsClockManifest.json)**: This manifest file provides metadata about the agent, including its emoji representation, description, and schema details. It also specifies the schema file and the type of actions the agent supports.
-- **[windowsClockSchema.ts](./src/windowsClockSchema.ts)**: This file defines the schema for the agent's actions. Each action is described with its name, parameters, and expected behavior. For example, the `createAlarm` action includes parameters for the alarm name, hour, and minute.
+- **[windowsClockManifest.json](./src/windowsClockManifest.json)**:
 
-- **[windowsClockActionHandler.ts](./src/windowsClockActionHandler.ts)**: This is the main handler file where the logic for executing actions is implemented. It uses helper functions and classes from the `@typeagent/agent-sdk` and `onboarding-agent` packages to perform UI automation tasks.
+  - This manifest file provides metadata about the agent, including its emoji representation, description, and schema details. It specifies the schema file and the type of actions the agent supports.
 
-- **Helper Binary**: The agent relies on a helper binary for UI automation. The binary is built using the `buildHelperBinary` function from the `onboarding-agent` package and is located in the `data` directory.
+- **[windowsClockSchema.ts](./src/windowsClockSchema.ts)**:
 
-- **[tsconfig.json](./src/tsconfig.json)**: This file contains the TypeScript configuration for the package, including compiler options and file inclusion rules.
+  - Defines the schema for the agent's actions. Each action is described with its name, parameters, and expected behavior. For example, the `createAlarm` action includes parameters for the alarm name, hour, and minute.
+
+- **[windowsClockActionHandler.ts](./src/windowsClockActionHandler.ts)**:
+
+  - The main handler file where the logic for executing actions is implemented. It uses helper functions and classes from the `@typeagent/agent-sdk` and `onboarding-agent` packages to perform UI automation tasks.
+
+- **Helper Binary**:
+
+  - The agent relies on a helper binary for UI automation. This binary is built using the `buildHelperBinary` function from the `onboarding-agent` package and is located in the `data` directory.
+
+- **[tsconfig.json](./src/tsconfig.json)**:
+  - Contains the TypeScript configuration for the package, including compiler options and file inclusion rules.
 
 ## How to extend
 
@@ -78,7 +96,7 @@ To extend the functionality of the `windowsclock-agent`, follow these steps:
 1. **Define New Actions**:
 
    - Open the schema file [windowsClockSchema.ts](./src/windowsClockSchema.ts).
-   - Add new action types by defining their structure and parameters. For example, if you want to add an action to delete an alarm, define a new type `DeleteAlarmAction` with the necessary parameters.
+   - Add new action types by defining their structure and parameters. For example, to add an action for deleting an alarm, define a new type `DeleteAlarmAction` with the necessary parameters.
 
 2. **Implement Action Logic**:
 
@@ -138,6 +156,6 @@ _14 actions declared in the schema, none yet implemented in [`./src/windowsClock
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter windowsclock-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter windowsclock-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
