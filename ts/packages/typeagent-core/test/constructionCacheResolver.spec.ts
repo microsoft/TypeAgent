@@ -162,6 +162,27 @@ describe("loadConstructionCacheLayer", () => {
         expect(typeof play?.actionName).toBe("string");
     });
 
+    test("valid: matchEntry surfaces the matched construction's identity", async () => {
+        const { name, hash } = fixtureNamespace();
+        const layer = await loadConstructionCacheLayer({
+            cacheFilePath: FIXTURE,
+            schemaName: "player",
+            currentHash: hash,
+        });
+        const entry = layer.matchEntry("pause");
+        expect(entry).toBeDefined();
+        expect(entry?.action).toEqual({
+            schemaName: "player",
+            actionName: "pause",
+        });
+        // Identity is drawn from the matched construction and its namespace.
+        expect(entry?.namespace).toBe(name);
+        expect(entry?.constructionId).toMatch(/^\d+$/);
+        expect(entry?.parts?.length).toBeGreaterThan(0);
+        expect(entry?.scores?.matchedCount).toBeGreaterThanOrEqual(0);
+        expect(entry?.cacheFileId).toBe(FIXTURE);
+    });
+
     test("stale: a mismatched hash falls back (no cache match)", async () => {
         const layer = await loadConstructionCacheLayer({
             cacheFilePath: FIXTURE,
@@ -171,6 +192,7 @@ describe("loadConstructionCacheLayer", () => {
         expect(layer.status).toBe("stale");
         expect(layer.cachedHash).toBeDefined();
         expect(layer.match("pause")).toBeUndefined();
+        expect(layer.matchEntry("pause")).toBeUndefined();
     });
 
     test("absent: no namespace for the schema", async () => {
@@ -182,6 +204,7 @@ describe("loadConstructionCacheLayer", () => {
         });
         expect(layer.status).toBe("absent");
         expect(layer.match("pause")).toBeUndefined();
+        expect(layer.matchEntry("pause")).toBeUndefined();
     });
 
     test("absent: missing cache file degrades cleanly (never throws)", async () => {

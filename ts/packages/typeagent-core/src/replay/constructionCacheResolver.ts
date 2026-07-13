@@ -37,6 +37,7 @@ import {
     type MatchResult,
 } from "agent-cache";
 import { normalizeAction } from "./replayActionShape.js";
+import type { ConstructionCacheEntryDto } from "./resolutionTrace.js";
 
 /**
  * Inputs to the dispatcher's schema-file hash. Mirrors
@@ -94,6 +95,13 @@ export interface ConstructionCacheLayer {
      * otherwise `undefined` (the caller falls back to the grammar path).
      */
     match(utterance: string): Record<string, unknown> | undefined;
+    /**
+     * As {@link match}, but returns the matched construction's inspectable
+     * identity (id, namespace, rendered parts, ranking scores) alongside the
+     * action, so a trace can show which cache entry resolved the utterance.
+     * `undefined` on the same conditions as {@link match}.
+     */
+    matchEntry(utterance: string): ConstructionCacheEntryDto | undefined;
 }
 
 /**
@@ -216,6 +224,7 @@ export async function loadConstructionCacheLayer(
         currentHash,
         cachedHash,
         match: () => undefined,
+        matchEntry: () => undefined,
     });
 
     let json: ConstructionCacheFileJSON;
@@ -239,6 +248,7 @@ export async function loadConstructionCacheLayer(
             currentHash,
             cachedHash: found.hash,
             match: () => undefined,
+            matchEntry: () => undefined,
         };
     }
 
@@ -256,6 +266,7 @@ export async function loadConstructionCacheLayer(
     const loadedCache = cache;
 
     const namespaceKeys = [found.namespaceName];
+    const namespaceName = found.namespaceName;
     return {
         status: "valid",
         cacheFilePath,
@@ -268,6 +279,32 @@ export async function loadConstructionCacheLayer(
                 return undefined;
             }
             return normalizeAction(schemaName, topConstructionAction(results));
+        },
+        matchEntry(utterance: string): ConstructionCacheEntryDto | undefined {
+            const results = loadedCache.match(utterance, { namespaceKeys });
+            const top = results[0];
+            if (top === undefined) {
+                return undefined;
+            }
+            const action = normalizeAction(
+                schemaName,
+                topConstructionAction(results),
+            );
+            if (action === undefined) {
+                return undefined;
+            }
+            return {
+                action,
+                constructionId: top.construction.id.toString(),
+                namespace: namespaceName,
+                parts: top.construction.parts.map((part) => part.toString()),
+                scores: {
+                    matchedCount: top.matchedCount,
+                    wildcardCharCount: top.wildcardCharCount,
+                    nonOptionalCount: top.nonOptionalCount,
+                },
+                cacheFileId: cacheFilePath,
+            };
         },
     };
 }
