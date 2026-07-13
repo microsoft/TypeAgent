@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c9abe18ec4032a91f4e6a7245a9ba551495cf34130a9832935b13c3574cc1462 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=45f507f57a78794966bac201d85bc85338354f927bf6e7aeb8478c8f13e80e45 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vampire-agent — AI-generated documentation
@@ -12,53 +12,112 @@
 
 ## Overview
 
-The Vampire Agent is a test agent designed to deliberately collide with other agents to exercise the dispatcher's action collision detection subsystem. It is registered in the default agent provider but is disabled by default, ensuring it does not interfere with production sessions unless explicitly enabled.
+The Vampire Agent is a test agent designed to deliberately collide with other agents' actions and grammar patterns. Its primary purpose is to exercise the dispatcher's action collision detection subsystem in a controlled environment. This agent is not bundled by default and must be explicitly enabled for testing scenarios. It provides a way to evaluate the dispatcher's resolution strategies, such as `first-match`, `score-rank`, `priority`, and `user-clarify`, using real collisions on real input.
 
 ## What it does
 
-The Vampire Agent's primary purpose is to create collisions with other agents' actions and grammar patterns. This allows developers to evaluate the dispatcher's resolution strategies (`first-match`, `score-rank`, `priority`, `user-clarify`) in a controlled environment. The agent's actions are divided into three categories:
+The Vampire Agent introduces intentional collisions with other agents' actions and grammar patterns to test the dispatcher's behavior under various scenarios. These collisions are categorized into three types:
 
-1. **Exact action-name collisions**: These actions have the same names as actions from other agents, causing static and grammar-match collisions. Examples include `play`, `addItems`, `removeItems`, `getList`, and `createCalendarEvent`.
-2. **Grammar-pattern collisions**: The agent's grammar rules overlap with those of other agents, causing runtime grammar/cache match collisions. Examples include `play <target>`, `add <items> to my <list> list`, `remove <items> from my <list> list`, and `what is on my <list> list`.
-3. **Synonym/semantic actions**: These actions are semantically similar to actions from other agents, causing fuzzy collisions. Examples include `siphon`, `summon`, `consume`, and `revive`.
+1. **Exact action-name collisions**:
 
-The Vampire Agent's handler is intentionally trivial, logging the action that fired and returning a benign result. This ensures that the only signal of interest is which agent won the resolution.
+   - The Vampire Agent defines actions with the same names as those in other agents, such as `play`, `addItems`, `removeItems`, `getList`, and `createCalendarEvent`.
+   - These collisions occur at both the static and grammar-match levels, ensuring that the dispatcher must resolve conflicts between identical action names.
+
+2. **Grammar-pattern collisions**:
+
+   - The agent's grammar rules overlap with those of other agents, creating runtime grammar/cache match collisions.
+   - Examples include:
+     - `play <target>` (collides with `player.play`).
+     - `add <items> to my <list> list` (collides with `list.addItems`).
+     - `remove <items> from my <list> list` (collides with `list.removeItems`).
+     - `what is on my <list> list` (collides with `list.getList`).
+
+3. **Synonym/semantic actions**:
+   - The Vampire Agent defines actions that are semantically similar to those in other agents, causing fuzzy collisions.
+   - Examples include:
+     - `siphon` (synonym for `list.removeItems`).
+     - `summon` (synonym for `list.createList`).
+     - `consume` (synonym for `list.clearList`).
+     - `revive` (synonym for `player.play`).
+
+The agent's action handler is intentionally simple, logging the action that fired and returning a benign result. This ensures that the focus remains on observing the dispatcher's resolution behavior rather than the action's outcome.
 
 ## Setup
 
-To enable the Vampire Agent in a session, update the session settings to include the vampire schema and actions, and configure collision detection:
+The Vampire Agent is disabled by default and must be explicitly enabled for testing. To enable it:
 
-```ts
-session.updateSettings({
-  schemas: { vampire: true },
-  actions: { vampire: true },
-  collision: {
-    static: { detect: true, strategy: "warn" },
-    grammarMatch: { detect: true, strategy: "user-clarify" },
-    telemetry: { emit: true, debugLog: true },
-  },
-});
-```
+1. Install the agent from the workspace catalog source:
 
-Alternatively, a user-facing `@config agent vampire` CLI command can be used once a session is loaded.
+   ```text
+   @package source list
+   @package install vampire
+   ```
+
+2. Update the session settings to include the Vampire Agent's schema and actions, and configure collision detection:
+
+   ```ts
+   session.updateSettings({
+     schemas: { vampire: true },
+     actions: { vampire: true },
+     collision: {
+       static: { detect: true, strategy: "warn" },
+       grammarMatch: { detect: true, strategy: "user-clarify" },
+       telemetry: { emit: true, debugLog: true },
+     },
+   });
+   ```
+
+3. Alternatively, use the `@config agent vampire` CLI command to enable the agent in a session.
+
+For detailed instructions on enabling collision detection and configuring resolution strategies, refer to the hand-written README.
 
 ## Key Files
 
-- **[vampireManifest.json](./src/vampireManifest.json)**: Defines the agent's manifest, including its description, schema, and default settings.
-- **[vampireSchema.ts](./src/vampireSchema.ts)**: Declares the types for the Vampire Agent's actions, including exact-name collisions and synonym/semantic-similarity actions.
-- **[vampireActionHandler.ts](./src/vampireActionHandler.ts)**: Implements the agent's action handler, logging the action that fired and returning a text result.
-- **[vampireSchema.agr](./src/vampireSchema.agr)**: Defines the grammar rules that deliberately overlap with other agents' grammar files to exercise runtime grammar/cache match collision detection.
+The Vampire Agent's implementation is organized into the following key files:
+
+- **[vampireManifest.json](./src/vampireManifest.json)**:
+
+  - Defines the agent's manifest, including its description, schema, and default settings.
+  - Specifies that the agent is disabled by default.
+
+- **[vampireSchema.ts](./src/vampireSchema.ts)**:
+
+  - Declares the types for the Vampire Agent's actions.
+  - Includes exact-name collisions (e.g., `play`, `addItems`) and synonym/semantic-similarity actions (e.g., `siphon`, `summon`).
+
+- **[vampireActionHandler.ts](./src/vampireActionHandler.ts)**:
+
+  - Implements the agent's action handler.
+  - Logs the action that fired and returns a text result.
+  - The handler is intentionally trivial to ensure the focus remains on collision detection.
+
+- **[vampireSchema.agr](./src/vampireSchema.agr)**:
+  - Defines grammar rules that deliberately overlap with other agents' grammar files.
+  - Used to exercise runtime grammar/cache match collision detection.
 
 ## How to extend
 
 To extend the Vampire Agent, follow these steps:
 
-1. **Add new actions**: Update [vampireSchema.ts](./src/vampireSchema.ts) to include new action types. Ensure they collide with existing actions from other agents.
-2. **Update grammar rules**: Modify [vampireSchema.agr](./src/vampireSchema.agr) to include new grammar patterns that overlap with other agents' grammar files.
-3. **Modify the action handler**: Update [vampireActionHandler.ts](./src/vampireActionHandler.ts) to handle new actions. Ensure the handler remains trivial, logging the action and returning a benign result.
-4. **Test the changes**: Enable the Vampire Agent in a session and configure collision detection. Issue requests that trigger the new actions and observe the dispatcher's resolution strategies.
+1. **Add new actions**:
 
-By following these steps, contributors can extend the Vampire Agent to cover additional collision scenarios and further exercise the dispatcher's action collision detection subsystem.
+   - Update [vampireSchema.ts](./src/vampireSchema.ts) to define new action types.
+   - Ensure the new actions are designed to collide with existing actions from other agents.
+
+2. **Update grammar rules**:
+
+   - Modify [vampireSchema.agr](./src/vampireSchema.agr) to include new grammar patterns that overlap with other agents' grammar files.
+
+3. **Modify the action handler**:
+
+   - Update [vampireActionHandler.ts](./src/vampireActionHandler.ts) to handle the new actions.
+   - Ensure the handler remains trivial, logging the action and returning a benign result.
+
+4. **Test the changes**:
+   - Enable the Vampire Agent in a session and configure collision detection.
+   - Issue requests that trigger the new actions and observe the dispatcher's resolution strategies.
+
+By following these steps, contributors can expand the Vampire Agent's capabilities to cover additional collision scenarios, enabling more comprehensive testing of the dispatcher's action collision detection subsystem.
 
 ## Reference
 
@@ -67,7 +126,7 @@ By following these steps, contributors can extend the Vampire Agent to cover add
 ### Entry points
 
 - `./agent/manifest` → [./src/vampireManifest.json](./src/vampireManifest.json)
-- `./agent/handlers` → [./dist/vampireActionHandler.js](./dist/vampireActionHandler.js)
+- `./agent/handlers` → `./dist/vampireActionHandler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -78,10 +137,6 @@ Workspace:
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 
 External: _None at runtime._
-
-### Used by
-
-- [default-agent-provider](../../../packages/defaultAgentProvider/README.md)
 
 ### Files of interest
 
@@ -100,6 +155,6 @@ _9 actions declared in the schema, none yet implemented in [`./src/vampireAction
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vampire-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vampire-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

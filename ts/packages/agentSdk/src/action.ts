@@ -26,6 +26,10 @@ export type ActionTokenUsage = {
     completion_tokens: number;
     prompt_tokens: number;
     total_tokens: number;
+    // Cached prompt tokens (read from / written to the model provider's prompt
+    // cache), reported separately from `prompt_tokens`. Optional; `undefined`
+    // => the provider/agent does not expose cache metrics.
+    cached_tokens?: number;
 };
 
 export type ActionResultActivityContext = Omit<

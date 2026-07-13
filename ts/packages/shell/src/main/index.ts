@@ -28,6 +28,12 @@ import {
     getShellWindowForMainWindowIpcEvent,
     fatal,
 } from "./instance.js";
+import {
+    isServerRunning,
+    connectAgentServer,
+    AGENT_SERVER_DEFAULT_PORT,
+    type AgentServerConnection,
+} from "@typeagent/agent-server-client";
 
 import {
     debugShell,
@@ -101,8 +107,69 @@ if (process.platform === "win32") {
     );
 }
 
+/**
+ * Probe `port` for an already-running *full* agent-server.
+ *
+ * `isServerRunning` only confirms that something accepts WebSocket
+ * connections there — a standalone shell also listens on this port to serve
+ * its discovery channel. To avoid that false positive we additionally issue a
+ * connection-level control RPC (`listConversations`); a discovery-only host
+ * won't answer, so the probe times out and we report "no server".
+ */
+async function detectRunningAgentServer(port: number): Promise<boolean> {
+    const url = `ws://localhost:${port}`;
+    if (!(await isServerRunning(url))) {
+        return false;
+    }
+    let connection: AgentServerConnection | undefined;
+    try {
+        connection = await connectAgentServer(url);
+        await Promise.race([
+            connection.listConversations(),
+            new Promise<never>((_, reject) =>
+                setTimeout(
+                    () => reject(new Error("agent-server probe timed out")),
+                    3000,
+                ),
+            ),
+        ]);
+        return true;
+    } catch (e: any) {
+        debugShell(`No full agent-server on port ${port}: ${e?.message ?? e}`);
+        return false;
+    } finally {
+        try {
+            await connection?.close();
+        } catch {
+            // Best effort — probe connection cleanup.
+        }
+    }
+}
+
+// Resolve the effective connect target. An explicit --connect always wins.
+// Otherwise, for a dev launch on the default profile (no --data/--clean/--reset),
+// probe the default agent-server port: if a real agent-server is already
+// running we connect to it instead of hosting an in-process server — the
+// latter would fail to acquire the shared instance-directory lock and abort
+// startup with "Another agent-server (or shell) is already using the instance
+// directory".
+let effectiveConnect = parsedArgs.connect;
+if (
+    effectiveConnect === undefined &&
+    !isProd &&
+    parsedArgs.data === undefined &&
+    !parsedArgs.clean &&
+    !parsedArgs.reset &&
+    (await detectRunningAgentServer(AGENT_SERVER_DEFAULT_PORT))
+) {
+    debugShell(
+        `Detected running agent-server on port ${AGENT_SERVER_DEFAULT_PORT}; connecting instead of hosting in-process.`,
+    );
+    effectiveConnect = AGENT_SERVER_DEFAULT_PORT;
+}
+
 const instanceDir =
-    parsedArgs.connect !== undefined
+    effectiveConnect !== undefined
         ? undefined
         : (parsedArgs.data ??
           (app.isPackaged
@@ -324,7 +391,7 @@ async function initialize() {
                 mockGreetings,
                 parsedArgs.inputOnly,
                 performance.now(),
-                parsedArgs.connect,
+                effectiveConnect,
                 parsedArgs.hidden,
                 parsedArgs.idleTimeout,
                 parsedArgs.resume,
@@ -338,7 +405,7 @@ async function initialize() {
         mockGreetings,
         parsedArgs.inputOnly,
         time,
-        parsedArgs.connect,
+        effectiveConnect,
         parsedArgs.hidden,
         parsedArgs.idleTimeout,
         parsedArgs.resume,
@@ -376,12 +443,12 @@ export async function reloadInstance() {
         await closeInstance();
         const shellSettings = new ShellSettingManager(instanceDir);
         await initializeInstance(
-            parsedArgs.connect ? undefined : instanceDir,
+            effectiveConnect ? undefined : instanceDir,
             shellSettings,
             mockGreetings,
             parsedArgs.inputOnly,
             performance.now(),
-            parsedArgs.connect,
+            effectiveConnect,
             parsedArgs.hidden,
             parsedArgs.idleTimeout,
             parsedArgs.resume,

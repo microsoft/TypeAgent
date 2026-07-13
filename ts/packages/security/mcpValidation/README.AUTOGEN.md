@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=63237fcb74e9501fc3112ca39a46518e4e3bcf0c61828a7d8f5c097dc149bb81 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=551458cc36e6acc9d5b6d4f49536ac1d82f4262ab32d25f18f42fc8626978858 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # mcp-plan-validation — AI-generated documentation
@@ -12,61 +12,67 @@
 
 ## Overview
 
-The `mcp-plan-validation` package is a TypeScript library designed to facilitate plan-validated agent execution via the Model Context Protocol (MCP). It ensures that agent actions comply with organizational policies by validating plans and enforcing self-checking model loops.
+The `mcp-plan-validation` package is a TypeScript library that enables plan-validated agent execution using the Model Context Protocol (MCP). It ensures that agent actions adhere to predefined organizational policies by validating plans and enforcing self-checking model loops. This package is designed to act as a server that mediates agent actions, ensuring compliance with the specified policies and execution plans.
 
 ## What it does
 
-This package provides a server that validates and executes plans submitted by agents. It supports various actions such as `get_plan_schema`, `submit_plan`, `plan_status`, `plan_reset`, `validated_read`, `validated_write`, `validated_edit`, `validated_glob`, `validated_grep`, and `validated_bash`. The server ensures that each action adheres to the current plan step and organizational policies before execution.
+The primary function of this package is to validate and execute plans submitted by agents. It provides a set of validated proxy tools and actions that are checked against the active plan and organizational policies before execution. The supported actions include:
 
-The package integrates with the `validation` library to load and enforce organizational policies. It uses the `@modelcontextprotocol/sdk` for server transport and communication, `fast-glob` for file operations, and `zod` for schema validation.
+- **Planning-related actions**: `get_plan_schema`, `submit_plan`, `plan_status`, and `plan_reset`. These actions allow agents to interact with the server to retrieve schemas, submit plans, check the status of plans, and reset plans.
+- **Validated proxy tools**: Actions such as `validated_read`, `validated_write`, `validated_edit`, `validated_glob`, `validated_grep`, and `validated_bash` enable agents to perform file and shell operations. Each action is validated against the current plan step and organizational policies to ensure compliance.
+
+The package integrates with the `validation` library to enforce organizational policies and uses the `@modelcontextprotocol/sdk` for server communication. It also leverages `fast-glob` for file operations and `zod` for schema validation.
 
 ## Setup
 
-To set up the `mcp-plan-validation` package, you need to install the necessary dependencies and configure the MCP server. The package requires the following environment variables:
+To use the `mcp-plan-validation` package, you need to configure the environment and provide the necessary dependencies. The following environment variables must be set:
 
-- `MCP_SERVER_COMMAND`: Command to start the MCP server.
-- `MCP_SERVER_ARGS`: Arguments for the MCP server command.
-- `ORG_POLICY_PATH`: Path to the organizational policy JSON file.
+- `MCP_SERVER_COMMAND`: The command to start the MCP server.
+- `MCP_SERVER_ARGS`: Arguments to pass to the MCP server command.
+- `ORG_POLICY_PATH`: The file path to the organizational policy JSON file.
 
-You can obtain these values by following the instructions in the hand-written README. Additionally, you may need to configure client-specific settings for tools like Claude, Copilot, or Cursor.
+You can find detailed instructions for obtaining and configuring these values in the hand-written README. Additionally, if you are integrating this package with tools like Claude, Copilot, or Cursor, you may need to configure client-specific settings.
 
 ## Key Files
 
-The package is structured into several key files, each responsible for different aspects of the plan validation and execution process:
+The package is organized into several key files, each with a specific role in the plan validation and execution process:
 
-- [index.ts](./src/index.ts): Entry point for the MCP server, handling policy loading and server initialization.
-- [cli.ts](./src/cli.ts): Command-line interface for initializing and serving the MCP server.
-- [executor.ts](./src/executor.ts): Implements file and shell operations for validated proxy tools.
-- [init.ts](./src/init.ts): Scaffolds plan validation into an existing project, creating necessary policy and settings files.
-- [mcpValidationTest.ts](./src/mcpValidationTest.ts): Tests the MCP server's validation and enforcement capabilities.
-- [planState.ts](./src/planState.ts): Manages the state of plan execution, including steps, bindings, and trace.
-- [server.ts](./src/server.ts): MCP server implementation, exposing validated proxy tools and handling plan validation.
+- **[index.ts](./src/index.ts)**: The main entry point for the MCP server. It initializes the server, loads the organizational policy, and sets up the communication transport.
+- **[cli.ts](./src/cli.ts)**: Provides a command-line interface for initializing and serving the MCP server. It handles subcommands like `init` and `serve`.
+- **[executor.ts](./src/executor.ts)**: Implements the core logic for file and shell operations, such as `executeRead` and `executeWrite`, which are validated against the active plan and policies.
+- **[init.ts](./src/init.ts)**: A utility for scaffolding the plan validation setup into an existing project. It generates necessary policy files and client-specific settings.
+- **[mcpValidationTest.ts](./src/mcpValidationTest.ts)**: Contains tests to verify that the MCP server correctly validates and enforces policies. It uses the Agent SDK for testing and validation.
+- **[planState.ts](./src/planState.ts)**: Manages the state of plan execution, including tracking steps, bindings, and execution traces. It provides utility functions like `createPlanState` and `resetState`.
+- **[server.ts](./src/server.ts)**: Implements the MCP server, exposing validated proxy tools and handling the flow of plan validation and execution.
 
 ### Detailed File Responsibilities
 
-- **[index.ts](./src/index.ts)**: This file serves as the main entry point for the MCP server. It initializes the server, loads the organizational policy, and sets up the transport mechanism for communication.
-- **[cli.ts](./src/cli.ts)**: Provides a command-line interface for various operations such as initializing the server and serving the MCP server. It handles subcommands and routes them to the appropriate modules.
-- **[executor.ts](./src/executor.ts)**: Contains the actual implementations for file and shell operations that are validated against the current plan and organizational policies. Functions like `executeRead` and `executeWrite` are defined here.
-- **[init.ts](./src/init.ts)**: This file is responsible for scaffolding the plan validation setup into an existing project. It creates necessary policy files and client-specific settings.
-- **[mcpValidationTest.ts](./src/mcpValidationTest.ts)**: Implements tests to verify that the MCP server correctly validates and enforces policies. It uses the Agent SDK to drive tests and observe enforcement.
-- **[planState.ts](./src/planState.ts)**: Manages the state of plan execution, including tracking current steps, bindings, and execution trace. Functions like `createPlanState` and `resetState` are defined here.
-- **[server.ts](./src/server.ts)**: Implements the MCP server, exposing various validated proxy tools and handling plan validation. It defines the flow for plan submission, validation, and execution.
+- **[index.ts](./src/index.ts)**: This file is the starting point for the MCP server. It parses command-line arguments, loads the organizational policy, and initializes the server with the appropriate configuration.
+- **[cli.ts](./src/cli.ts)**: Handles command-line arguments and routes them to the appropriate modules. For example, the `init` subcommand invokes the [init.ts](./src/init.ts) module, while the `serve` subcommand starts the MCP server.
+- **[executor.ts](./src/executor.ts)**: Contains the implementation of validated file and shell operations. These operations are executed only if they comply with the active plan and organizational policies.
+- **[init.ts](./src/init.ts)**: Scaffolds the plan validation setup by creating policy files and configuring client-specific settings. It supports multiple clients, including Claude, Copilot, and Cursor.
+- **[mcpValidationTest.ts](./src/mcpValidationTest.ts)**: Implements tests to ensure that the MCP server enforces policies correctly. It uses the Agent SDK to simulate agent interactions and validate the server's behavior.
+- **[planState.ts](./src/planState.ts)**: Manages the state of plan execution, including the current step, completed steps, and execution trace. It provides utility functions for initializing and resetting the state.
+- **[server.ts](./src/server.ts)**: The core of the MCP server, this file defines the flow for plan submission, validation, and execution. It also exposes the validated proxy tools and ensures that all actions comply with the active plan and policies.
 
 ## How to extend
 
-To extend the `mcp-plan-validation` package, follow these steps:
+To extend the functionality of the `mcp-plan-validation` package, follow these steps:
 
-1. **Open the relevant file**: Depending on the functionality you want to extend, open the corresponding file. For example, if you want to add a new validated tool, start with [server.ts](./src/server.ts).
+1. **Identify the area to extend**: Determine which aspect of the package you want to modify or enhance. For example, you might want to add a new validated action or modify the policy validation logic.
 
-2. **Add new actions**: Define new actions in the server implementation. Ensure that each action is validated against the current plan step and organizational policies.
+2. **Modify the relevant file**:
 
-3. **Update policy validation**: If your new actions require additional policy checks, update the policy validation logic in the `validation` library.
+   - To add a new validated action, start with [server.ts](./src/server.ts). Define the new action and ensure it is validated against the active plan and policies.
+   - If the new action requires additional policy checks, update the policy validation logic in the `validation` library.
 
-4. **Test your changes**: Add tests in [mcpValidationTest.ts](./src/mcpValidationTest.ts) to verify that your new actions are correctly validated and enforced.
+3. **Update the plan state management**: If your changes involve new plan states or transitions, update [planState.ts](./src/planState.ts) to handle the new logic.
 
-5. **Run tests**: Execute the tests to ensure that your changes do not break existing functionality.
+4. **Add tests**: Write tests in [mcpValidationTest.ts](./src/mcpValidationTest.ts) to verify that your changes are correctly implemented and do not break existing functionality.
 
-By following these steps, you can extend the package to support additional validated actions and enhance its capabilities.
+5. **Run tests**: Use the test suite to ensure that your changes work as expected and do not introduce regressions.
+
+By following these steps, you can effectively extend the `mcp-plan-validation` package to meet your specific requirements.
 
 ## Reference
 
@@ -74,7 +80,7 @@ By following these steps, you can extend the package to support additional valid
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -94,6 +100,6 @@ External: `@modelcontextprotocol/sdk`, `fast-glob`, `zod`
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T09:44:26.515Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter mcp-plan-validation docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter mcp-plan-validation docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
