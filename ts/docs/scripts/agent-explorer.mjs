@@ -42,7 +42,9 @@ async function readAgentInfo(dir, rootDir) {
                 ? manifest.emojiChar.trim()
                 : "🤖",
         description: firstNonEmpty(
-            typeof manifest?.description === "string" ? manifest.description : "",
+            typeof manifest?.description === "string"
+                ? manifest.description
+                : "",
             typeof packageJson.description === "string"
                 ? packageJson.description
                 : "",
@@ -61,7 +63,10 @@ async function resolveSchemaPath(dir, manifest, manifestPath) {
         typeof originalSchemaFile === "string" &&
         originalSchemaFile.length > 0
     ) {
-        const resolved = path.resolve(path.dirname(manifestPath), originalSchemaFile);
+        const resolved = path.resolve(
+            path.dirname(manifestPath),
+            originalSchemaFile,
+        );
         if (await exists(resolved)) return resolved;
     }
     const srcDir = path.join(dir, "src");
@@ -81,8 +86,9 @@ async function resolveSchemaPath(dir, manifest, manifestPath) {
 }
 
 async function findManifestPath(srcDir) {
-    const manifests = await findFiles(srcDir, (name) =>
-        name === "manifest.json" || name.endsWith("Manifest.json"),
+    const manifests = await findFiles(
+        srcDir,
+        (name) => name === "manifest.json" || name.endsWith("Manifest.json"),
     );
     let fallback = null;
     for (const file of manifests.sort()) {
@@ -147,7 +153,10 @@ function toPosix(value) {
 }
 
 export function renderAgentExplorerPage(agents) {
-    const actionCount = agents.reduce((sum, agent) => sum + agent.actions.length, 0);
+    const actionCount = agents.reduce(
+        (sum, agent) => sum + agent.actions.length,
+        0,
+    );
     const lines = [
         "# Agent & action explorer",
         "",
@@ -168,7 +177,9 @@ export function renderAgentExplorerPage(agents) {
 
 function renderAgent(agent) {
     const actionLabel =
-        agent.actions.length === 1 ? "1 action" : `${agent.actions.length} actions`;
+        agent.actions.length === 1
+            ? "1 action"
+            : `${agent.actions.length} actions`;
     const lines = [
         `<details class="typeagent-agent-explorer">`,
         `<summary><strong>${escapeHtml(agent.emoji)} ${escapeHtml(agent.slug)}</strong> — ${escapeHtml(agent.description || "No description.")} <em>(${actionLabel})</em></summary>`,
@@ -177,7 +188,9 @@ function renderAgent(agent) {
         "",
     ];
     if (agent.actions.length === 0) {
-        lines.push("<p><em>No typed actions were detected for this agent.</em></p>");
+        lines.push(
+            "<p><em>No typed actions were detected for this agent.</em></p>",
+        );
     } else {
         for (const action of agent.actions) {
             lines.push(renderAction(action));
@@ -386,7 +399,10 @@ function extractParameters(bodyLines) {
             else if (ch === "}") nestedDepth--;
         }
         buffer = buffer.length > 0 ? `${buffer} ${trimmed}` : trimmed;
-        if (nestedDepth === 0 && (buffer.endsWith(";") || buffer.endsWith(","))) {
+        if (
+            nestedDepth === 0 &&
+            (buffer.endsWith(";") || buffer.endsWith(","))
+        ) {
             flushField(buffer.replace(/[,;]\s*$/u, ""));
             buffer = "";
         }

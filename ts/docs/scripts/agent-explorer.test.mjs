@@ -51,7 +51,9 @@ export type SetTimerAction = {
 });
 
 test("buildAgentExplorer resolves nested manifest schema references", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "typeagent-agent-explorer-"));
+    const root = await fs.mkdtemp(
+        path.join(os.tmpdir(), "typeagent-agent-explorer-"),
+    );
     const agentDir = path.join(root, "timer");
     await fs.mkdir(path.join(agentDir, "src", "agent"), { recursive: true });
     await fs.writeFile(
