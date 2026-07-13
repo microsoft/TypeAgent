@@ -240,9 +240,13 @@ export type SourceStatus = (message: string) => void;
  * `@package update` settles asynchronously. `updated` = the swap
  * committed to `v2`; `reverted` = a phase timeout (a straggler that would not
  * idle, or a `v2` that would not start) rolled back to `v1`, leaving `v1` serving
- * in every session.
+ * in every session; `unchanged` = the requested version was already the installed,
+ * serving version, so nothing was swapped (a no-op the fan-out cannot express).
+ * A committed `updated` is announced by the source's cross-session fan-out (like
+ * an install's add); `reverted` and `unchanged` change no live session state, so
+ * the fan-out is silent and only the issuing conversation is told.
  */
-export type UpdateOutcomeStatus = "updated" | "reverted";
+export type UpdateOutcomeStatus = "updated" | "reverted" | "unchanged";
 
 /**
  * The terminal outcome the issuing conversation is told about after a coordinated

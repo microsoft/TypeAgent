@@ -733,6 +733,37 @@ describe("AppAgentSource fan-out (4, )", () => {
         ]);
     });
 
+    it("uninstall of a name recorded but not active in this source errors (out-of-band inconsistency)", async () => {
+        // A second source constructed BEFORE the agent exists never seeds an
+        // active entry for it. In supported deployments this can't happen (one
+        // process per store, a single shared source per process), so a recorded
+        // name with no active entry is an out-of-band inconsistency: fail loudly
+        // rather than silently mutating the store.
+        const instanceDir = pathOnlyInstanceDir();
+        const stale = createDefaultInstalledAgentSource(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir);
+        await installer.testApi.install(
+            "foo",
+            makePathAgentDir(),
+            undefined,
+            noopHost,
+        );
+
+        const issuing = recordingHost();
+        const sibling = recordingHost();
+        stale.connect(issuing.host);
+        stale.connect(sibling.host);
+
+        await expect(
+            stale.testApi.uninstall("foo", issuing.host),
+        ).rejects.toThrow(/not active in this source/i);
+
+        // Nothing was torn down and the record is left intact (not dropped).
+        expect(issuing.calls).toEqual([]);
+        expect(sibling.calls).toEqual([]);
+        expect(readAgentsJson(instanceDir)?.agents.foo).toBeDefined();
+    });
+
     it("threads dropConfig=true for uninstall and false for update to every remove leg (Model B)", async () => {
         // Capture the dropConfig each remove leg receives (the shared
         // recordingHost drops the third arg; this dedicated host keeps it).
@@ -1284,8 +1315,11 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         await built.testApi.uninstall("foo", issuing);
         await flush();
 
-        // The gated sibling still pends. Disposing its connection drops it from
-        // the drain, which completes the drain and frees the name (7.3).
+        // The gated sibling's unload is still pending. When its dispatcher tears
+        // down, the applicator auto-acks that queued unload (modeled here by
+        // releasing the gate) and the connection drops from the fan-out set —
+        // settling the last drain and freeing the name.
+        gated.release();
         gatedConn.dispose();
         await flush();
         await expect(
@@ -2116,6 +2150,10 @@ describe("installed agent source api (install/uninstall/update)", () => {
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("gone", agentDir, undefined, host);
         await installer.uninstall("gone", host);
+        // Uninstall returns once the teardown STARTS; the record is dropped when
+        // the drain settles (the issuing session's own unload runs only after
+        // this call returns). Let that macrotask finalize before asserting.
+        await new Promise((r) => setTimeout(r, 0));
         expect(readAgentsJson(instanceDir)!.agents.gone).toBeUndefined();
         await expect(installer.uninstall("missing", host)).rejects.toThrow(
             /not found/,

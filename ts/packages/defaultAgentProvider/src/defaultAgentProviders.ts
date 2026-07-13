@@ -271,19 +271,27 @@ type InstalledAgentSourceForTest = AppAgentSource & {
 const DEFAULT_QUIESCE_TIMEOUT_MS = 15_000;
 
 /**
- * Per-name lifecycle entry for a dynamic (installed) agent. A name
- * is either `active` (installed and vended) or `removing` (a coordinated
- * teardown/swap is in flight across the connected sessions before the name is
- * freed / reused). No two versions of a name ever coexist: install/uninstall/
- * update transition through these states, and a name that is `removing` is
- * off-limits until the barrier completes.
+ * Per-name lifecycle entry for a dynamic (installed) agent. A name is:
+ * - `active`: installed and vended;
+ * - `removing`: an `update` swap is coordinating a `v1 → v2` replacement across
+ *   the connected sessions through the barrier (no two versions ever coexist);
+ * - `draining`: an `uninstall` is tearing the agent down across the connected
+ *   sessions and awaiting the shared process to close before the name is freed.
+ * A name that is `removing` or `draining` is off-limits (concurrent mutations
+ * are rejected and a connecting session parks) until it settles.
  */
 type DynamicAgentEntry =
     | { status: "active"; provider: AppAgentProvider }
     | {
           status: "removing";
-          // The in-flight teardown/swap barrier.
+          // The in-flight update-swap barrier.
           barrier: ReplaceBarrier;
+      }
+    | {
+          status: "draining";
+          // Resolves when the uninstall teardown settles (freed or reverted), so
+          // a session connecting mid-teardown can park until the name is quiet.
+          whenDone: Promise<void>;
       };
 
 /**
@@ -291,8 +299,8 @@ type DynamicAgentEntry =
  * timeout or abort, rolls back. Every target host runs `replaceProvider`, tears
  * down the shared old
  * (`v1`) version, and fills its slot via `quiesce`. Once every slot is filled and
- * verify-0 confirms the shared `v1` refcount is 0, the source commits — each
- * host then adds `v2` (update) or nothing (uninstall). Any stall — a straggler
+ * verify-0 confirms the shared `v1` refcount is 0, the source commits and each
+ * host adds `v2`. Any stall — a straggler
  * that won't idle or a `v1` that won't terminate — or an out-of-band abort
  * resolves to rollback instead: `v1` is restored in every session and `v2` is
  * discarded, as if the op never happened. The outcome is decided before hosts
@@ -309,9 +317,8 @@ type ReplaceBarrier = {
     // The shared old (`v1`) provider: verify-0 checks its refcount, and it is
     // re-added to every session on rollback.
     readonly oldProvider: AppAgentProvider;
-    // The new (`v2`) provider added on a committed update; undefined for an
-    // uninstall (nothing to start; `old → ∅`).
-    readonly newProvider: AppAgentProvider | undefined;
+    // The new (`v2`) provider added on a committed swap.
+    readonly newProvider: AppAgentProvider;
     // Phase 1: hosts that have not yet quiesced (torn `v1` down). Empty ⇒ every
     // host removed `v1`.
     readonly pending: Set<AppAgentHost>;
@@ -320,15 +327,16 @@ type ReplaceBarrier = {
     // a participant (it never held `v1`, so it neither quiesces nor counts toward
     // verify-0/GC); instead its `connect` parks on this signal until every
     // in-flight barrier has been decided, then joins the fan-out set and
-    // snapshots the now-quiet active set — which already reflects the decided outcome
-    // (`v2`/absent/`v1`), so no separate decided-version fold is needed. Parking
+    // snapshots the now-quiet active set — which already reflects the decided
+    // outcome (`v2` on commit / `v1` on rollback), so no separate decided-version
+    // fold is needed. Parking
     // past the decision means it can neither pollute verify-0 nor run a command
     // with the agent mid-swap.
     readonly whenDecided: Promise<void>;
     // Resolves `whenDecided` (called once in `decide`).
     readonly resolveDecided: () => void;
-    // Run once when the outcome is decided: flip the entry to active(`v2`)/absent
-    // on commit, or restore active(`v1`) + the record on rollback.
+    // Run once when the outcome is decided: flip the entry to active(`v2`) on
+    // commit, or restore active(`v1`) on rollback.
     readonly onDecided: (outcome: ReplaceOutcome) => void;
     // Run once when the outcome is decided (the superseded old version is already
     // fully unloaded — verify-0 passed before commit — and a rollback's discarded
@@ -528,10 +536,12 @@ export function createDefaultInstalledAgentSource(
     // drain of the same name.
     const busy = new Set<string>();
 
-    // Reject a mutating op on a name that is still draining
-    // name-reuse-during-removing): the name is off-limits until fully torn down.
+    // Reject a mutating op on a name that is still tearing down (an `update`
+    // swap `removing`, or an `uninstall` `draining`): the name is off-limits
+    // until it settles.
     function assertNotRemoving(name: string): void {
-        if (entries.get(name)?.status === "removing") {
+        const status = entries.get(name)?.status;
+        if (status === "removing" || status === "draining") {
             throw new Error(
                 `Agent '${name}' is still being removed; retry shortly.`,
             );
@@ -564,11 +574,10 @@ export function createDefaultInstalledAgentSource(
         }
     }
 
-    // The provider each host adds AFTER the barrier is decided. The
-    // source decides post-barrier: `v1` (the old provider) on a rollback so every
-    // session restores the exact version it had, `v2` (the new provider) on a
-    // committed update, or nothing (undefined) on a committed uninstall.
-    function decideAdd(barrier: ReplaceBarrier): AppAgentProvider | undefined {
+    // The provider each host adds AFTER the barrier is decided: `v1` (the old
+    // provider) on a rollback so every session restores the exact version it
+    // had, or `v2` (the new provider) on a committed update.
+    function decideAdd(barrier: ReplaceBarrier): AppAgentProvider {
         return barrier.outcome === "rolledback"
             ? barrier.oldProvider
             : barrier.newProvider;
@@ -601,8 +610,8 @@ export function createDefaultInstalledAgentSource(
         }
         // Unblock participant hosts parked in `replaceProvider` and late joiners
         // parked in `connect()`. `onDecided` already flipped the entry, so late
-        // joiners re-snapshot the decided version (`v2` commit / `v1` rollback /
-        // absent on committed uninstall).
+        // joiners re-snapshot the decided version (`v2` on commit / `v1` on
+        // rollback).
         barrier.resolveDecided();
         // Report the final status to the issuing conversation:
         // a commit is `updated`; a rollback is `reverted` (the quiesce timeout
@@ -649,8 +658,8 @@ export function createDefaultInstalledAgentSource(
     }
 
     // End of phase 1 (a quiesce arrived): once every host has torn `v1` down AND
-    // verify-0 confirms the shared refcount is 0, COMMIT (add `v2` on an update /
-    // free the name on an uninstall). If verify-0 has not passed (a straggler
+    // verify-0 confirms the shared refcount is 0, COMMIT (add `v2`). If verify-0
+    // has not passed (a straggler
     // still holds a ref), stay parked — the quiesce timer is the backstop that
     // rolls back on expiry, so the no-coexistence guarantee holds without an
     // unbounded wait.
@@ -674,8 +683,8 @@ export function createDefaultInstalledAgentSource(
             );
             return;
         }
-        // `v1` is confirmed down everywhere — commit directly (add `v2` on an
-        // update / free the name on an uninstall). `v2`'s materialized manifest
+        // `v1` is confirmed down everywhere — commit directly (add `v2`). `v2`'s
+        // materialized manifest
         // was already structurally validated before the barrier was armed
         //, so there is nothing left to probe here.
         commit(barrier);
@@ -696,6 +705,41 @@ export function createDefaultInstalledAgentSource(
         maybeAdvance(entry.barrier);
     }
 
+    // The fan-out target set for a mutation: every connected session PLUS the
+    // issuing one (which may not have formally connected). A fresh copy so a
+    // concurrent connect/disconnect can't mutate it mid-iteration.
+    function fanOutTargets(issuingHost: AppAgentHost): Set<AppAgentHost> {
+        const targets = new Set<AppAgentHost>(clients);
+        targets.add(issuingHost);
+        return targets;
+    }
+
+    // Prune a version-scoped install root once its version is confirmed down —
+    // but only if no other agent's record still references it (content-addressed
+    // roots are shared). A no-op for an undefined root.
+    function pruneRootIfUnreferenced(
+        root: string | undefined,
+        excludeName: string,
+    ): void {
+        if (!isRootReferenced(instanceDir, root, excludeName)) {
+            // installDir is guaranteed resolved above (the source throws
+            // otherwise); the `!` bridges TS's lack of narrowing across this
+            // nested closure.
+            pruneAgentRoot(installDir!, root);
+        }
+    }
+
+    // Read `agents.json`, apply `mutate` to its record map, and write it back.
+    // The single read-modify-write site for the store; a throw from `mutate`
+    // (e.g. the install existing-name check) aborts before the write.
+    function mutateAgentsJson(
+        mutate: (agents: Record<string, InstalledAgentRecord>) => void,
+    ): void {
+        const current = readAgentsJson(instanceDir) ?? { agents: {} };
+        mutate(current.agents);
+        writeAgentsJson(instanceDir, current);
+    }
+
     // Begin a coordinated teardown/swap across every connected session,
     // time-bounded so a stall rolls it back. Every host
     // — INCLUDING the issuing one — runs `replaceProvider` on its own idle-gated
@@ -703,22 +747,18 @@ export function createDefaultInstalledAgentSource(
     // quiesces (fills its barrier slot), then awaits the shared `whenDecided`
     // before adding whatever the barrier decides — so no request interleaves the
     // swap on any session and no two versions coexist. Returns immediately once
-    // the barrier is wired; the swap resolves to COMMIT (`v2`/free the name) once
+    // the barrier is wired; the swap resolves to COMMIT (add `v2`) once
     // the last host quiesces and verify-0 confirms the shared old refcount is 0 —
     // or to ROLLBACK (`v1` restored, `v2` discarded) on a quiesce timeout. A
     // per-host failure is treated as a quiesce so a failed/gone session never
-    // wedges it.
-    //
-    // `dropConfig`: forwarded to every remove leg — `true`
-    // for uninstall (clear the enable preference), `false` for update (preserve
-    // it across the version bump).
+    // wedges it. Every remove leg preserves each session's enable preference
+    // (dropConfig=false): an update is a version bump, not a removal.
     function startReplace(params: {
         name: string;
         oldProvider: AppAgentProvider;
         issuingHost: AppAgentHost;
-        dropConfig: boolean;
-        // The new version to add on commit; undefined for an uninstall.
-        newProvider: AppAgentProvider | undefined;
+        // The new (`v2`) version to add on commit.
+        newProvider: AppAgentProvider;
         // Flip the entry (+ restore the record on rollback) at release.
         onDecided: (outcome: ReplaceOutcome) => void;
         // Prune the superseded install root once the outcome is decided.
@@ -730,7 +770,6 @@ export function createDefaultInstalledAgentSource(
             name,
             oldProvider,
             issuingHost,
-            dropConfig,
             newProvider,
             onDecided,
             finalizeGc,
@@ -738,8 +777,7 @@ export function createDefaultInstalledAgentSource(
         } = params;
         // The issuing host is always part of the barrier even if it never
         // formally connected (defensive); it is otherwise treated as a sibling.
-        const targets = new Set<AppAgentHost>(clients);
-        targets.add(issuingHost);
+        const targets = fanOutTargets(issuingHost);
         let resolveDecided!: () => void;
         const whenDecided = new Promise<void>((resolve) => {
             resolveDecided = resolve;
@@ -778,7 +816,9 @@ export function createDefaultInstalledAgentSource(
                     return decideAdd(barrier);
                 },
                 true,
-                dropConfig,
+                // dropConfig=false: an update is a version bump, so every
+                // session's per-session enable preference is preserved.
+                false,
             ).then(
                 () => {
                     // A host that was already closed at enqueue time auto-acks
@@ -809,8 +849,7 @@ export function createDefaultInstalledAgentSource(
         provider: AppAgentProvider,
         issuingHost: AppAgentHost,
     ): void {
-        const targets = new Set<AppAgentHost>(clients);
-        targets.add(issuingHost);
+        const targets = fanOutTargets(issuingHost);
         for (const host of targets) {
             host.addProvider(provider, true).catch((e) => {
                 debug(`addProvider failed: ${e}`);
@@ -885,14 +924,12 @@ export function createDefaultInstalledAgentSource(
                 // install that resolved to the same inferred name) cannot enter
                 // until the first commits, so the existing-agent check catches it.
                 await limiter(async () => {
-                    const current = readAgentsJson(instanceDir) ?? {
-                        agents: {},
-                    };
-                    if (current.agents[name] !== undefined) {
-                        throw new Error(`Agent '${name}' already exists`);
-                    }
-                    current.agents[name] = record;
-                    writeAgentsJson(instanceDir, current);
+                    mutateAgentsJson((agents) => {
+                        if (agents[name] !== undefined) {
+                            throw new Error(`Agent '${name}' already exists`);
+                        }
+                        agents[name] = record;
+                    });
                 });
                 // Mark the name active so later connects vend it.
                 entries.set(name, { status: "active", provider });
@@ -945,109 +982,126 @@ export function createDefaultInstalledAgentSource(
                     `Agent '${name}' is built-in and cannot be uninstalled`,
                 );
             }
-            // Serialize on the name; reject if it is draining or busy.
+            // Serialize on the name; reject if it is already tearing down or
+            // busy. `busy` covers only this synchronous prologue; the `draining`
+            // tombstone below covers the subsequent async drain.
             assertNameFree(name);
             busy.add(name);
             try {
-                const entry = entries.get(name);
-                // Capture the version-scoped install root before the barrier: its
-                // directory is pruned once the agent is confirmed down everywhere.
                 const deletedRecord = readAgentsJson(instanceDir)?.agents[name];
                 if (deletedRecord === undefined) {
                     throw new Error(`Agent '${name}' not found`);
                 }
+                // The version-scoped root to reclaim once the agent is confirmed
+                // down everywhere.
                 const uninstalledRoot = deletedRecord.installRoot;
-                // Drop the record only at the barrier COMMIT (in `onDecided`
-                // below), NOT here: while the teardown is in flight the agent
-                // stays the recorded-current install, so a crash mid-uninstall
-                // recovers to the still-installed agent rather than a half-removed
-                // state, and a rollback needs nothing restored.
-                const deleteInstalledRecord = () => {
-                    const current = readAgentsJson(instanceDir) ?? {
-                        agents: {},
-                    };
-                    delete current.agents[name];
-                    writeAgentsJson(instanceDir, current);
-                };
-                // The barrier decision is the commit point. Now tear
-                // the live agent down across every connected session through the
-                // coordinated barrier (active → removing → absent): each
-                // session's `replaceProvider` (no new-version
-                // thunk) unloads under one held command lock, then the name is
-                // freed only once verify-0 confirms the shared process is down
-                // everywhere. The name stays off-limits until the barrier
-                // completes. Uninstall drops each session's persisted enable
-                // preference (dropConfig=true) so a fresh reinstall starts from
-                // the manifest default. Once confirmed down,
-                // the agent's version-scoped install root is pruned; the startup
-                // orphan sweep is the backstop. If a straggler
-                // never idles the barrier times out and ROLLS BACK:
-                // `v1` is re-added everywhere and the record restored, so the name
-                // is never freed while its process may still be running.
-                if (entry?.status === "active") {
-                    startReplace({
-                        name,
-                        oldProvider: entry.provider,
-                        issuingHost,
-                        dropConfig: true,
-                        newProvider: undefined,
-                        onDecided: (outcome) => {
-                            if (outcome === "committed") {
-                                // Flip in-memory FIRST (never throws) so the name
-                                // is never stranded in `removing`, then drop the
-                                // record — the durable commit point.
-                                entries.delete(name);
-                                deleteInstalledRecord();
-                            } else {
-                                // Rollback: the record was never dropped, so there
-                                // is nothing to restore — just keep v1 live.
-                                entries.set(name, {
-                                    status: "active",
-                                    provider: entry.provider,
-                                });
-                            }
-                        },
-                        finalizeGc: (outcome) => {
-                            // Prune the version-scoped root only on a committed
-                            // uninstall whose record drop actually landed; a
-                            // rollback (or a commit-drop write that failed, leaving
-                            // the record present) keeps `v1` intact.
-                            if (outcome === "committed") {
-                                const stillRecorded =
-                                    readAgentsJson(instanceDir)?.agents[name];
-                                if (
-                                    stillRecorded === undefined &&
-                                    !isRootReferenced(
-                                        instanceDir,
-                                        uninstalledRoot,
-                                        name,
-                                    )
-                                ) {
-                                    pruneAgentRoot(installDir, uninstalledRoot);
-                                }
-                            }
-                        },
-                        // Report the final status: a
-                        // committed uninstall is `uninstalled`; a straggler-timeout
-                        // rollback is `reverted` (the agent stays installed), so the
-                        // issuing conversation is never left believing a reverted
-                        // uninstall succeeded.
-                        onOutcome: onOutcome
-                            ? (status) =>
-                                  onOutcome(
-                                      status === "updated"
-                                          ? "uninstalled"
-                                          : "reverted",
-                                  )
-                            : undefined,
-                    });
-                } else {
-                    deleteInstalledRecord();
-                    if (!isRootReferenced(instanceDir, uninstalledRoot, name)) {
-                        pruneAgentRoot(installDir, uninstalledRoot);
-                    }
-                    onOutcome?.("uninstalled");
+                const entry = entries.get(name);
+
+                // Invariant: a recorded name is `active` in this source (a name
+                // mid-teardown — `removing`/`draining` — was already rejected by
+                // `assertNameFree` above). Reaching here with no active entry
+                // means `agents.json` and this source's live set disagree, which
+                // can only come from an OUT-OF-BAND mutation of the store: the
+                // instance-dir lock keeps one process per `agents.json`, and both
+                // multi-dispatcher hosts (agent server + web API) run a single
+                // shared source per process, so no concurrent sibling source can
+                // add a record this source never seeded. Fail loudly rather than
+                // silently mutating the store on an inconsistency.
+                if (entry?.status !== "active") {
+                    throw new Error(
+                        `Agent '${name}' is recorded but not active in this source; the install store may have been modified out of band.`,
+                    );
                 }
+                const provider = entry.provider;
+
+                // Mark the name `draining` so a session that connects mid-teardown
+                // PARKS (never loads the going-away agent — which would re-hold the
+                // shared process after we verified it down) and concurrent
+                // mutations are rejected, until the teardown settles. The record
+                // stays on disk until success, so a crash mid-teardown recovers to
+                // the still-installed agent.
+                let resolveDone!: () => void;
+                const whenDone = new Promise<void>((resolve) => {
+                    resolveDone = resolve;
+                });
+                entries.set(name, { status: "draining", whenDone });
+
+                // Fan the unload out to every connected session — INCLUDING the
+                // issuing one — mirroring how install fans an add out; each host
+                // unloads under its own idle-gated command lock and is notified
+                // ("Agent 'x' was removed."). dropConfig=true clears each
+                // session's persisted enable preference so a fresh reinstall
+                // starts from the manifest default.
+                const drains = [...fanOutTargets(issuingHost)].map((host) =>
+                    host.removeProvider(provider, true, true),
+                );
+
+                // The issuing session's OWN unload is enqueued behind THIS command
+                // on the same command lock, so it can only run once this command
+                // returns — we must not await it inline (that would deadlock). So
+                // finalize in a detached continuation: free the name once every
+                // session has unloaded (the shared provider is refcounted, so the
+                // last unload closing the process IS verify-0, for free), or
+                // revert on a wedged-session timeout. This is why uninstall
+                // returns "started" and the terminal outcome arrives via
+                // `onOutcome`.
+                void (async () => {
+                    let timer: ReturnType<typeof setTimeout> | undefined;
+                    const timedOut = new Promise<"timeout">((resolve) => {
+                        timer = setTimeout(
+                            () => resolve("timeout"),
+                            quiesceTimeoutMs,
+                        );
+                    });
+                    // `allSettled` absorbs a per-host unload failure (still
+                    // "settled") so one bad session never wedges the teardown;
+                    // only a session that never idles trips the timeout.
+                    const outcome = await Promise.race([
+                        Promise.allSettled(drains).then(
+                            () => "drained" as const,
+                        ),
+                        timedOut,
+                    ]);
+                    if (timer !== undefined) {
+                        clearTimeout(timer);
+                    }
+                    try {
+                        if (outcome === "timeout") {
+                            // A session never idled to run its unload, so the
+                            // shared process may still be live there. Do NOT free
+                            // the name over a possibly-running process: re-add
+                            // everywhere (responsive sessions that already unloaded
+                            // restore it; a wedged one still holds it) and keep the
+                            // record, as if the uninstall never happened.
+                            entries.set(name, { status: "active", provider });
+                            fanOutAdd(provider, issuingHost);
+                            debug(
+                                `uninstall of '${name}' timed out; reverted (a session did not idle)`,
+                            );
+                            onOutcome?.("reverted");
+                            return;
+                        }
+                        // Every session unloaded ⇒ the shared process is down:
+                        // free the name (drop the record + entry) and prune the
+                        // version-scoped root if no other agent references it.
+                        mutateAgentsJson((agents) => {
+                            delete agents[name];
+                        });
+                        entries.delete(name);
+                        pruneRootIfUnreferenced(uninstalledRoot, name);
+                        onOutcome?.("uninstalled");
+                    } catch (e) {
+                        // Never strand the name in `draining` on an unexpected
+                        // failure (e.g. a record-write error): restore it active so
+                        // the agent stays consistently installed.
+                        entries.set(name, { status: "active", provider });
+                        debug(
+                            `uninstall of '${name}' failed to finalize: ${e}`,
+                        );
+                    } finally {
+                        resolveDone();
+                    }
+                })();
             } finally {
                 busy.delete(name);
             }
@@ -1088,11 +1142,9 @@ export function createDefaultInstalledAgentSource(
                 // unverified v2 with v1 already pruned. A
                 // failed materialize above is a no-op that leaves v1 intact.
                 const writeInstalledRecord = () => {
-                    const current = readAgentsJson(instanceDir) ?? {
-                        agents: {},
-                    };
-                    current.agents[name] = record;
-                    writeAgentsJson(instanceDir, current);
+                    mutateAgentsJson((agents) => {
+                        agents[name] = record;
+                    });
                 };
                 // Same-version no-op: a source-owned update that lands on a
                 // byte-identical content-addressed install root means
@@ -1106,7 +1158,11 @@ export function createDefaultInstalledAgentSource(
                 // pick up an in-place manifest edit.
                 if (updateResult.status === "no-op") {
                     writeInstalledRecord();
-                    onOutcome?.("updated");
+                    // Nothing swapped in any session, so the cross-session
+                    // fan-out has nothing to announce; report the no-op to the
+                    // issuing conversation directly so `@package update` on an
+                    // already-current agent is not silent.
+                    onOutcome?.("unchanged");
                     return;
                 }
                 // Coordinated update: tear the OLD
@@ -1151,7 +1207,6 @@ export function createDefaultInstalledAgentSource(
                         name,
                         oldProvider: oldEntry.provider,
                         issuingHost,
-                        dropConfig: false,
                         newProvider,
                         onDecided: (outcome) => {
                             if (outcome === "committed") {
@@ -1190,26 +1245,12 @@ export function createDefaultInstalledAgentSource(
                                     readAgentsJson(instanceDir)?.agents[name];
                                 if (
                                     committed?.installRoot === newRoot &&
-                                    oldRoot !== newRoot &&
-                                    !isRootReferenced(
-                                        instanceDir,
-                                        oldRoot,
-                                        name,
-                                    )
+                                    oldRoot !== newRoot
                                 ) {
-                                    pruneAgentRoot(installDir, oldRoot);
+                                    pruneRootIfUnreferenced(oldRoot, name);
                                 }
-                            } else {
-                                if (
-                                    oldRoot !== newRoot &&
-                                    !isRootReferenced(
-                                        instanceDir,
-                                        newRoot,
-                                        name,
-                                    )
-                                ) {
-                                    pruneAgentRoot(installDir, newRoot);
-                                }
+                            } else if (oldRoot !== newRoot) {
+                                pruneRootIfUnreferenced(newRoot, name);
                             }
                         },
                         onOutcome,
@@ -1224,11 +1265,8 @@ export function createDefaultInstalledAgentSource(
                         status: "active",
                         provider: newProvider,
                     });
-                    if (
-                        oldRoot !== record.installRoot &&
-                        !isRootReferenced(instanceDir, oldRoot, name)
-                    ) {
-                        pruneAgentRoot(installDir, oldRoot);
+                    if (oldRoot !== record.installRoot) {
+                        pruneRootIfUnreferenced(oldRoot, name);
                     }
                     fanOutAdd(newProvider, issuingHost);
                     onOutcome?.("updated");
@@ -1261,9 +1299,12 @@ export function createDefaultInstalledAgentSource(
             // an installed agent anymore.
             const agents = readAgentsJson(instanceDir)?.agents ?? {};
             return Object.values(agents)
-                .filter(
-                    (record) => entries.get(record.name)?.status !== "removing",
-                )
+                .filter((record) => {
+                    // Hide a name that is mid-teardown (an update swap or an
+                    // uninstall drain) — it is no longer a stable installed agent.
+                    const status = entries.get(record.name)?.status;
+                    return status !== "removing" && status !== "draining";
+                })
                 .map((record) => {
                     const ref = record.ref ?? record.module ?? record.path;
                     return {
@@ -1400,10 +1441,12 @@ export function createDefaultInstalledAgentSource(
                     if (disposed) {
                         return [];
                     }
-                    const inFlight: ReplaceBarrier[] = [];
+                    const inFlight: Promise<void>[] = [];
                     for (const entry of entries.values()) {
                         if (entry.status === "removing") {
-                            inFlight.push(entry.barrier);
+                            inFlight.push(entry.barrier.whenDecided);
+                        } else if (entry.status === "draining") {
+                            inFlight.push(entry.whenDone);
                         }
                     }
                     if (inFlight.length === 0) {
@@ -1416,9 +1459,7 @@ export function createDefaultInstalledAgentSource(
                         clients.add(host);
                         return [packageProvider, ...activeProviders()];
                     }
-                    await Promise.all(
-                        inFlight.map((barrier) => barrier.whenDecided),
-                    );
+                    await Promise.all(inFlight);
                 }
             };
             const providers = resolveProviders();
