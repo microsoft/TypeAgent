@@ -34,6 +34,8 @@ import type {
     TraceVersionSummary,
     TraceConnectionState,
     TraceUnavailableState,
+    TraceSide,
+    TraceSourceNode,
 } from "../traceProtocol.js";
 
 interface VsCodeApi {
@@ -51,7 +53,7 @@ type Variant = "recorded" | "fresh";
 type Drift = "matches" | "drifted";
 
 // The recorded trace is the source of truth and is preserved across a replay so
-// a failed or drifted recompute never erases it (R7).
+// a failed or drifted recompute never erases it.
 let recorded: ReplayResolutionTrace | undefined;
 let fresh: ReplayResolutionTrace | undefined;
 let provenance: TraceProvenanceSummary | undefined;
@@ -65,6 +67,23 @@ let replayNote: string | undefined;
 // Monotonic replay id so a slow earlier recompute can't overwrite a newer one.
 let replayRequestId = 0;
 let latestReplayId = 0;
+
+// Monotonic id for source-jump requests, mirroring the replay counter.
+let sourceRequestId = 0;
+
+// Post a source-jump request for one node on one side; the host resolves the
+// location and opens it, replying with a source-result.
+function requestSource(side: TraceSide, node: TraceSourceNode): void {
+    sourceRequestId += 1;
+    replayNote = undefined;
+    render();
+    vscode.postMessage({
+        type: "open-source",
+        requestId: sourceRequestId,
+        side,
+        node,
+    });
+}
 
 const root = document.getElementById("root") as HTMLElement;
 
@@ -113,11 +132,14 @@ window.addEventListener("message", (event: MessageEvent) => {
             render();
             break;
         case "source-result":
-            // Source navigation lands in a follow-up; surface the host's note.
-            if (msg.status !== "opened" && msg.message !== undefined) {
+            // A successful jump opened an editor; clear any stale note. An
+            // unavailable/stale jump surfaces the host's explanation.
+            if (msg.status === "opened") {
+                replayNote = undefined;
+            } else if (msg.message !== undefined) {
                 replayNote = msg.message;
-                render();
             }
+            render();
             break;
     }
 });
@@ -371,8 +393,8 @@ function grid(vm: TraceDivergenceViewModel): HTMLElement {
         }
         row.appendChild(gutter);
 
-        row.appendChild(nodeCell(aByKind.get(kind)));
-        row.appendChild(nodeCell(bByKind.get(kind)));
+        row.appendChild(nodeCell("a", aByKind.get(kind)));
+        row.appendChild(nodeCell("b", bByKind.get(kind)));
         table.appendChild(row);
     }
     return table;
@@ -402,7 +424,10 @@ function byKind(
 }
 
 /** One fidelity node, or a placeholder when the side never ran that layer. */
-function nodeCell(node: TraceNodeSummary | undefined): HTMLElement {
+function nodeCell(
+    side: TraceSide,
+    node: TraceNodeSummary | undefined,
+): HTMLElement {
     const cell = el("div", "grid-cell");
     if (node === undefined) {
         cell.classList.add("is-empty");
@@ -427,26 +452,64 @@ function nodeCell(node: TraceNodeSummary | undefined): HTMLElement {
     }
 
     if (node.grammar !== undefined) {
-        cell.appendChild(grammarExtra(node.grammar));
+        cell.appendChild(grammarExtra(side, node.grammar));
     }
     if (node.cache !== undefined) {
         cell.appendChild(cacheExtra(node.cache));
     }
     if (node.action !== undefined) {
-        cell.appendChild(actionExtra(node.action));
+        cell.appendChild(actionExtra(side, node.action));
     }
     return cell;
 }
 
+/** A button that jumps to a recorded source location on click. Rendered as an
+ *  inline link so it reads as an affordance without the chrome of a button. */
+function jumpLink(
+    label: string,
+    title: string,
+    side: TraceSide,
+    node: TraceSourceNode,
+): HTMLButtonElement {
+    const link = el("button", "jump-link") as HTMLButtonElement;
+    link.type = "button";
+    link.textContent = label;
+    link.title = title;
+    link.addEventListener("click", () => requestSource(side, node));
+    return link;
+}
+
 function grammarExtra(
+    side: TraceSide,
     grammar: NonNullable<TraceNodeSummary["grammar"]>,
 ): HTMLElement {
     const box = el("div", "node-extra grammar-extra");
     if (grammar.chosenRule !== undefined) {
-        const rule = el("code", "mono rule");
-        rule.textContent = grammar.chosenRule;
-        rule.title = `Matched rule: ${grammar.chosenRule}`;
-        box.appendChild(rule);
+        // The rule name jumps to its grammar span when the trace recorded one;
+        // otherwise it's plain text.
+        if (grammar.hasSource) {
+            const rule = jumpLink(
+                grammar.chosenRule,
+                `Open the grammar source for rule ${grammar.chosenRule}`,
+                side,
+                "grammar-match",
+            );
+            rule.classList.add("mono", "rule");
+            box.appendChild(rule);
+        } else {
+            const rule = el("code", "mono rule");
+            rule.textContent = grammar.chosenRule;
+            rule.title = `Matched rule: ${grammar.chosenRule}`;
+            box.appendChild(rule);
+        }
+    } else if (grammar.hasSource) {
+        const jump = jumpLink(
+            "grammar source",
+            "Open the matched grammar source",
+            side,
+            "grammar-match",
+        );
+        box.appendChild(jump);
     }
     const parity = el("span", "parity-chip");
     parity.classList.add(`parity-${grammar.rankingParity}`);
@@ -478,13 +541,26 @@ function cacheExtra(
 }
 
 function actionExtra(
+    side: TraceSide,
     action: NonNullable<TraceNodeSummary["action"]>,
 ): HTMLElement {
     const box = el("div", "node-extra action-extra");
     if (action.actionName !== undefined) {
-        const name = el("code", "mono action-name");
-        name.textContent = action.actionName;
-        box.appendChild(name);
+        // The action name jumps to its schema file when the trace recorded one.
+        if (action.hasSchema) {
+            const name = jumpLink(
+                action.actionName,
+                `Open the schema for ${action.actionName}`,
+                side,
+                "action",
+            );
+            name.classList.add("mono", "action-name");
+            box.appendChild(name);
+        } else {
+            const name = el("code", "mono action-name");
+            name.textContent = action.actionName;
+            box.appendChild(name);
+        }
     } else {
         const none = el("span", "action-none");
         none.textContent = "no action";

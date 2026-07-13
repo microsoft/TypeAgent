@@ -139,6 +139,8 @@ export interface TraceNodeSummary {
         rankingParityLabel: string;
         /** True when a step-by-step timeline can be expanded for this node. */
         hasTimeline: boolean;
+        /** True when the winning rule carries a source span to jump to. */
+        hasSource: boolean;
         /** True when `rankingParity === "diverged"`: the timeline is a
          *  diagnostic parse, not the resolver-selected one. */
         diagnosticOnly: boolean;
@@ -394,6 +396,7 @@ function summarizeNode(node: ReplayTraceNode): TraceNodeSummary {
                 rankingParity: g.rankingParity,
                 rankingParityLabel: RANKING_PARITY_LABEL[g.rankingParity],
                 hasTimeline: g.trace !== undefined && g.debugInfo !== undefined,
+                hasSource: g.source !== undefined,
                 diagnosticOnly: g.rankingParity === "diverged",
                 ...(g.chosenRule !== undefined
                     ? { chosenRule: g.chosenRule }
