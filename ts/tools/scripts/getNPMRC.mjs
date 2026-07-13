@@ -16,6 +16,8 @@
  *     2. Install a pnpm `tokenHelper` for the feed in ~/.npmrc that mints a
  *        fresh Azure DevOps token on demand (via the Azure CLI) — so feed auth
  *        auto-refreshes and never goes stale while you are signed in to `az`.
+ *     3. Seed corepack's cache with the pinned pnpm version from the feed, so
+ *        `pnpm` runs without corepack trying to reach the public npm registry.
  *   push:
  *     Upload the local ts/.npmrc as the '<secret>' secret (vault writers only).
  *
@@ -447,6 +449,214 @@ async function primeAzureAuth() {
     }
 }
 
+// --- corepack pnpm seeding -----------------------------------------------
+
+// Corepack fetches the pinned pnpm binary (package.json "packageManager") from
+// its OWN registry — it does not read .npmrc, and it defaults to the public npm
+// registry, which is blocked here. Pointing COREPACK_NPM_REGISTRY at the feed
+// also fails because Azure Artifacts does not serve the per-version metadata
+// endpoint corepack requests. To bypass both, download the pinned pnpm tarball
+// from the feed (whose tarball path works), verify it against the pinned
+// sha512, and drop it directly into corepack's cache so corepack runs it with
+// no network fetch.
+
+// Corepack's on-disk cache location. Mirrors corepack's own resolution exactly
+// (COREPACK_HOME, then XDG_CACHE_HOME, then LOCALAPPDATA, then a platform
+// default under the home dir) so a manually placed entry is found at runtime on
+// every platform.
+function corepackHomeFolder() {
+    if (process.env.COREPACK_HOME) return process.env.COREPACK_HOME;
+    const home = os.homedir();
+    const base =
+        process.env.XDG_CACHE_HOME ||
+        process.env.LOCALAPPDATA ||
+        path.join(
+            home,
+            process.platform === "win32"
+                ? path.join("AppData", "Local")
+                : ".cache",
+        );
+    return path.join(base, "node", "corepack");
+}
+
+// Parse the pinned pnpm spec from ts/package.json "packageManager":
+//   "pnpm@11.9.0+sha512.<hex>" -> { version, hash, hexHash }
+function parsePinnedPnpm() {
+    const pkgPath = path.resolve(__dirname, "../../package.json");
+    let pkg;
+    try {
+        pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+    } catch {
+        return undefined;
+    }
+    const pm = pkg.packageManager;
+    if (typeof pm !== "string") return undefined;
+    const m = pm.match(/^pnpm@([0-9.]+)\+(sha512\.[0-9a-f]+)$/);
+    if (!m) return undefined;
+    return {
+        version: m[1],
+        hash: m[2],
+        hexHash: m[2].slice("sha512.".length),
+    };
+}
+
+async function seedCorepackPnpm() {
+    if (process.exitCode) return; // pull already failed; don't seed
+
+    const pinned = parsePinnedPnpm();
+    if (!pinned) {
+        console.warn(
+            chalk.yellow(
+                'Could not read a pinned "pnpm@<version>+sha512…" from package.json — skipping corepack seed.',
+            ),
+        );
+        return;
+    }
+    const { version, hash, hexHash } = pinned;
+
+    const destDir = path.join(corepackHomeFolder(), "v1", "pnpm", version);
+    const markerPath = path.join(destDir, ".corepack");
+
+    // Already seeded with the exact pinned locator? Nothing to do.
+    if (fs.existsSync(markerPath)) {
+        try {
+            const existing = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+            if (existing?.locator?.reference === `${version}+${hash}`) {
+                console.log(
+                    chalk.gray(
+                        `corepack already has pnpm@${version} cached — skipping seed.`,
+                    ),
+                );
+                return;
+            }
+        } catch {
+            // unreadable marker — fall through and re-seed
+        }
+    }
+
+    let registry;
+    try {
+        registry = parseRegistry(fs.readFileSync(repoNpmrcPath, "utf8"));
+    } catch {
+        registry = undefined;
+    }
+    if (!registry) {
+        console.warn(
+            chalk.yellow(
+                "No registry in .npmrc — cannot seed corepack pnpm. Skipping.",
+            ),
+        );
+        return;
+    }
+    const tarballUrl = `${registry.replace(/\/+$/, "")}/pnpm/-/pnpm-${version}.tgz`;
+
+    if (!paramCommit) {
+        console.log(
+            chalk.gray(
+                `[dry-run] Would seed corepack cache with pnpm@${version} from ${tarballUrl}.`,
+            ),
+        );
+        return;
+    }
+
+    console.log(
+        `Seeding corepack cache with pnpm@${chalk.cyanBright(version)}...`,
+    );
+    try {
+        // Mint an Azure DevOps token for the feed (same resource the feed uses
+        // for installs, honoring the TYPEAGENT_ADO_RESOURCE override).
+        // getCredential() is cached, so this reuses the login from the Key Vault
+        // pull above without prompting again.
+        const credential = await getCredential();
+        const adoResource =
+            process.env.TYPEAGENT_ADO_RESOURCE ?? config.adoResource;
+        const at = await credential.getToken(`${adoResource}/.default`);
+        if (!at?.token) {
+            throw new Error("could not acquire an Azure DevOps token");
+        }
+
+        const res = await fetch(tarballUrl, {
+            headers: { Authorization: `Bearer ${at.token}` },
+        });
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status} fetching ${tarballUrl}`);
+        }
+        const buf = Buffer.from(await res.arrayBuffer());
+
+        // Verify the download against the pinned integrity hash before trusting
+        // it — never inject an unverified binary into the cache.
+        const crypto = await import("node:crypto");
+        const actual = crypto.createHash("sha512").update(buf).digest("hex");
+        if (actual !== hexHash) {
+            throw new Error(
+                `integrity mismatch: expected sha512 ${hexHash.slice(0, 16)}…, got ${actual.slice(0, 16)}…`,
+            );
+        }
+
+        // Extract package/* into the cache dir, stripping the tarball's leading
+        // "package/" directory.
+        fs.rmSync(destDir, { recursive: true, force: true });
+        fs.mkdirSync(destDir, { recursive: true });
+        const tmpTgz = path.join(
+            os.tmpdir(),
+            `pnpm-${version}-${process.pid}.tgz`,
+        );
+        fs.writeFileSync(tmpTgz, buf);
+        try {
+            const { spawnSync } = await import("node:child_process");
+            const r = spawnSync(
+                "tar",
+                ["-xzf", tmpTgz, "-C", destDir, "--strip-components=1"],
+                { stdio: ["ignore", "ignore", "pipe"] },
+            );
+            if (r.error) throw r.error;
+            if (r.status !== 0) {
+                throw new Error(
+                    `tar exited ${r.status}: ${r.stderr?.toString().trim() || "unknown error"}`,
+                );
+            }
+        } finally {
+            fs.rmSync(tmpTgz, { force: true });
+        }
+
+        // Write corepack's cache marker so it runs this version without a fetch.
+        // bin entries come from the extracted package.json, path-normalized the
+        // way corepack records them.
+        const extractedPkg = JSON.parse(
+            fs.readFileSync(path.join(destDir, "package.json"), "utf8"),
+        );
+        const rawBin =
+            typeof extractedPkg.bin === "string"
+                ? { [extractedPkg.name]: extractedPkg.bin }
+                : (extractedPkg.bin ?? {});
+        const bin = {};
+        for (const [name, rel] of Object.entries(rawBin)) {
+            bin[name] = rel.startsWith("./") ? rel : `./${rel}`;
+        }
+        const marker = {
+            locator: { name: "pnpm", reference: `${version}+${hash}` },
+            bin,
+            hash,
+        };
+        fs.writeFileSync(markerPath, JSON.stringify(marker), "utf8");
+
+        console.log(
+            chalk.green(
+                `Seeded corepack cache with pnpm@${version} (integrity verified). ` +
+                    "`pnpm` now runs without contacting the public npm registry.",
+            ),
+        );
+    } catch (e) {
+        console.warn(
+            chalk.yellowBright(
+                `Could not seed corepack's pnpm@${version} (${e?.message ?? String(e)}).\n` +
+                    "Non-fatal: .npmrc and feed auth are still set up. If `pnpm` later fails with a\n" +
+                    "corepack download error, re-run this script or seed pnpm manually.",
+            ),
+        );
+    }
+}
+
 // --- commands ------------------------------------------------------------
 
 async function pull() {
@@ -736,7 +946,8 @@ ${chalk.bold("Usage:")}
   node tools/scripts/getNPMRC.mjs [command] [options]
 
 ${chalk.bold("Commands:")}
-  pull    Download ts/.npmrc from Key Vault and set up feed auth (default)
+  pull    Download ts/.npmrc from Key Vault, set up feed auth, and seed corepack's
+          pnpm cache (default)
   push    Upload local ts/.npmrc to Key Vault (vault writers only)
   help    Show this help
 
@@ -812,6 +1023,7 @@ const commands = ["push", "pull", "help"];
         case "pull":
         case undefined:
             await pull();
+            await seedCorepackPnpm();
             break;
         case "help":
             printHelp();
