@@ -267,3 +267,70 @@ export function deserializeGrammarDebugInfo(
         filePaths: new Map(serialized.filePaths),
     };
 }
+
+/** Inputs for {@link buildTraceVersionPin}. The `spec` decides which of `sha`
+ *  (git ref) and `contentHashes` (working tree) is meaningful; the builder keeps
+ *  only the applicable one. */
+export interface TraceVersionPinInput {
+    spec: VersionSpec;
+    label: string;
+    sha?: string;
+    contentHashes?: Record<string, string>;
+}
+
+/** Assemble a {@link TraceVersionPin}, deriving `workingTree` from the spec and
+ *  dropping fields that can't apply to that side: a commit SHA identifies a
+ *  git-ref side (the working tree has none), and only the working tree can drift,
+ *  so content hashes are recorded for it alone. */
+export function buildTraceVersionPin(
+    input: TraceVersionPinInput,
+): TraceVersionPin {
+    const workingTree = input.spec.kind === "workingTree";
+    const pin: TraceVersionPin = {
+        spec: input.spec,
+        label: input.label,
+        workingTree,
+    };
+    if (!workingTree && input.sha !== undefined) {
+        pin.sha = input.sha;
+    }
+    if (workingTree && input.contentHashes !== undefined) {
+        pin.contentHashes = input.contentHashes;
+    }
+    return pin;
+}
+
+/** Inputs for {@link buildReplayRunDescriptor}. Pins are supplied already
+ *  resolved (SHA/content-hash resolution belongs to the runtime layer); this
+ *  builder only assembles the JSON-safe descriptor and stamps `runAt`. */
+export interface ReplayRunDescriptorInput {
+    runId: string;
+    agent: string;
+    a: TraceVersionPin;
+    b: TraceVersionPin;
+    mode: ReplayTraceMode;
+    missPolicy: ReplayMissPolicy;
+    validateWildcards: boolean;
+    corpus: CorpusFilter;
+    /** Epoch ms the run was issued; defaults to the injected clock. */
+    runAt?: number;
+}
+
+/** Build the {@link ReplayRunDescriptor} persisted with a run so a stored trace
+ *  can later be reproduced (or flagged as drifted) from the same inputs. */
+export function buildReplayRunDescriptor(
+    input: ReplayRunDescriptorInput,
+    now: () => number = Date.now,
+): ReplayRunDescriptor {
+    return {
+        runId: input.runId,
+        agent: input.agent,
+        a: input.a,
+        b: input.b,
+        mode: input.mode,
+        missPolicy: input.missPolicy,
+        validateWildcards: input.validateWildcards,
+        corpus: input.corpus,
+        runAt: input.runAt ?? now(),
+    };
+}
