@@ -43,7 +43,7 @@ Run any of these from `ts/`. All accept `--help`, `--root <path>`,
   `no-deprecated` — slower, report only), `--new-file-max <n>`.
 - **code-complexity:** `--cyclomatic <n>`, `--cognitive <n>`,
   `--new-file-cyclomatic <n>`, `--new-file-cognitive <n>`,
-  `--exceptions-file <path>` (deprecated JSON baseline by `file:line`; prefer
+  `--exceptions-file <path>` (deprecated JSON baseline exceptions keyed by `file:line`; prefer
   inline `// code-complexity-allow: <reason>` markers — see
   [Suppressing a known offender](#suppressing-a-known-offender)).
   For local CI-parity runs, use `npm run code-complexity:ci`.
