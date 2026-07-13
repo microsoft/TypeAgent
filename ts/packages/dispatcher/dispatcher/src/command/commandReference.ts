@@ -38,6 +38,7 @@ function escapeAngles(text: string): string {
 // Render a single command descriptor to a markdown section. Mirrors the
 // mechanical parts of getUsage() (commandHelp.ts) so the reference stays in
 // lockstep with interactive `@help`.
+// code-complexity-allow: command usage markdown needs explicit branches for args/flags formatting
 function renderCommand(command: string, descriptor: CommandDescriptor): string {
     // Usage tokens (flags first, unshifted in reverse like getUsage; then args).
     const usageParams: string[] = [];
