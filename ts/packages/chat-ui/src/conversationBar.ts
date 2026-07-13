@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import {
-    renderConnectionStatus,
+    formatConnectionStatusText,
+    DEFAULT_ACTION_LABELS,
     type ConnectionActionId,
     type ConnectionStatus,
 } from "./connectionStatus.js";
@@ -24,6 +25,12 @@ export type ConversationBarStatus = {
     errorText?: string;
     reconnectText?: string;
     demoSuffix?: string;
+    /**
+     * Agent-server endpoint (`host:port`) surfaced in the connected
+     * indicator's tooltip so the user can confirm which server they're
+     * attached to. Only meaningful while connected.
+     */
+    endpoint?: string;
     /**
      * Structured connection state. When present (and disconnected) the status
      * pill renders the reconnect countdown / stopped + manual-recovery links
@@ -110,6 +117,34 @@ function formatRelativeTime(createdAtIso: string): string {
     } catch {
         return "";
     }
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg" as const;
+
+/**
+ * Build the "connected" plug glyph as an inline SVG. Strokes use
+ * `currentColor` so the icon follows the status color set in CSS. Built via
+ * the DOM (no innerHTML) so the markup stays trusted and host-neutral.
+ */
+function createConnectIconSvg(): SVGSVGElement {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    for (const d of [
+        "M12 22v-5",
+        "M9 8V2",
+        "M15 8V2",
+        "M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z",
+    ]) {
+        const path = document.createElementNS(SVG_NS, "path");
+        path.setAttribute("d", d);
+        svg.appendChild(path);
+    }
+    return svg;
 }
 
 export class ConversationBar {
@@ -214,6 +249,13 @@ export class ConversationBar {
         this.statusEl.setAttribute("aria-live", "polite");
         this.statusEl.textContent = "Disconnected";
         this.rootEl.appendChild(this.statusEl);
+
+        // Thin rule fencing the status off from the action buttons so the
+        // ambient connected indicator isn't mistaken for another button.
+        const statusDividerEl = document.createElement("span");
+        statusDividerEl.className = "conversation-status-divider";
+        statusDividerEl.setAttribute("aria-hidden", "true");
+        this.rootEl.appendChild(statusDividerEl);
 
         const actionsEl = document.createElement("div");
         actionsEl.className = "conversation-actions";
@@ -447,38 +489,177 @@ export class ConversationBar {
 
     private renderStatus(): void {
         if (this.status.errorText) {
-            this.statusEl.className =
-                "conversation-status-summary disconnected";
-            this.statusEl.textContent = this.status.errorText;
+            this.renderStatusIndicator({
+                stateClass: "disconnected",
+                fullText: this.status.errorText,
+            });
         } else if (this.status.switching) {
-            this.statusEl.className = "conversation-status-summary switching";
-            this.statusEl.textContent = this.status.statusLabel ?? "Connecting";
+            this.renderStatusIndicator({
+                stateClass: "switching",
+                pulsing: true,
+                fullText: this.status.statusLabel ?? "Connecting",
+            });
         } else if (this.status.connected) {
-            this.statusEl.className = "conversation-status-summary connected";
-            const parts = ["Connected"];
-            const clientCount = this.formatClientCount(this.currentClientCount);
-            if (clientCount) parts.push(clientCount);
-            if (this.status.demoSuffix) parts.push(this.status.demoSuffix);
-            this.statusEl.textContent = parts.join(" · ");
+            this.renderStatusIndicator({
+                stateClass: "connected",
+                fullText: this.connectedFullText(),
+                badge:
+                    this.currentClientCount !== undefined
+                        ? { text: String(this.currentClientCount) }
+                        : undefined,
+            });
         } else if (this.status.connection) {
-            // Structured reconnect state — render countdown / stopped + the
-            // manual-recovery links via the shared helper so the UX matches
-            // across hosts. `stopped` is styled distinctly and may carry
-            // clickable Retry / Start actions.
-            const connection = this.status.connection;
-            const stopped = connection.phase === "stopped";
-            const hasActions = stopped && (connection.actions?.length ?? 0) > 0;
-            this.statusEl.className = `conversation-status-summary disconnected${
-                stopped ? " stopped" : ""
-            }${hasActions ? " has-actions" : ""}`;
-            renderConnectionStatus(this.statusEl, connection, (action) => {
-                void this.controller.connectionAction?.(action);
+            this.renderConnectionIndicator(this.status.connection);
+        } else {
+            this.renderStatusIndicator({
+                stateClass: "disconnected",
+                fullText: this.status.reconnectText ?? "Disconnected",
+            });
+        }
+    }
+
+    /**
+     * Full connected-status text (tooltip + assistive tech): client count,
+     * server endpoint, and any demo suffix.
+     */
+    private connectedFullText(): string {
+        const parts = ["Connected"];
+        const clientCount = this.formatClientCount(this.currentClientCount);
+        if (clientCount) parts.push(clientCount);
+        if (this.status.endpoint) parts.push(this.status.endpoint);
+        if (this.status.demoSuffix) parts.push(this.status.demoSuffix);
+        return parts.join(" · ");
+    }
+
+    /**
+     * Render a structured reconnect state as the plug indicator: an amber
+     * pulsing plug with the attempt count as a negative badge while auto-retry
+     * runs, and — once it has stopped — a red *clickable* plug that becomes the
+     * reconnect button, with any secondary recovery action (e.g. Start server)
+     * shown as a link beside it.
+     */
+    private renderConnectionIndicator(connection: ConnectionStatus): void {
+        const fullText = formatConnectionStatusText(connection);
+        if (connection.phase === "stopped") {
+            const actions = connection.actions ?? [];
+            if (actions.length === 0) {
+                this.renderStatusIndicator({
+                    stateClass: "disconnected",
+                    fullText,
+                });
+                return;
+            }
+            const primary = actions.includes("retry") ? "retry" : actions[0];
+            const secondaryActions = actions.filter(
+                (action) => action !== primary,
+            );
+            this.renderStatusIndicator({
+                stateClass: "disconnected",
+                fullText,
+                primaryAction: primary,
+                secondaryActions,
             });
         } else {
-            this.statusEl.className =
-                "conversation-status-summary disconnected";
-            this.statusEl.textContent =
-                this.status.reconnectText ?? "Disconnected";
+            // connecting / waiting → amber pulsing plug; attempt shown as a
+            // negative badge so it reads as "trouble", not a client count.
+            const attempt = connection.attempt;
+            this.renderStatusIndicator({
+                stateClass: "connecting",
+                pulsing: true,
+                fullText,
+                badge:
+                    attempt && attempt > 0
+                        ? { text: `-${attempt}`, attempt: true }
+                        : undefined,
+            });
+        }
+    }
+
+    /**
+     * Unified renderer for every connection state as the ambient plug glyph:
+     * tinted by `stateClass` (green connected / amber connecting / red
+     * disconnected), optionally pulsing, with an optional count/attempt badge.
+     * The full status text is mirrored into a visually-hidden node + tooltip so
+     * assistive tech still announces it. When `primaryAction` is set (auto-retry
+     * stopped) the plug becomes a button that triggers reconnect, and any
+     * `secondaryActions` render as recovery links beside it.
+     */
+    private renderStatusIndicator(opts: {
+        stateClass: string;
+        fullText: string;
+        pulsing?: boolean;
+        badge?: { text: string; attempt?: boolean };
+        primaryAction?: ConnectionActionId;
+        secondaryActions?: ConnectionActionId[];
+    }): void {
+        const secondaryActions = opts.secondaryActions ?? [];
+        const hasActions = secondaryActions.length > 0;
+
+        this.statusEl.className =
+            `conversation-status-summary ${opts.stateClass} as-indicator` +
+            (hasActions ? " has-actions" : "");
+        this.statusEl.replaceChildren();
+        this.statusEl.removeAttribute("title");
+
+        if (opts.primaryAction) {
+            const action = opts.primaryAction;
+            const hint =
+                action === "start"
+                    ? "click to start the server"
+                    : "click to reconnect";
+            const label = `${opts.fullText} — ${hint}`;
+            const plugBtn = document.createElement("button");
+            plugBtn.type = "button";
+            plugBtn.className = "conversation-status-plug";
+            plugBtn.title = label;
+            plugBtn.setAttribute("aria-label", label);
+            const iconEl = document.createElement("span");
+            iconEl.className = "conversation-status-icon";
+            iconEl.setAttribute("aria-hidden", "true");
+            iconEl.appendChild(createConnectIconSvg());
+            plugBtn.appendChild(iconEl);
+            plugBtn.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void this.controller.connectionAction?.(action);
+            });
+            this.statusEl.appendChild(plugBtn);
+        } else {
+            this.statusEl.title = opts.fullText;
+            const iconEl = document.createElement("span");
+            iconEl.className =
+                "conversation-status-icon" + (opts.pulsing ? " pulsing" : "");
+            iconEl.setAttribute("aria-hidden", "true");
+            iconEl.appendChild(createConnectIconSvg());
+            this.statusEl.appendChild(iconEl);
+
+            if (opts.badge) {
+                const badgeEl = document.createElement("span");
+                badgeEl.className =
+                    "conversation-status-badge" +
+                    (opts.badge.attempt ? " attempt" : "");
+                badgeEl.setAttribute("aria-hidden", "true");
+                badgeEl.textContent = opts.badge.text;
+                this.statusEl.appendChild(badgeEl);
+            }
+
+            const srEl = document.createElement("span");
+            srEl.className = "conversation-status-sr";
+            srEl.textContent = opts.fullText;
+            this.statusEl.appendChild(srEl);
+        }
+
+        for (const id of secondaryActions) {
+            const actionBtn = document.createElement("button");
+            actionBtn.type = "button";
+            actionBtn.className = `connection-status-action connection-status-action-${id}`;
+            actionBtn.textContent = DEFAULT_ACTION_LABELS[id];
+            actionBtn.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void this.controller.connectionAction?.(id);
+            });
+            this.statusEl.appendChild(actionBtn);
         }
     }
 

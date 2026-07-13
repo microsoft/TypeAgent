@@ -92,6 +92,10 @@ export interface ClientAPI {
     // connected to a separate agent server (--connect); false when the shell
     // hosts the agent server in-process (standalone) or for web/mobile clients.
     conversationBarEnabled(): Promise<boolean>;
+    // Agent-server endpoint (host:port) when connected to a separate server
+    // (--connect); undefined in standalone mode. Shown in the connected
+    // indicator's tooltip so the user can confirm the target server.
+    agentServerEndpoint(): Promise<string | undefined>;
     conversationList(): Promise<ConversationInfo[]>;
     conversationCreate(name: string): Promise<ConversationInfo>;
     conversationSwitch(

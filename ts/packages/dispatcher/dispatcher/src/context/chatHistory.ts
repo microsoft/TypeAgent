@@ -108,6 +108,25 @@ export interface ChatHistory {
     deleteEntityById(entityId: string): boolean;
     clear(): void;
     getStrings(): string[];
+    // Recent entries (both roles) for building reasoning context. Unlike
+    // export(), this includes assistant entries even when no user entry
+    // precedes them — in connected (agent-server) mode the user's turns are
+    // not recorded in chat history, so export() would drop everything.
+    getRecentEntries(
+        maxCount: number,
+    ): { role: "user" | "assistant"; text: string; source?: string }[];
+    // A page of the transcript for tools that read/page the conversation:
+    // entries by absolute index [offset, offset+limit) in chronological order.
+    // Total count is count().
+    getEntries(
+        offset: number,
+        limit: number,
+    ): {
+        index: number;
+        role: "user" | "assistant";
+        text: string;
+        source?: string;
+    }[];
     export(): ChatHistoryInputEntry | ChatHistoryInputEntry[] | undefined;
     import(input: ChatHistoryInputEntry | ChatHistoryInputEntry[]): void;
 }
@@ -342,6 +361,75 @@ export function createChatHistory(init: boolean): ChatHistory {
                 (entry, index) =>
                     `${index}: ${JSON.stringify(entry, undefined, 2)}`,
             );
+        },
+        getRecentEntries(maxCount: number): {
+            role: "user" | "assistant";
+            text: string;
+            source?: string;
+        }[] {
+            // Collect the last `maxCount` non-empty entries newest-first, then
+            // reverse to chronological order. Includes assistant entries even
+            // when no user entry precedes them (connected/agent-server mode).
+            const result: {
+                role: "user" | "assistant";
+                text: string;
+                source?: string;
+            }[] = [];
+            for (
+                let i = entries.length - 1;
+                i >= 0 && result.length < maxCount;
+                i--
+            ) {
+                const entry = entries[i];
+                if (entry.text.length === 0) {
+                    continue;
+                }
+                result.push(
+                    entry.role === "assistant"
+                        ? {
+                              role: "assistant",
+                              text: entry.text,
+                              source: entry.sourceSchemaName,
+                          }
+                        : { role: "user", text: entry.text },
+                );
+            }
+            return result.reverse();
+        },
+        getEntries(
+            offset: number,
+            limit: number,
+        ): {
+            index: number;
+            role: "user" | "assistant";
+            text: string;
+            source?: string;
+        }[] {
+            const start = Math.max(0, Math.floor(offset));
+            const end = Math.min(
+                entries.length,
+                start + Math.max(0, Math.floor(limit)),
+            );
+            const result: {
+                index: number;
+                role: "user" | "assistant";
+                text: string;
+                source?: string;
+            }[] = [];
+            for (let i = start; i < end; i++) {
+                const entry = entries[i];
+                result.push(
+                    entry.role === "assistant"
+                        ? {
+                              index: i,
+                              role: "assistant",
+                              text: entry.text,
+                              source: entry.sourceSchemaName,
+                          }
+                        : { index: i, role: "user", text: entry.text },
+                );
+            }
+            return result;
         },
         export(): ChatHistoryInputEntry | ChatHistoryInputEntry[] | undefined {
             const input: ChatHistoryInputEntry[] = [];

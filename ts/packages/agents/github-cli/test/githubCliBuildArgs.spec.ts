@@ -134,3 +134,70 @@ describe("buildArgs — prList assignee handling", () => {
         expect(args).not.toContain("--assignee");
     });
 });
+
+describe('buildArgs — author handling ("my PRs" / "issues I opened")', () => {
+    test("maps prList author @me to --author, not --assignee", () => {
+        const args = buildArgs(
+            action("prList", { state: "open", author: "@me" }),
+        )!;
+        const joined = args.join(" ");
+        expect(joined).toContain("--author @me");
+        expect(args).not.toContain("--assignee");
+        expect(joined).not.toContain("no:assignee");
+    });
+
+    test("composes author and assignee filters together for prList", () => {
+        const args = buildArgs(
+            action("prList", { author: "@me", assignee: "octocat" }),
+        )!;
+        const joined = args.join(" ");
+        expect(joined).toContain("--author @me");
+        expect(joined).toContain("--assignee octocat");
+    });
+
+    test("omits --author when unset for prList", () => {
+        const args = buildArgs(action("prList", { state: "open" }))!;
+        expect(args.join(" ")).not.toContain("--author");
+    });
+
+    test("maps issueList author @me to --author", () => {
+        const args = buildArgs(
+            action("issueList", { repo: "o/r", author: "@me" }),
+        )!;
+        expect(args.join(" ")).toContain("--author @me");
+    });
+});
+
+describe("buildArgs — myPullRequests (cross-repo gh search prs)", () => {
+    test("searches PRs authored by @me, open by default", () => {
+        const args = buildArgs(action("myPullRequests", {}))!;
+        const joined = args.join(" ");
+        expect(args.slice(0, 2)).toEqual(["search", "prs"]);
+        expect(joined).toContain("--author @me");
+        expect(joined).toContain("--state open");
+        expect(joined).toContain("--limit 20");
+        expect(joined).toContain("repository");
+    });
+
+    test("honors an explicit state and limit", () => {
+        const args = buildArgs(
+            action("myPullRequests", { state: "closed", limit: 5 }),
+        )!;
+        const joined = args.join(" ");
+        expect(joined).toContain("--state closed");
+        expect(joined).toContain("--limit 5");
+    });
+
+    test("scopes to an owner when provided", () => {
+        const args = buildArgs(
+            action("myPullRequests", { owner: "microsoft" }),
+        )!;
+        const joined = args.join(" ");
+        expect(joined).toContain("--owner microsoft");
+    });
+
+    test("omits --owner when unset", () => {
+        const args = buildArgs(action("myPullRequests", {}))!;
+        expect(args.join(" ")).not.toContain("--owner");
+    });
+});

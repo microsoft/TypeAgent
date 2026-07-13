@@ -95,13 +95,22 @@ function toConcreteEntity(
     });
 }
 
-export function addRequestToMemory(
+// Record the user's own turn in the in-session transcript (chat history).
+// Kept separate from knowledge extraction so the transcript stays complete
+// even when extraction is disabled (e.g. connected/agent-server mode).
+export function addUserMessageToHistory(
     context: CommandHandlerContext,
     request: string,
     cachedAttachments?: CachedImageWithDetails[],
 ): void {
     context.chatHistory.addUserEntry(request, cachedAttachments);
+}
 
+// Queue the user's turn for knowledge extraction into conversation memory.
+export function addRequestToMemory(
+    context: CommandHandlerContext,
+    request: string,
+): void {
     if (context.conversationManager) {
         context.conversationManager.queueAddMessage({
             text: request,

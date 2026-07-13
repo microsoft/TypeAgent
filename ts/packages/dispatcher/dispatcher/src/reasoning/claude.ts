@@ -90,6 +90,30 @@ function getClaudeCodeJsCliPath(): string {
     return cliPath;
 }
 
+/**
+ * Best-effort startup prewarm for the Claude reasoning engine. Unlike Copilot,
+ * Claude has no persistent client to keep running — each query() re-spawns the
+ * CLI — so a one-time prewarm can only resolve + validate the CLI path (which
+ * surfaces a missing SDK early) and warm the CLI file into the OS cache so the
+ * first query's process spawn reads it from memory. No-op unless the configured
+ * reasoning engine is Claude; failures are swallowed.
+ */
+export async function prewarmClaudeReasoning(
+    agentContext: CommandHandlerContext,
+): Promise<void> {
+    if (agentContext.session.getConfig().execution.reasoning !== "claude") {
+        return;
+    }
+    try {
+        const cliPath = getClaudeCodeJsCliPath();
+        debug(`Prewarming Claude reasoning CLI: ${cliPath}`);
+        // Warm the CLI bundle into the OS file cache (best-effort).
+        await fs.promises.readFile(cliPath).catch(() => undefined);
+    } catch {
+        // Best-effort — ignore.
+    }
+}
+
 const mcpServerName = "action-executor";
 const allowedTools = [
     "Read",
@@ -148,25 +172,25 @@ export function clearReasoningSession(agentContext: object): void {
  */
 function getRecentChatContext(
     context: ActionContext<CommandHandlerContext>,
-    k: number = 4,
+    k?: number,
 ): string {
-    const chatHistory = context.sessionContext.agentContext.chatHistory;
-    const exported = chatHistory.export();
-    if (!exported) return "";
-
-    const entries = Array.isArray(exported) ? exported : [exported];
-    const recent = entries.slice(-k);
+    const systemContext = context.sessionContext.agentContext;
+    const turns =
+        k ?? systemContext.session.getConfig().execution.reasoningHistoryTurns;
+    if (turns <= 0) return "";
+    // Use raw recent entries rather than export(): export() drops assistant
+    // entries that are not preceded by a user entry, which is exactly the
+    // connected/agent-server case where user turns are not recorded.
+    const recent = systemContext.chatHistory.getRecentEntries(turns);
     if (recent.length === 0) return "";
 
     const lines = ["[Recent conversation context]"];
     for (const entry of recent) {
-        lines.push(`User: ${entry.user}`);
-        const assistants = Array.isArray(entry.assistant)
-            ? entry.assistant
-            : [entry.assistant];
-        for (const a of assistants) {
-            lines.push(`Assistant (${a.source}): ${a.text}`);
-        }
+        lines.push(
+            entry.role === "assistant"
+                ? `Assistant (${entry.source}): ${entry.text}`
+                : `User: ${entry.text}`,
+        );
     }
     return lines.join("\n");
 }
@@ -558,6 +582,92 @@ function getClaudeOptions(
         },
     };
 
+    // TODO (deferred): cross-conversation browsing. get_conversation_info /
+    // read_conversation are scoped to the CURRENT conversation only. To help a
+    // user who is unsure which conversation they were in, add
+    // list_conversations / read_conversation(conversationId) backed by the
+    // agent-server ConversationManager (getConversationList). Not implemented yet.
+    const conversationInfoSchema = {};
+    const getConversationInfoTool: SdkMcpToolDefinition<
+        typeof conversationInfoSchema
+    > = {
+        name: "get_conversation_info",
+        description: [
+            "Get metadata about the current conversation transcript: total message count and which agents have responded.",
+            "Note: in some hosting modes the user's own turns are not recorded in the transcript, so userMessages may be 0 even though the user has spoken.",
+            "Use read_conversation to page through the actual messages.",
+        ].join("\n"),
+        inputSchema: conversationInfoSchema,
+        handler: async () => {
+            const total = systemContext.chatHistory.count();
+            const all = systemContext.chatHistory.getEntries(0, total);
+            let userMessages = 0;
+            const agents = new Set<string>();
+            for (const entry of all) {
+                if (entry.role === "user") {
+                    userMessages++;
+                } else if (entry.source) {
+                    agents.add(entry.source);
+                }
+            }
+            const info = {
+                messageCount: total,
+                userMessages,
+                assistantMessages: total - userMessages,
+                agents: [...agents],
+            };
+            return {
+                content: [
+                    { type: "text", text: JSON.stringify(info, null, 2) },
+                ],
+            };
+        },
+    };
+
+    const readConversationSchema = {
+        offset: z.number().optional(),
+        limit: z.number().optional(),
+    };
+    const readConversationTool: SdkMcpToolDefinition<
+        typeof readConversationSchema
+    > = {
+        name: "read_conversation",
+        description: [
+            "Read a page of the current conversation transcript in chronological order.",
+            "Params: offset (0-based start index, default 0) and limit (max messages, default 20).",
+            "For the most recent messages, call get_conversation_info first, then set offset = messageCount - limit.",
+        ].join("\n"),
+        inputSchema: readConversationSchema,
+        handler: async (args) => {
+            const total = systemContext.chatHistory.count();
+            const offset = args.offset ?? 0;
+            const limit = args.limit ?? 20;
+            const page = systemContext.chatHistory.getEntries(offset, limit);
+            if (page.length === 0) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `No messages in range (conversation has ${total} message(s)).`,
+                        },
+                    ],
+                };
+            }
+            const lines = page.map((entry) =>
+                entry.role === "assistant"
+                    ? `[${entry.index}] ${entry.source ?? "assistant"}: ${entry.text}`
+                    : `[${entry.index}] user: ${entry.text}`,
+            );
+            const more = offset + page.length < total;
+            const header = `Messages ${offset}\u2013${offset + page.length - 1} of ${total}${more ? " (more available — increase offset to continue)" : ""}:`;
+            return {
+                content: [
+                    { type: "text", text: `${header}\n${lines.join("\n")}` },
+                ],
+            };
+        },
+    };
+
     const sessionId = getSessionId(context);
 
     // Experimental override: if CLAUDE_CUSTOM_PROMPT_FILE is set, read that file
@@ -610,6 +720,10 @@ function getClaudeOptions(
                 "- `execute_action`: Execute actions conforming to discovered schemas",
                 "- `search_memory`: Recall information from earlier in this or prior conversations",
                 "- `remember`: Durably save a new memory so it can be recalled later",
+                "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
+                "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
+                "",
+                'For follow-up requests that refer to earlier turns (e.g. "those", "it", "mine"), first consult the [Recent conversation context] block included with the request; call search_memory only when you need older history not shown there.',
                 "",
                 "When the user asks about agent capabilities, use discover_actions first.",
                 "When the user asks to perform an action, discover the schema then execute_action.",
@@ -997,6 +1111,8 @@ function getClaudeOptions(
                     executeTool,
                     searchMemoryTool,
                     rememberTool,
+                    getConversationInfoTool,
+                    readConversationTool,
                 ],
             }),
         },
@@ -1045,6 +1161,27 @@ function extractActionInfo(
 }
 
 /**
+ * Build the reasoning token-usage record reported to the dispatcher (surfaced
+ * as "Action Tokens" in the UI). Returns undefined when no tokens were counted
+ * so the UI shows "not reported" rather than a misleading zero.
+ */
+function reasoningTokenUsage(
+    inputTokens: number,
+    outputTokens: number,
+    cachedTokens: number,
+) {
+    const total = inputTokens + outputTokens + cachedTokens;
+    return total > 0
+        ? {
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: total,
+              ...(cachedTokens > 0 && { cached_tokens: cachedTokens }),
+          }
+        : undefined;
+}
+
+/**
  * Execute reasoning action without planning (standard mode)
  */
 async function executeReasoningWithoutPlanning(
@@ -1052,6 +1189,7 @@ async function executeReasoningWithoutPlanning(
     context: ActionContext<CommandHandlerContext>,
     fallbackContext?: ReasoningFallbackContext,
     abortSignal?: AbortSignal,
+    requireToolUse: boolean = false,
 ): Promise<any> {
     // Display initial message
     context.actionIO.appendDisplay("Thinking...", "temporary");
@@ -1071,6 +1209,10 @@ async function executeReasoningWithoutPlanning(
     const toolUseIdToName = new Map<string, string>();
     const pendingExecuteActions = new Map<string, TypeAgentAction>();
     const executedActions: TypeAgentAction[] = [];
+    // LLM token usage reported by the final result message (captured below).
+    let usageInputTokens = 0;
+    let usageOutputTokens = 0;
+    let usageCachedTokens = 0;
 
     // Process streaming response
     for await (const message of queryInstance) {
@@ -1193,6 +1335,15 @@ async function executeReasoningWithoutPlanning(
             // Final result from the agent
             if (message.subtype === "success") {
                 finalResult = message.result;
+                // Track cache read/creation tokens separately from fresh input
+                // tokens (the Anthropic API reports them as distinct fields) so
+                // the UI can report them as a distinct "cached" figure.
+                const resultUsage = (message as any).usage;
+                usageInputTokens = resultUsage?.input_tokens ?? 0;
+                usageOutputTokens = resultUsage?.output_tokens ?? 0;
+                usageCachedTokens =
+                    (resultUsage?.cache_read_input_tokens ?? 0) +
+                    (resultUsage?.cache_creation_input_tokens ?? 0);
             } else {
                 // Handle error results
                 const errors =
@@ -1203,18 +1354,29 @@ async function executeReasoningWithoutPlanning(
         }
     }
 
-    // A success result with zero tool calls means the model replied with text
-    // only (e.g. described the change in prose) without executing anything.
-    // Nothing was actually modified — surface as a failure instead of letting
-    // the text be reported as a successful action.
-    if (finalResult && toolUseCount === 0) {
+    // For the action-execution path (requireToolUse), a success result with
+    // zero tool calls means the model replied with text only (e.g. described
+    // the change in prose) without executing anything — surface as a failure
+    // instead of reporting the text as a successful action. Conversation-answer
+    // callers leave requireToolUse false: answering a question with text only
+    // is a valid, complete result.
+    if (requireToolUse && finalResult && toolUseCount === 0) {
         throw new Error(
             "Reasoning completed with no tool calls — the model produced a text-only response and did not execute any action. No state was modified.",
         );
     }
 
     recordReasoningActions(context, executedActions);
-    return finalResult ? createActionResultNoDisplay(finalResult) : undefined;
+    if (!finalResult) {
+        return undefined;
+    }
+    const result = createActionResultNoDisplay(finalResult);
+    result.tokenUsage = reasoningTokenUsage(
+        usageInputTokens,
+        usageOutputTokens,
+        usageCachedTokens,
+    );
+    return result;
 }
 
 /**
@@ -1225,6 +1387,7 @@ async function executeReasoningWithTracing(
     context: ActionContext<CommandHandlerContext>,
     fallbackContext?: ReasoningFallbackContext,
     abortSignal?: AbortSignal,
+    requireToolUse: boolean = false,
 ): Promise<any> {
     const systemContext = context.sessionContext.agentContext;
     const storage = context.sessionContext.sessionStorage;
@@ -1237,6 +1400,7 @@ async function executeReasoningWithTracing(
             context,
             undefined,
             abortSignal,
+            requireToolUse,
         );
     }
 
@@ -1276,6 +1440,10 @@ async function executeReasoningWithTracing(
         const toolUseIdToName = new Map<string, string>();
         const pendingExecuteActions = new Map<string, TypeAgentAction>();
         const executedActions: TypeAgentAction[] = [];
+        // LLM token usage reported by the final result message (captured below).
+        let usageInputTokens = 0;
+        let usageOutputTokens = 0;
+        let usageCachedTokens = 0;
 
         // Process streaming response with tracing
         for await (const message of queryInstance) {
@@ -1422,6 +1590,15 @@ async function executeReasoningWithTracing(
                 // Final result from the agent
                 if (message.subtype === "success") {
                     finalResult = message.result;
+                    // Track cache read/creation tokens separately from fresh
+                    // input tokens (the Anthropic API reports them as distinct
+                    // fields) so the UI can report a distinct "cached" figure.
+                    const resultUsage = (message as any).usage;
+                    usageInputTokens = resultUsage?.input_tokens ?? 0;
+                    usageOutputTokens = resultUsage?.output_tokens ?? 0;
+                    usageCachedTokens =
+                        (resultUsage?.cache_read_input_tokens ?? 0) +
+                        (resultUsage?.cache_creation_input_tokens ?? 0);
                 } else {
                     // Handle error results
                     const errors =
@@ -1521,9 +1698,16 @@ async function executeReasoningWithTracing(
 
         recordReasoningActions(context, executedActions);
 
-        return finalResult
-            ? createActionResultNoDisplay(finalResult)
-            : undefined;
+        if (!finalResult) {
+            return undefined;
+        }
+        const result = createActionResultNoDisplay(finalResult);
+        result.tokenUsage = reasoningTokenUsage(
+            usageInputTokens,
+            usageOutputTokens,
+            usageCachedTokens,
+        );
+        return result;
     } catch (error) {
         // Mark trace as failed and save
         tracer.markFailed(error instanceof Error ? error : String(error));
@@ -1659,6 +1843,7 @@ export async function executeReasoningAction(
     return executeReasoning(enrichedRequest, context, {
         planReuseEnabled: planReuseEnabled || scriptReuseEnabled,
         engine: "claude",
+        requireToolUse: true,
         ...(fallbackContext ? { fallbackContext } : {}),
     });
 }
@@ -2026,6 +2211,11 @@ export async function executeReasoning(
         planReuseEnabled?: boolean; // false by default
         engine?: "claude"; // default is "claude" for now
         fallbackContext?: ReasoningFallbackContext;
+        // Require at least one tool/action execution; when true a text-only
+        // response is treated as a failure. Set by the action-execution path
+        // (reasoningAction). Conversation-answer callers leave it false, since
+        // answering a question with text only is a valid result.
+        requireToolUse?: boolean;
     },
 ) {
     const engine = options?.engine ?? "claude";
@@ -2034,6 +2224,7 @@ export async function executeReasoning(
     }
     const planReuseEnabled = options?.planReuseEnabled ?? false;
     const fallbackContext = options?.fallbackContext;
+    const requireToolUse = options?.requireToolUse ?? false;
     return runWithReasoningTimeout(context, (signal) => {
         if (!planReuseEnabled) {
             return executeReasoningWithoutPlanning(
@@ -2041,6 +2232,7 @@ export async function executeReasoning(
                 context,
                 fallbackContext,
                 signal,
+                requireToolUse,
             );
         }
         // Trace capture + auto recipe generation
@@ -2049,6 +2241,7 @@ export async function executeReasoning(
             context,
             fallbackContext,
             signal,
+            requireToolUse,
         );
     });
 }

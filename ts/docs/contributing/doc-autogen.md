@@ -66,6 +66,35 @@ node ts/tools/docsAutogen/bin/docs-autogen.cjs --package <name> --render --write
 node ts/tools/docsAutogen/bin/docs-autogen.cjs --package <name> --render --write --llm
 ```
 
+## The command reference (`--command-reference`)
+
+Separately from the per-package companions, doc-autogen also generates the
+top-level [`docs/overview/command-reference.md`](../overview/command-reference.md)
+— the reference for every `@` command. Unlike the package companions, this is a
+**purely deterministic** transform (no LLM): it boots a headless, read-only
+dispatcher with every bundled agent's commands enabled and renders each
+command's Usage / Arguments / Flags directly from its `CommandDescriptor`,
+mirroring `@help`. The output is formatted through Prettier so it is
+commit-ready.
+
+```bash
+# Regenerate docs/overview/command-reference.md (no API keys needed).
+node ts/tools/docsAutogen/bin/docs-autogen.cjs --command-reference
+
+# Preview on stdout without writing.
+node ts/tools/docsAutogen/bin/docs-autogen.cjs --command-reference --dry-run
+```
+
+Because the descriptors are the single source of truth, **do not hand-edit
+`command-reference.md`**. To change a command's summary, arguments, or flags,
+edit its `CommandDescriptor` in the agent source and regenerate. Extended prose
+for a command belongs in the README next to the code that implements it (e.g.
+the `@config collision` family and `@grammar collisions` are documented in the
+[dispatcher README](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/README.md#action-collision-detection),
+and the `@package` commands in the
+[default-agent-provider README](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/README.md#managing-installed-agents-package)),
+not inline in the generated reference.
+
 ## In CI
 
 The on-demand workflow at

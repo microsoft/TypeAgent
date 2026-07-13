@@ -80,7 +80,10 @@
               "schemaName": "browser.lookupAndAnswer",
               "actionName": "lookupAndAnswerInternet",
               "parameters": {
-                "originalRequest": "look up the ingredient for shepherd's pie for me please"
+                "originalRequest": "look up the ingredient for shepherd's pie for me please",
+                "internetLookups": [
+                  "ingredient for shepherd's pie"
+                ]
               }
             },
             "partial": true
