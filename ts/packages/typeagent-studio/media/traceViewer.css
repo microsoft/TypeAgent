@@ -1,0 +1,477 @@
+/* Copyright (c) Microsoft Corporation.
+   Licensed under the MIT License. */
+
+:root {
+  --tv-gap: 10px;
+  --tv-radius: 6px;
+  --tv-border: var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  --tv-muted: var(--vscode-descriptionForeground, #8a8a8a);
+  --tv-mono: var(--vscode-editor-font-family, monospace);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  margin: 0;
+  padding: 0;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 14px 18px 28px;
+  box-sizing: border-box;
+  gap: var(--tv-gap);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+code.mono,
+.mono {
+  font-family: var(--tv-mono);
+  font-size: 0.92em;
+}
+
+/* --- Connection bar ------------------------------------------------------- */
+.conn-bar {
+  min-height: 0;
+}
+.conn-bar.is-connected {
+  display: none;
+}
+.conn-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.85em;
+}
+.conn-pill.is-connecting {
+  background: var(--vscode-editorWarning-background, rgba(200, 160, 0, 0.12));
+  color: var(--vscode-editorWarning-foreground, #b58900);
+}
+.conn-pill.is-disconnected {
+  background: var(
+    --vscode-inputValidation-errorBackground,
+    rgba(200, 60, 60, 0.14)
+  );
+  color: var(--vscode-errorForeground, #d16969);
+}
+
+/* --- Header --------------------------------------------------------------- */
+.trace-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.trace-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.utterance {
+  font-family: var(--tv-mono);
+  font-size: 1.15em;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.provenance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--tv-muted);
+  font-size: 0.9em;
+}
+.prov-agent {
+  font-weight: 600;
+  color: var(--vscode-foreground);
+}
+.sep {
+  opacity: 0.5;
+}
+.arrow {
+  opacity: 0.7;
+  padding: 0 2px;
+}
+.version-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--tv-radius);
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.1));
+  border: 1px solid var(--tv-border);
+}
+.version-side {
+  font-weight: 700;
+  font-size: 0.82em;
+  width: 1.1em;
+  text-align: center;
+  border-radius: 3px;
+}
+.version-chip.side-a .version-side {
+  color: var(--vscode-charts-blue, #4ea1ff);
+}
+.version-chip.side-b .version-side {
+  color: var(--vscode-charts-purple, #b48ead);
+}
+.version-label {
+  color: var(--vscode-foreground);
+}
+.version-badge {
+  font-family: var(--tv-mono);
+  font-size: 0.8em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--vscode-badge-background, rgba(128, 128, 128, 0.25));
+  color: var(--vscode-badge-foreground, inherit);
+}
+.version-badge.working-tree {
+  background: var(--vscode-editorWarning-background, rgba(200, 160, 0, 0.16));
+  color: var(--vscode-editorWarning-foreground, #b58900);
+}
+
+/* --- Replay controls ------------------------------------------------------ */
+.replay-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.variant-toggle {
+  font-family: inherit;
+  font-size: 0.85em;
+  padding: 4px 10px;
+  border: 1px solid var(--tv-border);
+  border-radius: var(--tv-radius);
+  background: transparent;
+  color: var(--tv-muted);
+  cursor: pointer;
+}
+.variant-toggle.is-active {
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.14));
+  color: var(--vscode-foreground);
+  border-color: var(--vscode-focusBorder, #4ea1ff);
+}
+.replay-button {
+  font-family: inherit;
+  font-size: 0.9em;
+  padding: 5px 14px;
+  border: none;
+  border-radius: var(--tv-radius);
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #fff);
+  cursor: pointer;
+}
+.replay-button:hover:not(:disabled) {
+  background: var(--vscode-button-hoverBackground, #1177bb);
+}
+.replay-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* --- Divergence callout --------------------------------------------------- */
+.callout {
+  border: 1px solid var(--tv-border);
+  border-radius: var(--tv-radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.callout.is-match {
+  background: var(
+    --vscode-editorGutter-addedBackground,
+    rgba(70, 160, 90, 0.1)
+  );
+  border-color: var(--vscode-charts-green, rgba(70, 160, 90, 0.5));
+}
+.callout.is-differ {
+  background: var(
+    --vscode-inputValidation-warningBackground,
+    rgba(200, 150, 0, 0.12)
+  );
+  border-color: var(--vscode-charts-orange, rgba(200, 150, 0, 0.5));
+}
+.callout.is-low-confidence {
+  border-style: dashed;
+}
+.callout-headline {
+  font-weight: 600;
+  font-size: 1.02em;
+}
+.callout-detail {
+  line-height: 1.45;
+}
+.callout-subnote {
+  font-size: 0.88em;
+  color: var(--tv-muted);
+  line-height: 1.4;
+}
+
+.note-banner {
+  font-size: 0.88em;
+  color: var(--tv-muted);
+  padding: 6px 10px;
+  border-radius: var(--tv-radius);
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.1));
+}
+
+/* --- Fidelity grid -------------------------------------------------------- */
+.fidelity-grid {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--tv-border);
+  border-radius: var(--tv-radius);
+  overflow: hidden;
+}
+.grid-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.6fr) 1fr 1fr;
+  border-top: 1px solid var(--tv-border);
+}
+.grid-row:first-child {
+  border-top: none;
+}
+.grid-row.is-head {
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.08));
+}
+.grid-row.is-diverging {
+  background: var(
+    --vscode-inputValidation-warningBackground,
+    rgba(200, 150, 0, 0.08)
+  );
+}
+
+.grid-gutter {
+  padding: 10px 12px;
+  border-right: 1px solid var(--tv-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+}
+.layer-name {
+  font-weight: 600;
+  font-size: 0.9em;
+}
+.diverge-flag {
+  font-size: 0.72em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--vscode-charts-orange, #c8961e);
+  font-weight: 600;
+}
+
+.grid-side-head {
+  padding: 8px 12px;
+  border-right: 1px solid var(--tv-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.grid-side-head:last-child {
+  border-right: none;
+}
+.side-tag {
+  font-weight: 700;
+  font-size: 0.85em;
+  width: 1.3em;
+  height: 1.3em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  color: #fff;
+}
+.grid-side-head.side-a .side-tag {
+  background: var(--vscode-charts-blue, #4ea1ff);
+}
+.grid-side-head.side-b .side-tag {
+  background: var(--vscode-charts-purple, #b48ead);
+}
+.realization {
+  font-size: 0.82em;
+  color: var(--tv-muted);
+}
+
+.grid-cell {
+  padding: 10px 12px;
+  border-right: 1px solid var(--tv-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.grid-cell:last-child {
+  border-right: none;
+}
+.grid-cell.is-empty {
+  align-items: flex-start;
+  justify-content: center;
+  color: var(--tv-muted);
+}
+.empty-mark {
+  opacity: 0.5;
+}
+
+.node-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.pill {
+  font-size: 0.78em;
+  padding: 1px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* Execution states */
+.exec-pill {
+  background: var(--vscode-badge-background, rgba(128, 128, 128, 0.25));
+  color: var(--vscode-badge-foreground, inherit);
+}
+.exec-ran {
+  background: rgba(90, 150, 255, 0.2);
+  color: var(--vscode-charts-blue, #6cb0ff);
+}
+.exec-skipped,
+.exec-not-applicable,
+.exec-not-reached,
+.exec-unavailable {
+  background: rgba(128, 128, 128, 0.18);
+  color: var(--tv-muted);
+}
+
+/* Outcomes */
+.outcome-hit,
+.outcome-accepted {
+  background: rgba(70, 160, 90, 0.2);
+  color: var(--vscode-charts-green, #6bbf78);
+}
+.outcome-miss,
+.outcome-rejected,
+.outcome-errored {
+  background: rgba(200, 90, 70, 0.2);
+  color: var(--vscode-errorForeground, #e08a7a);
+}
+
+.node-detail {
+  font-size: 0.88em;
+  line-height: 1.4;
+  color: var(--tv-muted);
+  overflow-wrap: anywhere;
+}
+.node-extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.rule,
+.action-name {
+  background: var(--vscode-textCodeBlock-background, rgba(128, 128, 128, 0.14));
+  padding: 1px 6px;
+  border-radius: 3px;
+  overflow-wrap: anywhere;
+}
+.action-none {
+  font-size: 0.85em;
+  color: var(--tv-muted);
+  font-style: italic;
+}
+.cache-ns {
+  font-size: 0.82em;
+  color: var(--tv-muted);
+}
+
+.parity-chip {
+  font-size: 0.76em;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+.parity-matched {
+  background: rgba(70, 160, 90, 0.16);
+  color: var(--vscode-charts-green, #6bbf78);
+}
+.parity-diverged {
+  background: rgba(200, 150, 0, 0.18);
+  color: var(--vscode-charts-orange, #c8961e);
+}
+.parity-unavailable {
+  background: rgba(128, 128, 128, 0.16);
+  color: var(--tv-muted);
+}
+
+/* --- State screens -------------------------------------------------------- */
+.state-screen {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+.state-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 40ch;
+  text-align: center;
+  color: var(--tv-muted);
+  line-height: 1.5;
+}
+.spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--tv-border);
+  border-top-color: var(--vscode-focusBorder, #4ea1ff);
+  animation: tv-spin 0.8s linear infinite;
+}
+@keyframes tv-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+/* --- Narrow layout -------------------------------------------------------- */
+@media (max-width: 560px) {
+  .grid-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  /* Fold the layer name into a full-width band above its A/B cells so the two
+     versions stay adjacent on a narrow panel. */
+  .grid-gutter {
+    grid-column: 1 / -1;
+    border-right: none;
+    border-bottom: 1px solid var(--tv-border);
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+  }
+  .grid-row.is-head .grid-gutter {
+    display: none;
+  }
+}
