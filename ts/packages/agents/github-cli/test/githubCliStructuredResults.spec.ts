@@ -16,6 +16,9 @@ import {
     buildStructuredRepoView,
     buildStructuredDependabotResult,
     buildStructuredContributorsResult,
+    buildStructuredPrView,
+    buildStructuredIssueView,
+    buildStructuredField,
 } from "../src/github-cliActionHandler.js";
 
 // ---------------------------------------------------------------------------
@@ -413,3 +416,156 @@ describe("buildStructuredContributorsResult", () => {
         expect(table(result as any).sortable).toBe(true);
     });
 });
+
+// ---------------------------------------------------------------------------
+// buildStructuredPrView
+// ---------------------------------------------------------------------------
+
+describe("buildStructuredPrView", () => {
+    const pr = {
+        number: 7,
+        title: "Add feature",
+        state: "OPEN",
+        isDraft: false,
+        author: { login: "alice" },
+        headRefName: "feat/x",
+        baseRefName: "main",
+        additions: 10,
+        deletions: 2,
+        changedFiles: 3,
+        createdAt: "2026-01-01T00:00:00Z",
+        url: "https://github.com/owner/repo/pull/7",
+        body: "Some description",
+    };
+
+    test("heading shows number and title", () => {
+        const result = buildStructuredPrView(pr);
+        expect(heading(result as any)).toMatchObject({
+            kind: "heading",
+            text: "#7 Add feature",
+        });
+    });
+
+    test("state pair is a badge", () => {
+        const result = buildStructuredPrView(pr);
+        const kv = kvBlock(result);
+        const statePair = kv.pairs.find((p: any) => p.label === "State");
+        expect(statePair?.value).toMatchObject({ badge: "info" });
+    });
+
+    test("draft PR uses warning badge and Draft label", () => {
+        const result = buildStructuredPrView({ ...pr, isDraft: true });
+        const kv = kvBlock(result);
+        const statePair = kv.pairs.find((p: any) => p.label === "State");
+        expect(statePair?.value).toMatchObject({
+            text: "Draft",
+            badge: "warning",
+        });
+    });
+
+    test("body becomes a divider + text block", () => {
+        const result = buildStructuredPrView(pr);
+        const blocks = (result.displayContent as any).blocks;
+        expect(blocks.some((b: any) => b.kind === "divider")).toBe(true);
+        expect(blocks[blocks.length - 1]).toMatchObject({
+            kind: "text",
+            text: "Some description",
+        });
+    });
+
+    test("rawData is the original object", () => {
+        const result = buildStructuredPrView(pr);
+        expect((result.displayContent as any).rawData).toBe(pr);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// buildStructuredIssueView
+// ---------------------------------------------------------------------------
+
+describe("buildStructuredIssueView", () => {
+    const issue = {
+        number: 12,
+        title: "A bug",
+        state: "OPEN",
+        author: { login: "bob" },
+        labels: [{ name: "bug" }, { name: "p1" }],
+        assignees: [{ login: "carol" }],
+        comments: [{}, {}],
+        createdAt: "2026-01-01T00:00:00Z",
+        url: "https://github.com/owner/repo/issues/12",
+        body: "Repro steps",
+    };
+
+    test("heading shows number and title", () => {
+        const result = buildStructuredIssueView(issue);
+        expect(heading(result as any).text).toBe("#12 A bug");
+    });
+
+    test("state pair uses issue badge", () => {
+        const result = buildStructuredIssueView(issue);
+        const kv = kvBlock(result);
+        const statePair = kv.pairs.find((p: any) => p.label === "State");
+        expect(statePair?.value).toMatchObject({ badge: "info" });
+    });
+
+    test("labels joined and comment count numeric", () => {
+        const result = buildStructuredIssueView(issue);
+        const kv = kvBlock(result);
+        expect(kv.pairs.find((p: any) => p.label === "Labels")?.value).toBe(
+            "bug, p1",
+        );
+        expect(kv.pairs.find((p: any) => p.label === "Comments")?.value).toBe(2);
+    });
+
+    test("rawData is the original object", () => {
+        const result = buildStructuredIssueView(issue);
+        expect((result.displayContent as any).rawData).toBe(issue);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// buildStructuredField
+// ---------------------------------------------------------------------------
+
+describe("buildStructuredField", () => {
+    const repoData = {
+        name: "TypeAgent",
+        owner: { login: "microsoft" },
+        stargazerCount: 450,
+        forkCount: 30,
+        primaryLanguage: { name: "TypeScript" },
+        description: "Agents framework",
+    };
+
+    test("returns undefined for unknown field", () => {
+        expect(
+            buildStructuredField("nonsense", repoData, "microsoft/TypeAgent"),
+        ).toBeUndefined();
+    });
+
+    test("stars field yields keyValue pair with numeric value", () => {
+        const result = buildStructuredField(
+            "stars",
+            repoData,
+            "microsoft/TypeAgent",
+        )!;
+        const kv = kvBlock(result);
+        const pair = kv.pairs[0];
+        expect(pair).toMatchObject({ label: "Stars", value: 450 });
+    });
+
+    test("rawData carries repo, field and value", () => {
+        const result = buildStructuredField(
+            "stars",
+            repoData,
+            "microsoft/TypeAgent",
+        )!;
+        expect((result.displayContent as any).rawData).toMatchObject({
+            repo: "microsoft/TypeAgent",
+            field: "stars",
+            value: 450,
+        });
+    });
+});
+

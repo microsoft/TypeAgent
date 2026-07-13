@@ -330,6 +330,27 @@ Example — the `prList` table: an `#id` **link** column → `url`, a
 **text** title column, a **badge** state column (`DRAFT`/`OPEN` colored
 by tone), a **code** branch column; `sortable: true`.
 
+**Status: complete.** All display-producing paths now emit
+`StructuredContent`:
+
+- List actions (`prList`, `issueList`, `myAssignedIssues`, `searchRepos`)
+  → `buildStructuredListResult` (heading + interactive table).
+- `repoView` → `buildStructuredRepoView` (heading + `keyValue`).
+- Dependabot alerts → `buildStructuredDependabotResult` (badge severity
+  table).
+- Contributors → `buildStructuredContributorsResult` (ranked table).
+- Single `prView` / `issueView` → `buildStructuredPrView` /
+  `buildStructuredIssueView` (heading + `keyValue` metadata + optional
+  body text block).
+- Focused field answers (stars / forks / language / watchers /
+  description) → `buildStructuredField` (heading + single `keyValue`
+  pair + natural-language summary; `rawData` carries `{ repo, field,
+  value }`).
+
+Remaining markdown/text paths are intentional: mutation/create success
+messages, `statusPrint`, and the raw-output fallback carry no structured
+data. `githubCliStructuredResults.spec.ts` covers all builders.
+
 ### Phase 6 — Programmatic "or otherwise" *(after 1 + 5)*
 
 - `packages/commandExecutor/src/commandServer.ts` forwards `rawData` as
@@ -338,6 +359,54 @@ by tone), a **code** branch column; `sortable: true`.
 - Optionally update `packages/agents/taskflow/src/script/taskFlowScriptApi.mts`
   to read `rawData` directly, dropping the `extractText` + `tryParseJson`
   workaround.
+
+### Phase 7 — Broader agent rollout *(after 5; per-agent, parallelizable)*
+
+`github-cli` is the reference adopter, but every list-, table-, or
+record-shaped agent result throws away structure today. Convert the rest
+in the order below. The order is driven by (a) how naturally the output
+maps to blocks, (b) user-facing value, and (c) conversion cost. Each
+agent follows the `github-cli` template: emit `StructuredContent` via
+`createStructuredContent` / `createTable` / `fromRecords` with `rawData`,
+keep the derived markdown/text fallback at parity, and update the
+handler's unit tests.
+
+Agents already committed to custom HTML/iframe or a WebSocket/RPC bridge
+(`image`, `video`, `settings`, `chat`, `code`, `visualStudio`,
+`browser`, `markdown`, `montage`, `turtle`, `player`, `playerLocal`) are
+**out of scope** for v1 — they render their own UI and don't flow through
+the block-document fallback path. Short status/confirmation agents
+(`timer`, `windowsClock`, `greeting`, `desktop`, `vampire`,
+`androidMobile`, `powershell`, `utility`, `studio`) are **low value** and
+deferred until a clear need appears.
+
+**Wave A — high fit (clear list/table/record output):**
+
+| # | Agent | Shape today | Target blocks |
+| --- | --- | --- | --- |
+| 1 | `list` | markdown bullet lists | `heading` + `list` |
+| 2 | `calendar` | HTML event views (`appendDisplay`) | `heading` + `table` (agenda) + `card`/`keyValue` (event detail) |
+| 3 | `email` | HTML message lists + threads | `heading` + `table` (inbox/list) + `keyValue` (message detail) |
+| 4 | `weather` | text forecast | `keyValue` (current) + `table` (multi-day forecast) |
+| 5 | `ipconfig` | markdown key/values | `heading` + `keyValue` (per-adapter sections) |
+
+**Wave B — medium fit (structured data mixed with text):**
+
+| # | Agent | Shape today | Target blocks |
+| --- | --- | --- | --- |
+| 6 | `discord` | text channel/message lists | `heading` + `list`/`table` |
+| 7 | `taskflow` | text task listings | `table` (name / description / usage) |
+| 8 | `onboarding` | markdown wizard status | `heading` + `keyValue` (phase status) |
+| 9 | `screencapture` | image + markdown metadata | `image` + `heading`/`keyValue` |
+| 10 | `osNotifications` | streamed notification log | `list`/`card` (event stream) |
+
+**Out of scope (v1):** `image`, `video`, `settings`, `chat`, `code`,
+`visualStudio`, `browser`, `markdown`, `montage`, `turtle`, `player`,
+`playerLocal` (custom UI / RPC bridge).
+
+**Deferred (low value):** `timer`, `windowsClock`, `greeting`,
+`desktop`, `vampire`, `androidMobile`, `powershell`, `utility`, `studio`
+(short text/status confirmations).
 
 ## Verification
 

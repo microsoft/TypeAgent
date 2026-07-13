@@ -888,6 +888,57 @@ function distillRepoField(
     }
 }
 
+// Build a focused structured answer for a specific repo field. Wraps the
+// natural-language summary as a single-pair keyValue block plus a rawData
+// payload carrying the raw field value. Returns undefined for unknown fields.
+//
+// Exported for unit tests.
+export function buildStructuredField(
+    field: string,
+    data: Record<string, unknown>,
+    repo: string,
+): ActionResultSuccess | undefined {
+    const summary = distillRepoField(field, data, repo);
+    if (summary === undefined) {
+        return undefined;
+    }
+    const label = repo || `${formatValue(data.owner)}/${String(data.name ?? "")}`;
+    const fieldLabels: Record<string, string> = {
+        stars: "Stars",
+        forks: "Forks",
+        language: "Language",
+        watchers: "Watchers",
+        description: "Description",
+    };
+    const rawValues: Record<string, unknown> = {
+        stars: data.stargazerCount,
+        forks: data.forkCount,
+        language: formatValue(data.primaryLanguage),
+        watchers: formatValue(data.watchers),
+        description: data.description,
+    };
+    const value = rawValues[field];
+    const pair: KeyValuePair = {
+        label: fieldLabels[field] ?? field,
+        value:
+            typeof value === "number"
+                ? value
+                : String(value ?? ""),
+    };
+    const blocks: StructuredBlock[] = [
+        { kind: "heading", level: 3, text: label },
+        { kind: "keyValue", pairs: [pair] },
+        { kind: "text", text: summary, format: "markdown" },
+    ];
+    return {
+        historyText: summary,
+        entities: [],
+        displayContent: createStructuredContent(blocks, {
+            rawData: { repo: label, field, value },
+        }),
+    };
+}
+
 // Format gh status output — parse the │-table into clean markdown sections
 // code-complexity-allow: sequential gh status table parser; many format branches
 function formatStatusOutput(raw: string): string {
@@ -984,13 +1035,20 @@ function formatStatusOutput(raw: string): string {
     return result.join("\n");
 }
 
-// Format a single issue view from JSON into rich markdown
-function formatIssueView(data: Record<string, unknown>): string {
+// Build a single-issue structured view (issueView action). Renders a heading,
+// a keyValue metadata block, and an optional truncated body text block, plus a
+// rawData payload carrying the full gh JSON.
+//
+// Exported for unit tests.
+export function buildStructuredIssueView(
+    data: Record<string, unknown>,
+): ActionResultSuccess {
     const author = data.author ? formatValue(data.author) : "unknown";
     const labels = Array.isArray(data.labels)
         ? (data.labels as Record<string, unknown>[])
-              .map((l) => `\`${l.name}\``)
-              .join(" ")
+              .map((l) => String(l.name ?? ""))
+              .filter(Boolean)
+              .join(", ")
         : "";
     const assignees = Array.isArray(data.assignees)
         ? (data.assignees as Record<string, unknown>[])
@@ -1000,50 +1058,110 @@ function formatIssueView(data: Record<string, unknown>): string {
     const commentCount = Array.isArray(data.comments)
         ? data.comments.length
         : (data.comments ?? 0);
-    const body = data.body ? String(data.body).slice(0, 1000) : "";
-    const bodySection = body
-        ? `\n\n---\n\n${body}${String(data.body).length > 1000 ? "\n\n*…truncated*" : ""}`
-        : "";
 
-    let header = `### [#${data.number} ${data.title}](${data.url})\n\n`;
-    header += `**State:** ${data.state}`;
-    header += ` · **Author:** ${author}`;
-    if (labels) header += ` · **Labels:** ${labels}`;
-    if (assignees) header += `\n**Assignees:** ${assignees}`;
-    header += ` · **Comments:** ${commentCount}`;
-    header += ` · **Created:** ${String(data.createdAt).slice(0, 10)}`;
+    const pairs: KeyValuePair[] = [];
+    pairs.push({
+        label: "State",
+        value: {
+            text: String(data.state ?? ""),
+            badge: issueBadge(String(data.state ?? "")),
+        },
+    });
+    pairs.push({ label: "Author", value: author });
+    if (labels) pairs.push({ label: "Labels", value: labels });
+    if (assignees) pairs.push({ label: "Assignees", value: assignees });
+    pairs.push({ label: "Comments", value: Number(commentCount) });
+    if (data.createdAt)
+        pairs.push({ label: "Created", value: String(data.createdAt).slice(0, 10) });
     if (data.closedAt)
-        header += ` · **Closed:** ${String(data.closedAt).slice(0, 10)}`;
+        pairs.push({ label: "Closed", value: String(data.closedAt).slice(0, 10) });
+    if (data.url)
+        pairs.push({ label: "Link", value: { text: String(data.url), href: String(data.url) } });
 
-    return header + bodySection;
+    const headingText = `#${data.number} ${data.title}`;
+    const blocks: StructuredBlock[] = [
+        { kind: "heading", level: 3, text: headingText },
+        { kind: "keyValue", pairs },
+    ];
+    const body = data.body ? String(data.body) : "";
+    if (body) {
+        blocks.push({ kind: "divider" });
+        blocks.push({
+            kind: "text",
+            text:
+                body.slice(0, 1000) +
+                (body.length > 1000 ? "\n\n*…truncated*" : ""),
+            format: "markdown",
+        });
+    }
+    return {
+        historyText: headingText,
+        entities: [],
+        displayContent: createStructuredContent(blocks, { rawData: data }),
+    };
 }
 
-// Format a single PR view from JSON into rich markdown
-function formatPrView(data: Record<string, unknown>): string {
+// Build a single-PR structured view (prView action). Renders a heading, a
+// keyValue metadata block, and an optional truncated body text block, plus a
+// rawData payload carrying the full gh JSON.
+//
+// Exported for unit tests.
+export function buildStructuredPrView(
+    data: Record<string, unknown>,
+): ActionResultSuccess {
     const author = data.author ? formatValue(data.author) : "unknown";
     const labels = Array.isArray(data.labels)
         ? (data.labels as Record<string, unknown>[])
-              .map((l) => `\`${l.name}\``)
-              .join(" ")
+              .map((l) => String(l.name ?? ""))
+              .filter(Boolean)
+              .join(", ")
         : "";
-    const status = data.isDraft ? "DRAFT" : String(data.state);
-    const body = data.body ? String(data.body).slice(0, 1000) : "";
-    const bodySection = body
-        ? `\n\n---\n\n${body}${String(data.body).length > 1000 ? "\n\n*…truncated*" : ""}`
-        : "";
+    const isDraft = Boolean(data.isDraft);
+    const statusLabel = isDraft ? "Draft" : String(data.state ?? "");
+    const statusTone: BadgeTone = isDraft
+        ? "warning"
+        : prBadge(data as Record<string, unknown>);
 
-    let header = `### [#${data.number} ${data.title}](${data.url})\n\n`;
-    header += `**State:** ${status}`;
-    header += ` · **Author:** ${author}`;
+    const pairs: KeyValuePair[] = [];
+    pairs.push({ label: "State", value: { text: statusLabel, badge: statusTone } });
+    pairs.push({ label: "Author", value: author });
     if (data.headRefName)
-        header += ` · **Branch:** \`${data.headRefName}\` → \`${data.baseRefName}\``;
-    if (labels) header += ` · **Labels:** ${labels}`;
-    if (data.additions !== undefined) {
-        header += `\n**Changes:** +${data.additions} −${data.deletions} across ${data.changedFiles} files`;
-    }
-    header += ` · **Created:** ${String(data.createdAt).slice(0, 10)}`;
+        pairs.push({
+            label: "Branch",
+            value: `${String(data.headRefName)} → ${String(data.baseRefName ?? "")}`,
+        });
+    if (labels) pairs.push({ label: "Labels", value: labels });
+    if (data.additions !== undefined)
+        pairs.push({
+            label: "Changes",
+            value: `+${data.additions} −${data.deletions} across ${data.changedFiles} files`,
+        });
+    if (data.createdAt)
+        pairs.push({ label: "Created", value: String(data.createdAt).slice(0, 10) });
+    if (data.url)
+        pairs.push({ label: "Link", value: { text: String(data.url), href: String(data.url) } });
 
-    return header + bodySection;
+    const headingText = `#${data.number} ${data.title}`;
+    const blocks: StructuredBlock[] = [
+        { kind: "heading", level: 3, text: headingText },
+        { kind: "keyValue", pairs },
+    ];
+    const body = data.body ? String(data.body) : "";
+    if (body) {
+        blocks.push({ kind: "divider" });
+        blocks.push({
+            kind: "text",
+            text:
+                body.slice(0, 1000) +
+                (body.length > 1000 ? "\n\n*…truncated*" : ""),
+            format: "markdown",
+        });
+    }
+    return {
+        historyText: headingText,
+        entities: [],
+        displayContent: createStructuredContent(blocks, { rawData: data }),
+    };
 }
 
 // ============================================================================
@@ -1791,13 +1909,13 @@ async function executeAction(
 
                 // If a specific field was requested, return a focused answer
                 if (p.field) {
-                    const answer = distillRepoField(
+                    const result = buildStructuredField(
                         String(p.field),
                         data,
                         String(p.repo ?? data.name ?? ""),
                     );
-                    if (answer) {
-                        return createActionResultFromMarkdownDisplay(answer);
+                    if (result) {
+                        return result;
                     }
                 }
 
@@ -1815,16 +1933,12 @@ async function executeAction(
 
                 // Single issue view — rich formatted output
                 if (action.actionName === "issueView" && "number" in data) {
-                    return createActionResultFromMarkdownDisplay(
-                        formatIssueView(data),
-                    );
+                    return buildStructuredIssueView(data);
                 }
 
                 // Single PR view — rich formatted output
                 if (action.actionName === "prView" && "number" in data) {
-                    return createActionResultFromMarkdownDisplay(
-                        formatPrView(data),
-                    );
+                    return buildStructuredPrView(data);
                 }
 
                 // Repo view — structured key-value block

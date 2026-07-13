@@ -4,7 +4,7 @@ Working tracker for the plan in [PLAN.md](./PLAN.md). Update whenever a
 phase item is started, completed, or a follow-up surfaces. Keep entries
 terse — one line per item where possible.
 
-_Last updated: 2026-07-13 — Phase 6 (programmatic "or otherwise") implemented._
+_Last updated: 2026-07-13 — github-cli fully converted (single views + field answers); Phase 7 agent rollout order defined._
 
 ## Progress by phase
 
@@ -49,6 +49,8 @@ _Last updated: 2026-07-13 — Phase 6 (programmatic "or otherwise") implemented.
 | 5b | `dependabotAlerts` + contributors → table blocks | done |
 | 5c | `repoView` → keyValue block | done |
 | 5d | Update handler unit tests | done |
+| 5e | `prView` / `issueView` → heading + keyValue + body text block | done |
+| 5f | Focused field answers → `buildStructuredField` (keyValue + rawData) | done |
 
 ### Phase 6 — Programmatic "or otherwise" *(after 1 + 5)*
 
@@ -56,6 +58,36 @@ _Last updated: 2026-07-13 — Phase 6 (programmatic "or otherwise") implemented.
 | ---- | ----------- | ------ |
 | 6a | `commandExecutor` forwards `rawData` as MCP `structuredContent` | done |
 | 6b | `taskflow` reads `rawData` directly (drop extractText+tryParseJson) | done |
+
+### Phase 7 — Broader agent rollout *(after 5; per-agent)*
+
+Wave A — high fit:
+
+| Item | Agent | Target blocks | Status |
+| ---- | ----- | ------------- | ------ |
+| 7a | `list` | heading + list | not started |
+| 7b | `calendar` | table (agenda) + card/keyValue (detail) | not started |
+| 7c | `email` | table (list) + keyValue (message) | not started |
+| 7d | `weather` | keyValue (current) + table (forecast) | not started |
+| 7e | `ipconfig` | heading + keyValue (per-adapter) | not started |
+
+Wave B — medium fit:
+
+| Item | Agent | Target blocks | Status |
+| ---- | ----- | ------------- | ------ |
+| 7f | `discord` | heading + list/table | not started |
+| 7g | `taskflow` | table (name/description/usage) | not started |
+| 7h | `onboarding` | heading + keyValue (phase status) | not started |
+| 7i | `screencapture` | image + heading/keyValue | not started |
+| 7j | `osNotifications` | list/card (event stream) | not started |
+
+Out of scope (v1, custom UI / RPC bridge): `image`, `video`, `settings`,
+`chat`, `code`, `visualStudio`, `browser`, `markdown`, `montage`,
+`turtle`, `player`, `playerLocal`.
+
+Deferred (low value, short text/status): `timer`, `windowsClock`,
+`greeting`, `desktop`, `vampire`, `androidMobile`, `powershell`,
+`utility`, `studio`.
 
 ## Open questions
 
