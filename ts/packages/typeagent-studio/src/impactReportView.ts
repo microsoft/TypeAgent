@@ -11,6 +11,7 @@ import {
 import type {
     ResolvedVersion,
     RunProvenance,
+    VersionProvenance,
 } from "./webviewKit/replayViewModel.js";
 import {
     defaultGitExec,
@@ -22,6 +23,14 @@ import {
 import { StudioServiceClient } from "./studioServiceClient.js";
 import type { StudioConnectionState } from "./studioServiceConnection.js";
 import { loadPersistedRun, savePersistedRun } from "./impactReportStore.js";
+import { saveTraceRun } from "./traceStore.js";
+import {
+    buildReplayRunDescriptor,
+    buildTraceVersionPin,
+    type ReplayTraceMode,
+    type TraceVersionPin,
+    type VersionSpec,
+} from "@typeagent/core/replay";
 import type { StudioReplayResult } from "@typeagent/core/runtime";
 
 const VIEW_TYPE = "typeagentStudio.impactReport";
@@ -582,6 +591,41 @@ export function openImpactReport(
                 msg.resolvedA,
                 msg.resolvedB,
             );
+            // Persist the captured per-red-row traces + the run descriptor so the
+            // Trace Viewer can reopen the exact resolution behind a row and
+            // recompute a fresh one from the same pinned inputs.
+            if (
+                payload.resolutionTraces &&
+                payload.resolutionTraces.length > 0
+            ) {
+                const pinFor = (
+                    spec: VersionSpec,
+                    prov: VersionProvenance | undefined,
+                ): TraceVersionPin =>
+                    buildTraceVersionPin({
+                        spec,
+                        label:
+                            prov?.label ??
+                            (spec.kind === "git" ? spec.ref : "working tree"),
+                        ...(prov?.sha !== undefined ? { sha: prov.sha } : {}),
+                    });
+                const descriptor = buildReplayRunDescriptor({
+                    runId: payload.runId,
+                    agent,
+                    a: pinFor(msg.versionA, provenance?.a),
+                    b: pinFor(msg.versionB, provenance?.b),
+                    mode: (msg.mode ?? "nfa-grammar") as ReplayTraceMode,
+                    missPolicy: "needs-explanation",
+                    validateWildcards: msg.validateWildcards === true,
+                    corpus: {},
+                    runAt: completedAt,
+                });
+                await saveTraceRun(
+                    context.workspaceState,
+                    descriptor,
+                    payload.resolutionTraces,
+                );
+            }
         } catch (e) {
             post({
                 type: "error",

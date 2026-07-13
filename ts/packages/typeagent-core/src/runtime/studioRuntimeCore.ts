@@ -46,6 +46,7 @@ import {
     type ReplayActionResolver,
     type ReplayAgentResolution,
     type ReplayMissPolicy,
+    type ReplayResolutionTrace,
     type ReplaySummary,
     type VersionSpec,
 } from "../replay/index.js";
@@ -62,6 +63,7 @@ import {
 import {
     createGrammarReplayResolver,
     resolveGrammarReplayTarget,
+    captureResolutionTrace,
     ReplayVersionBuildError,
     type ReplayRunError,
     type GrammarReplayTarget,
@@ -370,6 +372,14 @@ export interface StudioReplayResult {
      * validation pass) so the Impact Report can show an honest "what ran" matrix.
      */
     sideFidelity: SideFidelity;
+    /**
+     * Per-red-row resolution traces captured right after the run, while the live
+     * resolver still matches what produced each row. Present only for a grammar
+     * run (the identity baseline has nothing to trace) and bounded so a large
+     * changed set doesn't inflate the result; the viewer reads these back through
+     * the trace store. Omitted when nothing was captured.
+     */
+    resolutionTraces?: ReplayResolutionTrace[];
     /**
      * with an empty summary rather than emitting fabricated regression rows.
      */
@@ -1005,6 +1015,53 @@ interface ReplayResolution {
     aborted?: StudioReplayResult;
 }
 
+/** Cap how many red-row traces one run captures so a large changed set doesn't
+ *  inflate the result or the persisted payload; the report still lists every
+ *  row, and the viewer drills into the captured ones first. */
+const MAX_CAPTURED_TRACES = 100;
+
+/** Capture a {@link ReplayResolutionTrace} for each changed (red) row, up to the
+ *  cap, by re-resolving with tracing on the live resolver. Entries are listed
+ *  only when there is at least one red row to trace and mapped by id to the
+ *  row's `utteranceId`; a row whose entry can't be found is skipped rather than
+ *  failing the run. Call while the resolver is still live so the trace reflects
+ *  exactly what produced the row. */
+export async function captureRedRowTraces(
+    resolver: GrammarReplayResolver,
+    listEntries: () => Promise<CorpusEntry[]>,
+    rows: readonly ActionDelta[],
+    runId: string,
+    versionA: VersionSpec,
+    versionB: VersionSpec,
+): Promise<ReplayResolutionTrace[]> {
+    const redRows = rows
+        .filter((row) => !row.equal)
+        .slice(0, MAX_CAPTURED_TRACES);
+    if (redRows.length === 0) {
+        return [];
+    }
+    const entriesById = new Map(
+        (await listEntries()).map((entry) => [entry.id, entry] as const),
+    );
+    const traces: ReplayResolutionTrace[] = [];
+    for (const row of redRows) {
+        const entry = entriesById.get(row.utteranceId);
+        if (entry === undefined) {
+            continue;
+        }
+        traces.push(
+            await captureResolutionTrace(
+                resolver,
+                entry,
+                runId,
+                versionA,
+                versionB,
+            ),
+        );
+    }
+    return traces;
+}
+
 export function createStudioRuntimeCore(
     context: StudioRuntimeContext,
     options: CreateStudioRuntimeOptions = {},
@@ -1539,9 +1596,23 @@ export function createStudioRuntimeCore(
             });
 
             const rows: ActionDelta[] = [];
+            let resolutionTraces: ReplayResolutionTrace[] = [];
             try {
                 for await (const row of handle.rows) {
                     rows.push(row);
+                }
+                // Capture per-red-row traces while the resolver (and any wildcard
+                // validator) is still live and the working tree still matches what
+                // produced the rows — the dispose below tears the validator down.
+                if (resolution.activeGrammarResolver !== undefined) {
+                    resolutionTraces = await captureRedRowTraces(
+                        resolution.activeGrammarResolver,
+                        () => corpus.list(request.agent, replayOptions.corpus),
+                        rows,
+                        handle.runId,
+                        replayOptions.versionA,
+                        replayOptions.versionB,
+                    );
                 }
             } finally {
                 await wildcardValidator?.dispose();
@@ -1581,6 +1652,7 @@ export function createStudioRuntimeCore(
                 ...(wildcardValidation !== undefined
                     ? { wildcardValidation }
                     : {}),
+                ...(resolutionTraces.length > 0 ? { resolutionTraces } : {}),
             };
         },
         reportCollision(event) {
