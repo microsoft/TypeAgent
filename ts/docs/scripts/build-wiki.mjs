@@ -38,6 +38,10 @@ import { promises as fs } from "node:fs";
 import { statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+    AGENT_EXPLORER_FILE,
+    buildAgentExplorer,
+} from "./agent-explorer.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const docsRoot = path.resolve(__dirname, ".."); // ts/docs (the docset root)
@@ -293,6 +297,14 @@ async function collectStaged() {
             path.relative(packagesDir, dir),
             items,
         );
+    }
+
+    async function writeAgentExplorer() {
+        const pkgDirs = await findPackageDirs(agentsDir);
+        const { markdown } = await buildAgentExplorer(pkgDirs, tsDir);
+        const target = path.join(docsRoot, "agents", AGENT_EXPLORER_FILE);
+        await fs.writeFile(target, markdown, "utf8");
+        console.log(`wrote ${toPosix(path.relative(docsRoot, target))}`);
     }
     for (const dir of await findPackageDirs(agentsDir)) {
         await collectPackageItems(
@@ -718,6 +730,7 @@ async function main() {
 
     const items = await collectStaged();
     await stage(items);
+    await writeAgentExplorer();
 
     await writeToc(
         path.join(docsRoot, "packages", "toc.yml"),
@@ -725,7 +738,9 @@ async function main() {
     );
     await writeToc(
         path.join(docsRoot, "agents", "toc.yml"),
-        await buildPackageToc(agentsDir),
+        [{ name: "Agent & action explorer", href: AGENT_EXPLORER_FILE }].concat(
+            await buildPackageToc(agentsDir),
+        ),
     );
     await writeToc(
         path.join(docsRoot, "architecture", "toc.yml"),

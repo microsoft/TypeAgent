@@ -11,6 +11,10 @@ hand-written README is shown as its **Overview** page, and its
 `README.AUTOGEN.md` companion (when present) appears as a secondary
 **Generated README** page — see [the doc-autogen guide](../contributing/doc-autogen.md).
 
+Start with the generated **[Agent & action explorer](./explorer.md)** if you want
+an at-a-glance browser of the current agent/action surface, including action
+parameters and sample phrases.
+
 ## Understand the patterns first
 
 Before reading individual agents (or building one), read
