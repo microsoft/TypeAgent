@@ -53,10 +53,18 @@ export function makeClientIOMessage(
 
     // Get the source icon (emoji) from the agent manifest
     let sourceIcon: string | undefined;
-    // When a reasoning engine is active, use its icon instead of the
-    // default dispatcher robot emoji.
+    // When a reasoning engine is active, use its icon instead of the default
+    // dispatcher robot emoji, and label the bubble with the reasoning action +
+    // engine (e.g. "dispatcher.reasoningAction.copilot") so its provenance is
+    // clear rather than a bare "dispatcher".
+    let displaySource = source;
     if (context.reasoningSourceIcon && source === "dispatcher") {
         sourceIcon = context.reasoningSourceIcon;
+        const engine = context.session.getConfig().execution.reasoning;
+        displaySource =
+            engine && engine !== "none"
+                ? `dispatcher.reasoningAction.${engine}`
+                : "dispatcher.reasoningAction";
     } else {
         try {
             if (context.agents.isAppAgentName(source)) {
@@ -70,7 +78,7 @@ export function makeClientIOMessage(
     return {
         message,
         requestId,
-        source,
+        source: displaySource,
         sourceIcon,
         actionIndex,
         metrics: context.metricsManager?.getMetrics(

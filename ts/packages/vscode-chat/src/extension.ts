@@ -2,11 +2,8 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-import {
-    connectAgentServer,
-    type AgentServerConnection,
-} from "@typeagent/agent-server-client";
 import { SessionManager, PARTICIPANT_ID } from "./sessionManager.js";
+import { ConnectionHolder } from "./connectionHolder.js";
 
 const URI_SCHEME = "typeagent";
 const CHAT_SESSION_TYPE = "typeagent";
@@ -79,19 +76,19 @@ export async function activate(
     const cfg = vscode.workspace.getConfiguration("typeagentChat");
     const url = cfg.get<string>("serverUrl")?.trim() || "ws://localhost:8999";
 
-    let connection: AgentServerConnection;
-    try {
-        connection = await connectAgentServer(url, () => {
-            vscode.window.showWarningMessage(
-                `TypeAgent: disconnected from agent server (${url}).`,
-            );
-        });
-    } catch (e) {
-        vscode.window.showErrorMessage(
-            `TypeAgent: failed to connect to ${url}: ${(e as Error).message}`,
+    const holder = new ConnectionHolder(url, () => {
+        vscode.window.showWarningMessage(
+            `TypeAgent: disconnected from agent server (${url}).`,
         );
-        return;
-    }
+    });
+    // Best-effort warm-up connect. Do NOT block activation on it: registering
+    // the chat surfaces regardless lets the extension recover once the server
+    // is (re)started without a VS Code reload, and lets prompts submitted
+    // while disconnected wait for a live connection instead of failing
+    // (see SessionState.handlePrompt).
+    void holder.ensureConnected().catch(() => {
+        // Server unreachable at startup — surfaces lazily on first use.
+    });
 
     type ConversationLabelState = {
         confirmedLabel: string;
@@ -99,7 +96,7 @@ export async function activate(
         renameInFlight: boolean;
     };
 
-    const manager = new SessionManager(connection);
+    const manager = new SessionManager(holder);
     // Per-conversation rename sync state.
     const conversationLabelState = new Map<string, ConversationLabelState>();
 
@@ -162,6 +159,7 @@ export async function activate(
 
         state.renameInFlight = true;
         try {
+            const connection = await holder.ensureConnected();
             await connection.renameConversation(conversationId, requested, {
                 nameCollisionBehavior: "appendNumber",
             });
@@ -188,7 +186,7 @@ export async function activate(
 
     context.subscriptions.push({
         dispose: () => {
-            void manager.dispose().then(() => connection.close());
+            void manager.dispose().then(() => holder.close());
         },
     });
 
@@ -196,6 +194,7 @@ export async function activate(
         CHAT_SESSION_TYPE,
         async (_token) => {
             try {
+                const connection = await holder.ensureConnected();
                 const list = await connection.listConversations();
                 conversationLabelState.clear();
                 const items = list.map((info) => {
@@ -262,6 +261,7 @@ export async function activate(
                 }
 
                 try {
+                    const connection = await holder.ensureConnected();
                     await connection.renameConversation(
                         conversationId,
                         trimmed,
@@ -318,6 +318,7 @@ export async function activate(
                 }
 
                 try {
+                    const connection = await holder.ensureConnected();
                     await connection.deleteConversation(conversationId);
                     conversationLabelState.delete(conversationId);
                     controller.items.delete(resource);
@@ -337,7 +338,9 @@ export async function activate(
             const name = seed
                 ? seed.slice(0, 40)
                 : `VS Code Chat ${new Date().toLocaleTimeString()}`;
-            const created = await connection.createConversation(name, {
+            const created = await (
+                await holder.ensureConnected()
+            ).createConversation(name, {
                 nameCollisionBehavior: "appendNumber",
             });
             const item = controller.createChatSessionItem(
@@ -386,7 +389,7 @@ export async function activate(
                 sessionCtx.chatSessionItem.resource,
             );
             const state = manager.getOrCreate(conversationId);
-            await state.handleRequest(connection, request, stream, token);
+            await state.handleRequest(holder, request, stream, token);
         },
     );
     participant.iconPath = new vscode.ThemeIcon("typeagent-logo");

@@ -19,6 +19,7 @@ import {
     renderDisplayToMarkdown,
     renderDisplayToText,
 } from "./displayRender.js";
+import { ConnectionHolder } from "./connectionHolder.js";
 
 // TODO: Replace these private constructor casts when VS Code exposes a
 // supported way for chat session providers to restore request/response turns.
@@ -72,6 +73,28 @@ class ResponseSink {
     }
 }
 
+/**
+ * Resolve after `ms`, or reject with a CancellationError if `token` fires
+ * first. Used to back off between connection retries while a prompt waits.
+ */
+function delayWithToken(
+    ms: number,
+    token: vscode.CancellationToken,
+): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+        let sub: vscode.Disposable | undefined;
+        const timer = setTimeout(() => {
+            sub?.dispose();
+            resolve();
+        }, ms);
+        sub = token.onCancellationRequested(() => {
+            clearTimeout(timer);
+            sub?.dispose();
+            reject(new vscode.CancellationError());
+        });
+    });
+}
+
 class SessionState {
     private dispatcher: ConversationDispatcher | undefined;
     private joinPromise: Promise<ConversationDispatcher> | undefined;
@@ -119,12 +142,25 @@ class SessionState {
         return this.join(conn);
     }
 
-    leave(conn: AgentServerConnection): Promise<void> | undefined {
-        if (!this.dispatcher) return undefined;
-        const id = this.conversationId;
+    /**
+     * Drop the cached join so the next join() re-joins. Called after a
+     * reconnect, which invalidates the prior per-conversation channels.
+     */
+    resetJoin(): void {
         this.dispatcher = undefined;
         this.joinPromise = undefined;
-        return conn.leaveConversation(id).catch(() => {});
+    }
+
+    leave(holder: ConnectionHolder): Promise<void> | undefined {
+        const wasJoined = this.dispatcher !== undefined;
+        this.dispatcher = undefined;
+        this.joinPromise = undefined;
+        if (!wasJoined) return undefined;
+        // Only issue an explicit leave while still connected; a dropped
+        // connection has already released the server-side dispatcher.
+        const conn = holder.currentIfConnected();
+        if (!conn) return undefined;
+        return conn.leaveConversation(this.conversationId).catch(() => {});
     }
 
     private routeToSink(
@@ -176,21 +212,71 @@ class SessionState {
         };
     }
 
+    /**
+     * Resolve a live connection for a prompt. If already connected, returns it
+     * immediately. Otherwise mirrors the shell's queued-send UX: shows a
+     * "waiting" progress line and retries the connection with backoff until it
+     * comes up or the user cancels the request.
+     */
+    private async connectForPrompt(
+        holder: ConnectionHolder,
+        stream: vscode.ChatResponseStream,
+        token: vscode.CancellationToken,
+    ): Promise<AgentServerConnection> {
+        if (holder.isConnected()) {
+            return holder.ensureConnected(token);
+        }
+        stream.progress("Waiting for TypeAgent connection…");
+        let delayMs = 1000;
+        const maxDelayMs = 15000;
+        for (;;) {
+            if (token.isCancellationRequested) {
+                throw new vscode.CancellationError();
+            }
+            try {
+                return await holder.ensureConnected(token);
+            } catch (e) {
+                if (token.isCancellationRequested) {
+                    throw e;
+                }
+                await delayWithToken(delayMs, token);
+                delayMs = Math.min(delayMs * 2, maxDelayMs);
+            }
+        }
+    }
+
     async handleRequest(
-        conn: AgentServerConnection,
+        holder: ConnectionHolder,
         request: vscode.ChatRequest,
         stream: vscode.ChatResponseStream,
         token: vscode.CancellationToken,
     ): Promise<void> {
-        return this.handlePrompt(conn, request.prompt, stream, token);
+        return this.handlePrompt(holder, request.prompt, stream, token);
     }
 
     async handlePrompt(
-        conn: AgentServerConnection,
+        holder: ConnectionHolder,
         prompt: string,
         stream: vscode.ChatResponseStream,
         token: vscode.CancellationToken,
     ): Promise<void> {
+        let conn: AgentServerConnection;
+        try {
+            conn = await this.connectForPrompt(holder, stream, token);
+        } catch (e) {
+            if (token.isCancellationRequested) {
+                stream.markdown(new vscode.MarkdownString(`_Cancelled._`));
+            } else {
+                stream.markdown(
+                    new vscode.MarkdownString(
+                        `**Error:** Could not connect to TypeAgent (${
+                            (e as Error).message
+                        }).`,
+                    ),
+                );
+            }
+            return;
+        }
         const session = await this.join(conn);
         const sink = new ResponseSink(stream, token);
         const submitResult = await session.dispatcher.submitCommand(prompt);
@@ -315,7 +401,11 @@ export const IDLE_DROP_DELAY_MS = 60_000;
 export class SessionManager {
     private readonly sessions = new Map<string, SessionState>();
 
-    constructor(private readonly conn: AgentServerConnection) {}
+    constructor(private readonly holder: ConnectionHolder) {
+        // After a reconnect the prior per-conversation channels are gone, so
+        // every cached join is stale; drop them all so the next use re-joins.
+        holder.setOnReconnect(() => this.resetAllJoins());
+    }
 
     getOrCreate(conversationId: string): SessionState {
         let state = this.sessions.get(conversationId);
@@ -326,16 +416,30 @@ export class SessionManager {
         return state;
     }
 
+    private resetAllJoins(): void {
+        for (const state of this.sessions.values()) {
+            state.resetJoin();
+        }
+    }
+
     async openSession(conversationId: string): Promise<vscode.ChatSession> {
         const state = this.getOrCreate(conversationId);
         state.cancelPendingDrop();
-        const conv = await state.ensureJoined(this.conn);
-        const history = await buildHistory(conv.dispatcher, PARTICIPANT_ID);
-        // Intentionally no requestHandler / activeResponseCallback: VS Code
-        // routes the initial prompt and subsequent requests to our participant
-        // via chatService.sendRequest (agentIdSilent), so handling them here
-        // would double-fire.
-        return { history, requestHandler: undefined };
+        try {
+            const conn = await this.holder.ensureConnected();
+            const conv = await state.ensureJoined(conn);
+            const history = await buildHistory(conv.dispatcher, PARTICIPANT_ID);
+            // Intentionally no requestHandler / activeResponseCallback: VS Code
+            // routes the initial prompt and subsequent requests to our
+            // participant via chatService.sendRequest (agentIdSilent), so
+            // handling them here would double-fire.
+            return { history, requestHandler: undefined };
+        } catch {
+            // Server unavailable — open the view with empty history so the
+            // session still loads; the first prompt waits for a live
+            // connection before running (see SessionState.handlePrompt).
+            return { history: [], requestHandler: undefined };
+        }
     }
 
     // Schedule a delayed drop. If the session is reopened before the delay
@@ -346,7 +450,7 @@ export class SessionManager {
         if (!state) return;
         state.schedulePendingDrop(delayMs, () => {
             this.sessions.delete(conversationId);
-            void state.leave(this.conn);
+            void state.leave(this.holder);
         });
     }
 
@@ -354,7 +458,7 @@ export class SessionManager {
         const pending: Promise<void>[] = [];
         for (const state of this.sessions.values()) {
             state.cancelPendingDrop();
-            const p = state.leave(this.conn);
+            const p = state.leave(this.holder);
             if (p) pending.push(p);
         }
         this.sessions.clear();

@@ -228,6 +228,9 @@ const api: ClientAPI = {
     conversationBarEnabled: () => {
         return ipcRenderer.invoke("conversation-bar-enabled");
     },
+    agentServerEndpoint: () => {
+        return ipcRenderer.invoke("agent-server-endpoint");
+    },
     conversationList: () => {
         return ipcRenderer.invoke("conversation-list");
     },

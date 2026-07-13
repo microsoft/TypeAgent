@@ -86,6 +86,13 @@ body.chat-inactive .conversation-status-summary {
   opacity: 0.7;
 }
 
+/* The ambient connected indicator has no pill background, so mute it by
+   dimming rather than repainting it with the disabled background. */
+body.chat-inactive .conversation-status-summary.as-indicator {
+  background: transparent;
+  opacity: 0.55;
+}
+
 /* ── Messages area ───────────────────────────────────────────── */
 
 #messages {
