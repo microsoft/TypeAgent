@@ -491,7 +491,7 @@ function parsePinnedPnpm() {
     }
     const pm = pkg.packageManager;
     if (typeof pm !== "string") return undefined;
-    const m = pm.match(/^pnpm@([0-9.]+)\+(sha512\.[0-9a-f]+)$/);
+    const m = pm.match(/^pnpm@([^+\s]+)\+(sha512\.[0-9a-f]+)$/);
     if (!m) return undefined;
     return {
         version: m[1],
@@ -592,20 +592,29 @@ async function seedCorepackPnpm() {
     } catch {
         registry = undefined;
     }
-    if (!registry) {
-        console.warn(
-            chalk.yellow(
-                "No registry in .npmrc — cannot seed corepack pnpm. Skipping.",
+    const tarballUrl = registry
+        ? `${registry.replace(/\/+$/, "")}/pnpm/-/pnpm-${version}.tgz`
+        : undefined;
+
+    // In dry-run, report intent even if .npmrc isn't present yet (pull writes it
+    // in commit mode); only treat a missing registry as a hard skip when we
+    // would actually seed.
+    if (!paramCommit) {
+        console.log(
+            chalk.gray(
+                `[dry-run] Would seed corepack cache with pnpm@${version}` +
+                    (tarballUrl
+                        ? ` from ${tarballUrl}.`
+                        : " from the feed configured in .npmrc."),
             ),
         );
         return;
     }
-    const tarballUrl = `${registry.replace(/\/+$/, "")}/pnpm/-/pnpm-${version}.tgz`;
 
-    if (!paramCommit) {
-        console.log(
-            chalk.gray(
-                `[dry-run] Would seed corepack cache with pnpm@${version} from ${tarballUrl}.`,
+    if (!registry) {
+        console.warn(
+            chalk.yellow(
+                "No registry in .npmrc — cannot seed corepack pnpm. Skipping.",
             ),
         );
         return;
