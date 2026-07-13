@@ -1118,6 +1118,11 @@ tr.row-open td.latency {
 .detail-close {
   margin-left: auto;
 }
+/* Sits with the close control on the right; the auto margin claims the free
+   space so the two group together, leaving title + meta on the left. */
+.detail-open-trace {
+  margin-left: auto;
+}
 
 .detail-legend {
   display: flex;

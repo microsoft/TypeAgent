@@ -113,7 +113,10 @@ export type WebviewToHostMessage =
     | { type: "pickVersion"; side: ReplaySide }
     /** Ask the host to open a native input box to edit the utterance filter,
      *  seeded with the filter currently applied in the report. */
-    | { type: "searchUtterances"; current: string };
+    | { type: "searchUtterances"; current: string }
+    /** Ask the host to open the Trace Viewer for one red row, drilling into the
+     *  full side-by-side resolution trace behind it. */
+    | { type: "openTrace"; runId: string; utteranceId: string };
 
 function narrowSide(value: unknown): ReplaySide | undefined {
     return value === "a" || value === "b" ? value : undefined;
@@ -175,6 +178,17 @@ export function parseWebviewMessage(
                 type: "searchUtterances",
                 current: typeof current === "string" ? current : "",
             };
+        }
+        case "openTrace": {
+            const m = value as { runId?: unknown; utteranceId?: unknown };
+            return typeof m.runId === "string" &&
+                typeof m.utteranceId === "string"
+                ? {
+                      type: "openTrace",
+                      runId: m.runId,
+                      utteranceId: m.utteranceId,
+                  }
+                : undefined;
         }
         case "run": {
             const m = value as {

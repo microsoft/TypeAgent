@@ -136,6 +136,28 @@ test("parseWebviewMessage accepts well-formed messages", () => {
     );
 });
 
+test("parseWebviewMessage accepts an openTrace request", () => {
+    assert.deepEqual(
+        parseWebviewMessage({
+            type: "openTrace",
+            runId: "run-1",
+            utteranceId: "u-7",
+        }),
+        { type: "openTrace", runId: "run-1", utteranceId: "u-7" },
+    );
+});
+
+test("parseWebviewMessage rejects an openTrace missing ids", () => {
+    assert.equal(
+        parseWebviewMessage({ type: "openTrace", runId: "run-1" }),
+        undefined,
+    );
+    assert.equal(
+        parseWebviewMessage({ type: "openTrace", runId: 1, utteranceId: "u" }),
+        undefined,
+    );
+});
+
 test("parseWebviewMessage rejects malformed / hostile input", () => {
     assert.equal(parseWebviewMessage(undefined), undefined);
     assert.equal(parseWebviewMessage(null), undefined);

@@ -115,6 +115,9 @@ let currentTotal = 0;
 // Raw deltas of the current result keyed by utterance id, so a row drill-in can
 // build the action A/B diff without the host re-sending the payload.
 let currentRawById = new Map<string, ActionDelta>();
+// Utterance ids that captured a resolution trace this run (only red rows do), so
+// the drill-in offers "Open trace" exactly for the rows the viewer can show.
+let tracedIds: Set<string> = new Set();
 // The utterance id whose drill-in detail is open, or undefined when closed; kept
 // so a filter re-render can re-assert (or drop) the open detail.
 let openDetailId: string | undefined;
@@ -575,6 +578,9 @@ function renderResult(
     hiddenRowIds = new Set();
     resetSearchAndSort();
     currentRawById = new Map(result.rows.map((r) => [r.utteranceId, r]));
+    tracedIds = new Set(
+        (result.resolutionTraces ?? []).map((t) => t.utteranceId),
+    );
     closeDetail();
     // A run-level error (a version that failed to build) aborts with an empty
     // summary — surface the failure instead of a misleading zero-row success.
@@ -1271,7 +1277,21 @@ function renderDetail(delta: ActionDelta): void {
         renderTable();
     });
     close.classList.add("detail-close");
-    header.append(title, meta, close);
+    // Offer the full resolution-trace drill-in only for rows that captured one
+    // (red rows). The Trace Viewer opens beside this report.
+    if (tracedIds.has(delta.utteranceId) && lastRenderedResult) {
+        const runId = lastRenderedResult.runId;
+        const utteranceId = delta.utteranceId;
+        const openTrace = toolButton(
+            "list-tree",
+            "Open the resolution trace for this row",
+            () => vscode.postMessage({ type: "openTrace", runId, utteranceId }),
+        );
+        openTrace.classList.add("detail-open-trace");
+        header.append(title, meta, openTrace, close);
+    } else {
+        header.append(title, meta, close);
+    }
 
     const legend = el("div", "detail-legend");
     legend.append(

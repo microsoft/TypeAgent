@@ -24,6 +24,7 @@ import { StudioServiceClient } from "./studioServiceClient.js";
 import type { StudioConnectionState } from "./studioServiceConnection.js";
 import { loadPersistedRun, savePersistedRun } from "./impactReportStore.js";
 import { saveTraceRun } from "./traceStore.js";
+import { openTraceViewer } from "./traceViewerView.js";
 import {
     buildReplayRunDescriptor,
     buildTraceVersionPin,
@@ -490,6 +491,19 @@ export function openImpactReport(
         }
         if (msg.type === "pickVersion") {
             await pickVersion(msg.side);
+            return;
+        }
+        if (msg.type === "openTrace") {
+            // Drill into the full resolution trace behind one red row, side-by-
+            // side with this report. The viewer reads the exact trace this run
+            // persisted, so it always reflects what produced the row.
+            openTraceViewer(
+                context,
+                repoRoot,
+                connection,
+                msg.runId,
+                msg.utteranceId,
+            );
             return;
         }
         if (msg.type === "searchUtterances") {
