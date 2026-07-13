@@ -2,8 +2,10 @@
 // Licensed under the MIT License.
 
 import { LitElement, html, css, nothing } from "lit";
+import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type {
+    GrammarDebugInfo,
     LoadedGrammar,
     MatchTrace,
     TraceEvent,
@@ -40,15 +42,6 @@ const EVENT_LABELS: Record<string, string> = {
     partMatched: "match",
     partFailed: "fail",
     backtrack: "back",
-};
-
-const EVENT_COLORS: Record<string, string> = {
-    ruleEntered: "var(--vscode-editorInfo-foreground, #3794ff)",
-    ruleExited: "var(--vscode-editorInfo-foreground, #3794ff)",
-    partAttempted: "var(--vscode-descriptionForeground, #9d9d9d)",
-    partMatched: "#4ec9b0",
-    partFailed: "var(--vscode-errorForeground, #f48771)",
-    backtrack: "var(--vscode-editorWarning-foreground, #cca700)",
 };
 
 interface DerivedTraceData {
@@ -249,6 +242,29 @@ export class GtTraceTimeline extends LitElement {
                 font-size: 0.9em;
                 color: var(--vscode-descriptionForeground, #9d9d9d);
             }
+            .evk-ruleEntered,
+            .evk-ruleExited {
+                color: var(--vscode-editorInfo-foreground, #3794ff);
+            }
+            .evk-partAttempted {
+                color: var(--vscode-descriptionForeground, #9d9d9d);
+            }
+            .evk-partMatched {
+                color: #4ec9b0;
+            }
+            .evk-partFailed {
+                color: var(--vscode-errorForeground, #f48771);
+            }
+            .evk-backtrack {
+                color: var(--vscode-editorWarning-foreground, #cca700);
+            }
+            .indent-unit {
+                display: inline-block;
+                width: 12px;
+            }
+            .status-line {
+                padding: 8px;
+            }
         `,
     ];
 
@@ -263,6 +279,19 @@ export class GtTraceTimeline extends LitElement {
 
     @property({ attribute: false })
     onSourceClick: ((loc: SourceLocation) => void) | undefined;
+
+    /**
+     * Display-only inputs. When set, the component renders this stored trace
+     * directly and never recomputes via the backend: the input box, match-policy
+     * options, and Trace button are hidden. Source jumps resolve through
+     * displayDebugInfo instead of a live grammar, so a persisted trace can be
+     * shown with no grammar-tools backend or live grammar present.
+     */
+    @property({ attribute: false })
+    displayTrace: MatchTrace | undefined;
+
+    @property({ attribute: false })
+    displayDebugInfo: GrammarDebugInfo | undefined;
 
     @state()
     private _input: string = "";
@@ -313,6 +342,36 @@ export class GtTraceTimeline extends LitElement {
         if (!this._initialized && this.initialInput) {
             this._input = this.initialInput;
             this._initialized = true;
+        }
+    }
+
+    /** True when the component shows a supplied stored trace instead of running
+     *  its own live match. */
+    private get _readOnly(): boolean {
+        return this.displayTrace !== undefined;
+    }
+
+    /** The trace currently rendered: the supplied stored one in display-only
+     *  mode, otherwise the one this component computed via the backend. */
+    private get _activeTrace(): MatchTrace | undefined {
+        return this.displayTrace ?? this._trace;
+    }
+
+    /** The debug info used to map events to source spans and part labels: the
+     *  supplied serialized one in display-only mode, otherwise the live
+     *  grammar's. */
+    private get _activeDebugInfo(): GrammarDebugInfo | undefined {
+        return this._readOnly ? this.displayDebugInfo : this.grammar?.debugInfo;
+    }
+
+    override willUpdate(changed: PropertyValues<this>): void {
+        // A new stored trace is a fresh table: drop selection and expansion
+        // state that referenced the previous trace's row indices.
+        if (changed.has("displayTrace")) {
+            this._selectedRow = -1;
+            this._hoveredRow = -1;
+            this._expandedRows = new Set();
+            this._collapsedGroups = new Set();
         }
     }
 
@@ -377,11 +436,12 @@ export class GtTraceTimeline extends LitElement {
         groupSize: number; // >0 for ruleEntered with children
         attemptPos?: number; // inputPos from preceding partAttempted
     }> {
-        if (!this._trace) return [];
+        const trace = this._activeTrace;
+        if (!trace) return [];
         const derived = this._derivedTraceData();
         const { depths, groupSize, attemptPosForEvent, onSuccessPath } =
             derived;
-        const events = this._trace.events;
+        const events = trace.events;
         const n = events.length;
 
         // Build the hidden set from collapsed groups.
@@ -423,10 +483,10 @@ export class GtTraceTimeline extends LitElement {
      */
     private _derivedTraceData(): DerivedTraceData {
         const cached = this._derivedCache;
-        if (cached !== undefined && cached.trace === this._trace) {
+        if (cached !== undefined && cached.trace === this._activeTrace) {
             return cached;
         }
-        const events = this._trace!.events;
+        const events = this._activeTrace!.events;
         const n = events.length;
 
         // Compute depth for every event.  ruleEntered carries an
@@ -523,7 +583,7 @@ export class GtTraceTimeline extends LitElement {
         }
 
         this._derivedCache = {
-            trace: this._trace!,
+            trace: this._activeTrace!,
             depths,
             groupSize,
             attemptPosForEvent,
@@ -533,8 +593,9 @@ export class GtTraceTimeline extends LitElement {
     }
 
     private _highlightRange(): { start: number; end: number } | undefined {
-        if (!this._trace || this._hoveredRow < 0) return undefined;
-        const event = this._trace.events[this._hoveredRow];
+        const trace = this._activeTrace;
+        if (!trace || this._hoveredRow < 0) return undefined;
+        const event = trace.events[this._hoveredRow];
         if (!event) return undefined;
         const start = "inputPos" in event ? event.inputPos : 0;
         const end = "endPos" in event ? event.endPos : start;
@@ -542,7 +603,7 @@ export class GtTraceTimeline extends LitElement {
     }
 
     private _renderInputDisplay() {
-        const text = this._trace?.input ?? this._input;
+        const text = this._activeTrace?.input ?? this._input;
         const range = this._highlightRange();
         if (!range || range.start === range.end) {
             return html`<div class="input-display">${text}</div>`;
@@ -565,7 +626,7 @@ export class GtTraceTimeline extends LitElement {
             case "ruleExited":
                 return event.result;
             case "partMatched": {
-                const input = this._trace?.input ?? "";
+                const input = this._activeTrace?.input ?? "";
                 const start = attemptPos ?? 0;
                 const end = event.endPos;
                 let matchedSpan: string | undefined;
@@ -596,6 +657,7 @@ export class GtTraceTimeline extends LitElement {
 
     override render() {
         const visible = this._visibleEvents();
+        const trace = this._activeTrace;
         const allKinds: EventKindFilter[] = [
             "ruleEntered",
             "ruleExited",
@@ -606,142 +668,145 @@ export class GtTraceTimeline extends LitElement {
         ];
 
         return html`
-            <details class="options-panel">
-                <summary>Match Options</summary>
-                <div class="options-bar">
-                    <label
-                        ><strong>Wildcard:</strong>
-                        <select
-                            @change=${(e: Event) => {
-                                this._wildcardPolicy = (
-                                    e.target as HTMLSelectElement
-                                ).value as WildcardPolicy;
-                            }}
-                        >
-                            <option
-                                value="exhaustive"
-                                ?selected=${this._wildcardPolicy ===
-                                "exhaustive"}
-                            >
-                                exhaustive
-                            </option>
-                            <option
-                                value="shortest"
-                                ?selected=${this._wildcardPolicy === "shortest"}
-                            >
-                                shortest
-                            </option>
-                        </select></label
-                    >
-                    <label
-                        ><strong>Optional:</strong>
-                        <select
-                            @change=${(e: Event) => {
-                                this._optionalPolicy = (
-                                    e.target as HTMLSelectElement
-                                ).value as OptionalPolicy;
-                            }}
-                        >
-                            <option
-                                value="exhaustive"
-                                ?selected=${this._optionalPolicy ===
-                                "exhaustive"}
-                            >
-                                exhaustive
-                            </option>
-                            <option
-                                value="preferTake"
-                                ?selected=${this._optionalPolicy ===
-                                "preferTake"}
-                            >
-                                preferTake
-                            </option>
-                            <option
-                                value="preferSkip"
-                                ?selected=${this._optionalPolicy ===
-                                "preferSkip"}
-                            >
-                                preferSkip
-                            </option>
-                        </select></label
-                    >
-                    <label
-                        ><strong>Repeat:</strong>
-                        <select
-                            @change=${(e: Event) => {
-                                this._repeatPolicy = (
-                                    e.target as HTMLSelectElement
-                                ).value as RepeatPolicy;
-                            }}
-                        >
-                            <option
-                                value="exhaustive"
-                                ?selected=${this._repeatPolicy === "exhaustive"}
-                            >
-                                exhaustive
-                            </option>
-                            <option
-                                value="greedy"
-                                ?selected=${this._repeatPolicy === "greedy"}
-                            >
-                                greedy
-                            </option>
-                            <option
-                                value="nonGreedy"
-                                ?selected=${this._repeatPolicy === "nonGreedy"}
-                            >
-                                nonGreedy
-                            </option>
-                        </select></label
-                    >
-                </div>
-            </details>
+            ${this._readOnly
+                ? nothing
+                : html`<details class="options-panel">
+                          <summary>Match Options</summary>
+                          <div class="options-bar">
+                              <label
+                                  ><strong>Wildcard:</strong>
+                                  <select
+                                      @change=${(e: Event) => {
+                                          this._wildcardPolicy = (
+                                              e.target as HTMLSelectElement
+                                          ).value as WildcardPolicy;
+                                      }}
+                                  >
+                                      <option
+                                          value="exhaustive"
+                                          ?selected=${this._wildcardPolicy ===
+                                          "exhaustive"}
+                                      >
+                                          exhaustive
+                                      </option>
+                                      <option
+                                          value="shortest"
+                                          ?selected=${this._wildcardPolicy ===
+                                          "shortest"}
+                                      >
+                                          shortest
+                                      </option>
+                                  </select></label
+                              >
+                              <label
+                                  ><strong>Optional:</strong>
+                                  <select
+                                      @change=${(e: Event) => {
+                                          this._optionalPolicy = (
+                                              e.target as HTMLSelectElement
+                                          ).value as OptionalPolicy;
+                                      }}
+                                  >
+                                      <option
+                                          value="exhaustive"
+                                          ?selected=${this._optionalPolicy ===
+                                          "exhaustive"}
+                                      >
+                                          exhaustive
+                                      </option>
+                                      <option
+                                          value="preferTake"
+                                          ?selected=${this._optionalPolicy ===
+                                          "preferTake"}
+                                      >
+                                          preferTake
+                                      </option>
+                                      <option
+                                          value="preferSkip"
+                                          ?selected=${this._optionalPolicy ===
+                                          "preferSkip"}
+                                      >
+                                          preferSkip
+                                      </option>
+                                  </select></label
+                              >
+                              <label
+                                  ><strong>Repeat:</strong>
+                                  <select
+                                      @change=${(e: Event) => {
+                                          this._repeatPolicy = (
+                                              e.target as HTMLSelectElement
+                                          ).value as RepeatPolicy;
+                                      }}
+                                  >
+                                      <option
+                                          value="exhaustive"
+                                          ?selected=${this._repeatPolicy ===
+                                          "exhaustive"}
+                                      >
+                                          exhaustive
+                                      </option>
+                                      <option
+                                          value="greedy"
+                                          ?selected=${this._repeatPolicy ===
+                                          "greedy"}
+                                      >
+                                          greedy
+                                      </option>
+                                      <option
+                                          value="nonGreedy"
+                                          ?selected=${this._repeatPolicy ===
+                                          "nonGreedy"}
+                                      >
+                                          nonGreedy
+                                      </option>
+                                  </select></label
+                              >
+                          </div>
+                      </details>
 
-            <div class="input-row">
-                <input
-                    type="text"
-                    placeholder="Enter input to trace..."
-                    .value=${this._input}
-                    @input=${(e: Event) => {
-                        this._input = (e.target as HTMLInputElement).value;
-                    }}
-                    @keydown=${this._onInputKeydown}
-                />
-                <button
-                    @click=${this._runTrace}
-                    ?disabled=${this._loading || !this._input}
-                >
-                    Trace
-                </button>
-            </div>
-
-            ${this._trace ? this._renderInputDisplay() : nothing}
+                      <div class="input-row">
+                          <input
+                              type="text"
+                              placeholder="Enter input to trace..."
+                              .value=${this._input}
+                              @input=${(e: Event) => {
+                                  this._input = (
+                                      e.target as HTMLInputElement
+                                  ).value;
+                              }}
+                              @keydown=${this._onInputKeydown}
+                          />
+                          <button
+                              @click=${this._runTrace}
+                              ?disabled=${this._loading || !this._input}
+                          >
+                              Trace
+                          </button>
+                      </div>`}
+            ${trace ? this._renderInputDisplay() : nothing}
             ${this._error
-                ? html`<div class="error-text" style="padding: 8px">
-                      ${this._error}
-                  </div>`
+                ? html`<div class="error-text status-line">${this._error}</div>`
                 : nothing}
             ${this._loading
-                ? html`<div class="muted" style="padding: 8px">Tracing...</div>`
+                ? html`<div class="muted status-line">Tracing...</div>`
                 : nothing}
-            ${this._trace
+            ${trace
                 ? html`
                       <div class="summary-bar">
-                          ${this._trace.events.length} events,
-                          ${this._trace.events.filter(
-                              (e) => e.kind === "ruleEntered",
-                          ).length}
+                          ${trace.events.length} events,
+                          ${trace.events.filter((e) => e.kind === "ruleEntered")
+                              .length}
                           rules entered,
-                          ${this._trace.events.filter(
-                              (e) => e.kind === "backtrack",
-                          ).length}
+                          ${trace.events.filter((e) => e.kind === "backtrack")
+                              .length}
                           backtracks, result:
-                          <strong>${this._trace.result}</strong>
-                          ${this._trace.matchValue !== undefined
+                          <strong>${trace.result}</strong>
+                          ${trace.matchValue !== undefined
                               ? html`, value:
                                     <code
                                         >${JSON.stringify(
-                                            this._trace.matchValue,
+                                            trace.matchValue,
                                             null,
                                             2,
                                         )}</code
@@ -763,7 +828,7 @@ export class GtTraceTimeline extends LitElement {
                                       )}
                                       @click=${() => this._toggleKind(kind)}
                                   >
-                                      <span style="color: ${EVENT_COLORS[kind]}"
+                                      <span class="evk-${kind}"
                                           >${EVENT_ICONS[kind]}</span
                                       >
                                       ${kind}
@@ -781,7 +846,7 @@ export class GtTraceTimeline extends LitElement {
                                       !this._showSuccessPath;
                               }}
                           >
-                              <span style="color: #4ec9b0">✓</span>
+                              <span class="evk-partMatched">✓</span>
                               Success path
                           </button>
                           <button
@@ -794,10 +859,7 @@ export class GtTraceTimeline extends LitElement {
                                       !this._showFailurePath;
                               }}
                           >
-                              <span
-                                  style="color: var(--vscode-errorForeground, #f48771)"
-                                  >✗</span
-                              >
+                              <span class="evk-partFailed">✗</span>
                               Failure path
                           </button>
                       </div>
@@ -826,12 +888,15 @@ export class GtTraceTimeline extends LitElement {
                                           event.kind === "partAttempted" ||
                                           event.kind === "partMatched" ||
                                           event.kind === "partFailed";
-                                      const partLabel = isPartEvent
-                                          ? this.grammar?.debugInfo?.partLabels.get(
-                                                (event as { part: number })
-                                                    .part,
-                                            )
+                                      const partId = isPartEvent
+                                          ? (event as { part: number }).part
                                           : undefined;
+                                      const partLabel =
+                                          partId !== undefined
+                                              ? this._activeDebugInfo?.partLabels.get(
+                                                    partId,
+                                                )
+                                              : undefined;
                                       const ruleName =
                                           event.kind !== "backtrack"
                                               ? event.rule
@@ -875,12 +940,13 @@ export class GtTraceTimeline extends LitElement {
                                           >
                                               <td>${index + 1}</td>
                                               <td>
-                                                  <span
-                                                      class="depth-indent"
-                                                      style="width: ${depth *
-                                                      12}px"
-                                                  ></span
-                                                  >${isGroup
+                                                  ${Array.from(
+                                                      { length: depth },
+                                                      () =>
+                                                          html`<span
+                                                              class="indent-unit"
+                                                          ></span>`,
+                                                  )}${isGroup
                                                       ? html`<span
                                                             class="group-toggle"
                                                             @click=${(
@@ -906,13 +972,15 @@ export class GtTraceTimeline extends LitElement {
                                                         >`
                                                       : nothing}
                                               </td>
-                                              <td>${partLabel ?? ""}</td>
+                                              <td>
+                                                  ${this._renderPartLink(
+                                                      partId,
+                                                      partLabel,
+                                                  )}
+                                              </td>
                                               <td>
                                                   <span
-                                                      class="event-icon"
-                                                      style="color: ${EVENT_COLORS[
-                                                          event.kind
-                                                      ]}"
+                                                      class="event-icon evk-${event.kind}"
                                                       >${EVENT_ICONS[
                                                           event.kind
                                                       ]}</span
@@ -964,10 +1032,11 @@ export class GtTraceTimeline extends LitElement {
     }
 
     private _renderRuleLink(ruleName: string) {
-        if (!this.onSourceClick || !this.grammar?.debugInfo) {
+        const debugInfo = this._activeDebugInfo;
+        if (!this.onSourceClick || !debugInfo) {
             return html`<span>${ruleName}</span>`;
         }
-        const loc = this.grammar.debugInfo.rules.get(ruleName);
+        const loc = debugInfo.rules.get(ruleName);
         if (!loc) return html`<span>${ruleName}</span>`;
         return html`<span
             class="rule-link"
@@ -976,6 +1045,26 @@ export class GtTraceTimeline extends LitElement {
                 this.onSourceClick!(loc);
             }}
             >${ruleName}</span
+        >`;
+    }
+
+    private _renderPartLink(
+        part: number | undefined,
+        label: string | undefined,
+    ) {
+        if (label === undefined) return html`${""}`;
+        const debugInfo = this._activeDebugInfo;
+        const loc = part !== undefined ? debugInfo?.parts.get(part) : undefined;
+        if (!this.onSourceClick || !loc) {
+            return html`<span>${label}</span>`;
+        }
+        return html`<span
+            class="rule-link"
+            @click=${(e: Event) => {
+                e.stopPropagation();
+                this.onSourceClick!(loc);
+            }}
+            >${label}</span
         >`;
     }
 }
