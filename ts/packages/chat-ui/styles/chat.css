@@ -1016,8 +1016,8 @@ table.sc-table td {
 }
 
 table.sc-table thead th {
-  background: var(--vscode-keybindingTable-headerBackground, var(--vscode-editor-background, #f5f5f5));
-  color: var(--vscode-foreground, #e0e0e0);
+  background: var(--chat-conversation-list-hover-background, rgba(0, 0, 0, 0.06));
+  color: var(--chat-conversation-foreground, #1f1f1f);
   font-weight: 600;
   white-space: nowrap;
 }
