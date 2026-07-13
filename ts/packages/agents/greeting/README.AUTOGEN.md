@@ -12,21 +12,23 @@
 
 ## Overview
 
-The Greeting Agent is a sample TypeAgent application designed to generate personalized and varied greeting messages using structured prompting and a language model (LLM). It demonstrates how to use schemas to structure LLM responses and how to enhance these responses with personalized information, such as details retrieved from a web search engine.
-
-This agent serves as an example of how to build a typed agent with structured prompting, showcasing the integration of external data sources and the generation of diverse, context-aware responses.
+The Greeting Agent is a sample TypeAgent application designed to generate personalized and varied greeting messages using structured prompting and a language model (LLM). It demonstrates how to use schemas to structure LLM responses and how to enhance these responses with personalized information, such as details retrieved from a web search engine. This agent serves as a practical example of building a typed agent that combines LLM capabilities with external data sources to create engaging and context-aware interactions.
 
 ## What it does
 
-The Greeting Agent is designed to handle the `personalizedGreetingAction`. This action enables the agent to generate multiple greeting options that vary in tone, length, cadence, delivery, and style. The greetings can convey a range of moods, such as friendly, enthusiastic, polite, cheerful, or lively. The agent also supports incorporating chat history into the generated greetings to make them more personalized and contextually relevant.
+The Greeting Agent is built around the `personalizedGreetingAction`, which enables the generation of multiple greeting options tailored to the user's context. These greetings vary in tone, length, cadence, delivery, and style, and can incorporate chat history to make them more relevant and personalized.
 
-Key features include:
+### Key Features
 
-- **Structured Responses**: The agent uses the schema defined in [greetingActionSchema.ts](./src/greetingActionSchema.ts) to ensure that the LLM generates structured and well-defined responses.
-- **Randomized Selection**: The agent generates multiple greeting options and selects one at random, ensuring diversity in the responses.
-- **Personalized Augmentation**: By integrating with a web search engine like Bing, the agent can enhance greetings with personalized information. If a Bing API key is not provided, the agent defaults to a generic "No Information available" response.
+1. **Structured Responses**: The agent uses a schema defined in [greetingActionSchema.ts](./src/greetingActionSchema.ts) to ensure that the LLM generates structured and consistent outputs. This schema specifies the parameters and expected format of the `personalizedGreetingAction`.
 
-This agent is a practical demonstration of how to combine LLM capabilities with external data sources to create engaging and context-aware interactions.
+2. **Diverse Greetings**: The agent generates multiple greeting options that vary in tone and style, such as friendly, enthusiastic, polite, cheerful, or lively. It also includes greetings that are appropriate for the time of day or day of the week, and may incorporate phrases from languages other than English.
+
+3. **Randomized Selection**: From the generated options, the agent selects one greeting at random, ensuring that responses remain dynamic and engaging.
+
+4. **Personalized Augmentation**: The agent can enhance greetings with personalized information retrieved from a web search engine, such as Bing. This allows the agent to provide contextually relevant and enriched responses. If a Bing API key is not provided, the agent defaults to a generic "No Information available" response.
+
+This functionality makes the Greeting Agent a versatile tool for exploring the integration of structured prompting, LLMs, and external data sources.
 
 ## Setup
 
@@ -43,39 +45,41 @@ If no Bing API key is provided, the agent will still function but will return a 
 
 ## Key Files
 
-The Greeting Agent is implemented using a modular architecture, with each component responsible for a specific aspect of the agent's functionality. The key files include:
+The Greeting Agent is implemented using a modular architecture, with each file playing a specific role in the agent's functionality. Below are the key files and their responsibilities:
 
-- **[greetingManifest.json](./src/greetingManifest.json)**: This file contains metadata about the agent, such as its description and an emoji character that represents it.
-- **[greetingActionSchema.ts](./src/greetingActionSchema.ts)**: This file defines the structure of the `personalizedGreetingAction`, including the parameters and expected response format. It ensures that the LLM generates structured and consistent outputs.
-- **[greetingCommandHandler.ts](./src/greetingCommandHandler.ts)**: This file implements the logic for handling the `personalizedGreetingAction`. It includes:
-  - Initialization of the agent's context.
-  - Functions for generating greeting responses.
-  - Integration with a web search engine for personalized lookups.
+- **[greetingManifest.json](./src/greetingManifest.json)**: Contains metadata about the agent, including its description and an emoji character that represents it. This file is essential for registering the agent within the TypeAgent ecosystem.
 
-The agent also relies on several dependencies, including `@typeagent/agent-sdk` for core agent functionalities, `@typeagent/aiclient` for LLM interactions, and `knowledge-processor` for managing conversation context.
+- **[greetingActionSchema.ts](./src/greetingActionSchema.ts)**: Defines the schema for the `personalizedGreetingAction`. This schema specifies the input parameters (e.g., the original user request and possible greeting responses) and the expected structure of the LLM-generated output. It ensures that the agent produces consistent and well-formed responses.
+
+- **[greetingCommandHandler.ts](./src/greetingCommandHandler.ts)**: Implements the logic for handling the `personalizedGreetingAction`. Key responsibilities include:
+  - Initializing the agent's context, such as user-specific data.
+  - Generating multiple greeting options using the LLM.
+  - Integrating with a web search engine (e.g., Bing) to augment greetings with personalized information.
+
+These files work together to define the agent's behavior, from its metadata and action schema to the logic for processing actions and generating responses.
 
 ## How to extend
 
-To extend the Greeting Agent, you can add new actions, enhance existing ones, or modify the agent's behavior. Here are the steps to get started:
+The Greeting Agent is designed to be extensible, allowing contributors to add new actions, enhance existing ones, or modify its behavior. Below are the steps to extend the agent:
 
-1. **Understand the existing structure**:
+1. **Understand the Existing Structure**:
 
-   - Review the [greetingActionSchema.ts](./src/greetingActionSchema.ts) file to understand the current action schema.
-   - Familiarize yourself with the [greetingCommandHandler.ts](./src/greetingCommandHandler.ts) file, which contains the logic for handling actions.
+   - Review the [greetingActionSchema.ts](./src/greetingActionSchema.ts) file to understand the current action schema and its parameters.
+   - Familiarize yourself with the [greetingCommandHandler.ts](./src/greetingCommandHandler.ts) file, which contains the logic for handling actions and integrating with external data sources.
 
-2. **Add new actions**:
+2. **Add New Actions**:
 
-   - Define the structure of the new action in the [greetingActionSchema.ts](./src/greetingActionSchema.ts) file. Ensure the schema includes all necessary parameters and expected response formats.
+   - Define the structure of the new action in the [greetingActionSchema.ts](./src/greetingActionSchema.ts) file. Ensure the schema includes all necessary parameters and specifies the expected response format.
 
-3. **Implement new handlers**:
+3. **Implement New Handlers**:
 
-   - Add new functions to the [greetingCommandHandler.ts](./src/greetingCommandHandler.ts) file to handle the new actions. Follow the existing patterns for initializing context, generating responses, and performing lookups.
+   - Extend the [greetingCommandHandler.ts](./src/greetingCommandHandler.ts) file with new functions to handle the new actions. Follow the existing patterns for initializing context, generating responses, and performing lookups.
 
-4. **Update the manifest**:
+4. **Update the Manifest**:
 
-   - Modify the [greetingManifest.json](./src/greetingManifest.json) file to include metadata for the new actions.
+   - Modify the [greetingManifest.json](./src/greetingManifest.json) file to include metadata for the new actions, such as their names and descriptions.
 
-5. **Test your changes**:
+5. **Test Your Changes**:
    - Use the existing test framework to validate your changes. Add new test cases to cover the new functionalities and ensure they work as expected.
 
 By following these steps, you can customize the Greeting Agent to meet specific requirements or expand its capabilities to handle additional types of interactions.
@@ -120,6 +124,6 @@ External: `debug`, `typechat`
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter greeting-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter greeting-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

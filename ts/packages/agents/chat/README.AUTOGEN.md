@@ -12,20 +12,20 @@
 
 ## Overview
 
-The `chat-agent` package is a TypeAgent application agent designed to handle conversational interactions. It serves as a sample implementation for building a typed chat agent that leverages structured prompting and large language models (LLMs). The agent uses a schema-driven approach to generate structured responses and can perform external lookups to provide additional information, such as web search results.
+The `chat-agent` package is a TypeAgent application agent designed to handle conversational interactions. It serves as a sample implementation for building a typed chat agent that leverages structured prompting and large language models (LLMs). The agent uses a schema-driven approach to generate structured responses and can perform external lookups, such as web searches, to provide additional information when needed.
 
-This package is part of the TypeAgent monorepo and integrates with other agents and utilities to deliver a cohesive conversational experience.
+This package is part of the TypeAgent monorepo and integrates with other agents and utilities to deliver a cohesive conversational experience. It is often used alongside other agents like the `default-agent-provider`, `greeting-agent`, and `settings-agent`.
 
 ## What it does
 
-The `chat-agent` facilitates natural language interactions by using structured schemas and LLMs. It supports two primary actions:
+The `chat-agent` facilitates natural language interactions by using structured schemas and LLMs. It supports the following key actions:
 
-- **`generateResponse`**: This action generates a response based on the provided context or known information. It is used for general conversation, answering questions, and providing explanations.
-- **`showImageFile`**: This action displays images based on file entities provided in the request. It retrieves and rehydrates image files from storage and includes them in the response.
+- **`generateResponse`**: Generates a response based on the provided context or known information. This action is used for general conversation, answering questions, and providing explanations. If additional information is required, the agent can perform lookups using external data sources like Bing.
+- **`showImageFile`**: Displays images based on file entities provided in the request. This action retrieves and rehydrates image files from storage and includes them in the response.
 
-The agent is designed to handle scenarios where additional information is required to respond to user queries. For example, it can perform lookups using external data sources like Bing to fetch supplementary information. If no external data source is configured or available, the agent will return a "No Information available" response.
+The agent is designed to handle scenarios where additional information is required to respond to user queries. If no external data source is configured or available, the agent will return a "No Information available" response.
 
-The `chat-agent` is often used in conjunction with other agents, such as the `default-agent-provider`, `greeting-agent`, and `settings-agent`, to create a more comprehensive conversational system.
+The `chat-agent` demonstrates how to use schemas to structure LLM responses, enabling the inclusion of additional lookups for information. It also provides an example implementation of lookups using the Bing search engine.
 
 ## Setup
 
@@ -124,6 +124,6 @@ External: `typechat`
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

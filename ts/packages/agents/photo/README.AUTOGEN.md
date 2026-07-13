@@ -12,47 +12,45 @@
 
 ## Overview
 
-The `photo-agent` package is a TypeAgent application agent designed to handle photo-related actions. It enables the system to interact with a connected camera, allowing users to take photos through natural language commands. This agent is part of the TypeAgent framework and integrates with other components in the monorepo to provide camera functionality.
+The `photo-agent` package is a TypeAgent application agent that enables photo-related functionality within the system. It interacts with a connected camera to capture photos based on user commands. This agent is part of the TypeAgent framework and integrates with other components in the monorepo to provide camera-based actions.
 
 ## What it does
 
-The `photo-agent` implements a single action, `takePhoto`, which uses a camera attached to the system to capture a photo. This action is triggered by user requests such as "Take a photo of this sunset" or "Snap a picture of my outfit." The agent processes these requests using a defined grammar and maps them to the `takePhoto` action.
+The `photo-agent` currently supports a single action, `takePhoto`, which allows users to capture a photo using a camera connected to the system. This action is triggered by natural language commands, such as "Take a picture of this" or "Snap a photo of my desk." The agent processes these commands using a defined grammar and maps them to the `takePhoto` action.
 
 ### Key Features:
 
-- **Action: `takePhoto`**: Captures a photo using the system's camera. It accepts a single parameter, `originalRequest`, which contains the user's original input. This parameter can be used for logging or additional processing.
-- **Grammar Parsing**: The agent uses a grammar file ([photoSchema.agr](./src/photoSchema.agr)) to interpret natural language requests and map them to the `takePhoto` action.
-- **Extensibility**: The agent is designed to be extended with additional actions, grammar rules, and handlers.
+- **Action: `takePhoto`**: Captures a photo using the system's camera. The action takes a single parameter, `originalRequest`, which contains the user's original input. This parameter can be used for logging or additional processing.
+- **Grammar Parsing**: The agent uses a grammar file ([photoSchema.agr](./src/photoSchema.agr)) to interpret user requests and map them to the `takePhoto` action.
+- **Integration**: The agent is designed to work within the TypeAgent framework, making it compatible with other agents and components in the system.
 
-The `photo-agent` is integrated with the TypeAgent framework and can be used in conjunction with other agents to provide a comprehensive user experience.
+The `photo-agent` is a foundational component for enabling photo-related interactions in the system and can be extended to support additional actions in the future.
 
 ## Setup
 
 To use the `photo-agent`, ensure the following prerequisites are met:
 
-1. **Camera Access**: A camera must be connected to the system and accessible. This may require installing appropriate drivers or granting necessary permissions.
-2. **Dependencies**: The package depends on `@typeagent/action-schema-compiler` and `@typeagent/agent-sdk`, which are managed within the monorepo. Ensure these dependencies are installed and up to date.
-3. **Build Process**: Run `pnpm install` in the root of the monorepo to install dependencies and build the package.
-
-No additional environment variables or external services are required for this package.
+1. **Camera Access**: A camera must be connected to the system and accessible. Depending on the operating system, this may require installing drivers or granting permissions.
+2. **Dependencies**: The package relies on `@typeagent/action-schema-compiler` and `@typeagent/agent-sdk`, which are managed within the monorepo. Run `pnpm install` in the root of the monorepo to install all required dependencies.
+3. **Build Process**: After installing dependencies, the package will be ready to use. No additional setup steps, environment variables, or external services are required.
 
 ## Key Files
 
-The `photo-agent` package is structured around the TypeAgent framework's conventions. The following files are central to its functionality:
+The `photo-agent` package is structured according to the conventions of the TypeAgent framework. Below are the key files and their responsibilities:
 
-- **[photoManifest.json](./src/photoManifest.json)**: Defines the agent's metadata, including its description, emoji representation, and schema details. This file is the entry point for the agent's manifest.
-- **[photoSchema.ts](./src/photoSchema.ts)**: Contains the TypeScript definitions for the actions supported by the agent. Currently, it defines the `PhotoAction` and `TakePhotoAction` types.
+- **[photoManifest.json](./src/photoManifest.json)**: This file defines the agent's metadata, including its description, emoji representation, and schema details. It serves as the entry point for the agent's manifest.
+- **[photoSchema.ts](./src/photoSchema.ts)**: Contains TypeScript definitions for the actions supported by the agent. Currently, it defines the `PhotoAction` and `TakePhotoAction` types.
 - **[photoActionHandler.ts](./src/photoActionHandler.ts)**: Implements the logic for handling the `takePhoto` action. This includes initializing the agent context, updating it, and executing the action.
 - **[photoSchema.agr](./src/photoSchema.agr)**: Specifies the grammar rules for parsing user requests into actionable commands. It defines patterns for recognizing requests to take photos and mapping them to the `takePhoto` action.
 - **[photoSchema.tests.json](./src/photoSchema.tests.json)**: Provides test cases for validating the grammar and action handling. These tests ensure that user requests are correctly interpreted and processed.
 
 ## How to extend
 
-The `photo-agent` is designed to be extensible, allowing contributors to add new actions, grammar rules, and functionality. Follow these steps to extend the agent:
+The `photo-agent` is designed to be extensible, allowing contributors to add new actions, grammar rules, and functionality. Below are the steps to extend the agent:
 
-1. **Add New Actions**:
+1. **Define New Actions**:
 
-   - Define new action types in [photoSchema.ts](./src/photoSchema.ts). Each action should have a unique `actionName` and a set of parameters.
+   - Add new action types in [photoSchema.ts](./src/photoSchema.ts). Each action should have a unique `actionName` and a set of parameters.
    - For example, to add an action for uploading a photo, you might define a new `UploadPhotoAction` type with parameters like `filePath` and `description`.
 
 2. **Update the Grammar**:
@@ -119,6 +117,6 @@ _1 action implemented by this agent, parsed deterministically from `./src/photoS
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter photo-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter photo-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
