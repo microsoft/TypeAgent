@@ -207,6 +207,7 @@ export type IssueReopenAction = {
 export type IssueListAction = {
     actionName: "issueList";
     parameters: {
+        // owner/repo. Omitting this defaults to the current repository.
         repo?: string;
 
         state?: string;
