@@ -957,6 +957,7 @@ function buildFallbackCopilotQuery(
 // By default this starts a fresh chat session (in a new chat editor) and
 // auto-submits the request, so the handoff doesn't append to — or wait on —
 // whatever chat the user already had open.
+// code-complexity-allow: command/compat flow is intentionally branch-heavy to preserve behavior across VS Code versions.
 export async function handleLaunchCopilotChatAction(
     action: any,
 ): Promise<ActionResult> {
