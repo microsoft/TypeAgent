@@ -11,8 +11,7 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
-    createActionResultFromMarkdownDisplay,
-    createActionResult,
+    createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ListAction, ListActivity } from "./listSchema.js";
 
@@ -185,6 +184,10 @@ class MemoryListCollection {
         return this.lists.get(name);
     }
 
+    getListNames(): string[] {
+        return Array.from(this.lists.keys());
+    }
+
     serialize(): string {
         const lists = Array.from(this.lists.values()).map((memList) => {
             return {
@@ -275,19 +278,42 @@ function getListDisplay(
 ) {
     const list = getList(listContext, listName);
     if (list.itemsSet.size === 0) {
-        return createActionResult(
-            `List '${listName}' is empty.${suffix ? `\n${suffix}` : ""}`,
-            undefined,
-            getEntities(listName),
+        return createStructuredResult(
+            [
+                { kind: "heading", level: 3, text: `List '${listName}'` },
+                { kind: "text", text: "This list is empty." },
+                ...(suffix
+                    ? [{ kind: "text" as const, text: suffix }]
+                    : []),
+            ],
+            {
+                entities: getEntities(listName),
+                rawData: { name: listName, items: [] },
+            },
         );
     }
     const plainList = Array.from(list.itemsSet);
 
-    // set displayText to markdown list of the items
-    return createActionResultFromMarkdownDisplay(
-        `List '${listName}' has items:\n\n${plainList.map((item) => `- ${item}`).join("\n")}${suffix ? `\n\n${suffix}` : ""}`,
-        undefined,
-        getEntities(listName, plainList),
+    // Render the list as a structured heading + list block. The SDK derives
+    // the markdown/text fallback for clients that can't render blocks.
+    const count = plainList.length;
+    return createStructuredResult(
+        [
+            {
+                kind: "heading",
+                level: 3,
+                text: `List '${listName}' — ${count} item${count === 1 ? "" : "s"}`,
+            },
+            {
+                kind: "list",
+                items: plainList.map((item) => ({ text: item })),
+            },
+            ...(suffix ? [{ kind: "text" as const, text: suffix }] : []),
+        ],
+        {
+            entities: getEntities(listName, plainList),
+            rawData: { name: listName, items: plainList },
+        },
     );
 }
 async function handleListAction(
@@ -360,6 +386,41 @@ async function handleListAction(
         }
         case "getList": {
             result = getListDisplay(listContext, action.parameters.listName);
+            break;
+        }
+        case "listLists": {
+            const store = getStore(listContext);
+            const names = store.getListNames();
+            if (names.length === 0) {
+                result = createStructuredResult(
+                    [
+                        { kind: "heading", level: 3, text: "Lists" },
+                        { kind: "text", text: "There are no lists yet." },
+                    ],
+                    { entities: [] },
+                );
+            } else {
+                result = createStructuredResult(
+                    [
+                        {
+                            kind: "heading",
+                            level: 3,
+                            text: `Lists — ${names.length} list${names.length === 1 ? "" : "s"}`,
+                        },
+                        {
+                            kind: "list",
+                            items: names.map((name) => ({ text: name })),
+                        },
+                    ],
+                    {
+                        entities: names.map((name) => ({
+                            name,
+                            type: ["list"],
+                        })),
+                        rawData: { lists: names },
+                    },
+                );
+            }
             break;
         }
         case "clearList": {

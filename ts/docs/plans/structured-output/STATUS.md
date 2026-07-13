@@ -4,7 +4,7 @@ Working tracker for the plan in [PLAN.md](./PLAN.md). Update whenever a
 phase item is started, completed, or a follow-up surfaces. Keep entries
 terse — one line per item where possible.
 
-_Last updated: 2026-07-13 — github-cli fully converted (single views + field answers); Phase 7 agent rollout order defined._
+_Last updated: 2026-07-13 — Phase 7 Wave A started: `list` agent converted (7a)._
 
 ## Progress by phase
 
@@ -65,7 +65,7 @@ Wave A — high fit:
 
 | Item | Agent | Target blocks | Status |
 | ---- | ----- | ------------- | ------ |
-| 7a | `list` | heading + list | not started |
+| 7a | `list` | heading + list | done |
 | 7b | `calendar` | table (agenda) + card/keyValue (detail) | not started |
 | 7c | `email` | table (list) + keyValue (message) | not started |
 | 7d | `weather` | keyValue (current) + table (forecast) | not started |
