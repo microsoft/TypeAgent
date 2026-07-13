@@ -1073,13 +1073,13 @@ export async function handleLaunchCopilotChatAction(
     }
 
     const attachNote = usedFallback
-        ? " (attachments referenced by path — update VS Code for inline attachments)"
+        ? " (attachments referenced by path - update VS Code for inline attachments)"
         : "";
     const tail = !autoSend
         ? ". Review the prompt, then send it to let Copilot diagnose and fix the problem."
         : sent
           ? " and sent the request to let Copilot diagnose and fix the problem."
-          : ". The prompt is ready — press Enter in the chat to send it to Copilot.";
+          : ". The prompt is ready - press Enter in the chat to send it to Copilot.";
     return {
         handled: true,
         message: `✅ Opened ${openedWhere} with the conversation attached${attachNote}${tail}`,
