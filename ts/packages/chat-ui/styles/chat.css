@@ -1016,7 +1016,8 @@ table.sc-table td {
 }
 
 table.sc-table thead th {
-  background: var(--vscode-editor-background, #f5f5f5);
+  background: var(--vscode-keybindingTable-headerBackground, var(--vscode-editor-background, #f5f5f5));
+  color: var(--vscode-foreground, #e0e0e0);
   font-weight: 600;
   white-space: nowrap;
 }

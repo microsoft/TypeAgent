@@ -154,7 +154,10 @@ export class TaskFlowScriptAPIImpl implements TaskFlowScriptAPI {
             const text = extractText(result);
             // Use rawData from StructuredContent when available; otherwise fall
             // back to parsing the text (the pre-Phase-6 path).
-            const dc = result.displayContent;
+            const dc =
+                "displayContent" in result
+                    ? result.displayContent
+                    : undefined;
             const rawData =
                 dc !== undefined &&
                 typeof dc === "object" &&

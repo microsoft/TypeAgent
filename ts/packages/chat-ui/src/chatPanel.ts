@@ -4910,11 +4910,13 @@ class AgentMessageContainer {
             text = content;
         } else if (
             !Array.isArray(content) &&
+            content.type !== "structured" &&
             typeof content.content === "string"
         ) {
             text = content.content;
         } else if (
             !Array.isArray(content) &&
+            content.type !== "structured" &&
             Array.isArray(content.content) &&
             content.content.length > 0 &&
             typeof content.content[0] === "string"
@@ -4950,7 +4952,11 @@ class AgentMessageContainer {
         const summaryText = originalLines.slice(0, jsonStart).join("\n");
         const detailsText = originalLines.slice(jsonStart).join("\n");
 
-        if (typeof content === "object" && !Array.isArray(content)) {
+        if (
+            typeof content === "object" &&
+            !Array.isArray(content) &&
+            content.type !== "structured"
+        ) {
             return {
                 summary: { ...content, content: summaryText },
                 details: { ...content, content: detailsText, kind: undefined },

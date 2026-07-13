@@ -7,7 +7,11 @@ import {
     DisplayContent,
     MessageContent,
 } from "@typeagent/agent-sdk";
-import { getContentForType } from "@typeagent/agent-sdk/helpers/display";
+import {
+    getContentForType,
+    getStructuredFallback,
+    isStructuredContent,
+} from "@typeagent/agent-sdk/helpers/display";
 import type {
     RequestId,
     ClientIO,
@@ -82,6 +86,9 @@ function createConsoleClientIO(
         let message: MessageContent;
         if (typeof content === "string" || Array.isArray(content)) {
             message = content;
+        } else if (isStructuredContent(content)) {
+            // Console gets the text fallback; no interactive rendering.
+            message = getStructuredFallback(content, "text");
         } else {
             // Console prefers text alternates when available
             const textContent = getContentForType(content, "text");
