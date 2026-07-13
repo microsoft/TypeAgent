@@ -5,10 +5,26 @@
 #
 # Azure DevOps port of .github/workflows/smoke-tests.yml. Differences from the
 # GitHub Actions version, and why:
-#   * The fork-PR permission gating (actions-cool/check-user-permission) is
-#     dropped. That check existed to protect secrets on the PUBLIC OSS repo;
-#     on an internal Azure DevOps project, Key Vault / secret access is already
-#     governed by project permissions and the service connection's RBAC.
+#   * The GitHub Actions fork-PR write gate (actions-cool/check-user-permission
+#     on pull_request_target) has no direct Azure DevOps equivalent. Its job —
+#     keep a contributor without write access from running fork-PR code against
+#     our secrets — is instead enforced by the pipeline's Pull request
+#     validation settings (Edit > ... > Triggers > Pull request validation).
+#     Those settings are UI-only and cannot be expressed in this YAML:
+#       - Forks > "Build pull requests from forks of this repository" = ON, so
+#         fork PRs can trigger this pipeline at all.
+#       - Forks > "Make secrets available to builds of forks" = ON, because
+#         every useful step needs a protected resource that fork builds are
+#         denied by default — the internal npm feed (even `pnpm install`), the
+#         MSOCTO-ADO-Service-Connection, and Key Vault. With it OFF a fork-PR
+#         run fails at the first authenticated step.
+#       - Comment triggers > "Require a team member's comment before building a
+#         pull request" = "Only for pull requests from non-team members". A team
+#         member (write or admin on the GitHub repo) must comment `/azp run`
+#         before a non-write-access contributor's fork PR runs with those
+#         secrets, and new commits after that vouch require a fresh comment.
+#         This comment gate IS the write-access protection; enabling secrets for
+#         forks without it would expose our secrets to arbitrary fork code.
 #   * "Setup Git LF" is dropped because .gitattributes already pins `* text
 #     eol=lf`, so checkout produces LF on every OS regardless of core.autocrlf.
 #   * dorny/paths-filter is replaced by the trigger `paths` filter below.
@@ -34,6 +50,12 @@
 #   * Pipeline variables (define in the pipeline UI or a linked variable group):
 #       - REGISTRY         npm registry URL used by include-prepare-repo.yml to
 #                          restore dependencies (internal Azure Artifacts feed).
+#   * Pull request validation settings (Edit > ... > Triggers, UI-only) - to run
+#     fork PRs behind a write-access gate, set: "Build pull requests from forks"
+#     = ON, "Make secrets available to builds of forks" = ON, and "Require a team
+#     member's comment" = "Only for pull requests from non-team members" (see the
+#     fork-PR note above). Optionally add an Approvals & checks gate on
+#     MSOCTO-ADO-Service-Connection for defense in depth.
 
 trigger:
   branches:
