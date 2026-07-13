@@ -20,6 +20,7 @@ import type {
     CorpusService,
 } from "@typeagent/core/corpus";
 import type { ReplayActionResolver } from "@typeagent/core/replay";
+import type { ReplayRunDescriptor } from "@typeagent/core/replay";
 import type { CollisionDetectedEvent } from "@typeagent/core/events";
 import { createStudioRuntimeCore } from "@typeagent/core/runtime";
 
@@ -1346,4 +1347,91 @@ test("replayCorpus consults the construction cache in completionBased-cache mode
     } finally {
         await fs.rm(repoRoot, { recursive: true, force: true });
     }
+});
+
+// `replayResolutionTrace` recomputes a single utterance's trace from a stored
+// run descriptor, reusing the same grammar path a run uses.
+
+function workingTreeDescriptor(): ReplayRunDescriptor {
+    const pin = {
+        spec: { kind: "workingTree" as const },
+        label: "working tree",
+        workingTree: true,
+    };
+    return {
+        runId: "run-recompute",
+        agent: "demo",
+        a: pin,
+        b: pin,
+        mode: "nfa-grammar",
+        missPolicy: "needs-explanation",
+        validateWildcards: false,
+        corpus: {},
+        runAt: 0,
+    };
+}
+
+test("replayResolutionTrace recomputes a trace for a known utterance", async () => {
+    const repoRoot = await scaffoldGatingRepo();
+    try {
+        const corpus = new StubCorpusService([gatingEntry("p", "pause")]);
+        const runtime = createStudioRuntimeCore(
+            createContext([repoRoot]).context,
+            { corpus },
+        );
+
+        const result = await runtime.replayResolutionTrace({
+            descriptor: workingTreeDescriptor(),
+            utteranceId: "p",
+        });
+
+        assert.equal(result.status, "recomputed");
+        if (result.status === "recomputed") {
+            assert.equal(result.trace.utteranceId, "p");
+            assert.equal(result.trace.runId, "run-recompute");
+        }
+    } finally {
+        await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("replayResolutionTrace reports entry-missing for an unknown utterance", async () => {
+    const repoRoot = await scaffoldGatingRepo();
+    try {
+        const corpus = new StubCorpusService([gatingEntry("p", "pause")]);
+        const runtime = createStudioRuntimeCore(
+            createContext([repoRoot]).context,
+            { corpus },
+        );
+
+        const result = await runtime.replayResolutionTrace({
+            descriptor: workingTreeDescriptor(),
+            utteranceId: "does-not-exist",
+        });
+
+        assert.equal(result.status, "entry-missing");
+    } finally {
+        await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("replayResolutionTrace reports unavailable without a grammar path", async () => {
+    const { context } = createContext();
+    const corpus = new StubCorpusService([corpusEntry("a")]);
+    const resolver: ReplayActionResolver = {
+        resolve(entry) {
+            return { action: { value: entry.id }, cacheState: "hit" };
+        },
+    };
+    const runtime = createStudioRuntimeCore(context, {
+        corpus,
+        replayResolver: resolver,
+    });
+
+    const result = await runtime.replayResolutionTrace({
+        descriptor: { ...workingTreeDescriptor(), agent: "player" },
+        utteranceId: "a",
+    });
+
+    assert.equal(result.status, "unavailable");
 });

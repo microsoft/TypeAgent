@@ -47,6 +47,7 @@ import {
     type ReplayAgentResolution,
     type ReplayMissPolicy,
     type ReplayResolutionTrace,
+    type ReplayRunDescriptor,
     type ReplaySummary,
     type VersionSpec,
 } from "../replay/index.js";
@@ -277,6 +278,23 @@ export interface StudioReplayRequest {
      */
     validateWildcards?: boolean;
 }
+
+/** Request to recompute one utterance's resolution trace from a stored run
+ *  descriptor — the drill-in's "replay this trace" path, reusing the same
+ *  grammar resolution a full run would. */
+export interface ReplayResolutionTraceRequest {
+    descriptor: ReplayRunDescriptor;
+    utteranceId: string;
+}
+
+/** Outcome of {@link StudioRuntime.replayResolutionTrace}: a freshly recomputed
+ *  trace, or why one couldn't be produced — the utterance is no longer in the
+ *  corpus (`entry-missing`), or the descriptor's versions don't reconstruct into
+ *  a grammar run (`unavailable`, e.g. identity baseline or a build failure). */
+export type ReplayResolutionTraceResult =
+    | { status: "recomputed"; trace: ReplayResolutionTrace }
+    | { status: "entry-missing" }
+    | { status: "unavailable" };
 
 /**
  * How a replay resolved corpus utterances into actions:
@@ -795,6 +813,16 @@ export interface StudioRuntime {
      * and summary.
      */
     replayCorpus(request: StudioReplayRequest): Promise<StudioReplayResult>;
+    /**
+     * Recompute the resolution trace for a single utterance from a stored run
+     * descriptor, reusing the same grammar path the run used. Returns
+     * `entry-missing` when the utterance is no longer in the corpus and
+     * `unavailable` when the descriptor's versions can't be reconstructed into a
+     * grammar run (identity baseline, or a version build failure).
+     */
+    replayResolutionTrace(
+        request: ReplayResolutionTraceRequest,
+    ): Promise<ReplayResolutionTraceResult>;
     /**
      * Report a detected schema/grammar collision. Stores it and emits a
      * `collision.detected` event (visible in the Event Log and the Collisions
@@ -1654,6 +1682,56 @@ export function createStudioRuntimeCore(
                     : {}),
                 ...(resolutionTraces.length > 0 ? { resolutionTraces } : {}),
             };
+        },
+        async replayResolutionTrace(request) {
+            const { descriptor, utteranceId } = request;
+            const replayOptions = {
+                agent: descriptor.agent,
+                corpus: descriptor.corpus,
+                versionA: descriptor.a.spec,
+                versionB: descriptor.b.spec,
+                missPolicy: descriptor.missPolicy,
+            } satisfies Parameters<typeof replayCorpus>[0];
+            const synthRequest: StudioReplayRequest = {
+                agent: descriptor.agent,
+                corpus: descriptor.corpus,
+                versionA: descriptor.a.spec,
+                versionB: descriptor.b.spec,
+                missPolicy: descriptor.missPolicy,
+                mode: descriptor.mode,
+                validateWildcards: descriptor.validateWildcards,
+            };
+            const resolution = await resolveReplayActions(
+                replayOptions,
+                synthRequest,
+                descriptor.mode,
+            );
+            try {
+                if (
+                    resolution.aborted !== undefined ||
+                    resolution.activeGrammarResolver === undefined
+                ) {
+                    return { status: "unavailable" };
+                }
+                const entry = (
+                    await corpus.list(descriptor.agent, descriptor.corpus)
+                ).find((candidate) => candidate.id === utteranceId);
+                if (entry === undefined) {
+                    return { status: "entry-missing" };
+                }
+                return {
+                    status: "recomputed",
+                    trace: await captureResolutionTrace(
+                        resolution.activeGrammarResolver,
+                        entry,
+                        descriptor.runId,
+                        descriptor.a.spec,
+                        descriptor.b.spec,
+                    ),
+                };
+            } finally {
+                await resolution.wildcardValidator?.dispose();
+            }
         },
         reportCollision(event) {
             return collisions.report(event);
