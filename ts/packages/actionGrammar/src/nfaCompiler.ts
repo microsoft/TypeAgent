@@ -11,7 +11,6 @@ import {
     RulesPart,
     PhraseSetPart,
     CompiledSpacingMode,
-    CompiledValueNode,
     getCapturedVariableName,
     createRulesPart,
 } from "./grammarTypes.js";
@@ -22,7 +21,7 @@ import {
     ValueExpression,
 } from "./environment.js";
 import { normalizeToken } from "./nfaMatcher.js";
-import { deriveValue } from "./grammarValueDeriver.js";
+import { deriveEffectiveValue } from "./grammarValueDeriver.js";
 
 // Scripts that require a word-boundary separator between adjacent tokens.
 // CJK and other logographic/syllabic scripts are NOT included — no separator needed.
@@ -355,6 +354,23 @@ function normalizeRule(
     rule: GrammarRule,
     cache: Map<GrammarRule[], GrammarRule[]>,
 ): GrammarRule {
+    // tailCall is a structural NFA/DFA backend gap (NYI, not fundamental -
+    // see `tailCallNotYetSupportedMessage`), unrelated to value derivation
+    // or rule normalization. `normalizeRule` recursively visits every
+    // rule exactly once (top-level and nested, via the cache-based walk
+    // in `normalizeRulesArray`) before any compilation begins, making
+    // this the single earliest point to reject it - fails fast, and
+    // lets every downstream consumer (including `deriveEffectiveValue`)
+    // stay unaware tailCall exists at all.
+    const tailCallPart = rule.parts.find(
+        (p): p is RulesPart => p.type === "rules" && !!p.tailCall,
+    );
+    if (tailCallPart !== undefined) {
+        throw new Error(
+            `normalizeGrammar: ${tailCallNotYetSupportedMessage(tailCallPart.name)}`,
+        );
+    }
+
     // First, normalize all nested RulesParts
     const normalizedParts = rule.parts.map((part) =>
         normalizePart(part, cache),
@@ -453,55 +469,20 @@ function stripDispatch(part: RulesPart): RulesPart {
 }
 
 /**
- * Derive the value expression for a rule that has no explicit `->` value:
- * a rule with exactly one variable-bearing part (whatever its type -
- * wildcard, number, or a bound rules/string/phraseSet part) implicitly
- * forwards that part's value, via the shared `deriveValue` - the single
- * place that decides a rule's effective value, explicit or implicit.
- * Not every rule needs a value - only when `requireValue` is set (i.e.
- * the value is actually consumed: top-level action rules, or nested
- * rules captured by a parent variable) do ambiguous (2+ variable-bearing
- * parts) or missing values throw; otherwise both cases just resolve to
- * `undefined`.
+ * Message for the NFA/DFA backend's tailCall gap, shared by every throw
+ * site so they report consistent wording. This is a known NYI gap, not
+ * a fundamental limitation: tail-call RulesParts let the AST-walking
+ * matcher share the parent's stack frame and forward a member's value
+ * directly as the parent rule's value (see `RulesPart.tailCall` in
+ * grammarTypes.ts) - NFAs are naturally well-suited to sharing prefix
+ * states, but the equivalent frame-sharing/variable-forwarding wiring
+ * for this state-machine backend hasn't been built yet.
  */
-function deriveEffectiveValue(
-    rule: GrammarRule,
-    describeRule: () => string,
-    requireValue: boolean,
-): CompiledValueNode | undefined {
-    const result = deriveValue(rule);
-    if (result.kind === "value") {
-        return result.value;
-    }
-    // Not every rule needs a value - only rules whose value is actually
-    // consumed (top-level action rules, or nested rules captured by a
-    // parent variable) do. If nothing downstream needs this rule's value,
-    // neither an ambiguous nor a missing implicit value is an error.
-    if (!requireValue) {
-        return undefined;
-    }
-    const termsDescription =
-        rule.parts.length === 1
-            ? "has 1 term"
-            : `has ${rule.parts.length} terms`;
-    if (result.kind === "ambiguous") {
-        throw new Error(
-            `${describeRule()} ${termsDescription} but no value expression, ` +
-                `and more than one part carries a variable - the implicit value is ambiguous. ` +
-                `Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.`,
-        );
-    }
-    const hasTailCall = rule.parts.some(
-        (p) => p.type === "rules" && p.tailCall,
-    );
-    throw new Error(
-        `${describeRule()} ${termsDescription} but no value expression, and no part carries a variable. ` +
-            `Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.` +
-            (hasTailCall
-                ? " This rule contains a tailCall RulesPart, which the NFA compiler " +
-                  "does not support - disable `tailFactoring` / `promoteTailRulesParts` " +
-                  "in the grammar optimizer for NFA/DFA paths."
-                : ""),
+function tailCallNotYetSupportedMessage(partName: string | undefined): string {
+    return (
+        `tail RulesPart (name='${partName ?? "<unnamed>"}') is not yet supported by the ` +
+        "NFA/DFA backend - disable `tailFactoring` / `promoteTailRulesParts` in the " +
+        "grammar optimizer for NFA/DFA paths."
     );
 }
 
@@ -1413,9 +1394,7 @@ function compileRulesPart(
 ): number {
     if (part.tailCall) {
         throw new Error(
-            `compileRulesPart: tail RulesParts are not supported by the NFA compiler ` +
-                `(part.name='${part.name ?? "<unnamed>"}'). ` +
-                "Disable `tailFactoring` in the grammar optimizer for NFA/DFA paths.",
+            `compileRulesPart: ${tailCallNotYetSupportedMessage(part.name)}`,
         );
     }
     if (part.alternatives.length === 0) {
@@ -1494,9 +1473,7 @@ function compileRulesPartWithSlots(
 ): number {
     if (part.tailCall) {
         throw new Error(
-            `compileRulesPartWithSlots: tail RulesParts are not supported by the NFA compiler ` +
-                `(part.name='${part.name ?? "<unnamed>"}'). ` +
-                "Disable `tailFactoring` in the grammar optimizer for NFA/DFA paths.",
+            `compileRulesPartWithSlots: ${tailCallNotYetSupportedMessage(part.name)}`,
         );
     }
     if (part.alternatives.length === 0) {

@@ -80,3 +80,55 @@ export function deriveValue(rule: GrammarRule): ImplicitValueResult {
         value: { type: "variable", name: result.variable },
     };
 }
+
+/**
+ * Derive the value expression for a rule that has no explicit `->` value:
+ * a rule with exactly one variable-bearing part (whatever its type -
+ * wildcard, number, or a bound rules/string/phraseSet part) implicitly
+ * forwards that part's value, via `deriveValue` above - the single place
+ * that decides a rule's effective value, explicit or implicit.
+ *
+ * Not every rule needs a value - only when `requireValue` is set (i.e.
+ * the value is actually consumed: top-level action rules, or nested
+ * rules captured by a parent variable) do ambiguous (2+ variable-bearing
+ * parts) or missing values throw; otherwise both cases just resolve to
+ * `undefined`. `describeRule` is only invoked when an error is actually
+ * thrown, so it's safe to pass a cheap closure.
+ *
+ * This function is unaware of any particular compilation backend's
+ * structural limitations (e.g. the NFA/DFA backend's tailCall gap) -
+ * callers with such constraints must check for them separately, before
+ * calling this.
+ */
+export function deriveEffectiveValue(
+    rule: GrammarRule,
+    describeRule: () => string,
+    requireValue: boolean,
+): CompiledValueNode | undefined {
+    const result = deriveValue(rule);
+    if (result.kind === "value") {
+        return result.value;
+    }
+    // Not every rule needs a value - only rules whose value is actually
+    // consumed (top-level action rules, or nested rules captured by a
+    // parent variable) do. If nothing downstream needs this rule's value,
+    // neither an ambiguous nor a missing implicit value is an error.
+    if (!requireValue) {
+        return undefined;
+    }
+    const termsDescription =
+        rule.parts.length === 1
+            ? "has 1 term"
+            : `has ${rule.parts.length} terms`;
+    if (result.kind === "ambiguous") {
+        throw new Error(
+            `${describeRule()} ${termsDescription} but no value expression, ` +
+                `and more than one part carries a variable - the implicit value is ambiguous. ` +
+                `Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.`,
+        );
+    }
+    throw new Error(
+        `${describeRule()} ${termsDescription} but no value expression, and no part carries a variable. ` +
+            `Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.`,
+    );
+}

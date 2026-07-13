@@ -602,9 +602,10 @@ tail contract, so the non-tail wrapper builder is only reached when
 `tailFactoring` is off.
 
 **NFA compatibility.** Tail RulesParts are understood only by the
-NFA-interpreter matcher (`grammarMatcher.ts`). The NFA compiler /
-DFA path (`nfaCompiler.ts`) explicitly throws on encountering one,
-so consumers that route through the NFA/DFA path must leave
+AST-walking matcher (`grammarMatcher.ts`). The NFA compiler / DFA path
+(`nfaCompiler.ts`) explicitly throws on encountering one - this is a known gap and is not yet implemented. NFAs are naturally well-suited to sharing prefix states, but the equivalent frame-sharing
+/ variable-forwarding wiring for that backend hasn't been built yet.
+Until it is, consumers that route through the NFA/DFA path must leave
 `tailFactoring` off (and `promoteTailRulesParts`, which produces the
 same tail-call shape) when calling `optimizeGrammar` /
 `loadGrammarRules` directly.

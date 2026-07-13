@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Direct unit tests for the pure helpers in grammarValueDeriver.ts,
-// shared by grammarOptimizer.ts (`getImplicitDefaultValue`,
-// `checkForwardingPromotable`) and nfaCompiler.ts (`deriveEffectiveValue`).
+// Direct unit tests for the pure helpers in grammarValueDeriver.ts, shared
+// by grammarOptimizer.ts (`checkForwardingPromotable`) and
+// nfaCompiler.ts (via `deriveEffectiveValue`, which - along with
+// `deriveValue` - now lives in this module).
 // The consumers' own spec files (grammarOptimizerPromoteTail.spec.ts,
 // nfaFactoredPrefixValues.spec.ts) already cover end-to-end wiring and
 // throw/promote decisions; these tests isolate the pure derivation logic

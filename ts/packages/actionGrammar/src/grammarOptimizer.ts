@@ -23,7 +23,7 @@ import { leadingWordBoundaryScriptPrefix } from "./spacingScripts.js";
 import { leadingNonSeparatorRun } from "./grammarMatcher.js";
 import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
 import {
-    deriveValue,
+    deriveEffectiveValue,
     findSingleValueBearingPart,
 } from "./grammarValueDeriver.js";
 import {
@@ -3236,14 +3236,22 @@ function trySubstituteMembers(
     let bailed = false;
     const rewriteOne = (m: GrammarRule): GrammarRule => {
         const renamed = renameAllChildBindings(m.parts, m.value, renameState);
+        // requireValue: false - a member without a structurally-expressible
+        // default (e.g. an unbound single-part `phraseSet` / `string`)
+        // resolves to `undefined` here instead of throwing, so it can
+        // signal a local bailout below rather than aborting compilation.
         const effective =
             renamed.value !== undefined
                 ? renamed.value
-                : getImplicitDefaultValue({
-                      ...m,
-                      parts: renamed.parts,
-                      value: renamed.value,
-                  });
+                : deriveEffectiveValue(
+                      {
+                          ...m,
+                          parts: renamed.parts,
+                          value: renamed.value,
+                      },
+                      () => "",
+                      false,
+                  );
         if (effective === undefined) {
             // Member has no explicit value and we can't synthesize
             // one to substitute (e.g. unbound single-part
@@ -3295,25 +3303,6 @@ function trySubstituteMembers(
             ? EMPTY_FALLBACK_RULES
             : newAlts;
     return { dispatch: newDispatch, alternatives: fallback };
-}
-
-/**
- * Compute a value expression equivalent to what the matcher's
- * implicit-default rule would produce for `rule` if it were matched
- * standalone.  Returns `undefined` if the rule doesn't have a
- * structurally-expressible default (e.g. an unbound single-part
- * `phraseSet` / `string` whose value depends on the matched text).
- *
- * Used by the value-substitution branch of `tryPromoteTrailing` to
- * fold each member's effective value into the parent's value
- * expression. See `deriveValue` (grammarValueDeriver.ts) for
- * the shared derivation logic.
- */
-function getImplicitDefaultValue(
-    rule: GrammarRule,
-): CompiledValueNode | undefined {
-    const result = deriveValue(rule);
-    return result.kind === "value" ? result.value : undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

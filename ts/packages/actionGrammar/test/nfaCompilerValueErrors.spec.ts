@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Direct, hand-built-AST coverage of `deriveEffectiveValue`'s (nfaCompiler.ts)
-// error paths when a top-level rule has no explicit `->` value and no
-// single variable-bearing part to forward implicitly. These bypass the
+// Direct, hand-built-AST coverage of `deriveEffectiveValue`'s
+// (grammarValueDeriver.ts, called from nfaCompiler.ts) error paths when a
+// top-level rule has no explicit `->` value and no single
+// variable-bearing part to forward implicitly. These bypass the
 // loader's own validation to exercise `compileGrammarToNFA`'s throw
 // behavior directly, independent of any particular grammar-source
 // scenario (e.g. shared-prefix factoring - see
