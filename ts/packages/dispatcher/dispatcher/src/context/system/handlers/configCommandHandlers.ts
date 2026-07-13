@@ -218,6 +218,7 @@ function escapeAttr(s: string): string {
         .replace(/>/g, "&gt;");
 }
 
+// code-complexity-allow: builds agent-status HTML table; many per-column format branches
 function buildAgentStatusHtml(
     entries: [string, StatusRecords[string]][],
     agents: {
@@ -309,6 +310,7 @@ function buildAgentStatusHtml(
     return `<table style="border-collapse:collapse;font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.4"><thead><tr>${headerCols.join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
 }
 
+// code-complexity-allow: agent enable/disable status handler; many state branches
 async function showAgentStatus(
     toggle: AgentToggle,
     context: ActionContext<CommandHandlerContext>,
@@ -2105,6 +2107,7 @@ function effectiveProvider(): ProviderMode {
     return getActiveModelProvider() ?? "azure";
 }
 
+// code-complexity-allow: per-provider model enumeration; one branch per provider
 async function listModelsForProvider(
     provider: ProviderMode,
     context: ActionContext<CommandHandlerContext>,

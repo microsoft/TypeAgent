@@ -583,6 +583,7 @@ function clientIdOf(requestId: any): string | undefined {
 
 // Translate the bridge's history-entry shape (which mirrors the dispatcher's
 // internal recorded events) to chat-ui's HistoryEntry union.
+// code-complexity-allow: history-event replay mapper; one branch per DisplayLogEntry type
 function toChatPanelHistory(entries: any[]): HistoryEntry[] {
     // First pass: derive "First Message" timing per requestId — the elapsed
     // ms from the user's request to the first agent display message. The
@@ -732,6 +733,7 @@ function setStatus(
     chatPanel.setEnabled(true);
 }
 
+// code-complexity-allow: webview message router; single switch over all host message types
 window.addEventListener("message", (event) => {
     const msg = event.data;
     switch (msg.type) {

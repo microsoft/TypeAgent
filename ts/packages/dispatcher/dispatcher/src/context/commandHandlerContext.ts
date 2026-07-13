@@ -930,6 +930,7 @@ async function hostRemoveProvider(
     }
 }
 
+// code-complexity-allow: context bootstrap wiring many optional subsystems
 export async function initializeCommandHandlerContext(
     hostName: string,
     options?: DispatcherOptions,
@@ -1710,6 +1711,7 @@ export async function reloadSessionOnCommandHandlerContext(
     await setSessionOnCommandHandlerContext(context, session);
 }
 
+// code-complexity-allow: applies every session-config toggle; one branch per option
 export async function changeContextConfig(
     options: SessionOptions,
     context: ActionContext<CommandHandlerContext>,

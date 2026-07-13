@@ -272,6 +272,7 @@ function escapeHtml(s: string): string {
 // passes through.
 // Avoids pulling in highlight.js / Prism just to colorize the action
 // JSON popup.
+// code-complexity-allow: hand-rolled JSON scanner kept branchy to avoid regex backtracking
 function highlightJson(json: string): string {
     const escapeChar = (c: string): string =>
         c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c;

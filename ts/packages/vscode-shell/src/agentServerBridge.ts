@@ -1280,6 +1280,7 @@ export class AgentServerBridge {
         }
     }
 
+    // code-complexity-allow: webview message router; single switch over all message types
     private async handleWebviewMessage(
         msg: BridgeFromWebviewMessage,
         webview: vscode.Webview,

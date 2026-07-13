@@ -408,6 +408,7 @@ function buildListArgs(
 }
 
 // Build gh CLI args from an action name and parameters.
+// code-complexity-allow: hand-written gh CLI arg marshaller; one branch per action
 export function buildArgs(
     action: TypeAgentAction<GithubCliActions>,
 ): string[] | undefined {
@@ -897,6 +898,7 @@ function distillRepoField(
 }
 
 // Format gh status output — parse the │-table into clean markdown sections
+// code-complexity-allow: sequential gh status table parser; many format branches
 function formatStatusOutput(raw: string): string {
     const lines = raw.split("\n");
 
@@ -1317,6 +1319,7 @@ export async function validateAndResolveRepo(
     };
 }
 
+// code-complexity-allow: top-level action dispatch over all github-cli actions
 async function executeAction(
     action: TypeAgentAction<GithubCliActions>,
     context: ActionContext<unknown>,
