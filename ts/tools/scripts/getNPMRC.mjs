@@ -500,6 +500,65 @@ function parsePinnedPnpm() {
     };
 }
 
+// True if corepack's cache already holds pnpm at the exact pinned locator.
+function corepackPnpmAlreadySeeded(markerPath, reference) {
+    if (!fs.existsSync(markerPath)) return false;
+    try {
+        const existing = JSON.parse(fs.readFileSync(markerPath, "utf8"));
+        return existing?.locator?.reference === reference;
+    } catch {
+        return false;
+    }
+}
+
+// Extract the pnpm tarball into corepack's cache dir, stripping the tarball's
+// leading "package/" directory.
+async function extractPnpmTarball(buf, destDir, version) {
+    fs.rmSync(destDir, { recursive: true, force: true });
+    fs.mkdirSync(destDir, { recursive: true });
+    const tmpTgz = path.join(os.tmpdir(), `pnpm-${version}-${process.pid}.tgz`);
+    fs.writeFileSync(tmpTgz, buf);
+    try {
+        const { spawnSync } = await import("node:child_process");
+        const r = spawnSync(
+            "tar",
+            ["-xzf", tmpTgz, "-C", destDir, "--strip-components=1"],
+            { stdio: ["ignore", "ignore", "pipe"] },
+        );
+        if (r.error) throw r.error;
+        if (r.status !== 0) {
+            throw new Error(
+                `tar exited ${r.status}: ${r.stderr?.toString().trim() || "unknown error"}`,
+            );
+        }
+    } finally {
+        fs.rmSync(tmpTgz, { force: true });
+    }
+}
+
+// Write corepack's cache marker so it runs this version without a fetch. bin
+// entries come from the extracted package.json, path-normalized the way
+// corepack records them.
+function writeCorepackMarker(destDir, markerPath, version, hash) {
+    const extractedPkg = JSON.parse(
+        fs.readFileSync(path.join(destDir, "package.json"), "utf8"),
+    );
+    const rawBin =
+        typeof extractedPkg.bin === "string"
+            ? { [extractedPkg.name]: extractedPkg.bin }
+            : (extractedPkg.bin ?? {});
+    const bin = {};
+    for (const [name, rel] of Object.entries(rawBin)) {
+        bin[name] = rel.startsWith("./") ? rel : `./${rel}`;
+    }
+    const marker = {
+        locator: { name: "pnpm", reference: `${version}+${hash}` },
+        bin,
+        hash,
+    };
+    fs.writeFileSync(markerPath, JSON.stringify(marker), "utf8");
+}
+
 async function seedCorepackPnpm() {
     if (process.exitCode) return; // pull already failed; don't seed
 
@@ -518,20 +577,13 @@ async function seedCorepackPnpm() {
     const markerPath = path.join(destDir, ".corepack");
 
     // Already seeded with the exact pinned locator? Nothing to do.
-    if (fs.existsSync(markerPath)) {
-        try {
-            const existing = JSON.parse(fs.readFileSync(markerPath, "utf8"));
-            if (existing?.locator?.reference === `${version}+${hash}`) {
-                console.log(
-                    chalk.gray(
-                        `corepack already has pnpm@${version} cached — skipping seed.`,
-                    ),
-                );
-                return;
-            }
-        } catch {
-            // unreadable marker — fall through and re-seed
-        }
+    if (corepackPnpmAlreadySeeded(markerPath, `${version}+${hash}`)) {
+        console.log(
+            chalk.gray(
+                `corepack already has pnpm@${version} cached — skipping seed.`,
+            ),
+        );
+        return;
     }
 
     let registry;
@@ -593,52 +645,10 @@ async function seedCorepackPnpm() {
             );
         }
 
-        // Extract package/* into the cache dir, stripping the tarball's leading
-        // "package/" directory.
-        fs.rmSync(destDir, { recursive: true, force: true });
-        fs.mkdirSync(destDir, { recursive: true });
-        const tmpTgz = path.join(
-            os.tmpdir(),
-            `pnpm-${version}-${process.pid}.tgz`,
-        );
-        fs.writeFileSync(tmpTgz, buf);
-        try {
-            const { spawnSync } = await import("node:child_process");
-            const r = spawnSync(
-                "tar",
-                ["-xzf", tmpTgz, "-C", destDir, "--strip-components=1"],
-                { stdio: ["ignore", "ignore", "pipe"] },
-            );
-            if (r.error) throw r.error;
-            if (r.status !== 0) {
-                throw new Error(
-                    `tar exited ${r.status}: ${r.stderr?.toString().trim() || "unknown error"}`,
-                );
-            }
-        } finally {
-            fs.rmSync(tmpTgz, { force: true });
-        }
-
-        // Write corepack's cache marker so it runs this version without a fetch.
-        // bin entries come from the extracted package.json, path-normalized the
-        // way corepack records them.
-        const extractedPkg = JSON.parse(
-            fs.readFileSync(path.join(destDir, "package.json"), "utf8"),
-        );
-        const rawBin =
-            typeof extractedPkg.bin === "string"
-                ? { [extractedPkg.name]: extractedPkg.bin }
-                : (extractedPkg.bin ?? {});
-        const bin = {};
-        for (const [name, rel] of Object.entries(rawBin)) {
-            bin[name] = rel.startsWith("./") ? rel : `./${rel}`;
-        }
-        const marker = {
-            locator: { name: "pnpm", reference: `${version}+${hash}` },
-            bin,
-            hash,
-        };
-        fs.writeFileSync(markerPath, JSON.stringify(marker), "utf8");
+        // Extract package/* into the cache dir and write corepack's cache
+        // marker so it runs this version without a fetch.
+        await extractPnpmTarball(buf, destDir, version);
+        writeCorepackMarker(destDir, markerPath, version, hash);
 
         console.log(
             chalk.green(
