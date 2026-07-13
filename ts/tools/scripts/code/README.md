@@ -90,8 +90,8 @@ JSON file that grandfathers offenders by position. It remains the mechanism for
 `code-circular` (a cycle spans files, so it has no single line to annotate);
 `code-complexity`, `code-lint`, and `code-debt` still honor it as a fallback but
 emit a deprecation notice — prefer inline markers there. Shape is
-`{ "exceptions": [ ... ] }` (a bare array also works);
-`--ratchet`/`--gate` honor it, report modes ignore it:
+`{ "exceptions": [ ... ] }` (a bare array also works). `--ratchet`/`--gate`
+honor it, and report modes ignore it:
 
 - **code-lint** / **code-complexity** / **code-debt:** entries are
   `{ "file": "packages/foo/src/bar.ts", "line": 42 }` (paths are normalized, so
