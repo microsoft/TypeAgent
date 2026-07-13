@@ -952,6 +952,22 @@ function buildFallbackCopilotQuery(
     return `${query}\n\nAttached context files:\n${list}`;
 }
 
+type LaunchCopilotChatAction = {
+    parameters?: {
+        query?: string;
+        mode?: "agent" | "ask";
+        isPartialQuery?: boolean;
+        attachScreenshot?: boolean;
+        attachFiles?: string[];
+        newSession?: boolean;
+        newSessionLocation?: "view" | "editor" | "window";
+    };
+};
+
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
 // Hand the current TypeAgent conversation (+ optional dev-captures and a
 // screenshot) to native GitHub Copilot Chat via `workbench.action.chat.open`.
 // By default this starts a fresh chat session (in a new chat editor) and
@@ -959,7 +975,7 @@ function buildFallbackCopilotQuery(
 // whatever chat the user already had open.
 // code-complexity-allow: command/compat flow is intentionally branch-heavy to preserve behavior across VS Code versions.
 export async function handleLaunchCopilotChatAction(
-    action: any,
+    action: LaunchCopilotChatAction,
 ): Promise<ActionResult> {
     const params = action.parameters ?? {};
     const query: string = typeof params.query === "string" ? params.query : "";
@@ -1038,7 +1054,7 @@ export async function handleLaunchCopilotChatAction(
             attachScreenshot,
             attachFiles,
         });
-    } catch (err: any) {
+    } catch {
         // Older VS Code builds may not support attachScreenshot / attachFiles.
         // Fall back to embedding the attachment paths in the query text.
         try {
@@ -1048,12 +1064,12 @@ export async function handleLaunchCopilotChatAction(
                 isPartialQuery: true,
             });
             usedFallback = true;
-        } catch (fallbackErr: any) {
+        } catch (fallbackErr: unknown) {
             return {
                 handled: true,
-                message: `❌ Failed to open GitHub Copilot Chat: ${
-                    fallbackErr?.message ?? String(fallbackErr)
-                }`,
+                message: `❌ Failed to open GitHub Copilot Chat: ${getErrorMessage(
+                    fallbackErr,
+                )}`,
             };
         }
     }
