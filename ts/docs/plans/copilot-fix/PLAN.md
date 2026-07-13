@@ -55,24 +55,24 @@ agent" intent.
 
 ## Aligned decisions
 
-| Topic | Decision |
-| --- | --- |
-| Where it runs | Start with the VS Code shell (`packages/vscode-shell`); design is frontend-agnostic so the Electron shell (`packages/shell`) works later for free. |
-| Execution surface | **Option A** — dispatcher orchestrates; VS Code automation runs through the `code` agent → Coda WebSocket bridge. |
-| Target Copilot | Default **native GitHub Copilot Chat** in **agent** mode. `--target typeagent` (route to the TypeAgent `vscode-chat` participant) is reserved for later. |
-| Conversation source | The **raw display log** (`displayLog.getEntries()`), delivered as a JSON file attachment. **Not** `conversationMemory` (that is indexed, not raw). |
-| Developer-mode data | When developer mode is on, also attach the `dev-captures` JSON for the failing request(s) — richer "why did it fail" context. |
-| Screenshot | Native `attachScreenshot: true` (VS Code captures the focused window and attaches it as an image). Avoids a temp file and the file-permission prompt. |
-| Submit behavior | `isPartialQuery: true` — pre-fill the prompt, let the user review the large context before sending. |
-| Trigger | Manual `@copilot fix` only (no automatic on-failure affordance in v1). |
+| Topic               | Decision                                                                                                                                                 |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Where it runs       | Start with the VS Code shell (`packages/vscode-shell`); design is frontend-agnostic so the Electron shell (`packages/shell`) works later for free.       |
+| Execution surface   | **Option A** — dispatcher orchestrates; VS Code automation runs through the `code` agent → Coda WebSocket bridge.                                        |
+| Target Copilot      | Default **native GitHub Copilot Chat** in **agent** mode. `--target typeagent` (route to the TypeAgent `vscode-chat` participant) is reserved for later. |
+| Conversation source | The **raw display log** (`displayLog.getEntries()`), delivered as a JSON file attachment. **Not** `conversationMemory` (that is indexed, not raw).       |
+| Developer-mode data | When developer mode is on, also attach the `dev-captures` JSON for the failing request(s) — richer "why did it fail" context.                            |
+| Screenshot          | Native `attachScreenshot: true` (VS Code captures the focused window and attaches it as an image). Avoids a temp file and the file-permission prompt.    |
+| Submit behavior     | `isPartialQuery: true` — pre-fill the prompt, let the user review the large context before sending.                                                      |
+| Trigger             | Manual `@copilot fix` only (no automatic on-failure affordance in v1).                                                                                   |
 
 ## Conversation data sources
 
-| Source | Contents | Availability | Role |
-| --- | --- | --- | --- |
-| `systemContext.displayLog.getEntries()` → `DisplayLogEntry[]` | Raw human-visible conversation: user requests, agent display bubbles, errors, command results | Always | **Primary** → `conversation.json` |
-| `<sessionDir>/dev-captures/translate-<ts>-<requestId>.json` (`DevTrace`) | Per-translation: request, history context, resolved actions, **full model prompt(s)** | Developer mode ON + persistent session | **Supplementary** → attach capture(s) for the failing request |
-| `systemContext.conversationMemory` | Indexed / knowledge-extracted messages | Persistent sessions | ❌ Not used (not the raw log) |
+| Source                                                                   | Contents                                                                                      | Availability                           | Role                                                          |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------- |
+| `systemContext.displayLog.getEntries()` → `DisplayLogEntry[]`            | Raw human-visible conversation: user requests, agent display bubbles, errors, command results | Always                                 | **Primary** → `conversation.json`                             |
+| `<sessionDir>/dev-captures/translate-<ts>-<requestId>.json` (`DevTrace`) | Per-translation: request, history context, resolved actions, **full model prompt(s)**         | Developer mode ON + persistent session | **Supplementary** → attach capture(s) for the failing request |
+| `systemContext.conversationMemory`                                       | Indexed / knowledge-extracted messages                                                        | Persistent sessions                    | ❌ Not used (not the raw log)                                 |
 
 `DisplayLogEntry` union (`packages/dispatcher/types/src/displayLogEntry.ts`):
 `SetDisplayEntry | AppendDisplayEntry | SetDisplayInfoEntry | NotifyEntry |
@@ -190,11 +190,11 @@ flowchart LR
 
 ## Files touched
 
-| File | Change |
-| --- | --- |
-| `packages/dispatcher/dispatcher/src/context/system/handlers/copilotCommandHandlers.ts` | New `FixWithCopilotCommandHandler`; register `fix` subcommand. |
-| `packages/agents/code/src/vscode/editorCodeActionsSchema.ts` (+ rebuilt `dist/editorSchema.pas.json`) | New `EditorActionLaunchCopilotChat` action type. |
-| `packages/coda/src/handleEditorCodeActions.ts`, `packages/coda/src/helpers.ts` | New `launchCopilotChat` handler → `workbench.action.chat.open`. |
+| File                                                                                                  | Change                                                          |
+| ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `packages/dispatcher/dispatcher/src/context/system/handlers/copilotCommandHandlers.ts`                | New `FixWithCopilotCommandHandler`; register `fix` subcommand.  |
+| `packages/agents/code/src/vscode/editorCodeActionsSchema.ts` (+ rebuilt `dist/editorSchema.pas.json`) | New `EditorActionLaunchCopilotChat` action type.                |
+| `packages/coda/src/handleEditorCodeActions.ts`, `packages/coda/src/helpers.ts`                        | New `launchCopilotChat` handler → `workbench.action.chat.open`. |
 
 No changes to the `screencapture` agent (screenshot is native), and no use of
 `conversationMemory` / `previousRequests`.

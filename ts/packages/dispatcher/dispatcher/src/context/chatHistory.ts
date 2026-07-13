@@ -362,9 +362,7 @@ export function createChatHistory(init: boolean): ChatHistory {
                     `${index}: ${JSON.stringify(entry, undefined, 2)}`,
             );
         },
-        getRecentEntries(
-            maxCount: number,
-        ): {
+        getRecentEntries(maxCount: number): {
             role: "user" | "assistant";
             text: string;
             source?: string;

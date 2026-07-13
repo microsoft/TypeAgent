@@ -1915,7 +1915,9 @@ class ConfigExecutionScriptReuseCommandHandler implements CommandHandler {
     }
 }
 
-class ConfigExecutionConversationAnswerCommandHandler implements CommandHandler {
+class ConfigExecutionConversationAnswerCommandHandler
+    implements CommandHandler
+{
     public readonly description =
         "How conversation questions are answered: 'lookup' (conversation-memory lookup, reasoning as fallback), 'reasoning-first' (reasoning agent primary, lookup as fallback), or 'reasoning-only' (remove the lookup action; reasoning handles conversation Q&A)";
     public readonly parameters = {

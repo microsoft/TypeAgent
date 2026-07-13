@@ -1377,16 +1377,13 @@ async function executeReasoningWithTracing(
 
         // Track cache read/write tokens separately from fresh input tokens so
         // the UI can report them as a distinct "cached" figure.
-        const unsubscribeUsage = session.on(
-            "assistant.usage",
-            (event: any) => {
-                usageInputTokens += event.data?.inputTokens ?? 0;
-                usageOutputTokens += event.data?.outputTokens ?? 0;
-                usageCachedTokens +=
-                    (event.data?.cacheReadTokens ?? 0) +
-                    (event.data?.cacheWriteTokens ?? 0);
-            },
-        );
+        const unsubscribeUsage = session.on("assistant.usage", (event: any) => {
+            usageInputTokens += event.data?.inputTokens ?? 0;
+            usageOutputTokens += event.data?.outputTokens ?? 0;
+            usageCachedTokens +=
+                (event.data?.cacheReadTokens ?? 0) +
+                (event.data?.cacheWriteTokens ?? 0);
+        });
 
         try {
             const prompt = buildPromptWithContext(originalRequest, context);

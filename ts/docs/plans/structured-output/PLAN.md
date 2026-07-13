@@ -20,7 +20,7 @@ markdown bullet string in `formatListResults()`:
 
 In a narrow chat column this renders as a cramped, hard-to-scan list:
 the status (`DRAFT`/`OPEN`) is inline plain text and the branch name
-wraps into the title. The agent *had* clean typed fields (number,
+wraps into the title. The agent _had_ clean typed fields (number,
 title, state, url, branch, isDraft, createdAt) and discarded all of
 them.
 
@@ -32,7 +32,7 @@ UI:
   markdown string.
 - **Programmatic consumers** ("or otherwise" clients — MCP / Claude
   Code, the copilot plugin, the `taskflow` script API) have to
-  *re-parse* the flattened text. `taskFlowScriptApi.mts` already does
+  _re-parse_ the flattened text. `taskFlowScriptApi.mts` already does
   exactly this: `extractText(result)` followed by `tryParseJson(text)`.
 
 This effort gives agents a first-class way to emit **structured output**
@@ -57,7 +57,7 @@ default** (client may sort/filter unless the agent marks them
 This is deliberately **A + C together**:
 
 - **A — semantic view-model**: typed presentation blocks a generic
-  renderer can turn into rich UI for *all* agents.
+  renderer can turn into rich UI for _all_ agents.
 - **C — hybrid**: the view-model travels alongside optional raw data, so
   programmatic clients get typed objects and UIs get rich rendering,
   with the existing `displayContent` text as the universal fallback.
@@ -86,7 +86,7 @@ This is deliberately **A + C together**:
   it). The type model reserves fields for it (`cell.href`, a future
   `block.action`) but no client wires it up in v1.
 - Rich tables in the CLI — the CLI gets the text fallback.
-- JSON Schema *validation* of `rawData` (the field is carried, not
+- JSON Schema _validation_ of `rawData` (the field is carried, not
   enforced).
 - Migrating other list-shaped agents (`list`, `calendar`, `email`,
   `search`). They can adopt the same primitives later; `github-cli` is
@@ -99,8 +99,8 @@ This is deliberately **A + C together**:
   `MessageContent = string | string[] | string[][]`. Note `string[][]`
   is already a rudimentary **table**.
 - **`TypedDisplayContent`** carries `type: "markdown" | "html" | "iframe"
-  | "text"`, an optional `kind`, `speak`, and **`alternates`** — a list
-  of alternate representations of the *same* content that clients pick
+| "text"`, an optional `kind`, `speak`, and **`alternates`** — a list
+  of alternate representations of the _same_ content that clients pick
   from via `getContentForType()`
   (`packages/agentSdk/src/helpers/displayHelpers.ts`). This is the seed
   of the "each client picks the best format" idea we generalize.
@@ -136,13 +136,13 @@ This is deliberately **A + C together**:
 
 ### Why not just N `appendDisplay` calls?
 
-An agent can already *visually* stack a table then an image by making
+An agent can already _visually_ stack a table then an image by making
 two `appendDisplay(..., "block")` calls (the `chat` agent does this).
 But those are **N independent records** — N history entries, N memory
 rows, no single machine-readable payload, and ordering across async
 appends can race. Bundling heterogeneous typed blocks into **one**
 `displayContent` is a primary reason to model structured output as a
-*document of blocks*. `appendDisplay` remains for the genuinely
+_document of blocks_. `appendDisplay` remains for the genuinely
 streaming case (transient status → then the bundled result).
 
 ## Design
@@ -156,76 +156,129 @@ heading, a table, a note, and a thumbnail is a four-block document.
 ```typescript
 // packages/agentSdk/src/display.ts (additions)
 
-export type BadgeTone =
-    | "neutral" | "info" | "success" | "warning" | "error";
+export type BadgeTone = "neutral" | "info" | "success" | "warning" | "error";
 
 export type TableCellType =
-    | "text" | "link" | "badge" | "number" | "date" | "code";
+  | "text"
+  | "link"
+  | "badge"
+  | "number"
+  | "date"
+  | "code";
 
 export interface TableColumn {
-    id: string;
-    header: string;
-    type?: TableCellType;            // default "text"
-    align?: "left" | "right" | "center";
-    sortable?: boolean;              // per-column override of table.sortable
+  id: string;
+  header: string;
+  type?: TableCellType; // default "text"
+  align?: "left" | "right" | "center";
+  sortable?: boolean; // per-column override of table.sortable
 }
 
 export type TableCell =
-    | string
-    | number
-    | {
-          text: string;
-          href?: string;             // link target (type "link", or any cell)
-          badge?: BadgeTone;         // badge tone (type "badge")
-          tooltip?: string;
-      };
+  | string
+  | number
+  | {
+      text: string;
+      href?: string; // link target (type "link", or any cell)
+      badge?: BadgeTone; // badge tone (type "badge")
+      tooltip?: string;
+    };
 
 export interface TableBlock {
-    kind: "table";
-    columns: TableColumn[];
-    rows: TableCell[][];
-    caption?: string;
-    // Affordances — interactive by default.
-    sortable?: boolean;              // default: true
-    filterable?: boolean;            // default: false
-    readonly?: boolean;              // lock order + content exactly as sent
+  kind: "table";
+  columns: TableColumn[];
+  rows: TableCell[][];
+  caption?: string;
+  // Affordances — interactive by default.
+  sortable?: boolean; // default: true
+  filterable?: boolean; // default: false
+  readonly?: boolean; // lock order + content exactly as sent
 }
 
-export interface HeadingBlock { kind: "heading"; text: string; level?: 1 | 2 | 3; }
-export interface TextBlock { kind: "text"; text: MessageContent; format?: "text" | "markdown"; }
-export interface ListItem { text: string; href?: string; subtitle?: string; badges?: BadgeTone[]; }
-export interface ListBlock { kind: "list"; ordered?: boolean; items: ListItem[]; }
-export interface KeyValuePair { label: string; value: TableCell; }
-export interface KeyValueBlock { kind: "keyValue"; pairs: KeyValuePair[]; }
-export interface CardBlock { kind: "card"; title?: string; subtitle?: string; fields?: KeyValuePair[]; href?: string; }
-export interface ImageBlock { kind: "image"; src: string; alt?: string; caption?: string; width?: number; height?: number; }
-export interface CodeBlock { kind: "code"; code: string; language?: string; }
-export interface DividerBlock { kind: "divider"; }
+export interface HeadingBlock {
+  kind: "heading";
+  text: string;
+  level?: 1 | 2 | 3;
+}
+export interface TextBlock {
+  kind: "text";
+  text: MessageContent;
+  format?: "text" | "markdown";
+}
+export interface ListItem {
+  text: string;
+  href?: string;
+  subtitle?: string;
+  badges?: BadgeTone[];
+}
+export interface ListBlock {
+  kind: "list";
+  ordered?: boolean;
+  items: ListItem[];
+}
+export interface KeyValuePair {
+  label: string;
+  value: TableCell;
+}
+export interface KeyValueBlock {
+  kind: "keyValue";
+  pairs: KeyValuePair[];
+}
+export interface CardBlock {
+  kind: "card";
+  title?: string;
+  subtitle?: string;
+  fields?: KeyValuePair[];
+  href?: string;
+}
+export interface ImageBlock {
+  kind: "image";
+  src: string;
+  alt?: string;
+  caption?: string;
+  width?: number;
+  height?: number;
+}
+export interface CodeBlock {
+  kind: "code";
+  code: string;
+  language?: string;
+}
+export interface DividerBlock {
+  kind: "divider";
+}
 
 export type StructuredBlock =
-    | HeadingBlock | TextBlock | TableBlock | ListBlock
-    | KeyValueBlock | CardBlock | ImageBlock | CodeBlock | DividerBlock;
+  | HeadingBlock
+  | TextBlock
+  | TableBlock
+  | ListBlock
+  | KeyValueBlock
+  | CardBlock
+  | ImageBlock
+  | CodeBlock
+  | DividerBlock;
 
 export interface StructuredContent {
-    type: "structured";
-    blocks: StructuredBlock[];
-    rawData?: unknown;               // machine-readable payload (C)
-    dataSchema?: unknown;            // optional JSON Schema for rawData
-    kind?: DisplayMessageKind;
-    speak?: boolean;
-    // SDK auto-derives a markdown/text alternate so unknowing clients degrade.
-    alternates?: Array<{ type: DisplayType; content: MessageContent }>;
+  type: "structured";
+  blocks: StructuredBlock[];
+  rawData?: unknown; // machine-readable payload (C)
+  dataSchema?: unknown; // optional JSON Schema for rawData
+  kind?: DisplayMessageKind;
+  speak?: boolean;
+  // SDK auto-derives a markdown/text alternate so unknowing clients degrade.
+  alternates?: Array<{ type: DisplayType; content: MessageContent }>;
 }
 
 export type DisplayContent =
-    | MessageContent
-    | TypedDisplayContent
-    | StructuredContent;             // <- new
+  | MessageContent
+  | TypedDisplayContent
+  | StructuredContent; // <- new
 ```
 
 ### Affordances — interactive by default
 
-Tables are `sortable` by default; a client that can sort *may* offer it.
+Tables are `sortable` by default; a client that can sort _may_ offer it.
 The agent opts **out** with `readonly: true` when order or content is
 semantically meaningful (e.g. a ranked "top 5"), or refines with
 per-column `sortable`. `readonly` is a hard instruction: the client
@@ -242,7 +295,7 @@ describes it. This is the "or otherwise" channel: MCP forwards it as
 `structuredContent`; `taskflow` can read it directly.
 
 **Source-of-truth guidance**: provide a `fromRecords(objects,
-columnSpec)` SDK helper that builds a `TableBlock` *and* stashes the
+columnSpec)` SDK helper that builds a `TableBlock` _and_ stashes the
 objects as `rawData` in one call, so an adopter can't let the table and
 the data drift.
 
@@ -267,19 +320,19 @@ before rich rendering lands.
 
 ## Client topology
 
-| Renderer | Clients it powers | v1 role |
-| --- | --- | --- |
-| `chat-ui` `setContent.ts` | Electron shell, vscode-shell webview, Chrome extension | Rich block rendering + interactivity |
-| `vscode-chat` `displayRender.ts` | VS Code Copilot chat participant | Static markdown blocks (tables, images, cards) |
-| `cli` `enhancedConsole.ts` | CLI / interactiveApp | Text fallback |
-| `commandExecutor` `commandServer.ts` | MCP / Claude Code | Text fallback (+ `rawData` → `structuredContent`, Phase 6) |
-| `copilot-plugin` `message-formatter.ts` | Copilot plugin | Text fallback |
+| Renderer                                | Clients it powers                                      | v1 role                                                    |
+| --------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------- |
+| `chat-ui` `setContent.ts`               | Electron shell, vscode-shell webview, Chrome extension | Rich block rendering + interactivity                       |
+| `vscode-chat` `displayRender.ts`        | VS Code Copilot chat participant                       | Static markdown blocks (tables, images, cards)             |
+| `cli` `enhancedConsole.ts`              | CLI / interactiveApp                                   | Text fallback                                              |
+| `commandExecutor` `commandServer.ts`    | MCP / Claude Code                                      | Text fallback (+ `rawData` → `structuredContent`, Phase 6) |
+| `copilot-plugin` `message-formatter.ts` | Copilot plugin                                         | Text fallback                                              |
 
 Implementing rich rendering in `chat-ui` covers three clients at once.
 
 ## Phased plan
 
-### Phase 1 — SDK foundation *(blocks everything)*
+### Phase 1 — SDK foundation _(blocks everything)_
 
 - Add the types above to `packages/agentSdk/src/display.ts`.
 - Add builder helpers + fallback derivation in
@@ -291,7 +344,7 @@ Implementing rich rendering in `chat-ui` covers three clients at once.
 - Export new types/helpers from `packages/agentSdk/src/index.ts`.
 - Unit tests for derivation (blocks → markdown/text) and builders.
 
-### Phase 2 — Renderer safety net *(after 1; parallel per client)*
+### Phase 2 — Renderer safety net _(after 1; parallel per client)_
 
 Teach each renderer to detect `type: "structured"` and render the
 derived fallback (no throw, no regression):
@@ -301,7 +354,7 @@ derived fallback (no throw, no regression):
 `packages/commandExecutor/src/commandServer.ts`,
 `packages/copilot-plugin/src/shared/message-formatter.ts`.
 
-### Phase 3 — Rich rendering *(after 1; 3a/3b parallel)*
+### Phase 3 — Rich rendering _(after 1; 3a/3b parallel)_
 
 - **3a** `packages/chat-ui/src/setContent.ts`: render blocks → HTML
   (typed table with link/badge/date cells, image block, card / list /
@@ -312,25 +365,26 @@ derived fallback (no throw, no regression):
   markdown (reuse `tableToMarkdown`, markdown images, card sections).
   Static.
 
-### Phase 4 — Interactivity *(after 3a)*
+### Phase 4 — Interactivity _(after 3a)_
 
 Client-side sort / filter on `TableBlock` in `chat-ui`, honoring
 `readonly` / `sortable` / `filterable`. chat-ui clients only.
 
-### Phase 5 — First adopter: `github-cli` *(after 1; visually validated by 3)*
+### Phase 5 — First adopter: `github-cli` _(after 1; visually validated by 3)_
 
 Rewrite `formatListResults` and the list/view actions in
 `packages/agents/github-cli/src/github-cliActionHandler.ts` — `prList`,
 `issueList`, `myPullRequests`, `searchRepos`, `dependabotAlerts`,
 contributors, and `repoView` (→ keyValue) — to emit `StructuredContent`
-+ `rawData` via `fromRecords`. The SDK-derived markdown fallback must
-match or beat today's output. Update the handler unit tests.
+
+- `rawData` via `fromRecords`. The SDK-derived markdown fallback must
+  match or beat today's output. Update the handler unit tests.
 
 Example — the `prList` table: an `#id` **link** column → `url`, a
 **text** title column, a **badge** state column (`DRAFT`/`OPEN` colored
 by tone), a **code** branch column; `sortable: true`.
 
-### Phase 6 — Programmatic "or otherwise" *(after 1 + 5)*
+### Phase 6 — Programmatic "or otherwise" _(after 1 + 5)_
 
 - `packages/commandExecutor/src/commandServer.ts` forwards `rawData` as
   MCP `structuredContent` (and optionally `outputSchema` from
@@ -382,21 +436,21 @@ by tone), a **code** branch column; `sortable: true`.
 
 ## Key files
 
-| Area | Path |
-| --- | --- |
-| SDK display types | `packages/agentSdk/src/display.ts` |
-| SDK action result | `packages/agentSdk/src/action.ts` |
-| SDK display helpers | `packages/agentSdk/src/helpers/displayHelpers.ts` |
-| SDK action helpers | `packages/agentSdk/src/helpers/actionHelpers.ts` |
-| SDK exports | `packages/agentSdk/src/index.ts` |
-| Rich renderer (shell/webview/ext) | `packages/chat-ui/src/setContent.ts` |
-| Rich renderer styles | `packages/chat-ui/styles/chat.css` |
-| VS Code chat participant renderer | `packages/vscode-chat/src/displayRender.ts` |
-| CLI renderer | `packages/cli/src/enhancedConsole.ts` |
-| MCP server | `packages/commandExecutor/src/commandServer.ts` |
-| Copilot formatter | `packages/copilot-plugin/src/shared/message-formatter.ts` |
-| Dispatcher emit | `packages/dispatcher/dispatcher/src/execute/actionHandlers.ts` |
-| Display log | `packages/dispatcher/dispatcher/src/displayLog.ts` |
-| RPC transport | `packages/agentRpc/src/types.ts` |
-| First adopter | `packages/agents/github-cli/src/github-cliActionHandler.ts` |
-| Taskflow consumer | `packages/agents/taskflow/src/script/taskFlowScriptApi.mts` |
+| Area                              | Path                                                           |
+| --------------------------------- | -------------------------------------------------------------- |
+| SDK display types                 | `packages/agentSdk/src/display.ts`                             |
+| SDK action result                 | `packages/agentSdk/src/action.ts`                              |
+| SDK display helpers               | `packages/agentSdk/src/helpers/displayHelpers.ts`              |
+| SDK action helpers                | `packages/agentSdk/src/helpers/actionHelpers.ts`               |
+| SDK exports                       | `packages/agentSdk/src/index.ts`                               |
+| Rich renderer (shell/webview/ext) | `packages/chat-ui/src/setContent.ts`                           |
+| Rich renderer styles              | `packages/chat-ui/styles/chat.css`                             |
+| VS Code chat participant renderer | `packages/vscode-chat/src/displayRender.ts`                    |
+| CLI renderer                      | `packages/cli/src/enhancedConsole.ts`                          |
+| MCP server                        | `packages/commandExecutor/src/commandServer.ts`                |
+| Copilot formatter                 | `packages/copilot-plugin/src/shared/message-formatter.ts`      |
+| Dispatcher emit                   | `packages/dispatcher/dispatcher/src/execute/actionHandlers.ts` |
+| Display log                       | `packages/dispatcher/dispatcher/src/displayLog.ts`             |
+| RPC transport                     | `packages/agentRpc/src/types.ts`                               |
+| First adopter                     | `packages/agents/github-cli/src/github-cliActionHandler.ts`    |
+| Taskflow consumer                 | `packages/agents/taskflow/src/script/taskFlowScriptApi.mts`    |

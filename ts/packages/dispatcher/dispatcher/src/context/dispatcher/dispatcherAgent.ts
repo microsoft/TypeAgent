@@ -133,8 +133,7 @@ async function executeDispatcherAction(
         case "dispatcher.lookup":
             switch (action.actionName) {
                 case "lookupAndAnswerConversation": {
-                    const systemContext =
-                        context.sessionContext.agentContext;
+                    const systemContext = context.sessionContext.agentContext;
                     const config = systemContext.session.getConfig();
                     const strategy = config.execution.conversationAnswer;
                     const reasoningAvailable =
