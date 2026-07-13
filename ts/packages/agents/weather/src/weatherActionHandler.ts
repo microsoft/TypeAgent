@@ -169,14 +169,22 @@ async function handleGetForecast(
     }
 
     const tempUnit = units === "celsius" ? "°C" : "°F";
-    const rows = forecastData.map((day, index) => {
+    const rows = forecastData.map((day) => {
         const conditions = getWeatherDescription(day.weatherCode);
         const precip =
             day.precipitationProbability > 0
                 ? `${day.precipitationProbability}%`
                 : "—";
+        // Derive the weekday name from the ISO date. Append T00:00 so the
+        // date is parsed in local time rather than UTC (which can shift the
+        // day backward for negative-offset timezones).
+        const weekday = day.date
+            ? new Date(`${day.date}T00:00`).toLocaleDateString(undefined, {
+                  weekday: "long",
+              })
+            : "";
         return [
-            `Day ${index + 1}`,
+            weekday,
             day.date,
             conditions,
             `${Math.round(day.maxTemp)}${tempUnit}`,
@@ -204,7 +212,7 @@ async function handleGetForecast(
             {
                 kind: "table",
                 columns: [
-                    { id: "day", header: "Day" },
+                    { id: "day", header: "Weekday" },
                     { id: "date", header: "Date", type: "date" },
                     { id: "conditions", header: "Conditions" },
                     { id: "high", header: "High", align: "right" },
