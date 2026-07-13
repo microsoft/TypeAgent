@@ -1439,7 +1439,7 @@ export class ChatPanel {
         this.textInput.textContent = full;
         this.sendButton.disabled = !full.trim();
         this.clearCompletions();
-        this.moveCursorToEnd();
+        this.placeCaretAtEnd();
     }
 
     private cycleCompletion(delta: number) {
@@ -1456,21 +1456,6 @@ export class ChatPanel {
         this.ghostSpan.textContent = "";
     }
 
-    private moveCursorToEnd() {
-        const range = document.createRange();
-        const sel = window.getSelection();
-        if (this.textInput.childNodes.length > 0) {
-            const lastNode =
-                this.textInput.childNodes[this.textInput.childNodes.length - 1];
-            range.setStartAfter(lastNode);
-        } else {
-            range.setStart(this.textInput, 0);
-        }
-        range.collapse(true);
-        sel?.removeAllRanges();
-        sel?.addRange(range);
-    }
-
     private navigateHistory(delta: number) {
         if (this.commandHistory.length === 0) return;
         this.historyIndex = Math.max(
@@ -1483,6 +1468,10 @@ export class ChatPanel {
             this.textInput.textContent = "";
         }
         this.sendButton.disabled = !this.textInput.textContent?.trim();
+        // Place the caret at the end of the recalled text so the user
+        // can continue editing from where the input ends, rather than
+        // leaving it stuck at the start of the input box.
+        this.placeCaretAtEnd();
     }
 
     private shouldAddToHistory(text: string) {
