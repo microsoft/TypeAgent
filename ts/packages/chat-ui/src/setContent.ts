@@ -86,13 +86,17 @@ function renderTableCell(
 }
 
 function renderTableBlock(block: TableBlock): string {
-    const { columns, rows, caption, sortable, filterable, readonly } = block;
+    const { columns, rows, caption, sortable, filterable, readonly, pageSize } =
+        block;
     const sortAttr =
         !readonly && sortable !== false ? ' data-sc-sortable="true"' : "";
     const filterAttr =
         !readonly && filterable ? ' data-sc-filterable="true"' : "";
+    const paginate =
+        typeof pageSize === "number" && pageSize > 0 && rows.length > pageSize;
+    const pageAttr = paginate ? ` data-sc-page-size="${pageSize}"` : "";
     const parts: string[] = [
-        `<div class="sc-table-wrap"><table class="sc-table"${sortAttr}${filterAttr}>`,
+        `<div class="sc-table-wrap"><table class="sc-table"${sortAttr}${filterAttr}${pageAttr}>`,
     ];
     if (caption) {
         parts.push(`<caption class="sc-caption">${esc(caption)}</caption>`);
@@ -109,8 +113,12 @@ function renderTableBlock(block: TableBlock): string {
         parts.push(`<th scope="col"${align}>${esc(col.header)}${sortBtn}</th>`);
     }
     parts.push("</tr></thead><tbody>");
-    for (const row of rows) {
-        parts.push("<tr>");
+    for (let ri = 0; ri < rows.length; ri++) {
+        const row = rows[ri];
+        // Rows beyond the first page start hidden; the "Show more" control
+        // (wired in attachTableInteractivity) reveals them in batches.
+        const hidden = paginate && ri >= pageSize! ? ' class="sc-row-hidden"' : "";
+        parts.push(`<tr${hidden}>`);
         for (let ci = 0; ci < columns.length; ci++) {
             const col = columns[ci];
             const cell = row[ci] ?? "";
@@ -120,7 +128,14 @@ function renderTableBlock(block: TableBlock): string {
         }
         parts.push("</tr>");
     }
-    parts.push("</tbody></table></div>");
+    parts.push("</tbody></table>");
+    if (paginate) {
+        const remaining = rows.length - pageSize!;
+        parts.push(
+            `<button class="sc-show-more" data-sc-remaining="${remaining}">Show more (${remaining})</button>`,
+        );
+    }
+    parts.push("</div>");
     return parts.join("");
 }
 
@@ -266,7 +281,9 @@ function attachTableInteractivity(root: HTMLElement): void {
         (table) => {
             const canSort = table.dataset.scSortable === "true";
             const canFilter = table.dataset.scFilterable === "true";
-            if (!canSort && !canFilter) return;
+            const pageSize = parseInt(table.dataset.scPageSize ?? "", 10);
+            const canPaginate = Number.isFinite(pageSize) && pageSize > 0;
+            if (!canSort && !canFilter && !canPaginate) return;
 
             const tbody =
                 table.querySelector<HTMLTableSectionElement>("tbody");
@@ -283,6 +300,42 @@ function attachTableInteractivity(root: HTMLElement): void {
             // Per-table sort state.
             let sortColId: string | null = null;
             let sortDir: "asc" | "desc" | "none" = "none";
+
+            // Per-table pagination state. `filtering` is shared so sort/filter
+            // can suspend or re-apply the row cap. When a filter query is
+            // active it takes precedence (all matches shown, cap suspended).
+            let filtering = false;
+            let visibleCount = canPaginate ? pageSize : Infinity;
+            const wrapEl = table.closest<HTMLElement>(".sc-table-wrap");
+            const showMoreBtn =
+                wrapEl?.querySelector<HTMLButtonElement>(".sc-show-more") ??
+                null;
+
+            const applyPagination = () => {
+                if (!canPaginate) return;
+                const rows = Array.from(
+                    tbody.querySelectorAll<HTMLTableRowElement>("tr"),
+                );
+                rows.forEach((row, i) => {
+                    row.classList.toggle("sc-row-hidden", i >= visibleCount);
+                });
+                if (showMoreBtn) {
+                    const remaining = Math.max(0, rows.length - visibleCount);
+                    if (remaining > 0) {
+                        showMoreBtn.textContent = `Show more (${remaining})`;
+                        showMoreBtn.style.display = "";
+                    } else {
+                        showMoreBtn.style.display = "none";
+                    }
+                }
+            };
+
+            if (showMoreBtn) {
+                showMoreBtn.addEventListener("click", () => {
+                    visibleCount += pageSize;
+                    applyPagination();
+                });
+            }
 
             if (canSort) {
                 table
@@ -351,6 +404,10 @@ function attachTableInteractivity(root: HTMLElement): void {
                                 });
                                 rows.forEach((row) => tbody.appendChild(row));
                             }
+                            // Row order changed — re-apply the page cap so the
+                            // first `visibleCount` rows in the new order show
+                            // (unless a filter query is currently active).
+                            if (!filtering) applyPagination();
                         });
                     });
             }
@@ -370,13 +427,29 @@ function attachTableInteractivity(root: HTMLElement): void {
 
                 input.addEventListener("input", () => {
                     const query = input.value.trim().toLowerCase();
+                    filtering = query.length > 0;
                     tbody
                         .querySelectorAll<HTMLTableRowElement>("tr")
                         .forEach((row) => {
                             const text = row.textContent?.toLowerCase() ?? "";
-                            row.style.display =
-                                query && !text.includes(query) ? "none" : "";
+                            row.classList.toggle(
+                                "sc-row-filtered",
+                                !!query && !text.includes(query),
+                            );
                         });
+                    if (filtering) {
+                        // Filter overrides pagination: reveal all matches and
+                        // hide the Show-more control while filtering.
+                        tbody
+                            .querySelectorAll<HTMLTableRowElement>("tr")
+                            .forEach((r) =>
+                                r.classList.remove("sc-row-hidden"),
+                            );
+                        if (showMoreBtn) showMoreBtn.style.display = "none";
+                    } else {
+                        // Query cleared — restore the page cap.
+                        applyPagination();
+                    }
                 });
             }
         },

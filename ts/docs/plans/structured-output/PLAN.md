@@ -317,6 +317,23 @@ derived fallback (no throw, no regression):
 Client-side sort / filter on `TableBlock` in `chat-ui`, honoring
 `readonly` / `sortable` / `filterable`. chat-ui clients only.
 
+**Phase 4b — client-side pagination (done).** Optional
+`TableBlock.pageSize`: when set (and `rows.length > pageSize`), `chat-ui`
+renders the first `pageSize` rows and reveals the rest in batches via a
+"Show more" control. All rows still ship in one payload — this is a pure
+rendering concern, so replay/DisplayLog stay unchanged and the
+markdown/text fallbacks render every row. Pagination composes with sort
+(re-caps after reorder) and filter (a live query suspends the cap and
+shows all matches). No agent-driven/server-side paging: fetching more
+rows on demand needs the same round-trip channel as row-actions and is
+deferred with open question #3.
+
+**Pinned columns — reserved, not built.** `TableColumn.pinned?: "left" |
+"right"` is carried in the type for forward-compat (like `cell.href` /
+`block.action`) but no client wires up sticky rendering yet. Sticky
+columns only pay off for wide, horizontally-scrolling tables, which no
+adopter emits today; wire the `position: sticky` CSS when one does.
+
 ### Phase 5 — First adopter: `github-cli` *(after 1; visually validated by 3)*
 
 Rewrite `formatListResults` and the list/view actions in

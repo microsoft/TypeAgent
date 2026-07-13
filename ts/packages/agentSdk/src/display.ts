@@ -55,6 +55,9 @@ export interface TableColumn {
     type?: TableCellType; // default "text"
     align?: "left" | "right" | "center";
     sortable?: boolean; // per-column override of table.sortable
+    // Reserved for future sticky columns. Carried in the type for
+    // forward-compat; no client wires up sticky rendering yet.
+    pinned?: "left" | "right";
 }
 
 // A table cell is either a bare scalar (rendered per the column type) or a
@@ -78,6 +81,10 @@ export interface TableBlock {
     sortable?: boolean; // default: true
     filterable?: boolean; // default: false
     readonly?: boolean; // lock order + content exactly as sent
+    // Client-side pagination: render at most `pageSize` rows initially and
+    // reveal the rest via a "Show more" control. All rows still ship in one
+    // payload; this only affects rendering. Omit / <= 0 to show all rows.
+    pageSize?: number;
     // Reserved for v2 row-actions (open question #3). Carried, not wired up.
     action?: unknown;
 }

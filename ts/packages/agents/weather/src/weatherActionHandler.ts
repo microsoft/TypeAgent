@@ -10,6 +10,7 @@ import type {
 import {
     createActionResultFromTextDisplay,
     createActionResultFromError,
+    createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { WeatherAction } from "./weatherSchema.js";
 import {
@@ -90,13 +91,6 @@ async function handleGetCurrentConditions(
     const conditions = getWeatherDescription(weather.weatherCode);
     const windDir = getWindDirection(weather.windDirection);
 
-    const displayText =
-        `Current conditions in ${coords.name}:\n` +
-        `Temperature: ${Math.round(weather.temperature)}${tempUnit} (feels like ${Math.round(weather.apparentTemperature)}${tempUnit})\n` +
-        `Conditions: ${conditions}\n` +
-        `Humidity: ${weather.humidity}%\n` +
-        `Wind: ${Math.round(weather.windSpeed)} mph ${windDir}`;
-
     const historyText = `Got current weather for ${coords.name}`;
 
     const entities = [
@@ -106,10 +100,43 @@ async function handleGetCurrentConditions(
         },
     ];
 
-    return createActionResultFromTextDisplay(
-        displayText,
-        historyText,
-        entities,
+    return createStructuredResult(
+        [
+            {
+                kind: "heading",
+                level: 3,
+                text: `Current conditions in ${coords.name}`,
+            },
+            {
+                kind: "keyValue",
+                pairs: [
+                    {
+                        label: "Temperature",
+                        value: `${Math.round(weather.temperature)}${tempUnit} (feels like ${Math.round(weather.apparentTemperature)}${tempUnit})`,
+                    },
+                    { label: "Conditions", value: conditions },
+                    { label: "Humidity", value: `${weather.humidity}%` },
+                    {
+                        label: "Wind",
+                        value: `${Math.round(weather.windSpeed)} mph ${windDir}`,
+                    },
+                ],
+            },
+        ],
+        {
+            historyText,
+            entities,
+            rawData: {
+                location: coords.name,
+                units,
+                temperature: weather.temperature,
+                apparentTemperature: weather.apparentTemperature,
+                conditions,
+                humidity: weather.humidity,
+                windSpeed: weather.windSpeed,
+                windDirection: windDir,
+            },
+        },
     );
 }
 
@@ -142,21 +169,21 @@ async function handleGetForecast(
     }
 
     const tempUnit = units === "celsius" ? "°C" : "°F";
-    const forecasts = forecastData.map((day, index) => {
+    const rows = forecastData.map((day, index) => {
         const conditions = getWeatherDescription(day.weatherCode);
-        const precipitation =
+        const precip =
             day.precipitationProbability > 0
-                ? `, ${day.precipitationProbability}% chance of precipitation`
-                : "";
-        return (
-            `Day ${index + 1} (${day.date}): ${conditions}, ` +
-            `High: ${Math.round(day.maxTemp)}${tempUnit}, ` +
-            `Low: ${Math.round(day.minTemp)}${tempUnit}${precipitation}`
-        );
+                ? `${day.precipitationProbability}%`
+                : "—";
+        return [
+            `Day ${index + 1}`,
+            day.date,
+            conditions,
+            `${Math.round(day.maxTemp)}${tempUnit}`,
+            `${Math.round(day.minTemp)}${tempUnit}`,
+            precip,
+        ];
     });
-
-    const displayText =
-        `${days}-day forecast for ${coords.name}:\n` + forecasts.join("\n");
 
     const historyText = `Got ${days}-day forecast for ${coords.name}`;
 
@@ -167,10 +194,37 @@ async function handleGetForecast(
         },
     ];
 
-    return createActionResultFromTextDisplay(
-        displayText,
-        historyText,
-        entities,
+    return createStructuredResult(
+        [
+            {
+                kind: "heading",
+                level: 3,
+                text: `${days}-day forecast for ${coords.name}`,
+            },
+            {
+                kind: "table",
+                columns: [
+                    { id: "day", header: "Day" },
+                    { id: "date", header: "Date", type: "date" },
+                    { id: "conditions", header: "Conditions" },
+                    { id: "high", header: "High", align: "right" },
+                    { id: "low", header: "Low", align: "right" },
+                    { id: "precip", header: "Precip", align: "right" },
+                ],
+                rows,
+                sortable: true,
+            },
+        ],
+        {
+            historyText,
+            entities,
+            rawData: {
+                location: coords.name,
+                units,
+                days,
+                forecast: forecastData,
+            },
+        },
     );
 }
 

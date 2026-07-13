@@ -6,9 +6,10 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { ActionContext, AppAgent, TypeAgentAction } from "@typeagent/agent-sdk";
+import { StructuredBlock, KeyValuePair } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
-    createActionResultFromMarkdownDisplay,
+    createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { IpconfigActions } from "./ipconfigSchema.js";
 
@@ -101,10 +102,10 @@ export function instantiate(): AppAgent {
             try {
                 const args = buildArgs(action);
                 const output = await runCli(...args);
-                const formatted = formatOutput(output, action.actionName);
-                return formatted.startsWith("#") || formatted.includes("**")
-                    ? createActionResultFromMarkdownDisplay(formatted)
-                    : createActionResultFromTextDisplay(formatted);
+                if (STRUCTURED_ACTIONS.has(action.actionName)) {
+                    return buildStructuredOutput(output);
+                }
+                return createActionResultFromTextDisplay(output);
             } catch (e: unknown) {
                 const msg = e instanceof Error ? e.message : String(e);
                 return createActionResultFromTextDisplay(`Error: ${msg}`);
@@ -121,24 +122,36 @@ const STRUCTURED_ACTIONS = new Set([
     "displayIPv6DHCPClassIDs",
 ]);
 
-function formatOutput(raw: string, actionName: string): string {
-    if (!STRUCTURED_ACTIONS.has(actionName)) {
-        return raw;
-    }
-
+// Parse `ipconfig` output into structured section blocks. Each section
+// (unindented header line) becomes a heading + keyValue block; the dotted
+// "Key . . . : Value" lines become key-value pairs. The SDK derives the
+// markdown/text fallback for clients that can't render blocks.
+function buildStructuredOutput(raw: string) {
     const lines = raw.split(/\r?\n/);
-    const out: string[] = [];
+
+    type Section = { heading?: string; pairs: KeyValuePair[]; loose: string[] };
+    const sections: Section[] = [];
+    let current: Section = { pairs: [], loose: [] };
+
+    const pushCurrent = () => {
+        if (current.heading || current.pairs.length || current.loose.length) {
+            sections.push(current);
+        }
+    };
 
     for (const line of lines) {
         if (line.trim() === "") {
-            out.push("");
             continue;
         }
 
-        // Section header: no leading whitespace
+        // Section header: no leading whitespace, ends with ":"
         if (!/^\s/.test(line)) {
-            const header = line.replace(/:$/, "").trim();
-            out.push(`\n## ${header}`);
+            pushCurrent();
+            current = {
+                heading: line.replace(/:$/, "").trim(),
+                pairs: [],
+                loose: [],
+            };
             continue;
         }
 
@@ -147,12 +160,40 @@ function formatOutput(raw: string, actionName: string): string {
         if (kv) {
             const key = kv[1].trimEnd();
             const value = kv[2].trim();
-            out.push(`- **${key}:** ${value || "—"}`);
+            current.pairs.push({ label: key, value: value || "—" });
             continue;
         }
 
-        out.push(line.trim());
+        current.loose.push(line.trim());
+    }
+    pushCurrent();
+
+    const blocks: StructuredBlock[] = [];
+    const rawData: Record<string, Record<string, string>> & {
+        _lines?: string[];
+    } = {};
+
+    for (const section of sections) {
+        if (section.heading) {
+            blocks.push({ kind: "heading", level: 2, text: section.heading });
+        }
+        if (section.pairs.length > 0) {
+            blocks.push({ kind: "keyValue", pairs: section.pairs });
+            const bucket: Record<string, string> = {};
+            for (const p of section.pairs) {
+                bucket[p.label] = String(p.value);
+            }
+            rawData[section.heading ?? "General"] = bucket;
+        }
+        for (const loose of section.loose) {
+            blocks.push({ kind: "text", text: loose, format: "text" });
+        }
     }
 
-    return out.join("\n").trim();
+    if (blocks.length === 0) {
+        // Nothing parsed into structure — fall back to the raw text.
+        return createActionResultFromTextDisplay(raw);
+    }
+
+    return createStructuredResult(blocks, { rawData });
 }

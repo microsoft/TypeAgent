@@ -121,6 +121,7 @@ export interface TableBuildOptions {
     sortable?: boolean;
     filterable?: boolean;
     readonly?: boolean;
+    pageSize?: number;
 }
 
 // A column definition for `fromRecords` — a `TableColumn` plus a `value`

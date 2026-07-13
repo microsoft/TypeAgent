@@ -6,9 +6,11 @@ import {
     AppAgent,
     ActionContext,
     ActionResult,
+    ActionResultSuccess,
     ReadinessReport,
     SessionContext,
     ParsedCommandParams,
+    StructuredBlock,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -25,6 +27,7 @@ import {
     createActionResultFromHtmlDisplay,
     createActionResultFromError,
     createActionResultFromTextDisplay,
+    createStructuredResult,
     createYesNoChoiceResult,
     createMultiChoiceResult,
     ChoiceManager,
@@ -331,41 +334,6 @@ function emptyStateHtml(message: string): string {
     return `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;color:#888;padding:8px 12px;border-left:3px solid #ddd;background:#f8f9fa;">${escapeHtml(message)}</div>`;
 }
 
-// Helper function to format events as HTML
-function formatEventsAsHtml(events: any[]): string {
-    if (!events || events.length === 0) {
-        return "<p>No events found.</p>";
-    }
-
-    const items = events.map((event) => {
-        const subject = escapeHtml(event.subject || "Untitled");
-        const datePart = event.start?.dateTime
-            ? formatEventDate(event.start.dateTime)
-            : "";
-        const timePart =
-            event.start?.dateTime && event.end?.dateTime
-                ? formatEventTimeRange(event.start.dateTime, event.end.dateTime)
-                : "";
-        const location = escapeHtml(getEventLocation(event));
-
-        const subjectHtml = event.htmlLink
-            ? `<a href="${escapeHtml(event.htmlLink)}" target="_blank" style="color:#1a73e8;text-decoration:none;font-weight:600;">${subject}</a>`
-            : `<span style="font-weight:600;">${subject}</span>`;
-
-        const metaParts = [datePart, timePart].filter(Boolean);
-        const metaLine = metaParts.length
-            ? `<div style="color:#555;font-size:12px;margin-top:2px;">${metaParts.join(" &nbsp;&middot;&nbsp; ")}</div>`
-            : "";
-        const locationLine = location
-            ? `<div style="color:#777;font-size:12px;margin-top:1px;">${location}</div>`
-            : "";
-
-        return `<div style="border-left:3px solid #1a73e8;padding:6px 10px;margin-bottom:8px;background:#f8f9fa;">${subjectHtml}${metaLine}${locationLine}</div>`;
-    });
-
-    return `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;">${items.join("")}</div>`;
-}
-
 // Helper function to format events as professional plain text
 function formatEventsAsText(events: any[]): string {
     if (!events || events.length === 0) {
@@ -400,6 +368,58 @@ function formatEventsAsText(events: any[]): string {
         }
     }
     return lines.join("\n");
+}
+
+// Build a structured agenda result: an optional heading + a table of events
+// (Subject as a link, When, Location) plus a machine-readable rawData payload.
+// The SDK derives the markdown/text fallback for clients that can't render
+// blocks.
+function buildStructuredEventList(
+    events: any[],
+    heading?: string,
+): ActionResultSuccess {
+    const rows = events.map((event) => {
+        const subject = event.subject || "Untitled";
+        const datePart = event.start?.dateTime
+            ? formatEventDate(event.start.dateTime)
+            : "";
+        const timePart =
+            event.start?.dateTime && event.end?.dateTime
+                ? formatEventTimeRange(event.start.dateTime, event.end.dateTime)
+                : "";
+        const when = [datePart, timePart].filter(Boolean).join(" · ");
+        const location = getEventLocation(event);
+        return [
+            event.htmlLink
+                ? { text: subject, href: event.htmlLink }
+                : subject,
+            when,
+            location,
+        ];
+    });
+
+    const blocks: StructuredBlock[] = [];
+    if (heading) {
+        blocks.push({ kind: "heading", level: 3, text: heading });
+    }
+    blocks.push({
+        kind: "table",
+        columns: [
+            { id: "subject", header: "Event", type: "link" },
+            { id: "when", header: "When", type: "date" },
+            { id: "location", header: "Location" },
+        ],
+        rows,
+        sortable: true,
+        pageSize: 15,
+    });
+
+    return createStructuredResult(blocks, {
+        historyText: heading
+            ? `${heading}\n\n${formatEventsAsText(events)}`
+            : formatEventsAsText(events),
+        rawData: events,
+    });
 }
 
 // HH:MM timestamp prefix for setup status updates — same convention used by
@@ -943,10 +963,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 );
             }
 
-            return createActionResultFromHtmlDisplay(
-                formatEventsAsHtml(events),
-                formatEventsAsText(events),
-            );
+            return buildStructuredEventList(events);
         } catch (error: any) {
             console.error(chalk.red(`Error finding events: ${error.message}`));
             return createActionResultFromError(
@@ -1055,12 +1072,8 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 month: "long",
                 day: "numeric",
             });
-            const heading = `Today's Schedule  \u2014  ${todayLabel}`;
-            const textResult = `${heading}\n${"=".repeat(heading.length)}\n\n${formatEventsAsText(events)}`;
-            return createActionResultFromHtmlDisplay(
-                `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"><div style="font-size:14px;font-weight:600;margin-bottom:8px;">Today's Schedule <span style="font-weight:400;color:#555;">\u2014 ${todayLabel}</span></div>${formatEventsAsHtml(events)}</div>`,
-                textResult,
-            );
+            const heading = `Today's Schedule \u2014 ${todayLabel}`;
+            return buildStructuredEventList(events, heading);
         } catch (error: any) {
             console.error(
                 chalk.red(`Error finding today's events: ${error.message}`),
@@ -1094,12 +1107,8 @@ export class CalendarActionHandlerV3 implements AppAgent {
             const weekStart = new Date(dateRange.startDateTime);
             const weekEnd = new Date(dateRange.endDateTime);
             const weekRangeLabel = `${weekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" })} \u2013 ${weekEnd.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
-            const weekHeading = `This Week's Schedule  \u2014  ${weekRangeLabel}`;
-            const textResult = `${weekHeading}\n${"=".repeat(weekHeading.length)}\n\n${formatEventsAsText(events)}`;
-            return createActionResultFromHtmlDisplay(
-                `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"><div style="font-size:14px;font-weight:600;margin-bottom:8px;">This Week's Schedule <span style="font-weight:400;color:#555;">\u2014 ${weekRangeLabel}</span></div>${formatEventsAsHtml(events)}</div>`,
-                textResult,
-            );
+            const weekHeading = `This Week's Schedule \u2014 ${weekRangeLabel}`;
+            return buildStructuredEventList(events, weekHeading);
         } catch (error: any) {
             console.error(
                 chalk.red(`Error finding this week's events: ${error.message}`),

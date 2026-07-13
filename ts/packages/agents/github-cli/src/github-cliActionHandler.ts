@@ -1203,13 +1203,23 @@ function makeStructuredTable<T>(
     objects: T[],
     colSpecs: ColumnSpec<T>[],
     headingText: string,
-    tableOptions?: { sortable?: boolean; filterable?: boolean; readonly?: boolean },
+    tableOptions?: {
+        sortable?: boolean;
+        filterable?: boolean;
+        readonly?: boolean;
+        pageSize?: number;
+    },
 ): ActionResultSuccess {
     const columns = colSpecs.map(({ value: _v, ...col }) => col);
     const rows: TableCell[][] = objects.map((obj) =>
         colSpecs.map((col) => col.value(obj)),
     );
-    const table: TableBlock = createTable(columns, rows, tableOptions);
+    // Cap long lists to a first page (client reveals the rest via "Show
+    // more") unless the caller overrode it. All rows still ship.
+    const table: TableBlock = createTable(columns, rows, {
+        pageSize: 15,
+        ...tableOptions,
+    });
     const blocks: StructuredBlock[] = [
         { kind: "heading", level: 3, text: headingText },
         table,
