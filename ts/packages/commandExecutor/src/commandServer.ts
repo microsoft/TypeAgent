@@ -103,8 +103,15 @@ type ExecuteActionRequest = {
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-function toolResult(result: string): CallToolResult {
-    return { content: [{ type: "text", text: result }] };
+function toolResult(result: string, rawData?: unknown): CallToolResult {
+    const out: CallToolResult = { content: [{ type: "text", text: result }] };
+    if (rawData !== undefined) {
+        // MCP structuredContent must be Record<string, unknown>; wrap arrays.
+        out.structuredContent = Array.isArray(rawData)
+            ? ({ data: rawData } as Record<string, unknown>)
+            : (rawData as Record<string, unknown>);
+    }
+    return out;
 }
 
 function stripAnsi(text: string): string {
@@ -174,7 +181,7 @@ class Logger {
 
 function createMcpClientIO(
     logger: Logger,
-    responseCollector: { messages: string[] },
+    responseCollector: { messages: string[]; rawData?: unknown },
     getConfirmedFlag: () => boolean,
 ): ClientIO {
     return {
@@ -201,6 +208,9 @@ function createMcpClientIO(
                     responseCollector.messages.push(
                         stripAnsi(String(getStructuredFallback(msg, "text"))),
                     );
+                    if (msg.rawData !== undefined) {
+                        responseCollector.rawData = msg.rawData;
+                    }
                 } else if (typeof msg === "object" && msg && "content" in msg) {
                     responseCollector.messages.push(
                         stripAnsi(String(msg.content)),
@@ -232,6 +242,9 @@ function createMcpClientIO(
                     responseCollector.messages.push(
                         stripAnsi(String(getStructuredFallback(msg, "text"))),
                     );
+                    if (msg.rawData !== undefined) {
+                        responseCollector.rawData = msg.rawData;
+                    }
                 } else if (typeof msg === "object" && msg && "content" in msg) {
                     responseCollector.messages.push(
                         stripAnsi(String(msg.content)),
@@ -329,7 +342,9 @@ export class CommandServer {
     private isConnecting: boolean = false;
     private reconnectDelayMs: number = 5000;
     private logger: Logger;
-    private responseCollector: { messages: string[] } = { messages: [] };
+    private responseCollector: { messages: string[]; rawData?: unknown } = {
+        messages: [],
+    };
     private currentRequestConfirmed: boolean = false;
     private config: ResolvedAgentServerConfig;
 
@@ -631,6 +646,7 @@ export class CommandServer {
         if (request.cacheCheck) {
             try {
                 this.responseCollector.messages = [];
+                this.responseCollector.rawData = undefined;
                 const cacheResult = await this.dispatcher.checkCache(
                     request.request,
                 );
@@ -642,6 +658,7 @@ export class CommandServer {
                         this.responseCollector.messages.join("\n\n");
                     return toolResult(
                         `CACHE_HIT: ${await processHtmlContent(response)}`,
+                        this.responseCollector.rawData,
                     );
                 }
                 return toolResult(
@@ -661,6 +678,7 @@ export class CommandServer {
 
         try {
             this.responseCollector.messages = [];
+            this.responseCollector.rawData = undefined;
             const result = await awaitCommand(this.dispatcher, request.request);
 
             if (result?.lastError) {
@@ -671,7 +689,10 @@ export class CommandServer {
 
             if (this.responseCollector.messages.length > 0) {
                 const response = this.responseCollector.messages.join("\n\n");
-                return toolResult(await processHtmlContent(response));
+                return toolResult(
+                    await processHtmlContent(response),
+                    this.responseCollector.rawData,
+                );
             }
             return toolResult(`Successfully executed: ${request.request}`);
         } catch (error) {
@@ -905,6 +926,7 @@ export class CommandServer {
 
         this.logger.log(`Dispatching: ${actionCommand}`);
         this.responseCollector.messages = [];
+        this.responseCollector.rawData = undefined;
 
         try {
             const result = await awaitCommand(this.dispatcher, actionCommand);
@@ -913,7 +935,10 @@ export class CommandServer {
             }
             if (this.responseCollector.messages.length > 0) {
                 const response = this.responseCollector.messages.join("\n\n");
-                return toolResult(await processHtmlContent(response));
+                return toolResult(
+                    await processHtmlContent(response),
+                    this.responseCollector.rawData,
+                );
             }
             return toolResult(
                 `✓ Action ${request.actionName} executed successfully`,

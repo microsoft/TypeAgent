@@ -152,7 +152,17 @@ export class TaskFlowScriptAPIImpl implements TaskFlowScriptAPI {
             );
 
             const text = extractText(result);
-            const data = tryParseJson(text) ?? text;
+            // Use rawData from StructuredContent when available; otherwise fall
+            // back to parsing the text (the pre-Phase-6 path).
+            const dc = result.displayContent;
+            const rawData =
+                dc !== undefined &&
+                typeof dc === "object" &&
+                !Array.isArray(dc) &&
+                (dc as { type?: string }).type === "structured"
+                    ? (dc as { rawData?: unknown }).rawData
+                    : undefined;
+            const data = rawData !== undefined ? rawData : tryParseJson(text) ?? text;
 
             if (result.error) {
                 return { text, data, error: result.error };

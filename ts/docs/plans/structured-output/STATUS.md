@@ -4,7 +4,7 @@ Working tracker for the plan in [PLAN.md](./PLAN.md). Update whenever a
 phase item is started, completed, or a follow-up surfaces. Keep entries
 terse — one line per item where possible.
 
-_Last updated: 2026-07-12 — Phase 4 (sort/filter interactivity) + Phase 5 (github-cli adopter) implemented._
+_Last updated: 2026-07-13 — Phase 6 (programmatic "or otherwise") implemented._
 
 ## Progress by phase
 
@@ -54,8 +54,8 @@ _Last updated: 2026-07-12 — Phase 4 (sort/filter interactivity) + Phase 5 (git
 
 | Item | Description | Status |
 | ---- | ----------- | ------ |
-| 6a | `commandExecutor` forwards `rawData` as MCP `structuredContent` | todo |
-| 6b | `taskflow` reads `rawData` directly (drop extractText+tryParseJson) | todo |
+| 6a | `commandExecutor` forwards `rawData` as MCP `structuredContent` | done |
+| 6b | `taskflow` reads `rawData` directly (drop extractText+tryParseJson) | done |
 
 ## Open questions
 
