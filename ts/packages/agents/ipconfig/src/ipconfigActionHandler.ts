@@ -158,7 +158,10 @@ export function buildStructuredOutput(raw: string) {
         }
 
         // Key-value pair: "   Key . . . . . : Value"
-        const kv = line.match(/^\s+(.*?)\s*\.[\s.]*:\s*(.*)/);
+        // Match on the leading-whitespace-trimmed line with disjoint
+        // sub-expressions (key excludes '.'/':' and the dotted separator
+        // starts with a literal '.') to avoid polynomial backtracking.
+        const kv = line.trimStart().match(/^([^.:]*)\.[.\s]*:\s*(.*)/);
         if (kv) {
             const key = kv[1].trimEnd();
             const value = kv[2].trim();
