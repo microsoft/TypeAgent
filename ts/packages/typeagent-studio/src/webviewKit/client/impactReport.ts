@@ -579,7 +579,8 @@ function renderResult(
     resetSearchAndSort();
     currentRawById = new Map(result.rows.map((r) => [r.utteranceId, r]));
     tracedIds = new Set(
-        (result.resolutionTraces ?? []).map((t) => t.utteranceId),
+        result.tracedUtteranceIds ??
+            (result.resolutionTraces ?? []).map((t) => t.utteranceId),
     );
     closeDetail();
     // A run-level error (a version that failed to build) aborts with an empty

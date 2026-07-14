@@ -82,7 +82,7 @@ export async function savePersistedRun(
     versionA?: ResolvedVersion,
     versionB?: ResolvedVersion,
 ): Promise<void> {
-    const bounded =
+    const rowsBounded =
         payload.rows.length > MAX_PERSISTED_ROWS
             ? {
                   ...payload,
@@ -92,6 +92,20 @@ export async function savePersistedRun(
                   ),
               }
             : payload;
+    // Drop the (large) per-row traces; only the lightweight `tracedUtteranceIds`
+    // is needed to restore the "Open trace" affordance, and the full traces are
+    // persisted separately by the Trace Viewer store. Derive the ids from the
+    // traces when the payload didn't already carry them.
+    const { resolutionTraces, ...withoutTraces } = rowsBounded;
+    const bounded: StudioReplayResult =
+        resolutionTraces === undefined
+            ? withoutTraces
+            : {
+                  ...withoutTraces,
+                  tracedUtteranceIds:
+                      rowsBounded.tracedUtteranceIds ??
+                      resolutionTraces.map((t) => t.utteranceId),
+              };
     await state.update(runStoreKey(agent), {
         payload: bounded,
         runAt,

@@ -399,6 +399,13 @@ export interface StudioReplayResult {
      */
     resolutionTraces?: ReplayResolutionTrace[];
     /**
+     * The utterances that captured a resolution trace. Mirrors the ids in
+     * `resolutionTraces` so a consumer can show a "trace available" affordance
+     * without shipping the (large) traces themselves. Omitted when none were
+     * captured.
+     */
+    tracedUtteranceIds?: string[];
+    /**
      * with an empty summary rather than emitting fabricated regression rows.
      */
     error?: ReplayRunError;
@@ -1680,7 +1687,14 @@ export function createStudioRuntimeCore(
                 ...(wildcardValidation !== undefined
                     ? { wildcardValidation }
                     : {}),
-                ...(resolutionTraces.length > 0 ? { resolutionTraces } : {}),
+                ...(resolutionTraces.length > 0
+                    ? {
+                          resolutionTraces,
+                          tracedUtteranceIds: resolutionTraces.map(
+                              (t) => t.utteranceId,
+                          ),
+                      }
+                    : {}),
             };
         },
         async replayResolutionTrace(request) {

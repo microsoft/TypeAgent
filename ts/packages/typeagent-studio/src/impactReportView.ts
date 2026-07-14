@@ -161,15 +161,34 @@ export function openImpactReport(
 
     const post = (message: HostToWebviewMessage) => panel.post(message);
 
+    // The webview only needs the set of traced utterances (carried by
+    // `tracedUtteranceIds`) to offer the "Open trace" affordance; the full
+    // traces are large (per-red-row grammar debug info) and are persisted
+    // separately for the Trace Viewer. Strip them from anything sent to the
+    // webview so a big changed set doesn't inflate the host→webview message.
+    const forWebview = (result: StudioReplayResult): StudioReplayResult => {
+        if (result.resolutionTraces === undefined) {
+            return result;
+        }
+        const { resolutionTraces, ...slim } = result;
+        return {
+            ...slim,
+            tracedUtteranceIds:
+                result.tracedUtteranceIds ??
+                resolutionTraces.map((t) => t.utteranceId),
+        };
+    };
+
     // Let an external Replay (launched from the Corpora view) refresh this open
     // report in place: adopt its result as this panel's last result (so a later
     // reload/ready re-push shows it) and, when the webview is listening, post it
     // as an external result the client accepts regardless of its own request-id
     // sequence.
     openReportRefreshers.set(agent, (update) => {
+        const slim = forWebview(update.payload);
         lastResult = {
             requestId: 0,
-            payload: update.payload,
+            payload: slim,
             runAt: update.runAt,
             versionA: update.versionA,
             versionB: update.versionB,
@@ -180,7 +199,7 @@ export function openImpactReport(
                 type: "result",
                 requestId: 0,
                 external: true,
-                payload: update.payload,
+                payload: slim,
                 runAt: update.runAt,
                 versionA: update.versionA,
                 versionB: update.versionB,
@@ -579,10 +598,11 @@ export function openImpactReport(
                 missPolicy: "needs-explanation",
             });
             const completedAt = Date.now();
+            const slim = forWebview(payload);
             post({
                 type: "result",
                 requestId: msg.requestId,
-                payload,
+                payload: slim,
                 runAt: completedAt,
                 versionA: msg.resolvedA,
                 versionB: msg.resolvedB,
@@ -590,7 +610,7 @@ export function openImpactReport(
             });
             lastResult = {
                 requestId: msg.requestId,
-                payload,
+                payload: slim,
                 runAt: completedAt,
                 versionA: msg.resolvedA,
                 versionB: msg.resolvedB,
