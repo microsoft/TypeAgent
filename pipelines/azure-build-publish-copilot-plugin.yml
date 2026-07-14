@@ -52,7 +52,7 @@ jobs:
         parameters:
           buildDirectory: $(buildDirectory)
           nodeVersion: $(nodeVersion)
-          registry: $(REGISTRY)
+          registry: $(INSTALL_REGISTRY)
           enableCache: false
 
       - template: include-update-package-version.yml
