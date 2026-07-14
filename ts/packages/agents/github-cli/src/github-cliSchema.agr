@@ -63,7 +63,22 @@
     }
 };
 
-<IssueList> = show open issues in $(repo:wildcard) -> {
+<IssueList> = show open unassigned issues in $(repo:wildcard) -> {
+    actionName: "issueList",
+    parameters: {
+        repo,
+        state: "open",
+        assignee: "none"
+    }
+}
+  | list unassigned issues in $(repo:wildcard) -> {
+    actionName: "issueList",
+    parameters: {
+        repo,
+        assignee: "none"
+    }
+}
+  | show open issues in $(repo:wildcard) -> {
     actionName: "issueList",
     parameters: {
         repo,
@@ -144,6 +159,14 @@
     actionName: "prList",
     parameters: {
         repo
+    }
+}
+  | list my open PRs in $(repo:wildcard) -> {
+    actionName: "prList",
+    parameters: {
+        repo,
+        author: "@me",
+        state: "open"
     }
 }
   | get latest $(limit:number) PRs in $(repo:wildcard) -> {
@@ -301,6 +324,25 @@
     parameters: {}
 };
 
+<MyPullRequests> = (show | list) my open (pull requests | PRs) (on github)? -> {
+    actionName: "myPullRequests",
+    parameters: {
+        state: "open"
+    }
+}
+  | (show | list) my (pull requests | PRs) (on github)? -> {
+    actionName: "myPullRequests",
+    parameters: {}
+}
+  | (show | list) (pull requests | PRs) I opened -> {
+    actionName: "myPullRequests",
+    parameters: {}
+}
+  | what (pull requests | PRs) have I opened -> {
+    actionName: "myPullRequests",
+    parameters: {}
+};
+
 <IssueAddLabel> = add label $(label:wildcard) to issue $(number:number) -> {
     actionName: "issueAddLabel",
     parameters: {
@@ -417,6 +459,7 @@ import { GithubCliActions } from "./github-cliSchema.ts";
   | <SearchRepos>
   | <StatusPrint>
   | <MyAssignedIssues>
+  | <MyPullRequests>
   | <IssueAddLabel>
   | <RunView>
   | <WorkflowView>

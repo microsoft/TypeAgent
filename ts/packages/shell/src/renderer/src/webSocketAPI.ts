@@ -90,6 +90,10 @@ export const webapi: ClientAPI = {
         // agent server, so the conversation switcher is hidden.
         return false;
     },
+    agentServerEndpoint: async () => {
+        // Web/mobile clients don't attach to a separate agent server.
+        return undefined;
+    },
     conversationList: async () => {
         // Not supported on mobile
         return [];

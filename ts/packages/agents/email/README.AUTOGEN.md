@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=3092396a257215cc156805e6b5b75081a68a4480ec46491f713e4f19793b1068 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=ef97cc9a212056f34581503ddb9c93b8df51380f02fbafabd2ee9e2e7f5d01ea -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # email — AI-generated documentation
@@ -12,18 +12,18 @@
 
 ## Overview
 
-The Email agent is a TypeAgent application agent designed to manage email interactions through the Microsoft Graph API. It provides functionality for sending, replying to, forwarding, and searching emails. This agent leverages structured prompting and large language models (LLMs) to process user requests and integrates with the Outlook mail client via the Microsoft Graph API.
+The Email agent is a TypeAgent application agent designed to facilitate email management through the Microsoft Graph API. It enables users to perform common email operations such as sending, replying to, forwarding, and searching for emails. By leveraging structured prompting and large language models (LLMs), the agent interprets user requests and interacts with the Outlook mail client via the Microsoft Graph API.
 
 ## What it does
 
-The Email agent implements four primary actions to facilitate email management:
+The Email agent provides functionality for managing email communication through the following actions:
 
-- **`sendEmail`**: Sends an email with a specified subject, body, recipients, and optional attachments. It supports CC, BCC, and the inclusion of file paths or URLs for attachments.
-- **`forwardEmail`**: Forwards an existing email to specified recipients, with the option to include an additional message.
-- **`replyEmail`**: Replies to an existing email, optionally including a body, CC, BCC, and attachments.
-- **`findEmail`**: Searches for an email message using a message reference, enabling retrieval of specific emails.
+- **`sendEmail`**: Allows users to send an email with a subject, body, and recipients. Additional options include CC, BCC, and attachments (file paths or URLs). The `genContent` parameter can be used to generate email content dynamically.
+- **`forwardEmail`**: Enables forwarding an existing email to specified recipients, with an optional additional message.
+- **`replyEmail`**: Facilitates replying to an existing email, with options to include a body, CC, BCC, and attachments.
+- **`findEmail`**: Searches for an email message using a `messageRef` parameter, which identifies the email to be retrieved.
 
-These actions are implemented using the Microsoft Graph API, which allows the agent to interact with the user's email account. The agent also integrates with the `graph-utils` library for email-related operations and supports advanced features like generating email content using LLMs.
+These actions are implemented using the Microsoft Graph API, which provides access to email accounts and related operations. The agent also integrates with the `graph-utils` library for email-specific functionality and supports advanced features like content generation using LLMs.
 
 ## Setup
 
@@ -31,7 +31,7 @@ To use the Email agent, you need to configure access to the Microsoft Graph API.
 
 1. **Create a Microsoft Graph Client Application**:
 
-   - Visit the Microsoft Graph quickstart page to create a Graph Client application.
+   - Visit the Microsoft Graph quickstart page (`https://developer.microsoft.com/en-us/graph/quick-start?state=option-typescript`) to create a Graph Client application.
    - Set up a demo tenant if required.
 
 2. **Configure Environment Variables**:
@@ -52,12 +52,12 @@ These steps are required only once to set up the Graph Client application and co
 
 ## Key Files
 
-The Email agent's functionality is distributed across several key files:
+The Email agent's implementation is distributed across several key files:
 
 - **[emailManifest.json](./src/emailManifest.json)**: Defines the agent's manifest, including its description, schema, and integration points.
-- **[emailActionsSchema.ts](./src/emailActionsSchema.ts)**: Contains type definitions for the supported email actions (`sendEmail`, `replyEmail`, `forwardEmail`, and `findEmail`).
-- **[emailActionHandler.ts](./src/emailActionHandler.ts)**: Implements the logic for handling email actions, including integration with the Microsoft Graph API.
-- **[emailSchema.agr](./src/emailSchema.agr)**: Defines the grammar for parsing user requests into actionable commands.
+- **[emailActionsSchema.ts](./src/emailActionsSchema.ts)**: Contains type definitions for the supported email actions (`sendEmail`, `replyEmail`, `forwardEmail`, and `findEmail`), specifying their parameters and expected inputs.
+- **[emailActionHandler.ts](./src/emailActionHandler.ts)**: Implements the logic for handling email actions. This file integrates with the Microsoft Graph API and the `graph-utils` library to perform operations like sending, replying, forwarding, and searching emails.
+- **[emailSchema.agr](./src/emailSchema.agr)**: Defines the grammar for parsing user requests into actionable commands. This ensures that user inputs are correctly interpreted and mapped to the appropriate actions.
 - **[emailKpBridge.ts](./src/emailKpBridge.ts)**: Bridges email agent types with Knowledge Processor (kp) types, converting email messages into `TextChunks` and `ChunkGroups` for indexing and search.
 - **[emailKpIndex.ts](./src/emailKpIndex.ts)**: Manages the lifecycle of the kp index, including fetching emails, indexing them, and enabling search capabilities.
 - **[emailSchema.tests.json](./src/emailSchema.tests.json)**: Contains test cases for validating the email schema and actions.
@@ -121,7 +121,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `chalk`, `debug`
 
 ### Files of interest
 
-`./src/emailActionHandler.ts`, `./src/emailActionsSchema.ts`, `./src/emailManifest.json`, …and 6 more under `./src/`.
+`./src/emailActionHandler.ts`, `./src/emailActionsSchema.ts`, `./src/emailManifest.json`, …and 7 more under `./src/`.
 
 ### Agent surface
 
@@ -143,6 +143,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/email
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter email docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter email docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=75283a8f0bc46e9a6d221511cc71e220609825608baeb74f8358b251a147a7bb -->
+<!-- AUTOGEN:DOCS:HASH:sha256=f66bd0f865dbc3c5bfc90702c29af3d5537d08c1d2b266b2f351ee67ad846fe3 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # weather-agent — AI-generated documentation
@@ -12,43 +12,64 @@
 
 ## Overview
 
-The `weather-agent` package is a TypeAgent application agent designed to provide weather information. It can retrieve current weather conditions, forecasts, and alerts for specified locations.
+The `weather-agent` package is a TypeAgent application agent that provides weather-related information. It supports retrieving current weather conditions, forecasts, and alerts for specified locations. This agent integrates with the broader TypeAgent ecosystem, enabling users to query weather data through structured actions.
 
 ## What it does
 
-The `weather-agent` package implements three main actions:
+The `weather-agent` implements three primary actions to handle weather-related queries:
 
-- `getCurrentConditions`: Retrieves the current weather conditions for a specified location. Optionally, the units can be specified as either "celsius" or "fahrenheit".
-- `getForecast`: Provides a weather forecast for a specified location for up to 7 days. The units can also be specified as either "celsius" or "fahrenheit".
-- `getAlerts`: Fetches weather alerts for a specified location.
+- **`getCurrentConditions`**: Fetches the current weather conditions for a given location. Users can optionally specify the temperature units as `"celsius"` or `"fahrenheit"`.
+- **`getForecast`**: Provides a weather forecast for a specified location, supporting up to 7 days. Users can also specify the temperature units and the number of days for the forecast.
+- **`getAlerts`**: Retrieves weather alerts for a specific location, such as severe weather warnings or advisories.
 
-These actions enable users to obtain detailed weather information, including current conditions, forecasts, and alerts, by specifying the location and optional parameters.
+These actions allow the agent to respond to user queries about real-time weather conditions, upcoming forecasts, and potential weather hazards. The agent is designed to work with external weather APIs to fetch accurate and up-to-date data.
 
 ## Setup
 
-To set up the `weather-agent`, ensure you have the necessary environment variables configured. The package requires access to a weather API service, and you need to set the API key in your environment variables. Follow the steps in the hand-written README for detailed instructions on obtaining and configuring the API key.
+To use the `weather-agent`, you need access to a weather API service. Follow these steps to set up the package:
+
+1. **Obtain an API key**: Register with a weather data provider (e.g., OpenWeatherMap, WeatherAPI) to obtain an API key.
+2. **Set environment variables**: Configure the API key as an environment variable. The specific variable name and setup instructions are detailed in the hand-written README.
+3. **Install dependencies**: Run `pnpm install` in the package directory to install all required dependencies.
+
+Ensure that the API key is valid and that the environment variable is correctly set before running the agent.
 
 ## Key Files
 
-The `weather-agent` package is structured as follows:
+The `weather-agent` package is organized into several key files, each serving a specific purpose:
 
-- **Manifest**: The agent's manifest is defined in [weatherManifest.json](./src/weatherManifest.json), which includes metadata and schema information.
-- **Schema**: The action schema is defined in [weatherSchema.ts](./src/weatherSchema.ts), specifying the types and parameters for each action.
-- **Grammar**: The action grammar is defined in [weatherSchema.agr](./src/weatherSchema.agr), detailing the patterns and rules for parsing user requests.
-- **Handler**: The main action handler is implemented in [weatherActionHandler.ts](./src/weatherActionHandler.ts), which contains the logic for executing each action.
+- **[weatherManifest.json](./src/weatherManifest.json)**: Defines the agent's metadata, including its description, schema, and grammar files.
+- **[weatherSchema.ts](./src/weatherSchema.ts)**: Specifies the action schema, including the types and parameters for each action (`getCurrentConditions`, `getForecast`, and `getAlerts`).
+- **[weatherSchema.agr](./src/weatherSchema.agr)**: Contains the action grammar, defining the patterns and rules for parsing user queries into structured actions.
+- **[weatherActionHandler.ts](./src/weatherActionHandler.ts)**: Implements the logic for handling each action. This file includes functions to process user requests and interact with the weather API.
+- **[testWeather.ts](./src/testWeather.ts)**: A manual test script for verifying the integration with the weather API. It includes sample queries for geocoding and fetching weather data.
 
-The package also includes a test script, [testWeather.ts](./src/testWeather.ts), for manually verifying the weather API integration.
+These files collectively define the agent's capabilities and provide a foundation for extending its functionality.
 
 ## How to extend
 
 To extend the `weather-agent` package, follow these steps:
 
-1. **Add new actions**: Define new actions in [weatherSchema.ts](./src/weatherSchema.ts) by specifying the action name and parameters.
-2. **Update grammar**: Modify [weatherSchema.agr](./src/weatherSchema.agr) to include new patterns and rules for the new actions.
-3. **Implement handlers**: Add the logic for the new actions in [weatherActionHandler.ts](./src/weatherActionHandler.ts). Ensure the new actions are handled correctly within the `executeWeatherAction` function.
-4. **Test**: Update the test script [testWeather.ts](./src/testWeather.ts) to include tests for the new actions. Run the tests to verify the integration.
+1. **Define new actions**:
 
-By following these steps, you can extend the functionality of the `weather-agent` package to support additional weather-related actions and features.
+   - Add new action types to [weatherSchema.ts](./src/weatherSchema.ts). Define the action name and its parameters.
+   - For example, to add an action for retrieving historical weather data, define a new type `GetHistoricalWeatherAction` with appropriate parameters.
+
+2. **Update the grammar**:
+
+   - Modify [weatherSchema.agr](./src/weatherSchema.agr) to include new patterns and rules for the new actions.
+   - For example, add a rule like `<getHistoricalWeather> = <Polite>? <HistoricalWeatherPatterns> $(location:<LocationSpec>) $(date:<DateSpec>) -> { actionName: "getHistoricalWeather", parameters: { location, date } };`.
+
+3. **Implement the handler**:
+
+   - Add the logic for the new actions in [weatherActionHandler.ts](./src/weatherActionHandler.ts). Extend the `executeWeatherAction` function to handle the new action.
+   - For example, create a function `handleGetHistoricalWeather` that interacts with the weather API to fetch historical data.
+
+4. **Test the new functionality**:
+   - Update [testWeather.ts](./src/testWeather.ts) to include test cases for the new actions.
+   - Run the test script to verify that the new actions work as expected.
+
+By following these steps, you can expand the `weather-agent` to support additional weather-related features, such as historical data, air quality information, or advanced weather analytics.
 
 ## Reference
 
@@ -57,7 +78,7 @@ By following these steps, you can extend the functionality of the `weather-agent
 ### Entry points
 
 - `./agent/manifest` → [./src/weatherManifest.json](./src/weatherManifest.json)
-- `./agent/handlers` → [./dist/weatherActionHandler.js](./dist/weatherActionHandler.js)
+- `./agent/handlers` → `./dist/weatherActionHandler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -76,7 +97,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/weatherActionHandler.ts`, `./src/weatherManifest.json`, `./src/weatherSchema.agr`, …and 6 more under `./src/`.
+`./src/weatherActionHandler.ts`, `./src/weatherManifest.json`, `./src/weatherSchema.agr`, …and 7 more under `./src/`.
 
 ### Agent surface
 
@@ -97,6 +118,6 @@ _3 actions implemented by this agent, parsed deterministically from `./src/weath
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter weather-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter weather-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

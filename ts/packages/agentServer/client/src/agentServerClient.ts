@@ -28,6 +28,7 @@ import {
     ConversationInfo,
     JoinConversationResult,
     RenameConversationOptions,
+    SpeechToken,
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -119,6 +120,12 @@ export type AgentServerConnection = {
     ): Promise<void>;
     deleteConversation(conversationId: string): Promise<void>;
     shutdown(): Promise<void>;
+    /**
+     * Request a short-lived Azure Speech authorization token from the server
+     * (which owns the `speech:` config). Resolves to `undefined` when speech
+     * isn't configured, so callers can hide/disable the mic affordance.
+     */
+    getSpeechToken(): Promise<SpeechToken | undefined>;
     /**
      * Reopen the underlying transport and rebind the control rpc onto it,
      * reusing this connection object instead of building a new one. Returns
@@ -314,6 +321,10 @@ export function createAgentServerConnection(
         async shutdown(): Promise<void> {
             debug("Requesting server shutdown via existing connection");
             await rpc.invoke("shutdown");
+        },
+
+        async getSpeechToken(): Promise<SpeechToken | undefined> {
+            return rpc.invoke("getSpeechToken");
         },
 
         async reconnect(): Promise<boolean> {

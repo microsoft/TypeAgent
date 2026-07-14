@@ -267,5 +267,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "code"
   }
 }

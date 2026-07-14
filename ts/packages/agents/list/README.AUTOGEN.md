@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=e047fc6c53efb2f43df9b6d9817e97cee0409145c3c9b15f6c321f0afd407ab5 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=3b85260e2b269ce9bc55c9ca40fdd24fb1cc2fd1bec208c8282d3ed5426035ec -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # list-agent — AI-generated documentation
@@ -100,7 +100,7 @@ External: _None at runtime._
 
 ### Files of interest
 
-`./src/listActionHandler.ts`, `./src/listManifest.json`, `./src/listSchema.agr`, …and 3 more under `./src/`.
+`./src/listActionHandler.ts`, `./src/listManifest.json`, `./src/listSchema.agr`, …and 4 more under `./src/`.
 
 ### Agent surface
 
@@ -124,6 +124,6 @@ _6 actions implemented by this agent, parsed deterministically from `./src/listS
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

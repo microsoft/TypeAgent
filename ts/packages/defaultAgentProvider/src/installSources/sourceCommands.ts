@@ -14,14 +14,10 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     displayResult,
-    displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import chalk from "chalk";
-import {
-    DefaultInstallSourceRegistry,
-    listAvailableAgents,
-} from "./registry.js";
+import { DefaultInstallSourceRegistry } from "./registry.js";
 import { getAddSourceCommandHandlers } from "./addSource.js";
 
 // The host owns the entire `@package source` command surface. The dispatcher
@@ -131,72 +127,6 @@ class SourceOrderCommandHandler implements CommandHandler {
     }
 }
 
-class SourceWhereCommandHandler implements CommandHandler {
-    public readonly description =
-        "Report which source would resolve a ref, without installing";
-    public readonly parameters = {
-        args: {
-            ref: {
-                description:
-                    "Reference to resolve: a filesystem path, a catalog short name, or a feed specifier.",
-                type: "string",
-            },
-        },
-    } as const;
-    constructor(private readonly deps: SourceCommandsDeps) {}
-    public async run(
-        context: ActionContext<unknown>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const { registry } = this.deps;
-        const { ref } = params.args;
-        // Show non-fatal source warnings (e.g. a corrupt catalog
-        // skipped during the walk) once, for this dry-run command. The status
-        // callback reports which source is being probed as the sequential walk
-        // advances.
-        const candidate = await registry.where(
-            ref,
-            (m) => displayWarn(m, context),
-            (m) => displayStatus(m, context),
-        );
-        if (candidate === undefined) {
-            const order = registry
-                .list()
-                .map((s) => s.name)
-                .join(", ");
-            displayResult(
-                `No source would resolve '${ref}'. Order: [${order}]`,
-                context,
-            );
-            return;
-        }
-        const handle = candidate.path ?? candidate.module ?? ref;
-        displayResult(
-            `'${ref}' would resolve via source '${candidate.source}' (${handle}).`,
-            context,
-        );
-    }
-
-    public async getCompletion(
-        _context: SessionContext<unknown>,
-        _params: PartialParsedCommandParams<ParameterDefinitions>,
-        names: string[],
-    ) {
-        const completions: CompletionGroup[] = [];
-        for (const name of names) {
-            if (name === "ref") {
-                // Enumerable sources (catalog/feed) advertise their agents;
-                // path sources don't, so refs there stay freeform.
-                completions.push({
-                    name,
-                    completions: await listAvailableAgents(this.deps.registry),
-                });
-            }
-        }
-        return { groups: completions };
-    }
-}
-
 class SourceRemoveCommandHandler implements CommandHandler {
     public readonly description = "Remove an install source";
     public readonly parameters = {
@@ -259,9 +189,10 @@ class SourceRemoveCommandHandler implements CommandHandler {
 }
 
 /**
- * Build the host's full `@package source` command table (list / order / where /
+ * Build the host's full `@package source` command table (list / order /
  * remove / add). The dispatcher core merges this in under `@package` as
- * `source` via `InstalledAgentSourceApi.sourceCommands()`.
+ * `source` via `InstalledAgentSourceApi.sourceCommands()`. Resolution preview
+ * lives on `@package install --dry-run`, not here.
  */
 export function getSourceCommands(
     deps: SourceCommandsDeps,
@@ -272,7 +203,6 @@ export function getSourceCommands(
         commands: {
             list: new SourceListCommandHandler(deps),
             order: new SourceOrderCommandHandler(deps),
-            where: new SourceWhereCommandHandler(deps),
             remove: new SourceRemoveCommandHandler(deps),
             add: getAddSourceCommandHandlers(deps.registry),
         },

@@ -2010,7 +2010,7 @@ async function testCapabilityTools(): Promise<boolean> {
             name: "test-container",
             container: {
                 enabled: true,
-                image: "node:20-slim",
+                image: "node:22-slim",
                 networkMode: "none",
                 readOnly: true,
                 memoryLimit: "512m",
@@ -2026,8 +2026,8 @@ async function testCapabilityTools(): Promise<boolean> {
             "expected none network",
         );
         assert(
-            state.policy?.container?.image === "node:20-slim",
-            "expected node:20-slim image",
+            state.policy?.container?.image === "node:22-slim",
+            "expected node:22-slim image",
         );
     });
 
@@ -2201,7 +2201,7 @@ async function testContainerSandbox(): Promise<boolean> {
 
     const baseContainerPolicy: ContainerPolicy = {
         enabled: true,
-        image: "node:20-slim",
+        image: "node:22-slim",
         networkMode: "none",
     };
 
@@ -2214,7 +2214,7 @@ async function testContainerSandbox(): Promise<boolean> {
         assert(args.includes("run"), "should include 'run'");
         assert(args.includes("--rm"), "should include '--rm'");
         assert(args.includes("--network=none"), "should include network=none");
-        assert(args.includes("node:20-slim"), "should include image name");
+        assert(args.includes("node:22-slim"), "should include image name");
         assert(args.includes("echo hello"), "should include command");
     });
 

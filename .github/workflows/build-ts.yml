@@ -92,7 +92,9 @@ jobs:
       # functions over the cyclomatic/cognitive budget versus the base branch
       # (a stateless ratchet — the base branch is the baseline, so the count
       # can only trend down), and any brand-new file is additionally held to a
-      # hard cap.  Tune the thresholds down as hotspots get refactored.
+      # hard cap.  Pre-existing offenders are grandfathered by inline
+      # // code-complexity-allow markers.  Tune the thresholds down as hotspots
+      # get refactored.
       - name: Complexity ratchet
         if: ${{ github.event_name == 'pull_request' && steps.filter.outputs.ts != 'false' }}
         working-directory: ts
@@ -101,8 +103,7 @@ jobs:
           git fetch --no-tags origin "${{ github.base_ref }}"
           npm run code-complexity -- --ratchet --base "origin/${{ github.base_ref }}" \
             --cyclomatic 25 --cognitive 30 \
-            --new-file-cyclomatic 25 --new-file-cognitive 30 \
-            --exceptions-file tools/scripts/code/complexity-baseline-exception.json
+            --new-file-cyclomatic 25 --new-file-cognitive 30
       # Lint ratchet (PRs only): the files this PR changes may not add ESLint
       # violations (no-explicit-any, no-console, no-unused-vars, ...) versus the
       # base branch.  Syntactic rules only, so it is fast; the count can only
@@ -124,7 +125,7 @@ jobs:
         shell: bash
         run: |
           git fetch --no-tags origin "${{ github.base_ref }}"
-          npm run code-circular -- --ratchet --base "origin/${{ github.base_ref }}"
+          npm run code-circular -- --ratchet --base "origin/${{ github.base_ref }}" --exceptions-file tools/scripts/code/circular-baseline-exception.json
       # Test-debt gate (PRs only): zero tolerance for focused tests
       # (.only/fit/fdescribe) and no newly skipped tests (.skip/xit/xdescribe)
       # in changed files.  A small, fixable problem -> a hard gate, not a ratchet.

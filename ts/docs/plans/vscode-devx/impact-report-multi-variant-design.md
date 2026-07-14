@@ -50,7 +50,7 @@ journeys in [`02-journeys.md`](./02-journeys.md).
 The MVP is fenced by five gates; the load-bearing one for replay is:
 
 - **Gate C — headline / validation gate (journey J4, persona P4 "Regression Owner").**
-  The Impact Report, run with the default "likely-bad change" predicate (F4.4) on a
+  The Impact Report, run with the default "likely regression" predicate (F4.4) on a
   **hand-labelled `player` regression set**, agrees with developer judgment on **≥ 80%
   of rows** (red = regression, green = improvement), under the **deterministic
   `needs-explanation` miss policy**. Evaluated on the **binary** compare

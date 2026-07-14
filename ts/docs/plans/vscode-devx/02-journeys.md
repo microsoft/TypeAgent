@@ -210,7 +210,7 @@ Each journey below has the same five-part shape:
 > 3. **Action-level delta** _(the new primitive)_ — every utterance where vA and vB produced different action JSON. Each row is annotated with a feedback label when present: a `👎` on the vA action with category `bad-response` shows green here ("you fixed a known bad response"); a `👍` on vA with a different vB action shows red ("you may have broken something users liked"). Cells that hit a cache miss in vB show the developer-chosen replay-miss state (needs-explanation / live-LLM-resolved / strict).
 > 4. **Collisions delta** — any new action collisions vB introduced vs vA (data from the §10 detectors).
 >
-> Dani filters action-level rows to "red" (likely-bad changes). Two rows remain. They click one; J5 opens with that trace fully expanded.
+> Dani filters action-level rows to "red" (likely regressions). Two rows remain. They click one; J5 opens with that trace fully expanded.
 
 #### Entry points
 
@@ -241,7 +241,7 @@ Each journey below has the same five-part shape:
 - A replay across **the full player corpus** (in-repo + captures + feedback) finishes in **under one minute** on a developer laptop with the default replay-miss policy.
 - The report shows all four lenses (structural / coverage / action-level / collisions).
 - Action-level rows are annotated with the latest feedback label per `requestId` when one exists. Rows without a label render gracefully.
-- Filtering rows by "likely-bad change" (= changed action where the prior version had 👍 _or_ current version's matching feedback is 👎) returns the expected subset.
+- Filtering rows by "likely regression" (= changed action where the prior version had 👍 _or_ current version's matching feedback is 👎) returns the expected subset.
 - Each row links to J5 for full-trace investigation.
 - The developer can choose the replay-miss policy per run; the choice is remembered per workspace; the auto-explain mode shows estimated LLM-call count + cost before firing.
 - **Validation gate:** the report must agree with developer judgment on a hand-labeled regression set for `player` before the journey is declared MVP-complete.
@@ -358,7 +358,7 @@ These are decisions the journeys imply but don't fix. Phase 3 / 4 must resolve t
 2. **`replayCorpus()` engine surface.** Signature, transport (in-process vs WS), batching strategy. Forced by J4. Likely lives in `typeagent-core`.
 3. **Structured event protocol shape.** Event types, payload schemas, transport, schema versioning. Forced by J4/J5/J6.
 4. **Feedback re-rating from Trace Viewer (J5).** Is editing a rating from inside the trace allowed? Implementation-wise the dispatcher RPC supports it; UX-wise it may be confusing if the trace is from a different session than the current sandbox.
-5. **Impact Report's "likely-bad change" definition.** The journey states the intent; the exact predicate (which mix of feedback rating, category, replay-miss state) is a tuning decision.
+5. **Impact Report's "likely regression" definition.** The journey states the intent; the exact predicate (which mix of feedback rating, category, replay-miss state) is a tuning decision.
 6. **Sandbox lifecycle UI.** Who restarts the sandbox? Auto on agent install? Manual control? Status indicator location?
 7. **Agent health-check rule set.** What does Studio actually validate at the end of J1 phase 7? Manifest ↔ schema ↔ grammar ↔ handler ↔ provider — but the specific rules are TBD.
 

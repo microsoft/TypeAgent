@@ -21,6 +21,7 @@ import {
     HistoryEntry,
     SettingsPanelSchema,
     HelpPanelContent,
+    formatHistorySeparatorLabel,
     type TemplateEditServices,
     type ConnectionStatus,
 } from "chat-ui";
@@ -117,6 +118,7 @@ function mapResult(result: any):
 // HistoryEntry[] for replayHistory(). Mirrors vscode-shell's
 // toHistoryReplayMessage + toChatPanelHistory, but works directly off the
 // DisplayLogEntry shape (using ridStr to normalize RequestId → client id).
+// code-complexity-allow: history-event replay mapper; one branch per DisplayLogEntry type
 function toHistoryEntries(entries: any[]): HistoryEntry[] {
     // First pass: derive per-request "first message" timing (elapsed ms from
     // the user request to the first real agent display message).
@@ -220,55 +222,6 @@ function toHistoryEntries(entries: any[]): HistoryEntry[] {
     return out;
 }
 
-function formatHistorySeparatorLabel(entries: any[]): string {
-    let newestTimestamp: number | undefined;
-    for (const entry of entries) {
-        if (typeof entry.timestamp !== "number") continue;
-        if (
-            newestTimestamp === undefined ||
-            entry.timestamp > newestTimestamp
-        ) {
-            newestTimestamp = entry.timestamp;
-        }
-    }
-
-    if (newestTimestamp === undefined) {
-        return "earlier";
-    }
-
-    const diffMs = Math.max(0, Date.now() - newestTimestamp);
-    const diffMinutes = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMinutes < 2) {
-        return "a moment ago";
-    }
-    if (diffMinutes < 10) {
-        return "a few minutes ago";
-    }
-    if (diffMinutes < 60) {
-        return `${diffMinutes} minutes ago`;
-    }
-    if (diffHours < 2) {
-        return "an hour ago";
-    }
-    if (diffHours < 6) {
-        return "a few hours ago";
-    }
-    if (diffHours < 24) {
-        return `${diffHours} hours ago`;
-    }
-    if (diffDays < 2) {
-        return "yesterday";
-    }
-    if (diffDays < 7) {
-        return `${diffDays} days ago`;
-    }
-
-    return new Date(newestTimestamp).toLocaleDateString();
-}
-
 export type ChatPanelClient = {
     client: Client;
     chatPanel: ChatPanel;
@@ -285,6 +238,17 @@ export function createChatPanelClient(
     agents: Map<string, string>,
 ): ChatPanelClient {
     let dispatcher: Dispatcher | undefined;
+    // Requests the user submitted before the dispatcher finished
+    // initializing. Buffered here (rather than dropped with a "not ready"
+    // notice) and flushed by dispatcherInitialized() once the dispatcher is
+    // live — after the main process has enqueued the startup `@greeting`, so
+    // the greeting stays at the head of the queue and these follow in the
+    // order they were typed.
+    const pendingSends: Array<{
+        text: string;
+        attachments: string[] | undefined;
+        requestId: string;
+    }> = [];
     let settings: ShellUserSettings = defaultUserSettings;
     const notifications: NotificationEntry[] = [];
 
@@ -639,6 +603,49 @@ export function createChatPanelClient(
         ],
     };
 
+    // Submit a user command to the dispatcher and finalize its bubble on
+    // completion. Extracted from `onSend` so requests buffered before the
+    // dispatcher was ready can be replayed through the identical path.
+    function submitUserCommand(
+        text: string,
+        attachments: string[] | undefined,
+        requestId: string,
+    ): void {
+        void (async () => {
+            try {
+                const result = await awaitCommand(
+                    dispatcher!,
+                    text,
+                    attachments,
+                    undefined,
+                    requestId,
+                );
+                const mapped = mapResult(result);
+                // Dedupe with queueRequestCancelled to avoid
+                // double-stamping the affordance.
+                const cancelled =
+                    mapped?.cancelled === true &&
+                    claimCancelledRender(requestId);
+                chatPanel.completeRequest(
+                    requestId,
+                    mapped ? { ...mapped, cancelled } : undefined,
+                );
+                clearQueueChip(requestId);
+            } catch (e: any) {
+                // Drop rejection-from-cancel stragglers (affordance
+                // already painted by queueRequestCancelled).
+                if (!isCancelledRequest(requestId)) {
+                    chatPanel.addSystemMessage(
+                        `Error: ${e?.message ?? String(e)}`,
+                    );
+                }
+                clearQueueChip(requestId);
+            } finally {
+                chatPanel.setIdle();
+            }
+        })();
+    }
+
     // --- ChatPanel -------------------------------------------------------
     const chatPanel = new ChatPanel(rootElement, {
         platformAdapter: {
@@ -648,43 +655,14 @@ export function createChatPanelClient(
         },
         onSend: (text, attachments, requestId) => {
             if (dispatcher === undefined) {
-                chatPanel.addSystemMessage("Dispatcher not ready.");
-                chatPanel.setIdle();
+                // Dispatcher still initializing — queue the request instead
+                // of dropping it. dispatcherInitialized() flushes these once
+                // the dispatcher is live (after the startup `@greeting`). The
+                // bubble stays in its processing state so it reads as pending.
+                pendingSends.push({ text, attachments, requestId });
                 return;
             }
-            void (async () => {
-                try {
-                    const result = await awaitCommand(
-                        dispatcher!,
-                        text,
-                        attachments,
-                        undefined,
-                        requestId,
-                    );
-                    const mapped = mapResult(result);
-                    // Dedupe with queueRequestCancelled to avoid
-                    // double-stamping the affordance.
-                    const cancelled =
-                        mapped?.cancelled === true &&
-                        claimCancelledRender(requestId);
-                    chatPanel.completeRequest(
-                        requestId,
-                        mapped ? { ...mapped, cancelled } : undefined,
-                    );
-                    clearQueueChip(requestId);
-                } catch (e: any) {
-                    // Drop rejection-from-cancel stragglers (affordance
-                    // already painted by queueRequestCancelled).
-                    if (!isCancelledRequest(requestId)) {
-                        chatPanel.addSystemMessage(
-                            `Error: ${e?.message ?? String(e)}`,
-                        );
-                    }
-                    clearQueueChip(requestId);
-                } finally {
-                    chatPanel.setIdle();
-                }
-            })();
+            submitUserCommand(text, attachments, requestId);
         },
         onCancel: (requestId) => {
             dispatcher?.cancelCommandByClientId(requestId);
@@ -698,8 +676,11 @@ export function createChatPanelClient(
                 ctx,
             );
         },
-        onFeedbackHidden: (requestId, target, hidden) => {
-            void dispatcher?.recordUserHide(requestId, hidden, target);
+        onDeleteMessage: (requestId, target, permanent) => {
+            // Developer-mode per-message delete. Reuse the feedback "hide"
+            // RPC: permanent=true is a non-recoverable hard delete;
+            // permanent=false is a recoverable soft delete (trash).
+            void dispatcher?.recordUserHide(requestId, true, target, permanent);
         },
         speechProvider,
         ttsProvider,
@@ -910,6 +891,10 @@ export function createChatPanelClient(
             switch (event) {
                 case "explained":
                     chatPanel.notifyExplained(ridStr(requestId)!, data);
+                    break;
+                case "developerMode":
+                    // Toggle dev-only UI affordances (per-message delete).
+                    chatPanel.setDeveloperMode(data?.enabled === true);
                     break;
                 case "randomCommandSelected":
                     break;
@@ -1311,12 +1296,35 @@ export function createChatPanelClient(
             cutoffSeq: number | undefined,
         ): void {
             dispatcher = d;
+            // Seed dev-mode state so the per-message delete button reflects a
+            // server started with `--dev` on connect, without waiting for a
+            // `@config dev` toggle. Best-effort (older servers lack the RPC).
+            if (typeof d.getDeveloperMode === "function") {
+                void d
+                    .getDeveloperMode()
+                    .then((enabled) => chatPanel.setDeveloperMode(enabled))
+                    .catch(() => {});
+            }
             // Seed mirror sync; defer DOM reconcile until replay finishes.
             if (initialQueueSnapshot) {
                 const prev = queueMirror.snapshot;
                 queueMirror.reset(initialQueueSnapshot);
                 const snapshot = initialQueueSnapshot;
                 afterReplay(() => reconcileQueueChips(prev, snapshot));
+            }
+            // Flush any requests the user typed before the dispatcher was
+            // ready. Deferred behind replay (same gate as the queue-chip
+            // reconcile) so it runs after history settles and after the main
+            // process has enqueued the startup `@greeting` — keeping the
+            // greeting at the head of the dispatcher queue, followed by these
+            // in the order they were typed.
+            if (pendingSends.length > 0) {
+                const buffered = pendingSends.splice(0);
+                afterReplay(() => {
+                    for (const { text, attachments, requestId } of buffered) {
+                        submitUserCommand(text, attachments, requestId);
+                    }
+                });
             }
             void replayDisplayHistory(cutoffSeq);
         },

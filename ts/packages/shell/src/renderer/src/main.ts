@@ -136,6 +136,10 @@ document.addEventListener("DOMContentLoaded", async function () {
     // hosts the agent server in-process (standalone) or for web/mobile. The
     // mode is fixed for the shell's lifetime, so it is fetched once and cached.
     let conversationBarEnabled: boolean | undefined;
+    // Agent-server endpoint (host:port) shown in the connected indicator's
+    // tooltip. Fetched once alongside conversationBarEnabled (mode is fixed for
+    // the shell's lifetime).
+    let agentServerEndpoint: string | undefined;
 
     async function refreshConversations(): Promise<void> {
         refreshConversationsPromise ??= refreshConversationsCore().finally(
@@ -151,6 +155,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             if (conversationBarEnabled === undefined) {
                 conversationBarEnabled =
                     await clientAPI.conversationBarEnabled();
+                agentServerEndpoint = await clientAPI.agentServerEndpoint();
             }
             if (!conversationBarEnabled) {
                 // Standalone shell hosts the agent server in-process: a single
@@ -166,6 +171,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             conversationBar.setStatus({
                 connected: true,
                 errorText: undefined,
+                endpoint: agentServerEndpoint,
             });
             conversationBar.setConversations(
                 conversations.map((conversation) => ({

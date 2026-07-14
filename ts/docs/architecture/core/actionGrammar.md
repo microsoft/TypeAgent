@@ -602,10 +602,13 @@ tail contract, so the non-tail wrapper builder is only reached when
 `tailFactoring` is off.
 
 **NFA compatibility.** Tail RulesParts are understood only by the
-NFA-interpreter matcher (`grammarMatcher.ts`). The NFA compiler /
-DFA path (`nfaCompiler.ts`) explicitly throws on encountering one,
-so consumers that route through the NFA/DFA path must leave
-`tailFactoring` off.
+AST-walking matcher (`grammarMatcher.ts`). The NFA compiler / DFA path
+(`nfaCompiler.ts`) explicitly throws on encountering one - this is a known gap and is not yet implemented. NFAs are naturally well-suited to sharing prefix states, but the equivalent frame-sharing
+/ variable-forwarding wiring for that backend hasn't been built yet.
+Until it is, consumers that route through the NFA/DFA path must leave
+`tailFactoring` off (and `promoteTailRulesParts`, which produces the
+same tail-call shape) when calling `optimizeGrammar` /
+`loadGrammarRules` directly.
 
 **No fixed-point loop.** Factoring is applied once per group of
 alternatives — the trie's grouping converges in a single pass and
@@ -1517,6 +1520,17 @@ matched text as a string. For example, `"hello"` produces `"hello"`.
 **No value** (`none` kind): Rules with multiple variable parts but no
 explicit value expression produce no value — the compiler warns about
 this because the output is ambiguous.
+
+The NFA compiler (`nfaCompiler.ts`) mirrors this same "no value unless
+actually needed" principle via the shared `deriveEffectiveValue`
+(`grammarValueDeriver.ts`), which forwards a rule's
+single variable-bearing part (whatever its shape - a single-part rule,
+or a multi-part rule reshaped by `factorCommonPrefixes`), and only
+treats an ambiguous or missing implicit value as a hard error when the
+value is actually required — i.e. for top-level action rules, or nested
+rules a parent captures via `$(name:<Rule>)`. A nested, uncaptured rule
+with an ambiguous shape is harmless (nothing reads its value) and
+silently resolves to "no value," exactly like the `none` kind above.
 
 ### Design Principles
 

@@ -42,32 +42,79 @@ test("buildCorpusAgentNodes maps each agent sorted and expandable", () => {
     assert.equal(nodes[0].contextValue, "corpusAgent");
 });
 
-test("buildCorpusSourceNodes shows only present sources with counts in fixed order", () => {
+test("buildCorpusSourceNodes renders file-backed sources as named file rows", () => {
     const nodes = buildCorpusSourceNodes("player", [
-        entry({ id: "a", source: "feedback" }),
         entry({ id: "b", source: "in-repo" }),
         entry({ id: "c", source: "in-repo" }),
     ]);
     assert.deepEqual(
         nodes.map((n) => n.source),
-        ["in-repo", "feedback"],
+        ["in-repo"],
     );
+    // In-repo row is titled by the backing file name and carries its path.
+    assert.equal(nodes[0].label, "player.utterances.jsonl");
+    assert.equal(nodes[0].contextValue, "corpusFile");
+    assert.equal(nodes[0].filePath, "corpus/player.utterances.jsonl");
     assert.equal(nodes[0].description, "2 entries");
-    assert.equal(nodes[1].description, "1 entry");
-    assert.equal(nodes[0].contextValue, "corpusSource");
 });
 
-test("buildCorpusSourceNodes returns an actionable seed node when no entries exist", () => {
+test("buildCorpusSourceNodes emits one row per distinct external file", () => {
+    const nodes = buildCorpusSourceNodes("player", [
+        entry({
+            id: "a",
+            source: "external",
+            provenance: { sourceUri: "/ext/regression.jsonl" },
+        }),
+        entry({
+            id: "b",
+            source: "external",
+            provenance: { sourceUri: "/ext/regression.jsonl" },
+        }),
+        entry({
+            id: "c",
+            source: "external",
+            provenance: { sourceUri: "/ext/smoke.jsonl" },
+        }),
+    ]);
+    assert.deepEqual(
+        nodes.map((n) => n.label),
+        ["regression.jsonl", "smoke.jsonl"],
+    );
+    assert.ok(nodes.every((n) => n.contextValue === "corpusFile"));
+    assert.equal(nodes[0].description, "2 entries");
+    assert.equal(nodes[1].description, "1 entry");
+});
+
+test("buildCorpusSourceNodes returns an actionable seed node when no entries or file exist", () => {
     const nodes = buildCorpusSourceNodes("player", []);
     assert.equal(nodes.length, 1);
     assert.equal(nodes[0].kind, "empty");
-    assert.equal(nodes[0].label, "Seed in-repo corpus\u2026");
+    assert.equal(nodes[0].label, "Create corpus file\u2026");
+    assert.equal(nodes[0].description, "No entries yet");
     assert.equal(nodes[0].contextValue, "corpusAgentSeed");
     assert.equal(nodes[0].agent, "player");
 });
 
-test("buildCorpusEntryNodes filters to the requested source and labels by utterance", () => {
-    const nodes = buildCorpusEntryNodes("player", "in-repo", [
+test("buildCorpusSourceNodes shows an existing empty in-repo file as a row", () => {
+    const nodes = buildCorpusSourceNodes(
+        "player",
+        [],
+        "/repo/corpus/player.utterances.jsonl",
+    );
+    assert.equal(nodes.length, 1);
+    assert.equal(nodes[0].kind, "source");
+    assert.equal(nodes[0].contextValue, "corpusFile");
+    assert.equal(nodes[0].label, "player.utterances.jsonl");
+    assert.equal(nodes[0].filePath, "/repo/corpus/player.utterances.jsonl");
+    assert.equal(nodes[0].description, "No entries yet");
+    assert.equal(nodes[0].hasChildren, false);
+});
+
+test("buildCorpusEntryNodes filters to the group's file and labels by utterance", () => {
+    const [group] = buildCorpusSourceNodes("player", [
+        entry({ id: "a", source: "in-repo", utterance: "play jazz" }),
+    ]);
+    const nodes = buildCorpusEntryNodes(group, [
         entry({ id: "a", source: "in-repo", utterance: "play jazz" }),
         entry({ id: "b", source: "captures", utterance: "skip" }),
     ]);
@@ -79,17 +126,25 @@ test("buildCorpusEntryNodes filters to the requested source and labels by uttera
     assert.equal(nodes[0].description, undefined);
 });
 
-test("buildCorpusEntryNodes surfaces feedback via the row rating when present", () => {
-    const nodes = buildCorpusEntryNodes("player", "feedback", [
+test("buildCorpusEntryNodes splits external entries by backing file", () => {
+    const all = [
         entry({
             id: "a",
-            source: "feedback",
-            feedback: { rating: "down", recordedAt: 1 },
+            source: "external",
+            provenance: { sourceUri: "/ext/regression.jsonl" },
         }),
-    ]);
-    // Feedback is conveyed by the row icon, not a description badge.
-    assert.equal(nodes[0].description, undefined);
-    assert.equal(nodes[0].feedbackRating, "down");
+        entry({
+            id: "b",
+            source: "external",
+            provenance: { sourceUri: "/ext/smoke.jsonl" },
+        }),
+    ];
+    const [regression] = buildCorpusSourceNodes("player", all);
+    const nodes = buildCorpusEntryNodes(regression, all);
+    assert.deepEqual(
+        nodes.map((n) => n.entryId),
+        ["a"],
+    );
 });
 
 test("truncateUtterance collapses whitespace and caps length", () => {
@@ -110,5 +165,5 @@ test("formatCorpusSource covers every source and CORPUS_SOURCE_ORDER is complete
     for (const source of CORPUS_SOURCE_ORDER) {
         assert.equal(formatCorpusSource(source), expected[source]);
     }
-    assert.equal(CORPUS_SOURCE_ORDER.length, 4);
+    assert.equal(CORPUS_SOURCE_ORDER.length, 2);
 });
