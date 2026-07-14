@@ -1,6 +1,6 @@
 # contextSelector benchmark
 
-_Generated 2026-07-14T22:30:07.949Z._
+_Generated 2026-07-14T23:17:56.018Z._
 
 ## What this measures
 
@@ -52,7 +52,87 @@ cd packages/dispatcher/dispatcher
 npx tsx src/validation/contextselector/reproduce.mts
 ```
 
-Runs the whole suite — this report plus the LLM comparison appended at the end — and overwrites this file in place. Deterministic, so re-running produces the same numbers.
+Runs the whole suite — this report plus the LLM comparison appended at the end — and overwrites this tracked file (`docs/architecture/collision/contextSelector-report.md`) in place. Deterministic, so re-running produces the same numbers.
+
+## How the benchmark is built
+
+**At a glance:** an _offline, deterministic_ benchmark that replays the **real** contextSelector pipeline — the shipped agent keyword lists, the same recency-weighted model of the recent conversation, and the same resolve/abstain decision gate the product uses — over **1690** labeled collision test cases (four corpora) plus a **50-case** adversarial stress set, and scores three things: does it find the topic, does it fire only when it should, and does it pick the right agent. **No LLM and no app startup** (except a separate, fully-cached LLM-comparison arm). Every run produces identical numbers.
+
+Under the hood it is three layers. You don't need to read the code to follow the results — this is just the shape of the machine that produced them.
+
+**Layer 1 — the foundation.** A _roster_ is loaded from every shipped agent's real keyword list (the exact data the product routes with). A _fixture_ is one labeled test case. A small shared toolkit builds conversation turns and samples words with a fixed random seed, so everything is reproducible.
+
+A **fixture** is the single unit every part of the benchmark speaks in:
+
+```
+fixture = {
+  prelude:        the recent conversation, as a list of turns (what the scorer reads)
+  collisionInput: the final ambiguous request that triggered the collision
+  candidates:     the 2+ agents whose grammars collided (candidates[0] = what first-match picks)
+  label:          the correct answer — resolve→<agent>, or abstain (tie | no-signal | stale | coverage)
+  retrieval?:     (optional) which words the context SHOULD vs SHOULD-NOT focus on, for Metric 1
+  tier?:          (optional) clear | vague
+}
+```
+
+**Layer 2 — the corpus generators.** Each generator turns the roster into a list of fixtures. They differ in where the words come from and how hard the collision is, but all emit the same fixture shape, so the engine scores them identically. Three build their cases from templates (keywords glued with filler words like "the" and "and", so only the keywords carry signal); one is written by hand in plain English. **None uses an LLM** — every case is either template-generated from real/synthetic keyword lists or literally typed by a person.
+
+| Generator      | Words come from                                           | Difficulty                        | Labeled by   |
+| -------------- | --------------------------------------------------------- | --------------------------------- | ------------ |
+| **easy**       | real agents, _distinct_ pairs (barely-overlapping vocab)  | floor — trivially separable       | construction |
+| **siblings**   | _synthetic_ look-alike agents sharing ~60% of their words | hard — little discriminates them  | construction |
+| **real-pairs** | real agents, _genuinely confusable_ pairs                 | medium–hard, split clear vs vague | construction |
+| **dialogue**   | _hand-written_ natural sentences                          | 5 tiers, simple → adversarial     | human intent |
+
+**Layer 3 — one scoring engine + orchestration.** A single engine scores any corpus the same way, producing the three metrics and the strategy comparison. The top-level script runs every corpus through it and writes this report; a second script adds the LLM comparison; and the one-line command above runs the whole thing.
+
+### What a fixture looks like, per generator
+
+Illustrative examples — the templated turns sample real keywords, so the exact words vary by seed:
+
+**easy** — _player_ vs _browser_, led by one unrelated _weather_ turn; the conversation is on-topic for the music player:
+
+```
+prelude:        ["the forecast and the humidity",   // weather noise (oldest, faint)
+                 "the playlist and the album",       // player's own words
+                 "the artist and the chorus"]
+collisionInput: "handle the play request"
+candidates:     ["player.play", "browser.open"]
+label:          resolve → player.play
+```
+
+**siblings** — _vampire_ vs _werewolf_. Both share the occult register (blood, night…), which cancels in scoring; only the unique words (coffin, fang) can point at a winner:
+
+```
+prelude:        ["the coffin",               // vampire-unique (discriminates)
+                 "the fang",
+                 "the blood and the night"]  // shared register (cancels to zero)
+collisionInput: "perform the summon"
+candidates:     ["vampire.summon", "werewolf.summon"]
+label:          resolve → vampire.summon
+```
+
+If every turn were shared occult words, the correct answer flips to **abstain** — nothing discriminates.
+
+**real-pairs** — _timer_ vs _windowsClock_, a genuinely confusable pair, in its two flavors:
+
+```
+CLEAR  (should resolve):  mostly the shared time-words + a few "tells" unique to timer
+                          → label: resolve → timer,  tier: clear
+VAGUE  (should abstain):  only the shared time-words both agents answer to
+                          → label: abstain,          tier: vague
+```
+
+**dialogue** — hand-written, reads like a real user, grounded in the agents' real keywords. The final _ask_ is recorded but not scored (the decision is made from the turns before it):
+
+```
+dialogue: ["I've been listening to so much new stuff this week.",
+           "my discover weekly has been on point lately.",
+           "queue up my favorite upbeat mix for the gym."]
+ask:      "play it"                  // recorded, not scored
+candidates: ["player", "localPlayer"]
+label:      resolve → player
+```
 
 ## Results by difficulty tier
 
@@ -348,7 +428,7 @@ The dispatcher's other grammar-collision strategies (`first-match`, `score-rank`
 
 # contextSelector vs the LLM resolution path
 
-_Generated 2026-07-14T22:30:11.043Z · 250 labeled collisions · LLM arm = real `aiclient` model (the standard path's LLM), temperature 0, cached._
+_Generated 2026-07-14T23:17:58.645Z · 250 labeled collisions · LLM arm = real `aiclient` model (the standard path's LLM), temperature 0, cached._
 
 **Goal:** the report above shows contextSelector is safe and instant, but the dispatcher could instead just ask the LLM to resolve every collision. This section asks the shipping question head-on: versus letting the LLM decide, what does turning contextSelector on gain, and what does it cost? The same 250 labeled collisions are scored both ways.
 

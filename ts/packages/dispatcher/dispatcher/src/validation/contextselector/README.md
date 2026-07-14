@@ -58,8 +58,9 @@ npx tsx src/validation/contextselector/measureMetrics.mts --out <output-dir>
 npx tsx src/validation/contextselector/compareLlm.mts
 ```
 
-Both arms write into a **single consolidated `contextSelector-report.md`** in
-`--out` (default: next to the scripts) — `measureMetrics.mts` writes the base
+Both arms write into a **single consolidated `contextSelector-report.md`** — by
+default the tracked copy at `docs/architecture/collision/contextSelector-report.md`
+(override the directory with `--out <dir>`). `measureMetrics.mts` writes the base
 report and `compareLlm.mts` upserts its LLM-comparison section, so any run order
 is idempotent. No build needed — `tsx` runs the `.mts` files against the
 TypeScript sources directly, and the committed keyword files live in each agent's
@@ -127,8 +128,9 @@ generator** under "How the benchmark is built".
   `contextSelector-report.md`. Responses are cached to `llm-cache.json` so
   re-runs are free; run: `npx tsx src/validation/contextselector/compareLlm.mts`.
 - **`reportFile.mts`** — shared output target: resolves the single
-  `contextSelector-report.md` path (honoring `--out`, default next to the
-  scripts) and provides the base-write / LLM-section-upsert helpers both arms use.
+  `contextSelector-report.md` path (honoring `--out`, default the tracked
+  `docs/architecture/collision/` folder) and provides the base-write /
+  LLM-section-upsert helpers both arms use.
 - **`reproduce.mts`** — the one-command umbrella: runs `measureMetrics` then
   `compareLlm` into the one report.
 

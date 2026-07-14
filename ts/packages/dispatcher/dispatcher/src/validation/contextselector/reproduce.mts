@@ -3,8 +3,8 @@
 
 // One-command reproduction of the full contextSelector collision-resolution
 // benchmark suite. Both arms write into a SINGLE consolidated markdown report
-// (contextSelector-report.md), by default next to these scripts (override the
-// directory with `--out <dir>`):
+// (contextSelector-report.md), by default the tracked copy under
+// docs/architecture/collision/ (override the directory with `--out <dir>`):
 //
 //   1. measureMetrics.mts — deterministic, offline. Writes the base report:
 //      the deployed routing-lift of contextSelector layered on every silent
@@ -85,5 +85,23 @@ if (llmStatus !== 0) {
     );
 }
 
+// 3. Format the report so the tracked copy stays prettier-clean (CI runs
+// `prettier --check .`). The generator emits valid markdown but not
+// prettier-normalized table alignment, so normalize it here rather than expecting
+// every runner to remember a manual pass. Best-effort — a formatting failure does
+// not invalidate the report content.
+const reportPath = resolveReportPath();
+console.log("\n=== contextSelector benchmark — prettier --write (report) ===");
+const fmt = spawnSync("npx", ["prettier", "--write", reportPath], {
+    stdio: "inherit",
+    shell: process.platform === "win32",
+    env: childEnv(),
+});
+if ((fmt.status ?? 1) !== 0) {
+    console.warn(
+        `\nprettier --write did not complete (exit ${fmt.status ?? 1}) — format ${reportPath} manually before committing.`,
+    );
+}
+
 console.log("\n=== contextSelector benchmark reproduction complete ===");
-console.log(`Consolidated report: ${resolveReportPath(HERE)}`);
+console.log(`Consolidated report: ${reportPath}`);

@@ -328,7 +328,7 @@ async function main() {
     md.push(
         "\n**How to read it.** *LLM-only accuracy* is the standard path with contextSelector off. *CS-ON system accuracy* is the deployed behavior (resolve, else fall through to the LLM). *Regressions* are the price of enabling contextSelector — collisions it resolves to the wrong agent that the LLM alone would have routed correctly. *Correct saves* are the payoff — right answers delivered without an LLM call.\n",
     );
-    const reportPath = resolveReportPath(HERE);
+    const reportPath = resolveReportPath();
     upsertLlmSection(reportPath, md.join("\n"));
     console.log(
         `Wrote LLM comparison into consolidated report:\n  ${reportPath}`,

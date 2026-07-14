@@ -3,7 +3,7 @@
 
 // Single consolidated output target for the contextSelector benchmark. Both the
 // deterministic arm (measureMetrics) and the LLM arm (compareLlm) write into ONE
-// markdown report, defaulting to a fixed local path next to the scripts
+// markdown report, defaulting to the tracked docs/architecture/collision/ copy
 // (overridable with `--out <dir>`). measureMetrics writes the base report,
 // truncating any prior content (including a stale LLM section); compareLlm
 // upserts its own marked section. Any run order or repetition is therefore
@@ -12,18 +12,32 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const REPORT_FILENAME = "contextSelector-report.md";
 
-// Resolve the report path: `--out <dir>` if provided, else `defaultDir` (each
-// caller passes its own module directory so the report lands next to the
-// scripts). Creates the directory if needed.
-export function resolveReportPath(defaultDir: string): string {
+// Default output directory: the committed collision design-docs folder, so the
+// tracked report at docs/architecture/collision/contextSelector-report.md stays
+// current on every run without a manual copy. Resolved from this module's own
+// location: contextselector -> validation -> src -> dispatcher -> dispatcher ->
+// packages -> ts, then docs/architecture/collision.
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..", "..", "..");
+const DEFAULT_REPORT_DIR = path.join(
+    TS_ROOT,
+    "docs",
+    "architecture",
+    "collision",
+);
+
+// Resolve the report path: `--out <dir>` if provided, else the tracked docs
+// folder above. Creates the directory if needed.
+export function resolveReportPath(): string {
     const idx = process.argv.indexOf("--out");
     const dir =
         idx !== -1 && process.argv[idx + 1]
             ? process.argv[idx + 1]
-            : defaultDir;
+            : DEFAULT_REPORT_DIR;
     fs.mkdirSync(dir, { recursive: true });
     return path.join(dir, REPORT_FILENAME);
 }

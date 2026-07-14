@@ -24,8 +24,6 @@
 //
 // Run: npx tsx src/validation/contextselector/measureMetrics.mts [--out <dir>]
 
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { resolveReportPath, writeBaseReport } from "./reportFile.mjs";
 import { loadRoster, buildRoster } from "./metricRoster.mjs";
 import { selectPairs, generateFixtures, Fixture } from "./metricCorpus.mjs";
@@ -44,10 +42,6 @@ import {
     DEFAULT_THRESHOLDS,
     MetricsResult,
 } from "./metricRunner.mjs";
-
-// This script's directory — the default output location for the consolidated
-// report, so it lands next to the harness regardless of the caller's cwd.
-const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 function pct(x: number): string {
     return `${(x * 100).toFixed(1)}%`;
@@ -557,7 +551,7 @@ function md(): string {
         "```\ncd packages/dispatcher/dispatcher\nnpx tsx src/validation/contextselector/reproduce.mts\n```\n",
     );
     L.push(
-        `Runs the whole suite — this report plus the LLM comparison appended at the end — and overwrites this file in place. Deterministic, so re-running produces the same numbers.\n`,
+        `Runs the whole suite — this report plus the LLM comparison appended at the end — and overwrites this tracked file (\`docs/architecture/collision/contextSelector-report.md\`) in place. Deterministic, so re-running produces the same numbers.\n`,
     );
 
     // ---- How the benchmark is built (structure + fixture examples) ----
@@ -1137,6 +1131,6 @@ function md(): string {
     return L.join("\n") + "\n";
 }
 
-const reportPath = resolveReportPath(HERE);
+const reportPath = resolveReportPath();
 writeBaseReport(reportPath, md());
 console.log(`\nWrote consolidated report:\n  ${reportPath}`);
