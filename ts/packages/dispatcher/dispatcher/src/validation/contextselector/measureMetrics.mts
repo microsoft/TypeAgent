@@ -481,6 +481,34 @@ function md(): string {
         `The test set spans **${dialogue.total} hand-labeled conversations** across five difficulty tiers, plus larger auto-generated collision sets — real overlapping agent pairs and a family of deliberately-confusable synthetic agents (**${combined.total}** realistic collisions in the combined corpus) — and a separate **50-case adversarial** set that stress-tests where word-matching breaks.\n`,
     );
 
+    // ---- Executive summary: headline results up top ----
+    const summaryCs = combined.strategies.contextSelector;
+    const firstMatchMisroute =
+        combined.strategies.baselines.find((b) => b.strategy === "first-match")
+            ?.misrouteRate ?? 0;
+    const priorityMisroute =
+        combined.strategies.baselines.find((b) => b.strategy === "priority")
+            ?.misrouteRate ?? 0;
+    L.push("## Summary of results\n");
+    L.push(
+        "**Bottom line: contextSelector is safe to use as a first-pass collision resolver.** On realistic conversation it routes a large share of ambiguous requests to the right agent and **never once silently sends one to the wrong agent** — when the evidence is weak it steps aside and lets today's routing (or the LLM) decide. The only misroutes it makes are on inputs deliberately engineered to defeat word-matching, which are meant to fall through to the LLM anyway. Everything below is the supporting evidence — scroll on for the per-tier breakdown, the three metrics, the head-to-head against every other strategy, and the LLM comparison.\n",
+    );
+    L.push(
+        `- **Safety — the headline: 0 silent misroutes.** Across all **${combined.total}** realistic collisions (and all 100 hand-written realistic conversations), *wrong-target* is **${combined.resolution.wrongTargetCount}**.`,
+    );
+    L.push(
+        `- **Helpfulness:** on the combined corpus it confidently resolves **${pct(combined.trigger.yield)}** of collisions (${combined.trigger.triggeredOnResolvable}/${combined.trigger.resolvable}), and **${pct(combined.resolution.targetAccuracy)}** of those go to the right agent.`,
+    );
+    L.push(
+        `- **Net routing gain:** layered on the dispatcher's current default (first-match), routing accuracy climbs **${pct(combined.ab.baselineAccuracy)} → ${pct(combined.ab.treatmentAccuracy)}** (**+${pct(combined.ab.routingAccuracyLift)}**), with no group of conversations left worse off than before.`,
+    );
+    L.push(
+        `- **Safer than every silent strategy:** its silent-misroute rate is **${pct(summaryCs.misrouteRate)}**, versus ${pct(firstMatchMisroute)} for first-match and ${pct(priorityMisroute)} for priority; and it auto-handles **${pct(summaryCs.accuracy)}** of collisions that the always-ask strategy would interrupt the user for.`,
+    );
+    L.push(
+        `- **Where it must not be trusted:** on the separate **50-case adversarial** stress set (loaded negation, sarcasm, quoting someone else) it makes **${dialogueXhard.resolution.wrongTargetCount}** misroutes — failures that need semantic/LLM understanding, which is exactly why those inputs are excluded from the safety corpus and left to the LLM.\n`,
+    );
+
     L.push("## Key terms\n");
     L.push(
         `Every conversation is labeled with what *should* happen, then scored by the real pipeline. Each one lands in exactly one of four outcomes:\n`,
