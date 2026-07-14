@@ -610,8 +610,8 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
         // Check for single-variable / factored rules with no explicit -> value.
         const effectiveValue = deriveEffectiveValue(
             rule,
-            () => `Grammar rule at index ${ruleIndex}`,
             true,
+            () => `Grammar rule at index ${ruleIndex}`,
         );
 
         const ruleEntry = builder.createState(false);
@@ -1495,11 +1495,7 @@ function compileRulesPartWithSlots(
 
         // Compile and store the action value on the entry state FIRST
         // We need to know if there's a value before deciding about environments
-        const effectiveValue = deriveEffectiveValue(
-            rule,
-            () => "Nested grammar rule",
-            false,
-        );
+        const effectiveValue = deriveEffectiveValue(rule);
 
         let compiledValue: ValueExpression | undefined;
         let nestedCompletionActionName: string | undefined;
