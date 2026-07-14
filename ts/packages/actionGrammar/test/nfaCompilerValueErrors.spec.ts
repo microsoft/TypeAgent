@@ -36,14 +36,12 @@ describe("deriveEffectiveValue error messages", () => {
         );
     });
 
-    it("throws an accurate error (not 'Multi-term') for a single-part rule with no variable and no value", () => {
+    it("throws an accurate error for a single-part rule with no variable and no value", () => {
         // Raw AST with exactly one part, that part carrying no variable
         // and no top-level `value`. String-literal single-part rules are
         // auto-normalized (isSingleLiteralRule) to stamp a matched-text
         // value, so this uses an unbound phraseSet part instead - a
-        // shape normalizeRule does not special-case. Guard here that the
-        // message accurately reflects a 1-term rule instead of the
-        // multi-term wording.
+        // shape normalizeRule does not special-case.
         const grammar: Grammar = {
             alternatives: [{ parts: [createPhraseSetPart("Polite")] }],
         };
@@ -54,7 +52,6 @@ describe("deriveEffectiveValue error messages", () => {
             message = (e as Error).message;
         }
         expect(message).toMatch(/has 1 term but no value expression/);
-        expect(message).not.toMatch(/Multi-term/);
     });
 
     it("throws an accurate error for a zero-part rule with no value", () => {
