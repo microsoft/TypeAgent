@@ -1,0 +1,89 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Privileged companion to codeql.yml.
+#
+# CodeQL analysis of a fork pull request runs in codeql.yml under the unprivileged
+# `pull_request` event (read-only token, no secrets) and stores its SARIF as an
+# artifact. This workflow runs after that completes, in the trusted context of the
+# base repository (write token), and uploads the SARIF to code scanning so the
+# "Require code scanning results" ruleset rule is satisfied for fork PRs.
+#
+# SECURITY: This job must NEVER check out or execute the pull request's code. It
+# only downloads the SARIF artifact and uploads it. The destination ref/sha are
+# derived from the TRUSTED workflow_run payload (head_sha) plus a server-side PR
+# lookup — never from artifact contents — so a malicious fork cannot redirect
+# results to another ref. This is the safe alternative to pull_request_target.
+
+name: CodeQL fork upload
+
+on:
+  workflow_run:
+    workflows: ["CodeQL Advanced"]
+    types: [completed]
+
+concurrency:
+  group: codeql-fork-upload-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    name: Upload CodeQL results for fork PRs
+    runs-on: ubuntu-latest
+    # Only fork PR analysis runs that finished successfully. Push and
+    # internal-branch runs already uploaded their own results in codeql.yml.
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.fork == true
+    permissions:
+      actions: read # download artifacts from the triggering run
+      contents: read
+      security-events: write # upload SARIF to code scanning
+    steps:
+      - name: Download CodeQL SARIF artifacts
+        uses: actions/download-artifact@v5
+        with:
+          pattern: codeql-sarif-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/codeql-sarif
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Resolve pull request from trusted head SHA
+        id: pr
+        uses: actions/github-script@v8
+        with:
+          script: |
+            // workflow_run.pull_requests[] is empty for forks, and the
+            // associated-commits API does not index a fork's head commit against
+            // the base repo. So resolve the PR by scanning this repo's open PRs
+            // for the one whose head commit matches the SHA GitHub reported for
+            // the analysis run. Every value here comes from the base repo or the
+            // trusted event payload -- never from the downloaded artifact -- so a
+            // fork cannot redirect the upload to another ref.
+            const headSha = context.payload.workflow_run.head_sha;
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+            const pr = prs.find((p) => p.head.sha === headSha);
+            if (!pr) {
+              core.setFailed(`No open pull request found with head ${headSha}.`);
+              return;
+            }
+            core.setOutput("number", String(pr.number));
+            core.setOutput("sha", headSha);
+
+      - name: Upload CodeQL results to the pull request
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ runner.temp }}/codeql-sarif
+          ref: refs/pull/${{ steps.pr.outputs.number }}/head
+          sha: ${{ steps.pr.outputs.sha }}
+          wait-for-processing: true

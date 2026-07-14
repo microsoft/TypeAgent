@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ca702e86bec4d3344d1b54887951e7aff94e01799193cefa823f6c4689a663e0 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=26353128cf30562c0712f3237a4e02f5c91883e2a0ffd13b777d0222b9ed4c38 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # github-cli-agent — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The `github-cli-agent` is a TypeAgent application agent that integrates with the GitHub CLI (`gh`). It allows users to perform a wide range of GitHub operations, such as managing repositories, issues, pull requests, workflows, and more, using natural language commands. By leveraging the GitHub CLI, this agent provides a programmatic interface to automate and simplify common GitHub tasks.
+The `github-cli-agent` is a TypeAgent application agent designed to interact with GitHub through the GitHub CLI (`gh`). It enables users to perform a wide range of GitHub operations, such as managing repositories, issues, pull requests, workflows, and more, using natural language commands. By leveraging the GitHub CLI, this agent provides a streamlined interface for automating and simplifying common GitHub tasks.
 
 ## What it does
 
-The `github-cli-agent` supports 64 actions, grouped into several categories:
+The `github-cli-agent` supports 65 actions, categorized into several functional areas:
 
-- **Authentication**: Manage GitHub authentication with actions like `authLogin`, `authLogout`, and `authStatus`. These actions enable users to log in, log out, and check their authentication status.
-- **Issues**: Handle issue workflows with actions such as `issueCreate`, `issueClose`, `issueDelete`, `issueReopen`, `issueList`, and `issueView`. These actions allow users to create, modify, and view issues across repositories.
-- **Pull Requests**: Manage pull requests with actions like `prCreate`, `prClose`, `prMerge`, `prList`, `prView`, and `prCheckout`. These actions cover the entire lifecycle of pull requests, from creation to merging.
+- **Authentication**: Actions like `authLogin`, `authLogout`, and `authStatus` allow users to manage their GitHub authentication, including logging in, logging out, and checking the current authentication status.
+- **Issues**: Manage GitHub issues with actions such as `issueCreate`, `issueClose`, `issueDelete`, `issueReopen`, `issueList`, and `issueView`. These actions enable users to create, modify, delete, and view issues across repositories.
+- **Pull Requests**: Handle pull request workflows with actions like `prCreate`, `prClose`, `prMerge`, `prList`, `prView`, and `prCheckout`. These actions cover the entire lifecycle of pull requests, from creation to merging.
 - **Repositories**: Perform repository-related tasks with actions such as `repoCreate`, `repoClone`, `repoDelete`, `repoView`, `repoFork`, `starRepo`, and `searchRepos`. These actions allow users to create, clone, delete, and explore repositories.
 - **Codespaces**: Manage GitHub Codespaces with actions like `codespaceCreate`, `codespaceDelete`, and `codespaceList`.
 - **Gists**: Create, delete, and list gists using `gistCreate`, `gistDelete`, and `gistList`.
@@ -44,7 +44,7 @@ The agent performs a `gh auth status` readiness check at startup and before exec
 
 ## Key Files
 
-The `github-cli-agent` is organized into several key files that define its functionality:
+The `github-cli-agent` is structured around several key files that define its functionality:
 
 - **[github-cliManifest.json](./src/github-cliManifest.json)**: Contains metadata about the agent, including its description, emoji, and schema details.
 - **[github-cliSchema.ts](./src/github-cliSchema.ts)**: Defines the types and parameters for all supported actions.
@@ -89,7 +89,7 @@ By following these steps, you can extend the `github-cli-agent` to support addit
 ### Entry points
 
 - `./agent/manifest` → [./src/github-cliManifest.json](./src/github-cliManifest.json)
-- `./agent/handlers` → `./dist/github-cliActionHandler.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/github-cliActionHandler.js](./dist/github-cliActionHandler.js)
 
 ### Dependencies
 
@@ -118,44 +118,44 @@ External: _None at runtime._
 
 ### Actions
 
-_64 actions implemented by this agent, parsed deterministically from `./src/github-cliSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
+_65 actions implemented by this agent, parsed deterministically from `./src/github-cliSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
-| User says                                                           | Action                            |
-| ------------------------------------------------------------------- | --------------------------------- |
-| _(no sample)_                                                       | `authLogin`                       |
-| _(no sample)_                                                       | `authLogout`                      |
-| _(no sample)_                                                       | `authStatus`                      |
-| _(no sample)_                                                       | `browseRepo`                      |
-| _(no sample)_                                                       | `browseIssue`                     |
-| _(no sample)_                                                       | `browsePr`                        |
-| _(no sample)_                                                       | `codespaceCreate`                 |
-| _(no sample)_                                                       | `codespaceDelete`                 |
-| _(no sample)_                                                       | `codespaceList`                   |
-| _(no sample)_                                                       | `gistCreate`                      |
-| _(no sample)_                                                       | `gistDelete`                      |
-| _(no sample)_                                                       | `gistList`                        |
-| _(no sample)_                                                       | `issueCreate`                     |
-| _(no sample)_                                                       | `issueClose`                      |
-| _Permanently delete a GitHub issue (uses `gh issue delete --yes`)._ | `issueDelete` → `{ "number": 0 }` |
-| _(no sample)_                                                       | `issueReopen`                     |
-| _(no sample)_                                                       | `issueList`                       |
-| _View / open a specific GitHub issue by number_                     | `issueView`                       |
-| _(no sample)_                                                       | `orgList`                         |
-| _(no sample)_                                                       | `orgView`                         |
-| _(no sample)_                                                       | `prCreate`                        |
-| _(no sample)_                                                       | `prClose`                         |
-| _(no sample)_                                                       | `prMerge`                         |
-| _(no sample)_                                                       | `prList`                          |
-| _View / open a specific GitHub pull request by number_              | `prView`                          |
-| _(no sample)_                                                       | `prCheckout`                      |
-| _(no sample)_                                                       | `prChecks` → `{ "number": 0 }`    |
-| _(no sample)_                                                       | `projectCreate`                   |
-| _(no sample)_                                                       | `projectDelete`                   |
-| _(no sample)_                                                       | `projectList`                     |
-| _…and 34 more actions not shown (cap: 30)._                         |                                   |
+| User says                                                                            | Action                            |
+| ------------------------------------------------------------------------------------ | --------------------------------- |
+| _(no sample)_                                                                        | `authLogin`                       |
+| _(no sample)_                                                                        | `authLogout`                      |
+| _(no sample)_                                                                        | `authStatus`                      |
+| _(no sample)_                                                                        | `browseRepo`                      |
+| _(no sample)_                                                                        | `browseIssue`                     |
+| _(no sample)_                                                                        | `browsePr`                        |
+| _(no sample)_                                                                        | `codespaceCreate`                 |
+| _(no sample)_                                                                        | `codespaceDelete`                 |
+| _(no sample)_                                                                        | `codespaceList`                   |
+| _(no sample)_                                                                        | `gistCreate`                      |
+| _(no sample)_                                                                        | `gistDelete`                      |
+| _(no sample)_                                                                        | `gistList`                        |
+| _(no sample)_                                                                        | `issueCreate`                     |
+| _(no sample)_                                                                        | `issueClose`                      |
+| _Permanently delete a GitHub issue (uses `gh issue delete --yes`)._                  | `issueDelete` → `{ "number": 0 }` |
+| _(no sample)_                                                                        | `issueReopen`                     |
+| _(no sample)_                                                                        | `issueList`                       |
+| _View / open a specific GitHub issue by number_                                      | `issueView`                       |
+| _(no sample)_                                                                        | `orgList`                         |
+| _(no sample)_                                                                        | `orgView`                         |
+| _(no sample)_                                                                        | `prCreate`                        |
+| _(no sample)_                                                                        | `prClose`                         |
+| _(no sample)_                                                                        | `prMerge`                         |
+| _List pull requests, optionally filtered by repo, state, label, author, or assignee_ | `prList`                          |
+| _View / open a specific GitHub pull request by number_                               | `prView`                          |
+| _(no sample)_                                                                        | `prCheckout`                      |
+| _(no sample)_                                                                        | `prChecks` → `{ "number": 0 }`    |
+| _(no sample)_                                                                        | `projectCreate`                   |
+| _(no sample)_                                                                        | `projectDelete`                   |
+| _(no sample)_                                                                        | `projectList`                     |
+| _…and 35 more actions not shown (cap: 30)._                                          |                                   |
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter github-cli-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter github-cli-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
