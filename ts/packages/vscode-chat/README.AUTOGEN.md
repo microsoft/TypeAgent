@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=b0513e501a53521095371b9958838f5a38bc21678e17dc5c0fdf8d8be78d01ac -->
+<!-- AUTOGEN:DOCS:HASH:sha256=fcc17dd068ab8fd02eab7cca07c646c712452b0290eb712a36e2a4dd04c2dc51 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-chat — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `vscode-chat` package integrates TypeAgent as a third-party agent within Visual Studio Code's native Chat view. This extension leverages the proposed `chatSessionsProvider` API to allow users to interact with TypeAgent sessions directly in VS Code. Conversations initiated through this extension, the Electron shell, the CLI, or `vscode-shell` are synchronized and appear as session items in the Chat sidebar. Prompts sent in these sessions are routed through a running TypeAgent agent server.
+The `vscode-chat` package integrates TypeAgent as a third-party agent within Visual Studio Code's native Chat view. This extension uses the proposed `chatSessionsProvider` API to enable users to interact with TypeAgent sessions directly in VS Code. Conversations initiated through this extension, the Electron shell, the CLI, or `vscode-shell` are synchronized and appear as session items in the Chat sidebar. Prompts sent in these sessions are routed through a running TypeAgent agent server.
 
 ## What it does
 
-The `vscode-chat` package provides the following capabilities:
+The `vscode-chat` package provides the following functionality:
 
 - **Session Management**: Users can view, create, and manage TypeAgent sessions directly from the Chat sidebar. Existing sessions are selectable, and new sessions can be created using the `+` button in the Chat view.
 - **Prompt Processing**: Prompts entered in the Chat view are sent to the TypeAgent dispatcher via the agent server. Responses are streamed back and displayed in the chat panel.
@@ -24,7 +24,7 @@ The `vscode-chat` package provides the following capabilities:
 - **Display Rendering**: Chat responses are rendered in markdown or plain text formats, ensuring compatibility with VS Code's Chat view.
 - **Cross-Platform Session Visibility**: Conversations created in the VS Code Chat view are accessible from other TypeAgent interfaces, such as the CLI and Electron shell.
 
-This extension is built on VS Code's proposed `chatSessionsProvider` API, which requires enabling proposed APIs in an Insiders build of VS Code. It is not eligible for the VS Code Marketplace while the API remains in the proposed stage.
+This extension relies on VS Code's proposed `chatSessionsProvider` API, which requires enabling proposed APIs in an Insiders build of VS Code. It is not eligible for the VS Code Marketplace while the API remains in the proposed stage.
 
 ## Setup
 
@@ -119,10 +119,10 @@ External: `ansi_up`, `debug`
 
 ### Files of interest
 
-`./src/displayRender.ts`, `./src/extension.ts`, `./src/sessionManager.ts`, …and 1 more under `./src/`.
+`./src/connectionHolder.ts`, `./src/displayRender.ts`, `./src/extension.ts`, …and 2 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-chat docs:verify-links` to spot-check._
+_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-chat docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
