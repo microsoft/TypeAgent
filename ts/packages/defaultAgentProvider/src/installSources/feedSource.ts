@@ -6,6 +6,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import semver from "semver";
+import registerDebug from "debug";
 import {
     InstallSource,
     FeedSourceConfig,
@@ -24,6 +25,8 @@ import {
 } from "./feedAuth.js";
 
 const execFileAsync = promisify(execFile);
+
+const debug = registerDebug("typeagent:dispatcher:installSource:feed");
 
 // The sentinel keyword an app agent declares in its package.json.
 export const AGENT_KEYWORD = "typeagent-agent";
@@ -288,6 +291,9 @@ async function listScopedPackages(
         }
         const data = (await res.json()) as AzurePackagesResponse;
         const page = Array.isArray(data.value) ? data.value : [];
+        debug(
+            `listScopedPackages: GET ${url} -> ${res.status} ${res.statusText}, ${page.length} package(s)`,
+        );
         for (const pkg of page) {
             const nameValue = pkg.normalizedName ?? pkg.name;
             const name = typeof nameValue === "string" ? nameValue : undefined;
@@ -304,6 +310,9 @@ async function listScopedPackages(
         }
         skip += top;
     }
+    debug(
+        `listScopedPackages: ${names.length} package(s) matched scopes [${scopes.join(", ")}]: ${names.join(", ")}`,
+    );
     return names;
 }
 
@@ -320,11 +329,18 @@ async function isAgentPackage(
         headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
+        debug(
+            `isAgentPackage: GET ${url} -> ${res.status} ${res.statusText} (treated as non-agent)`,
+        );
         return false;
     }
     const packument = asRecord(await res.json());
     const keywords: unknown = packument?.keywords;
-    return Array.isArray(keywords) && keywords.includes(AGENT_KEYWORD);
+    const isAgent = Array.isArray(keywords) && keywords.includes(AGENT_KEYWORD);
+    debug(
+        `isAgentPackage: ${packageName} keywords=[${Array.isArray(keywords) ? keywords.join(", ") : ""}] -> ${isAgent}`,
+    );
+    return isAgent;
 }
 
 // Fetch and parse a package's packument. Returns undefined
@@ -342,10 +358,21 @@ async function fetchPackument(
             headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
+            debug(
+                `fetchPackument: GET ${url} -> ${res.status} ${res.statusText} (no packument)`,
+            );
             return undefined;
         }
-        return await res.json();
-    } catch {
+        const packument = await res.json();
+        const record = asRecord(packument);
+        const versions = asRecord(record?.versions);
+        const distTags = asRecord(record?.["dist-tags"]);
+        debug(
+            `fetchPackument: ${packageName} -> versions=[${versions ? Object.keys(versions).join(", ") : ""}] dist-tags=${JSON.stringify(distTags ?? {})}`,
+        );
+        return packument;
+    } catch (e) {
+        debug(`fetchPackument: ${packageName} failed: ${e}`);
         return undefined;
     }
 }
@@ -505,6 +532,14 @@ async function enumerateFeedAgentDescriptors(
         }
         descriptors.push(descriptor);
     }
+    debug(
+        `enumerateFeedAgentDescriptors: ${descriptors.length} agent package(s): ${descriptors
+            .map(
+                (d) =>
+                    `${d.packageName}@${d.latestVersion}${d.defaultAgentName ? ` (${d.defaultAgentName})` : ""}`,
+            )
+            .join(", ")}`,
+    );
     return descriptors;
 }
 
