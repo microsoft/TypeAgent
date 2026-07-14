@@ -40,9 +40,22 @@ an all-vague slice, abstention for an all-clear slice) show `n/a`.
 
 ## Run
 
+Reproduce the **whole** suite (deterministic report + the LLM arm) with one
+command:
+
 ```bash
 cd packages/dispatcher/dispatcher
+npx tsx src/validation/contextselector/reproduce.mts --out <output-dir>
+```
+
+`reproduce.mts` runs `measureMetrics.mts` (the deterministic per-strategy
+comparison **and** the deployed routing-lift of contextSelector on top of every
+strategy fallback, over the combined 1000+-collision corpus) followed by
+`compareLlm.mts` (the LLM arm, best-effort from cache). Or run either directly:
+
+```bash
 npx tsx src/validation/contextselector/measureMetrics.mts --out <output-dir>
+npx tsx src/validation/contextselector/compareLlm.mts
 ```
 
 Writes `contextSelector-metrics.{md,json}` to `--out` (default: cwd). No build
@@ -139,6 +152,57 @@ standard path with it OFF (the LLM disambiguating the collision)?
   liability only under adversarial phrasing — which reinforces the mitigation
   (bias to abstention + a negation guard so those cases fall through to the LLM
   instead of resolving).
+
+**contextSelector vs _every_ collision-resolution strategy (`measureMetrics.mts`,
+"Comparison" section).** The LLM comparison above is one baseline; the dispatcher
+also ships four deterministic grammar-collision strategies. All four are
+**context-blind** — they pick the same agent regardless of the conversation — so
+this comparison isolates the value of reading context. On the combined corpus
+(1090 resolvable collisions), each strategy's _own_ decision:
+
+| Strategy            | Resolves correctly | Silently misroutes | Defers / abstains |
+| ------------------- | ------------------ | ------------------ | ----------------- |
+| first-match         | 49.4%              | **50.6%**          | 0%                |
+| score-rank¹         | 50.9%              | **49.1%**          | 0%                |
+| priority            | 50.9%              | **49.1%**          | 0%                |
+| user-clarify        | 0%                 | 0%                 | 100% (prompts)    |
+| **contextSelector** | **59.6%**          | **0%**             | 40.4%             |
+
+¹ On a genuine grammar collision the colliding constructions matched the _same_
+input, so `score-rank`'s match-strength heuristic ties and falls through to
+`priority` — identical on this corpus (real grammar match-counts aren't
+reconstructable offline without the matcher).
+
+- **The context-blind auto-resolvers misroute ~half the time** (50.6% / 49.1%):
+  with no view of the conversation they can only be right when their fixed rule
+  happens to land on the intended agent.
+- **contextSelector never silently misroutes on this corpus (0%)** and still
+  auto-resolves _more_ correctly than any of them (59.6%), handing back the 40.4%
+  it can't resolve confidently instead of guessing.
+- **vs `user-clarify`** (the only other zero-misroute strategy): contextSelector
+  auto-resolves 59.6% of the collisions a clarify prompt would otherwise interrupt
+  the user for, at no misroute cost.
+
+(Note: the "routing lift" in the tier table credits contextSelector with the
+first-match _fallback_ it defers to on abstain, so that number is larger than the
+standalone lift here — this table scores each strategy's own decision only.)
+
+**Deployed on top of each strategy (the flip side — `measureMetrics.mts`,
+"Deployed routing-lift" section).** The standalone table above scores each
+strategy alone; deploying contextSelector _on top of_ a silent auto-resolver
+(resolve when confident, else fall back to X) is the actual shipping question.
+On the combined corpus it is strictly additive over every silent strategy:
+
+| Base strategy X | X alone | + contextSelector | Routing lift | No-regression |
+| --------------- | ------- | ----------------- | ------------ | ------------- |
+| first-match     | 49.4%   | 78.4%             | **+29.0%**   | ✅ holds      |
+| score-rank      | 50.9%   | 80.2%             | **+29.3%**   | ✅ holds      |
+| priority        | 50.9%   | 80.2%             | **+29.3%**   | ✅ holds      |
+
+Whatever grammar strategy a dispatcher already runs, adding contextSelector lifts
+routing accuracy ~29 points with **zero** per-target-class regressions. (This is
+the deterministic `defer-to-strategy` deployment; the `escalate-to-llm` fallback
+is measured separately by `compareLlm.mts`.)
 
 **Realistic dialogue (the ship-confidence set).** Across the 100 simple+realistic
 +hard non-adversarial conversations:

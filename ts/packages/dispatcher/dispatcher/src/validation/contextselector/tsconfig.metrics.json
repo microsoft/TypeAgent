@@ -16,6 +16,7 @@
     "metricAdversary.mts",
     "metricRealPairs.mts",
     "metricRealisticDialogue.mts",
-    "compareLlm.mts"
+    "compareLlm.mts",
+    "reproduce.mts"
   ]
 }

@@ -292,6 +292,109 @@ export type AbMetrics = {
     clarifyOrLlmAvoided: number; // deterministic resolves a clarify would surface
 };
 
+// The context-BLIND collision-resolution strategies (matchCollision.ts). Each
+// picks a single candidate from the collision set WITHOUT reading the
+// conversation, so on a context-dependent collision it is right only when its
+// fixed rule happens to land on the intended target. Modeled faithfully for the
+// offline corpus:
+//   first-match  — candidates[0] (the cache/grammar order).
+//   priority     — the agent-priority order. No registration data offline, so a
+//                  fixed alphabetical id order stands in; ANY fixed order is
+//                  context-blind, which is the whole point of the comparison.
+//   score-rank   — strongest grammar match, ties -> priority. A genuine collision
+//                  is exactly the case where the constructions matched the SAME
+//                  input, so their match heuristics tie and score-rank falls
+//                  through to priority here (reported, and noted, as == priority).
+//   user-clarify — never auto-resolves; always defers to a user prompt (0
+//                  misroutes, but a prompt every time).
+export type BaselineStrategy =
+    | "first-match"
+    | "score-rank"
+    | "priority"
+    | "user-clarify";
+
+export const BASELINE_STRATEGIES: BaselineStrategy[] = [
+    "first-match",
+    "score-rank",
+    "priority",
+    "user-clarify",
+];
+
+// The context-blind strategies that SILENTLY auto-resolve (so contextSelector can
+// be deployed "on top of" them as the abstain-fallback and its lift measured).
+// user-clarify is excluded — it prompts rather than routing, so an accuracy lift
+// is ill-defined; its value is prompt-avoidance, reported separately.
+export const SILENT_STRATEGIES: BaselineStrategy[] = [
+    "first-match",
+    "score-rank",
+    "priority",
+];
+
+function priorityPick(candidates: readonly string[]): string {
+    // Fixed, context-blind order — alphabetical by full "schema.action" id.
+    return [...candidates].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))[0];
+}
+
+// What a baseline strategy would silently route to, or undefined if it defers
+// (user-clarify) instead of auto-resolving.
+function baselinePick(
+    strategy: BaselineStrategy,
+    candidates: readonly string[],
+): string | undefined {
+    switch (strategy) {
+        case "first-match":
+            return candidates[0];
+        case "score-rank": // ties -> priority on a genuine collision
+        case "priority":
+            return priorityPick(candidates);
+        case "user-clarify":
+            return undefined; // defers to the user
+    }
+}
+
+// One strategy's behavior on the resolvable set: how often it lands on the
+// labeled target (correct), silently routes to the wrong candidate (misroute),
+// or defers/abstains (no silent decision). Rates are over the resolvable fixtures.
+export type StrategyAccuracy = {
+    strategy: string;
+    correct: number;
+    wrong: number;
+    deferred: number; // user-clarify defers; contextSelector abstains
+    accuracy: number; // correct / resolvable
+    misrouteRate: number; // wrong / resolvable
+    deferRate: number; // deferred / resolvable
+};
+
+// Deploying contextSelector "on top of" a silent auto-resolver X: on a confident
+// pick it resolves, otherwise it falls back to X. `deployedAccuracy` is that
+// combined accuracy on the resolvable set; `lift` is the gain over X alone; and
+// `noRegression` is the safety gate — CS must never make a per-target class worse
+// than X did (only possible via a misroute where X was right). This is the
+// "strictly additive vs X" claim, generalized past first-match.
+export type DeployedLift = {
+    strategy: string;
+    baselineAccuracy: number; // X standalone (== StrategyAccuracy.accuracy)
+    deployedAccuracy: number; // CS resolves, else X
+    lift: number;
+    noRegression: boolean;
+};
+
+// The full head-to-head: every context-blind baseline plus contextSelector, over
+// the resolvable set, so contextSelector's lift over EACH strategy is visible
+// (not just first-match).
+export type StrategyComparison = {
+    resolvable: number;
+    contextSelector: StrategyAccuracy;
+    baselines: StrategyAccuracy[];
+    // contextSelector accuracy − baseline accuracy, per baseline strategy.
+    liftOverBaseline: Record<string, number>;
+    // contextSelector misroute − baseline misroute (negative = safer), per
+    // baseline strategy.
+    misrouteDeltaVsBaseline: Record<string, number>;
+    // Deployed routing-lift of CS-on-top-of-X, for each silent auto-resolver X.
+    deployed: DeployedLift[];
+};
+
 export type MetricsResult = {
     total: number;
     thresholds: Thresholds;
@@ -300,6 +403,7 @@ export type MetricsResult = {
     trigger: TriggerMetrics;
     resolution: ResolutionMetrics;
     ab: AbMetrics;
+    strategies: StrategyComparison;
 };
 
 export function runMetrics(
@@ -315,19 +419,33 @@ export function runMetrics(
     let totalResolves = 0;
     let trueResolve = 0;
     let wrongTarget = 0;
-    let baselineCorrect = 0;
-    let treatmentCorrect = 0;
     let clarifyOrLlmAvoided = 0;
+    // Standalone correct/wrong/deferred tallies per baseline strategy, over the
+    // resolvable set.
+    const stratCorrect: Record<string, number> = {};
+    const stratWrong: Record<string, number> = {};
+    const stratDeferred: Record<string, number> = {};
+    // Deployed (CS-on-top-of-X) correct tally + per-target-class base/treat for
+    // the no-regression gate, for each silent auto-resolver X.
+    const deployedCorrect: Record<string, number> = {};
+    const perClassByStrat: Record<
+        string,
+        Map<string, { base: number; treat: number }>
+    > = {};
+    for (const s of BASELINE_STRATEGIES) {
+        stratCorrect[s] = 0;
+        stratWrong[s] = 0;
+        stratDeferred[s] = 0;
+    }
+    for (const s of SILENT_STRATEGIES) {
+        deployedCorrect[s] = 0;
+        perClassByStrat[s] = new Map();
+    }
     const spuriousByReason: Record<string, number> = {};
     const abstainByReason: Record<string, number> = {};
-    // Per-resolve-class routing for the no-regression gate.
-    const perClass = new Map<string, { base: number; treat: number }>();
 
     for (const fixture of fixtures) {
         const decision = decide(roster, fixture, thresholds);
-        const firstMatch = fixture.candidates[0];
-        const route =
-            decision.kind === "resolve" ? decision.target : firstMatch;
         if (decision.kind === "resolve") {
             totalResolves++;
             clarifyOrLlmAvoided++;
@@ -336,19 +454,42 @@ export function runMetrics(
         if (fixture.label.kind === "resolve") {
             resolvable++;
             const target = fixture.label.target;
-            const baseCorrect = firstMatch === target;
-            const treatCorrect = route === target;
-            if (baseCorrect) baselineCorrect++;
-            if (treatCorrect) treatmentCorrect++;
             const cls = target.split(".")[0];
-            const pc = perClass.get(cls) ?? { base: 0, treat: 0 };
-            if (baseCorrect) pc.base++;
-            if (treatCorrect) pc.treat++;
-            perClass.set(cls, pc);
+            const csResolvedCorrect =
+                decision.kind === "resolve" && decision.target === target;
+
+            for (const s of BASELINE_STRATEGIES) {
+                const pick = baselinePick(s, fixture.candidates);
+                const xCorrect = pick !== undefined && pick === target;
+                if (pick === undefined) {
+                    stratDeferred[s]++;
+                } else if (xCorrect) {
+                    stratCorrect[s]++;
+                } else {
+                    stratWrong[s]++;
+                }
+                // Deployed: CS resolves -> its pick; else fall back to X.
+                if (s in perClassByStrat) {
+                    const deployed =
+                        decision.kind === "resolve"
+                            ? csResolvedCorrect
+                            : xCorrect;
+                    if (deployed) {
+                        deployedCorrect[s]++;
+                    }
+                    const pc = perClassByStrat[s].get(cls) ?? {
+                        base: 0,
+                        treat: 0,
+                    };
+                    if (xCorrect) pc.base++;
+                    if (deployed) pc.treat++;
+                    perClassByStrat[s].set(cls, pc);
+                }
+            }
 
             if (decision.kind === "resolve") {
                 triggeredOnResolvable++;
-                if (decision.target === target) trueResolve++;
+                if (csResolvedCorrect) trueResolve++;
                 else wrongTarget++;
             }
         } else {
@@ -368,7 +509,60 @@ export function runMetrics(
     const total = fixtures.length;
     const r = Math.max(1, resolvable);
     const ab = Math.max(1, abstainable);
-    const noRegression = [...perClass.values()].every((c) => c.treat >= c.base);
+
+    // Deployed routing-lift of CS-on-top-of-X, for each silent auto-resolver.
+    const deployed: DeployedLift[] = SILENT_STRATEGIES.map((s) => {
+        const baselineAccuracy = stratCorrect[s] / r;
+        const deployedAccuracy = deployedCorrect[s] / r;
+        return {
+            strategy: s,
+            baselineAccuracy,
+            deployedAccuracy,
+            lift: deployedAccuracy - baselineAccuracy,
+            noRegression: [...perClassByStrat[s].values()].every(
+                (c) => c.treat >= c.base,
+            ),
+        };
+    });
+    // Legacy first-match A/B view is just the first-match deployed entry.
+    const firstMatchDeployed = deployed.find(
+        (d) => d.strategy === "first-match",
+    )!;
+
+    const mkAccuracy = (
+        name: string,
+        correct: number,
+        wrong: number,
+        deferred: number,
+    ): StrategyAccuracy => ({
+        strategy: name,
+        correct,
+        wrong,
+        deferred,
+        accuracy: correct / r,
+        misrouteRate: wrong / r,
+        deferRate: deferred / r,
+    });
+
+    // contextSelector standalone on the resolvable set: resolve->target = correct,
+    // resolve->other = misroute, abstain = deferred (missed, not wrong).
+    const csAbstainedOnResolvable = resolvable - triggeredOnResolvable;
+    const csAccuracy = mkAccuracy(
+        "contextSelector",
+        trueResolve,
+        wrongTarget,
+        csAbstainedOnResolvable,
+    );
+    const baselines = BASELINE_STRATEGIES.map((s) =>
+        mkAccuracy(s, stratCorrect[s], stratWrong[s], stratDeferred[s]),
+    );
+    const liftOverBaseline: Record<string, number> = {};
+    const misrouteDeltaVsBaseline: Record<string, number> = {};
+    for (const b of baselines) {
+        liftOverBaseline[b.strategy] = csAccuracy.accuracy - b.accuracy;
+        misrouteDeltaVsBaseline[b.strategy] =
+            csAccuracy.misrouteRate - b.misrouteRate;
+    }
 
     return {
         total,
@@ -401,11 +595,19 @@ export function runMetrics(
             wrr: (wrongTarget + spuriousResolve) / Math.max(1, total),
         },
         ab: {
-            baselineAccuracy: baselineCorrect / r,
-            treatmentAccuracy: treatmentCorrect / r,
-            routingAccuracyLift: (treatmentCorrect - baselineCorrect) / r,
-            noRegression,
+            baselineAccuracy: firstMatchDeployed.baselineAccuracy,
+            treatmentAccuracy: firstMatchDeployed.deployedAccuracy,
+            routingAccuracyLift: firstMatchDeployed.lift,
+            noRegression: firstMatchDeployed.noRegression,
             clarifyOrLlmAvoided,
+        },
+        strategies: {
+            resolvable,
+            contextSelector: csAccuracy,
+            baselines,
+            liftOverBaseline,
+            misrouteDeltaVsBaseline,
+            deployed,
         },
     };
 }

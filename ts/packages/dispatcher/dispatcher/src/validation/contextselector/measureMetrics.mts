@@ -48,6 +48,11 @@ function pct(x: number): string {
     return `${(x * 100).toFixed(1)}%`;
 }
 
+// Signed percentage for deltas/lifts, so a negative renders "-5.9%" not "+-5.9%".
+function signedPct(x: number): string {
+    return `${x >= 0 ? "+" : ""}${pct(x)}`;
+}
+
 // n/a-aware formatters: a slice made entirely of one tier has no data for the
 // opposite metric (vague has nothing to resolve; clear has nothing to abstain
 // on), so show "n/a" instead of a misleading 0%/100%.
@@ -401,6 +406,31 @@ console.log(
     `  ${col((r) => `+${pct(r.ab.routingAccuracyLift)}`)}  no-regression: ${col((r) => `${r.ab.noRegression}`)}`,
 );
 
+console.log(
+    "\nDeployed routing-lift on combined (CS on top of each strategy | X alone -> +CS):",
+);
+for (const d of combined.strategies.deployed) {
+    console.log(
+        `  ${d.strategy.padEnd(13)} ${pct(d.baselineAccuracy).padStart(5)} -> ${pct(d.deployedAccuracy).padStart(5)}  lift ${signedPct(d.lift).padStart(6)}  no-regression: ${d.noRegression}`,
+    );
+}
+
+console.log(
+    "\nvs every collision strategy on combined (resolve accuracy | silent misroute):",
+);
+{
+    const cs = combined.strategies;
+    for (const b of cs.baselines) {
+        console.log(
+            `  ${b.strategy.padEnd(13)} acc ${pct(b.accuracy).padStart(4)}  misroute ${pct(b.misrouteRate).padStart(4)}  defer ${pct(b.deferRate).padStart(4)}`,
+        );
+    }
+    const c = cs.contextSelector;
+    console.log(
+        `  ${"contextSelector".padEnd(13)} acc ${pct(c.accuracy).padStart(4)}  misroute ${pct(c.misrouteRate).padStart(4)}  defer ${pct(c.deferRate).padStart(4)}  (lift vs first-match ${signedPct(cs.liftOverBaseline["first-match"])}, vs priority ${signedPct(cs.liftOverBaseline["priority"])})`,
+    );
+}
+
 console.log("\nThreshold sweep on combined (36 cells)");
 console.log(
     `  wrong-target across ALL cells:  ${anyWrongTarget === 0 ? "0 (safety threshold-robust)" : `${anyWrongTarget} FAIL`}`,
@@ -738,6 +768,84 @@ function md(): string {
                 (r) => (r.ab.noRegression ? "✅ holds" : "❌ FAILED"),
             ],
         ]),
+    );
+
+    // ---- Deployed routing-lift generalized to every silent auto-resolver ----
+    L.push(
+        "\n## Deployed routing-lift — adding contextSelector on top of each strategy\n",
+    );
+    L.push(
+        'The table above is the deployed lift over *first-match* specifically (contextSelector resolves confidently, else falls back to first-match). Any silent auto-resolver can be the fallback, so this generalizes it to `score-rank` and `priority` too, on the combined corpus — answering "if my dispatcher already routes with strategy X, does adding contextSelector still help, and does it ever regress?" (Deterministic, `defer-to-strategy` mode; the `escalate-to-llm` fallback is measured separately by `compareLlm.mts`.)\n',
+    );
+    {
+        const dep = combined.strategies.deployed;
+        L.push(
+            "| Base strategy X | X alone | + contextSelector (deployed) | Routing lift | No-regression |",
+        );
+        L.push("| --- | --- | --- | --- | --- |");
+        for (const d of dep) {
+            L.push(
+                `| ${d.strategy} | ${pct(d.baselineAccuracy)} | ${pct(d.deployedAccuracy)} | ${signedPct(d.lift)} | ${d.noRegression ? "✅ holds" : "❌ FAILED"} |`,
+            );
+        }
+        // user-clarify is a prompt-cost, not accuracy, tradeoff — reported apart.
+        const cs = combined.strategies.contextSelector;
+        L.push(
+            `\n**vs \`user-clarify\`:** an accuracy lift is ill-defined (a prompt eventually resolves correctly), so the gain is **prompts avoided** — contextSelector auto-resolves ${pct(cs.accuracy + cs.misrouteRate)} of these collisions (${cs.correct + cs.wrong}/${combined.strategies.resolvable}) that user-clarify would interrupt the user for, misrouting ${pct(cs.misrouteRate)} (${cs.wrong}) of them.\n`,
+        );
+    }
+
+    // ---- Full head-to-head vs every collision-resolution strategy ----
+    L.push(
+        "\n## Comparison — contextSelector vs every collision-resolution strategy\n",
+    );
+    L.push(
+        "The dispatcher's other grammar-collision strategies (`first-match`, `score-rank`, `priority`, `user-clarify`) are all **context-blind**: they pick the same agent no matter what the conversation said. So on a context-dependent collision they land on the intended target only when their fixed rule happens to, and silently misroute otherwise. `user-clarify` never misroutes but prompts the user every time. contextSelector reads the recent conversation — it resolves the clear collisions correctly and *abstains* (defers, never silently misroutes) on the rest. Each row scores a strategy's **own** decision (an abstain counts as a deferral, not a fallback), so the first-match lift here is smaller than the deployed *routing lift* above — which additionally credits contextSelector with the first-match fallback it defers to on abstain.\n",
+    );
+    const baseAcc = (r: MetricsResult, name: string) =>
+        r.strategies.baselines.find((b) => b.strategy === name)?.accuracy ?? 0;
+    const liftVs = (r: MetricsResult, name: string) =>
+        r.strategies.liftOverBaseline[name] ?? 0;
+    L.push(
+        ...sliceTable([
+            ["first-match accuracy", (r) => pct(baseAcc(r, "first-match"))],
+            ["score-rank accuracy¹", (r) => pct(baseAcc(r, "score-rank"))],
+            ["priority accuracy", (r) => pct(baseAcc(r, "priority"))],
+            [
+                "**contextSelector accuracy**",
+                (r) => `**${pct(r.strategies.contextSelector.accuracy)}**`,
+            ],
+            ["lift vs first-match", (r) => signedPct(liftVs(r, "first-match"))],
+            ["lift vs score-rank", (r) => signedPct(liftVs(r, "score-rank"))],
+            ["lift vs priority", (r) => signedPct(liftVs(r, "priority"))],
+        ]),
+    );
+    L.push(
+        "\n¹ On a genuine grammar collision the colliding constructions matched the *same* input, so `score-rank`'s match-strength heuristic ties and it falls through to `priority` — the two are identical on this corpus (an honest offline limitation: real grammar match-counts aren't reconstructable without the matcher).\n",
+    );
+
+    // Per-strategy breakdown on the combined corpus (strategies as rows).
+    const cs = combined.strategies;
+    L.push(
+        `\n**Per-strategy breakdown on the combined corpus** (${cs.resolvable} resolvable collisions):\n`,
+    );
+    L.push(
+        "| Strategy | Resolves correctly | Silently misroutes | Defers / abstains |",
+    );
+    L.push("| --- | --- | --- | --- |");
+    for (const b of cs.baselines) {
+        const label = b.strategy === "score-rank" ? "score-rank¹" : b.strategy;
+        L.push(
+            `| ${label} | ${pct(b.accuracy)} (${b.correct}/${cs.resolvable}) | ${pct(b.misrouteRate)} (${b.wrong}) | ${pct(b.deferRate)} (${b.deferred}) |`,
+        );
+    }
+    L.push(
+        `| **contextSelector** | **${pct(cs.contextSelector.accuracy)}** (${cs.contextSelector.correct}/${cs.resolvable}) | **${pct(cs.contextSelector.misrouteRate)}** (${cs.contextSelector.wrong}) | ${pct(cs.contextSelector.deferRate)} (${cs.contextSelector.deferred}) |`,
+    );
+    const misrouteOf = (name: string) =>
+        cs.baselines.find((b) => b.strategy === name)?.misrouteRate ?? 0;
+    L.push(
+        `\n**Takeaway:** contextSelector's silent-misroute rate (${pct(cs.contextSelector.misrouteRate)}) sits far below every silently-resolving baseline (first-match ${pct(misrouteOf("first-match"))}, priority ${pct(misrouteOf("priority"))}); the collisions it can't resolve confidently it hands back rather than guessing. Against the always-safe user-clarify strategy, contextSelector auto-resolves ${pct(cs.contextSelector.accuracy)} of the collisions that a clarify prompt would otherwise interrupt the user for.\n`,
     );
 
     L.push(
