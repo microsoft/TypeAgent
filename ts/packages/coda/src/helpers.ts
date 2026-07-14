@@ -658,6 +658,9 @@ export async function showDocumentInEditor(
     return editor;
 }
 
+// Whether the GitHub Copilot *completions* extension is available. This gates
+// inline-suggestion features (e.g. triggering an inline completion after
+// inserting a snippet), which are provided specifically by `GitHub.copilot`.
 export async function isCopilotEnabled(): Promise<boolean> {
     const copilot = vscode.extensions.getExtension("GitHub.copilot");
     if (!copilot) return false;
@@ -665,6 +668,29 @@ export async function isCopilotEnabled(): Promise<boolean> {
     if (!copilot.isActive) {
         try {
             await copilot.activate(); // Activates the extension if not already
+        } catch {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Whether GitHub Copilot Chat is available for the `workbench.action.chat.open`
+// handoff. Chat is powered by the `GitHub.copilot-chat` extension, but some
+// setups enable Chat while the completions extension (`GitHub.copilot`) is
+// disabled or absent. Accept either so we don't report a false "not available"
+// when Chat is actually usable. Distinct from `isCopilotEnabled` (completions),
+// which gates inline-suggestion features.
+export async function isCopilotChatAvailable(): Promise<boolean> {
+    const copilot =
+        vscode.extensions.getExtension("GitHub.copilot-chat") ??
+        vscode.extensions.getExtension("GitHub.copilot");
+    if (!copilot) return false;
+
+    if (!copilot.isActive) {
+        try {
+            await copilot.activate();
         } catch {
             return false;
         }

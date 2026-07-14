@@ -163,6 +163,37 @@ function messageContentToHTML(
     return `<table class="table-message">${table.map((row, i) => `<tr>${row.map((cell) => `${i === 0 ? "<th>" : "<td>"}${processContent(cell, type)}${i === 0 ? "</th>" : "</td>"}`).join("")}</tr>`).join("")}</table>`;
 }
 
+// Copy a status badge's tooltip message to the clipboard, then show a brief
+// "Copied!" confirmation anchored to the clicked badge. Uses the same
+// clipboard API + graceful-failure handling as the message copy button in
+// feedbackWidget.
+async function copyStatusMessage(
+    text: string,
+    anchor: HTMLElement,
+): Promise<void> {
+    try {
+        await navigator.clipboard.writeText(text);
+    } catch (e) {
+        console.warn("clipboard write failed", e);
+        return;
+    }
+    showCopiedToast(anchor);
+}
+
+// Transient, self-removing "Copied!" toast centered just above `anchor`.
+// Positioned in viewport coordinates (the CSS uses `position: fixed`).
+function showCopiedToast(anchor: HTMLElement): void {
+    const rect = anchor.getBoundingClientRect();
+    const toast = document.createElement("div");
+    toast.className = "chat-copied-toast";
+    toast.setAttribute("role", "status");
+    toast.textContent = "Copied!";
+    toast.style.left = `${rect.left + rect.width / 2}px`;
+    toast.style.top = `${rect.top}px`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 1200);
+}
+
 /**
  * Render DisplayContent into a DOM element.
  *
@@ -335,6 +366,27 @@ export function setContent(
                     platformAdapter.handleLinkClick(href, target);
                 });
             }
+        });
+
+        // Status badges (agent-status readiness/load indicators and other
+        // tooltip-bearing status glyphs) stash their full message in a
+        // `title` attribute. Make them click-to-copy so the (often long)
+        // message can be grabbed without hand-selecting text. Re-bound on
+        // every render — matching the link handling above — because the
+        // `innerHTML +=` sink recreates these nodes on each append.
+        const copyables =
+            contentElm.querySelectorAll<HTMLElement>("span[title]");
+        copyables.forEach((badge) => {
+            badge.style.cursor = "pointer";
+            badge.addEventListener("click", (e) => {
+                const text = badge.getAttribute("title");
+                if (!text) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                void copyStatusMessage(text, badge);
+            });
         });
     }
 
