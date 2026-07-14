@@ -10,7 +10,7 @@ This file collates all TODO comments found across the repository, organized by t
 |------|------|------|--------|-------------|-------|----------------|--------------|
 | `dotnet/autoShell/Services/WindowsDisplayService.cs` | 169 | better handle return value from change mode | Low | High | Local | Fix | No |
 | `dotnet/autoShell/Services/WindowsVirtualDesktopService.cs` | 71 | proper HSTRING custom marshaling | Medium | Medium | Local | Fix | No |
-| `dotnet/autoShell/Services/WindowsVirtualDesktopService.cs` | 300 | debug & get working | High | Low | Local | Fix | Yes |
+| `dotnet/autoShell/Services/WindowsVirtualDesktopService.cs` | 300 | Debug & get working | High | Low | Local | Fix | Yes |
 | `dotnet/autoShell/Services/WindowsVirtualDesktopService.cs` | 328 | investigate. | High | Low | Local | No Fix | Yes |
 | `dotnet/autoShell/Services/WindowsWindowService.cs` | 155 | Update this to account for UWP apps (e.g. calculator). UWPs are hosted by ApplicationFrameHost.exe | Medium | Medium | Local | Fix | No |
 | `dotnet/autoShell/Services/WindowsWindowService.cs` | 195 | handle multiple monitors | Medium | High | Local | Fix | No |
