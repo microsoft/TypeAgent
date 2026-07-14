@@ -560,6 +560,105 @@ function md(): string {
         `Runs the whole suite — this report plus the LLM comparison appended at the end — and overwrites this file in place. Deterministic, so re-running produces the same numbers.\n`,
     );
 
+    // ---- How the benchmark is built (structure + fixture examples) ----
+    L.push("## How the benchmark is built\n");
+    L.push(
+        `**At a glance:** an *offline, deterministic* benchmark that replays the **real** contextSelector pipeline — the shipped agent keyword lists, the same recency-weighted model of the recent conversation, and the same resolve/abstain decision gate the product uses — over **${combined.total}** labeled collision test cases (four corpora) plus a **${dialogueXhard.total}-case** adversarial stress set, and scores three things: does it find the topic, does it fire only when it should, and does it pick the right agent. **No LLM and no app startup** (except a separate, fully-cached LLM-comparison arm). Every run produces identical numbers.\n`,
+    );
+    L.push(
+        "Under the hood it is three layers. You don't need to read the code to follow the results — this is just the shape of the machine that produced them.\n",
+    );
+    L.push(
+        "**Layer 1 — the foundation.** A *roster* is loaded from every shipped agent's real keyword list (the exact data the product routes with). A *fixture* is one labeled test case. A small shared toolkit builds conversation turns and samples words with a fixed random seed, so everything is reproducible.\n",
+    );
+    L.push(
+        "A **fixture** is the single unit every part of the benchmark speaks in:\n",
+    );
+    L.push(
+        "```\nfixture = {\n" +
+            "  prelude:        the recent conversation, as a list of turns (what the scorer reads)\n" +
+            "  collisionInput: the final ambiguous request that triggered the collision\n" +
+            "  candidates:     the 2+ agents whose grammars collided (candidates[0] = what first-match picks)\n" +
+            "  label:          the correct answer — resolve→<agent>, or abstain (tie | no-signal | stale | coverage)\n" +
+            "  retrieval?:     (optional) which words the context SHOULD vs SHOULD-NOT focus on, for Metric 1\n" +
+            "  tier?:          (optional) clear | vague\n" +
+            "}\n```\n",
+    );
+    L.push(
+        '**Layer 2 — the corpus generators.** Each generator turns the roster into a list of fixtures. They differ in where the words come from and how hard the collision is, but all emit the same fixture shape, so the engine scores them identically. Three build their cases from templates (keywords glued with filler words like "the" and "and", so only the keywords carry signal); one is written by hand in plain English. **None uses an LLM** — every case is either template-generated from real/synthetic keyword lists or literally typed by a person.\n',
+    );
+    L.push("| Generator | Words come from | Difficulty | Labeled by |");
+    L.push("| --- | --- | --- | --- |");
+    L.push(
+        "| **easy** | real agents, *distinct* pairs (barely-overlapping vocab) | floor — trivially separable | construction |",
+    );
+    L.push(
+        "| **siblings** | *synthetic* look-alike agents sharing ~60% of their words | hard — little discriminates them | construction |",
+    );
+    L.push(
+        "| **real-pairs** | real agents, *genuinely confusable* pairs | medium–hard, split clear vs vague | construction |",
+    );
+    L.push(
+        "| **dialogue** | *hand-written* natural sentences | 5 tiers, simple → adversarial | human intent |",
+    );
+    L.push(
+        "\n**Layer 3 — one scoring engine + orchestration.** A single engine scores any corpus the same way, producing the three metrics and the strategy comparison. The top-level script runs every corpus through it and writes this report; a second script adds the LLM comparison; and the one-line command above runs the whole thing.\n",
+    );
+
+    L.push("### What a fixture looks like, per generator\n");
+    L.push(
+        "Illustrative examples — the templated turns sample real keywords, so the exact words vary by seed:\n",
+    );
+    L.push(
+        "**easy** — *player* vs *browser*, led by one unrelated *weather* turn; the conversation is on-topic for the music player:\n",
+    );
+    L.push(
+        "```\n" +
+            'prelude:        ["the forecast and the humidity",   // weather noise (oldest, faint)\n' +
+            '                 "the playlist and the album",       // player\'s own words\n' +
+            '                 "the artist and the chorus"]\n' +
+            'collisionInput: "handle the play request"\n' +
+            'candidates:     ["player.play", "browser.open"]\n' +
+            "label:          resolve → player.play\n```\n",
+    );
+    L.push(
+        "**siblings** — *vampire* vs *werewolf*. Both share the occult register (blood, night…), which cancels in scoring; only the unique words (coffin, fang) can point at a winner:\n",
+    );
+    L.push(
+        "```\n" +
+            'prelude:        ["the coffin",               // vampire-unique (discriminates)\n' +
+            '                 "the fang",\n' +
+            '                 "the blood and the night"]  // shared register (cancels to zero)\n' +
+            'collisionInput: "perform the summon"\n' +
+            'candidates:     ["vampire.summon", "werewolf.summon"]\n' +
+            "label:          resolve → vampire.summon\n```\n",
+    );
+    L.push(
+        "If every turn were shared occult words, the correct answer flips to **abstain** — nothing discriminates.\n",
+    );
+    L.push(
+        "**real-pairs** — *timer* vs *windowsClock*, a genuinely confusable pair, in its two flavors:\n",
+    );
+    L.push(
+        "```\n" +
+            'CLEAR  (should resolve):  mostly the shared time-words + a few "tells" unique to timer\n' +
+            "                          → label: resolve → timer,  tier: clear\n" +
+            "VAGUE  (should abstain):  only the shared time-words both agents answer to\n" +
+            "                          → label: abstain,          tier: vague\n```\n",
+    );
+    L.push(
+        "**dialogue** — hand-written, reads like a real user, grounded in the agents' real keywords. The final *ask* is recorded but not scored (the decision is made from the turns before it):\n",
+    );
+    L.push(
+        "```\n" +
+            'dialogue: ["I\'ve been listening to so much new stuff this week.",\n' +
+            '           "my discover weekly has been on point lately.",\n' +
+            '           "queue up my favorite upbeat mix for the gym."]\n' +
+            'ask:      "play it"                  // recorded, not scored\n' +
+            'candidates: ["player", "localPlayer"]\n' +
+            "label:      resolve → player\n```\n",
+    );
+
     // ---- Results by difficulty tier (the requested per-tier metric tables) ----
     L.push("## Results by difficulty tier\n");
     L.push(

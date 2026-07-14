@@ -67,38 +67,57 @@ TypeScript sources directly, and the committed keyword files live in each agent'
 
 Type-check the harness with `npx tsc --noEmit -p src/validation/contextselector/tsconfig.metrics.json`.
 
-## Files
+## Structure — three layers
+
+The benchmark is organized in three layers. Every corpus is scored by one shared
+engine, so adding a corpus is just "emit `Fixture[]`".
+
+**Layer 1 — foundation (the agents + the test-case shape).**
 
 - **`metricRoster.mts`** — loads every committed `*.keywords.json` across
   `packages/agents` and exposes them through the production
   `KeywordIndex.effective()` read path (empty sidecar). `buildRoster()` is shared
   with the adversary so both exercise identical scoring machinery.
-- **`metricRealisticDialogue.mts`** — the **dialogue** slice: 250 hand-authored
-  natural conversations = 50 simple + 50 no-context + 50 realistic + 50 hard + 50
-  extra-hard adversarial (tagged `difficulty`/`category`), grounded in the agents'
-  real keyword vectors and verified against the real scorer. **Edit `SCENARIOS` to
-  add your own** — a scenario's `dialogue` is just an array of natural sentences.
-- **`metricCorpus.mts`** — deterministic, self-labeling corpus for the **easy**
-  slice: manufactures collisions from real overlapping-agent pairs and composes
-  preludes from each agent's own discriminating keywords. Also exports the shared
-  helpers (`turnFrom`, `makePrng`, `sample`, `shared`).
-- **`metricRealPairs.mts`** — the **real-agent clear/vague** slice: ≥10 curated
-  confusable real pairs. CLEAR conversations are realistic (mostly shared domain
-  vocabulary with a gradient of 3/2/1 discriminating "tells", so the gate decides
-  recall); VAGUE conversations are shared-only or balanced (ground truth: abstain).
-- **`metricAdversary.mts`** — the **siblings** slice: 8 confusable synthetic
-  occult siblings, each `SHARED occult vocab ∪ small UNIQUE set`. Resolve fixtures
-  span a signal grid so the **evidence gate — not the fixture author — decides
-  yield**.
-- **`metricRunner.mts`** — the three-metric engine. Metric 1 scores the signal
-  source in isolation (topical mass + pinned contract property checks); metrics 2
-  and 3 score the full resolve/abstain decision and the resolved target.
-- **`measureMetrics.mts`** — entry point: runs the three metrics per-slice at the
-  shipped defaults, runs the B-6 threshold sweep on the combined corpus, and
-  writes the base of the consolidated `contextSelector-report.md`.
-- **`reportFile.mts`** — shared output target: resolves the single
-  `contextSelector-report.md` path (honoring `--out`, default next to the
-  scripts) and provides the base-write / LLM-section-upsert helpers both arms use.
+- **`metricCorpus.mts`** — defines the **`Fixture`** type (the unit every corpus
+  emits) and the shared toolkit (`turnFrom`, `makePrng`, `sample`, `shared`,
+  `discriminating`). Also generates the **easy** corpus (see Layer 2).
+
+A **`Fixture`** is one labeled collision test case:
+
+```
+fixture = {
+  prelude:        the recent conversation, as a list of turns (what the scorer reads)
+  collisionInput: the final ambiguous request that triggered the collision
+  candidates:     the 2+ agents whose grammars collided (candidates[0] = what first-match picks)
+  label:          the correct answer — resolve→<agent>, or abstain (tie | no-signal | stale | coverage)
+  retrieval?:     (optional) which words the context SHOULD vs SHOULD-NOT focus on, for Metric 1
+  tier?:          (optional) clear | vague
+}
+```
+
+**Layer 2 — corpus generators (each turns the roster into `Fixture[]`).** Three
+build cases from templates (keywords glued with filler words so only the keywords
+carry signal); one is hand-written English. **None uses an LLM.**
+
+| File                          | Corpus         | Words come from                                                                   | Labeled by   |
+| ----------------------------- | -------------- | --------------------------------------------------------------------------------- | ------------ |
+| `metricCorpus.mts`            | **easy**       | real agents, distinct pairs (barely-overlapping vocab)                            | construction |
+| `metricAdversary.mts`         | **siblings**   | 8 synthetic occult siblings, `SHARED ∪ small UNIQUE` (~60% shared)                | construction |
+| `metricRealPairs.mts`         | **real-pairs** | real confusable pairs, even clear/vague mixture                                   | construction |
+| `metricRealisticDialogue.mts` | **dialogue**   | 250 hand-authored sentences across 5 tiers (**edit `SCENARIOS` to add your own**) | human intent |
+
+The generated `contextSelector-report.md` has a **worked example fixture for each
+generator** under "How the benchmark is built".
+
+**Layer 3 — scoring engine + orchestration.**
+
+- **`metricRunner.mts`** — the three-metric engine (`runMetrics`). Metric 1 scores
+  the signal source in isolation (topical mass + 5 pinned contract checks); metrics
+  2 and 3 score the resolve/abstain decision and the resolved target; also models
+  the context-blind baseline strategies for the comparison.
+- **`measureMetrics.mts`** — entry point: runs every corpus through `runMetrics` at
+  the shipped defaults, runs the threshold sweep, and writes the base of the
+  consolidated `contextSelector-report.md`.
 - **`compareLlm.mts`** — the **LLM comparison** (the only online, LLM-dependent
   script): runs the real `aiclient` model (the standard resolution path's LLM) as
   a "contextSelector OFF" arm on all 250 collisions and reports, per tier,
@@ -107,6 +126,11 @@ Type-check the harness with `npx tsc --noEmit -p src/validation/contextselector/
   resolves that avoid an LLM call). Upserts its section into the shared
   `contextSelector-report.md`. Responses are cached to `llm-cache.json` so
   re-runs are free; run: `npx tsx src/validation/contextselector/compareLlm.mts`.
+- **`reportFile.mts`** — shared output target: resolves the single
+  `contextSelector-report.md` path (honoring `--out`, default next to the
+  scripts) and provides the base-write / LLM-section-upsert helpers both arms use.
+- **`reproduce.mts`** — the one-command umbrella: runs `measureMetrics` then
+  `compareLlm` into the one report.
 
 ## Interpreting the result
 
