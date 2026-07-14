@@ -902,9 +902,7 @@ function buildStructuredEmailList(
     heading: string,
 ): ActionResultSuccess {
     const items = messages.map((msg) => {
-        const from = msg.from
-            ? msg.from.name || msg.from.address
-            : "Unknown";
+        const from = msg.from ? msg.from.name || msg.from.address : "Unknown";
         const date = msg.receivedDateTime
             ? new Date(msg.receivedDateTime).toLocaleDateString()
             : "";

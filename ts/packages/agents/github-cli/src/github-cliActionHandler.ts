@@ -921,7 +921,8 @@ export function buildStructuredField(
     if (summary === undefined) {
         return undefined;
     }
-    const label = repo || `${formatValue(data.owner)}/${String(data.name ?? "")}`;
+    const label =
+        repo || `${formatValue(data.owner)}/${String(data.name ?? "")}`;
     const fieldLabels: Record<string, string> = {
         stars: "Stars",
         forks: "Forks",
@@ -939,10 +940,7 @@ export function buildStructuredField(
     const value = rawValues[field];
     const pair: KeyValuePair = {
         label: fieldLabels[field] ?? field,
-        value:
-            typeof value === "number"
-                ? value
-                : String(value ?? ""),
+        value: typeof value === "number" ? value : String(value ?? ""),
     };
     const blocks: StructuredBlock[] = [
         { kind: "heading", level: 3, text: label },
@@ -1091,11 +1089,20 @@ export function buildStructuredIssueView(
     if (assignees) pairs.push({ label: "Assignees", value: assignees });
     pairs.push({ label: "Comments", value: Number(commentCount) });
     if (data.createdAt)
-        pairs.push({ label: "Created", value: String(data.createdAt).slice(0, 10) });
+        pairs.push({
+            label: "Created",
+            value: String(data.createdAt).slice(0, 10),
+        });
     if (data.closedAt)
-        pairs.push({ label: "Closed", value: String(data.closedAt).slice(0, 10) });
+        pairs.push({
+            label: "Closed",
+            value: String(data.closedAt).slice(0, 10),
+        });
     if (data.url)
-        pairs.push({ label: "Link", value: { text: String(data.url), href: String(data.url) } });
+        pairs.push({
+            label: "Link",
+            value: { text: String(data.url), href: String(data.url) },
+        });
 
     const headingText = `#${data.number} ${data.title}`;
     const blocks: StructuredBlock[] = [
@@ -1142,7 +1149,10 @@ export function buildStructuredPrView(
         : prBadge(data as Record<string, unknown>);
 
     const pairs: KeyValuePair[] = [];
-    pairs.push({ label: "State", value: { text: statusLabel, badge: statusTone } });
+    pairs.push({
+        label: "State",
+        value: { text: statusLabel, badge: statusTone },
+    });
     pairs.push({ label: "Author", value: author });
     if (data.headRefName)
         pairs.push({
@@ -1156,9 +1166,15 @@ export function buildStructuredPrView(
             value: `+${data.additions} −${data.deletions} across ${data.changedFiles} files`,
         });
     if (data.createdAt)
-        pairs.push({ label: "Created", value: String(data.createdAt).slice(0, 10) });
+        pairs.push({
+            label: "Created",
+            value: String(data.createdAt).slice(0, 10),
+        });
     if (data.url)
-        pairs.push({ label: "Link", value: { text: String(data.url), href: String(data.url) } });
+        pairs.push({
+            label: "Link",
+            value: { text: String(data.url), href: String(data.url) },
+        });
 
     const headingText = `#${data.number} ${data.title}`;
     const blocks: StructuredBlock[] = [
@@ -1266,12 +1282,10 @@ export function buildStructuredListResult(
         return {
             historyText: headingText,
             entities: [],
-            displayContent: createStructuredContent(
-                [
-                    { kind: "heading", level: 3, text: headingText },
-                    { kind: "text", text: "No results found." },
-                ],
-            ),
+            displayContent: createStructuredContent([
+                { kind: "heading", level: 3, text: headingText },
+                { kind: "text", text: "No results found." },
+            ]),
         };
     }
 
@@ -1310,8 +1324,12 @@ export function buildStructuredListResult(
                     const tone = prBadge(pr as Record<string, unknown>);
                     const lbl = pr.isDraft
                         ? "Draft"
-                        : String(pr.state ?? "").charAt(0).toUpperCase() +
-                          String(pr.state ?? "").slice(1).toLowerCase();
+                        : String(pr.state ?? "")
+                              .charAt(0)
+                              .toUpperCase() +
+                          String(pr.state ?? "")
+                              .slice(1)
+                              .toLowerCase();
                     return { text: lbl, badge: tone };
                 },
             },
@@ -1373,8 +1391,12 @@ export function buildStructuredListResult(
                 type: "badge",
                 value: (i): TableCell => ({
                     text:
-                        String(i.state ?? "").charAt(0).toUpperCase() +
-                        String(i.state ?? "").slice(1).toLowerCase(),
+                        String(i.state ?? "")
+                            .charAt(0)
+                            .toUpperCase() +
+                        String(i.state ?? "")
+                            .slice(1)
+                            .toLowerCase(),
                     badge: issueBadge(String(i.state ?? "")),
                 }),
             },
@@ -1630,12 +1652,8 @@ export function buildStructuredDependabotResult(
             header: "Package",
             type: "code",
             value: (a): TableCell => {
-                const dep = a.dependency as
-                    | Record<string, unknown>
-                    | undefined;
-                const pkg = dep?.package as
-                    | Record<string, unknown>
-                    | undefined;
+                const dep = a.dependency as Record<string, unknown> | undefined;
+                const pkg = dep?.package as Record<string, unknown> | undefined;
                 return String(pkg?.name ?? "unknown");
             },
         },
@@ -1666,7 +1684,12 @@ export function buildStructuredContributorsResult(
     const headerText =
         arr.length === 1 ? "Top contributor" : `Top ${arr.length} contributors`;
     const columns = [
-        { id: "rank", header: "#", type: "number" as const, align: "right" as const },
+        {
+            id: "rank",
+            header: "#",
+            type: "number" as const,
+            align: "right" as const,
+        },
         { id: "login", header: "Contributor", type: "link" as const },
         {
             id: "contributions",

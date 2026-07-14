@@ -138,7 +138,9 @@ describe("buildStructuredListResult — prList", () => {
     test("markdown alternate contains heading and table headers", () => {
         const result = buildStructuredListResult(prs, "prList", "prList");
         const content = result?.displayContent as any;
-        const mdAlt = content?.alternates?.find((a: any) => a.type === "markdown");
+        const mdAlt = content?.alternates?.find(
+            (a: any) => a.type === "markdown",
+        );
         expect(mdAlt?.content).toContain("prList — 2 results");
         expect(mdAlt?.content).toContain("| # |");
     });
@@ -161,13 +163,21 @@ describe("buildStructuredListResult — issueList", () => {
     ];
 
     test("returns structured result for issueList", () => {
-        const result = buildStructuredListResult(issues, "issueList", "issueList");
+        const result = buildStructuredListResult(
+            issues,
+            "issueList",
+            "issueList",
+        );
         expect(result).toBeDefined();
         expect(table(result).kind).toBe("table");
     });
 
     test("labels cell joins label names", () => {
-        const result = buildStructuredListResult(issues, "issueList", "issueList");
+        const result = buildStructuredListResult(
+            issues,
+            "issueList",
+            "issueList",
+        );
         const t = table(result);
         const labelsColIdx = t.columns.findIndex((c: any) => c.id === "labels");
         const labelsCell = t.rows[0][labelsColIdx];
@@ -176,7 +186,11 @@ describe("buildStructuredListResult — issueList", () => {
     });
 
     test("open issue gets info badge", () => {
-        const result = buildStructuredListResult(issues, "issueList", "issueList");
+        const result = buildStructuredListResult(
+            issues,
+            "issueList",
+            "issueList",
+        );
         const t = table(result);
         const stateIdx = t.columns.findIndex((c: any) => c.id === "state");
         expect(t.rows[0][stateIdx]).toMatchObject({ badge: "info" });
@@ -192,8 +206,14 @@ describe("buildStructuredListResult — empty array", () => {
         const result = buildStructuredListResult([], "prList", "PR list");
         expect(result).toBeDefined();
         const content = result?.displayContent as any;
-        expect(content.blocks[0]).toMatchObject({ kind: "heading", text: "PR list — 0 results" });
-        expect(content.blocks[1]).toMatchObject({ kind: "text", text: "No results found." });
+        expect(content.blocks[0]).toMatchObject({
+            kind: "heading",
+            text: "PR list — 0 results",
+        });
+        expect(content.blocks[1]).toMatchObject({
+            kind: "text",
+            text: "No results found.",
+        });
     });
 });
 
@@ -228,12 +248,20 @@ describe("buildStructuredListResult — searchRepos", () => {
     ];
 
     test("returns structured result for searchRepos", () => {
-        const result = buildStructuredListResult(repos, "searchRepos", "search");
+        const result = buildStructuredListResult(
+            repos,
+            "searchRepos",
+            "search",
+        );
         expect(result).toBeDefined();
     });
 
     test("name cell links to repo url", () => {
-        const result = buildStructuredListResult(repos, "searchRepos", "search");
+        const result = buildStructuredListResult(
+            repos,
+            "searchRepos",
+            "search",
+        );
         const t = table(result);
         const nameIdx = t.columns.findIndex((c: any) => c.id === "name");
         expect(t.rows[0][nameIdx]).toMatchObject({
@@ -243,7 +271,11 @@ describe("buildStructuredListResult — searchRepos", () => {
     });
 
     test("stars are formatted as number column", () => {
-        const result = buildStructuredListResult(repos, "searchRepos", "search");
+        const result = buildStructuredListResult(
+            repos,
+            "searchRepos",
+            "search",
+        );
         const t = table(result);
         const starsIdx = t.columns.findIndex((c: any) => c.id === "stars");
         expect(t.columns[starsIdx].type).toBe("number");
@@ -515,7 +547,9 @@ describe("buildStructuredIssueView", () => {
         expect(kv.pairs.find((p: any) => p.label === "Labels")?.value).toBe(
             "bug, p1",
         );
-        expect(kv.pairs.find((p: any) => p.label === "Comments")?.value).toBe(2);
+        expect(kv.pairs.find((p: any) => p.label === "Comments")?.value).toBe(
+            2,
+        );
     });
 
     test("rawData is the original object", () => {
@@ -568,4 +602,3 @@ describe("buildStructuredField", () => {
         });
     });
 });
-

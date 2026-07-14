@@ -10,10 +10,7 @@ import {
 import { ActionContext } from "../agentInterface.js";
 import { DisplayMessageKind, StructuredBlock } from "../display.js";
 import { Entity } from "../memory.js";
-import {
-    createStructuredContent,
-    structuredToText,
-} from "./displayHelpers.js";
+import { createStructuredContent, structuredToText } from "./displayHelpers.js";
 import { ChoiceManager, PickRememberResponse } from "./choiceManager.js";
 export { ChoiceManager };
 

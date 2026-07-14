@@ -83,7 +83,9 @@ function renderStructuredBlockToMarkdown(block: StructuredBlock): string {
             const { columns, rows, caption } = block;
             const headers = columns.map((c) => escapeTableCell(c.header));
             const dataRows = rows.map((row) =>
-                columns.map((_, ci) => escapeTableCell(scCellMarkdown(row[ci] ?? ""))),
+                columns.map((_, ci) =>
+                    escapeTableCell(scCellMarkdown(row[ci] ?? "")),
+                ),
             );
             const lines = [
                 `| ${headers.join(" | ")} |`,
@@ -110,7 +112,8 @@ function renderStructuredBlockToMarkdown(block: StructuredBlock): string {
         case "keyValue":
             return block.pairs
                 .map(
-                    (pair) => `- **${pair.label}:** ${scCellMarkdown(pair.value)}`,
+                    (pair) =>
+                        `- **${pair.label}:** ${scCellMarkdown(pair.value)}`,
                 )
                 .join("\n");
         case "card": {

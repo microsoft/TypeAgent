@@ -167,8 +167,7 @@ export function fromRecords<T>(
     const rows: TableCell[][] = objects.map((object) =>
         columnSpec.map((column) => column.value(object)),
     );
-    const { rawData, dataSchema, kind, speak, ...tableOptions } =
-        options ?? {};
+    const { rawData, dataSchema, kind, speak, ...tableOptions } = options ?? {};
     const table = createTable(columns, rows, tableOptions);
     return createStructuredContent([table], {
         rawData: rawData ?? objects,
@@ -255,9 +254,7 @@ export function structuredToMarkdown(blocks: StructuredBlock[]): string {
     for (const block of blocks) {
         switch (block.kind) {
             case "heading":
-                sections.push(
-                    `${"#".repeat(block.level ?? 1)} ${block.text}`,
-                );
+                sections.push(`${"#".repeat(block.level ?? 1)} ${block.text}`);
                 break;
             case "text":
                 sections.push(messageContentToString(block.text));

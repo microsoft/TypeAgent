@@ -622,7 +622,10 @@ async function executeAction(
                 // Uncategorized channels first
                 const uncategorized = byParent.get(undefined) ?? [];
                 if (uncategorized.length > 0) {
-                    blocks.push({ kind: "list", items: toItems(uncategorized) });
+                    blocks.push({
+                        kind: "list",
+                        items: toItems(uncategorized),
+                    });
                 }
                 // Each category and its children
                 for (const cat of categories) {

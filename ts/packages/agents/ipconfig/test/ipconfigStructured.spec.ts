@@ -25,7 +25,7 @@ const SAMPLE = [
 ].join("\r\n");
 
 function content(raw: string) {
-    return (buildStructuredOutput(raw).displayContent as any);
+    return buildStructuredOutput(raw).displayContent as any;
 }
 
 describe("buildStructuredOutput", () => {

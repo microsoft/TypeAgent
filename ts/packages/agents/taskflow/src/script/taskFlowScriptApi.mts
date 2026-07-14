@@ -155,9 +155,7 @@ export class TaskFlowScriptAPIImpl implements TaskFlowScriptAPI {
             // Use rawData from StructuredContent when available; otherwise fall
             // back to parsing the text (the pre-Phase-6 path).
             const dc =
-                "displayContent" in result
-                    ? result.displayContent
-                    : undefined;
+                "displayContent" in result ? result.displayContent : undefined;
             const rawData =
                 dc !== undefined &&
                 typeof dc === "object" &&
@@ -165,7 +163,8 @@ export class TaskFlowScriptAPIImpl implements TaskFlowScriptAPI {
                 (dc as { type?: string }).type === "structured"
                     ? (dc as { rawData?: unknown }).rawData
                     : undefined;
-            const data = rawData !== undefined ? rawData : tryParseJson(text) ?? text;
+            const data =
+                rawData !== undefined ? rawData : (tryParseJson(text) ?? text);
 
             if (result.error) {
                 return { text, data, error: result.error };

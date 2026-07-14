@@ -53,16 +53,13 @@ function badgeClass(tone: BadgeTone | undefined): string {
     return `sc-badge sc-badge-${tone ?? "neutral"}`;
 }
 
-function renderTableCell(
-    cell: TableCell,
-    colType: string | undefined,
-): string {
+function renderTableCell(cell: TableCell, colType: string | undefined): string {
     const text = cellDisplayText(cell);
     const obj = typeof cell === "object" && cell !== null ? cell : null;
     const href = obj?.href ?? undefined;
     const badge = obj?.badge ?? undefined;
     const tooltip = obj?.tooltip ? ` title="${esc(obj.tooltip)}"` : "";
-    const effectiveType = badge ? "badge" : href ? "link" : colType ?? "text";
+    const effectiveType = badge ? "badge" : href ? "link" : (colType ?? "text");
 
     switch (effectiveType) {
         case "link":
@@ -103,8 +100,7 @@ function renderTableBlock(block: TableBlock): string {
     }
     parts.push("<thead><tr>");
     for (const col of columns) {
-        const align =
-            col.align ? ` style="text-align:${esc(col.align)}"` : "";
+        const align = col.align ? ` style="text-align:${esc(col.align)}"` : "";
         const colSortable =
             !readonly && (col.sortable ?? sortable ?? true) !== false;
         const sortBtn = colSortable
@@ -117,13 +113,15 @@ function renderTableBlock(block: TableBlock): string {
         const row = rows[ri];
         // Rows beyond the first page start hidden; the "Show more" control
         // (wired in attachTableInteractivity) reveals them in batches.
-        const hidden = paginate && ri >= pageSize! ? ' class="sc-row-hidden"' : "";
+        const hidden =
+            paginate && ri >= pageSize! ? ' class="sc-row-hidden"' : "";
         parts.push(`<tr${hidden}>`);
         for (let ci = 0; ci < columns.length; ci++) {
             const col = columns[ci];
             const cell = row[ci] ?? "";
-            const align =
-                col.align ? ` style="text-align:${esc(col.align)}"` : "";
+            const align = col.align
+                ? ` style="text-align:${esc(col.align)}"`
+                : "";
             parts.push(`<td${align}>${renderTableCell(cell, col.type)}</td>`);
         }
         parts.push("</tr>");
@@ -146,7 +144,13 @@ function renderMarkdownToHtml(text: string): string {
         function (tokens: any, idx: any, options: any, _env: any, self: any) {
             return self.renderToken(tokens, idx, options);
         };
-    md.renderer.rules.link_open = (tokens: any, idx: any, options: any, env: any, self: any) => {
+    md.renderer.rules.link_open = (
+        tokens: any,
+        idx: any,
+        options: any,
+        env: any,
+        self: any,
+    ) => {
         tokens[idx].attrSet("target", "_blank");
         return defaultRender(tokens, idx, options, env, self);
     };
@@ -189,13 +193,11 @@ function renderBlock(block: StructuredBlock): string {
                         ? ` <span class="sc-list-subtitle">${esc(item.subtitle)}</span>`
                         : "";
                     const badges = (item.badges ?? [])
-                        .map(
-                            (tone) => {
-                                const label =
-                                    tone.charAt(0).toUpperCase() + tone.slice(1);
-                                return `<span class="${esc(badgeClass(tone))}">${esc(label)}</span>`;
-                            },
-                        )
+                        .map((tone) => {
+                            const label =
+                                tone.charAt(0).toUpperCase() + tone.slice(1);
+                            return `<span class="${esc(badgeClass(tone))}">${esc(label)}</span>`;
+                        })
                         .join(" ");
                     return `<li>${label}${subtitle}${badges ? " " + badges : ""}</li>`;
                 })
@@ -285,8 +287,7 @@ function attachTableInteractivity(root: HTMLElement): void {
             const canPaginate = Number.isFinite(pageSize) && pageSize > 0;
             if (!canSort && !canFilter && !canPaginate) return;
 
-            const tbody =
-                table.querySelector<HTMLTableSectionElement>("tbody");
+            const tbody = table.querySelector<HTMLTableSectionElement>("tbody");
             if (!tbody) return;
 
             // Snapshot original row order so we can restore it on "none" sort.

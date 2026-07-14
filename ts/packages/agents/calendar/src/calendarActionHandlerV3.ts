@@ -396,9 +396,7 @@ export function buildStructuredEventList(
         const when = [datePart, timePart].filter(Boolean).join(" · ");
         const location = getEventLocation(event);
         return [
-            event.htmlLink
-                ? { text: subject, href: event.htmlLink }
-                : subject,
+            event.htmlLink ? { text: subject, href: event.htmlLink } : subject,
             when,
             location,
         ];

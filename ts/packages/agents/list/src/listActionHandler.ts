@@ -293,9 +293,7 @@ export function buildListResult(
             [
                 { kind: "heading", level: 3, text: `List '${listName}'` },
                 { kind: "text", text: "This list is empty." },
-                ...(suffix
-                    ? [{ kind: "text" as const, text: suffix }]
-                    : []),
+                ...(suffix ? [{ kind: "text" as const, text: suffix }] : []),
             ],
             {
                 entities: getEntities(listName),
