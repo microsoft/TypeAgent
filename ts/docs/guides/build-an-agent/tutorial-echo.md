@@ -1,8 +1,8 @@
-# Building Agents for TypeAgent Dispatcher
+# Tutorial: build an Echo agent (standalone package)
 
 TypeAgent [Shell](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/shell) and [CLI](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/cli) are built using [TypeAgent Dispatcher](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/dispatcher). It has a configurable and extensible architecture that allow custom agents to plug into the system. The TypeAgent repo includes several example [agents](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/agents). **Application agents** can be built **_outside_** the TypeAgent repo by using the [TypeAgent SDK](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/agentSdk/README.md). These agents can be packaged as npm packages and then surfaced in the [Shell](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/shell) or [CLI](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/cli).
 
-This document describes how to build a custom application agent as an independent local NPM package **_outside of the repo_** that works with a locally built TypeAgent [Shell](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/shell) or [CLI](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/cli). The are two example agents in this repo you can reference: [Echo Agent](https://github.com/microsoft/TypeAgent/tree/main/ts/examples/agentExamples/echo) and [Measure Agent](https://github.com/microsoft/TypeAgent/tree/main/ts/examples/agentExamples/measure).
+This tutorial is a hands-on walkthrough of the **standalone external-package** case: authoring an agent in its own npm package outside the TypeAgent repo. For the broader picture (agent patterns, in-repo authoring, distribution via path / catalog / feed), start with [Build an agent](./index.md). This tutorial complements that guide with a concrete Echo example.
 
 ## Prerequisites
 
@@ -238,3 +238,17 @@ The `Echo` agent will be reloaded again after installation. It can be uninstalle
 ## Next step
 
 Start modifying the `Echo` agent and add new action schema and action handlers.
+
+## Where to go next
+
+- **Broader picture:** [Build an agent](./index.md) covers picking a pattern,
+  authoring in-repo vs. standalone, and the three distribution options
+  (path / catalog / feed).
+- **Display output to the user:** [User interaction (`ActionIO`)](./user-interaction.md)
+  walks through `setDisplay` / `appendDisplay`, message kinds, and the display
+  helpers exported from `@typeagent/agent-sdk/helpers/display`.
+- **Choose an architectural pattern:** [Agent patterns](../../architecture/agents/agent-patterns.md)
+  covers the nine patterns and when each is a good fit.
+- **Install sources for distribution:** [Agent install sources](../../architecture/lifecycle/agent-sources.md)
+  explains how path / catalog / feed sources resolve and how ordering works
+  (useful for shadowing a published version with a local build during iteration).
