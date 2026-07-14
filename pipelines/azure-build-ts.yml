@@ -35,7 +35,7 @@ jobs:
         parameters:
           buildDirectory: $(buildDirectory)
           nodeVersion: $(nodeVersion)
-          registry: $(REGISTRY)
+          registry: $(INSTALL_REGISTRY)
 
       - template: include-update-package-version.yml
         parameters:
@@ -89,8 +89,8 @@ jobs:
         workingDirectory: $(buildDirectory)
 
       - script: |
-          echo $(ADO_REGISTRY)
-          echo "registry=$(ADO_REGISTRY)" > .npmrc
+          echo $(PUBLISH_REGISTRY)
+          echo "registry=$(PUBLISH_REGISTRY)" > .npmrc
           cat .npmrc
         displayName: "Create .npmrc file."
         workingDirectory: $(NpmRcDirectory)
@@ -103,7 +103,26 @@ jobs:
       - script: |
           for file in $(publishedPackageDirectory)/*.tgz; do
             echo "Publishing file: $file"
-            npm publish --registry=$(ADO_REGISTRY) --tag=latest "$file"
+            npm publish --registry=$(PUBLISH_REGISTRY) --tag=latest "$file"
           done
         displayName: "Publish packages"
         workingDirectory: $(NpmRcDirectory)
+
+      # PUBLISH_REGISTRY is an upstream source of INSTALL_REGISTRY. Upstreams
+      # are pull-through: a package published to PUBLISH_REGISTRY only shows up
+      # in INSTALL_REGISTRY after something requests it through INSTALL_REGISTRY.
+      # Do that request here so freshly published versions are cached in
+      # INSTALL_REGISTRY immediately. npm pack downloads just the tarball (no
+      # dep resolution), which is enough to trigger the upstream fetch.
+      - script: |
+          set -e
+          primeDir=$(mktemp -d)
+          cp $(buildDirectory)/.npmrc "$primeDir/.npmrc"
+          cd "$primeDir"
+          for file in $(publishedPackageDirectory)/*.tgz; do
+            name=$(tar -xzOf "$file" package/package.json | jq -r .name)
+            version=$(tar -xzOf "$file" package/package.json | jq -r .version)
+            echo "Priming INSTALL_REGISTRY cache: $name@$version"
+            npm pack --registry=$(INSTALL_REGISTRY) "$name@$version" > /dev/null
+          done
+        displayName: "Prime INSTALL_REGISTRY cache from upstream"
