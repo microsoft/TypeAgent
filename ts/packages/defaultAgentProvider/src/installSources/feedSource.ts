@@ -367,8 +367,9 @@ async function fetchPackument(
         const record = asRecord(packument);
         const versions = asRecord(record?.versions);
         const distTags = asRecord(record?.["dist-tags"]);
+        const versionCount = versions ? Object.keys(versions).length : 0;
         debug(
-            `fetchPackument: ${packageName} -> versions=[${versions ? Object.keys(versions).join(", ") : ""}] dist-tags=${JSON.stringify(distTags ?? {})}`,
+            `fetchPackument: ${packageName} -> ${versionCount} version(s), dist-tags=${JSON.stringify(distTags ?? {})}`,
         );
         return packument;
     } catch (e) {
@@ -779,25 +780,34 @@ export function createFeedSource(
         findName,
         describe(): string {
             // Reuse the same resolution as find/materialize
-            // (resolveFeedRegistry / resolveFeedScopes), then annotate a value
-            // that came from an env var because the config omitted it.
-            const registry = resolveFeedRegistry(config) ?? "<unset>";
-            const registryDetail = config.registry
-                ? registry
-                : `${registry} (env: TYPEAGENT_FEED_REGISTRY)`;
+            // (resolveFeedRegistry / resolveFeedScopes). Annotate a value with
+            // its env var only when the env var actually supplied it (config
+            // was silent AND the env var was set).
+            const resolvedRegistry = resolveFeedRegistry(config);
+            const registryFromEnv =
+                config.registry === undefined && resolvedRegistry !== undefined;
+            const registryDetail =
+                resolvedRegistry === undefined
+                    ? "<unset>"
+                    : registryFromEnv
+                      ? `${resolvedRegistry} (env: TYPEAGENT_FEED_REGISTRY)`
+                      : resolvedRegistry;
 
             const scopeList = resolveFeedScopes(config);
             const scopes =
                 scopeList.length > 0
                     ? `scopes: ${scopeList.join(", ")}`
                     : "scopes: (none)";
-            const scopeDetail = config.scopes
-                ? scopes
-                : `${scopes} (env: TYPEAGENT_FEED_SCOPES)`;
+            // Match resolveFeedScopes' check: an explicit `scopes: []` in
+            // config uses config, not env.
+            const scopesFromEnv =
+                config.scopes === undefined &&
+                process.env.TYPEAGENT_FEED_SCOPES !== undefined;
+            const scopeDetail = scopesFromEnv
+                ? `${scopes} (env: TYPEAGENT_FEED_SCOPES)`
+                : scopes;
 
-            return scopeDetail !== undefined
-                ? `${registryDetail}\n${scopeDetail}`
-                : registryDetail;
+            return `${registryDetail}\n${scopeDetail}`;
         },
         async refresh(): Promise<void> {
             // Fetch fresh descriptors and atomically swap them in on success;

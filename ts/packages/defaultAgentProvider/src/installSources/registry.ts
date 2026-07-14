@@ -499,7 +499,6 @@ export function createInstallSourceRegistry(
             return Array.from(entries.values(), ({ config, source }) => ({
                 name: config.name,
                 kind: config.kind,
-                // Each source formats its own config summary.
                 detail: source.describe(),
             }));
         },
