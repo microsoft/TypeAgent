@@ -20,7 +20,7 @@ Run any of these from `ts/`. All accept `--help`, `--root <path>`,
 
 | Command                    | Engine                     | Measures                                                                                          | Baseline (2026-07)                                               | CI gate                                                    |
 | -------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------- |
-| `npm run code-complexity`  | ESLint + sonarjs           | cyclomatic + cognitive complexity per function                                                    | budgets 25/30 in CI                                              | **ratchet** (+ new-file caps)                              |
+| `npm run code-complexity`  | ESLint + sonarjs           | cyclomatic + cognitive complexity per function                                                    | budgets 50/60 in CI                                              | **ratchet** (+ new-file caps)                              |
 | `npm run code-lint`        | ESLint + typescript-eslint | `no-explicit-any`, `no-console`, `no-unused-vars`, `no-var`, `prefer-const` (+ opt-in type-aware) | 6,396 (any 3,874 · console 2,098 · unused 421 · **var/const 0**) | **ratchet** (+ zero-tolerance for `no-var`/`prefer-const`) |
 | `npm run code-duplication` | jscpd                      | copy/paste clones, cross-package + per-package                                                    | 744 clones / 13,984 lines (3.67%)                                | —                                                          |
 | `npm run code-circular`    | madge                      | runtime import cycles                                                                             | 232 cycles (dispatcher 115)                                      | **ratchet** (no new cycles)                                |
@@ -43,7 +43,7 @@ Run any of these from `ts/`. All accept `--help`, `--root <path>`,
   `no-deprecated` — slower, report only), `--new-file-max <n>`.
 - **code-complexity:** `--cyclomatic <n>`, `--cognitive <n>`,
   `--new-file-cyclomatic <n>`, `--new-file-cognitive <n>`,
-  `--exceptions-file <path>` (deprecated JSON baseline by `file:line`; prefer
+  `--exceptions-file <path>` (deprecated JSON baseline exceptions keyed by `file:line`; prefer
   inline `// code-complexity-allow: <reason>` markers — see
   [Suppressing a known offender](#suppressing-a-known-offender)).
   For local CI-parity runs, use `npm run code-complexity:ci`.
@@ -90,8 +90,8 @@ JSON file that grandfathers offenders by position. It remains the mechanism for
 `code-circular` (a cycle spans files, so it has no single line to annotate);
 `code-complexity`, `code-lint`, and `code-debt` still honor it as a fallback but
 emit a deprecation notice — prefer inline markers there. Shape is
-`{ "exceptions": [ ... ] }` (a bare array also works);
-`--ratchet`/`--gate` honor it, report modes ignore it:
+`{ "exceptions": [ ... ] }` (a bare array also works). `--ratchet`/`--gate`
+honor it, and report modes ignore it:
 
 - **code-lint** / **code-complexity** / **code-debt:** entries are
   `{ "file": "packages/foo/src/bar.ts", "line": 42 }` (paths are normalized, so

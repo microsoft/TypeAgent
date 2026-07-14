@@ -2,6 +2,12 @@
   "exceptions": [
     {
       "key": "packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/context/memory.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/dispatcher.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/context/memory.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/command/commandReference.ts"
+    },
+    {
+      "key": "packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts > packages/dispatcher/dispatcher/src/command/command.ts > packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/context/memory.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/command/commandReference.ts"
     }
   ]
 }

@@ -6,7 +6,10 @@ export { createDispatcherFromContext } from "./dispatcher.js";
 export {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
+    prewarmReasoning,
 } from "./context/commandHandlerContext.js";
+export type { CommandHandlerContext } from "./context/commandHandlerContext.js";
+export { collectCommandReferenceMarkdown } from "./command/commandReference.js";
 export { lockInstanceDir } from "./utils/fsUtils.js";
 export { DisplayLog } from "./displayLog.js";
 export type { DisplayLogEntry } from "./displayLog.js";

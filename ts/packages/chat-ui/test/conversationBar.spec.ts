@@ -68,6 +68,40 @@ describe("ConversationBar", () => {
         expect(root.textContent).toContain("1 client");
     });
 
+    it("renders the connected state as an ambient indicator with a client-count badge", () => {
+        const { root } = makeBar();
+
+        const status = root.querySelector<HTMLElement>(
+            ".conversation-status-summary",
+        );
+        expect(status).not.toBeNull();
+        // Ambient indicator (icon + badge), not a solid text pill.
+        expect(status!.classList.contains("as-indicator")).toBe(true);
+        expect(status!.querySelector("svg")).not.toBeNull();
+        const badge = status!.querySelector<HTMLElement>(
+            ".conversation-status-badge",
+        );
+        expect(badge?.textContent).toBe("1");
+        // Full status stays available to assistive tech + as a tooltip.
+        expect(status!.getAttribute("title")).toBe("Connected · 1 client");
+    });
+
+    it("shows the server endpoint in the connected indicator tooltip", () => {
+        const { root, bar } = makeBar();
+        bar.setStatus({ connected: true, endpoint: "localhost:8899" });
+
+        const status = root.querySelector<HTMLElement>(
+            ".conversation-status-summary",
+        );
+        // Endpoint is appended so the user can confirm the target server.
+        expect(status!.getAttribute("title")).toBe(
+            "Connected · 1 client · localhost:8899",
+        );
+        // ...and mirrored into the visually-hidden text for assistive tech.
+        const sr = status!.querySelector(".conversation-status-sr");
+        expect(sr?.textContent).toContain("localhost:8899");
+    });
+
     it("requests and filters conversations from the search popover", () => {
         const { root, controller } = makeBar();
 
@@ -212,9 +246,13 @@ describe("ConversationBar", () => {
                 secondsRemaining: 5,
             },
         });
-        expect(status?.textContent).toBe(
+        expect(status?.textContent).toContain(
             "Disconnected — retrying in 5s (attempt 3)",
         );
+        // Attempt count shown as a negative amber badge.
+        const badge = status?.querySelector(".conversation-status-badge");
+        expect(badge?.textContent).toBe("-3");
+        expect(badge?.classList.contains("attempt")).toBe(true);
         expect(status?.classList.contains("stopped")).toBe(false);
         // No recovery links while still retrying.
         expect(
@@ -222,7 +260,7 @@ describe("ConversationBar", () => {
         ).toBe(0);
     });
 
-    it("renders Retry / Start links once reconnect has stopped and routes clicks", () => {
+    it("makes the plug a reconnect button once auto-retry has stopped and routes clicks", () => {
         const { root, bar, controller } = makeBar();
         const status = root.querySelector<HTMLElement>(
             ".conversation-status-summary",
@@ -238,21 +276,25 @@ describe("ConversationBar", () => {
             },
         });
 
-        expect(status?.classList.contains("stopped")).toBe(true);
-        expect(status?.classList.contains("has-actions")).toBe(true);
-        expect(status?.textContent).toContain("stopped");
-        expect(status?.textContent).toContain("ECONNREFUSED");
+        // The plug itself becomes the primary reconnect button; the full
+        // status stays available via its accessible label / tooltip.
+        const plug = status?.querySelector<HTMLButtonElement>(
+            ".conversation-status-plug",
+        );
+        expect(plug).not.toBeNull();
+        expect(plug?.getAttribute("aria-label")).toContain("stopped");
+        expect(plug?.getAttribute("aria-label")).toContain("ECONNREFUSED");
+        plug?.click();
+        expect(controller.connectionAction).toHaveBeenCalledWith("retry");
 
-        const actions = status?.querySelectorAll<HTMLButtonElement>(
+        // The remaining action (start server) sits alongside as a link.
+        expect(status?.classList.contains("has-actions")).toBe(true);
+        const links = status?.querySelectorAll<HTMLButtonElement>(
             ".connection-status-action",
         );
-        expect(actions?.length).toBe(2);
-        expect(actions?.[0].textContent).toBe("Retry");
-        expect(actions?.[1].textContent).toBe("Start server");
-
-        actions?.[0].click();
-        expect(controller.connectionAction).toHaveBeenCalledWith("retry");
-        actions?.[1].click();
+        expect(links?.length).toBe(1);
+        expect(links?.[0].textContent).toBe("Start server");
+        links?.[0].click();
         expect(controller.connectionAction).toHaveBeenCalledWith("start");
     });
 

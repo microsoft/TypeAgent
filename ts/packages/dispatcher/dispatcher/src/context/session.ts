@@ -161,6 +161,33 @@ export type DispatcherConfig = {
             legacy: boolean; // use legacy memory behavior
         };
         reasoning: "claude" | "copilot" | "none";
+        // Copilot reasoning model + effort overrides. Undefined => fall back to
+        // the COPILOT_REASONING_MODEL / COPILOT_REASONING_EFFORT env vars (set
+        // from config.yaml) and then the built-in defaults. Set live via
+        // `@config execution reasoningModel|reasoningEffort` without a rebuild.
+        reasoningModel?: string;
+        reasoningEffort?: "low" | "medium" | "high" | "xhigh";
+        // How conversation questions ("what did we say about X?", and
+        // follow-ups like "are any of those mine?") are answered:
+        // - "lookup": translate to the conversation-memory lookup; fall back
+        //   to reasoning only if the lookup errors.
+        // - "reasoning-first" (default): hand conversation questions to the
+        //   reasoning agent (which has recent chat context in-prompt + the
+        //   search_memory tool); the direct lookup remains as the fallback
+        //   when reasoning is unavailable or fails.
+        // - "reasoning-only": additionally remove the lookup action from
+        //   translation so conversation questions route to the reasoning agent.
+        conversationAnswer: "lookup" | "reasoning-first" | "reasoning-only";
+        // Number of recent conversation turns injected as context into the
+        // reasoning prompt (see getRecentChatContext). 0 disables history.
+        reasoningHistoryTurns: number;
+        // Whether the user's own messages are recorded in the conversation
+        // transcript (chat history). Independent of knowledge extraction — in
+        // connected/agent-server mode extraction is off, which previously also
+        // dropped user turns from the transcript. Default true so the
+        // transcript (and the reasoning context + read_conversation tool)
+        // reflects what the user actually said.
+        recordUserMessages: boolean;
         // Controls how reasoning events are displayed in the chat UI.
         // "inline": each reasoning phase (thinking, tool call, result, text) gets its own chat bubble.
         // "block": all reasoning output is appended into a single chat bubble (legacy behavior).
@@ -409,6 +436,9 @@ const defaultSessionConfig: SessionConfig = {
         },
         reasoning: "copilot",
         reasoningDisplay: "inline",
+        conversationAnswer: "reasoning-first", // default: reasoning agent handles conversation Q&A; lookup kept as fallback
+        reasoningHistoryTurns: 10, // recent chat turns injected into the reasoning prompt
+        recordUserMessages: true, // record the user's own turns in the transcript
         setupOnFirstUse: true,
         // Default set based on the entity-shape experiment (bench-results/entity-shape-experiment.md):
         // appending the Entity TS type to the reasoning system prompt produced 4 consistent

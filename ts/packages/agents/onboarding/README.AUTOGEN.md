@@ -12,18 +12,18 @@
 
 ## Overview
 
-The `onboarding-agent` is a TypeAgent application agent designed to automate the process of integrating new applications and APIs into the TypeAgent ecosystem. It breaks the onboarding workflow into seven distinct phases, each managed by a sub-agent. This agent is particularly useful when paired with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
+The `onboarding-agent` is a TypeAgent application agent that automates the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each managed by a sub-agent. This agent is particularly effective when used with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
 
 ## What it does
 
-The `onboarding-agent` provides a structured, multi-phase approach to integrating new applications or APIs into the TypeAgent ecosystem. The agent supports the following actions:
+The `onboarding-agent` provides a structured, multi-phase approach to integrating new applications or APIs into the TypeAgent ecosystem. It supports the following actions:
 
-- **`startOnboarding`**: Initiates the onboarding process for a new integration by specifying the integration name and optional details such as a description or API type.
+- **`startOnboarding`**: Begins the onboarding process for a new integration by specifying the integration name and optional details such as a description or API type.
 - **`resumeOnboarding`**: Resumes an in-progress onboarding process, optionally starting from a specific phase such as discovery, schema generation, or testing.
 - **`getOnboardingStatus`**: Retrieves the current status of an ongoing integration, including the current phase and progress.
 - **`listIntegrations`**: Lists all integrations, optionally filtered by their status (e.g., in-progress or complete).
 
-The onboarding process is divided into seven phases, each producing specific artifacts that are saved to a structured workspace directory (`~/.typeagent/onboarding/<integration-name>/`). These phases are:
+The onboarding process is divided into seven phases, each producing specific artifacts saved to a structured workspace directory (`~/.typeagent/onboarding/<integration-name>/`). These phases are:
 
 1. **Discovery**: Crawls documentation, parses OpenAPI specs, or analyzes CLI `--help` output to enumerate the API surface.
 2. **Phrase Generation**: Generates natural language sample phrases for each discovered action.
@@ -39,10 +39,10 @@ The agent is designed to be driven by AI clients that can iteratively call TypeA
 
 To use the `onboarding-agent`, you need to configure the following environment variables:
 
-- **`TYPEAGENT_UIA_HELPER`**: This variable is required for the experimental UI Automation crawling feature, which is used to discover actions in Windows desktop applications. Refer to the hand-written README for more details on how to set this up.
+- **`TYPEAGENT_UIA_HELPER`**: Required for the experimental UI Automation crawling feature, which is used to discover actions in Windows desktop applications. Refer to the hand-written README for more details on how to set this up.
 - **`__PORT_ENV__`**: Specifies the port environment for the agent. Ensure this is set to the appropriate value for your environment.
 
-Additionally, for the best experience, it is recommended to set up TypeAgent as an MCP server. This allows AI clients like Claude Code or GitHub Copilot to communicate directly with the TypeAgent dispatcher. The hand-written README provides detailed instructions for this setup.
+Additionally, for optimal usage, it is recommended to set up TypeAgent as an MCP server. This allows AI clients like Claude Code or GitHub Copilot to communicate directly with the TypeAgent dispatcher. The hand-written README provides detailed instructions for this setup.
 
 ## Key Files
 
@@ -164,6 +164,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/onboa
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
