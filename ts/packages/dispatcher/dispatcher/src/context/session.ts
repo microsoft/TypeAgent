@@ -499,7 +499,13 @@ const defaultSessionConfig: SessionConfig = {
             strategy: "first-match",
         },
         contextSelector: {
-            detect: false,
+            // On by default: the context-weighted collision resolver runs as a
+            // deterministic, LLM-free first pass. On a confident topical pick it
+            // resolves the collision; otherwise it abstains and (with the
+            // defer-to-strategy fallback below) hands off to the grammar
+            // strategy — strictly additive over first-match, never a silent
+            // misroute (see docs/architecture/collision/contextSelector-report.md).
+            detect: true,
             windowTurns: 20,
             decay: 0.9,
             minUniqueTokens: 2,
