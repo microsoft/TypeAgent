@@ -2,10 +2,8 @@
 // Licensed under the MIT License.
 
 /**
- * Derives a rule's *effective* value expression: its explicit `->`
- * expression when present, otherwise the implicit value forwarded from
- * a single variable-bearing part. Single source of truth for this
- * derivation, shared by the grammar optimizer and the NFA compiler.
+ * Value-derivation logic shared by grammarOptimizer.ts and
+ * nfaCompiler.ts: computing a rule's effective value expression.
  */
 
 import type {
@@ -41,13 +39,13 @@ export function findSingleValueBearingPart(
 }
 
 /**
- * Derive a rule's effective value expression: its explicit `->` value
- * when present, otherwise the implicit value from a single
- * variable-bearing part (via `findSingleValueBearingPart`). Throws if a
- * value is required and missing/ambiguous. Not every rule needs a value -
- * only when `requireValue` is set (top-level action rules, or nested
- * rules captured by a parent variable) do ambiguous/missing values
- * throw; otherwise both resolve to `undefined`. `describeRule` is only
+ * A rule's explicit `->` value when present, otherwise the implicit
+ * value from a single variable-bearing part (via
+ * `findSingleValueBearingPart`). Throws if a value is required and
+ * missing/ambiguous. Not every rule needs a value - only when
+ * `requireValue` is set (top-level action rules, or nested rules
+ * captured by a parent variable) do ambiguous/missing values throw;
+ * otherwise both resolve to `undefined`. `describeRule` is only
  * invoked when an error is thrown.
  */
 export function deriveEffectiveValue(
