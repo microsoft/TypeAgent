@@ -44,7 +44,7 @@ The `package.json` contains references to **handler** and **manifest** files in 
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "tsc": "tsc -b"
   },
-  "keywords": [],
+  "keywords": ["typeagent-agent"],
   "dependencies": {
     "@typeagent/agent-sdk": "0.0.1"
   },
@@ -203,7 +203,7 @@ Start TypeAgent [Shell](https://github.com/microsoft/TypeAgent/tree/main/ts/pack
 # you can run these commands from the `ts` folder
 # in the TypeAgent root.
 
-pnpm run cli interactive
+pnpm run cli connect
 
 or
 
@@ -213,7 +213,7 @@ pnpm run shell
 In the [Shell](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/shell) or [CLI](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/cli), install the echo agent and check the status by issuing the command:
 
 ```
-@install echo <path to echo package>
+@package install echo <path to echo package>
 @config agent
 ```
 
@@ -232,7 +232,7 @@ When to run the shell this is how interaction with the `Echo` agent will look li
 The `Echo` agent will be reloaded again after installation. It can be uninstalled using the command:
 
 ```
-@uninstall echo
+@package uninstall echo
 ```
 
 ## Next step
