@@ -548,10 +548,13 @@ class UninstallCommandHandler implements CommandHandler {
             }
         });
         // The barrier teardown settles asynchronously, so print the "started"
-        // acknowledgement — unless the source already settled inline (a
-        // non-active agent removed with no barrier), in which case the fan-out
-        // "was removed" is the whole story and a "will unload shortly" line would
-        // be misleading.
+        // acknowledgement. The `settledSynchronously` guard mirrors the update
+        // handler and stays defensive: if a source ever reported its outcome
+        // synchronously (before this await resolved), the "was removed" fan-out
+        // would already be the whole story and a "will unload shortly" line
+        // would be misleading. Today's uninstall path never settles that way (a
+        // recorded name is torn down through the barrier; a non-active recorded
+        // name throws before reaching here), so this branch normally prints.
         if (!settledSynchronously) {
             displayResult(
                 `Agent '${name}' uninstall started; it will unload from each session shortly.`,
