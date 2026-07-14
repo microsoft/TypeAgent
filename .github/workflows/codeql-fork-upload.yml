@@ -45,7 +45,7 @@ jobs:
       security-events: write # upload SARIF to code scanning
     steps:
       - name: Download CodeQL SARIF artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: codeql-sarif-*
           merge-multiple: true
@@ -55,24 +55,26 @@ jobs:
 
       - name: Resolve pull request from trusted head SHA
         id: pr
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
+            // workflow_run.pull_requests[] is empty for forks, and the
+            // associated-commits API does not index a fork's head commit against
+            // the base repo. So resolve the PR by scanning this repo's open PRs
+            // for the one whose head commit matches the SHA GitHub reported for
+            // the analysis run. Every value here comes from the base repo or the
+            // trusted event payload -- never from the downloaded artifact -- so a
+            // fork cannot redirect the upload to another ref.
             const headSha = context.payload.workflow_run.head_sha;
-            const { data: prs } =
-              await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                commit_sha: headSha,
-              });
-            // Trust only a PR whose head commit matches the SHA GitHub reported
-            // for the analysis run and which targets this repository.
-            const expectedBase = `${context.repo.owner}/${context.repo.repo}`;
-            const pr = prs.find(
-              (p) => p.head.sha === headSha && p.base.repo.full_name === expectedBase,
-            );
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+            const pr = prs.find((p) => p.head.sha === headSha);
             if (!pr) {
-              core.setFailed(`No matching pull request for commit ${headSha}.`);
+              core.setFailed(`No open pull request found with head ${headSha}.`);
               return;
             }
             core.setOutput("number", String(pr.number));
