@@ -39,26 +39,30 @@ export type ActionResolution =
     | { kind: "ambiguous"; actionName: string; matches: ActionMatch[] }
     | { kind: "notFound"; actionName: string; suggestion?: string | undefined };
 
-/** Levenshtein edit distance, used for "did you mean" suggestions. */
+/**
+ * Levenshtein edit distance, used for "did you mean" suggestions.
+ * Two-row iterative form (O(min(a,b)) space).
+ */
 function editDistance(a: string, b: string): number {
-    const al = a.length;
-    const bl = b.length;
-    const d: number[][] = Array.from({ length: al + 1 }, () =>
-        new Array<number>(bl + 1).fill(0),
-    );
-    for (let i = 0; i <= al; i++) d[i][0] = i;
-    for (let j = 0; j <= bl; j++) d[0][j] = j;
-    for (let i = 1; i <= al; i++) {
-        for (let j = 1; j <= bl; j++) {
+    if (a === b) return 0;
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+    let prev = new Array<number>(b.length + 1);
+    let curr = new Array<number>(b.length + 1);
+    for (let j = 0; j <= b.length; j++) prev[j] = j;
+    for (let i = 1; i <= a.length; i++) {
+        curr[0] = i;
+        for (let j = 1; j <= b.length; j++) {
             const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-            d[i][j] = Math.min(
-                d[i - 1][j] + 1,
-                d[i][j - 1] + 1,
-                d[i - 1][j - 1] + cost,
+            curr[j] = Math.min(
+                curr[j - 1] + 1,
+                prev[j] + 1,
+                prev[j - 1] + cost,
             );
         }
+        [prev, curr] = [curr, prev];
     }
-    return d[al][bl];
+    return prev[b.length];
 }
 
 /** Return the closest candidate to `name` (case-insensitive), if any is close enough. */
