@@ -277,7 +277,18 @@ function getListDisplay(
     suffix?: string,
 ) {
     const list = getList(listContext, listName);
-    if (list.itemsSet.size === 0) {
+    return buildListResult(listName, Array.from(list.itemsSet), suffix);
+}
+
+// Build the structured display for a list: a heading + list block (or an
+// empty-state text block) plus a machine-readable rawData payload. Pure —
+// exported for unit tests.
+export function buildListResult(
+    listName: string,
+    items: string[],
+    suffix?: string,
+) {
+    if (items.length === 0) {
         return createStructuredResult(
             [
                 { kind: "heading", level: 3, text: `List '${listName}'` },
@@ -292,7 +303,7 @@ function getListDisplay(
             },
         );
     }
-    const plainList = Array.from(list.itemsSet);
+    const plainList = items;
 
     // Render the list as a structured heading + list block. The SDK derives
     // the markdown/text fallback for clients that can't render blocks.

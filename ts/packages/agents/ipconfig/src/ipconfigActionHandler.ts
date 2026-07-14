@@ -126,7 +126,9 @@ const STRUCTURED_ACTIONS = new Set([
 // (unindented header line) becomes a heading + keyValue block; the dotted
 // "Key . . . : Value" lines become key-value pairs. The SDK derives the
 // markdown/text fallback for clients that can't render blocks.
-function buildStructuredOutput(raw: string) {
+//
+// Exported for unit tests.
+export function buildStructuredOutput(raw: string) {
     const lines = raw.split(/\r?\n/);
 
     type Section = { heading?: string; pairs: KeyValuePair[]; loose: string[] };

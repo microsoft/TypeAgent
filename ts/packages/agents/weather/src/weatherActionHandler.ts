@@ -3,6 +3,7 @@
 
 import type {
     ActionContext,
+    ActionResultSuccess,
     AppAgent,
     SessionContext,
     TypeAgentAction,
@@ -87,7 +88,6 @@ async function handleGetCurrentConditions(
         );
     }
 
-    const tempUnit = units === "celsius" ? "°C" : "°F";
     const conditions = getWeatherDescription(weather.weatherCode);
     const windDir = getWindDirection(weather.windDirection);
 
@@ -100,12 +100,38 @@ async function handleGetCurrentConditions(
         },
     ];
 
+    return buildCurrentConditionsResult(
+        coords.name,
+        units,
+        { ...weather, conditions, windDir },
+        historyText,
+        entities,
+    );
+}
+
+// Build a structured current-conditions result (heading + keyValue block +
+// rawData). Pure — exported for unit tests.
+export function buildCurrentConditionsResult(
+    locationName: string,
+    units: "celsius" | "fahrenheit",
+    weather: {
+        temperature: number;
+        apparentTemperature: number;
+        humidity: number;
+        windSpeed: number;
+        conditions: string;
+        windDir: string;
+    },
+    historyText: string,
+    entities: { name: string; type: string[] }[],
+): ActionResultSuccess {
+    const tempUnit = units === "celsius" ? "°C" : "°F";
     return createStructuredResult(
         [
             {
                 kind: "heading",
                 level: 3,
-                text: `Current conditions in ${coords.name}`,
+                text: `Current conditions in ${locationName}`,
             },
             {
                 kind: "keyValue",
@@ -114,11 +140,11 @@ async function handleGetCurrentConditions(
                         label: "Temperature",
                         value: `${Math.round(weather.temperature)}${tempUnit} (feels like ${Math.round(weather.apparentTemperature)}${tempUnit})`,
                     },
-                    { label: "Conditions", value: conditions },
+                    { label: "Conditions", value: weather.conditions },
                     { label: "Humidity", value: `${weather.humidity}%` },
                     {
                         label: "Wind",
-                        value: `${Math.round(weather.windSpeed)} mph ${windDir}`,
+                        value: `${Math.round(weather.windSpeed)} mph ${weather.windDir}`,
                     },
                 ],
             },
@@ -127,14 +153,14 @@ async function handleGetCurrentConditions(
             historyText,
             entities,
             rawData: {
-                location: coords.name,
+                location: locationName,
                 units,
                 temperature: weather.temperature,
                 apparentTemperature: weather.apparentTemperature,
-                conditions,
+                conditions: weather.conditions,
                 humidity: weather.humidity,
                 windSpeed: weather.windSpeed,
-                windDirection: windDir,
+                windDirection: weather.windDir,
             },
         },
     );
@@ -168,6 +194,41 @@ async function handleGetForecast(
         );
     }
 
+    const historyText = `Got ${days}-day forecast for ${coords.name}`;
+
+    const entities = [
+        {
+            name: coords.name,
+            type: ["location"],
+        },
+    ];
+
+    return buildForecastResult(
+        coords.name,
+        units,
+        days,
+        forecastData,
+        historyText,
+        entities,
+    );
+}
+
+// Build a structured forecast result (heading + sortable table + rawData).
+// Pure — exported for unit tests.
+export function buildForecastResult(
+    locationName: string,
+    units: "celsius" | "fahrenheit",
+    days: number,
+    forecastData: {
+        date: string;
+        weatherCode: number;
+        maxTemp: number;
+        minTemp: number;
+        precipitationProbability: number;
+    }[],
+    historyText: string,
+    entities: { name: string; type: string[] }[],
+): ActionResultSuccess {
     const tempUnit = units === "celsius" ? "°C" : "°F";
     const rows = forecastData.map((day) => {
         const conditions = getWeatherDescription(day.weatherCode);
@@ -193,21 +254,12 @@ async function handleGetForecast(
         ];
     });
 
-    const historyText = `Got ${days}-day forecast for ${coords.name}`;
-
-    const entities = [
-        {
-            name: coords.name,
-            type: ["location"],
-        },
-    ];
-
     return createStructuredResult(
         [
             {
                 kind: "heading",
                 level: 3,
-                text: `${days}-day forecast for ${coords.name}`,
+                text: `${days}-day forecast for ${locationName}`,
             },
             {
                 kind: "table",
@@ -227,7 +279,7 @@ async function handleGetForecast(
             historyText,
             entities,
             rawData: {
-                location: coords.name,
+                location: locationName,
                 units,
                 days,
                 forecast: forecastData,

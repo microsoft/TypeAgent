@@ -430,6 +430,87 @@ short status confirmations.
 `desktop`, `vampire`, `androidMobile`, `powershell`, `utility`, `studio`
 (short text/status confirmations).
 
+### Phase 8 — RPC / custom-UI agents *(after 7; mostly out of scope)*
+
+These are the twelve agents Wave A/B set aside as "custom UI / RPC
+bridge." The distinguishing property is **where the display is produced**:
+their user-facing output does not flow through
+`ActionResult.displayContent` as flattened list/record text, so the
+block-document model has nothing to convert. Three architectures:
+
+- **WebSocket/RPC bridge to an external process** — the agent forwards a
+  command and the *external* client renders the result; the
+  `displayContent` path carries only status/error text.
+  - `code` → Coda VS Code extension (`codeAgentWebSocketServer.ts`;
+    display goes straight to the socket via
+    `actionIO.setDisplay(data.result)`).
+  - `visualStudio` → VS C# extension (`VisualStudioBridge`); only bridge
+    error text uses `createActionResultFromTextDisplay`.
+  - `player` (Spotify) / `playerLocal` — imperative playback commands;
+    results are errors + HTML player widgets, no list results on the
+    `displayContent` path.
+- **Custom webapp (forked view process + Yjs/HTTP)** — a separate web
+  app owns rendering; agent results are "opening / updated" status text.
+  - `markdown`, `montage`, `turtle` (each forks a `site/` viewer).
+- **Bespoke interactive HTML/JS** via
+  `createActionResultFromHtmlDisplayWithScript` / iframe — the payload is
+  a *pre-rendered* stateful widget (forms, carousels, players), not
+  structured data + fallback.
+  - `image` (carousel), `video` (polling player), `settings` (forms),
+    `chat` (freeform LLM text + HTML-embedded images).
+
+**Verdict: only `browser` has a genuinely convertible result.** Its web
+**search results** are produced by `generateWebSearchMarkdown()` and
+returned through the normal `createActionResultFromMarkdownDisplay` path
+(`browserActionHandler.mts` ~L1771) — a list of `{ title, url, domain,
+snippet, relevanceScore }`. The browser's page-interaction actions
+(navigate, screenshot, follow-link) stay on the extension-RPC path.
+
+#### Phase 8a — `browser` web-search → structured *(the one adopter)*
+
+Convert `generateWebSearchMarkdown()`'s output to a `StructuredContent`
+document: a heading (`Found N results for "query"`) + a **table** (or
+`list`) with a link title column, domain, snippet, and a right-aligned
+relevance column; `sortable: true`, `pageSize: 10`; carry the raw
+`websites` array as `rawData`. Keep the existing entity creation
+untouched. The knowledge-preview path
+(`generateLiveKnowledgePreview`, ~L1521) emits HTML into the extension
+and is **not** in scope here.
+
+- **Client caveat:** `browser` search results can surface in the Chrome/
+  Edge extension, which has its **own** renderer and does not understand
+  `type: "structured"`. The SDK-derived markdown `alternates` (via
+  `getStructuredFallback`) cover it, but this must be **visually
+  verified in the extension** before shipping — if the extension renders
+  raw JSON instead of the markdown alternate, either update the
+  extension to prefer the alternate or keep this conversion behind the
+  shell/vscode surfaces only.
+
+#### Phase 8b — the rest: prerequisites, not work items
+
+The remaining eleven agents are **out of scope until their external
+renderer understands `StructuredContent` (or reliably falls back to the
+markdown/text alternate).** No agent-side change is worthwhile before
+then, because the block document would either never reach a
+block-capable renderer or would replace a richer bespoke widget with a
+plain table. Concretely, a future effort would need:
+
+- **Extension/bridge renderers** (`code`, `visualStudio`, `browser`
+  extension) to consume `DisplayContent` and call `getContentForType` /
+  `getStructuredFallback` like `chat-ui` and `vscode-chat` do today.
+- **Webapp viewers** (`markdown`, `montage`, `turtle`) — no change; their
+  content is documents/graphics, not tabular data. Leave as-is
+  permanently.
+- **Widget agents** (`image`, `video`, `settings`, `chat`, `playerLocal`,
+  `player`) — would each need a redesign to separate *data* from
+  *pre-rendered widget* (e.g. `image` emitting `ImageBlock[]` instead of
+  a carousel iframe). Only pursue per-agent if a concrete UX need
+  arises; not a batch conversion.
+
+**Recommendation:** do **Phase 8a** (browser search) as an isolated,
+visually-validated change; treat **8b** as documentation of
+prerequisites, not a backlog to burn down.
+
 ## Verification
 
 - `pnpm --filter agent-sdk test` + `pnpm run build agent-sdk` —

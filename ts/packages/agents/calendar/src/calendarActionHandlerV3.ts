@@ -374,7 +374,9 @@ function formatEventsAsText(events: any[]): string {
 // (Subject as a link, When, Location) plus a machine-readable rawData payload.
 // The SDK derives the markdown/text fallback for clients that can't render
 // blocks.
-function buildStructuredEventList(
+//
+// Exported for unit tests.
+export function buildStructuredEventList(
     events: any[],
     heading?: string,
 ): ActionResultSuccess {

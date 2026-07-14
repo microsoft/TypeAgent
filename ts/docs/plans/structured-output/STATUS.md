@@ -4,7 +4,7 @@ Working tracker for the plan in [PLAN.md](./PLAN.md). Update whenever a
 phase item is started, completed, or a follow-up surfaces. Keep entries
 terse — one line per item where possible.
 
-_Last updated: 2026-07-13 — Phase 7 Wave B: `discord`, `taskflow`, `onboarding`, `screencapture` converted; `osNotifications` reclassified out-of-scope (toast-event stream, not list-shaped)._
+_Last updated: 2026-07-13 — Phase 7 Wave B: `discord`, `taskflow`, `onboarding`, `screencapture` converted; `osNotifications` reclassified out-of-scope (toast-event stream, not list-shaped). Phase 8 (RPC/custom-UI agents) plan added. Agent builder unit tests added for calendar/weather/ipconfig/list (78 structured tests total incl. github-cli)._
 
 ## Progress by phase
 
@@ -90,6 +90,33 @@ Out of scope (v1, custom UI / RPC bridge): `image`, `video`, `settings`,
 Deferred (low value, short text/status): `timer`, `windowsClock`,
 `greeting`, `desktop`, `vampire`, `androidMobile`, `powershell`,
 `utility`, `studio`.
+
+### Phase 8 — RPC / custom-UI agents *(mostly out of scope; see PLAN Phase 8)*
+
+| Item | Agent | Plan | Status |
+| ---- | ----- | ---- | ------ |
+| 8a | `browser` | web-search results (`generateWebSearchMarkdown`) → heading + table (`pageSize: 10`) + rawData; **verify markdown fallback in Chrome/Edge extension** | not started |
+| 8b | `code`, `visualStudio`, `player`, `playerLocal`, `markdown`, `montage`, `turtle`, `image`, `video`, `settings`, `chat` | out of scope — display lives in external bridge/webapp/widget, not on the `displayContent` path; blocked on external renderers understanding `StructuredContent` / its fallback | deferred |
+
+### Agent builder unit tests
+
+Structured-output builders extracted to pure exported functions and
+covered by per-agent specs (in addition to the 16 SDK derivation tests):
+
+| Agent | Spec | Builder(s) | Tests |
+| ----- | ---- | ---------- | ----- |
+| github-cli | `githubCliStructuredResults.spec.ts` | list / repo / dependabot / contributors / pr / issue / field | 46 |
+| calendar | `calendarStructured.spec.ts` | `buildStructuredEventList` | 9 |
+| weather | `weatherStructured.spec.ts` | `buildCurrentConditionsResult`, `buildForecastResult` | 10 |
+| ipconfig | `ipconfigStructured.spec.ts` | `buildStructuredOutput` | 7 |
+| list | `listStructured.spec.ts` | `buildListResult` | 6 |
+
+Covers all core block shapes: table, keyValue, list, heading, badge,
+link cells, pagination, and rawData. New jest harnesses were scaffolded
+for `weather`, `ipconfig`, and `list` (calendar already had one).
+`email`, `discord`, `taskflow`, `onboarding`, `screencapture` builders
+remain inline (validated by build/typecheck); their block shapes are
+covered transitively by the specs above.
 
 ## Open questions
 
