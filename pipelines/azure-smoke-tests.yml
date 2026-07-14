@@ -48,7 +48,7 @@
 #     'build-pipeline-kv' vault (the vault uses RBAC authorization, not access
 #     policies). Authorize the pipeline to use the connection on first run.
 #   * Pipeline variables (define in the pipeline UI or a linked variable group):
-#       - REGISTRY         npm registry URL used by include-prepare-repo.yml to
+#       - INSTALL_REGISTRY npm registry URL used by include-prepare-repo.yml to
 #                          restore dependencies (internal Azure Artifacts feed).
 #   * Pull request validation settings (Edit > ... > Triggers, UI-only) - to run
 #     fork PRs behind a write-access gate, set: "Build pull requests from forks"
@@ -120,7 +120,7 @@ jobs:
         parameters:
           buildDirectory: $(buildDirectory)
           nodeVersion: $(nodeVersion)
-          registry: $(REGISTRY)
+          registry: $(INSTALL_REGISTRY)
 
       # keytar links against libsecret at runtime on Linux; install before any
       # TypeAgent process (CLI / shell) loads the native module.

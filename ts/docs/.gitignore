@@ -19,3 +19,7 @@ log.txt
 !/packages/index.md
 /agents/*
 !/agents/index.md
+
+# --- Generated interactive Action Browser (built by tools/actionBrowser) ---
+/overview/action-browser.html
+/overview/action-browser.json
