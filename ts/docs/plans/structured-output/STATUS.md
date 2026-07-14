@@ -4,7 +4,7 @@ Working tracker for the plan in [PLAN.md](./PLAN.md). Update whenever a
 phase item is started, completed, or a follow-up surfaces. Keep entries
 terse — one line per item where possible.
 
-_Last updated: 2026-07-13 — Phase 4b client-side table pagination (`pageSize`) added; `TableColumn.pinned` reserved (not built)._
+_Last updated: 2026-07-13 — Phase 7 Wave B: `discord`, `taskflow`, `onboarding`, `screencapture` converted; `osNotifications` reclassified out-of-scope (toast-event stream, not list-shaped)._
 
 ## Progress by phase
 
@@ -77,11 +77,11 @@ Wave B — medium fit:
 
 | Item | Agent | Target blocks | Status |
 | ---- | ----- | ------------- | ------ |
-| 7f | `discord` | heading + list/table | not started |
-| 7g | `taskflow` | table (name/description/usage) | not started |
-| 7h | `onboarding` | heading + keyValue (phase status) | not started |
-| 7i | `screencapture` | image + heading/keyValue | not started |
-| 7j | `osNotifications` | list/card (event stream) | not started |
+| 7f | `discord` | heading + list/table | done |
+| 7g | `taskflow` | table (name/description/usage) | done |
+| 7h | `onboarding` | heading + keyValue (phase status) | done |
+| 7i | `screencapture` | image + heading/keyValue | done |
+| 7j | `osNotifications` | list/card (event stream) | out of scope — single toast/inline events via `context.notify`, not list-shaped |
 
 Out of scope (v1, custom UI / RPC bridge): `image`, `video`, `settings`,
 `chat`, `code`, `visualStudio`, `browser`, `markdown`, `montage`,

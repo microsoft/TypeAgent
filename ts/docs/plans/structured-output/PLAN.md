@@ -415,7 +415,12 @@ deferred until a clear need appears.
 | 7 | `taskflow` | text task listings | `table` (name / description / usage) |
 | 8 | `onboarding` | markdown wizard status | `heading` + `keyValue` (phase status) |
 | 9 | `screencapture` | image + markdown metadata | `image` + `heading`/`keyValue` |
-| 10 | `osNotifications` | streamed notification log | `list`/`card` (event stream) |
+
+`osNotifications` was initially a Wave B candidate but is **out of scope**:
+each notification is an individual toast/inline event pushed via
+`context.notify` (single-line, intentionally plain text for clean CLI
+rendering), not a list-shaped action result. Its action results are
+short status confirmations.
 
 **Out of scope (v1):** `image`, `video`, `settings`, `chat`, `code`,
 `visualStudio`, `browser`, `markdown`, `montage`, `turtle`, `player`,
