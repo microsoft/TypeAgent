@@ -30,21 +30,6 @@ state, and what output it produces:
 | `view-ui`                | Rich interactive web-view UI             | `turtle`, `montage`, `markdown` |
 | `command-handler`        | Simple settings-style direct dispatch    | `settings`, `test`              |
 
-## Anatomy of an agent
-
-Each agent typically follows this layout:
-
-```
-packages/agents/<name>/src/
-  <name>Manifest.json    # metadata, schema pointers, emoji
-  <name>Schema.ts        # typed action/activity definitions
-  <name>Schema.agr       # grammar rules (NL → structured actions)
-  <name>ActionHandler.ts # implements instantiate(): AppAgent
-```
-
-The dispatcher calls `executeAction(action, context)` with already-validated,
-typed actions — agents never parse natural language directly.
-
 ## Adding an agent
 
 Building a new application agent? Start with
