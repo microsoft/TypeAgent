@@ -16,7 +16,6 @@ import type {
 } from "@typeagent/action-schema";
 import { SchemaCreator } from "@typeagent/action-schema";
 import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
-import { findSingleValueBearingPart } from "./grammarValueDeriver.js";
 
 // Sentinel for "any" — can't determine type
 const ANY_TYPE: SchemaType = SchemaCreator.any();
@@ -499,15 +498,12 @@ export function classifyRuleValue(rule: GrammarRule): RuleValueKind {
     if (rule.value !== undefined) {
         return { kind: "explicit" };
     }
-    const contributor = findSingleValueBearingPart(rule.parts);
-    if (contributor !== undefined && contributor !== "ambiguous") {
-        return {
-            kind: "variable",
-            variableName: contributor.variable,
-            part: contributor.part,
-        };
+    const variableParts = rule.parts.filter((p) => p.variable !== undefined);
+    if (variableParts.length === 1) {
+        const part = variableParts[0];
+        return { kind: "variable", variableName: part.variable!, part };
     }
-    if (contributor === undefined && rule.parts.length === 1) {
+    if (variableParts.length === 0 && rule.parts.length === 1) {
         const part = rule.parts[0];
         if (part.type === "rules") {
             // For dispatched parts, the effective member list spans

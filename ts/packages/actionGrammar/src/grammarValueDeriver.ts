@@ -63,17 +63,14 @@ export function deriveEffectiveValue(
     if (!requireValue) {
         return undefined;
     }
-    const termsDescription =
-        rule.parts.length === 1
-            ? "has 1 term"
-            : `has ${rule.parts.length} terms`;
     const description = describeRule?.() ?? "";
+    const term = rule.parts.length === 1 ? "term" : "terms";
     const reason =
         result === "ambiguous"
-            ? "and more than one part carries a variable - the implicit value is ambiguous"
-            : "and no part carries a variable";
+            ? "more than one part carries a variable - the implicit value is ambiguous"
+            : "no part carries a variable";
     throw new Error(
-        `${description} ${termsDescription} but no value expression, ${reason}. ` +
-            `Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.`,
+        `Internal Error : ${description} has ${rule.parts.length} ${term} but no value expression, and ${reason}. ` +
+            "Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.",
     );
 }
