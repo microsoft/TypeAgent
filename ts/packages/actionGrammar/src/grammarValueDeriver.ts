@@ -61,10 +61,7 @@ export function deriveEffectiveValue(
     if (rule.value !== undefined) {
         return rule.value;
     }
-    const result =
-        rule.parts.length === 0
-            ? undefined
-            : findSingleValueBearingPart(rule.parts);
+    const result = findSingleValueBearingPart(rule.parts);
     if (result !== undefined && result !== "ambiguous") {
         return { type: "variable", name: result.variable };
     }

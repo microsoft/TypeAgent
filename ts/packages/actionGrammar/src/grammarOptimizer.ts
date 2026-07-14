@@ -3236,18 +3236,11 @@ function trySubstituteMembers(
     let bailed = false;
     const rewriteOne = (m: GrammarRule): GrammarRule => {
         const renamed = renameAllChildBindings(m.parts, m.value, renameState);
-        const effective =
-            renamed.value !== undefined
-                ? renamed.value
-                : deriveEffectiveValue(
-                      {
-                          ...m,
-                          parts: renamed.parts,
-                          value: renamed.value,
-                      },
-                      () => "",
-                      false,
-                  );
+        const effective = deriveEffectiveValue(
+            { ...m, parts: renamed.parts, value: renamed.value },
+            () => "",
+            false,
+        );
         if (effective === undefined) {
             // Member has no explicit value and we can't synthesize
             // one to substitute (e.g. unbound single-part
