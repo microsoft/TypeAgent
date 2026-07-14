@@ -7,6 +7,7 @@ import {
     getAppAgentName,
     type ActionConfig,
 } from "agent-dispatcher/internal";
+import type { ActionSchemaTypeDefinition } from "@typeagent/action-schema";
 import type { AppAgentManifest, GrammarContent } from "@typeagent/agent-sdk";
 import { extractParams } from "./paramTypes.js";
 import { extractPhrasings, extractCompiledPhrasings } from "./phrasings.js";
@@ -127,7 +128,7 @@ function collectActions(
 ): ActionInfo[] {
     const phrasings = collectPhrasings(config);
 
-    let actionSchemas: Map<string, any>;
+    let actionSchemas: Map<string, ActionSchemaTypeDefinition>;
     try {
         const schemaFile = provider.getActionSchemaFileForConfig(config);
         actionSchemas = schemaFile.parsedActionSchema.actionSchemas;

@@ -14,10 +14,18 @@ interface HandlerNode {
     defaultSubCommand?: HandlerNode | undefined;
     parameters?:
         | {
-              args?: Record<string, any> | undefined;
-              flags?: Record<string, any> | undefined;
+              args?: Record<string, ParameterDef> | undefined;
+              flags?: Record<string, ParameterDef> | undefined;
           }
         | undefined;
+}
+
+interface ParameterDef {
+    type?: unknown;
+    optional?: unknown;
+    description?: unknown;
+    char?: unknown;
+    default?: unknown;
 }
 
 /**

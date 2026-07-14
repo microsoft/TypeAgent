@@ -17,6 +17,13 @@ import { lowerFirst, normalizeSpaces } from "./util.js";
 const MAX_PHRASINGS = 8;
 const MAX_DEPTH = 4;
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+    if (typeof value !== "object" || value === null) {
+        return undefined;
+    }
+    return value as Record<string, unknown>;
+}
+
 /**
  * Parse an `.agr` grammar and produce, for each action name, a list of example
  * natural-language phrasings. Literal tokens are rendered as-is, captured
@@ -60,26 +67,19 @@ export function extractPhrasings(
 
 /** Extract the `actionName` string literal from a rule's `-> { ... }` value. */
 function getActionName(value: unknown): string | undefined {
-    const node = value as any;
-    if (
-        node === undefined ||
-        node === null ||
-        node.type !== "object" ||
-        !Array.isArray(node.value)
-    ) {
+    const node = asRecord(value);
+    if (node?.type !== "object" || !Array.isArray(node.value)) {
         return undefined;
     }
     for (const element of node.value) {
+        const property = asRecord(element);
         if (
-            element !== null &&
-            element.type === "property" &&
-            element.key === "actionName"
+            property?.type === "property" &&
+            property.key === "actionName"
         ) {
-            const propValue = element.value;
+            const propValue = asRecord(property.value);
             if (
-                propValue !== null &&
-                propValue !== undefined &&
-                propValue.type === "literal" &&
+                propValue?.type === "literal" &&
                 typeof propValue.value === "string"
             ) {
                 return propValue.value;
@@ -108,30 +108,33 @@ function renderExpressions(
 }
 
 function renderExpr(
-    expr: any,
+    expr: unknown,
     defs: Map<string, RuleDefinition>,
     depth: number,
 ): string {
-    switch (expr?.type) {
+    const node = asRecord(expr);
+    switch (node?.type) {
         case "string":
-            return Array.isArray(expr.value) ? expr.value.join(" ") : "";
+            return Array.isArray(node.value) ? node.value.join(" ") : "";
         case "variable": {
             // A capture like `$(trackName:<TrackName>)` — the slot name is the
             // most meaningful placeholder for the reader.
-            const name = expr.variableName?.name;
+            const variableName = asRecord(node.variableName);
+            const name = variableName?.name;
             return typeof name === "string" && name.length > 0
                 ? `{${name}}`
                 : "";
         }
         case "ruleReference":
-            return renderRuleRef(expr.refName?.name, defs, depth);
+            return renderRuleRef(asRecord(node.refName)?.name, defs, depth);
         case "rules": {
             // Drop optional groups to keep the canonical phrasing clean; for a
             // required group, render its first alternative.
-            if (expr.optional === true || expr.repeat === true) {
+            if (node.optional === true || node.repeat === true) {
                 return "";
             }
-            const first = expr.rules?.[0];
+            const rules = Array.isArray(node.rules) ? node.rules : undefined;
+            const first = asRecord(rules?.[0]);
             return first
                 ? renderExpressions(first.expressions, defs, depth)
                 : "";
@@ -221,26 +224,27 @@ export function extractCompiledPhrasings(
     // The top-level grammar shares the {alternatives, dispatch} shape of a
     // RulesPart; optimized grammars keep their entry rules in `dispatch`, so
     // seed from both.
-    const stack: any[] = compiledAlternatives(grammar);
+    const stack: unknown[] = compiledAlternatives(grammar);
     while (stack.length > 0) {
         const rule = stack.pop();
-        if (rule === undefined || rule === null || seen.has(rule)) {
+        if (typeof rule !== "object" || rule === null || seen.has(rule)) {
             continue;
         }
         seen.add(rule);
+        const ruleNode = rule as Record<string, unknown>;
 
-        const actionName = getActionName(rule.value);
+        const actionName = getActionName(ruleNode.value);
         if (actionName !== undefined) {
-            const phrase = renderCompiledParts(rule.parts, 0);
+            const phrase = renderCompiledParts(ruleNode.parts, 0);
             if (phrase.length > 0) {
                 addPhrase(result, actionName, phrase);
             }
         }
 
         // Descend into nested alternations to reach every leaf production.
-        if (Array.isArray(rule.parts)) {
-            for (const part of rule.parts) {
-                if (part?.type === "rules") {
+        if (Array.isArray(ruleNode.parts)) {
+            for (const part of ruleNode.parts) {
+                if (asRecord(part)?.type === "rules") {
                     for (const alt of compiledAlternatives(part)) {
                         stack.push(alt);
                     }
@@ -265,30 +269,31 @@ function renderCompiledParts(parts: unknown, depth: number): string {
     return normalizeSpaces(rendered.join(" "));
 }
 
-function renderCompiledPart(part: any, depth: number): string {
-    switch (part?.type) {
+function renderCompiledPart(part: unknown, depth: number): string {
+    const node = asRecord(part);
+    switch (node?.type) {
         case "string":
-            return Array.isArray(part.value) ? part.value.join(" ") : "";
+            return Array.isArray(node.value) ? node.value.join(" ") : "";
         case "wildcard":
         case "number":
-            return typeof part.variable === "string" && part.variable.length > 0
-                ? `{${part.variable}}`
+            return typeof node.variable === "string" && node.variable.length > 0
+                ? `{${node.variable}}`
                 : "";
         case "phraseSet":
-            return typeof part.variable === "string" && part.variable.length > 0
-                ? `{${part.variable}}`
+            return typeof node.variable === "string" && node.variable.length > 0
+                ? `{${node.variable}}`
                 : "";
         case "rules": {
-            if (part.optional === true || part.repeat === true) {
+            if (node.optional === true || node.repeat === true) {
                 return "";
             }
-            if (typeof part.variable === "string" && part.variable.length > 0) {
-                return `{${part.variable}}`;
+            if (typeof node.variable === "string" && node.variable.length > 0) {
+                return `{${node.variable}}`;
             }
             if (depth >= MAX_DEPTH) {
                 return "";
             }
-            const first = compiledAlternatives(part)[0];
+            const first = asRecord(compiledAlternatives(node)[0]);
             return first ? renderCompiledParts(first.parts, depth + 1) : "";
         }
         default:
@@ -297,16 +302,18 @@ function renderCompiledPart(part: any, depth: number): string {
 }
 
 /** All member rules of a compiled alternation (direct + dispatch buckets). */
-function compiledAlternatives(rulesPart: any): any[] {
-    const members: any[] = Array.isArray(rulesPart?.alternatives)
-        ? [...rulesPart.alternatives]
+function compiledAlternatives(rulesPart: unknown): unknown[] {
+    const node = asRecord(rulesPart);
+    const members: unknown[] = Array.isArray(node?.alternatives)
+        ? [...node.alternatives]
         : [];
-    const dispatch = rulesPart?.dispatch;
+    const dispatch = node?.dispatch;
     if (Array.isArray(dispatch)) {
         for (const bucket of dispatch) {
-            const tokenMap = bucket?.tokenMap;
-            if (tokenMap && typeof tokenMap.values === "function") {
-                for (const arr of tokenMap.values()) {
+            const tokenMap = asRecord(asRecord(bucket)?.tokenMap);
+            const values = tokenMap?.values;
+            if (typeof values === "function") {
+                for (const arr of values.call(tokenMap) as Iterable<unknown>) {
                     if (Array.isArray(arr)) {
                         members.push(...arr);
                     }

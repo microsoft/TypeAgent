@@ -66,18 +66,18 @@ async function main(): Promise<void> {
             JSON.stringify(catalog, undefined, 2),
             "utf8",
         );
-        console.log(`wrote ${jsonPath}`);
+        process.stdout.write(`wrote ${jsonPath}\n`);
     }
 
     const html = renderHtml(catalog);
     await fs.writeFile(outPath, html, "utf8");
 
-    console.log(
+    process.stdout.write(
         `Action browser: ${catalog.counts.agents} agents, ` +
             `${catalog.counts.actions} actions, ` +
-            `${catalog.counts.commands} system commands`,
+            `${catalog.counts.commands} system commands\n`,
     );
-    console.log(`wrote ${outPath}`);
+    process.stdout.write(`wrote ${outPath}\n`);
 }
 
 main().catch((err) => {
