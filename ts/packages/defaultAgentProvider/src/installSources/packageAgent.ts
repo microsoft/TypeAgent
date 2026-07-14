@@ -87,18 +87,13 @@ export interface InstalledAgentSourceApi {
     // refreshed. A fetch failure throws so the `--refresh` command fails rather
     // than acting on stale data.
     refresh(sourceName?: string): Promise<void>;
-    // Fan the unload out to every session — including the issuing one — through
-    // its idle-gated applicator, each notified with a system message ("Agent 'x'
-    // was removed."), exactly as an install announces its add. Unlike `update`,
-    // uninstall needs no version-swap barrier: the shared agent provider is
-    // refcounted, so once EVERY session has unloaded it the process closes, and
-    // the source frees the name (drops the record) only then — so a name is never
-    // reused while its process may still be live. The COMMITTED removal is
-    // announced by that fan-out, so callers need not echo it. `onOutcome` reports
-    // the final status: `uninstalled` (freed) or `reverted` (a session never
-    // idled within the timeout, so the agent was left installed — which the
-    // fan-out cannot express, since nothing changed). Returns as soon as the
-    // teardown starts; the issuing session's own unload runs after this returns.
+    // Drop the record (commit), then fan out `removeProvider` to every session —
+    // including the issuing one — through its idle-gated applicator, each
+    // notified. The teardown is coordinated by the same
+    // barrier as `update`, so a straggler that won't idle rolls back (the agent
+    // stays installed); `onOutcome` reports that final
+    // status (uninstalled / reverted). Returns as soon as the teardown starts;
+    // the unload lands at each session's next idle.
     uninstall(
         name: string,
         issuingHost: AppAgentHost,

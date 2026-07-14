@@ -1315,11 +1315,8 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         await built.testApi.uninstall("foo", issuing);
         await flush();
 
-        // The gated sibling's unload is still pending. When its dispatcher tears
-        // down, the applicator auto-acks that queued unload (modeled here by
-        // releasing the gate) and the connection drops from the fan-out set —
-        // settling the last drain and freeing the name.
-        gated.release();
+        // The gated sibling still pends. Disposing its connection drops it from
+        // the drain, which completes the drain and frees the name (7.3).
         gatedConn.dispose();
         await flush();
         await expect(
@@ -2150,10 +2147,6 @@ describe("installed agent source api (install/uninstall/update)", () => {
             createDefaultInstalledAgentSource(instanceDir).testApi;
         await installer.install("gone", agentDir, undefined, host);
         await installer.uninstall("gone", host);
-        // Uninstall returns once the teardown STARTS; the record is dropped when
-        // the drain settles (the issuing session's own unload runs only after
-        // this call returns). Let that macrotask finalize before asserting.
-        await new Promise((r) => setTimeout(r, 0));
         expect(readAgentsJson(instanceDir)!.agents.gone).toBeUndefined();
         await expect(installer.uninstall("missing", host)).rejects.toThrow(
             /not found/,
