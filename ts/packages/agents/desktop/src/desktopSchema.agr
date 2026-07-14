@@ -14,7 +14,8 @@ import { DesktopActions } from "./actionsSchema.ts";
           | <WifiControl>
           | <DesktopManagement>
           | <NetworkSettings>
-          | <BrightnessControl>;
+          | <BrightnessControl>
+          | <ServiceControl>;
 
 // ===== Known Programs (for completions and priority matching) =====
 // These are matched with higher priority than wildcards
@@ -146,3 +147,13 @@ import { DesktopActions } from "./actionsSchema.ts";
   | make (the)? screen dimmer -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "decrease" } }
   | dim (the)? screen -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "decrease" } }
   | brighten (the)? screen -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "increase" } };
+
+// ===== Windows Service Control =====
+// "restart the <name> service" matches by service name / display name.
+// "restart the service that <phrase>" matches by a phrase in the service description.
+<ServiceControl> =
+    restart (the)? $(service:wildcard) service -> { actionName: "RestartService", parameters: { service: service, matchBy: "name" } }
+  | restart (the)? $(service:wildcard) windows service -> { actionName: "RestartService", parameters: { service: service, matchBy: "name" } }
+  | restart service $(service:wildcard) -> { actionName: "RestartService", parameters: { service: service, matchBy: "name" } }
+  | bounce (the)? $(service:wildcard) service -> { actionName: "RestartService", parameters: { service: service, matchBy: "name" } }
+  | restart (the)? service (with description|described as|whose description is) $(service:wildcard) -> { actionName: "RestartService", parameters: { service: service, matchBy: "description" } };

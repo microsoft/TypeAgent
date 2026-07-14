@@ -10,7 +10,7 @@
 
 ## 1. The MVP, in one paragraph
 
-A developer opens VS Code on the TypeAgent repo. They install the **TypeAgent Studio** extension pack. From the activity bar they start a sandboxed agent-server with `player` loaded. They open Schema Studio, load `player`'s federated corpus (in-repo seed + their own captures + remote feedback), filter to 👎 / `wrong-agent`, identify one missing schema variant, add it via a code-action, observe the inline collision diagnostic clear, and commit. They run **Replay corpus across versions** (working tree vs `HEAD~1`). The Impact Report opens with four panes; in the action-level pane they filter to "likely-bad change" and drill into one row. The Trace Viewer shows that trace in full, side-by-side with the prior version. They satisfy themselves the change is good, restore the sandbox to clean state, and the journey loops to the next iteration. In a separate flow, a brand-new developer runs **New Agent** and produces a working `thermostat` agent in the sandbox in one sitting — the same sandbox infrastructure, the same health-check engine, the same event stream.
+A developer opens VS Code on the TypeAgent repo. They install the **TypeAgent Studio** extension pack. From the activity bar they start a sandboxed agent-server with `player` loaded. They open Schema Studio, load `player`'s federated corpus (in-repo seed + their own captures + remote feedback), filter to 👎 / `wrong-agent`, identify one missing schema variant, add it via a code-action, observe the inline collision diagnostic clear, and commit. They run **Replay corpus across versions** (working tree vs `HEAD~1`). The Impact Report opens with four panes; in the action-level pane they filter to "likely regression" and drill into one row. The Trace Viewer shows that trace in full, side-by-side with the prior version. They satisfy themselves the change is good, restore the sandbox to clean state, and the journey loops to the next iteration. In a separate flow, a brand-new developer runs **New Agent** and produces a working `thermostat` agent in the sandbox in one sitting — the same sandbox infrastructure, the same health-check engine, the same event stream.
 
 That paragraph is the MVP demo script. Everything in this document exists to make it true.
 
@@ -55,7 +55,7 @@ Starting from the current `player` schema and a federated corpus of ≥ 200 utte
 
 ### Gate C — Headline gate (J4) — _the validation gate_
 
-The Impact Report, run with the default "likely-bad change" predicate (F4.4) on a **hand-labelled regression set for `player`**, agrees with developer judgment on ≥ 80% of rows. Defined "agree" = the row is labelled "red" exactly when the human labeller would call it a regression and "green" exactly when the human labeller would call it an improvement. Disagreements on equal-rows are not counted.
+The Impact Report, run with the default "likely regression" predicate (F4.4) on a **hand-labelled regression set for `player`**, agrees with developer judgment on ≥ 80% of rows. Defined "agree" = the row is labelled "red" exactly when the human labeller would call it a regression and "green" exactly when the human labeller would call it an improvement. Disagreements on equal-rows are not counted.
 
 **This gate is the single hardest one.** It can fail because the predicate is wrong (tunable), because the corpus doesn't have enough labels (fixable by capturing more), or because the engine produces flaky `ActionDelta` rows under cache-miss conditions (an engine bug). All three failure modes have to be diagnostically distinguishable.
 
@@ -155,7 +155,7 @@ To make the slice concrete, here is the demo a Studio reviewer would walk after 
 7. Schema Studio re-evaluates within a second; row now maps. _(F2.6)_
 8. Notice the editor shows a collision diagnostic against an overlapping older variant. Apply quick-fix → diagnostic clears. _(F0.6, F2.4)_
 9. From the source-control gutter → "Compare working tree vs HEAD against corpus." Launch dialog opens; defaults look right; click Run. _(F4.2)_
-10. ~30 seconds later Impact Report opens. Pane 3 (action-level). Filter chip → "likely-bad change." Two rows. Click one. _(F4.1, F4.3, F4.4)_
+10. ~30 seconds later Impact Report opens. Pane 3 (action-level). Filter chip → "likely regression." Two rows. Click one. _(F4.1, F4.3, F4.4)_
 11. Trace Viewer opens. Side-by-side vA vs vB. Click a grammar match step → jumps to the AGR line. Click an action node → jumps to the schema variant. _(F5.1, F5.3)_
 12. Return to Impact Report → Export. Save the run. _(F4.5)_
 13. _(Bonus path — Gate A.)_ Quit. New developer machine. `TypeAgent Studio: New Agent`. Type two paragraphs. Walk the seven phases. Install. Type "set the living room to 68" in vscode-shell. It works. _(F1._, F0.5)\*

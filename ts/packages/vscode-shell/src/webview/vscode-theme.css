@@ -175,7 +175,10 @@
   color: transparent !important;
 }
 .agent-icon {
-  background-color: var(--vscode-badge-background, #2a2a40) !important;
+  background-color: var(
+    --vscode-badge-background,
+    var(--vscode-editorWidget-background, #3c3c3c)
+  ) !important;
   color: var(--vscode-badge-foreground, var(--vscode-foreground)) !important;
 }
 

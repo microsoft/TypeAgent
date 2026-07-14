@@ -67,5 +67,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "studio"
   }
 }

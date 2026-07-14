@@ -3,9 +3,14 @@
 
 import type {
     IAgentMessage,
+    PendingInteractionRequest,
+    PendingInteractionResponse,
     QueuedRequest,
     QueueCancelReason,
     QueueSnapshot,
+    UserFeedbackEntry,
+    UserFeedbackRating,
+    UserFeedbackCategory,
 } from "@typeagent/dispatcher-types";
 import type {
     CompletionDirection,
@@ -14,6 +19,7 @@ import type {
 } from "@typeagent/agent-sdk";
 import type { CompletionState } from "agent-dispatcher/helpers/completion";
 import type { ConnectionActionId } from "chat-ui";
+import type { SpeechToken } from "@typeagent/agent-server-protocol";
 
 /**
  * Messages from extension host → webview
@@ -24,6 +30,9 @@ export type BridgeToWebviewMessage =
           connected: boolean;
           sessionId?: string;
           sessionName?: string;
+          // Agent-server endpoint (host:port), shown in the connected
+          // indicator's tooltip so the user can confirm the target server.
+          endpoint?: string;
       }
     | { type: "sessionChanged"; sessionId: string; sessionName: string }
     | {
@@ -134,6 +143,23 @@ export type BridgeToWebviewMessage =
           clientRequestId?: string;
       }
     | { type: "queueStateChanged"; snapshot: QueueSnapshot }
+    // Connection dropped mid-request: the dispatcher's completion push can no
+    // longer reach us, so the webview marks the bubble "status unknown" (a
+    // muted rail, no spinner/Stop) instead of leaving it stuck "working". On
+    // reconnect the host re-checks each against a fresh queue snapshot and
+    // sends `requestStatusResume` (still running/queued) or `commandComplete`
+    // (finished while we were away).
+    | { type: "requestStatusUnknown"; requestId: string }
+    | {
+          type: "requestStatusResume";
+          requestId: string;
+          status: "running" | "queued";
+      }
+    // Offline send buffered in the host's pendingSends queue (not yet
+    // submitted to any dispatcher). Stamps a "queued" chip on the bubble
+    // immediately; the dispatcher snapshot reconciles it once it flushes on
+    // reconnect.
+    | { type: "queuePending"; requestId: string }
     | {
           type: "demoState";
           running: boolean;
@@ -188,19 +214,102 @@ export type BridgeToWebviewMessage =
           }>;
           currentSessionId?: string;
       }
+    | { type: "developerMode"; enabled: boolean }
+    | {
+          // Non-blocking choice card from an agent action
+          // (createYesNoChoiceResult / createMultiChoiceResult /
+          // createPickRememberChoiceResult -> ClientIO.requestChoice). The
+          // prompt text is already shown as the action's `displayContent`
+          // (rendered via appendDisplay), so the webview renders ONLY the
+          // buttons and anchors them to that request's agent bubble via
+          // `requestId`. It replies with a `choiceResponse`. Without this the
+          // card's buttons never appear and the user can't answer the prompt.
+          type: "requestChoice";
+          choiceId: string;
+          // Renamed from ClientIO's `type` param to avoid colliding with this
+          // message's own `type` discriminant.
+          choiceType: "yesNo" | "multiChoice" | "pickRemember";
+          message: string;
+          choices: string[];
+          source: string;
+          checkboxLabel?: string;
+          requestId?: string;
+      }
+    | {
+          // Live-updating ("dynamic") display from an agent action that set
+          // ActionResult.dynamicDisplayId (e.g. the player agent's "now
+          // playing" status). The webview registers a refresh timer via
+          // chat-ui's ChatPanel.setDynamicDisplay, which polls back for fresh
+          // content through the `getDynamicDisplay` bridge RPC. Without this
+          // the initial content renders once but never refreshes.
+          type: "setDynamicDisplay";
+          source: string;
+          displayId: string;
+          nextRefreshMs: number;
+      }
+    | {
+          // Broadcast of a user feedback rating (thumbs up/down) recorded by
+          // any connected client, fanned out via ClientIO.onUserFeedback so
+          // every client's bubble stays in sync. The webview applies it via
+          // chat-ui's ChatPanel.applyFeedback.
+          type: "userFeedback";
+          entry: UserFeedbackEntry;
+      }
+    | {
+          // Server-driven interactive prompt: dev-mode action confirmation
+          // (`@config dev on --confirm`) or an agent question. The webview
+          // renders it (proposeActionEdit / choice prompt) and replies with
+          // an `interactionResponse` message.
+          type: "requestInteraction";
+          interaction: PendingInteractionRequest;
+      }
+    // Another client answered / the server cancelled the interaction; the
+    // webview should tear down its in-progress prompt (identified by id).
+    | { type: "interactionResolved"; interactionId: string }
+    | { type: "interactionCancelled"; interactionId: string }
+    | {
+          // Response to a webview-issued `bridgeRpcRequest` (template editor
+          // schema / completion lookups routed through the host to the
+          // dispatcher). Correlated by `id`.
+          type: "bridgeRpcResponse";
+          id: number;
+          result?: unknown;
+          error?: string;
+      }
+    // Response to a webview-issued `getSpeechToken` request. Correlated by
+    // `id`; `token` is undefined when speech isn't configured / unavailable.
+    | { type: "speechTokenResponse"; id: number; token?: SpeechToken }
     | { type: "sessionError"; message: string };
 
 /**
  * Messages from webview → extension host
  */
 export type BridgeFromWebviewMessage =
-    | { type: "sendCommand"; command: string; requestId?: string }
+    | {
+          type: "sendCommand";
+          command: string;
+          requestId?: string;
+          // Base64 data URLs of image attachments picked/dropped/pasted in
+          // the chat input (from chat-ui's attach button).
+          attachments?: string[];
+      }
     | { type: "cancelCommand"; requestId: string }
+    // Developer-mode per-message delete. `permanent` chooses hard delete
+    // (non-recoverable) vs soft delete (recoverable "move to trash").
+    | {
+          type: "deleteMessage";
+          requestId: string;
+          target: "user" | "agent";
+          permanent: boolean;
+      }
     // Promote a queued request so it runs next ("jump the queue").
     | { type: "promoteCommand"; requestId: string }
     // Double-Esc gesture: cancel every queued + running entry on the session.
     | { type: "cancelAllQueuedAndRunning" }
     | { type: "openExternal"; href: string }
+    // Request a fresh Azure Speech authorization token from the server
+    // (relayed via the bridge). Correlated by `id`.
+    | { type: "getSpeechToken"; id: number }
     | { type: "connect" }
     | { type: "disconnect" }
     | { type: "getStatus" }
@@ -221,4 +330,48 @@ export type BridgeFromWebviewMessage =
     | { type: "pcHide" }
     | { type: "pcDispose" }
     | { type: "demoCommand"; action: "continue" | "cancel" }
-    | { type: "demoLineCancelled"; requestId: string };
+    | { type: "demoLineCancelled"; requestId: string }
+    // Reply to a `requestInteraction` prompt. Forwarded to the dispatcher
+    // via respondToInteraction.
+    | { type: "interactionResponse"; response: PendingInteractionResponse }
+    // Reply to a `requestChoice` card. Forwarded to the dispatcher via
+    // respondToChoice, which resolves the pending choice route so the
+    // agent's handleChoice callback runs. `response` is boolean (yesNo),
+    // number[] of selected indices (multiChoice), or { selected, remember }
+    // (pickRemember).
+    | {
+          type: "choiceResponse";
+          choiceId: string;
+          response:
+              | boolean
+              | number[]
+              | { selected: number; remember: boolean };
+      }
+    | {
+          // Submit a user feedback rating (thumbs up/down + optional category /
+          // comment) for an agent message. Forwarded to the dispatcher via
+          // recordUserFeedback, which persists it and broadcasts a
+          // `userFeedback` back to all clients. `requestId` is the bubble's
+          // client request id (RequestId.requestId), mirroring the
+          // deleteMessage -> recordUserHide path.
+          type: "recordUserFeedback";
+          requestId: string;
+          rating: UserFeedbackRating;
+          category?: UserFeedbackCategory;
+          comment?: string;
+          includeContext?: boolean;
+      }
+    | {
+          // Service call routed through the host to the dispatcher: template-
+          // editor lookups (getTemplateSchema / getTemplateCompletion) for the
+          // proposeAction edit flow, or getDynamicDisplay for refreshing a
+          // live display. Correlated by `id`; answered with a
+          // `bridgeRpcResponse`.
+          type: "bridgeRpcRequest";
+          id: number;
+          method:
+              | "getTemplateSchema"
+              | "getTemplateCompletion"
+              | "getDynamicDisplay";
+          args: unknown[];
+      };

@@ -13,7 +13,9 @@ import {
     MaterializedInstallRecord,
     ResolvedCandidate,
     AGENT_INSTALL_ROOTS_SUBDIR,
+    AvailableInstallRow,
 } from "./config.js";
+import { isLegalAgentName, ambiguousDefaultNameError } from "./packageMeta.js";
 import {
     AzTokenRunner,
     getFeedAccessToken,
@@ -157,7 +159,20 @@ export interface FeedSourceDeps {
     cacheFilePath?: string;
 }
 
-type FeedCache = { fetchedAt: number; packages: string[] };
+type FeedCache = { fetchedAt: number; packages: FeedAgentPackageInfo[] };
+
+/**
+ * A cached feed-package descriptor: the npm package name plus the metadata
+ * needed for `@package available` listing and one-argument default-name
+ * matching. The default name is a HINT used to shortlist a `findName`
+ * candidate; the concrete installed name is always re-confirmed from the
+ * resolved version's own metadata (see `findName`).
+ */
+interface FeedAgentPackageInfo {
+    readonly packageName: string;
+    readonly defaultAgentName?: string;
+    readonly latestVersion?: string;
+}
 
 interface AzureFeedInfo {
     org: string;
@@ -424,6 +439,75 @@ export async function enumerateFeedAgents(
     return scoped.filter((_, i) => flags[i]);
 }
 
+// Read a package version manifest's `typeagent.defaultAgentName`, returning it
+// only when present AND a legal agent name (an illegal declared name is treated
+// as no default name for matching).
+function defaultAgentNameFromManifest(
+    manifest: Record<string, unknown> | undefined,
+): string | undefined {
+    const typeagent = asRecord(manifest?.typeagent);
+    const name = typeagent?.defaultAgentName;
+    return typeof name === "string" && isLegalAgentName(name)
+        ? name
+        : undefined;
+}
+
+// Full descriptor enumeration: the scoped package list narrowed to packages
+// whose latest published version carries the agent keyword, each annotated with
+// its latest version and (when legal) its declared default agent name. Powers
+// the descriptor cache that backs `@package available`, package-name lookup, and
+// one-argument default-name shortlisting.
+async function enumerateFeedAgentDescriptors(
+    config: FeedSourceConfig,
+    token: string,
+    fetchFn: typeof fetch,
+): Promise<FeedAgentPackageInfo[]> {
+    const registry = resolveFeedRegistry(config);
+    if (registry === undefined) {
+        return [];
+    }
+    const info = parseAzureFeed(registry);
+    if (info === undefined) {
+        throw new Error(
+            `feed '${config.name}': unrecognized Azure Artifacts registry URL '${registry}'`,
+        );
+    }
+    const scopes = resolveFeedScopes(config);
+    const scoped = await listScopedPackages(info, scopes, token, fetchFn);
+    const packuments = await Promise.all(
+        scoped.map((name) => fetchPackument(registry, name, token, fetchFn)),
+    );
+    const descriptors: FeedAgentPackageInfo[] = [];
+    for (let i = 0; i < scoped.length; i++) {
+        const packageName = scoped[i];
+        const packument = packuments[i];
+        if (packument === undefined) {
+            continue;
+        }
+        // Pin the latest published version (the `latest` dist-tag) to read its
+        // keyword + manifest.
+        const latest = resolveConcreteVersion(packageName, packument);
+        if (latest === undefined) {
+            continue;
+        }
+        if (!hasAgentKeywordForVersion(packument, latest)) {
+            continue;
+        }
+        const manifest = packageManifestForVersion(packument, latest);
+        const descriptor: {
+            packageName: string;
+            defaultAgentName?: string;
+            latestVersion?: string;
+        } = { packageName, latestVersion: latest };
+        const defaultAgentName = defaultAgentNameFromManifest(manifest);
+        if (defaultAgentName !== undefined) {
+            descriptor.defaultAgentName = defaultAgentName;
+        }
+        descriptors.push(descriptor);
+    }
+    return descriptors;
+}
+
 // `feed` source.
 //   find        = membership check against a cached package list (~1h TTL),
 //                 then a live registry round-trip to pin a concrete version;
@@ -452,18 +536,46 @@ export function createFeedSource(
         if (typeof value !== "object" || value === null) {
             return false;
         }
-        const cache = value as Partial<FeedCache>;
-        return (
-            typeof cache.fetchedAt === "number" &&
-            Array.isArray(cache.packages) &&
-            cache.packages.every((name) => typeof name === "string")
+        const cache = value as { fetchedAt?: unknown; packages?: unknown };
+        if (typeof cache.fetchedAt !== "number") {
+            return false;
+        }
+        if (!Array.isArray(cache.packages)) {
+            return false;
+        }
+        // Accept either the new descriptor shape or a legacy `string[]` cache
+        // (upgraded to descriptors on read).
+        return cache.packages.every(
+            (entry) =>
+                typeof entry === "string" ||
+                (typeof entry === "object" &&
+                    entry !== null &&
+                    typeof (entry as { packageName?: unknown }).packageName ===
+                        "string"),
+        );
+    }
+
+    // Normalize a parsed cache's packages to descriptors: a legacy `string[]`
+    // cache is treated as package names with no default name (upgraded to
+    // descriptors on the next successful refresh).
+    function toDescriptors(packages: unknown[]): FeedAgentPackageInfo[] {
+        return packages.map((entry) =>
+            typeof entry === "string"
+                ? { packageName: entry }
+                : (entry as FeedAgentPackageInfo),
         );
     }
 
     function readDiskCache(): FeedCache | undefined {
         try {
             const parsed = JSON.parse(fs.readFileSync(cacheFilePath, "utf8"));
-            return isFeedCache(parsed) ? parsed : undefined;
+            if (!isFeedCache(parsed)) {
+                return undefined;
+            }
+            return {
+                fetchedAt: parsed.fetchedAt,
+                packages: toDescriptors(parsed.packages as unknown[]),
+            };
         } catch {
             return undefined;
         }
@@ -478,7 +590,22 @@ export function createFeedSource(
         }
     }
 
-    async function getPackageList(): Promise<string[]> {
+    // Fetch fresh descriptors and atomically swap them into the cache. Throws on
+    // any fetch/auth failure BEFORE reassigning `memoryCache`, so a failed fetch
+    // leaves the prior cache (memory + disk) intact. Backs `--refresh`.
+    async function refreshDescriptors(): Promise<FeedAgentPackageInfo[]> {
+        const token = await getFeedAccessToken(tokenRunner);
+        const packages = await enumerateFeedAgentDescriptors(
+            config,
+            token,
+            fetchFn,
+        );
+        memoryCache = { fetchedAt: now(), packages };
+        writeDiskCache(memoryCache);
+        return packages;
+    }
+
+    async function getPackageDescriptors(): Promise<FeedAgentPackageInfo[]> {
         if (resolveFeedRegistry(config) === undefined) {
             return [];
         }
@@ -499,11 +626,7 @@ export function createFeedSource(
         // error) serve the stale cache (or empty) rather than failing the walk
         // and continue source resolution.
         try {
-            const token = await getFeedAccessToken(tokenRunner);
-            const packages = await enumerateFeedAgents(config, token, fetchFn);
-            memoryCache = { fetchedAt: current, packages };
-            writeDiskCache(memoryCache);
-            return packages;
+            return await refreshDescriptors();
         } catch {
             return memoryCache?.packages ?? [];
         }
@@ -511,8 +634,8 @@ export function createFeedSource(
 
     async function find(ref: string): Promise<ResolvedCandidate | undefined> {
         const moduleName = moduleNameFromSpec(ref);
-        const packages = await getPackageList();
-        if (!packages.includes(moduleName)) {
+        const descriptors = await getPackageDescriptors();
+        if (!descriptors.some((d) => d.packageName === moduleName)) {
             return undefined; // non-match (or skipped when offline+empty)
         }
         // Membership matched: resolve the concrete version so
@@ -525,6 +648,9 @@ export function createFeedSource(
         // no published version satisfies the ref -- the agent is not
         // installable, so we fail the find (the host reports it unresolved).
         let version: string | undefined;
+        // The resolved version's own declared default agent name (the source of
+        // truth for the installed name on a one-argument package-name install).
+        let defaultAgentName: string | undefined;
         const registry = resolveFeedRegistry(config);
         if (registry !== undefined) {
             try {
@@ -551,6 +677,11 @@ export function createFeedSource(
                     ) {
                         return undefined;
                     }
+                    if (version !== undefined) {
+                        defaultAgentName = defaultAgentNameFromManifest(
+                            packageManifestForVersion(packument, version),
+                        );
+                    }
                 }
             } catch {
                 // offline / auth failure -> leave version unresolved
@@ -559,7 +690,7 @@ export function createFeedSource(
         if (version === undefined) {
             return undefined;
         }
-        return {
+        const candidate: ResolvedCandidate = {
             source: config.name,
             module: moduleName,
             // Retain the user-specified spec/range in `ref` as the durable
@@ -567,14 +698,56 @@ export function createFeedSource(
             // separately in `version`.
             ref,
             version,
+            packageName: moduleName,
             loaderConfig: { execMode: "separate" },
         };
+        if (defaultAgentName !== undefined) {
+            candidate.defaultAgentName = defaultAgentName;
+        }
+        return candidate;
+    }
+
+    // Phase-1 default-agent-name lookup. The cached descriptors only SHORTLIST
+    // the package(s) whose declared default name equals `name` (cache-only, no
+    // network for a miss); confirming a shortlist hit runs the same live
+    // resolution as `find` (token + packument to pin a concrete version). The
+    // cached default name is a hint: the resolved version's own
+    // `typeagent.defaultAgentName` must equal `name` for the match to stand, and
+    // that resolved value is what installs. A stale/drifted cache therefore
+    // never installs under a surprising name - it just fails to match.
+    async function findName(
+        name: string,
+    ): Promise<ResolvedCandidate | undefined> {
+        const descriptors = await getPackageDescriptors();
+        const shortlist = descriptors.filter(
+            (d) => d.defaultAgentName === name,
+        );
+        if (shortlist.length === 0) {
+            return undefined; // non-match: the ordered walk continues
+        }
+        if (shortlist.length > 1) {
+            const labels = shortlist.map((d) => d.packageName);
+            throw ambiguousDefaultNameError(config.name, name, labels);
+        }
+        const candidate = await find(shortlist[0].packageName);
+        // The resolved version must still declare this exact default name.
+        if (candidate === undefined || candidate.defaultAgentName !== name) {
+            return undefined;
+        }
+        return candidate;
     }
 
     return {
         name: config.name,
         kind: "feed",
         find,
+        findName,
+        async refresh(): Promise<void> {
+            // Fetch fresh descriptors and atomically swap them in on success;
+            // a fetch failure throws (leaving the prior cache intact) so
+            // `--refresh` fails the command rather than guessing from stale data.
+            await refreshDescriptors();
+        },
         async update(
             record: InstalledAgentRecord,
             opts?: { range?: string | undefined },
@@ -756,8 +929,14 @@ export function createFeedSource(
                 }
             }
         },
-        async listAgents(): Promise<string[]> {
-            return getPackageList();
+        async listAgents(): Promise<AvailableInstallRow[]> {
+            const descriptors = await getPackageDescriptors();
+            return descriptors.map((d) => ({
+                source: config.name,
+                ref: d.packageName,
+                packageName: d.packageName,
+                defaultAgentName: d.defaultAgentName,
+            }));
         },
     };
 }

@@ -93,7 +93,11 @@ async function runConfiguredReasoning(
 }
 import { getTranslatorForSchema } from "../../../translation/translateRequest.js";
 import { getActivityNamespaceSuffix } from "../../../translation/matchRequest.js";
-import { addRequestToMemory, addResultToMemory } from "../../memory.js";
+import {
+    addRequestToMemory,
+    addResultToMemory,
+    addUserMessageToHistory,
+} from "../../memory.js";
 import { requestCompletion } from "../../../translation/requestCompletion.js";
 import {
     getCannotUseCacheReason,
@@ -466,8 +470,17 @@ export class RequestCommandHandler implements CommandHandler {
                 entities: history?.entities ?? [],
                 activityContext: history?.activityContext,
             });
+            if (
+                systemContext.session.getConfig().execution.recordUserMessages
+            ) {
+                addUserMessageToHistory(
+                    systemContext,
+                    request,
+                    cachedAttachments,
+                );
+            }
             if (systemContext.userRequestKnowledgeExtraction === true) {
-                addRequestToMemory(systemContext, request, cachedAttachments);
+                addRequestToMemory(systemContext, request);
             }
             let interpretResult: InterpretResult;
             try {

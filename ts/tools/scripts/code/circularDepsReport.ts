@@ -696,6 +696,10 @@ async function runRatchet(opts: Options): Promise<number> {
         console.error(
             "\nBreak the cycle (e.g. extract the shared piece into a third module) before merging.",
         );
+        console.error(
+            "Why the circular-dependency ratchet exists — and how to reproduce " +
+                "& fix it locally: ts/tools/scripts/code/README.md#ci-gates",
+        );
         return 1;
     }
     console.log("Ratchet OK: no new circular dependencies.");

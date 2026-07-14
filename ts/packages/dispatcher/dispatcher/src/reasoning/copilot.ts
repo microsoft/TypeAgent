@@ -62,18 +62,37 @@ function withAbortSignal<T>(
     });
 }
 
-const FALLBACK_MODEL = "claude-sonnet-4.5";
+const FALLBACK_MODEL = "claude-opus-4.8";
 
-function resolveModel(): string {
-    return process.env.COPILOT_REASONING_MODEL?.trim() || FALLBACK_MODEL;
+// Default reasoning effort when COPILOT_REASONING_EFFORT is unset/invalid.
+// "high" makes the model more likely to actually run verification tool calls
+// instead of narrating an intent ("Let me confirm…") and stopping.
+const FALLBACK_REASONING_EFFORT = "high" as const;
+
+function resolveModel(context: ActionContext<CommandHandlerContext>): string {
+    // Live @config override wins, then the COPILOT_REASONING_MODEL env var
+    // (from config.yaml), then the built-in fallback.
+    const configured =
+        context.sessionContext.agentContext.session.getConfig().execution
+            .reasoningModel;
+    return (
+        configured?.trim() ||
+        process.env.COPILOT_REASONING_MODEL?.trim() ||
+        FALLBACK_MODEL
+    );
 }
 
-function resolveReasoningEffort():
-    | "low"
-    | "medium"
-    | "high"
-    | "xhigh"
-    | undefined {
+function resolveReasoningEffort(
+    context: ActionContext<CommandHandlerContext>,
+): "low" | "medium" | "high" | "xhigh" {
+    // Live @config override wins, then COPILOT_REASONING_EFFORT, then the
+    // built-in default.
+    const configured =
+        context.sessionContext.agentContext.session.getConfig().execution
+            .reasoningEffort;
+    if (configured) {
+        return configured;
+    }
     const raw = process.env.COPILOT_REASONING_EFFORT?.trim().toLowerCase();
     if (
         raw === "low" ||
@@ -83,7 +102,7 @@ function resolveReasoningEffort():
     ) {
         return raw;
     }
-    return undefined;
+    return FALLBACK_REASONING_EFFORT;
 }
 
 /**
@@ -98,8 +117,11 @@ function resolveReasoningDisplayMode(
     return config.execution.reasoningDisplay === "inline" ? "step" : "block";
 }
 
-// Track Copilot clients per dispatcher instance (WeakMap for GC)
-const copilotClients = new WeakMap<object, CopilotClient>();
+// Memoize the in-flight Copilot client start per dispatcher instance (WeakMap
+// for GC). Caching the PROMISE (not just the resolved client) lets a startup
+// prewarm and the first reasoning request share one CLI start instead of
+// racing into two.
+const copilotClientPromises = new WeakMap<object, Promise<CopilotClient>>();
 
 // Track Copilot session IDs per dispatcher instance (mirrors Claude's session tracking)
 const copilotSessionIds = new WeakMap<object, string>();
@@ -175,24 +197,44 @@ function findBundledNativeCli(): string | undefined {
     const binaryName = process.platform === "win32" ? "copilot.exe" : "copilot";
     const require = createRequire(import.meta.url);
     try {
-        // 1. Resolve @github/copilot-sdk (our direct dependency)
+        // Resolve our direct dependency @github/copilot-sdk. Its install
+        // location is stable across machines (always under the repo's
+        // node_modules), but its entry-point *depth* is not — copilot-sdk@0.2.0
+        // nests the entry deeper than earlier versions, which broke a
+        // hard-coded "../.." climb to the @github scope dir. Instead, walk up
+        // from the resolved entry to the enclosing "@github" directory,
+        // bounded to the repo root so we never depend on anything above it.
+        // Works for both pnpm's isolated store and a hoisted node_modules
+        // layout. (@github/copilot itself is not require.resolve-able — its
+        // package "exports" blocks both the main entry and package.json.)
         const sdkEntry = require.resolve("@github/copilot-sdk");
-        // sdkEntry is like: .../@github/copilot-sdk/dist/index.js
-        // Navigate to the @github/ directory that contains copilot-sdk
-        const githubDir = path.resolve(path.dirname(sdkEntry), "../..");
+        const repoRoot = getRepoRoot();
+        let scopeDir = path.dirname(sdkEntry);
+        while (
+            path.basename(scopeDir) !== "@github" &&
+            scopeDir.startsWith(repoRoot) &&
+            path.dirname(scopeDir) !== scopeDir
+        ) {
+            scopeDir = path.dirname(scopeDir);
+        }
+        if (
+            path.basename(scopeDir) !== "@github" ||
+            !scopeDir.startsWith(repoRoot)
+        ) {
+            debug(`Could not locate @github scope dir from: ${sdkEntry}`);
+            return undefined;
+        }
 
-        // 2. @github/copilot should be a sibling (pnpm hoists deps here)
-        const copilotDir = path.join(githubDir, "copilot");
+        // @github/copilot is a (transitive) dependency of the SDK, linked as a
+        // sibling of copilot-sdk under the @github scope. Follow the symlink to
+        // its real location; the platform binary package
+        // (@github/copilot-<platform>-<arch>) is a sibling there.
+        const copilotDir = path.join(scopeDir, "copilot");
         if (!existsSync(copilotDir)) {
             debug(`@github/copilot not found at: ${copilotDir}`);
             return undefined;
         }
-
-        // 3. Follow the pnpm symlink to the real package location
-        const realCopilotDir = realpathSync(copilotDir);
-        // realCopilotDir is like: .../.pnpm/@github+copilot@VER/node_modules/@github/copilot
-        // The platform binary package is a sibling in the real location
-        const realGithubDir = path.dirname(realCopilotDir);
+        const realGithubDir = path.dirname(realpathSync(copilotDir));
         const candidate = path.join(
             realGithubDir,
             `copilot-${process.platform}-${process.arch}`,
@@ -213,81 +255,115 @@ function findBundledNativeCli(): string | undefined {
 }
 
 /**
- * Get or create Copilot client singleton for this dispatcher instance
+ * Create + start a Copilot client. Go through getCopilotClient(), which
+ * memoizes the in-flight promise so we never start two CLIs concurrently.
  */
-async function getCopilotClient(
-    context: ActionContext<CommandHandlerContext>,
+async function createCopilotClient(
+    agentContext: CommandHandlerContext,
 ): Promise<CopilotClient> {
-    const agentContext = context.sessionContext.agentContext;
-    let client = copilotClients.get(agentContext);
+    debug("Creating new Copilot client");
+    const repoRoot = getRepoRoot();
+    debug(`Repo root: ${repoRoot}`);
+    debug(`Parent dir: ${path.resolve(repoRoot, "..")}`);
 
-    if (!client) {
-        debug("Creating new Copilot client");
-        const repoRoot = getRepoRoot();
-        debug(`Repo root: ${repoRoot}`);
-        debug(`Parent dir: ${path.resolve(repoRoot, "..")}`);
+    // When running inside Electron, process.execPath is the Electron
+    // binary — not node. The SDK's default getBundledCliPath() resolves
+    // to a .js entry point which the SDK then spawns via
+    // process.execPath, causing the CLI to exit immediately. To avoid
+    // this, resolve the platform-specific native binary from the
+    // bundled @github/copilot-<platform> package and pass it as
+    // cliPath so the SDK spawns it directly (no node needed).
+    const cliPath = await findBundledNativeCli();
 
-        // When running inside Electron, process.execPath is the Electron
-        // binary — not node. The SDK's default getBundledCliPath() resolves
-        // to a .js entry point which the SDK then spawns via
-        // process.execPath, causing the CLI to exit immediately. To avoid
-        // this, resolve the platform-specific native binary from the
-        // bundled @github/copilot-<platform> package and pass it as
-        // cliPath so the SDK spawns it directly (no node needed).
-        const cliPath = await findBundledNativeCli();
+    // Isolate the CLI from the user's ~/.claude/settings.json.
+    // The Copilot CLI binary internally uses the Anthropic API and
+    // reads Claude Code's settings file.  If that file contains a
+    // model value with a "[1m]" suffix (e.g. "opus[1m]"), the CLI
+    // adds a "context-1m-2025-08-07" beta header that the API
+    // rejects for accounts without the 1M-context entitlement.
+    // Pointing CLAUDE_CONFIG_DIR at an empty temp directory prevents
+    // the CLI from reading those settings while still allowing it
+    // to use its own default configuration.
+    const isolatedConfigDir = mkdtempSync(
+        path.join(os.tmpdir(), "typeagent-copilot-"),
+    );
 
-        // Isolate the CLI from the user's ~/.claude/settings.json.
-        // The Copilot CLI binary internally uses the Anthropic API and
-        // reads Claude Code's settings file.  If that file contains a
-        // model value with a "[1m]" suffix (e.g. "opus[1m]"), the CLI
-        // adds a "context-1m-2025-08-07" beta header that the API
-        // rejects for accounts without the 1M-context entitlement.
-        // Pointing CLAUDE_CONFIG_DIR at an empty temp directory prevents
-        // the CLI from reading those settings while still allowing it
-        // to use its own default configuration.
-        const isolatedConfigDir = mkdtempSync(
-            path.join(os.tmpdir(), "typeagent-copilot-"),
-        );
+    const client = new CopilotClient({
+        ...(cliPath ? { cliPath } : {}),
+        env: {
+            ...process.env,
+            CLAUDE_CONFIG_DIR: isolatedConfigDir,
+        },
+        cliArgs: [
+            "--add-dir",
+            repoRoot,
+            "--add-dir",
+            path.resolve(repoRoot, ".."),
+            "--allow-all-urls",
+            "--allow-all-tools",
+        ],
+    });
 
-        client = new CopilotClient({
-            ...(cliPath ? { cliPath } : {}),
-            env: {
-                ...process.env,
-                CLAUDE_CONFIG_DIR: isolatedConfigDir,
-            },
-            cliArgs: [
-                "--add-dir",
-                repoRoot,
-                "--add-dir",
-                path.resolve(repoRoot, ".."),
-                "--allow-all-urls",
-                "--allow-all-tools",
-            ],
-        });
+    try {
+        debug("Starting Copilot client...");
+        await client.start();
+        debug("Copilot client started successfully");
 
-        try {
-            debug("Starting Copilot client...");
-            await client.start();
-            debug("Copilot client started successfully");
-            copilotClients.set(agentContext, client);
-
-            // Register cleanup on process exit
-            process.on("exit", () => {
-                debug("Cleaning up Copilot client on exit");
-                client?.stop().catch((err) => {
-                    debug("Error stopping client:", err);
-                });
+        // Register cleanup on process exit
+        process.on("exit", () => {
+            debug("Cleaning up Copilot client on exit");
+            client.stop().catch((err) => {
+                debug("Error stopping client:", err);
             });
-        } catch (err) {
-            debug("Failed to start Copilot client:", err);
-            throw new Error(
-                `Failed to start Copilot CLI client. Make sure 'copilot' command is available and authenticated.\n` +
-                    `Error: ${err instanceof Error ? err.message : String(err)}`,
-            );
-        }
+        });
+        return client;
+    } catch (err) {
+        debug("Failed to start Copilot client:", err);
+        throw new Error(
+            `Failed to start Copilot CLI client. Make sure 'copilot' command is available and authenticated.\n` +
+                `Error: ${err instanceof Error ? err.message : String(err)}`,
+        );
     }
+}
 
-    return client;
+/**
+ * Get or create the Copilot client singleton for this dispatcher instance.
+ * Memoizes the in-flight promise so a startup prewarm and the first real
+ * reasoning request share one CLI start; on failure the cached promise is
+ * dropped so a later attempt retries.
+ */
+function getCopilotClient(
+    agentContext: CommandHandlerContext,
+): Promise<CopilotClient> {
+    let clientP = copilotClientPromises.get(agentContext);
+    if (clientP === undefined) {
+        clientP = createCopilotClient(agentContext);
+        copilotClientPromises.set(agentContext, clientP);
+        clientP.catch(() => {
+            if (copilotClientPromises.get(agentContext) === clientP) {
+                copilotClientPromises.delete(agentContext);
+            }
+        });
+    }
+    return clientP;
+}
+
+/**
+ * Best-effort startup prewarm: begin starting the Copilot CLI client in the
+ * background so the first reasoning request doesn't pay the multi-second CLI
+ * start cost. No-op unless the configured reasoning engine is Copilot.
+ * Failures are swallowed — the on-demand path retries and surfaces them.
+ */
+export function prewarmCopilotReasoning(
+    agentContext: CommandHandlerContext,
+): void {
+    if (agentContext.session.getConfig().execution.reasoning !== "copilot") {
+        return;
+    }
+    debug("Prewarming Copilot reasoning client at startup");
+    void getCopilotClient(agentContext).catch(() => {
+        // Ignore — prewarm is best-effort.
+    });
 }
 
 /**
@@ -296,25 +372,25 @@ async function getCopilotClient(
  */
 function getRecentChatContext(
     context: ActionContext<CommandHandlerContext>,
-    k: number = 4,
+    k?: number,
 ): string {
-    const chatHistory = context.sessionContext.agentContext.chatHistory;
-    const exported = chatHistory.export();
-    if (!exported) return "";
-
-    const entries = Array.isArray(exported) ? exported : [exported];
-    const recent = entries.slice(-k);
+    const systemContext = context.sessionContext.agentContext;
+    const turns =
+        k ?? systemContext.session.getConfig().execution.reasoningHistoryTurns;
+    if (turns <= 0) return "";
+    // Use raw recent entries rather than export(): export() drops assistant
+    // entries that are not preceded by a user entry, which is exactly the
+    // connected/agent-server case where user turns are not recorded.
+    const recent = systemContext.chatHistory.getRecentEntries(turns);
     if (recent.length === 0) return "";
 
     const lines = ["[Recent conversation context]"];
     for (const entry of recent) {
-        lines.push(`User: ${entry.user}`);
-        const assistants = Array.isArray(entry.assistant)
-            ? entry.assistant
-            : [entry.assistant];
-        for (const a of assistants) {
-            lines.push(`Assistant (${a.source}): ${a.text}`);
-        }
+        lines.push(
+            entry.role === "assistant"
+                ? `Assistant (${entry.source}): ${entry.text}`
+                : `User: ${entry.text}`,
+        );
     }
     return lines.join("\n");
 }
@@ -368,6 +444,18 @@ function formatToolCallDisplay(toolName: string, input: any): string {
         return `**Tool:** search_memory — \`${question}\``;
     } else if (toolName === "remember") {
         return `**Tool:** remember`;
+    }
+    // Built-in tools (shell, github/fs/*, github/search/*, ...): show the
+    // primary argument so parallel or similar calls are distinguishable
+    // instead of rendering as identical "Tool: <name>" bubbles.
+    const primaryArg =
+        input?.command ??
+        input?.path ??
+        input?.filePath ??
+        input?.query ??
+        input?.pattern;
+    if (typeof primaryArg === "string" && primaryArg.length > 0) {
+        return `**Tool:** ${toolName} — \`${primaryArg}\``;
     }
     return `**Tool:** ${toolName}`;
 }
@@ -625,20 +713,116 @@ function getCopilotSessionConfig(
         },
     });
 
-    const model = resolveModel();
-    const reasoningEffort = resolveReasoningEffort();
+    // TODO (deferred): cross-conversation browsing. get_conversation_info /
+    // read_conversation are scoped to the CURRENT conversation only. To help a
+    // user who is unsure which conversation they were in, add
+    // list_conversations / read_conversation(conversationId) backed by the
+    // agent-server ConversationManager (getConversationList). Not implemented yet.
+    const getConversationInfoTool = defineTool("get_conversation_info", {
+        description: [
+            "Get metadata about the current conversation transcript: total message count and which agents have responded.",
+            "Note: in some hosting modes the user's own turns are not recorded in the transcript, so userMessages may be 0 even though the user has spoken.",
+            "Use read_conversation to page through the actual messages.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {},
+            required: [],
+        },
+        handler: async () => {
+            const total = systemContext.chatHistory.count();
+            const all = systemContext.chatHistory.getEntries(0, total);
+            let userMessages = 0;
+            const agents = new Set<string>();
+            for (const entry of all) {
+                if (entry.role === "user") {
+                    userMessages++;
+                } else if (entry.source) {
+                    agents.add(entry.source);
+                }
+            }
+            const info = {
+                messageCount: total,
+                userMessages,
+                assistantMessages: total - userMessages,
+                agents: [...agents],
+            };
+            return {
+                textResultForLlm: JSON.stringify(info, null, 2),
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const readConversationTool = defineTool("read_conversation", {
+        description: [
+            "Read a page of the current conversation transcript in chronological order.",
+            "Params: offset (0-based start index, default 0) and limit (max messages, default 20).",
+            "For the most recent messages, call get_conversation_info first, then set offset = messageCount - limit.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                offset: {
+                    type: "number",
+                    description: "0-based start index (default 0)",
+                },
+                limit: {
+                    type: "number",
+                    description:
+                        "maximum number of messages to return (default 20)",
+                },
+            },
+            required: [],
+        },
+        handler: async (args: any) => {
+            const total = systemContext.chatHistory.count();
+            const offset = typeof args.offset === "number" ? args.offset : 0;
+            const limit = typeof args.limit === "number" ? args.limit : 20;
+            const page = systemContext.chatHistory.getEntries(offset, limit);
+            if (page.length === 0) {
+                return {
+                    textResultForLlm: `No messages in range (conversation has ${total} message(s)).`,
+                    resultType: "success" as const,
+                };
+            }
+            const lines = page.map((entry) =>
+                entry.role === "assistant"
+                    ? `[${entry.index}] ${entry.source ?? "assistant"}: ${entry.text}`
+                    : `[${entry.index}] user: ${entry.text}`,
+            );
+            const more = offset + page.length < total;
+            const header = `Messages ${offset}\u2013${offset + page.length - 1} of ${total}${more ? " (more available — increase offset to continue)" : ""}:`;
+            return {
+                textResultForLlm: `${header}\n${lines.join("\n")}`,
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const model = resolveModel(context);
+    const reasoningEffort = resolveReasoningEffort(context);
 
     return {
         clientName: "TypeAgent",
         model,
         ...(reasoningEffort ? { reasoningEffort } : {}),
         streaming: true,
-        tools: [discoverTool, executeTool, searchMemoryTool, rememberTool],
+        tools: [
+            discoverTool,
+            executeTool,
+            searchMemoryTool,
+            rememberTool,
+            getConversationInfoTool,
+            readConversationTool,
+        ],
         availableTools: [
             "discover_actions",
             "execute_action",
             "search_memory",
             "remember",
+            "get_conversation_info",
+            "read_conversation",
             "github/fs/*",
             "github/search/*",
             "shell",
@@ -667,8 +851,11 @@ function getCopilotSessionConfig(
                 "## Conversation Memory Tools",
                 "- `search_memory`: Recall information from earlier in this or prior conversations",
                 "- `remember`: Durably save a new memory so it can be recalled later",
+                "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
+                "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
                 "",
                 "## Guidelines",
+                '- **For follow-up questions** that refer to earlier turns (e.g. "those", "it", "mine"), consult the [Recent conversation context] block first; use `search_memory` only for older history not shown there',
                 "- **PREFER built-in tools** for web search, file operations, and code investigation",
                 "- **Use TypeAgent actions** only for domain-specific operations (music, calendar, email, etc.)",
                 "- For web search queries → use your native web search capability",
@@ -677,6 +864,57 @@ function getCopilotSessionConfig(
             ].join("\n"),
         },
     };
+}
+
+/**
+ * Create a Copilot session, retrying once WITHOUT `reasoningEffort` when the
+ * selected model rejects effort configuration (not all models support it — see
+ * `capabilities.supports.reasoningEffort`). Keeps reasoning working instead of
+ * hard-failing the whole request into the lookup fallback.
+ */
+async function createCopilotSession(
+    client: CopilotClient,
+    sessionId: string,
+    config: SessionConfig,
+): Promise<any> {
+    try {
+        return await client.createSession({ sessionId, ...config });
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (
+            config.reasoningEffort !== undefined &&
+            /reasoning effort/i.test(msg)
+        ) {
+            debug(
+                `Model rejected reasoning effort; retrying session create without it: ${msg}`,
+            );
+            const { reasoningEffort, ...rest } = config;
+            void reasoningEffort;
+            return await client.createSession({ sessionId, ...rest });
+        }
+        throw err;
+    }
+}
+
+/**
+ * Build the reasoning token-usage record reported to the dispatcher (surfaced
+ * as "Action Tokens" in the UI). Returns undefined when no tokens were counted
+ * so the UI shows "not reported" rather than a misleading zero.
+ */
+function reasoningTokenUsage(
+    inputTokens: number,
+    outputTokens: number,
+    cachedTokens: number,
+) {
+    const total = inputTokens + outputTokens + cachedTokens;
+    return total > 0
+        ? {
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: total,
+              ...(cachedTokens > 0 && { cached_tokens: cachedTokens }),
+          }
+        : undefined;
 }
 
 /**
@@ -691,7 +929,7 @@ async function executeReasoningWithoutPlanning(
     context.actionIO.appendDisplay("Thinking...", "temporary");
     const displayMode = resolveReasoningDisplayMode(context);
 
-    const client = await getCopilotClient(context);
+    const client = await getCopilotClient(context.sessionContext.agentContext);
     const config = getCopilotSessionConfig(context);
 
     // Check for existing session ID to enable multi-turn conversations
@@ -719,10 +957,7 @@ async function executeReasoningWithoutPlanning(
         debug(`Creating new session: ${sessionId}`);
 
         try {
-            session = await client.createSession({
-                sessionId,
-                ...config,
-            });
+            session = await createCopilotSession(client, sessionId, config);
             debug(`Session created successfully: ${sessionId}`);
 
             // Store session ID (not the session object) for future resumption
@@ -739,6 +974,14 @@ async function executeReasoningWithoutPlanning(
     let finalResult: string | undefined = undefined;
     let currentContent = "";
     let currentReasoning = "";
+    // Dedup guard: the Copilot SDK re-emits prior turns' reasoning across a
+    // multi-turn tool loop, which would render duplicate thinking bubbles.
+    let lastReasoningContent: string | undefined;
+    // Accumulate LLM token usage across the (possibly multi-turn) tool loop so
+    // it can be reported to the UI as "Action Tokens".
+    let usageInputTokens = 0;
+    let usageOutputTokens = 0;
+    let usageCachedTokens = 0;
 
     // Subscribe to reasoning events (thinking blocks)
     const unsubscribeReasoningDelta = session.on(
@@ -760,8 +1003,12 @@ async function executeReasoningWithoutPlanning(
     const unsubscribeReasoning = session.on(
         "assistant.reasoning",
         (event: any) => {
-            if (event.data?.content) {
+            if (
+                event.data?.content &&
+                event.data.content !== lastReasoningContent
+            ) {
                 // Final reasoning content - display as permanent thinking block
+                lastReasoningContent = event.data.content;
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
@@ -842,6 +1089,16 @@ async function executeReasoningWithoutPlanning(
         },
     );
 
+    // Track cache read/write tokens separately from fresh input tokens so the
+    // UI can report them as a distinct "cached" figure.
+    const unsubscribeUsage = session.on("assistant.usage", (event: any) => {
+        usageInputTokens += event.data?.inputTokens ?? 0;
+        usageOutputTokens += event.data?.outputTokens ?? 0;
+        usageCachedTokens +=
+            (event.data?.cacheReadTokens ?? 0) +
+            (event.data?.cacheWriteTokens ?? 0);
+    });
+
     try {
         // Send request with chat history context and wait for completion
         const prompt = buildPromptWithContext(originalRequest, context);
@@ -864,8 +1121,11 @@ async function executeReasoningWithoutPlanning(
             finalResult = response.data.content;
         }
 
-        // Display final content as permanent block (replaces temporary streaming display)
-        const displayContent = currentContent || finalResult;
+        // Display final content as permanent block (replaces temporary
+        // streaming display). Prefer the authoritative final message over the
+        // streamed accumulation, which can be stale/truncated when the model
+        // interleaves tool calls mid-turn (which produced an "unfinished" answer).
+        const displayContent = finalResult || currentContent;
         if (displayContent) {
             context.actionIO.appendDisplay(
                 {
@@ -878,9 +1138,16 @@ async function executeReasoningWithoutPlanning(
             debug("Warning: No content to display!");
         }
 
-        return finalResult
-            ? createActionResultNoDisplay(finalResult)
-            : undefined;
+        if (!finalResult) {
+            return undefined;
+        }
+        const result = createActionResultNoDisplay(finalResult);
+        result.tokenUsage = reasoningTokenUsage(
+            usageInputTokens,
+            usageOutputTokens,
+            usageCachedTokens,
+        );
+        return result;
     } catch (error) {
         debug("Error during reasoning:", error);
         context.actionIO.appendDisplay(
@@ -899,6 +1166,7 @@ async function executeReasoningWithoutPlanning(
         unsubscribeToolStart();
         unsubscribeToolComplete();
         unsubscribeFinalMessage();
+        unsubscribeUsage();
     }
 }
 
@@ -926,7 +1194,7 @@ async function executeReasoningWithTracing(
         sessionId: systemContext.session.getSessionDirPath() || "unknown",
         originalRequest,
         requestId,
-        model: resolveModel(),
+        model: resolveModel(context),
         planReuseEnabled: true,
     });
 
@@ -935,7 +1203,9 @@ async function executeReasoningWithTracing(
         context.actionIO.appendDisplay("Thinking...", "temporary");
         const displayMode = resolveReasoningDisplayMode(context);
 
-        const client = await getCopilotClient(context);
+        const client = await getCopilotClient(
+            context.sessionContext.agentContext,
+        );
         const config = getCopilotSessionConfig(context);
 
         // Check for existing session ID to enable multi-turn conversations
@@ -963,10 +1233,7 @@ async function executeReasoningWithTracing(
             debug(`Creating new session: ${sessionId}`);
 
             try {
-                session = await client.createSession({
-                    sessionId,
-                    ...config,
-                });
+                session = await createCopilotSession(client, sessionId, config);
                 debug(`Session created successfully: ${sessionId}`);
 
                 // Store session ID (not the session object) for future resumption
@@ -983,6 +1250,14 @@ async function executeReasoningWithTracing(
         let finalResult: string | undefined = undefined;
         let currentContent = "";
         let currentReasoning = "";
+        // Dedup guard (see executeReasoningWithoutPlanning): the SDK re-emits
+        // prior turns' reasoning across the multi-turn tool loop.
+        let lastReasoningContent: string | undefined;
+        // Accumulate LLM token usage across the (possibly multi-turn) tool loop
+        // so it can be reported to the UI as "Action Tokens".
+        let usageInputTokens = 0;
+        let usageOutputTokens = 0;
+        let usageCachedTokens = 0;
 
         // Subscribe to reasoning events and record thinking
         const unsubscribeReasoningDelta = session.on(
@@ -1004,7 +1279,11 @@ async function executeReasoningWithTracing(
         const unsubscribeReasoning = session.on(
             "assistant.reasoning",
             (event: any) => {
-                if (event.data?.content) {
+                if (
+                    event.data?.content &&
+                    event.data.content !== lastReasoningContent
+                ) {
+                    lastReasoningContent = event.data.content;
                     // Record thinking for trace
                     tracer.recordThinking({
                         content: [
@@ -1096,6 +1375,16 @@ async function executeReasoningWithTracing(
             },
         );
 
+        // Track cache read/write tokens separately from fresh input tokens so
+        // the UI can report them as a distinct "cached" figure.
+        const unsubscribeUsage = session.on("assistant.usage", (event: any) => {
+            usageInputTokens += event.data?.inputTokens ?? 0;
+            usageOutputTokens += event.data?.outputTokens ?? 0;
+            usageCachedTokens +=
+                (event.data?.cacheReadTokens ?? 0) +
+                (event.data?.cacheWriteTokens ?? 0);
+        });
+
         try {
             const prompt = buildPromptWithContext(originalRequest, context);
             debug(`Sending prompt: ${prompt.substring(0, 100)}...`);
@@ -1111,8 +1400,11 @@ async function executeReasoningWithTracing(
                 finalResult = response.data.content;
             }
 
-            // Display final content as permanent block (replaces temporary streaming display)
-            const displayContent = currentContent || finalResult;
+            // Display final content as permanent block (replaces temporary
+            // streaming display). Prefer the authoritative final message over
+            // the streamed accumulation, which can be stale/truncated when the
+            // model interleaves tool calls mid-turn.
+            const displayContent = finalResult || currentContent;
             if (displayContent) {
                 context.actionIO.appendDisplay(
                     {
@@ -1165,9 +1457,16 @@ async function executeReasoningWithTracing(
                 }
             }
 
-            return finalResult
-                ? createActionResultNoDisplay(finalResult)
-                : undefined;
+            if (!finalResult) {
+                return undefined;
+            }
+            const result = createActionResultNoDisplay(finalResult);
+            result.tokenUsage = reasoningTokenUsage(
+                usageInputTokens,
+                usageOutputTokens,
+                usageCachedTokens,
+            );
+            return result;
         } finally {
             unsubscribeReasoningDelta();
             unsubscribeReasoning();
@@ -1175,6 +1474,7 @@ async function executeReasoningWithTracing(
             unsubscribeToolStart();
             unsubscribeToolComplete();
             unsubscribeFinalMessage();
+            unsubscribeUsage();
         }
     } catch (error) {
         tracer.markFailed(error instanceof Error ? error : String(error));

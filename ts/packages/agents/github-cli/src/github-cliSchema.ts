@@ -63,6 +63,7 @@ export type GithubCliActions =
     | SshKeyAddAction
     | StatusPrintAction
     | MyAssignedIssuesAction
+    | MyPullRequestsAction
     | IssueAddLabelAction
     | VariableCreateAction
     | DependabotAlertsAction;
@@ -213,6 +214,13 @@ export type IssueListAction = {
 
         label?: string;
 
+        // Filter by author (issue creator): a GitHub login (e.g. "octocat") or
+        // "@me" for the current user. Use this for "issues I opened".
+        author?: string;
+
+        // Filter by assignee: a GitHub login (e.g. "octocat"), "@me" for the
+        // current user, or "none" to list only unassigned issues. Use this for
+        // "issues assigned to me".
         assignee?: string;
 
         limit?: number;
@@ -284,6 +292,20 @@ export type PrMergeAction = {
     };
 };
 
+// List pull requests, optionally filtered by repo, state, label, author, or
+// assignee.
+//
+// A PR is "mine" when the user *authored* it. On GitHub the owner of a PR is
+// its author, not its assignee (self-assignment is rare), so "my PRs", "PRs I
+// opened", and "are any of those mine?" map to author: "@me" — NOT assignee.
+//
+// Example:
+// User: are any of those mine?  (after listing open PRs in microsoft/TypeAgent)
+// Agent: { actionName: "prList", parameters: { repo: "microsoft/TypeAgent", state: "open", author: "@me" } }
+//
+// Example:
+// User: show my open pull requests
+// Agent: { actionName: "prList", parameters: { state: "open", author: "@me" } }
 export type PrListAction = {
     actionName: "prList";
     parameters: {
@@ -293,6 +315,13 @@ export type PrListAction = {
 
         label?: string;
 
+        // Filter by author (PR creator): a GitHub login (e.g. "octocat") or
+        // "@me" for the current user. Use this for "my PRs" / "PRs I opened".
+        author?: string;
+
+        // Filter by assignee: a GitHub login (e.g. "octocat"), "@me" for the
+        // current user, or "none" to list only unassigned pull requests. Most
+        // PRs have no assignee — prefer `author` for "my PRs".
         assignee?: string;
 
         limit?: number;
@@ -612,6 +641,25 @@ export type MyAssignedIssuesAction = {
     actionName: "myAssignedIssues";
     parameters: {
         // Maximum number of issues to return (default 20)
+        limit?: number;
+    };
+};
+
+// List the current user's own pull requests across ALL repositories — the PRs
+// they authored. Maps to `gh search prs --author @me`. Use this for "my PRs",
+// "PRs I opened", or "my open PRs everywhere" when no specific repo is named.
+// For PRs within a single repo, use `prList` with author: "@me" instead.
+export type MyPullRequestsAction = {
+    actionName: "myPullRequests";
+    parameters: {
+        // Filter by state: "open" (default) or "closed".
+        state?: string;
+
+        // Scope the search to a single org/user's repositories (e.g.
+        // "microsoft"). Omit to search every repository the user can see.
+        owner?: string;
+
+        // Maximum number of pull requests to return (default 20).
         limit?: number;
     };
 };

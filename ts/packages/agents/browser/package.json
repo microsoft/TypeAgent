@@ -266,5 +266,8 @@
         ]
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "browser"
   }
 }

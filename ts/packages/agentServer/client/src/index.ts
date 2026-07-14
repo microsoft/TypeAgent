@@ -25,6 +25,7 @@ export type {
     ConversationInfo,
     JoinConversationResult,
     DispatcherConnectOptions,
+    SpeechToken,
 } from "@typeagent/agent-server-protocol";
 export {
     AGENT_SERVER_DEFAULT_PORT,

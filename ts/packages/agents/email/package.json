@@ -61,5 +61,8 @@
         }
       }
     }
+  },
+  "typeagent": {
+    "defaultAgentName": "email"
   }
 }

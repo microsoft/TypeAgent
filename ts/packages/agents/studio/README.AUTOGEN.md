@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=0eb39cc641ff1541cb307d5c0dc40f462c421df4ae15e3d85c21d52cefcbfd94 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=f2f6d9d96956cccfa073fbc1cbda8f9b93814ba2b4d09d2002c0427285030c84 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # studio-agent — AI-generated documentation
@@ -12,44 +12,71 @@
 
 ## Overview
 
-The `studio-agent` package is a TypeAgent application agent designed to interact with the TypeAgent Studio runtime. It serves as the AI conversational presenter, facilitating inspection, validation, and authoring processes within the Studio environment. This agent currently supports actions to report Studio's environment, list grammar collisions, and query recent events.
+The `studio-agent` package is a TypeAgent application agent that serves as the conversational interface for the TypeAgent Studio runtime. It provides developers with tools to inspect, monitor, and debug the Studio environment. By exposing read-only actions, the agent allows users to query the state of the Studio environment, identify schema collisions, and review recent events. This agent is a key component of the TypeAgent ecosystem, supporting the development and validation of other agents.
 
 ## What it does
 
-The `studio-agent` package provides three main actions:
+The `studio-agent` package implements three read-only actions that provide insights into the TypeAgent Studio environment:
 
-- `getStudioInfo`: Reports the Studio environment, including the repository root and directories scanned for agents, along with the count of agent packages in each directory. This action is useful for confirming that Studio is pointed at the correct location.
-- `listCollisions`: Lists the cross-schema grammar collisions that Studio knows about, ordered from newest to oldest. This list is populated by collision scans and remains empty until a scan has been performed.
-- `queryEvents`: Displays the most recent entries from Studio's structured event stream, including sandbox, collision, replay, and feedback events. The results are shown from oldest to newest, with an optional limit on the number of events returned.
+- **`getStudioInfo`**: This action reports the Studio's environment, including the repository root and the directories it scans for agent packages. It also provides the count of agent packages in each directory. This is useful for verifying that Studio is configured correctly and scanning the intended locations.
 
-These actions are read-only and help users inspect the current state and activities within the Studio environment.
+- **`listCollisions`**: This action lists cross-schema grammar collisions detected by Studio, ordered from newest to oldest. These collisions are identified during grammar scans and are essential for debugging and resolving conflicts between agent schemas.
+
+- **`queryEvents`**: This action retrieves the most recent entries from Studio's structured event stream, which includes sandbox, collision, replay, and feedback events. The results are presented in chronological order, and the number of events returned can be limited using an optional `limit` parameter.
+
+These actions are designed to provide developers with a clear understanding of the Studio environment's current state, help identify potential issues, and monitor recent activities.
 
 ## Setup
 
-To set up the `studio-agent` package, ensure the following environment variable is configured:
+To use the `studio-agent` package, you need to configure the following environment variable:
 
-- `STUDIO_REGISTRY_PORT`: This variable specifies the port on which the Studio registry server will run. The hand-written README may provide additional details on how to obtain and set this value.
+- **`STUDIO_REGISTRY_PORT`**: This variable specifies the port on which the Studio registry server will run. It is required for the agent to communicate with the Studio service. If additional details on how to set this variable are provided in the hand-written README, refer to that document for guidance.
+
+Ensure that the environment variable is set in your shell or in the `ts/.env` file before running the agent.
 
 ## Key Files
 
-The `studio-agent` package consists of several key files that define its functionality:
+The `studio-agent` package is organized into several key files, each with a specific role in the agent's functionality:
 
-- [studioActionHandler.ts](./src/studioActionHandler.ts): Contains the main logic for handling actions. It includes functions to initialize, update, and close the agent context, as well as execute actions.
-- [studioManifest.json](./src/studioManifest.json): Defines the agent's manifest, including its description, emoji character, and schema details.
-- [studioSchema.ts](./src/studioSchema.ts): Specifies the types for the actions supported by the agent, including `GetStudioInfoAction`, `ListCollisionsAction`, and `QueryEventsAction`.
-- [inspect.ts](./src/lib/inspect.ts): Provides pure Markdown formatters for the agent's read-only inspect results, making them easily unit-testable.
-- [studioServiceLifecycle.ts](./src/lib/studioServiceLifecycle.ts): Manages the lifecycle of the Studio service, including the registry server and session context.
+- **[studioActionHandler.ts](./src/studioActionHandler.ts)**: This file contains the main logic for the agent, including the `executeAction` function that processes the supported actions. It also manages the initialization, updating, and closing of the agent context.
+
+- **[studioManifest.json](./src/studioManifest.json)**: This file defines the agent's metadata, such as its description, emoji representation, and the schema file that specifies the supported actions.
+
+- **[studioSchema.ts](./src/studioSchema.ts)**: This file contains the type definitions for the actions supported by the agent. It defines the structure and parameters for actions like `getStudioInfo`, `listCollisions`, and `queryEvents`.
+
+- **[inspect.ts](./src/lib/inspect.ts)**: This file provides pure Markdown formatters for the agent's read-only inspection results. These formatters are designed to be unit-testable and are used to generate human-readable output for the actions.
+
+- **[studioServiceLifecycle.ts](./src/lib/studioServiceLifecycle.ts)**: This file manages the lifecycle of the Studio service, including the registry server and session context. It ensures that the agent can discover and communicate with the Studio service.
 
 ## How to extend
 
-To extend the `studio-agent` package, follow these steps:
+To extend the `studio-agent` package with new functionality, follow these steps:
 
-1. **Open the `studioSchema.ts` file**: Define new action types by adding them to the `StudioActions` union type. Ensure each action has a unique `actionName` and appropriate parameters.
-2. **Update the `studioActionHandler.ts` file**: Implement the logic for the new actions within the `executeAction` function. Use helper functions and formatters as needed to process and return results.
-3. **Modify the `studioManifest.json` file**: Update the schema details to include the new actions, ensuring the manifest accurately reflects the agent's capabilities.
-4. **Add unit tests**: Create unit tests for the new actions and formatters to ensure they work as expected. Place these tests in a suitable directory, such as `./tests/`.
+1. **Define new actions in `studioSchema.ts`**:
 
-By following these steps, you can extend the functionality of the `studio-agent` package to support additional actions and enhance its capabilities within the TypeAgent Studio environment.
+   - Add a new action type to the `StudioActions` union type.
+   - Ensure the new action has a unique `actionName` and define its parameters.
+
+2. **Implement the action in `studioActionHandler.ts`**:
+
+   - Extend the `executeAction` function to handle the new action.
+   - Use helper functions and formatters as needed to process the action and generate the desired output.
+
+3. **Update the manifest in `studioManifest.json`**:
+
+   - Add the new action to the schema details in the manifest file.
+   - Ensure the manifest accurately reflects the updated capabilities of the agent.
+
+4. **Write unit tests**:
+
+   - Create tests for the new action and any associated helper functions or formatters.
+   - Place the tests in an appropriate directory, such as `./tests/`.
+
+5. **Test the integration**:
+   - Run the agent in the TypeAgent Studio environment to verify that the new action works as expected.
+   - Check the output of the action to ensure it meets the requirements.
+
+By following these steps, you can extend the `studio-agent` package to support additional actions and enhance its utility within the TypeAgent Studio ecosystem.
 
 ## Reference
 
@@ -58,7 +85,7 @@ By following these steps, you can extend the functionality of the `studio-agent`
 ### Entry points
 
 - `./agent/manifest` → [./src/studioManifest.json](./src/studioManifest.json)
-- `./agent/handlers` → [./dist/studioActionHandler.js](./dist/studioActionHandler.js)
+- `./agent/handlers` → `./dist/studioActionHandler.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -79,7 +106,7 @@ External: `debug`, `ws`
 
 ### Files of interest
 
-`./src/studioActionHandler.ts`, `./src/studioManifest.json`, `./src/studioSchema.ts`, …and 3 more under `./src/`.
+`./src/studioActionHandler.ts`, `./src/studioManifest.json`, `./src/studioSchema.ts`, …and 4 more under `./src/`.
 
 ### Agent surface
 
@@ -105,6 +132,6 @@ _3 actions implemented by this agent, parsed deterministically from `./src/studi
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter studio-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter studio-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

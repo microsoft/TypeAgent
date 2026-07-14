@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=97de699385df79e294fb30dd3b991040ecc1c9064db518065e33f46b2cf92958 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=ff214e7c90fb5de07ffba6e760e9c4591d26ebb708609cb21024a01252c6f064 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # montage-agent — AI-generated documentation
@@ -12,11 +12,13 @@
 
 ## Overview
 
-The montage-agent package is a TypeAgent application agent designed to facilitate the creation and management of photo montages. It provides a collaborative environment where users and the agent work together to organize, edit, and display images in a montage format. The package includes backend logic for handling montage-related actions and a web-based interface for user interaction.
+The `montage-agent` package is a TypeAgent application agent designed to facilitate the creation and management of photo montages. It provides a collaborative environment where users can interact with the agent to organize, edit, and display images in a montage format. The package includes both backend logic for handling montage-related actions and a web-based interface for user interaction.
+
+This package is part of the TypeAgent monorepo and integrates with other system components, such as image processing libraries, knowledge processors, and WebSocket utilities, to deliver its functionality.
 
 ## What it does
 
-The montage-agent supports a wide range of actions to enable users to create and manage photo montages effectively. These actions can be grouped into the following categories:
+The `montage-agent` supports a range of actions that enable users to create, customize, and manage photo montages. These actions are grouped into the following categories:
 
 - **Montage Management**:
 
@@ -33,11 +35,11 @@ The montage-agent supports a wide range of actions to enable users to create and
 - **Advanced Features**:
   - Actions such as `mergeMontage`, `startSlideShow`, and `setSearchParameters` provide advanced functionality for combining montages, creating slideshows, and filtering images.
 
-The agent integrates with other system components, such as image storage, processing libraries, and knowledge processors, to perform these tasks. It also includes a web interface for users to interact with the montage creation process, making it accessible and user-friendly.
+The agent also includes a web interface for user interaction, allowing users to manage montages and perform actions through a browser-based UI. The backend integrates with external libraries such as `sharp` for image processing and `image-memory` for image storage and retrieval.
 
 ## Setup
 
-To set up the montage-agent package, follow these steps:
+To set up the `montage-agent` package, follow these steps:
 
 1. **Install Dependencies**:
 
@@ -60,50 +62,76 @@ For additional setup details, refer to the hand-written README.
 
 ## Key Files
 
-The montage-agent package is organized into several key files, each serving a specific purpose:
+The `montage-agent` package is organized into several key files, each serving a specific purpose:
 
-- **Agent Definition**:
+### Agent Definition
 
-  - **[montageManifest.json](./src/agent/montageManifest.json)**: Defines the agent's metadata, including its description, schema, and supported actions.
-  - **[montageActionSchema.ts](./src/agent/montageActionSchema.ts)**: Specifies the schema for the actions, activities, and entities supported by the agent. This file defines the structure and parameters for each action.
+- **[montageManifest.json](./src/agent/montageManifest.json)**:
 
-- **Action Handling**:
+  - Defines the agent's metadata, including its description, schema, and supported actions.
+  - Specifies the schema file and types for actions, activities, and entities.
 
-  - **[montageActionHandler.ts](./src/agent/montageActionHandler.ts)**: Implements the logic for handling montage-related actions, such as creating montages, adding photos, and managing view modes.
+- **[montageActionSchema.ts](./src/agent/montageActionSchema.ts)**:
+  - Contains the schema definitions for the actions, activities, and entities supported by the agent.
+  - Defines the structure and parameters for each action, such as `addPhotos`, `removePhotos`, and `setMontageViewMode`.
 
-- **Server and Routing**:
+### Action Handling
 
-  - **[route.ts](./src/route/route.ts)**: Sets up the Express server, handles HTTP requests, and enforces security measures like origin allowlists.
-  - **[originAllowlist.ts](./src/route/originAllowlist.ts)**: Implements an origin allowlist to restrict access to the server, ensuring only authorized requests are processed.
+- **[montageActionHandler.ts](./src/agent/montageActionHandler.ts)**:
+  - Implements the logic for handling montage-related actions.
+  - Includes functions for creating montages, adding photos, managing view modes, and more.
 
-- **Web Interface**:
+### Server and Routing
 
-  - **[index.html](./src/site/index.html)**: The main HTML file for the web interface.
-  - **[index.ts](./src/site/index.ts)**: The TypeScript file that powers the web interface's functionality.
-  - `styles.css`: Provides styling for the web interface.
+- **[route.ts](./src/route/route.ts)**:
 
-- **Configuration**:
-  - **[tsconfig.json](./src/agent/tsconfig.json)** and **[tsconfig.json](./src/route/tsconfig.json)**: TypeScript configuration files for the agent and route components.
+  - Sets up the Express server, handles HTTP requests, and integrates middleware for functionalities like rate limiting and body parsing.
+  - Configures the server to enforce security measures, such as origin allowlists.
+
+- **[originAllowlist.ts](./src/route/originAllowlist.ts)**:
+  - Implements an origin allowlist to restrict access to the server, ensuring only authorized requests are processed.
+
+### Web Interface
+
+- **[index.html](./src/site/index.html)**:
+
+  - The main HTML file for the web interface, providing the structure for user interaction.
+
+- **[index.ts](./src/site/index.ts)**:
+
+  - The TypeScript file that powers the web interface's functionality, enabling users to interact with the montage creation process.
+
+- **styles.css**:
+  - Provides styling for the web interface.
+
+### Configuration
+
+- **[tsconfig.json](./src/agent/tsconfig.json)** and **[tsconfig.json](./src/route/tsconfig.json)**:
+  - TypeScript configuration files for the agent and route components, specifying compiler options and project structure.
 
 ## How to extend
 
-To extend the montage-agent package, follow these steps:
+To extend the `montage-agent` package, follow these steps:
 
 1. **Define New Actions**:
 
-   - Add new action types to the [montageActionSchema.ts](./src/agent/montageActionSchema.ts) file. Clearly define the action name, parameters, and expected behavior.
+   - Add new action types to the [montageActionSchema.ts](./src/agent/montageActionSchema.ts) file.
+   - Clearly define the action name, parameters, and expected behavior.
 
 2. **Implement Action Logic**:
 
-   - Implement the logic for the new actions in the [montageActionHandler.ts](./src/agent/montageActionHandler.ts) file. Use existing action implementations as a reference for structure and best practices.
+   - Implement the logic for the new actions in the [montageActionHandler.ts](./src/agent/montageActionHandler.ts) file.
+   - Use existing action implementations as a reference for structure and best practices.
 
 3. **Update the Agent Manifest**:
 
-   - Add the new actions to the [montageManifest.json](./src/agent/montageManifest.json) file. Include a description of each action to ensure they are properly documented.
+   - Add the new actions to the [montageManifest.json](./src/agent/montageManifest.json) file.
+   - Include a description of each action to ensure they are properly documented.
 
 4. **Modify the Web Interface (if needed)**:
 
-   - Update the web interface files ([index.html](./src/site/index.html), [index.ts](./src/site/index.ts), and `styles.css`) to support the new actions. For example, you might add new buttons or input fields to trigger the actions.
+   - Update the web interface files ([index.html](./src/site/index.html), [index.ts](./src/site/index.ts), and `styles.css`) to support the new actions.
+   - For example, you might add new buttons or input fields to trigger the actions.
 
 5. **Test Your Changes**:
 
@@ -111,9 +139,10 @@ To extend the montage-agent package, follow these steps:
    - Test the web interface to confirm that the new functionality works as expected.
 
 6. **Run and Verify**:
-   - Start the server and test the new actions in a local environment. Use the web interface or API calls to verify the behavior of the new features.
+   - Start the server and test the new actions in a local environment.
+   - Use the web interface or API calls to verify the behavior of the new features.
 
-By following these steps, you can enhance the montage-agent package to meet additional requirements or support new use cases.
+By following these steps, you can enhance the `montage-agent` package to meet additional requirements or support new use cases.
 
 ## Reference
 
@@ -150,16 +179,16 @@ External: `body-parser`, `d3`, `d3-cloud`, `debug`, `express`, `express-rate-lim
 - [./src/agent/montageActionHandler.ts](./src/agent/montageActionHandler.ts)
 - [./src/agent/montageActionSchema.ts](./src/agent/montageActionSchema.ts)
 - [./src/site/index.ts](./src/site/index.ts)
+- [./src/agent/montageActionSchema.keywords.json](./src/agent/montageActionSchema.keywords.json)
 - [./src/agent/tsconfig.json](./src/agent/tsconfig.json)
 - [./src/route/originAllowlist.ts](./src/route/originAllowlist.ts)
 - [./src/route/route.ts](./src/route/route.ts)
 - [./src/route/tsconfig.json](./src/route/tsconfig.json)
 - [./src/site/index.html](./src/site/index.html)
-- [./src/site/photo.ts](./src/site/photo.ts)
-- _…and 2 more under `./src/`._
+- _…and 3 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter montage-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter montage-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

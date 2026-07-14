@@ -27,8 +27,7 @@
     "cli:dev": "pnpm -C packages/cli run start:dev",
     "code-circular": "npx tsx tools/scripts/code/circularDepsReport.ts",
     "code-complexity": "npx tsx tools/scripts/code/complexityReport.ts",
-    "code-complexity:ci": "npm run code-complexity -- --ratchet --base origin/main --cyclomatic 25 --cognitive 30 --new-file-cyclomatic 25 --new-file-cognitive 30 --exceptions-file tools/scripts/code/complexity-baseline-exception.json",
-    "code-complexity:update-exceptions": "npm run code-complexity -- --cyclomatic 25 --cognitive 30 && node tools/scripts/code/updateComplexityBaselineExceptions.mjs",
+    "code-complexity:ci": "npm run code-complexity -- --ratchet --base origin/main --cyclomatic 25 --cognitive 30 --new-file-cyclomatic 25 --new-file-cognitive 30",
     "code-consistency": "npx tsx tools/scripts/code/consistencyReport.ts",
     "code-deadcode": "npx tsx tools/scripts/code/deadCodeReport.ts",
     "code-debt": "npx tsx tools/scripts/code/debtMarkersReport.ts",
@@ -45,6 +44,7 @@
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
     "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
+    "getNPMRC": "node tools/scripts/getNPMRC.mjs",
     "postinstall": "pnpm run postinstall:better-sqlite3-node-copy && pnpm run postinstall:better-sqlite3-node-restore",
     "install:ext:vscode": "fluid-build . -t install:ext:vscode",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
@@ -93,74 +93,9 @@
     "tsx": "^4.21.0",
     "typescript-eslint": "^8.62.1"
   },
-  "packageManager": "pnpm@10.34.4+sha512.8768be55200ae3f2226b6527fcca2687e14bc4e5f12d7721a0f25da3df47915177058648db4177baf348120fa0ba2752d8d8d93f6beaf1fe64ae18da8de961af",
+  "packageManager": "pnpm@11.12.0+sha512.820a6fbd0d9f04c226638002aead1e45340a9139dd5dc077c1d83ef44aa2481c8eb6637b4c9aa696a3c7e35ba818e49cf27213e5f2b91138d09b7a3e26e898ba",
   "engines": {
     "node": ">=22",
     "pnpm": ">=10"
-  },
-  "pnpm": {
-    "peerDependencyRules": {
-      "allowedVersions": {
-        "@azure/core-rest-pipeline": "*",
-        "jest": "*",
-        "zod": "*"
-      },
-      "ignoreMissing": [
-        "eslint",
-        "zod"
-      ]
-    },
-    "onlyBuiltDependencies": [
-      "@azure/msal-node-extensions",
-      "@azure/msal-node-runtime",
-      "@vscode/vsce-sign",
-      "better-sqlite3",
-      "canvas",
-      "electron",
-      "electron-winstaller",
-      "esbuild",
-      "exifreader",
-      "keytar",
-      "koffi",
-      "onnxruntime-node",
-      "puppeteer",
-      "sharp"
-    ],
-    "allowedDeprecatedVersions": {
-      "@cliqz/adblocker": "*",
-      "@cliqz/adblocker-content": "*",
-      "@cliqz/adblocker-extended-selectors": "*",
-      "@cliqz/adblocker-puppeteer": "*",
-      "@xmldom/xmldom": "<0.9.9",
-      "abab": "*",
-      "boolean": "*",
-      "crx": "5",
-      "domexception": "*",
-      "glob": "<12",
-      "inflight": "*",
-      "lodash.isequal": "*",
-      "node-domexception": "*",
-      "prebuild-install": "*",
-      "rimraf": "<4",
-      "whatwg-encoding": "*"
-    },
-    "supportedArchitectures": {
-      "cpu": [
-        "x64",
-        "arm64"
-      ]
-    },
-    "overrides": {
-      "@azure/core-xml": ">=1.5.0 <2.0.0",
-      "express>path-to-regexp": "0.1.13",
-      "fast-xml-parser": ">=5.5.7 <6.0.0",
-      "hono": ">=4.12.8 <5.0.0",
-      "http-proxy-agent": ">=7.0.0 <8.0.0",
-      "node-forge": ">=1.4.0 <2.0.0",
-      "node-gyp": "^12.2.0",
-      "router>path-to-regexp": ">=8.4.0 <9.0.0",
-      "serialize-javascript": ">=7.0.5 <8.0.0"
-    },
-    "ignoredBuiltDependencies": []
   }
 }

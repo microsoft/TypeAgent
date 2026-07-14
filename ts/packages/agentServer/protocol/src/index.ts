@@ -20,6 +20,7 @@ export {
     RenameConversationOptions,
     UserIdentity,
     DefaultUserIdentity,
+    SpeechToken,
     getDispatcherChannelName,
     getClientIOChannelName,
     registerClientType,

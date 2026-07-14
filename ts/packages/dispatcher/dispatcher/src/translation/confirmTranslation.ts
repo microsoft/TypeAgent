@@ -56,9 +56,12 @@ export async function confirmTranslation(
 }> {
     const actions = requestAction.actions;
     const systemContext = context.sessionContext.agentContext;
-    if (!systemContext.developerMode || systemContext.batchMode) {
-        // Non-developer mode: skip inline display of translation result.
-        // Action data is still accessible via the clickable label above the bubble.
+    if (!systemContext.confirmActions || systemContext.batchMode) {
+        // Confirmation not requested: skip inline display of translation
+        // result. Action data is still accessible via the clickable label
+        // above the bubble. Gated on `confirmActions` (see `@config dev on
+        // --confirm`) rather than `developerMode` so recording conversation
+        // data does not force an interactive Run/Cancel/Edit prompt.
         return { requestAction };
     }
     const preface =

@@ -27,6 +27,7 @@ import {
     FeedbackUIVariant,
     FeedbackWidget,
 } from "./feedbackWidget.js";
+import { createDeleteControl } from "./deleteControl.js";
 import { ChatContextMenu } from "./contextMenu.js";
 import {
     renderConnectionStatus,
@@ -66,10 +67,19 @@ import type {
     SpeechState,
     TtsProvider,
 } from "./providers.js";
+import { createWebSpeechProvider } from "./webSpeechProvider.js";
 import { openSettingsPopup, openHelpPopup } from "./popups.js";
 import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
 import { iconX, iconJumpQueue, iconStop } from "./icons.js";
+
+/**
+ * How long the transient "sent" acknowledgement stays on the user bubble
+ * before auto-dismissing. Kept short — it confirms the request left the queue
+ * and is being handled; the agent bubble's "working" rail then conveys
+ * in-progress state. The agent's first response dismisses it even sooner.
+ */
+const SENT_STATUS_TIMEOUT_MS = 1500;
 
 /**
  * Default per-agent emoji map used when a host calls add/replaceAgentMessage
@@ -175,6 +185,66 @@ export type HistoryEntry =
       }
     | { kind: "system"; text: string };
 
+/**
+ * Compute a human-friendly relative-time label for the history separator
+ * shown between replayed session history and new live messages (e.g.
+ * "a few minutes ago", "yesterday"). Uses the newest timestamp among the
+ * given entries; falls back to "earlier" when none carry a timestamp.
+ *
+ * Entries carry a numeric epoch-ms `timestamp` (the dispatcher display-log
+ * shape), which is distinct from `HistoryEntry.timestamp` (an ISO string).
+ */
+export function formatHistorySeparatorLabel(
+    entries: ReadonlyArray<{ timestamp?: number }>,
+): string {
+    let newestTimestamp: number | undefined;
+    for (const entry of entries) {
+        if (typeof entry.timestamp !== "number") continue;
+        if (
+            newestTimestamp === undefined ||
+            entry.timestamp > newestTimestamp
+        ) {
+            newestTimestamp = entry.timestamp;
+        }
+    }
+
+    if (newestTimestamp === undefined) {
+        return "earlier";
+    }
+
+    const diffMs = Math.max(0, Date.now() - newestTimestamp);
+    const diffMinutes = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMinutes < 2) {
+        return "a moment ago";
+    }
+    if (diffMinutes < 10) {
+        return "a few minutes ago";
+    }
+    if (diffMinutes < 60) {
+        return `${diffMinutes} minutes ago`;
+    }
+    if (diffHours < 2) {
+        return "an hour ago";
+    }
+    if (diffHours < 6) {
+        return "a few hours ago";
+    }
+    if (diffHours < 24) {
+        return `${diffHours} hours ago`;
+    }
+    if (diffDays < 2) {
+        return "yesterday";
+    }
+    if (diffDays < 7) {
+        return `${diffDays} days ago`;
+    }
+
+    return new Date(newestTimestamp).toLocaleDateString();
+}
+
 function formatDuration(ms: number): string {
     if (ms < 1) return `${ms.toFixed(2)}ms`;
     if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
@@ -202,6 +272,7 @@ function escapeHtml(s: string): string {
 // passes through.
 // Avoids pulling in highlight.js / Prism just to colorize the action
 // JSON popup.
+// code-complexity-allow: hand-rolled JSON scanner kept branchy to avoid regex backtracking
 function highlightJson(json: string): string {
     const escapeChar = (c: string): string =>
         c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c;
@@ -391,9 +462,10 @@ export interface ChatPanelOptions {
     feedbackUIVariant?: FeedbackUIVariant;
 
     /**
-     * Optional speech-to-text provider. When supplied, ChatPanel renders a
-     * microphone button (reflecting the provider's state) and a "listening"
-     * banner, and inserts recognized text into the input.
+     * Optional speech-to-text provider. The mic button renders by default
+     * using the browser's Web Speech API; supplying a provider overrides that
+     * default (e.g. the Electron shell's Azure/Whisper recognizer), driving
+     * the mic-button state, the "listening" banner, and recognized-text input.
      */
     speechProvider?: SpeechInputProvider;
     /**
@@ -402,9 +474,11 @@ export interface ChatPanelOptions {
      */
     ttsProvider?: TtsProvider;
     /**
-     * Optional image-capture provider. When supplied, ChatPanel renders an
-     * attach-file button (if pickFile present) and a camera button (if
-     * openCamera present) that feed the next message's attachments.
+     * Optional image-capture provider. The attach-file button renders by
+     * default using a web-native hidden file picker; supplying `pickFile`
+     * overrides that with a host-native picker (e.g. the Electron dialog).
+     * When `openCamera` is present, an in-app camera button is also rendered.
+     * Both feed the next message's attachments.
      */
     imageCaptureProvider?: ImageCaptureProvider;
     /**
@@ -418,14 +492,16 @@ export interface ChatPanelOptions {
      */
     helpPanel?: HelpPanelContent;
     /**
-     * Optional soft-hide ("trash") hook for the feedback widget. When
-     * supplied, the feedback footer shows a trash button that toggles the
-     * hidden state of the user or agent message for the given request.
+     * Optional developer-mode hook to delete a message. When supplied and
+     * developer mode is enabled (see `ChatPanel.setDeveloperMode`), each
+     * message bubble shows a split "delete" button: the primary action is a
+     * soft (recoverable) delete; the caret offers a permanent (hard) delete.
+     * `permanent` is `true` for the hard-delete choice.
      */
-    onFeedbackHidden?: (
+    onDeleteMessage?: (
         requestId: RequestId,
         target: "user" | "agent",
-        hidden: boolean,
+        permanent: boolean,
     ) => void;
 }
 
@@ -457,6 +533,14 @@ export class ChatPanel {
      */
     private threadContainers = new Map<string, AgentMessageContainer>();
     /**
+     * For reasoning "step" bubbles: the div of the most recently committed
+     * step bubble per thread. New step/temporary bubbles anchor on it so
+     * successive phases render top-to-bottom in chronological order under the
+     * column-reverse layout — instead of stacking newest-first on the user
+     * bubble. Stale entries self-heal via a parentElement liveness check.
+     */
+    private lastStepAnchorByThread = new Map<string, HTMLElement>();
+    /**
      * All agent bubbles ever created for a request/thread id, in creation
      * order. Step-mode reasoning intentionally creates multiple bubbles per
      * request; this lets us clear stale running rails and still finalize
@@ -471,6 +555,20 @@ export class ChatPanel {
      * appears once there's a visible bubble to anchor it to).
      */
     private agentRunningRequestIds = new Set<string>();
+    /**
+     * Per-request one-shot timers that auto-dismiss the transient "sent"
+     * acknowledgement on the user bubble (see setUserBubbleQueueStatus).
+     * Keyed by requestId; cleared when the ack is dismissed, the request
+     * completes, or the session resets.
+     */
+    private sentAckTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    /**
+     * Request ids whose transient "sent" acknowledgement has already been
+     * dismissed — either by its timer or early when the agent's first bubble
+     * materialized. Suppresses re-showing "sent" when the server re-broadcasts
+     * the still-`running` request on subsequent queue snapshots.
+     */
+    private sentAckConsumed = new Set<string>();
     /**
      * The threadId of the most-recent user request. Methods that take an
      * optional requestId/threadId default to this when no explicit id is
@@ -635,15 +733,19 @@ export class ChatPanel {
     private imageCaptureProvider?: ImageCaptureProvider;
     private settingsPanel?: SettingsPanelSchema;
     private helpPanel?: HelpPanelContent;
-    public onFeedbackHidden?: (
+    public onDeleteMessage?: (
         requestId: RequestId,
         target: "user" | "agent",
-        hidden: boolean,
+        permanent: boolean,
     ) => void;
+    private developerMode = false;
     // Input-bar affordances created only when the matching provider exists.
     private micButton?: HTMLButtonElement;
     private attachButton?: HTMLButtonElement;
     private cameraButton?: HTMLButtonElement;
+    // Hidden <input type="file"> backing the web-native default attach button
+    // (used when the host doesn't supply an imageCaptureProvider.pickFile).
+    private fileInput?: HTMLInputElement;
     private voiceBanner?: HTMLDivElement;
     private lightboxOverlay?: HTMLDivElement;
     private lightboxKeyHandler?: (ev: KeyboardEvent) => void;
@@ -667,7 +769,15 @@ export class ChatPanel {
         this.imageCaptureProvider = options.imageCaptureProvider;
         this.settingsPanel = options.settingsPanel;
         this.helpPanel = options.helpPanel;
-        this.onFeedbackHidden = options.onFeedbackHidden;
+        this.onDeleteMessage = options.onDeleteMessage;
+
+        // Web-native default: when the host doesn't inject a speech provider,
+        // fall back to the browser's Web Speech API so the mic button works
+        // out of the box. Resolves to undefined where the API is unavailable,
+        // in which case the mic affordance is simply not rendered.
+        if (!this.speechProvider) {
+            this.speechProvider = createWebSpeechProvider();
+        }
 
         // Build DOM structure
         const wrapper = document.createElement("div");
@@ -985,22 +1095,37 @@ export class ChatPanel {
 
     /**
      * Create the mic / attach / camera buttons and wire the speech
-     * provider's state callbacks. Only the affordances whose providers are
-     * present get rendered, so hosts that omit a provider see no change.
+     * provider's state callbacks. The attach-file and mic buttons render by
+     * default (web-native file picker + Web Speech API); the camera button
+     * renders only when the host supplies `imageCaptureProvider.openCamera`.
      */
     private setupProviderAffordances() {
-        // Attach-file + camera buttons (image capture provider).
-        if (this.imageCaptureProvider?.pickFile) {
-            this.attachButton = document.createElement("button");
-            this.attachButton.className =
-                "chat-input-button chat-attach-button";
-            this.attachButton.title = "Attach image";
-            this.attachButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 0 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6z"/></svg>`;
-            this.attachButton.addEventListener("click", () =>
-                this.handleAttachFile(),
-            );
-            this.inputArea.insertBefore(this.attachButton, this.sendButton);
-        }
+        // Attach-file button — always rendered. Uses the host's
+        // imageCaptureProvider.pickFile when supplied, otherwise a built-in
+        // web-native hidden <input type="file"> (see handleAttachFile).
+        this.fileInput = document.createElement("input");
+        this.fileInput.type = "file";
+        this.fileInput.accept = "image/*";
+        this.fileInput.multiple = true;
+        this.fileInput.style.display = "none";
+        this.fileInput.addEventListener("change", () => {
+            this.handleFileDrop(this.fileInput?.files);
+            // Reset so re-selecting the same file still fires "change".
+            if (this.fileInput) this.fileInput.value = "";
+        });
+        this.inputArea.appendChild(this.fileInput);
+
+        this.attachButton = document.createElement("button");
+        this.attachButton.className = "chat-input-button chat-attach-button";
+        this.attachButton.title = "Attach image";
+        this.attachButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 0 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6z"/></svg>`;
+        this.attachButton.addEventListener("click", () =>
+            this.handleAttachFile(),
+        );
+        this.inputArea.insertBefore(this.attachButton, this.sendButton);
+
+        // Camera button — only when the host supplies an in-app capture
+        // (there is no reliable web-native default for this yet).
         if (this.imageCaptureProvider?.openCamera) {
             this.cameraButton = document.createElement("button");
             this.cameraButton.className =
@@ -1089,13 +1214,20 @@ export class ChatPanel {
     }
 
     private async handleAttachFile() {
-        const urls = await this.imageCaptureProvider?.pickFile();
-        if (urls && urls.length > 0) {
-            for (const url of urls) {
-                this.pendingAttachments.push(url);
-                this.showAttachmentPreview(url);
+        // Prefer a host-supplied native picker (e.g. the Electron dialog).
+        if (this.imageCaptureProvider?.pickFile) {
+            const urls = await this.imageCaptureProvider.pickFile();
+            if (urls && urls.length > 0) {
+                for (const url of urls) {
+                    this.pendingAttachments.push(url);
+                    this.showAttachmentPreview(url);
+                }
             }
+            return;
         }
+        // Web-native default: open the hidden file input; the "change"
+        // handler reads the selection via handleFileDrop.
+        this.fileInput?.click();
     }
 
     private async handleCameraCapture() {
@@ -1600,11 +1732,127 @@ export class ChatPanel {
     }
 
     /**
+     * Mark a request's agent bubble as "status unknown" — used when the
+     * connection drops mid-request. Stops the "working" affordance (spinner +
+     * Stop) without finalizing the bubble, since the request may still be
+     * running server-side; the host re-checks and resolves it on reconnect
+     * (resumeRunning / clearRequestUnknown / completeRequest). No-op on the
+     * agent side for a request whose bubble hasn't materialized yet (e.g. a
+     * still-queued request), which is fine — its queued chip is reconciled
+     * from the authoritative snapshot on reconnect.
+     */
+    public setRequestUnknown(threadId: string): void {
+        // Stop treating it as in-flight so a later bubble-materialize doesn't
+        // re-stamp the working rail.
+        this.agentRunningRequestIds.delete(threadId);
+        // If it was the active request, restore the input's Send button — the
+        // Stop button can't cancel across a dead channel.
+        if (this.activeRequestId === threadId) {
+            this.activeRequestId = undefined;
+            this.stopButton.style.display = "none";
+            this.sendButton.style.display = "";
+        }
+        this.threadContainers.get(threadId)?.setUnknown();
+        const all = this.requestAgentContainers.get(threadId);
+        if (all) {
+            for (const c of all) c.setUnknown();
+        }
+    }
+
+    /**
+     * Restore the "working" affordance on a request whose status was marked
+     * unknown (see {@link setRequestUnknown}) once a reconnect confirms it is
+     * still running. Re-marks it in-flight and re-applies the agent bubble's
+     * working rail + input Stop button.
+     */
+    public resumeRunning(threadId: string): void {
+        this.setProcessing(threadId);
+    }
+
+    /**
+     * Remove the "status unknown" rail from a request's agent bubble without
+     * finalizing it — used on reconnect when the request turns out to be
+     * (still) queued rather than running. The user bubble's queued chip is
+     * restored separately from the authoritative queue snapshot.
+     */
+    public clearRequestUnknown(threadId: string): void {
+        this.agentRunningRequestIds.delete(threadId);
+        this.threadContainers.get(threadId)?.clearRunning();
+        const all = this.requestAgentContainers.get(threadId);
+        if (all) {
+            for (const c of all) c.clearRunning();
+        }
+    }
+
+    /**
      * Returns the in-flight requestId, or undefined when idle. Used by
      * hosts to gate document-level interrupt gestures.
      */
     public getActiveRequestId(): string | undefined {
         return this.activeRequestId;
+    }
+
+    /**
+     * Toggle the developer-mode per-message delete affordance. When enabled,
+     * every message bubble that carries a requestId shows a split "delete"
+     * button offering soft (recoverable) or permanent delete. No-op unless the
+     * host wired `onDeleteMessage`.
+     */
+    public setDeveloperMode(enabled: boolean): void {
+        if (this.developerMode === enabled) {
+            return;
+        }
+        this.developerMode = enabled;
+        this.rootElement.classList.toggle("chat-developer-mode", enabled);
+        if (this.onDeleteMessage === undefined) {
+            return;
+        }
+        if (enabled) {
+            const containers = this.messageDiv.querySelectorAll<HTMLElement>(
+                ".chat-message-container-user[data-request-id]," +
+                    ".chat-message-container-agent[data-request-id]",
+            );
+            containers.forEach((c) => {
+                const target = c.classList.contains(
+                    "chat-message-container-user",
+                )
+                    ? "user"
+                    : "agent";
+                this.attachDeleteControl(c, c.dataset.requestId!, target);
+            });
+        } else {
+            this.messageDiv
+                .querySelectorAll(".chat-delete-control")
+                .forEach((el) => el.remove());
+        }
+    }
+
+    /**
+     * Attach the dev-mode delete split button to a message container, reading
+     * the requestId + target from it. No-op when developer mode is off, the
+     * host didn't wire `onDeleteMessage`, or a control is already present.
+     */
+    private attachDeleteControl(
+        containerEl: HTMLElement,
+        requestId: string,
+        target: "user" | "agent",
+    ): void {
+        if (!this.developerMode || this.onDeleteMessage === undefined) {
+            return;
+        }
+        if (containerEl.querySelector(":scope > .chat-delete-control")) {
+            return;
+        }
+        const control = createDeleteControl((permanent) => {
+            containerEl.classList.add("chat-message-trashed");
+            try {
+                this.onDeleteMessage?.({ requestId }, target, permanent);
+            } catch (e) {
+                containerEl.classList.remove("chat-message-trashed");
+                console.error("onDeleteMessage callback failed", e);
+            }
+        });
+        containerEl.appendChild(control);
     }
 
     /**
@@ -1678,9 +1926,13 @@ export class ChatPanel {
 
     /**
      * Stamp / clear the queue state on the user bubble's status rail. The
-     * rail carries a de-emphasized, state-tinted label ("sent" while the
-     * request is being processed, "queued" while it waits) on the left and
-     * controls on the right.
+     * rail carries a de-emphasized, state-tinted label on the left and
+     * controls on the right: "queued" persists while the request waits behind
+     * others, while "sent" (the `running` state) is a transient
+     * acknowledgement that auto-dismisses after SENT_STATUS_TIMEOUT_MS — or
+     * earlier, when the agent's first bubble materializes. It intentionally
+     * does NOT linger for the whole time the agent works; the agent bubble's
+     * own "working" rail conveys in-progress state.
      *
      * For queued entries, `onCancel` (when provided) renders a Remove (×)
      * button and `onPromote` renders a "run next" jump-the-queue button.
@@ -1704,6 +1956,27 @@ export class ChatPanel {
         // Nothing to do on a clear when no rail exists — avoids creating an
         // empty rail just to remove it.
         if (status === null) {
+            // Terminal/explicit clear — drop any pending "sent" auto-dismiss
+            // timer and the consumed marker so an id reused after @clear
+            // starts clean.
+            this.clearSentAckTimer(requestId);
+            this.sentAckConsumed.delete(requestId);
+            const container = this.userMessageById.get(requestId);
+            container
+                ?.querySelector(
+                    ".chat-message-user > .chat-message-status-rail",
+                )
+                ?.remove();
+            return;
+        }
+
+        // The `running` state renders as a transient "sent" acknowledgement.
+        // Once dismissed (by its timer or early via dismissSentAck when the
+        // agent responds), `sentAckConsumed` suppresses re-showing it: the
+        // server keeps the request `running` — and re-broadcasts it on every
+        // `queueStateChanged` snapshot — for the entire time the agent works,
+        // and those snapshots would otherwise resurrect the "sent" chip.
+        if (status === "running" && this.sentAckConsumed.has(requestId)) {
             const container = this.userMessageById.get(requestId);
             container
                 ?.querySelector(
@@ -1771,7 +2044,75 @@ export class ChatPanel {
                 });
                 controls.appendChild(btn);
             }
+        } else {
+            // running → transient "sent": schedule its auto-dismiss so the
+            // acknowledgement doesn't linger for the whole time the agent
+            // works. dismissSentAck (called by the timer, or earlier by
+            // getOrCreateAgentContainer) handles the removal + consumed mark.
+            this.startSentAckTimer(requestId);
         }
+    }
+
+    /**
+     * Start the one-shot timer that auto-dismisses the transient "sent"
+     * acknowledgement on the user bubble for `requestId`. No-op if a timer is
+     * already pending (so repeated `running` snapshots don't extend the
+     * visible window) or the ack was already consumed.
+     */
+    private startSentAckTimer(requestId: string): void {
+        if (
+            this.sentAckTimers.has(requestId) ||
+            this.sentAckConsumed.has(requestId)
+        ) {
+            return;
+        }
+        const timer = setTimeout(() => {
+            this.sentAckTimers.delete(requestId);
+            this.dismissSentAck(requestId);
+        }, SENT_STATUS_TIMEOUT_MS);
+        this.sentAckTimers.set(requestId, timer);
+    }
+
+    /** Clear any pending "sent" auto-dismiss timer for `requestId`. */
+    private clearSentAckTimer(requestId: string): void {
+        const timer = this.sentAckTimers.get(requestId);
+        if (timer !== undefined) {
+            clearTimeout(timer);
+            this.sentAckTimers.delete(requestId);
+        }
+    }
+
+    /**
+     * Dismiss the transient "sent" acknowledgement on the user bubble for
+     * `requestId` and mark it consumed so later `running` snapshots (which the
+     * server keeps broadcasting while the agent works) don't re-show it.
+     * Called by the auto-dismiss timer and — early, when the agent's first
+     * bubble materializes — by getOrCreateAgentContainer. Only removes the
+     * rail when it is showing the running ("sent") state; a "queued" rail is
+     * left intact. No-op when there's no user bubble for the id. Idempotent.
+     */
+    private dismissSentAck(requestId: string): void {
+        this.clearSentAckTimer(requestId);
+        const container = this.userMessageById.get(requestId);
+        if (container === undefined) {
+            return;
+        }
+        this.sentAckConsumed.add(requestId);
+        const rail = container.querySelector<HTMLElement>(
+            ".chat-message-user > .chat-message-status-rail",
+        );
+        if (rail?.dataset.status === "running") {
+            rail.remove();
+        }
+    }
+
+    /** Clear every pending "sent" timer and the consumed set (session reset). */
+    private clearAllSentAck(): void {
+        for (const timer of this.sentAckTimers.values()) {
+            clearTimeout(timer);
+        }
+        this.sentAckTimers.clear();
+        this.sentAckConsumed.clear();
     }
 
     /**
@@ -1856,6 +2197,9 @@ export class ChatPanel {
 
         const id = container.dataset.requestId!;
         this.userMessageById.set(id, container);
+        if (this.developerMode) {
+            this.attachDeleteControl(container, id, "user");
+        }
         if (!isRemote) {
             if (!this.suppressFirstMessageTracking) {
                 this.requestStartByRequestId.set(id, Date.now());
@@ -1908,9 +2252,14 @@ export class ChatPanel {
         // simply omit the line rather than printing "not reported".
         const leftLines: string[] = [];
         if (tokenUsage) {
+            const cachedPart =
+                tokenUsage.cached_tokens !== undefined &&
+                tokenUsage.cached_tokens > 0
+                    ? `+${tokenUsage.cached_tokens} cached`
+                    : "";
             leftLines.push(
                 `${label} Tokens: <b>${tokenUsage.total_tokens}</b> ` +
-                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens})`,
+                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens}${cachedPart})`,
             );
         }
         metricsDiv.innerHTML = sanitize(
@@ -2009,21 +2358,64 @@ export class ChatPanel {
             this.statusContainer = undefined;
         }
 
-        // "step" mode — force a new bubble for each reasoning phase so
-        // thinking, tool calls, tool results, and final text each appear
-        // as distinct first-class chat messages instead of being appended
-        // into a single monolithic bubble.
+        // "step" mode — each reasoning phase (thinking, tool call, tool
+        // result, final text) becomes its own first-class bubble. Reuse the
+        // current streaming/temporary bubble as this phase's finalized bubble
+        // so the streamed content is not duplicated, then close it so the NEXT
+        // phase gets a fresh bubble chained directly below it (chronological
+        // order under the column-reverse layout).
         if (appendMode === "step") {
-            // Detach the existing container for this request (if any) so
-            // getOrCreateAgentContainer will spin up a fresh one.
-            if (requestId) {
-                const threadId = this.resolveThreadId(requestId);
-                // Mark the previous step bubble as done immediately when we
-                // advance to the next phase, rather than waiting for the
-                // whole command to complete.
-                this.threadContainers.get(threadId)?.clearRunning();
-                this.threadContainers.delete(threadId);
+            const threadId = this.resolveThreadId(requestId);
+            let stepContainer = this.threadContainers.get(threadId);
+            if (stepContainer === undefined) {
+                stepContainer = this.getOrCreateAgentContainer(
+                    source,
+                    sourceIcon,
+                    requestId,
+                );
+            } else if (sourceIcon) {
+                // The bubble may have been created by an earlier dispatcher
+                // status ("Executing action…") before the reasoning engine
+                // icon was known — refresh it to the engine icon.
+                stepContainer.setIcon(sourceIcon);
             }
+            // Reasoning step bubbles carry the engine provenance
+            // ("dispatcher.reasoningAction.<engine>") as their authoritative
+            // label. The first step can inherit the enclosing action's name via
+            // setDisplayInfo (e.g. lookupAndAnswerConversation) — force the
+            // reasoning source so every step is labeled consistently.
+            if (
+                typeof source === "string" &&
+                source.startsWith("dispatcher.reasoningAction")
+            ) {
+                stepContainer.overrideSource(source, sourceIcon);
+            }
+            if (requestId) {
+                const start = this.requestStartByRequestId.get(requestId);
+                if (start !== undefined) {
+                    stepContainer.setElapsedBadge(Date.now() - start);
+                }
+            }
+            // setMessage("block") flushes the streamed "temporary" content, so
+            // the reused bubble shows the finalized phase exactly once.
+            stepContainer.setMessage(content, source, "block");
+            // Keep the "working" rail on the CURRENT step bubble (the request
+            // is still in progress) while clearing it from any PRIOR step
+            // bubbles for this thread, so only the latest phase reads as
+            // running. completeRequest clears them all when the request ends.
+            const priorSteps = this.requestAgentContainers.get(threadId);
+            if (priorSteps) {
+                for (const prior of priorSteps) {
+                    if (prior !== stepContainer) {
+                        prior.clearRunning();
+                    }
+                }
+            }
+            this.threadContainers.delete(threadId);
+            this.lastStepAnchorByThread.set(threadId, stepContainer.div);
+            this.extractUserMarker(this.messageDiv);
+            this.scrollToBottom();
+            return;
         }
 
         const container = this.getOrCreateAgentContainer(
@@ -2032,20 +2424,7 @@ export class ChatPanel {
             requestId,
         );
 
-        // For step bubbles, stamp elapsed time since the request started.
-        if (appendMode === "step" && requestId) {
-            const start = this.requestStartByRequestId.get(requestId);
-            if (start !== undefined) {
-                const elapsed = Date.now() - start;
-                container.setElapsedBadge(elapsed);
-            }
-        }
-
-        container.setMessage(
-            content,
-            source,
-            appendMode === "step" ? "block" : appendMode,
-        );
+        container.setMessage(content, source, appendMode);
 
         // Speak the agent's reply when a TTS provider is enabled. Only
         // "block" (full reply) content is spoken — inline/temporary status
@@ -2071,6 +2450,9 @@ export class ChatPanel {
         this.threadContainers.delete(requestId);
         this.requestAgentContainers.delete(requestId);
         this.pendingThreadDisplayInfo.delete(requestId);
+        this.lastStepAnchorByThread.delete(requestId);
+        this.clearSentAckTimer(requestId);
+        this.sentAckConsumed.delete(requestId);
         if (this.currentUserThreadId === requestId) {
             this.currentUserThreadId = undefined;
         }
@@ -2114,16 +2496,21 @@ export class ChatPanel {
         const effectiveIcon = pending
             ? (pending.sourceIcon ?? this.iconForSource(effectiveSource))
             : (sourceIcon ?? this.iconForSource(effectiveSource));
-        // Anchor on the user bubble so the agent's response renders
-        // directly below it (column-reverse: DOM-before = visually-after).
-        // Liveness check guards against detached anchors. Falls through
-        // to default placement for ad-hoc / system / agent-N threads
-        // with no user bubble.
+        // Chain step bubbles: when a prior committed reasoning-step bubble
+        // exists for this thread, anchor the new bubble on it so successive
+        // phases render top-to-bottom in order. Otherwise anchor on the user
+        // bubble so the agent's response renders directly below the question
+        // (column-reverse: DOM-before = visually-after). Liveness checks guard
+        // against detached anchors; falls through to default placement for
+        // ad-hoc / system / agent-N threads with no user bubble.
+        const lastStep = this.lastStepAnchorByThread.get(threadId);
         const mappedBubble = this.userMessageById.get(threadId);
         const anchor =
-            mappedBubble?.parentElement === this.messageDiv
-                ? mappedBubble
-                : undefined;
+            lastStep?.parentElement === this.messageDiv
+                ? lastStep
+                : mappedBubble?.parentElement === this.messageDiv
+                  ? mappedBubble
+                  : undefined;
         const container = this.createAgentContainer(
             effectiveSource ?? "assistant",
             effectiveIcon,
@@ -2131,6 +2518,10 @@ export class ChatPanel {
             anchor,
         );
         this.threadContainers.set(threadId, container);
+        container.div.dataset.requestId = threadId;
+        if (this.developerMode) {
+            this.attachDeleteControl(container.div, threadId, "agent");
+        }
         const requestContainers =
             this.requestAgentContainers.get(threadId) ?? [];
         requestContainers.push(container);
@@ -2138,6 +2529,13 @@ export class ChatPanel {
         // If this request is in-flight, stamp the "working" rail + Stop now
         // that there's a visible bubble to anchor it to.
         this.applyAgentRunning(threadId);
+        // The agent has started responding — dismiss the transient "sent"
+        // acknowledgement on the user bubble early (before its timer) so it
+        // doesn't overlap the agent bubble's "working" rail. Skipped during
+        // history replay, where no live "sent" chips exist.
+        if (!this.suppressFirstMessageTracking) {
+            this.dismissSentAck(threadId);
+        }
         // Capture the elapsed time from request send to first agent
         // bubble for this thread — drives the "First Message"
         // metric line on the agent metrics tooltip.
@@ -2326,6 +2724,7 @@ export class ChatPanel {
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
         this.agentRunningRequestIds.clear();
+        this.clearAllSentAck();
 
         // Suppress first-message timing tracking during replay — those
         // timestamps would reflect the speed of replay, not the original
@@ -2396,6 +2795,7 @@ export class ChatPanel {
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
         this.agentRunningRequestIds.clear();
+        this.clearAllSentAck();
         this.suppressFirstMessageTracking = true;
 
         try {
@@ -2674,6 +3074,7 @@ export class ChatPanel {
         this.requestStartByRequestId.clear();
         this.firstMessageMsByRequestId.clear();
         this.agentRunningRequestIds.clear();
+        this.clearAllSentAck();
         // Reset the up-arrow back stack too — `@clear` resets the chat, which
         // includes the command recall history seeded from prior-session
         // replayed commands. After clearing, recall starts empty until the
@@ -2797,6 +3198,12 @@ export class ChatPanel {
         // The request is done — drop the in-flight marker and remove the
         // "working" rail + Stop from its agent bubble.
         this.clearAgentRunning(threadId);
+        // Drop any pending "sent" auto-dismiss timer / consumed marker — the
+        // transient acknowledgement is moot once the request completes. The
+        // host's queue-chip clear also covers this, but completeRequest is
+        // reached on paths (history replay) that don't clear the chip.
+        this.clearSentAckTimer(threadId);
+        this.sentAckConsumed.delete(threadId);
         const requestContainers =
             this.requestAgentContainers.get(threadId) ?? [];
         const target =
@@ -3360,7 +3767,12 @@ export class ChatPanel {
             const finish = (value: unknown) => {
                 setKeyHandler(undefined);
                 clearButtons();
-                actionContainer.remove();
+                // Remove the whole confirmation bubble, not just the inner
+                // template editor. Removing only `actionContainer` left an
+                // empty agent container ("dispatcher" bubble) behind after
+                // Accept/Cancel/Replace. The action's own result renders in
+                // its own bubble when it runs.
+                container.remove();
                 resolve(value);
             };
 
@@ -4076,12 +4488,6 @@ export class ChatPanel {
                 }
             },
         };
-        // Only expose the trash affordance when the host supplied a hide hook.
-        if (this.onFeedbackHidden) {
-            controller.setHidden = async (hidden, target) => {
-                this.onFeedbackHidden!(requestId, target ?? "agent", hidden);
-            };
-        }
         container.attachFeedbackController(controller, this._feedbackUIVariant);
         const existing = this.feedbackByRequestId.get(threadId);
         if (existing) {
@@ -4395,10 +4801,16 @@ class AgentMessageContainer {
         if (tokenUsage) {
             // Compact form: "Action Tokens: 14356 (14257+99)" — the long
             // "(prompt N, completion M)" form overflowed the metrics
-            // tooltip in narrow webview sidebars.
+            // tooltip in narrow webview sidebars. Cache hits, when reported,
+            // are appended as a distinct "+N cached" term.
+            const cachedPart =
+                tokenUsage.cached_tokens !== undefined &&
+                tokenUsage.cached_tokens > 0
+                    ? `+${tokenUsage.cached_tokens} cached`
+                    : "";
             leftLines.push(
                 `${actionLabel} Tokens: <b>${tokenUsage.total_tokens}</b> ` +
-                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens})`,
+                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens}${cachedPart})`,
             );
         } else {
             leftLines.push(`${actionLabel} Tokens: <b>not reported</b>`);
@@ -4570,10 +4982,33 @@ class AgentMessageContainer {
         this.div.classList.remove("chat-message-hidden");
     }
 
+    public setIcon(icon: string) {
+        if (icon) {
+            this.iconDiv.textContent = icon;
+        }
+    }
+
     public updateSource(source: string, icon?: string) {
         if (!this.actionDerivedName) {
             this.nameSpan.textContent = source;
         }
+        if (icon) {
+            this.iconDiv.textContent = icon;
+        }
+    }
+
+    /**
+     * Force the source label + icon onto this bubble, overriding any
+     * action-derived name. Used for reasoning "step" bubbles: the first step
+     * can inherit the enclosing action's setDisplayInfo name (e.g.
+     * "dispatcher.lookup.lookupAndAnswerConversation"), but the reasoning
+     * engine provenance ("dispatcher.reasoningAction.<engine>") is the correct
+     * label for every step. Locks the name so a later setMessage(source) with
+     * the same value doesn't revert it.
+     */
+    public overrideSource(source: string, icon?: string) {
+        this.nameSpan.textContent = source;
+        this.actionDerivedName = source;
         if (icon) {
             this.iconDiv.textContent = icon;
         }
@@ -4685,6 +5120,9 @@ class AgentMessageContainer {
             this.statusRail = rail;
         }
         const rail = this.statusRail;
+        // Ensure the rail reads as "running" even if it was previously showing
+        // the muted "unknown" state (setUnknown reuses this same rail element).
+        rail.dataset.status = "running";
         const stateZone = rail.querySelector<HTMLElement>(
             ":scope > .chat-status-state-zone",
         )!;
@@ -4724,6 +5162,49 @@ class AgentMessageContainer {
     public clearRunning() {
         this.statusRail?.remove();
         this.statusRail = undefined;
+    }
+
+    /**
+     * Swap the "working" rail for a muted "status unknown" state: no spinner,
+     * no Stop button. Used when the connection drops mid-request — we can't
+     * know whether the agent is still working, so we stop implying active
+     * progress without finalizing the bubble. Reuses the same rail element as
+     * setRunning, so clearRunning() removes it.
+     */
+    public setUnknown(label: string = "status unknown") {
+        if (!this.statusRail) {
+            const rail = document.createElement("div");
+            rail.className = "chat-message-status-rail";
+            const stateZone = document.createElement("span");
+            stateZone.className = "chat-status-state-zone";
+            const controls = document.createElement("span");
+            controls.className = "chat-status-rail-controls";
+            rail.append(stateZone, controls);
+            this.bodyDiv.insertBefore(rail, this.bodyDiv.firstChild);
+            this.statusRail = rail;
+        }
+        const rail = this.statusRail;
+        rail.dataset.status = "unknown";
+        const stateZone = rail.querySelector<HTMLElement>(
+            ":scope > .chat-status-state-zone",
+        )!;
+        const controls = rail.querySelector<HTMLElement>(
+            ":scope > .chat-status-rail-controls",
+        )!;
+        stateZone.replaceChildren();
+        const state = document.createElement("span");
+        state.className = "chat-status-state";
+        state.dataset.status = "unknown";
+        const dot = document.createElement("span");
+        dot.className = "chat-status-dot";
+        dot.setAttribute("aria-hidden", "true");
+        const labelSpan = document.createElement("span");
+        labelSpan.textContent = label;
+        state.append(dot, labelSpan);
+        stateZone.appendChild(state);
+        // No controls: an "unknown" request can't be meaningfully stopped
+        // (the channel is down), so drop the Stop button.
+        controls.replaceChildren();
     }
 
     /**

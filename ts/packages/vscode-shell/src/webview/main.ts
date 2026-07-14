@@ -11,13 +11,22 @@ import {
     ChatPanel,
     ConversationBar,
     HistoryEntry,
+    formatHistorySeparatorLabel,
     type ConnectionStatus,
 } from "chat-ui";
+import type { TemplateEditServices, DynamicDisplayResult } from "chat-ui";
+import { VsCodeAzureSpeechProvider } from "./azureSpeechProvider.js";
+import type { SpeechToken } from "@typeagent/agent-server-protocol";
 import chatPanelStyles from "chat-ui/styles";
 import completionUiStyles from "@typeagent/completion-ui/styles.css";
 import vscodeThemeStyles from "./vscode-theme.css";
 import { QueueStateMirror } from "@typeagent/dispatcher-types";
-import type { QueuedRequest, QueueSnapshot } from "@typeagent/dispatcher-types";
+import type {
+    PendingInteractionRequest,
+    PendingInteractionResponse,
+    QueuedRequest,
+    QueueSnapshot,
+} from "@typeagent/dispatcher-types";
 
 // Inject the chat-ui base styles first, then the completion-ui dropdown
 // styles, then the VS Code theme overlay so it can override defaults via
@@ -44,8 +53,10 @@ const rootEl = document.getElementById("chat-root")!;
 
 // Track the higher-level disabled reasons so we can reconcile them when
 // any one of them flips. ChatPanel.setEnabled honors switching/history
-// loading internally, but we additionally require the websocket to be
-// connected before the input is enabled.
+// loading internally. Connection state does NOT gate the input: the user
+// may type while disconnected, and the extension host queues those sends
+// (AgentServerBridge.pendingSends) and flushes them once a session is
+// ready — mirroring the Electron shell's pre-init send queue.
 let isConnected = false;
 let isSwitching = false;
 let currentSessionId: string | undefined;
@@ -95,6 +106,30 @@ const conversationBar = new ConversationBar(conversationBarRootEl, {
 
 window.addEventListener("beforeunload", () => conversationBar.dispose());
 
+// Azure Speech token round-trip: the mic provider asks the extension host
+// (which relays to the agent server that owns the `speech:` config) for a
+// short-lived token. Correlated by `id`; see "speechTokenResponse" below.
+let nextSpeechTokenId = 1;
+const pendingSpeechToken = new Map<
+    number,
+    (token: SpeechToken | undefined) => void
+>();
+function requestSpeechToken(
+    timeoutMs = 15_000,
+): Promise<SpeechToken | undefined> {
+    const id = nextSpeechTokenId++;
+    return new Promise<SpeechToken | undefined>((resolve) => {
+        const timer = setTimeout(() => {
+            if (pendingSpeechToken.delete(id)) resolve(undefined);
+        }, timeoutMs);
+        pendingSpeechToken.set(id, (token) => {
+            clearTimeout(timer);
+            resolve(token);
+        });
+        vscode.postMessage({ type: "getSpeechToken", id });
+    });
+}
+
 const chatPanel = new ChatPanel(rootEl, {
     platformAdapter: {
         // Open links via the extension host — webviews can't call window.open
@@ -103,11 +138,52 @@ const chatPanel = new ChatPanel(rootEl, {
             vscode.postMessage({ type: "openExternal", href });
         },
     },
-    onSend: (text: string, _attachments, requestId: string) => {
-        vscode.postMessage({ type: "sendCommand", command: text, requestId });
+    // The browser Web Speech API doesn't work inside VS Code webviews, so
+    // override chat-ui's default with an Azure-backed provider fed by a
+    // server-vended token.
+    speechProvider: new VsCodeAzureSpeechProvider(requestSpeechToken),
+    onSend: (text: string, attachments, requestId: string) => {
+        vscode.postMessage({
+            type: "sendCommand",
+            command: text,
+            requestId,
+            attachments,
+        });
     },
     onCancel: (requestId: string) => {
         vscode.postMessage({ type: "cancelCommand", requestId });
+    },
+    onDeleteMessage: (requestId, target, permanent) => {
+        vscode.postMessage({
+            type: "deleteMessage",
+            requestId: requestId.requestId,
+            target,
+            permanent,
+        });
+    },
+    // Refresh callback for live-updating ("dynamic") displays. chat-ui's
+    // setDynamicDisplay schedules the timer; each tick calls this to fetch
+    // fresh content, routed through the host to dispatcher.getDynamicDisplay.
+    // "html" is the render format (same choice as the visualStudio and
+    // browser webview hosts).
+    getDynamicDisplay: (source: string, displayId: string) =>
+        bridgeRpc("getDynamicDisplay", [
+            source,
+            "html",
+            displayId,
+        ]) as Promise<DynamicDisplayResult>,
+    // User rated an agent message (thumbs up/down). Forward to the host,
+    // which calls dispatcher.recordUserFeedback; the resulting broadcast
+    // (userFeedback) updates the bubble via applyFeedback.
+    onFeedback: (requestId, rating, category, comment, includeContext) => {
+        vscode.postMessage({
+            type: "recordUserFeedback",
+            requestId: requestId.requestId,
+            rating,
+            category,
+            comment,
+            includeContext,
+        });
     },
 });
 
@@ -122,6 +198,171 @@ chatPanel.onDemoAction = (action: "continue" | "cancel") => {
 // pcUpdate / pcAccept / pcDismiss / pcHide / pcDispose; the host
 // answers with `pcState` (handled in the message switch below).
 chatPanel.attachCompletion((msg) => vscode.postMessage(msg));
+
+// ─── Server-driven interactions (dev-mode action confirmation / questions) ───
+// The dispatcher (via the agent-server) can block a request on an interactive
+// prompt: `@config dev on --confirm` confirms each translated action before it
+// runs, and agents can ask questions. The host forwards these as
+// `requestInteraction`; we render them with chat-ui and reply via
+// `interactionResponse`. Without this the request blocks on the server until
+// the 10-minute proposeAction timeout. In-flight prompts are tracked by
+// interactionId so `interactionResolved` / `interactionCancelled` (another
+// client answered, or a server timeout) can tear the local UI down.
+const activeInteractions = new Map<string, AbortController>();
+
+// Template-editor services (schema refresh + per-field completion) for the
+// proposeAction edit flow. chat-ui is framework-free, so these are injected;
+// each call is routed through the host to the dispatcher and correlated by id.
+let nextBridgeRpcId = 1;
+const pendingBridgeRpc = new Map<
+    number,
+    { resolve: (v: unknown) => void; reject: (e: unknown) => void }
+>();
+function bridgeRpc(
+    method: "getTemplateSchema" | "getTemplateCompletion" | "getDynamicDisplay",
+    args: unknown[],
+    timeoutMs = 30_000,
+): Promise<unknown> {
+    const id = nextBridgeRpcId++;
+    return new Promise<unknown>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            if (pendingBridgeRpc.delete(id)) {
+                reject(new Error(`bridgeRpc '${method}' timed out`));
+            }
+        }, timeoutMs);
+        pendingBridgeRpc.set(id, {
+            resolve: (v) => {
+                clearTimeout(timer);
+                resolve(v);
+            },
+            reject: (e) => {
+                clearTimeout(timer);
+                reject(e);
+            },
+        });
+        vscode.postMessage({ type: "bridgeRpcRequest", id, method, args });
+    });
+}
+const templateServices: TemplateEditServices = {
+    getTemplateSchema: (templateAgentName, templateName, data) =>
+        bridgeRpc("getTemplateSchema", [
+            templateAgentName,
+            templateName,
+            data,
+        ]) as ReturnType<TemplateEditServices["getTemplateSchema"]>,
+    getTemplateCompletion: (
+        templateAgentName,
+        templateName,
+        data,
+        propertyName,
+    ) =>
+        bridgeRpc("getTemplateCompletion", [
+            templateAgentName,
+            templateName,
+            data,
+            propertyName,
+        ]) as ReturnType<TemplateEditServices["getTemplateCompletion"]>,
+};
+
+// Render a server-driven interaction and reply with the user's response.
+// Mirrors the Electron shell (chatPanelBridge.ts requestInteraction).
+function handleRequestInteraction(
+    interaction: PendingInteractionRequest,
+): void {
+    const ac = new AbortController();
+    activeInteractions.set(interaction.interactionId, ac);
+    void (async () => {
+        let response: PendingInteractionResponse;
+        try {
+            if (interaction.type === "question") {
+                const value = await chatPanel.addChoicePrompt<number>(
+                    interaction.message,
+                    interaction.choices.map((label, index) => ({
+                        label,
+                        value: index,
+                    })),
+                    { defaultValue: interaction.defaultId, signal: ac.signal },
+                );
+                response = {
+                    interactionId: interaction.interactionId,
+                    type: "question",
+                    value,
+                };
+            } else {
+                const value = await chatPanel.proposeActionEdit(
+                    interaction.actionTemplates,
+                    interaction.source,
+                    templateServices,
+                );
+                response = {
+                    interactionId: interaction.interactionId,
+                    type: "proposeAction",
+                    value,
+                };
+            }
+        } catch (e) {
+            // Aborted (resolved/cancelled by another client or server timeout)
+            // — nothing to send.
+            activeInteractions.delete(interaction.interactionId);
+            if (!ac.signal.aborted) {
+                console.error("[requestInteraction] failed", e);
+            }
+            return;
+        }
+        if (ac.signal.aborted) {
+            activeInteractions.delete(interaction.interactionId);
+            return;
+        }
+        activeInteractions.delete(interaction.interactionId);
+        if (ac.signal.aborted) return;
+        vscode.postMessage({ type: "interactionResponse", response });
+    })().catch((e) => console.error("[requestInteraction] failed", e));
+}
+
+// Render a non-blocking choice card (yes/no, multi-select, or pick+remember)
+// and reply with the user's response. Mirrors the Electron shell
+// (chatPanelBridge.ts requestChoice). The prompt text is already rendered as
+// the action's displayContent, so `showMessage:false` suppresses the card's
+// duplicate copy and `requestId` anchors the buttons onto that agent bubble so
+// the message and the buttons read as one card.
+function handleRequestChoice(msg: {
+    choiceId: string;
+    choiceType: "yesNo" | "multiChoice" | "pickRemember";
+    message: string;
+    choices: string[];
+    checkboxLabel?: string;
+    requestId?: string;
+}): void {
+    void (async () => {
+        const opts = { showMessage: false, requestId: msg.requestId };
+        let response:
+            | boolean
+            | number[]
+            | { selected: number; remember: boolean };
+        if (msg.choiceType === "yesNo") {
+            response = await chatPanel.askYesNo(msg.message, undefined, opts);
+        } else if (msg.choiceType === "pickRemember") {
+            response = await chatPanel.addPickRememberPrompt(
+                msg.message,
+                msg.choices,
+                msg.checkboxLabel ?? "Remember this for next time",
+                opts,
+            );
+        } else {
+            const index = await chatPanel.addChoicePrompt<number>(
+                msg.message,
+                msg.choices.map((label, i) => ({ label, value: i })),
+                opts,
+            );
+            response = [index];
+        }
+        vscode.postMessage({
+            type: "choiceResponse",
+            choiceId: msg.choiceId,
+            response,
+        });
+    })().catch((e) => console.error("[requestChoice] failed", e));
+}
 
 // Mirror of dispatcher's queue lifecycle (requestQueued / requestStarted
 // / requestCancelled / queueStateChanged) so we can dedupe "⚠ Cancelled"
@@ -342,6 +583,7 @@ function clientIdOf(requestId: any): string | undefined {
 
 // Translate the bridge's history-entry shape (which mirrors the dispatcher's
 // internal recorded events) to chat-ui's HistoryEntry union.
+// code-complexity-allow: history-event replay mapper; one branch per DisplayLogEntry type
 function toChatPanelHistory(entries: any[]): HistoryEntry[] {
     // First pass: derive "First Message" timing per requestId — the elapsed
     // ms from the user's request to the first agent display message. The
@@ -446,6 +688,10 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
 // broadcast from the host.
 let lastConnected = false;
 let demoSuffix: string | undefined;
+// Agent-server endpoint (host:port) surfaced in the connected indicator's
+// tooltip. Cached from `status` messages that carry it so it survives status
+// updates that omit it.
+let serverEndpoint: string | undefined;
 // Reconnect ribbon overlay shown while disconnected. Replaces the old
 // per-attempt error spam in the chat area with a single in-place
 // updating status (countdown, or a "stopped" state with Retry / Start
@@ -462,6 +708,7 @@ function updateConversationBarStatus(): void {
         switching: isSwitching,
         connection: connectionStatus,
         demoSuffix,
+        endpoint: isConnected ? serverEndpoint : undefined,
     });
 }
 
@@ -481,13 +728,19 @@ function setStatus(
         connectionStatus = undefined;
     }
     updateConversationBarStatus();
-    chatPanel.setEnabled(connected);
+    // Keep the input usable regardless of connection so the user can type
+    // while (re)connecting; the host queues sends until a session is ready.
+    chatPanel.setEnabled(true);
 }
 
+// code-complexity-allow: webview message router; single switch over all host message types
 window.addEventListener("message", (event) => {
     const msg = event.data;
     switch (msg.type) {
         case "status":
+            if (msg.endpoint !== undefined) {
+                serverEndpoint = msg.endpoint;
+            }
             setStatus(msg.connected, msg.sessionId, msg.sessionName);
             if (msg.connected && msg.sessionId) {
                 currentSessionId = msg.sessionId;
@@ -523,6 +776,9 @@ window.addEventListener("message", (event) => {
         }
         case "userInfo":
             chatPanel.setUserInfo(msg.name);
+            break;
+        case "developerMode":
+            chatPanel.setDeveloperMode(msg.enabled);
             break;
         case "sessionChanged":
             currentSessionId = msg.sessionId;
@@ -701,8 +957,9 @@ window.addEventListener("message", (event) => {
                 errorText: undefined,
             });
             chatPanel.setSwitching(msg.switching, msg.targetName);
-            // Re-apply connection-derived enable state when the switch ends.
-            if (!msg.switching) chatPanel.setEnabled(isConnected);
+            // Re-enable input when the switch ends (connection state no
+            // longer gates input — sends queue on the host while offline).
+            if (!msg.switching) chatPanel.setEnabled(true);
             break;
         case "historyReplay": {
             // Stream the replay in chunks so the browser can paint between
@@ -712,8 +969,17 @@ window.addEventListener("message", (event) => {
             // races or is lost.
             const replayEntries = toChatPanelHistory(msg.entries);
             void chatPanel.replayHistoryStreaming(replayEntries).then(() => {
+                // Divider between replayed history and live messages,
+                // matching the Electron shell. The bridge only sends
+                // historyReplay when prior history exists, but guard
+                // defensively.
+                if (msg.entries.length > 0) {
+                    chatPanel.addHistorySeparator(
+                        formatHistorySeparatorLabel(msg.entries),
+                    );
+                }
                 chatPanel.setHistoryLoading(false);
-                chatPanel.setEnabled(isConnected);
+                chatPanel.setEnabled(true);
             });
             break;
         }
@@ -722,7 +988,7 @@ window.addEventListener("message", (event) => {
             break;
         case "historyLoading":
             chatPanel.setHistoryLoading(msg.loading);
-            if (!msg.loading) chatPanel.setEnabled(isConnected);
+            if (!msg.loading) chatPanel.setEnabled(true);
             break;
         case "conversationNotification":
             // Conversation-management feedback. We add a fresh agent
@@ -869,6 +1135,80 @@ window.addEventListener("message", (event) => {
             const result = queueMirror.applyQueueStateChanged(msg.snapshot);
             if (!result.admitted) break;
             reconcileQueueChips(result.previous, msg.snapshot);
+            break;
+        }
+        case "requestStatusUnknown":
+            // Connection dropped mid-request — show a muted "status unknown"
+            // rail instead of a stuck "working" spinner. Resolved on reconnect
+            // via requestStatusResume / commandComplete.
+            chatPanel.setRequestUnknown(msg.requestId);
+            break;
+        case "requestStatusResume":
+            // Reconnect confirmed the request is still live: restore the
+            // working rail (running) or just clear the unknown rail (queued —
+            // its user-bubble chip is reconciled from the pushed snapshot).
+            if (msg.status === "running") {
+                chatPanel.resumeRunning(msg.requestId);
+            } else {
+                chatPanel.clearRequestUnknown(msg.requestId);
+            }
+            break;
+        case "queuePending":
+            // Offline send buffered in the host's pendingSends — mark the
+            // bubble "queued" right away; the dispatcher snapshot reconciles
+            // it (running / still queued / done) once it flushes on reconnect.
+            chatPanel.setUserBubbleQueueStatus(msg.requestId, "queued");
+            break;
+        case "requestInteraction":
+            handleRequestInteraction(msg.interaction);
+            break;
+        case "requestChoice":
+            handleRequestChoice(msg);
+            break;
+        case "setDynamicDisplay":
+            // Register/refresh a live-updating display. chat-ui owns the
+            // refresh timer and calls back via the getDynamicDisplay option
+            // wired at construction.
+            chatPanel.setDynamicDisplay(
+                msg.source,
+                msg.displayId,
+                msg.nextRefreshMs,
+            );
+            break;
+        case "userFeedback":
+            // A rating was recorded (by us or a peer) — mirror it onto the
+            // matching bubble.
+            chatPanel.applyFeedback(msg.entry);
+            break;
+        case "interactionResolved":
+        case "interactionCancelled": {
+            // Another client answered, or the server cancelled/timed out the
+            // interaction — abort our local prompt so it stops waiting.
+            const ac = activeInteractions.get(msg.interactionId);
+            if (ac) {
+                activeInteractions.delete(msg.interactionId);
+                ac.abort();
+            }
+            break;
+        }
+        case "bridgeRpcResponse": {
+            const pending = pendingBridgeRpc.get(msg.id);
+            if (pending) {
+                pendingBridgeRpc.delete(msg.id);
+                if (msg.error !== undefined) {
+                    pending.reject(new Error(msg.error));
+                } else {
+                    pending.resolve(msg.result);
+                }
+            }
+            break;
+        }
+        case "speechTokenResponse": {
+            const resolve = pendingSpeechToken.get(msg.id);
+            if (typeof resolve === "function") {
+                pendingSpeechToken.delete(msg.id);
+                resolve(msg.token);
+            }
             break;
         }
     }

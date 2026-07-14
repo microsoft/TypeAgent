@@ -43,6 +43,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayResult,
+    displaySuccess,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { alwaysEnabledAgents } from "../../appAgentManager.js";
@@ -217,6 +218,7 @@ function escapeAttr(s: string): string {
         .replace(/>/g, "&gt;");
 }
 
+// code-complexity-allow: builds agent-status HTML table; many per-column format branches
 function buildAgentStatusHtml(
     entries: [string, StatusRecords[string]][],
     agents: {
@@ -308,6 +310,7 @@ function buildAgentStatusHtml(
     return `<table style="border-collapse:collapse;font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.4"><thead><tr>${headerCols.join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
 }
 
+// code-complexity-allow: agent enable/disable status handler; many state branches
 async function showAgentStatus(
     toggle: AgentToggle,
     context: ActionContext<CommandHandlerContext>,
@@ -1692,19 +1695,37 @@ class ConfigExecutionReasoningCommandHandler implements CommandHandler {
         args: {
             engine: {
                 description:
-                    "Reasoning engine to use (claude, copilot, or none)",
+                    "Reasoning engine to use (claude, copilot, or none). Omit to show the current engine.",
+                optional: true,
             },
         },
-    };
+    } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const engine = params.args.engine;
+        if (engine === undefined) {
+            displayResult(
+                `Reasoning engine is '${context.sessionContext.agentContext.session.getConfig().execution.reasoning}'`,
+                context,
+            );
+            return;
+        }
         if (engine === "claude" || engine === "copilot" || engine === "none") {
-            const agentToggle = {
+            const systemContext = context.sessionContext.agentContext;
+            const strategy =
+                systemContext.session.getConfig().execution.conversationAnswer;
+            // Turning reasoning off while the answer strategy relies on it
+            // ("reasoning-only" disables the conversation-lookup action) would
+            // leave conversation questions unanswerable — re-enable the lookup
+            // action in that case.
+            const agentToggle: Record<string, boolean> = {
                 "dispatcher.reasoning": engine !== "none",
-            } as const;
+            };
+            if (engine === "none" && strategy === "reasoning-only") {
+                agentToggle["dispatcher.lookup"] = true;
+            }
             await changeContextConfig(
                 {
                     translation: { multiple: { enabled: engine === "none" } },
@@ -1746,6 +1767,85 @@ class ConfigExecutionReasoningCommandHandler implements CommandHandler {
     }
 }
 
+class ConfigExecutionReasoningModelCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set the Copilot reasoning model (e.g. claude-opus-4.8). Omit to show the current value.";
+    public readonly parameters = {
+        args: {
+            model: {
+                description:
+                    "Model identifier for Copilot reasoning. Omit to show the current value.",
+                optional: true,
+            },
+        },
+    } as const;
+    async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const model = params.args.model;
+        const current =
+            context.sessionContext.agentContext.session.getConfig().execution
+                .reasoningModel;
+        if (model === undefined) {
+            return displayResult(
+                current
+                    ? `Reasoning model is '${current}'`
+                    : "Reasoning model is not overridden (using the configured default)",
+                context,
+            );
+        }
+        await changeContextConfig(
+            { execution: { reasoningModel: model } },
+            context,
+        );
+        return displayResult(`Reasoning model is set to '${model}'`, context);
+    }
+}
+
+class ConfigExecutionReasoningEffortCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set the Copilot reasoning effort (low, medium, high, xhigh). Only applies to models that support it. Omit to show the current value.";
+    public readonly parameters = {
+        args: {
+            effort: {
+                description:
+                    "'low', 'medium', 'high', or 'xhigh'. Omit to show the current value.",
+                type: "string" as const,
+                enum: ["low", "medium", "high", "xhigh"],
+                optional: true,
+            },
+        },
+    } as const;
+    async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const effort = params.args.effort as
+            | "low"
+            | "medium"
+            | "high"
+            | "xhigh"
+            | undefined;
+        const current =
+            context.sessionContext.agentContext.session.getConfig().execution
+                .reasoningEffort;
+        if (effort === undefined) {
+            return displayResult(
+                current
+                    ? `Reasoning effort is '${current}'`
+                    : "Reasoning effort is not overridden (using the configured default)",
+                context,
+            );
+        }
+        await changeContextConfig(
+            { execution: { reasoningEffort: effort } },
+            context,
+        );
+        return displayResult(`Reasoning effort is set to '${effort}'`, context);
+    }
+}
+
 class ConfigExecutionPlanReuseCommandHandler implements CommandHandler {
     public readonly description =
         "Enable or disable workflow plan reuse for reasoning actions";
@@ -1753,9 +1853,10 @@ class ConfigExecutionPlanReuseCommandHandler implements CommandHandler {
         args: {
             mode: {
                 description:
-                    "Plan reuse mode: 'enabled' to cache and reuse workflow plans, 'disabled' for standard reasoning",
+                    "Plan reuse mode: 'enabled' to cache and reuse workflow plans, 'disabled' for standard reasoning. Omit to show the current value.",
                 type: "string" as const,
                 enum: ["enabled", "disabled"],
+                optional: true,
             },
         },
     } as const;
@@ -1764,7 +1865,13 @@ class ConfigExecutionPlanReuseCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const mode = params.args.mode as "enabled" | "disabled";
+        const mode = params.args.mode as "enabled" | "disabled" | undefined;
+        if (mode === undefined) {
+            return displayResult(
+                `Plan reuse is '${context.sessionContext.agentContext.session.getConfig().execution.planReuse}'`,
+                context,
+            );
+        }
 
         await changeContextConfig({ execution: { planReuse: mode } }, context);
 
@@ -1779,9 +1886,10 @@ class ConfigExecutionScriptReuseCommandHandler implements CommandHandler {
         args: {
             mode: {
                 description:
-                    "Script reuse mode: 'enabled' to capture and reuse PowerShell scripts, 'disabled' for standard reasoning",
+                    "Script reuse mode: 'enabled' to capture and reuse PowerShell scripts, 'disabled' for standard reasoning. Omit to show the current value.",
                 type: "string" as const,
                 enum: ["enabled", "disabled"],
+                optional: true,
             },
         },
     } as const;
@@ -1790,7 +1898,13 @@ class ConfigExecutionScriptReuseCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const mode = params.args.mode as "enabled" | "disabled";
+        const mode = params.args.mode as "enabled" | "disabled" | undefined;
+        if (mode === undefined) {
+            return displayResult(
+                `Script reuse is '${context.sessionContext.agentContext.session.getConfig().execution.scriptReuse}'`,
+                context,
+            );
+        }
 
         await changeContextConfig(
             { execution: { scriptReuse: mode } },
@@ -1801,6 +1915,110 @@ class ConfigExecutionScriptReuseCommandHandler implements CommandHandler {
     }
 }
 
+class ConfigExecutionConversationAnswerCommandHandler
+    implements CommandHandler
+{
+    public readonly description =
+        "How conversation questions are answered: 'lookup' (conversation-memory lookup, reasoning as fallback), 'reasoning-first' (reasoning agent primary, lookup as fallback), or 'reasoning-only' (remove the lookup action; reasoning handles conversation Q&A)";
+    public readonly parameters = {
+        args: {
+            strategy: {
+                description:
+                    "'lookup' (default), 'reasoning-first', or 'reasoning-only'. Omit to show the current strategy.",
+                type: "string" as const,
+                enum: ["lookup", "reasoning-first", "reasoning-only"],
+                optional: true,
+            },
+        },
+    } as const;
+
+    async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const strategy = params.args.strategy as
+            | "lookup"
+            | "reasoning-first"
+            | "reasoning-only"
+            | undefined;
+        if (strategy === undefined) {
+            return displayResult(
+                `Conversation answer strategy is '${systemContext.session.getConfig().execution.conversationAnswer}'`,
+                context,
+            );
+        }
+        const engine = systemContext.session.getConfig().execution.reasoning;
+
+        // "reasoning-only" removes the conversation-lookup action from
+        // translation — but only when a reasoning engine is actually available,
+        // otherwise the user would have no way to answer conversation
+        // questions. In that case the lookup action stays enabled.
+        const disableLookup =
+            strategy === "reasoning-only" && engine !== "none";
+        const agentToggle = {
+            "dispatcher.lookup": !disableLookup,
+        } as const;
+
+        await changeContextConfig(
+            {
+                execution: { conversationAnswer: strategy },
+                schemas: agentToggle,
+                actions: agentToggle,
+            },
+            context,
+        );
+
+        let message = `Conversation answer strategy is set to '${strategy}'`;
+        if (strategy !== "lookup" && engine === "none") {
+            message +=
+                "\nNote: reasoning engine is 'none' — set one with '@config execution reasoning claude|copilot' for this to take effect. Conversation lookup remains enabled until then.";
+        }
+        return displayResult(message, context);
+    }
+}
+
+class ConfigExecutionReasoningHistoryCommandHandler implements CommandHandler {
+    public readonly description =
+        "Number of recent conversation turns included as context in the reasoning prompt";
+    public readonly parameters = {
+        args: {
+            turns: {
+                description:
+                    "Number of recent conversation turns to include (e.g. 4). 0 disables history. Omit to show the current value.",
+                type: "number" as const,
+                optional: true,
+            },
+        },
+    } as const;
+
+    async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const turns = params.args.turns;
+        if (turns === undefined) {
+            return displayResult(
+                `Reasoning history turns is ${context.sessionContext.agentContext.session.getConfig().execution.reasoningHistoryTurns}`,
+                context,
+            );
+        }
+        if (!Number.isInteger(turns) || turns < 0) {
+            throw new Error(
+                `Invalid number of turns: ${turns}. Must be a non-negative integer.`,
+            );
+        }
+        await changeContextConfig(
+            { execution: { reasoningHistoryTurns: turns } },
+            context,
+        );
+        return displayResult(
+            `Reasoning history turns is set to ${turns}`,
+            context,
+        );
+    }
+}
+
 class ConfigExecutionEntityPromptShapeCommandHandler implements CommandHandler {
     public readonly description =
         "Shape used when serializing Entity objects into LLM prompts";
@@ -1808,9 +2026,10 @@ class ConfigExecutionEntityPromptShapeCommandHandler implements CommandHandler {
         args: {
             shape: {
                 description:
-                    "'facets' (default, name+value array), 'flat' (collapse facets into a properties object), or 'facets-with-schema' (facets + append the Entity TS type to the reasoning system prompt)",
+                    "'facets' (default, name+value array), 'flat' (collapse facets into a properties object), or 'facets-with-schema' (facets + append the Entity TS type to the reasoning system prompt). Omit to show the current value.",
                 type: "string" as const,
                 enum: ["facets", "flat", "facets-with-schema"],
+                optional: true,
             },
         },
     } as const;
@@ -1822,7 +2041,14 @@ class ConfigExecutionEntityPromptShapeCommandHandler implements CommandHandler {
         const shape = params.args.shape as
             | "facets"
             | "flat"
-            | "facets-with-schema";
+            | "facets-with-schema"
+            | undefined;
+        if (shape === undefined) {
+            return displayResult(
+                `Entity prompt shape is '${context.sessionContext.agentContext.session.getConfig().execution.entityPromptShape}'`,
+                context,
+            );
+        }
 
         await changeContextConfig(
             { execution: { entityPromptShape: shape } },
@@ -1846,6 +2072,20 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
             },
         ),
         reasoning: new ConfigExecutionReasoningCommandHandler(),
+        reasoningModel: new ConfigExecutionReasoningModelCommandHandler(),
+        reasoningEffort: new ConfigExecutionReasoningEffortCommandHandler(),
+        conversationAnswer:
+            new ConfigExecutionConversationAnswerCommandHandler(),
+        reasoningHistory: new ConfigExecutionReasoningHistoryCommandHandler(),
+        recordUserMessages: getToggleHandlerTable(
+            "record the user's own messages in the conversation transcript (chat history)",
+            async (context, enable) => {
+                await changeContextConfig(
+                    { execution: { recordUserMessages: enable } },
+                    context,
+                );
+            },
+        ),
         planReuse: new ConfigExecutionPlanReuseCommandHandler(),
         scriptReuse: new ConfigExecutionScriptReuseCommandHandler(),
         entityPromptShape: new ConfigExecutionEntityPromptShapeCommandHandler(),
@@ -1869,6 +2109,7 @@ function effectiveProvider(): ProviderMode {
     return getActiveModelProvider() ?? "azure";
 }
 
+// code-complexity-allow: per-provider model enumeration; one branch per provider
 async function listModelsForProvider(
     provider: ProviderMode,
     context: ActionContext<CommandHandlerContext>,
@@ -2952,6 +3193,54 @@ function getCollisionCommandHandlers(): CommandHandlerTable {
     };
 }
 
+/**
+ * `@config dev on [--confirm]` — turn on developer mode.
+ *
+ * Developer mode records conversation + translation data (see DevTrace) and
+ * enables dev-only UI affordances (per-message delete). The optional
+ * `--confirm` flag additionally turns on per-request action confirmation
+ * (confirmTranslation -> clientIO.proposeAction), which is otherwise off so
+ * that recording data does not force an interactive Run/Cancel/Edit prompt.
+ */
+class DevModeOnCommandHandler implements CommandHandler {
+    public readonly description =
+        "Turn on development mode (records conversation + translation data)";
+    public readonly parameters = {
+        flags: {
+            confirm: {
+                description:
+                    "Also confirm each translated action via the client before running it",
+                char: "c",
+                type: "boolean",
+                default: false,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const confirm = params.flags.confirm === true;
+        systemContext.developerMode = true;
+        systemContext.confirmActions = confirm;
+        // Notify connected clients so dev-mode UI affordances (e.g. the
+        // per-message delete button) can toggle live.
+        systemContext.clientIO.notify(
+            undefined,
+            "developerMode",
+            { enabled: true },
+            "dispatcher",
+        );
+        displaySuccess(
+            confirm
+                ? "development mode is enabled (action confirmation on)."
+                : "development mode is enabled.",
+            context,
+        );
+    }
+}
+
 export function getConfigCommandHandlers(): CommandHandlerTable {
     return {
         description: "Configuration commands",
@@ -2995,12 +3284,34 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
             explainer: configExplainerCommandHandlers,
             execution: configExecutionCommandHandlers,
             modelProvider: new ConfigModelProviderCommandHandler(),
-            dev: getToggleHandlerTable(
-                "development mode",
-                async (context, enable) => {
-                    context.sessionContext.agentContext.developerMode = enable;
+            dev: {
+                description: "Toggle development mode",
+                defaultSubCommand: "on",
+                commands: {
+                    on: new DevModeOnCommandHandler(),
+                    off: {
+                        description: "Turn off development mode",
+                        run: async (
+                            context: ActionContext<CommandHandlerContext>,
+                        ) => {
+                            const systemContext =
+                                context.sessionContext.agentContext;
+                            systemContext.developerMode = false;
+                            systemContext.confirmActions = false;
+                            systemContext.clientIO.notify(
+                                undefined,
+                                "developerMode",
+                                { enabled: false },
+                                "dispatcher",
+                            );
+                            displaySuccess(
+                                "development mode is disabled.",
+                                context,
+                            );
+                        },
+                    },
                 },
-            ),
+            },
             log: {
                 description: "Toggle logging",
                 commands: {
