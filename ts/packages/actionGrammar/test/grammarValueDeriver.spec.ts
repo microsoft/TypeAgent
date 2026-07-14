@@ -68,8 +68,6 @@ describe("findSingleValueBearingPart", () => {
 });
 
 describe("deriveEffectiveValue (requireValue: false)", () => {
-    const derive = (rule: GrammarRule) => deriveEffectiveValue(rule);
-
     it("returns the rule's explicit value when present, ignoring parts", () => {
         const rule: GrammarRule = {
             parts: [
@@ -78,17 +76,20 @@ describe("deriveEffectiveValue (requireValue: false)", () => {
             ],
             value: { type: "literal", value: "explicit" },
         };
-        expect(derive(rule)).toEqual({ type: "literal", value: "explicit" });
+        expect(deriveEffectiveValue(rule)).toEqual({
+            type: "literal",
+            value: "explicit",
+        });
     });
 
     it("returns undefined for a rule with no parts and no value", () => {
         const rule: GrammarRule = { parts: [] };
-        expect(derive(rule)).toBeUndefined();
+        expect(deriveEffectiveValue(rule)).toBeUndefined();
     });
 
     it("returns undefined for a single part with no variable", () => {
         const rule: GrammarRule = { parts: [createStringPart(["foo"])] };
-        expect(derive(rule)).toBeUndefined();
+        expect(deriveEffectiveValue(rule)).toBeUndefined();
     });
 
     it("forwards a single part's variable as the implicit value", () => {
@@ -98,7 +99,10 @@ describe("deriveEffectiveValue (requireValue: false)", () => {
                 createWildcardPart("x", "wildcard"),
             ],
         };
-        expect(derive(rule)).toEqual({ type: "variable", name: "x" });
+        expect(deriveEffectiveValue(rule)).toEqual({
+            type: "variable",
+            name: "x",
+        });
     });
 
     it("forwards a nested RulesPart's captured variable", () => {
@@ -111,7 +115,10 @@ describe("deriveEffectiveValue (requireValue: false)", () => {
         const rule: GrammarRule = {
             parts: [createStringPart(["prefix"]), nested],
         };
-        expect(derive(rule)).toEqual({ type: "variable", name: "chosen" });
+        expect(deriveEffectiveValue(rule)).toEqual({
+            type: "variable",
+            name: "chosen",
+        });
     });
 
     it("returns undefined when 2+ parts carry a variable and there is no explicit value", () => {
@@ -121,13 +128,13 @@ describe("deriveEffectiveValue (requireValue: false)", () => {
                 createStringPart(["bar"], "y"),
             ],
         };
-        expect(derive(rule)).toBeUndefined();
+        expect(deriveEffectiveValue(rule)).toBeUndefined();
     });
 
     it("returns undefined for a multi-part rule where nothing carries a variable", () => {
         const rule: GrammarRule = {
             parts: [createStringPart(["foo"]), createStringPart(["bar"])],
         };
-        expect(derive(rule)).toBeUndefined();
+        expect(deriveEffectiveValue(rule)).toBeUndefined();
     });
 });

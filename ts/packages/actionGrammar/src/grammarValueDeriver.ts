@@ -2,13 +2,10 @@
 // Licensed under the MIT License.
 
 /**
- * Structural derivation of a rule's *effective* value expression: its
- * explicit `->` expression when present, otherwise an implicit
- * forwarding value derived from the rule's parts.
- *
- * A rule with exactly one variable-bearing part implicitly forwards that
- * part's value. This is the single source of truth for that
- * derivation, kept independent of any particular compilation backend.
+ * Derives a rule's *effective* value expression: its explicit `->`
+ * expression when present, otherwise the implicit value forwarded from
+ * a single variable-bearing part. Single source of truth for this
+ * derivation, shared by the grammar optimizer and the NFA compiler.
  */
 
 import type {
@@ -73,15 +70,12 @@ export function deriveEffectiveValue(
             ? "has 1 term"
             : `has ${rule.parts.length} terms`;
     const description = describeRule?.() ?? "";
-    if (result === "ambiguous") {
-        throw new Error(
-            `${description} ${termsDescription} but no value expression, ` +
-                `and more than one part carries a variable - the implicit value is ambiguous. ` +
-                `Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.`,
-        );
-    }
+    const reason =
+        result === "ambiguous"
+            ? "and more than one part carries a variable - the implicit value is ambiguous"
+            : "and no part carries a variable";
     throw new Error(
-        `${description} ${termsDescription} but no value expression, and no part carries a variable. ` +
+        `${description} ${termsDescription} but no value expression, ${reason}. ` +
             `Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.`,
     );
 }
