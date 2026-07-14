@@ -23,6 +23,7 @@ import {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
     createDispatcherFromContext,
+    prewarmReasoning as prewarmDispatcherReasoning,
 } from "agent-dispatcher/internal";
 import { PendingInteractionManager } from "agent-dispatcher/internal";
 
@@ -413,6 +414,9 @@ export async function createSharedDispatcher(
         get pendingInteractions() {
             return pendingInteractions;
         },
+        prewarmReasoning() {
+            prewarmDispatcherReasoning(context);
+        },
         join(
             clientIO: ClientIO,
             closeFn: () => void,
@@ -663,6 +667,13 @@ export async function createSharedDispatcher(
 export type SharedDispatcher = {
     readonly clientCount: number;
     readonly pendingInteractions: PendingInteractionManager;
+    /**
+     * Prewarm the configured reasoning engine's CLI in the background.
+     * Best-effort and non-blocking. Called by the host AFTER the conversation
+     * has finished reloading so reasoning cold-start work (module load + CLI
+     * spawn) doesn't slow the initial load.
+     */
+    prewarmReasoning(): void;
     join(
         clientIO: ClientIO,
         closeFn: () => void,

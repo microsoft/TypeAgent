@@ -35,8 +35,6 @@
  *     dir, where the TS project is unavailable) are compared like-for-like.
  *     On failure it prints where the new violations are — the file:line of the
  *     regressed rules in each changed file.
- *     On failure it prints where the new violations are — the file:line of the
- *     regressed rules in each changed file.
  *
  * Outputs (written to --out-dir, default tools/scripts/code/lint-report):
  *   - violations.csv : every violation, ranked

@@ -371,11 +371,15 @@ function isUnassignedAssignee(assignee: string): boolean {
     );
 }
 
-// Build args for `gh issue list` / `gh pr list`. `state`, `label`, and a
-// concrete `assignee` map to the matching flags. "Unassigned" has no flag
+// Build args for `gh issue list` / `gh pr list`. `state`, `label`, `author`,
+// and a concrete `assignee` map to the matching flags. "Unassigned" has no flag
 // equivalent — `gh ... list --assignee none` treats "none" as a literal
 // login and fails with "Could not find an assignee with the login 'none'" —
 // so it maps to the `no:assignee` search qualifier instead.
+//
+// `author` is the ownership signal for pull requests (a PR is "mine" when I
+// authored it, not when I'm an assignee), so "my PRs" resolves to
+// `--author @me` rather than `--assignee @me`.
 //
 // gh honors `--search` alongside `--state` and `--label`, so a request like
 // "open unassigned issues labeled X" composes to
@@ -389,6 +393,7 @@ function buildListArgs(
     if (p.repo) args.push("--repo", String(p.repo));
     if (p.state) args.push("--state", String(p.state));
     if (p.label) args.push("--label", String(p.label));
+    if (p.author) args.push("--author", String(p.author));
 
     const assignee = p.assignee ? String(p.assignee) : "";
     if (isUnassignedAssignee(assignee)) {
@@ -819,6 +824,20 @@ export function buildArgs(
                 "number,title,url,repository,state,updatedAt,labels",
             ];
         }
+        case "myPullRequests": {
+            const limit = p.limit ?? 20;
+            const state = p.state ? String(p.state) : "open";
+            // gh search prs --author @me --state open --json …
+            const args = ["search", "prs", "--author", "@me", "--state", state];
+            if (p.owner) args.push("--owner", String(p.owner));
+            args.push(
+                "--limit",
+                String(limit),
+                "--json",
+                "number,title,url,repository,state,updatedAt,labels,isDraft",
+            );
+            return args;
+        }
         case "variableCreate": {
             const args = ["variable", "set"];
             if (p.name) args.push(String(p.name));
@@ -1088,6 +1107,24 @@ function formatListResults(
                 const labelStr = labels ? ` _[${labels}]_` : "";
                 const repoPrefix = repoFull ? `${repoFull} ` : "";
                 return `- ${repoPrefix}[#${it.number} ${it.title}](${it.url})${labelStr}`;
+            })
+            .join("\n");
+    }
+
+    // The current user's own pull requests across repos (gh search prs --author @me)
+    if (actionName === "myPullRequests" && "number" in items[0]) {
+        return items
+            .map((pr) => {
+                const repo = pr.repository as
+                    | Record<string, unknown>
+                    | undefined;
+                const repoFull =
+                    (repo?.nameWithOwner as string | undefined) ??
+                    (repo?.name as string | undefined) ??
+                    "";
+                const repoPrefix = repoFull ? `${repoFull} ` : "";
+                const status = pr.isDraft ? "DRAFT" : String(pr.state);
+                return `- ${repoPrefix}[#${pr.number} ${pr.title}](${pr.url}) — ${status}`;
             })
             .join("\n");
     }
