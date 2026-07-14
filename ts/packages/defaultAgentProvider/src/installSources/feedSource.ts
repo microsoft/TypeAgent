@@ -916,7 +916,9 @@ export function createFeedSource(
                               const elapsed = Math.round(
                                   (now() - installStart) / 1000,
                               );
-                              onStatus(`Still working... (${elapsed}s elapsed)`);
+                              onStatus(
+                                  `Still working... (${elapsed}s elapsed)`,
+                              );
                           }, 2500)
                         : undefined;
                 heartbeat?.unref?.();
