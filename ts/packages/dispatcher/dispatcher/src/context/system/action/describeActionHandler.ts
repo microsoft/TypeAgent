@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { ActionContext, AppAction } from "@typeagent/agent-sdk";
+import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { processCommandNoLock } from "../../../command/command.js";
 import { DescribeAction } from "../schema/describeActionSchema.js";
@@ -16,7 +17,10 @@ function quoteArg(value: string): string {
 // Forwards to the `@describe` command, following the same convention as the
 // other system NL handlers (e.g. configActionHandler.ts, historyActionHandler.ts):
 // the command is the single shared implementation; the NL path just builds
-// the equivalent command string.
+// the equivalent command string. The command appends the rendered markdown
+// itself, so we return a no-display result — returning undefined would make
+// the dispatcher tack on a generic "Action <name> completed." message
+// (actionHandlers.ts), which is just noise on top of the real output.
 export async function executeDescribeAction(
     action: AppAction,
     context: ActionContext<CommandHandlerContext>,
@@ -29,7 +33,9 @@ export async function executeDescribeAction(
                 `@describe ${quoteArg(agentName)}${all ? " --all" : ""}`,
                 context.sessionContext.agentContext,
             );
-            break;
+            return createActionResultNoDisplay(
+                `Described the "${agentName}" agent.`,
+            );
         }
         case "describeAction": {
             const { actionName, agentName } = nlAction.parameters;
@@ -41,12 +47,13 @@ export async function executeDescribeAction(
                 command,
                 context.sessionContext.agentContext,
             );
-            break;
+            return createActionResultNoDisplay(
+                `Described the "${actionName}" action.`,
+            );
         }
         default:
             throw new Error(
                 `Invalid action name: ${(action as { actionName: string }).actionName}`,
             );
     }
-    return undefined;
 }
