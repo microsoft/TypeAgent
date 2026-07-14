@@ -17,6 +17,58 @@ const MAX_UNION_MEMBERS = 8;
 // Cap on how many object field names are shown inline.
 const MAX_OBJECT_FIELDS = 6;
 
+function renderStringUnion(typeEnum: string[] | undefined): string {
+    const values = typeEnum ?? [];
+    const shown = values
+        .slice(0, MAX_UNION_MEMBERS)
+        .map((v) => JSON.stringify(v));
+    if (values.length > MAX_UNION_MEMBERS) {
+        shown.push("…");
+    }
+    return shown.join(" | ") || "string";
+}
+
+function renderTypeUnion(
+    types: SchemaType[] | undefined,
+    depth: number,
+): string {
+    const parts = (types ?? []).map((t) => renderSchemaType(t, depth + 1));
+    const unique = [...new Set(parts)];
+    const shown = unique.slice(0, MAX_UNION_MEMBERS);
+    if (unique.length > MAX_UNION_MEMBERS) {
+        shown.push("…");
+    }
+    return shown.join(" | ") || "any";
+}
+
+function renderTypeReference(
+    type: Extract<SchemaType, { type: "type-reference" }>,
+    depth: number,
+): string {
+    // Expand a shallow reference so the reader sees the real shape;
+    // fall back to the referenced type name when it is too deep.
+    if (type.definition !== undefined && depth < MAX_TYPE_DEPTH) {
+        return renderSchemaType(type.definition.type, depth + 1);
+    }
+    return type.name || "object";
+}
+
+function renderObject(
+    type: Extract<SchemaType, { type: "object" }>,
+    depth: number,
+): string {
+    if (depth >= MAX_TYPE_DEPTH) {
+        return "{ … }";
+    }
+    const fields = Object.keys(type.fields ?? {});
+    if (fields.length === 0) {
+        return "{}";
+    }
+    const shown = fields.slice(0, MAX_OBJECT_FIELDS);
+    const suffix = fields.length > MAX_OBJECT_FIELDS ? ", …" : "";
+    return `{ ${shown.join(", ")}${suffix} }`;
+}
+
 /**
  * Render a parsed schema type as a compact, human-readable type string
  * (e.g. `string`, `number[]`, `"a" | "b"`, `{ x, y }`).
@@ -43,49 +95,16 @@ export function renderSchemaType(
             return "true";
         case "false":
             return "false";
-        case "string-union": {
-            const values = type.typeEnum ?? [];
-            const shown = values
-                .slice(0, MAX_UNION_MEMBERS)
-                .map((v) => JSON.stringify(v));
-            if (values.length > MAX_UNION_MEMBERS) {
-                shown.push("…");
-            }
-            return shown.join(" | ") || "string";
-        }
+        case "string-union":
+            return renderStringUnion(type.typeEnum);
         case "array":
             return `${renderSchemaType(type.elementType, depth + 1)}[]`;
-        case "type-union": {
-            const parts = (type.types ?? []).map((t) =>
-                renderSchemaType(t, depth + 1),
-            );
-            const unique = [...new Set(parts)];
-            const shown = unique.slice(0, MAX_UNION_MEMBERS);
-            if (unique.length > MAX_UNION_MEMBERS) {
-                shown.push("…");
-            }
-            return shown.join(" | ") || "any";
-        }
-        case "type-reference": {
-            // Expand a shallow reference so the reader sees the real shape;
-            // fall back to the referenced type name when it is too deep.
-            if (type.definition !== undefined && depth < MAX_TYPE_DEPTH) {
-                return renderSchemaType(type.definition.type, depth + 1);
-            }
-            return type.name || "object";
-        }
-        case "object": {
-            if (depth >= MAX_TYPE_DEPTH) {
-                return "{ … }";
-            }
-            const fields = Object.keys(type.fields ?? {});
-            if (fields.length === 0) {
-                return "{}";
-            }
-            const shown = fields.slice(0, MAX_OBJECT_FIELDS);
-            const suffix = fields.length > MAX_OBJECT_FIELDS ? ", …" : "";
-            return `{ ${shown.join(", ")}${suffix} }`;
-        }
+        case "type-union":
+            return renderTypeUnion(type.types, depth);
+        case "type-reference":
+            return renderTypeReference(type, depth);
+        case "object":
+            return renderObject(type, depth);
         default:
             return "any";
     }
