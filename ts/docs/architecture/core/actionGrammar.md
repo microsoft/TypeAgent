@@ -1522,8 +1522,8 @@ explicit value expression produce no value — the compiler warns about
 this because the output is ambiguous.
 
 The NFA compiler (`nfaCompiler.ts`) mirrors this same "no value unless
-actually needed" principle via the shared `deriveValue`
-(`grammarValueDeriver.ts`): `deriveEffectiveValue` forwards a rule's
+actually needed" principle via the shared `deriveEffectiveValue`
+(`grammarValueDeriver.ts`), which forwards a rule's
 single variable-bearing part (whatever its shape - a single-part rule,
 or a multi-part rule reshaped by `factorCommonPrefixes`), and only
 treats an ambiguous or missing implicit value as a hard error when the

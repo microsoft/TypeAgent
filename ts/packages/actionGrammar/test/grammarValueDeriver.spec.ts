@@ -55,6 +55,19 @@ describe("deriveEffectiveValue (requireValue: false)", () => {
         });
     });
 
+    it("forwards the variable-bearing part's value regardless of its position", () => {
+        const rule: GrammarRule = {
+            parts: [
+                createWildcardPart("x", "wildcard"),
+                createStringPart(["foo"]),
+            ],
+        };
+        expect(deriveEffectiveValue(rule)).toEqual({
+            type: "variable",
+            name: "x",
+        });
+    });
+
     it("forwards a nested RulesPart's captured variable", () => {
         const nested = createRulesPart(
             [{ parts: [createStringPart(["foo"])] }],
@@ -76,6 +89,17 @@ describe("deriveEffectiveValue (requireValue: false)", () => {
             parts: [
                 createStringPart(["foo"], "x"),
                 createStringPart(["bar"], "y"),
+            ],
+        };
+        expect(deriveEffectiveValue(rule)).toBeUndefined();
+    });
+
+    it("returns undefined when 3+ parts carry a variable and there is no explicit value", () => {
+        const rule: GrammarRule = {
+            parts: [
+                createStringPart(["foo"], "x"),
+                createStringPart(["bar"], "y"),
+                createStringPart(["baz"], "z"),
             ],
         };
         expect(deriveEffectiveValue(rule)).toBeUndefined();
