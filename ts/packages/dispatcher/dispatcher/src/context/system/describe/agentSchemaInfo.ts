@@ -14,6 +14,7 @@ import type {
 import type { ActionSchemaTypeDefinition } from "@typeagent/action-schema";
 import { generateSchemaTypeDefinition } from "@typeagent/action-schema";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import { getAppAgentName } from "../../../translation/agentTranslators.js";
 
 /** Extract action names + descriptions from a parsed action schema. */
 export function extractActions(
@@ -38,10 +39,10 @@ export async function getAgentSchemas(
 ): Promise<AgentSchemaInfo[]> {
     await context.agents.waitUntilReady();
     const configs = context.agents.getActionConfigs();
-    // Group configs by top-level agent name (part before first '.')
+    // Group configs by top-level agent name (part before the first '.')
     const agentMap = new Map<string, typeof configs>();
     for (const config of configs) {
-        const topName = config.schemaName.split(".")[0];
+        const topName = getAppAgentName(config.schemaName);
         if (agentName !== undefined && topName !== agentName) continue;
         const list = agentMap.get(topName) ?? [];
         list.push(config);
