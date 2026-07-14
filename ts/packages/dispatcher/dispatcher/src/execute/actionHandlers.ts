@@ -339,6 +339,10 @@ export function emitActionResult(
         acc.prompt_tokens += result.tokenUsage.prompt_tokens;
         acc.completion_tokens += result.tokenUsage.completion_tokens;
         acc.total_tokens += result.tokenUsage.total_tokens;
+        if (result.tokenUsage.cached_tokens !== undefined) {
+            acc.cached_tokens =
+                (acc.cached_tokens ?? 0) + result.tokenUsage.cached_tokens;
+        }
         commandResult.actionTokenUsage = acc;
     }
     if (result.displayContent !== undefined) {

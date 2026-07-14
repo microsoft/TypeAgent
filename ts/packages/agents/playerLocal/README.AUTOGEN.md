@@ -12,17 +12,17 @@
 
 ## Overview
 
-The `music-local` package is a TypeAgent application agent designed to play and manage local audio files without relying on external streaming services. It supports a variety of audio formats and provides features such as playback controls, queue management, volume adjustment, and file search. The agent is cross-platform, working on Windows, macOS, and Linux by leveraging the system's native audio playback capabilities.
+The `music-local` package is a TypeAgent application agent that enables users to play and manage local audio files without relying on external streaming services. It supports a wide range of audio formats and provides features such as playback controls, queue management, volume adjustment, and file search. The agent is designed to work across platforms, leveraging native audio playback capabilities on Windows, macOS, and Linux.
 
 ## What it does
 
-The `music-local` agent enables users to interact with their local music library through natural language commands. It supports a wide range of actions, which can be grouped into the following categories:
+The `music-local` agent provides a natural language interface for interacting with a local music library. Users can issue commands to perform various actions, which can be grouped into the following categories:
 
 - **Playback Controls**: Actions like `playFile`, `playFolder`, `pause`, `resume`, `stop`, `next`, and `previous` allow users to control audio playback.
-- **Queue Management**: Users can manage playback queues with actions such as `addToQueue`, `clearQueue`, `showQueue`, and `playFromQueue`.
-- **Volume Control**: Adjustments to audio levels can be made using actions like `setVolume`, `changeVolume`, `mute`, and `unmute`.
-- **Shuffle and Repeat**: The `shuffle` and `repeat` actions enable users to toggle shuffle mode and set repeat preferences (off, one, or all).
-- **File Search and Listing**: Actions like `listFiles` and `searchFiles` allow users to browse and locate audio files in their music folder.
+- **Queue Management**: Manage playback queues with actions such as `addToQueue`, `clearQueue`, `showQueue`, and `playFromQueue`.
+- **Volume Control**: Adjust audio levels using actions like `setVolume`, `changeVolume`, `mute`, and `unmute`.
+- **Shuffle and Repeat**: Use the `shuffle` and `repeat` actions to toggle shuffle mode and set repeat preferences (off, one, or all).
+- **File Search and Listing**: Browse and locate audio files in the music folder with actions like `listFiles` and `searchFiles`.
 - **Status and Configuration**: Actions such as `status`, `setMusicFolder`, and `showMusicFolder` provide playback status and allow users to configure the default music folder.
 
 The agent uses platform-specific tools for audio playback:
@@ -37,13 +37,13 @@ To set up the `music-local` agent, follow these steps:
 
 1. **Set Environment Variables**:
 
-   - `XDG_CONFIG_HOME`: Specify the path to the configuration directory.
-   - `XDG_MUSIC_DIR`: Specify the path to your music directory.
+   - `XDG_CONFIG_HOME`: Path to the configuration directory.
+   - `XDG_MUSIC_DIR`: Path to your music directory.
 
 2. **Install Required Software**:
 
-   - **Windows**: Ensure that Windows Media Player is installed and accessible via PowerShell.
-   - **macOS**: Ensure that `afplay` is available (it is included by default in macOS).
+   - **Windows**: Ensure Windows Media Player is installed and accessible via PowerShell.
+   - **macOS**: Ensure `afplay` is available (it is included by default in macOS).
    - **Linux**: Install `mpv` using your package manager:
      - Debian/Ubuntu: `sudo apt install mpv`
      - Fedora: `sudo dnf install mpv`
@@ -57,7 +57,7 @@ No external API keys or additional accounts are required for this agent.
 
 ## Key Files
 
-The `music-local` package is structured around several key files, each serving a specific purpose:
+The `music-local` package is organized into several key files that define its functionality:
 
 - **[localPlayerManifest.json](./src/agent/localPlayerManifest.json)**: Contains metadata and schema definitions for the agent, including action and entity types.
 - **[localPlayerSchema.ts](./src/agent/localPlayerSchema.ts)**: Defines the actions supported by the agent, such as `playFile`, `pause`, and `setVolume`, along with their parameters.
@@ -68,7 +68,7 @@ The `music-local` package is structured around several key files, each serving a
 
 ## How to extend
 
-To extend the `music-local` agent, you can add new actions, modify existing ones, or enhance its capabilities. Here’s how to get started:
+To extend the `music-local` agent, follow these steps:
 
 1. **Define New Actions**:
 
@@ -130,6 +130,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music-local docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music-local docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

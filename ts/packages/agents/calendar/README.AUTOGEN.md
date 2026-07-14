@@ -16,7 +16,7 @@ The `calendar` package is a TypeAgent application agent designed to manage calen
 
 ## What it does
 
-The calendar agent provides a comprehensive set of actions to manage calendar events. These actions are grouped into two main categories:
+The calendar agent provides a set of actions to manage and manipulate calendar events. These actions are grouped into two main categories:
 
 ### Event Management
 
@@ -31,7 +31,7 @@ The calendar agent provides a comprehensive set of actions to manage calendar ev
 - **`changeTime`**: Update the time of an existing event.
 - **`changeDescription`**: Modify the description of an existing event.
 
-The agent uses the `graph-utils` library to implement these actions and relies on the `@microsoft/microsoft-graph-client` library for communication with the Microsoft Graph API. The agent's schema and grammar definitions enable it to interpret natural language requests and map them to the appropriate actions.
+The agent uses the `graph-utils` library to implement these actions and relies on the `@microsoft/microsoft-graph-client` library for communication with the Microsoft Graph API. The schema and grammar definitions enable the agent to interpret natural language requests and map them to the appropriate actions.
 
 ## Setup
 
@@ -147,6 +147,6 @@ External: `chalk`, `date-fns`, `debug`
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

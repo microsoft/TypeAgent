@@ -65,8 +65,12 @@ export type CompletionUsageStats = {
     completion_tokens: number;
     // Number of tokens in the prompt
     prompt_tokens: number;
-    // Total tokens (prompt + completion)
+    // Total tokens (prompt + completion, plus cached_tokens when reported)
     total_tokens: number;
+    // Cached prompt tokens (read from / written to the model provider's prompt
+    // cache), reported separately from prompt_tokens. Optional; undefined =>
+    // not reported.
+    cached_tokens?: number;
 };
 
 export type CommandResult = {
