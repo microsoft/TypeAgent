@@ -777,6 +777,28 @@ export function createFeedSource(
         kind: "feed",
         find,
         findName,
+        describe(): string {
+            // Reuse the same resolution as find/materialize
+            // (resolveFeedRegistry / resolveFeedScopes), then annotate a value
+            // that came from an env var because the config omitted it.
+            const registry = resolveFeedRegistry(config) ?? "<unset>";
+            const registryDetail = config.registry
+                ? registry
+                : `${registry} (env: TYPEAGENT_FEED_REGISTRY)`;
+
+            const scopeList = resolveFeedScopes(config);
+            const scopes =
+                scopeList.length > 0
+                    ? `scopes: ${scopeList.join(", ")}`
+                    : "scopes: (none)";
+            const scopeDetail = config.scopes
+                ? scopes
+                : `${scopes} (env: TYPEAGENT_FEED_SCOPES)`;
+
+            return scopeDetail !== undefined
+                ? `${registryDetail}\n${scopeDetail}`
+                : registryDetail;
+        },
         async refresh(): Promise<void> {
             // Fetch fresh descriptors and atomically swap them in on success;
             // a fetch failure throws (leaving the prior cache intact) so

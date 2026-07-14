@@ -278,23 +278,6 @@ export function createInstallSourceRegistry(
         return eligible.map((e) => e.source);
     }
 
-    // The host-rendered one-line summary the core shows for `@package source list`. This
-    // is where the kind is interpreted (the core never sees it).
-    function describe(config: InstallSourceConfig): string {
-        switch (config.kind) {
-            case "feed":
-                return config.registry ?? "(env: TYPEAGENT_FEED_REGISTRY)";
-            case "catalog":
-                return config.catalog;
-            case "path":
-                return config.baseDir ?? "(default base)";
-            default: {
-                const exhaustive: never = config;
-                return String(exhaustive);
-            }
-        }
-    }
-
     function addConfig(config: InstallSourceConfig): void {
         if (entries.has(config.name)) {
             throw new Error(`source '${config.name}' already exists`);
@@ -513,10 +496,11 @@ export function createInstallSourceRegistry(
 
     return {
         list(): InstallSourceInfo[] {
-            return Array.from(entries.values(), ({ config }) => ({
+            return Array.from(entries.values(), ({ config, source }) => ({
                 name: config.name,
                 kind: config.kind,
-                detail: describe(config),
+                // Each source formats its own config summary.
+                detail: source.describe(),
             }));
         },
         get(name: string): InstallSource | undefined {
