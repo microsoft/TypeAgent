@@ -122,6 +122,9 @@ body {
 .codicon-settings-gear::before {
   content: "\eb51";
 }
+.codicon-list-tree::before {
+  content: "\eb86";
+}
 
 /* --- Action bar (the native editor toolbar) ------------------------------ */
 .action-bar {
