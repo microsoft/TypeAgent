@@ -166,6 +166,58 @@ export function createNpmAppAgentProvider(
 ): AppAgentProvider {
     const moduleAgents = new Map<string, AgentProcess>();
     const manifests = new Map<string, AppAgentManifest>();
+    // In-flight first-loads, keyed by agent name. `loadAppAgent` awaits between
+    // the cache-miss check and the map insert (the actual module/process load),
+    // so without coalescing two CONCURRENT first-loads of the same agent (e.g.
+    // an installed agent being enabled in two sessions at once, which share this
+    // one provider instance) would each spawn a duplicate agent process and the
+    // second insert would clobber the first: a leaked process AND a lost
+    // refcount (two holders, count 1), which later over-unloads and throws.
+    // Sharing one in-flight load keeps the refcount honest (one increment per
+    // holder) and the process count at one.
+    const loadingAgents = new Map<string, Promise<AgentProcess>>();
+
+    // Resolve the shared AgentProcess, loading it exactly once even under
+    // concurrent first-loads. Does NOT touch the refcount; the caller adds its
+    // own hold via `count++` so every caller (initiator or one that joined an
+    // in-flight load) is accounted for uniformly.
+    async function ensureModuleAgent(
+        appAgentName: string,
+    ): Promise<AgentProcess> {
+        const existing = moduleAgents.get(appAgentName);
+        if (existing) {
+            return existing;
+        }
+        let loadingP = loadingAgents.get(appAgentName);
+        if (loadingP === undefined) {
+            const config = configs[appAgentName];
+            if (config === undefined) {
+                throw new Error(`Invalid app agent: ${appAgentName}`);
+            }
+            loadingP = loadModuleAgent(config, appAgentName, requirePath).then(
+                (agent) => {
+                    // `loadModuleAgent` returns count 1; reset to 0 so the
+                    // per-caller `count++` in `loadAppAgent` is the single
+                    // source of truth for the refcount. Register before the
+                    // in-flight marker is cleared so a caller arriving after
+                    // this resolves hits the loaded fast path above.
+                    agent.count = 0;
+                    moduleAgents.set(appAgentName, agent);
+                    return agent;
+                },
+            );
+            loadingAgents.set(appAgentName, loadingP);
+            // Clear the in-flight marker once settled (success or failure), so a
+            // failed load is retriable and a completed one is served from
+            // `moduleAgents`.
+            void loadingP
+                .finally(() => {
+                    loadingAgents.delete(appAgentName);
+                })
+                .catch(() => {});
+        }
+        return loadingP;
+    }
     return {
         getAppAgentNames() {
             return Object.keys(configs);
@@ -192,22 +244,9 @@ export function createNpmAppAgentProvider(
             }
         },
         async loadAppAgent(appAgentName: string) {
-            const existing = moduleAgents.get(appAgentName);
-            if (existing) {
-                existing.count++;
-                return existing.appAgent;
-            }
-            const config = configs[appAgentName];
-            if (config === undefined) {
-                throw new Error(`Invalid app agent: ${appAgentName}`);
-            }
-            // Load on demand
-            const agent = await loadModuleAgent(
-                config,
-                appAgentName,
-                requirePath,
-            );
-            moduleAgents.set(appAgentName, agent);
+            // Take a fresh hold on the (possibly already-loaded) shared agent.
+            const agent = await ensureModuleAgent(appAgentName);
+            agent.count++;
             return agent.appAgent;
         },
         async unloadAppAgent(appAgentName: string) {
