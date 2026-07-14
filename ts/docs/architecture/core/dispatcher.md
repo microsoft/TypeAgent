@@ -701,6 +701,7 @@ Handles `@`-prefixed system commands. The full set is registered in
 | `@const`                 | Construction store management (load/save, list, merge, delete, auto-save toggle).                                                                                                                             |
 | `@conversation`          | Manage local dispatcher conversations (named, persisted under `~/.typeagent/profiles/<profile>/sessions`).                                                                                                    |
 | `@debug`                 | Wait-for-debugger and other developer hooks.                                                                                                                                                                  |
+| `@describe`              | Capability discovery: describe what an agent or action does (works for installed-but-disabled agents too). See `describeCore.ts`.                                                                             |
 | `@display`               | Tweak how output is rendered.                                                                                                                                                                                 |
 | `@env`                   | Inspect environment variables and config-relevant runtime values.                                                                                                                                             |
 | `@exit`                  | Exit the program.                                                                                                                                                                                             |
@@ -729,6 +730,12 @@ subcommands, and help text.
 
 The system agent also has sub-agents with LLM-translated action schemas:
 
+- **`system.describe`** — Natural language capability discovery ("what can the spotify agent do",
+  "describe the play action"). `executeDescribeAction` forwards to the equivalent `@describe`
+  command (same convention as `system.config`/`system.history`), which resolves the agent/action
+  against `getAgentSchemas()` (agentSchemaInfo.ts) and renders a deterministic markdown summary,
+  optionally polished by a fast LLM call when one is configured (falls back to the deterministic
+  text on missing/failed model — see `describeCore.ts`).
 - **`system.config`** — Natural language configuration changes.
 - **`system.conversation`** — Natural language management of **agentServer client-connection
   conversations** (the named, GUID-keyed sessions described in
