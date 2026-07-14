@@ -145,7 +145,6 @@ const allFixtures: Fixture[] = [
     ...dialogueHardFx,
 ];
 
-const easy = runMetrics(easyRoster, easyFixtures, DEFAULT_THRESHOLDS);
 const hard = runMetrics(adversary.roster, hardFixtures, DEFAULT_THRESHOLDS);
 const realClear = runMetrics(easyRoster, realClearFixtures, DEFAULT_THRESHOLDS);
 const realVague = runMetrics(easyRoster, realVagueFixtures, DEFAULT_THRESHOLDS);
@@ -462,18 +461,81 @@ function sliceTable(rows: [string, (r: MetricsResult) => string][]): string[] {
 
 function md(): string {
     const L: string[] = [];
-    L.push("# contextSelector three-metric benchmark\n");
+    L.push("# contextSelector benchmark\n");
+    L.push(`_Generated ${new Date().toISOString()}._\n`);
+
+    L.push("## What this measures\n");
     L.push(
-        `_Generated ${new Date().toISOString()} · real pairs: ${pairs.length} confusable real-agent comparisons (clear ${realClear.total} + vague ${realVague.total}) · siblings: ${adversary.siblings.length} synthetic / ${hard.total} · easy: ${easyRoster.fileCount} schemas / ${easy.total} · combined ${combined.total} · shipped defaults (minUniqueTokens=2, minMass=1.0, margin=0.5, λ=0.9, N=20)._\n`,
+        `**contextSelector** is a fast, deterministic step in the dispatcher that handles *grammar collisions* — when a single user request matches the command grammar of **two or more agents** at once (for example, "play something relaxing" could be the music player *or* the video player). Instead of always picking the same agent, it reads the **recent conversation** and either **resolves** the collision to the agent the context points to, or **abstains** when the evidence is too weak — handing the decision back to today's routing (or the LLM) rather than guessing.\n`,
     );
     L.push(
-        "L2 offline probe (benchmarking doc B-4): real committed keyword vectors + real ring-buffer decay + real TF-IDF strategy + real decision rule. No LLM, no dispatcher boot; fully deterministic.\n",
+        `The rule it must never break: **never silently route a request to the wrong agent.** So the headline result is simple — on realistic input, **wrong-target must be 0.** How often it helps, and how confidently it fires, all matter less than keeping that promise.\n`,
+    );
+    L.push(
+        `It is checked three ways (Metrics 1–3 below): **(1)** does it pull the conversation's real topic out of the noise, **(2)** does it fire only when there is a clear winner and stay quiet otherwise, and **(3)** when it does fire, does it pick the right agent.\n`,
+    );
+    L.push(
+        `This is an **offline** benchmark: it runs the *real* scoring pipeline — the shipped agent keyword lists, the same recency-weighted model of the recent conversation, and the same decision rule the product uses — against hand-labeled conversations, with **no LLM call and no app startup**. Every number is reproducible bit-for-bit. Shipped decision thresholds: \`minUniqueTokens=2, minMass=1.0, margin=0.5\` (recency decay λ=0.9 over a 20-turn look-back).\n`,
+    );
+    L.push(
+        `The test set spans **${dialogue.total} hand-labeled conversations** across five difficulty tiers, plus larger auto-generated collision sets — real overlapping agent pairs and a family of deliberately-confusable synthetic agents (**${combined.total}** realistic collisions in the combined corpus) — and a separate **50-case adversarial** set that stress-tests where word-matching breaks.\n`,
     );
 
-    // ---- 250-test report by tier (the requested per-tier metric tables) ----
-    L.push("## 250-test report by difficulty tier\n");
+    L.push("## Key terms\n");
     L.push(
-        "250 hand-authored conversations across five tiers, each labeled by honest human intent and scored by the real pipeline. **Yield** = of the conversations that should resolve, how many did; **Resolution accuracy** = of those resolves, how many hit the right agent; **Abstention** = of the conversations that should stay out, how many did; **Retrieval topic share** = how cleanly the context pointed at the intended agent; **Routing lift** = accuracy gained over the first-match baseline.\n",
+        `Every conversation is labeled with what *should* happen, then scored by the real pipeline. Each one lands in exactly one of four outcomes:\n`,
+    );
+    L.push("| Outcome | What it means | Good or bad? |");
+    L.push("| --- | --- | --- |");
+    L.push(
+        "| ✅ **correct** | Resolved to the right agent, or correctly abstained | Good |",
+    );
+    L.push(
+        "| ⚪ **safe-miss** | Should have resolved, but abstained instead | Safe — a missed chance, not a mistake; it just defers to today's routing |",
+    );
+    L.push(
+        "| ❌ **wrong-target** | Resolved to the **wrong** agent | The dangerous failure: a silent misroute (must be 0) |",
+    );
+    L.push(
+        "| ❌ **spurious** | Fired when it should have stayed out | A false alarm |",
+    );
+    L.push(
+        `\nThe metrics throughout the report are just different views of those four outcomes:\n`,
+    );
+    L.push(
+        "- **Resolve** = commit to one agent. **Abstain** = decline and defer to the existing routing.",
+    );
+    L.push(
+        "- **Yield** — of the conversations that *should* resolve, how many did (higher = more helpful).",
+    );
+    L.push(
+        "- **Resolution accuracy** — of the times it resolved, how many hit the right agent.",
+    );
+    L.push(
+        "- **Abstention** — of the conversations that *should* stay out, how many correctly did.",
+    );
+    L.push(
+        "- **Spurious** — of the should-abstain conversations, how many it wrongly fired on (a false alarm).",
+    );
+    L.push(
+        "- **Wrong-target** — of the resolves it made, how many went to the wrong agent (**must stay 0**).",
+    );
+    L.push(
+        "- **Routing lift** — extra requests sent to the right agent versus the routing the dispatcher uses today.\n",
+    );
+
+    L.push("## How to regenerate this report\n");
+    L.push(
+        "```\ncd packages/dispatcher/dispatcher\nnpx tsx src/validation/contextselector/reproduce.mts\n```\n",
+    );
+    L.push(
+        `Runs the whole suite — this report plus the LLM comparison appended at the end — and overwrites this file in place. Deterministic, so re-running produces the same numbers.\n`,
+    );
+
+    // ---- Results by difficulty tier (the requested per-tier metric tables) ----
+    L.push("## Results by difficulty tier\n");
+    L.push(
+        `${dialogue.total} hand-authored conversations across five tiers of increasing difficulty (50 each), each labeled by honest human intent and scored by the real pipeline. See **Key terms** above for what Yield, Resolution accuracy, Abstention, Spurious, and Wrong-target mean; **Retrieval topic share** is how cleanly the recent conversation pointed at the intended agent (Metric 1), and **Routing lift** is the accuracy gained over the dispatcher's current first-match default.\n`,
     );
     const na = (r: MetricsResult, ok: boolean, v: string) => (ok ? v : "n/a");
     for (const t of tiers) {
@@ -713,7 +775,10 @@ function md(): string {
 
     L.push("## Metric 2 — Trigger discipline (resolve only when required)\n");
     L.push(
-        "_Do we trigger a resolution exactly when a clear topical winner exists, and abstain otherwise — and vice versa?_\n",
+        "_Does it fire exactly when there is a clear winner, and stay quiet otherwise?_\n",
+    );
+    L.push(
+        "**Goal:** a collision-resolver is judged as much by its restraint as by its hits. This checks both directions at once — when a conversation clearly points at one agent it should **resolve** (measured by *yield*), and when the conversation is ambiguous or empty it should **abstain** (measured by *abstention*). Firing on a should-abstain conversation is a *spurious* resolve — a false alarm — and should be near zero.\n",
     );
     L.push(
         ...sliceTable([
@@ -725,7 +790,7 @@ function md(): string {
                         : `${pct(r.trigger.yield)} (${r.trigger.triggeredOnResolvable}/${r.trigger.resolvable})`,
             ],
             [
-                "Abstention correctness (vice versa)",
+                "Abstention (correctly stayed out)",
                 (r) =>
                     r.trigger.abstainable === 0
                         ? "n/a"
@@ -745,8 +810,9 @@ function md(): string {
     );
 
     L.push("## Metric 3 — Resolution correctness (resolve correctly)\n");
+    L.push("_When it does fire, does it route to the RIGHT agent?_\n");
     L.push(
-        "_When the tier does trigger a resolution, does it route to the RIGHT agent?_\n",
+        "**Goal:** this is the safety metric. A high yield is worthless if the resolves land on the wrong agent, so the single most important number in this report is **wrong-target resolves — it must be 0** on realistic input. A wrong resolve is a silent misroute; abstaining instead would have been safe.\n",
     );
     L.push(
         ...sliceTable([
@@ -758,17 +824,23 @@ function md(): string {
                         : `${pct(r.resolution.targetAccuracy)} (${r.resolution.trueResolve}/${r.resolution.resolves})`,
             ],
             [
-                "Wrong-target resolves (Gate A)",
+                "Wrong-target resolves (must be 0)",
                 (r) => `${r.resolution.wrongTargetCount}`,
             ],
-            ["WRR (wrong-resolution rate)", (r) => pct(r.resolution.wrr)],
+            [
+                "Wrong-resolution rate (wrong-target + spurious, of all)",
+                (r) => pct(r.resolution.wrr),
+            ],
         ]),
     );
     L.push(
         "\nAcross every slice — including the *trap* fixtures where the losing sibling gets a salient recent mention — resolution accuracy holds and wrong-target stays 0: when discriminating evidence is too weak the tier abstains rather than guessing.\n",
     );
 
-    L.push("## Safety — strictly additive vs first-match baseline\n");
+    L.push("## Safety — never worse than today's routing\n");
+    L.push(
+        "**Goal:** switching contextSelector on should only ever *add* correct routings, never remove any. Below, routing accuracy is compared **with vs. without** contextSelector layered on the dispatcher's current default (*first-match*): where it resolves it uses its own pick, otherwise it falls back to first-match. **No-regression** verifies that no group of conversations ends up worse than first-match alone.\n",
+    );
     L.push(
         ...sliceTable([
             [
@@ -784,7 +856,7 @@ function md(): string {
                 (r) => `+${pct(r.ab.routingAccuracyLift)}`,
             ],
             [
-                "No-regression (Gate D)",
+                "No-regression (never worse than baseline)",
                 (r) => (r.ab.noRegression ? "✅ holds" : "❌ FAILED"),
             ],
         ]),
@@ -869,10 +941,15 @@ function md(): string {
     );
 
     L.push(
-        "\n## Threshold sweep (B-6) on the combined corpus: the safety boundary\n",
+        "\n## Threshold sweep — how sensitive is safety to the gate settings?\n",
     );
     L.push(
-        `- **Safety is threshold-robust:** ${anyWrongTarget === 0 ? `**0 wrong-target resolves in all ${sweep.length} cells**` : `${anyWrongTarget} cells produced a wrong-target`}.`,
+        "**Goal:** the *gate* is the set of thresholds that decide resolve-vs-abstain. Loosening it lifts yield but risks false alarms and misroutes; tightening it is safer but quieter. This sweeps 36 threshold combinations to map the safety boundary and confirm the shipped default sits in the fully-safe region.\n",
+    );
+    L.push(
+        anyWrongTarget === 0
+            ? `- **Wrong-target across the sweep:** **0 in all ${sweep.length} cells** — safety is threshold-robust.`
+            : `- **Wrong-target across the sweep:** **${anyWrongTarget} of ${sweep.length} cells** produced a wrong-target; the shipped default holds **0** (see the table below).`,
     );
     L.push(
         `- **Abstention boundary:** ${fullySafe.length}/${sweep.length} cells hold 0 spurious resolves; the rest leak on the stale/shared-tie fixtures when the mass/margin gates are loosened.`,

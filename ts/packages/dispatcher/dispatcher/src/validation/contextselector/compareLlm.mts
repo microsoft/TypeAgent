@@ -281,7 +281,10 @@ async function main() {
         `_Generated ${new Date().toISOString()} · 250 labeled collisions · LLM arm = real \`aiclient\` model (the standard path's LLM), temperature 0, cached._\n`,
     );
     md.push(
-        "**contextSelector OFF** = the collision falls through to the LLM, which picks the agent. **contextSelector ON** = it resolves deterministically, or abstains and falls through to the LLM. Routing is *correct* when it commits to the labeled agent (resolve cases) or declines to commit (ambiguous cases).\n",
+        "**Goal:** the report above shows contextSelector is safe and instant, but the dispatcher could instead just ask the LLM to resolve every collision. This section asks the shipping question head-on: versus letting the LLM decide, what does turning contextSelector on gain, and what does it cost? The same 250 labeled collisions are scored both ways.\n",
+    );
+    md.push(
+        "**contextSelector OFF** = the collision falls through to the LLM, which picks the agent. **contextSelector ON** = contextSelector resolves it instantly, or abstains and falls through to the LLM. Routing is *correct* when it commits to the labeled agent (resolve cases) or correctly declines to commit (ambiguous cases). Every LLM answer is cached, so re-running is free and deterministic.\n",
     );
     md.push(
         "| Tier | LLM-only acc (CS off) | CS-ON system acc | CS resolves (LLM calls saved) | Regressions (CS wrong, LLM right) | Correct saves |",
