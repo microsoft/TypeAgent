@@ -344,7 +344,8 @@ for (const t of tiers) {
             ` | abstention ${fmtPct(r.trigger.abstainable > 0, `${pct(r.trigger.abstentionCorrectness)} (${r.trigger.abstainedOnAbstainable}/${r.trigger.abstainable})`)}`,
     );
     console.log(
-        `  spurious/wrong ${r.trigger.spuriousResolve}/${r.resolution.wrongTargetCount}` +
+        `  spurious ${fmtPct(r.trigger.abstainable > 0, `${pct(r.trigger.spuriousResolveRate)} (${r.trigger.spuriousResolve}/${r.trigger.abstainable})`)}` +
+            ` | wrong-target ${fmtPct(r.resolution.resolves > 0, `${pct(r.resolution.wrongTargetCount / r.resolution.resolves)} (${r.resolution.wrongTargetCount}/${r.resolution.resolves})`)}` +
             ` | retrieval-share ${fmtPct(r.retrieval.n > 0, pct(r.retrieval.meanTopicShare))}` +
             ` | routing-lift +${pct(r.ab.routingAccuracyLift)}`,
     );
@@ -490,7 +491,10 @@ function md(): string {
             `| Abstention (stayed out) | ${na(r, r.trigger.abstainable > 0, `${pct(r.trigger.abstentionCorrectness)} (${r.trigger.abstainedOnAbstainable}/${r.trigger.abstainable})`)} |`,
         );
         L.push(
-            `| Spurious / wrong-target | ${r.trigger.spuriousResolve} / ${r.resolution.wrongTargetCount} |`,
+            `| Spurious (fired when it should abstain) | ${na(r, r.trigger.abstainable > 0, `${pct(r.trigger.spuriousResolveRate)} (${r.trigger.spuriousResolve}/${r.trigger.abstainable})`)} |`,
+        );
+        L.push(
+            `| Wrong-target (misrouted a resolve) | ${na(r, r.resolution.resolves > 0, `${pct(r.resolution.wrongTargetCount / r.resolution.resolves)} (${r.resolution.wrongTargetCount}/${r.resolution.resolves})`)} |`,
         );
         L.push(
             `| Retrieval topic share | ${na(r, r.retrieval.n > 0, pct(r.retrieval.meanTopicShare))} |`,
@@ -647,9 +651,27 @@ function md(): string {
         `\n**How the metrics move:** on **clear** conversations the tier fires and routes correctly (yield ${pct(realClear.trigger.yield)}, resolution accuracy ${pct(realClear.resolution.targetAccuracy)}); on **vague** conversations the *same agents* now trigger the abstention machinery instead — it correctly stays out ${pct(realVague.trigger.abstentionCorrectness)} of the time and false-alarms on ${pct(realVague.trigger.spuriousResolveRate)}. Yield/accuracy and abstention are complementary: clear input exercises the first, vague input the second, and the tier does the right thing in both.\n`,
     );
 
+    L.push(
+        "**Reading the columns below.** `dlg-simple`, `dlg-nocontext`, `dlg-realistic`, `dlg-hard`, and `dlg-advers` are the five 50-conversation dialogue tiers. **`combined`** is the full calibration corpus — every *realistic* slice unioned (easy real-roster pairs + confusable siblings + real clear/vague pairs + the four non-adversarial dialogue tiers), scored over one merged roster. The adversarial dialogue tier is **excluded** from `combined` (it is a stress test, reported separately above), so `combined` is not the sum of the five `dlg-*` columns.\n",
+    );
     L.push("## Metric 1 — Context retrieval fidelity\n");
     L.push(
         "_Does the signal source appropriately retrieve the conversation's topic, before any decision is made?_\n",
+    );
+    L.push(
+        "**In plain terms:** before the scorer decides anything, the signal source turns the recent conversation into a weighted bag of words (more-recent words count more). It sorts those words into three buckets — the **intended topic** (what the user is really asking about), a **distractor** (a look-alike agent that could be mistaken for it), and **unrelated noise** — and checks that most of the weight landed in the intended-topic bucket. If it did, the signal handed to the scorer already points at the right agent; whether to actually resolve or abstain is decided later (Metrics 2 and 3). The rows below measure how cleanly that separation holds:\n",
+    );
+    L.push(
+        "- **Topic mass share** — of all the topical weight, the fraction sitting on the intended topic (100% = nothing but the topic; higher is cleaner).",
+    );
+    L.push(
+        "- **Topic is strongest bank** — how often the intended topic outweighs **both** the distractor and the noise.",
+    );
+    L.push(
+        "- **Topic outweighs distractor** — how often the intended topic beats the look-alike agent specifically.",
+    );
+    L.push(
+        "- **Mean separation** — how far ahead the topic is in raw weight — the margin of safety.\n",
     );
     L.push(
         ...sliceTable([
