@@ -28,6 +28,7 @@ import { CompletionUsageStats } from "./openai.js";
 import {
     CopilotApiSettings,
     copilotApiSettingsFromConfig,
+    COPILOT_FALLBACK_MODEL,
 } from "./copilotSettings.js";
 import { TokenCounter } from "./tokenCounter.js";
 
@@ -256,6 +257,15 @@ export async function warmupCopilotFromConfig(): Promise<void> {
         { cliPath: settings.cliPath, cliUrl: settings.cliUrl },
         buildSessionConfig(settings, {}, false),
     );
+    // Prime the model-capability cache so the first real request doesn't pay
+    // the one-time listModels cost on the hot path.
+    try {
+        const client = await getClient({
+            cliPath: settings.cliPath,
+            cliUrl: settings.cliUrl,
+        });
+        await ensureModelList(client);
+    } catch {}
 }
 
 function withAbortSignal<T>(
@@ -316,20 +326,103 @@ function renderPrompt(prompt: string | PromptSection[]): string {
     return parts.join("\n\n");
 }
 
+// Cached per-model capability info, populated from client.listModels() once per
+// process. Used to (a) fall back to an available model when the configured one
+// isn't offered by the tenant, and (b) decide reasoningEffort (invalid for
+// non-reasoning models; forced to minimal for reasoning models on translation).
+const reasoningSupportCache = new Map<string, boolean>();
+let modelListPromise: Promise<void> | undefined;
+
+async function ensureModelList(client: CopilotClient): Promise<void> {
+    if (modelListPromise === undefined) {
+        modelListPromise = (async () => {
+            try {
+                const models = await client.listModels();
+                for (const m of models) {
+                    reasoningSupportCache.set(
+                        m.id,
+                        m.capabilities?.supports?.reasoningEffort === true,
+                    );
+                }
+            } catch (err) {
+                debug(
+                    `listModels failed; model capabilities unknown: ${
+                        err instanceof Error ? err.message : String(err)
+                    }`,
+                );
+            }
+        })();
+    }
+    await modelListPromise;
+}
+
+// Resolve the model to actually use for a session, falling back to
+// COPILOT_FALLBACK_MODEL when the requested model isn't offered by the tenant,
+// and reporting whether that model supports reasoning effort. When the model
+// list is unavailable (e.g. listModels failed), the requested model is used
+// as-is and reasoning support is left unknown.
+async function resolveModel(
+    client: CopilotClient,
+    requested: string,
+): Promise<{ model: string; reasoningSupported: boolean | undefined }> {
+    await ensureModelList(client);
+    if (reasoningSupportCache.size === 0) {
+        return { model: requested, reasoningSupported: undefined };
+    }
+    if (reasoningSupportCache.has(requested)) {
+        return {
+            model: requested,
+            reasoningSupported: reasoningSupportCache.get(requested),
+        };
+    }
+    debug(
+        `model "${requested}" not available in this tenant; ` +
+            `falling back to "${COPILOT_FALLBACK_MODEL}"`,
+    );
+    return {
+        model: COPILOT_FALLBACK_MODEL,
+        reasoningSupported:
+            reasoningSupportCache.get(COPILOT_FALLBACK_MODEL) ?? false,
+    };
+}
+
 function buildSessionConfig(
     settings: CopilotApiSettings,
     completionSettings: CompletionSettings,
     streaming: boolean,
+    resolved?: { model: string; reasoningSupported: boolean | undefined },
 ): SessionConfig {
-    const reasoningEffort =
+    const modelName = resolved?.model ?? settings.modelName;
+    const reasoningSupported = resolved?.reasoningSupported;
+    const explicitEffort =
         (completionSettings.reasoning_effort as
             | "low"
             | "medium"
             | "high"
+            | "xhigh"
             | undefined) ?? settings.reasoningEffort;
+    // Simple translation calls don't benefit from model-side "thinking" and it
+    // adds significant latency, so we disable it wherever possible:
+    //  - Non-reasoning models (e.g. claude-haiku-4.5): never send reasoningEffort.
+    //    The SDK/CLI rejects it for models where capabilities.supports.reasoningEffort
+    //    is false, and these models don't think anyway.
+    //  - Reasoning-capable models with no explicit override: force the lowest
+    //    effort ("low") to minimize thinking latency for translation.
+    //  - Explicit per-call/config override always wins for reasoning models.
+    let reasoningEffort: "low" | "medium" | "high" | "xhigh" | undefined;
+    if (reasoningSupported === false) {
+        reasoningEffort = undefined;
+    } else if (explicitEffort !== undefined) {
+        reasoningEffort = explicitEffort;
+    } else if (reasoningSupported === true) {
+        reasoningEffort = "low";
+    } else {
+        // Capability unknown (e.g. during warmup): fall back to explicit only.
+        reasoningEffort = explicitEffort;
+    }
     const config: SessionConfig = {
         clientName: "TypeAgent",
-        model: settings.modelName,
+        model: modelName,
         streaming,
         tools: [],
         availableTools: [],
@@ -419,8 +512,14 @@ export function createCopilotChatModel(
         let session: CopilotSession;
         const tCreate = Date.now();
         try {
+            const resolved = await resolveModel(client, settings.modelName);
             session = await client.createSession(
-                buildSessionConfig(settings, completionSettings!, false),
+                buildSessionConfig(
+                    settings,
+                    completionSettings!,
+                    false,
+                    resolved,
+                ),
             );
         } catch (err) {
             return error(
@@ -506,8 +605,14 @@ export function createCopilotChatModel(
         let session: CopilotSession;
         const tCreate = Date.now();
         try {
+            const resolved = await resolveModel(client, settings.modelName);
             session = await client.createSession(
-                buildSessionConfig(settings, completionSettings!, true),
+                buildSessionConfig(
+                    settings,
+                    completionSettings!,
+                    true,
+                    resolved,
+                ),
             );
         } catch (err) {
             return error(
