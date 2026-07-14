@@ -328,6 +328,9 @@ async function main() {
     md.push(
         "\n**How to read it.** *LLM-only accuracy* is the standard path with contextSelector off. *CS-ON system accuracy* is the deployed behavior (resolve, else fall through to the LLM). *Regressions* are the price of enabling contextSelector — collisions it resolves to the wrong agent that the LLM alone would have routed correctly. *Correct saves* are the payoff — right answers delivered without an LLM call.\n",
     );
+    md.push(
+        "\n**Fidelity caveat — this LLM arm is a proxy, not the production fallback.** The real fallback (when contextSelector abstains with `escalate-to-llm`) is the full translation pipeline: it selects among *all* active agents using their real action schemas and emits a complete typed action, on the configured translation model. This arm instead asks a default chat model to pick between just the *two* colliding agents, described by one-line blurbs, and scores only the agent label. It also explicitly prompts the model to watch for negation/sarcasm/quoting, a hint production translation does not get. Net effect: the arm makes the LLM look **stronger** than production would (easier 2-way task, hinted), so treat the realistic-tier *0 regressions* as a robust floor, but read the adversarial-tier regression count as a **worst-case** cost for contextSelector, not an expected one. A faithful measurement needs an L3 live-dispatcher replay through the real translator (a listed follow-up).\n",
+    );
     const reportPath = resolveReportPath();
     upsertLlmSection(reportPath, md.join("\n"));
     console.log(
