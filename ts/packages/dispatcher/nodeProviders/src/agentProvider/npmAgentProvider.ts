@@ -154,9 +154,11 @@ async function loadModuleAgent(
             `Failed to load agent '${appAgentName}' package '${info.name}': missing 'instantiate' function.`,
         );
     }
+    // `count` is a HOLDER refcount owned by `loadAppAgent`; a freshly loaded
+    // agent has zero holders until a caller takes one.
     return {
         appAgent: module.instantiate(),
-        count: 1,
+        count: 0,
     };
 }
 
@@ -177,10 +179,31 @@ export function createNpmAppAgentProvider(
     // holder) and the process count at one.
     const loadingAgents = new Map<string, Promise<AgentProcess>>();
 
-    // Resolve the shared AgentProcess, loading it exactly once even under
-    // concurrent first-loads. Does NOT touch the refcount; the caller adds its
-    // own hold via `count++` so every caller (initiator or one that joined an
-    // in-flight load) is accounted for uniformly.
+    // Load + cache the shared AgentProcess for a name, once. Refcount-free: it
+    // yields a zero-holder process (see `loadModuleAgent`) and `loadAppAgent` is
+    // the sole place a hold is taken.
+    async function loadSharedAgent(
+        appAgentName: string,
+        config: NpmAppAgentInfo,
+    ): Promise<AgentProcess> {
+        try {
+            const agent = await loadModuleAgent(
+                config,
+                appAgentName,
+                requirePath,
+            );
+            moduleAgents.set(appAgentName, agent);
+            return agent;
+        } finally {
+            // Clear the in-flight marker once settled (success or failure), so a
+            // failed load is retriable and a completed one is served from
+            // `moduleAgents`.
+            loadingAgents.delete(appAgentName);
+        }
+    }
+
+    // Resolve the shared AgentProcess, coalescing concurrent first-loads onto a
+    // single load. Does NOT touch the refcount.
     async function ensureModuleAgent(
         appAgentName: string,
     ): Promise<AgentProcess> {
@@ -194,27 +217,10 @@ export function createNpmAppAgentProvider(
             if (config === undefined) {
                 throw new Error(`Invalid app agent: ${appAgentName}`);
             }
-            loadingP = loadModuleAgent(config, appAgentName, requirePath).then(
-                (agent) => {
-                    // `loadModuleAgent` returns count 1; reset to 0 so the
-                    // per-caller `count++` in `loadAppAgent` is the single
-                    // source of truth for the refcount. Register before the
-                    // in-flight marker is cleared so a caller arriving after
-                    // this resolves hits the loaded fast path above.
-                    agent.count = 0;
-                    moduleAgents.set(appAgentName, agent);
-                    return agent;
-                },
-            );
+            // Register the in-flight promise SYNCHRONOUSLY (before any await) so
+            // a concurrent first-load joins it instead of starting its own.
+            loadingP = loadSharedAgent(appAgentName, config);
             loadingAgents.set(appAgentName, loadingP);
-            // Clear the in-flight marker once settled (success or failure), so a
-            // failed load is retriable and a completed one is served from
-            // `moduleAgents`.
-            void loadingP
-                .finally(() => {
-                    loadingAgents.delete(appAgentName);
-                })
-                .catch(() => {});
         }
         return loadingP;
     }
