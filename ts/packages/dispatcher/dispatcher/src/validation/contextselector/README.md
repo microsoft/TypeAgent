@@ -58,9 +58,12 @@ npx tsx src/validation/contextselector/measureMetrics.mts --out <output-dir>
 npx tsx src/validation/contextselector/compareLlm.mts
 ```
 
-Writes `contextSelector-metrics.{md,json}` to `--out` (default: cwd). No build
-needed — `tsx` runs the `.mts` files against the TypeScript sources directly, and
-the committed keyword files live in each agent's `src/`.
+Both arms write into a **single consolidated `contextSelector-report.md`** in
+`--out` (default: next to the scripts) — `measureMetrics.mts` writes the base
+report and `compareLlm.mts` upserts its LLM-comparison section, so any run order
+is idempotent. No build needed — `tsx` runs the `.mts` files against the
+TypeScript sources directly, and the committed keyword files live in each agent's
+`src/`.
 
 Type-check the harness with `npx tsc --noEmit -p src/validation/contextselector/tsconfig.metrics.json`.
 
@@ -92,13 +95,17 @@ Type-check the harness with `npx tsc --noEmit -p src/validation/contextselector/
   and 3 score the full resolve/abstain decision and the resolved target.
 - **`measureMetrics.mts`** — entry point: runs the three metrics per-slice at the
   shipped defaults, runs the B-6 threshold sweep on the combined corpus, and
-  writes the report.
+  writes the base of the consolidated `contextSelector-report.md`.
+- **`reportFile.mts`** — shared output target: resolves the single
+  `contextSelector-report.md` path (honoring `--out`, default next to the
+  scripts) and provides the base-write / LLM-section-upsert helpers both arms use.
 - **`compareLlm.mts`** — the **LLM comparison** (the only online, LLM-dependent
   script): runs the real `aiclient` model (the standard resolution path's LLM) as
   a "contextSelector OFF" arm on all 250 collisions and reports, per tier,
   LLM-only accuracy vs contextSelector-ON system accuracy, plus **regressions**
   (CS resolves wrong where the LLM would be right) and **savings** (correct
-  resolves that avoid an LLM call). Responses are cached to `llm-cache.json` so
+  resolves that avoid an LLM call). Upserts its section into the shared
+  `contextSelector-report.md`. Responses are cached to `llm-cache.json` so
   re-runs are free; run: `npx tsx src/validation/contextselector/compareLlm.mts`.
 
 ## Interpreting the result

@@ -24,8 +24,9 @@
 //
 // Run: npx tsx src/validation/contextselector/measureMetrics.mts [--out <dir>]
 
-import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { resolveReportPath, writeBaseReport } from "./reportFile.mjs";
 import { loadRoster, buildRoster } from "./metricRoster.mjs";
 import { selectPairs, generateFixtures, Fixture } from "./metricCorpus.mjs";
 import {
@@ -43,6 +44,10 @@ import {
     DEFAULT_THRESHOLDS,
     MetricsResult,
 } from "./metricRunner.mjs";
+
+// This script's directory — the default output location for the consolidated
+// report, so it lands next to the harness regardless of the caller's cwd.
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 function pct(x: number): string {
     return `${(x * 100).toFixed(1)}%`;
@@ -71,13 +76,6 @@ function accuracyOf(r: MetricsResult): string {
     return r.resolution.resolves === 0
         ? "n/a"
         : pct(r.resolution.targetAccuracy);
-}
-
-function outDir(): string {
-    const idx = process.argv.indexOf("--out");
-    return idx !== -1 && process.argv[idx + 1]
-        ? process.argv[idx + 1]
-        : process.cwd();
 }
 
 // ---- Build the two corpora ----
@@ -913,76 +911,6 @@ function md(): string {
     return L.join("\n") + "\n";
 }
 
-const dir = outDir();
-fs.mkdirSync(dir, { recursive: true });
-const mdPath = path.join(dir, "contextSelector-metrics.md");
-const jsonPath = path.join(dir, "contextSelector-metrics.json");
-fs.writeFileSync(mdPath, md(), "utf8");
-fs.writeFileSync(
-    jsonPath,
-    JSON.stringify(
-        {
-            tierReport: tiers.map((t) => ({
-                tier: t.name,
-                n: t.r.total,
-                yield: t.r.trigger.yield,
-                resolutionAccuracy: t.r.resolution.targetAccuracy,
-                abstention: t.r.trigger.abstentionCorrectness,
-                spurious: t.r.trigger.spuriousResolve,
-                wrongTarget: t.r.resolution.wrongTargetCount,
-                retrievalShare:
-                    t.r.retrieval.n > 0 ? t.r.retrieval.meanTopicShare : null,
-                routingLift: t.r.ab.routingAccuracyLift,
-            })),
-            slices: {
-                dialogue,
-                dialogueSimple,
-                dialogueNoContext,
-                dialogueNormal,
-                dialogueHard,
-                dialogueXhard,
-                realClear,
-                realVague,
-                siblings: hard,
-                easy,
-                combined,
-            },
-            dialogueScenarios: dialogueRows,
-            hardByCategory: Object.fromEntries(hardCats),
-            extraHardByCategory: Object.fromEntries(xhardCats),
-            realPairs: pairs.map((p) => ({
-                label: p.label,
-                aId: p.aId,
-                bId: p.bId,
-                shared: p.shared.length,
-                discA: p.discA.length,
-                discB: p.discB.length,
-            })),
-            corpus: {
-                dialogue: {
-                    scenarios: dialogue.total,
-                    resolve: dialogue.trigger.resolvable,
-                    abstain: dialogue.trigger.abstainable,
-                },
-                realPairs: {
-                    pairs: pairs.length,
-                    clear: realClear.total,
-                    vague: realVague.total,
-                },
-                siblings: {
-                    agents: adversary.siblings.length,
-                    fixtures: hard.total,
-                },
-                easy: { pairs: easyPairs.length, fixtures: easy.total },
-                combined: combined.total,
-            },
-            sweep,
-            recommended,
-            propertyChecks: props,
-        },
-        null,
-        2,
-    ),
-    "utf8",
-);
-console.log(`\nWrote:\n  ${mdPath}\n  ${jsonPath}`);
+const reportPath = resolveReportPath(HERE);
+writeBaseReport(reportPath, md());
+console.log(`\nWrote consolidated report:\n  ${reportPath}`);

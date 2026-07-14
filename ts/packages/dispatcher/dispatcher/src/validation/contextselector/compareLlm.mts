@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfigSync } from "../../../../../config/dist/index.js";
 import { openai } from "../../../../../aiclient/dist/index.js";
 import { loadRoster } from "./metricRoster.mjs";
+import { resolveReportPath, upsertLlmSection } from "./reportFile.mjs";
 import { SCENARIOS } from "./metricRealisticDialogue.mjs";
 import { RingBufferSignalSource } from "../../context/contextSelector/conversationSignal.js";
 import { TfIdfStrategy } from "../../context/contextSelector/strategy.js";
@@ -213,7 +214,10 @@ async function main() {
             cache[s.id] = cached;
             called++;
             if (called % 10 === 0) {
-                fs.writeFileSync(CACHE_PATH, JSON.stringify(cache, null, 2));
+                fs.writeFileSync(
+                    CACHE_PATH,
+                    JSON.stringify(cache, null, 2) + "\n",
+                );
                 process.stdout.write(`  …${called} LLM calls\n`);
             }
         }
@@ -235,7 +239,7 @@ async function main() {
             llm,
         });
     }
-    fs.writeFileSync(CACHE_PATH, JSON.stringify(cache, null, 2));
+    fs.writeFileSync(CACHE_PATH, JSON.stringify(cache, null, 2) + "\n");
     console.log(`LLM calls this run: ${called} (rest cached)\n`);
 
     // Routing-correct: for a resolve-gold, route to the target; for an
@@ -318,18 +322,14 @@ async function main() {
         );
     }
 
-    const outIdx = process.argv.indexOf("--out");
-    const dir =
-        outIdx !== -1 && process.argv[outIdx + 1]
-            ? process.argv[outIdx + 1]
-            : process.cwd();
-    fs.mkdirSync(dir, { recursive: true });
-    const mdPath = path.join(dir, "contextSelector-vs-llm.md");
     md.push(
         "\n**How to read it.** *LLM-only accuracy* is the standard path with contextSelector off. *CS-ON system accuracy* is the deployed behavior (resolve, else fall through to the LLM). *Regressions* are the price of enabling contextSelector — collisions it resolves to the wrong agent that the LLM alone would have routed correctly. *Correct saves* are the payoff — right answers delivered without an LLM call.\n",
     );
-    fs.writeFileSync(mdPath, md.join("\n") + "\n", "utf8");
-    console.log(`Wrote ${mdPath}`);
+    const reportPath = resolveReportPath(HERE);
+    upsertLlmSection(reportPath, md.join("\n"));
+    console.log(
+        `Wrote LLM comparison into consolidated report:\n  ${reportPath}`,
+    );
 }
 
 main().catch((e) => {
