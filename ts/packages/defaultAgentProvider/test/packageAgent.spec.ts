@@ -300,10 +300,9 @@ describe("@package agent", () => {
             appAgentHost: noopHost,
             source: api,
         });
-        await handler.run(
-            context,
-            { args: { name: "foo", range: undefined } } as any,
-        );
+        await handler.run(context, {
+            args: { name: "foo", range: undefined },
+        } as any);
         expect(notifications).toEqual([]);
     });
 
@@ -318,10 +317,9 @@ describe("@package agent", () => {
             appAgentHost: noopHost,
             source: api,
         });
-        await handler.run(
-            context,
-            { args: { name: "foo", range: undefined } } as any,
-        );
+        await handler.run(context, {
+            args: { name: "foo", range: undefined },
+        } as any);
         expect(notifications).toEqual([
             "Agent 'foo' update failed; reverted to the previous version.",
         ]);
@@ -338,10 +336,9 @@ describe("@package agent", () => {
             appAgentHost: noopHost,
             source: api,
         });
-        await handler.run(
-            context,
-            { args: { name: "foo", range: undefined } } as any,
-        );
+        await handler.run(context, {
+            args: { name: "foo", range: undefined },
+        } as any);
         expect(notifications).toEqual(["Agent 'foo' is already up to date."]);
     });
 
@@ -357,10 +354,9 @@ describe("@package agent", () => {
             appAgentHost: noopHost,
             source: api,
         });
-        await handler.run(
-            context,
-            { args: { name: "foo", range: undefined } } as any,
-        );
+        await handler.run(context, {
+            args: { name: "foo", range: undefined },
+        } as any);
         expect(output()).toContain(
             "Agent 'foo' update started; it will reload in each session shortly.",
         );
@@ -711,7 +707,7 @@ describe("@package install one-argument, dry-run, and refresh", () => {
         expect(text).toContain(
             "Agent 'weather' installed from package '@typeagent/weather-agent' via feed source 'typeagent';",
         );
-        expect(text).toContain("Matched as default agent name 'weather'.");
+        expect(text).toContain("Matched default agent name 'weather'.");
     });
 
     it("two-argument install omits the match-kind note (the name was explicit)", async () => {

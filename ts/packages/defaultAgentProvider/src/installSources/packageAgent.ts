@@ -346,12 +346,23 @@ class InstallCommandHandler implements CommandHandler {
     }): string {
         switch (m.matchKind) {
             case "defaultAgentName":
-                return `as default agent name '${m.name}'`;
+                return `default agent name '${m.name}'`;
             case "packageName":
-                return `as package '${m.packageName ?? "?"}'`;
+                return `package '${m.packageName ?? "?"}'`;
             case "path":
-                return `as path '${m.path ?? "?"}'`;
+                return `path '${m.path ?? "?"}'`;
         }
+    }
+
+    // "<kind> source '<name>'" (e.g. "catalog source 'workspace'"), or just
+    // "source '<name>'" when the kind is unknown.
+    private describeSource(m: {
+        source: string;
+        sourceKind?: string | undefined;
+    }): string {
+        return m.sourceKind !== undefined
+            ? `${m.sourceKind} source '${m.source}'`
+            : `source '${m.source}'`;
     }
 
     public async run(
@@ -397,7 +408,9 @@ class InstallCommandHandler implements CommandHandler {
                 return;
             }
             const { winner, matches } = preview;
-            let message = `'${target}' would resolve via source '${winner.source}' ${this.describeMatch(
+            let message = `'${target}' would resolve via ${this.describeSource(
+                winner,
+            )} as ${this.describeMatch(
                 winner,
             )} and install as '${winner.name}'.`;
             const shadows = matches.slice(1);
@@ -405,7 +418,9 @@ class InstallCommandHandler implements CommandHandler {
                 const list = shadows
                     .map(
                         (m) =>
-                            `source '${m.source}' (${this.describeMatch(m)})`,
+                            `${this.describeSource(m)} (${this.describeMatch(
+                                m,
+                            )})`,
                     )
                     .join(", ");
                 message += ` Also matched: ${list}.`;
@@ -436,20 +451,11 @@ class InstallCommandHandler implements CommandHandler {
             result.packageName !== undefined
                 ? ` from package '${result.packageName}'`
                 : "";
-        // "<kind> source '<name>'" (e.g. "catalog source 'workspace'"), or just
-        // the name if the kind is unknown.
-        const sourceLabel =
-            result.sourceKind !== undefined
-                ? `${result.sourceKind} source '${result.source}'`
-                : `source '${result.source}'`;
-        let message = `Agent '${result.name}' installed${pkgPart} via ${sourceLabel}; it will load in each session shortly.`;
-        if (result.ref !== undefined && result.ref !== result.packageName) {
-            message += ` Durable ref: ${result.ref}.`;
-        }
-        displayResult(message, context);
+        const sourceLabel = this.describeSource(result);
         // One-argument (inferred) installs clarify HOW the single ambiguous
-        // token matched, as a separate follow-up line. A two-argument install
-        // typed the name explicitly, so there is nothing to clarify.
+        // token matched, on a separate line shown before the install
+        // confirmation. A two-argument install typed the name explicitly, so
+        // there is nothing to clarify.
         if (!explicit) {
             const matchKind: InstallMatchKind = deriveMatchKind({
                 matchedByName: result.matchedByName,
@@ -465,6 +471,11 @@ class InstallCommandHandler implements CommandHandler {
                 context,
             );
         }
+        let message = `Agent '${result.name}' installed${pkgPart} via ${sourceLabel}; it will load in each session shortly.`;
+        if (result.ref !== undefined && result.ref !== result.packageName) {
+            message += ` Durable ref: ${result.ref}.`;
+        }
+        displayResult(message, context);
     }
 
     public async getCompletion(

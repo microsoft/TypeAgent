@@ -110,6 +110,7 @@ export function deriveMatchKind(m: {
  */
 export interface InstallPreviewMatch {
     readonly source: string;
+    readonly sourceKind?: string; // path / catalog / feed, for the preview message
     readonly matchKind: InstallMatchKind;
     readonly name: string; // dispatcher name it would install as
     readonly packageName?: string;

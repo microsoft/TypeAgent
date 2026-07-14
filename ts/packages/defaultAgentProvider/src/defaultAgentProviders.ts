@@ -1371,12 +1371,17 @@ export function createDefaultInstalledAgentSource(
                 });
                 const im: {
                     source: string;
+                    sourceKind?: string;
                     matchKind: InstallMatchKind;
                     name: string;
                     packageName?: string;
                     path?: string;
                     ref?: string;
                 } = { source: m.source, matchKind, name: m.name };
+                const sourceKind = registry.get(m.source)?.kind;
+                if (sourceKind !== undefined) {
+                    im.sourceKind = sourceKind;
+                }
                 if (m.candidate.packageName !== undefined) {
                     im.packageName = m.candidate.packageName;
                 }
