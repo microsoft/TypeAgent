@@ -16,9 +16,7 @@ trigger:
   branches:
     include:
       - main
-  paths:
-    include:
-      - ts/packages/copilot-plugin/**
+
 
 pr:
   branches:
