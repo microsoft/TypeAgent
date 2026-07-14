@@ -218,6 +218,34 @@ describe("describeCore deterministic rendering", () => {
         expect(markdown).not.toContain("Showing");
     });
 
+    it("escapes backslashes and pipes in table cells so they can't be confused with markdown table syntax", () => {
+        const agent: AgentSchemaInfo = {
+            name: "spotify",
+            emoji: "🎵",
+            description: "controls your local Spotify instance",
+            subSchemas: [
+                {
+                    schemaName: "spotify",
+                    description: "Spotify playback control",
+                    schemaText: undefined,
+                    actions: [
+                        makeAction(
+                            "play",
+                            String.raw`Play a track, e.g. C:\music\track.mp3 | also supports "artist | album"`,
+                        ),
+                    ],
+                },
+            ],
+        };
+        const markdown = renderAgentView(agent, false, () => true);
+        // Backslashes must be doubled *before* pipes are escaped, otherwise a
+        // literal `\` immediately preceding a `|` would combine with the
+        // pipe-escape into an unintended sequence.
+        expect(markdown).toContain(
+            String.raw`Play a track, e.g. C:\\music\\track.mp3 \| also supports "artist \| album"`,
+        );
+    });
+
     it("truncates to 10 rows with a footer when more than 10 actions exist", () => {
         const agent = makeSpotifyAgent(23);
         const isEnabled = () => true;

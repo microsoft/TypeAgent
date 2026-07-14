@@ -74,7 +74,10 @@ function closestMatch(name: string, candidates: string[]): string | undefined {
             best = candidate;
         }
     }
-    // Only suggest when the candidate is plausibly a typo, not an unrelated word.
+    // Only suggest when the candidate is plausibly a typo, not an unrelated
+    // word: allow roughly one edit per 3 characters (empirically tuned —
+    // permissive enough for real typos like "spotfy" -> "spotify" without
+    // matching unrelated short names), with a floor of 2 for short inputs.
     const threshold = Math.max(2, Math.ceil(target.length / 3));
     return best !== undefined && bestDistance <= threshold ? best : undefined;
 }
@@ -125,29 +128,41 @@ export function resolveAction(
     if (dotIndex > 0) {
         const schemaName = actionName.slice(0, dotIndex);
         const bareActionName = actionName.slice(dotIndex + 1);
-        for (const agent of schemas) {
-            const subSchema = agent.subSchemas.find(
-                (s) => s.schemaName.toLowerCase() === schemaName.toLowerCase(),
+
+        // Schema names are unique across agents (each sub-schema belongs to
+        // exactly one agent), so there's at most one match here.
+        const owned = schemas
+            .flatMap((agent) =>
+                agent.subSchemas.map((subSchema) => ({ agent, subSchema })),
+            )
+            .find(
+                ({ subSchema }) =>
+                    subSchema.schemaName.toLowerCase() ===
+                    schemaName.toLowerCase(),
             );
-            if (subSchema === undefined) continue;
-            const action = subSchema.actions.find(
-                (a) => a.name.toLowerCase() === bareActionName.toLowerCase(),
-            );
-            if (action !== undefined) {
-                return {
-                    kind: "found",
-                    match: { agent, subSchema, action },
-                };
-            }
-            // Matched the schema but not the action within it: suggest the
-            // closest action name in that same sub-schema.
-            const suggestion = closestMatch(
-                bareActionName,
-                subSchema.actions.map((a) => a.name),
-            );
-            return { kind: "notFound", actionName, suggestion };
+        if (owned === undefined) {
+            return { kind: "notFound", actionName };
         }
-        return { kind: "notFound", actionName };
+        const action = owned.subSchema.actions.find(
+            (a) => a.name.toLowerCase() === bareActionName.toLowerCase(),
+        );
+        if (action !== undefined) {
+            return {
+                kind: "found",
+                match: {
+                    agent: owned.agent,
+                    subSchema: owned.subSchema,
+                    action,
+                },
+            };
+        }
+        // Matched the schema but not the action within it: suggest the
+        // closest action name in that same sub-schema.
+        const suggestion = closestMatch(
+            bareActionName,
+            owned.subSchema.actions.map((a) => a.name),
+        );
+        return { kind: "notFound", actionName, suggestion };
     }
 
     if (agentName !== undefined) {
@@ -194,7 +209,13 @@ export function resolveAction(
 // ---------------------------------------------------------------------------
 
 function escapeTableCell(text: string): string {
-    return text.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+    // Escape backslashes first so a literal `\` in the source text can't
+    // combine with the following pipe-escape to produce an ambiguous
+    // sequence (e.g. `\|` meaning something other than an escaped pipe).
+    return text
+        .replace(/\\/g, "\\\\")
+        .replace(/\|/g, "\\|")
+        .replace(/\r?\n/g, " ");
 }
 
 function buildDeterministicAgentSummary(agent: AgentSchemaInfo): string {
@@ -268,23 +289,34 @@ export function renderAgentView(
     return lines.join("\n");
 }
 
-/** Best-effort extraction of a single action's parameter list from generated schema text. */
-export function extractActionParameters(
-    schemaText: string | undefined,
-    actionName: string,
-): { name: string; type: string; optional: boolean; comment?: string }[] {
-    if (schemaText === undefined) return [];
+export type ActionParameter = {
+    name: string;
+    type: string;
+    optional: boolean;
+    comment?: string;
+};
 
+/**
+ * Locate the `parameters: { ... }` block belonging to `actionName` inside
+ * generated schema text, via brace-depth matching (so nested braces in the
+ * parameter types don't confuse the search for the block's closing brace).
+ * Returns the block's inner text (without the outer braces), or undefined
+ * if the action or its parameters block can't be found.
+ */
+function findParametersBlock(
+    schemaText: string,
+    actionName: string,
+): string | undefined {
     // Find `actionName: "<actionName>";` then the following `parameters: { ... }` block.
     const actionNameRe = new RegExp(
         `actionName:\\s*"${actionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\s*;`,
     );
     const nameMatch = actionNameRe.exec(schemaText);
-    if (nameMatch === undefined || nameMatch === null) return [];
+    if (nameMatch === undefined || nameMatch === null) return undefined;
 
     const paramsStart = schemaText.indexOf("parameters", nameMatch.index);
     const braceStart = schemaText.indexOf("{", paramsStart);
-    if (paramsStart === -1 || braceStart === -1) return [];
+    if (paramsStart === -1 || braceStart === -1) return undefined;
 
     let depth = 0;
     let end = -1;
@@ -298,31 +330,29 @@ export function extractActionParameters(
             }
         }
     }
-    if (end === -1) return [];
+    return end === -1 ? undefined : schemaText.slice(braceStart + 1, end);
+}
 
-    const body = schemaText.slice(braceStart + 1, end);
-    const params: {
-        name: string;
-        type: string;
-        optional: boolean;
-        comment?: string;
-    }[] = [];
-
-    // Walk the body line by line, tracking brace depth so that fields of
-    // nested object types (e.g. `options: { volume: number; };`) are
-    // reported once at the top level (with type "object") rather than
-    // their inner fields being mistaken for top-level parameters.
+/**
+ * Parse a `parameters { ... }` block's body into top-level field records.
+ * Walks the body line by line, tracking brace depth so that fields of
+ * nested object types (e.g. `options: { volume: number; };`) are reported
+ * once at the top level (with type "object") rather than their inner
+ * fields being mistaken for top-level parameters.
+ */
+function parseParameterFields(body: string): ActionParameter[] {
+    const params: ActionParameter[] = [];
     const fieldRe = /^([A-Za-z_$][\w$]*)(\?)?:\s*([^;]+?);?\s*$/;
-    let bodyDepth = 0;
+    let depth = 0;
     let pendingComment: string | undefined;
     for (const rawLine of body.split("\n")) {
         const line = rawLine.trim();
         if (line.length === 0) continue;
-        if (bodyDepth === 0 && line.startsWith("//")) {
+        if (depth === 0 && line.startsWith("//")) {
             pendingComment = line.replace(/^\/\/\s*/, "");
             continue;
         }
-        const fieldMatch = bodyDepth === 0 ? fieldRe.exec(line) : null;
+        const fieldMatch = depth === 0 ? fieldRe.exec(line) : null;
         if (fieldMatch !== null) {
             const type = fieldMatch[3].trim();
             params.push({
@@ -336,14 +366,24 @@ export function extractActionParameters(
             pendingComment = undefined;
         }
         for (const ch of line) {
-            if (ch === "{") bodyDepth++;
-            else if (ch === "}") bodyDepth--;
+            if (ch === "{") depth++;
+            else if (ch === "}") depth--;
         }
-        if (bodyDepth === 0 && fieldMatch === null) {
+        if (depth === 0 && fieldMatch === null) {
             pendingComment = undefined;
         }
     }
     return params;
+}
+
+/** Best-effort extraction of a single action's parameter list from generated schema text. */
+export function extractActionParameters(
+    schemaText: string | undefined,
+    actionName: string,
+): ActionParameter[] {
+    if (schemaText === undefined) return [];
+    const body = findParametersBlock(schemaText, actionName);
+    return body === undefined ? [] : parseParameterFields(body);
 }
 
 export function renderActionView(match: ActionMatch): string {
@@ -503,18 +543,6 @@ export async function polishActionView(
 // Orchestration
 // ---------------------------------------------------------------------------
 
-function isSchemaEnabledFn(
-    context: CommandHandlerContext,
-): (schemaName: string) => boolean {
-    return (schemaName) => {
-        try {
-            return context.agents.isSchemaEnabled(schemaName);
-        } catch {
-            return false;
-        }
-    };
-}
-
 export async function describeAction(
     context: CommandHandlerContext,
     actionName: string,
@@ -548,10 +576,19 @@ export async function describeAgentOrAction(
     const schemas = await getAgentSchemas(context);
     const agentResolution = resolveAgent(schemas, name);
     if (agentResolution.kind === "found") {
+        // isSchemaEnabled can throw for an unregistered schema name; treat
+        // that the same as "disabled" for the purpose of the enable-hint.
+        const isSchemaEnabled = (schemaName: string) => {
+            try {
+                return context.agents.isSchemaEnabled(schemaName);
+            } catch {
+                return false;
+            }
+        };
         const deterministic = renderAgentView(
             agentResolution.agent,
             all,
-            isSchemaEnabledFn(context),
+            isSchemaEnabled,
         );
         return polishAgentView(agentResolution.agent, deterministic);
     }

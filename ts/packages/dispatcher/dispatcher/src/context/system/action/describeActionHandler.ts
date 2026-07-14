@@ -21,10 +21,10 @@ export async function executeDescribeAction(
     action: AppAction,
     context: ActionContext<CommandHandlerContext>,
 ) {
-    const describeAction = action as unknown as DescribeAction;
-    switch (describeAction.actionName) {
+    const nlAction = action as unknown as DescribeAction;
+    switch (nlAction.actionName) {
         case "describeAgent": {
-            const { agentName, all } = describeAction.parameters;
+            const { agentName, all } = nlAction.parameters;
             await processCommandNoLock(
                 `@describe ${quoteArg(agentName)}${all ? " --all" : ""}`,
                 context.sessionContext.agentContext,
@@ -32,7 +32,7 @@ export async function executeDescribeAction(
             break;
         }
         case "describeAction": {
-            const { actionName, agentName } = describeAction.parameters;
+            const { actionName, agentName } = nlAction.parameters;
             const command =
                 agentName !== undefined
                     ? `@describe ${quoteArg(agentName)} ${quoteArg(actionName)}`
