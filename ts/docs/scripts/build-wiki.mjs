@@ -36,6 +36,7 @@
 
 import { promises as fs } from "node:fs";
 import { statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -697,6 +698,35 @@ async function clean() {
 }
 
 // ---------------------------------------------------------------------------
+// Interactive Action Browser
+// ---------------------------------------------------------------------------
+
+// Generate the self-contained, searchable Action Browser HTML from the bundled
+// agents. It is emitted into overview/ (git-ignored) and copied verbatim into
+// the site by DocFX (registered as an .html resource in docfx.json). The tool
+// depends on workspace packages, so it is spawned as a built CLI rather than
+// imported here.
+async function generateActionBrowser() {
+    const cli = path.join(tsDir, "tools", "actionBrowser", "dist", "cli.js");
+    const out = path.join(docsRoot, "overview", "action-browser.html");
+    if (!(await exists(cli))) {
+        console.warn(
+            `skipping action browser: ${toPosix(path.relative(tsDir, cli))} ` +
+                `not built (run \`pnpm --filter @typeagent/action-browser build\`)`,
+        );
+        return;
+    }
+    const res = spawnSync(process.execPath, [cli, "--out", out], {
+        stdio: "inherit",
+    });
+    if (res.status !== 0) {
+        throw new Error(
+            `action browser generation failed (exit code ${res.status})`,
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
 
 async function main() {
     if (checkOnly) {
@@ -731,6 +761,8 @@ async function main() {
         path.join(docsRoot, "architecture", "toc.yml"),
         await buildArchitectureToc(),
     );
+
+    await generateActionBrowser();
 
     console.log("done. Now run: docfx build ts/docs/docfx.json");
 }

@@ -6342,6 +6342,31 @@ importers:
         specifier: ^8.62.1
         version: 8.62.1(eslint@10.6.0(jiti@2.7.0))(typescript@5.9.3)
 
+  tools/actionBrowser:
+    dependencies:
+      '@typeagent/action-grammar':
+        specifier: workspace:*
+        version: link:../../packages/actionGrammar
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../../packages/actionSchema
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../packages/agentSdk
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../../packages/dispatcher/dispatcher
+      default-agent-provider:
+        specifier: workspace:*
+        version: link:../../packages/defaultAgentProvider
+    devDependencies:
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   tools/docsAutogen:
     dependencies:
       '@typeagent/aiclient':
