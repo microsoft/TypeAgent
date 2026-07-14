@@ -12,21 +12,21 @@
 
 ## Overview
 
-The `weather-agent` package is a TypeAgent application agent that provides weather-related information. It supports retrieving current weather conditions, forecasts, and alerts for specified locations. This agent is designed to integrate with the broader TypeAgent ecosystem, enabling users to query weather data through structured actions.
+The `weather-agent` package is a TypeAgent application agent that provides weather-related information. It supports retrieving current weather conditions, forecasts, and alerts for specified locations. This agent integrates with the broader TypeAgent ecosystem, enabling users to query weather data through structured actions.
 
 ## What it does
 
-The `weather-agent` implements three primary actions:
+The `weather-agent` implements three primary actions to handle weather-related queries:
 
 - **`getCurrentConditions`**: Fetches the current weather conditions for a given location. Users can optionally specify the temperature units as `"celsius"` or `"fahrenheit"`.
 - **`getForecast`**: Provides a weather forecast for a specified location, supporting up to 7 days. Users can also specify the temperature units and the number of days for the forecast.
 - **`getAlerts`**: Retrieves weather alerts for a specific location, such as severe weather warnings or advisories.
 
-These actions are designed to handle user queries about weather conditions, forecasts, and alerts, making the agent suitable for applications that require real-time weather data.
+These actions allow the agent to respond to user queries about real-time weather conditions, upcoming forecasts, and potential weather hazards. The agent is designed to work with external weather APIs to fetch accurate and up-to-date data.
 
 ## Setup
 
-To use the `weather-agent`, you need access to a weather API service. The following setup steps are required:
+To use the `weather-agent`, you need access to a weather API service. Follow these steps to set up the package:
 
 1. **Obtain an API key**: Register with a weather data provider (e.g., OpenWeatherMap, WeatherAPI) to obtain an API key.
 2. **Set environment variables**: Configure the API key as an environment variable. The specific variable name and setup instructions are detailed in the hand-written README.
@@ -118,6 +118,6 @@ _3 actions implemented by this agent, parsed deterministically from `./src/weath
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter weather-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter weather-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

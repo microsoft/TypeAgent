@@ -54,6 +54,10 @@ import {
     parseTimeString,
 } from "typechat-utils";
 import chalk from "chalk";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:calendar");
+const debugError = registerDebug("typeagent:calendar:error");
 
 // Calendar context to hold the client
 export type CalendarActionContext = {
@@ -504,7 +508,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
                     }
                 }
 
-                console.log(
+                debug(
                     chalk.cyan(
                         `[Calendar] Using ${provider.providerName} calendar provider`,
                     ),
@@ -517,12 +521,12 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 void trySilentCalendarSignIn(provider, context);
             } else {
                 const availableProviders = getAvailableProviders();
-                console.log(
+                debug(
                     chalk.yellow(
                         `[Calendar] No calendar provider configured. Available: ${availableProviders.length > 0 ? availableProviders.join(", ") : "none"}`,
                     ),
                 );
-                console.log(
+                debug(
                     chalk.yellow(
                         `[Calendar] Set MSGRAPH_APP_CLIENTID for Microsoft Graph or GOOGLE_CALENDAR_CLIENT_ID for Google Calendar`,
                     ),
@@ -543,7 +547,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
         const provider = context.sessionContext.agentContext.calendarProvider;
         const providerType = context.sessionContext.agentContext.providerType;
 
-        console.log(
+        debug(
             chalk.cyan(
                 `\n[Calendar V3] Executing action: ${calendarAction.actionName} (provider: ${providerType || "none"})`,
             ),
@@ -614,7 +618,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 );
                 break;
             default:
-                console.log(
+                debug(
                     chalk.red(
                         `Unknown action: ${(calendarAction as any).actionName}`,
                     ),
@@ -638,7 +642,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
     ): Promise<ActionResult | undefined> {
         const { description, date, time, participant } = action.parameters;
 
-        console.log(chalk.green(`\n✓ Scheduling event: ${description}`));
+        debug(chalk.green(`\n✓ Scheduling event: ${description}`));
 
         try {
             const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -680,7 +684,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
                             startMinute = m;
                         } catch {
                             // Fall back to default 9am
-                            console.log(
+                            debug(
                                 chalk.yellow(
                                     `Could not parse time: ${time}, using 9am`,
                                 ),
@@ -747,7 +751,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 return createActionResultFromError("Failed to create event");
             }
         } catch (error: any) {
-            console.error(chalk.red(`Error creating event: ${error.message}`));
+            debugError(chalk.red(`Error creating event: ${error.message}`));
             return createActionResultFromError(
                 `Failed to create event: ${error.message}`,
             );
@@ -906,7 +910,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
     ): Promise<ActionResult | undefined> {
         const { date, description } = action.parameters;
 
-        console.log(chalk.green(`\n✓ Searching for events`));
+        debug(chalk.green(`\n✓ Searching for events`));
 
         try {
             let events: any[] = [];
@@ -967,7 +971,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
             return buildStructuredEventList(events);
         } catch (error: any) {
-            console.error(chalk.red(`Error finding events: ${error.message}`));
+            debugError(chalk.red(`Error finding events: ${error.message}`));
             return createActionResultFromError(
                 `Failed to find events: ${error.message}`,
             );
@@ -981,7 +985,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
     ): Promise<ActionResult | undefined> {
         const { description, participant } = action.parameters;
 
-        console.log(
+        debug(
             chalk.green(
                 `\n✓ Adding participant ${participant} to ${description}`,
             ),
@@ -1021,9 +1025,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 );
             }
         } catch (error: any) {
-            console.error(
-                chalk.red(`Error adding participant: ${error.message}`),
-            );
+            debugError(chalk.red(`Error adding participant: ${error.message}`));
             return createActionResultFromError(
                 `Failed to add participant: ${error.message}`,
             );
@@ -1034,7 +1036,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
         context: ActionContext<CalendarActionContext>,
         provider: ICalendarProvider,
     ): Promise<ActionResult | undefined> {
-        console.log(chalk.green(`\n✓ Finding today's events`));
+        debug(chalk.green(`\n✓ Finding today's events`));
 
         try {
             const today = new Date();
@@ -1077,7 +1079,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
             const heading = `Today's Schedule \u2014 ${todayLabel}`;
             return buildStructuredEventList(events, heading);
         } catch (error: any) {
-            console.error(
+            debugError(
                 chalk.red(`Error finding today's events: ${error.message}`),
             );
             return createActionResultFromError(
@@ -1090,7 +1092,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
         context: ActionContext<CalendarActionContext>,
         provider: ICalendarProvider,
     ): Promise<ActionResult | undefined> {
-        console.log(chalk.green(`\n✓ Finding this week's events`));
+        debug(chalk.green(`\n✓ Finding this week's events`));
 
         try {
             const dateRange = getNWeeksDateRangeISO(1);
@@ -1112,7 +1114,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
             const weekHeading = `This Week's Schedule \u2014 ${weekRangeLabel}`;
             return buildStructuredEventList(events, weekHeading);
         } catch (error: any) {
-            console.error(
+            debugError(
                 chalk.red(`Error finding this week's events: ${error.message}`),
             );
             return createActionResultFromError(
@@ -1128,7 +1130,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
     ): Promise<ActionResult | undefined> {
         const { description, date } = action.parameters;
 
-        console.log(
+        debug(
             chalk.green(
                 `\n✓ Searching for events to remove: ${description}${date ? ` (${date})` : ""}`,
             ),
@@ -1270,7 +1272,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 `Found ${events.length} events matching "${description}". Please be more specific (try adding a date or more details).`,
             );
         } catch (error: any) {
-            console.error(chalk.red(`Error removing event: ${error.message}`));
+            debugError(chalk.red(`Error removing event: ${error.message}`));
             return createActionResultFromError(
                 `Failed to remove event: ${error.message}`,
             );

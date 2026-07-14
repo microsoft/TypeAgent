@@ -12,32 +12,32 @@
 
 ## Overview
 
-The `discord-agent` package is a TypeAgent application agent that enables interaction with Discord servers through natural language commands. It integrates with the Discord REST API v10 to perform a variety of server management and communication tasks, such as sending messages, listing channels, creating invites, and more. By leveraging this agent, users can manage their Discord servers and interact with members using intuitive, conversational commands.
+The `discord-agent` package is a TypeAgent application agent that facilitates interaction with Discord servers using natural language commands. It integrates with the Discord REST API v10 to perform tasks such as sending messages, managing channels, creating invites, and more. This agent is designed to simplify server management and communication by interpreting user commands and executing the appropriate actions.
 
 ## What it does
 
-The `discord-agent` provides a set of actions to interact with Discord servers. These actions are designed to simplify common tasks and include:
+The `discord-agent` provides a range of actions to interact with Discord servers. These actions are grouped into several categories:
 
 - **Message Management**:
 
-  - `createMessage`: Send a specific message to a channel.
-  - `craftMessage`: Generate a message using an LLM based on a high-level intent and post it to a channel.
-  - `getChannelMessages`: Retrieve messages from a specific channel.
+  - `createMessage`: Sends a specific message to a channel.
+  - `craftMessage`: Uses an LLM to generate a message based on a high-level intent and posts it to a channel.
+  - `getChannelMessages`: Retrieves messages from a specified channel.
 
 - **User and Server Management**:
 
-  - `getCurrentUser`: Retrieve details about the bot's account.
-  - `setGuild`: Set the default Discord server (guild) for all operations.
+  - `getCurrentUser`: Fetches details about the bot's account.
+  - `setGuild`: Sets the default Discord server (guild) for all operations.
 
 - **Channel Management**:
 
-  - `listChannels`: List all channels in the current Discord server.
-  - `refreshChannels`: Refresh the cached list of channels from the server.
+  - `listChannels`: Lists all channels in the current Discord server.
+  - `refreshChannels`: Refreshes the cached list of channels from the server.
 
 - **Invite Management**:
-  - `createChannelInvite`: Generate a new invite link for a specific channel.
+  - `createChannelInvite`: Creates a new invite link for a specific channel.
 
-These actions allow users to perform tasks such as sending messages, managing channels, and creating invites without needing to interact directly with the Discord interface. The agent also supports natural language processing to interpret user commands and execute the appropriate actions.
+These actions allow users to perform common Discord tasks without directly interacting with the Discord interface. The agent also supports natural language processing to interpret user commands and map them to the appropriate actions.
 
 ## Setup
 
@@ -78,16 +78,16 @@ To use the `discord-agent`, you need to configure a Discord bot and set up the r
 
 ## Key Files
 
-The `discord-agent` package is structured around the TypeAgent framework, with key files that define its functionality:
+The `discord-agent` package is organized into several key files that define its functionality:
 
-- [src/discordActionHandler.ts](./src/discordActionHandler.ts): Implements the logic for handling the supported actions, such as sending messages, creating invites, and managing channels.
-- [src/discordManifest.json](./src/discordManifest.json): The agent's manifest file, which describes the agent's purpose, schema, and default settings.
-- [src/discordSchema.ts](./src/discordSchema.ts): Defines the TypeScript types and structures for the actions supported by the agent.
+- [src/discordActionHandler.ts](./src/discordActionHandler.ts): Contains the implementation of the action handlers, including logic for sending messages, creating invites, and managing channels.
+- [src/discordManifest.json](./src/discordManifest.json): Defines the agent's metadata, including its description, schema, and default settings.
+- [src/discordSchema.ts](./src/discordSchema.ts): Specifies the TypeScript types and structures for the actions supported by the agent.
 - [src/discordSchema.agr](./src/discordSchema.agr): Contains the grammar definitions for parsing natural language commands into actionable intents.
 
 ## How to extend
 
-To extend the `discord-agent` package, you can add new actions, update the grammar, and implement the corresponding handlers. Here's how:
+To extend the `discord-agent` package, you can add new actions, update the grammar, and implement the corresponding handlers. Here’s how:
 
 1. **Define New Actions**:
 
@@ -176,6 +176,6 @@ _8 actions implemented by this agent, parsed deterministically from `./src/disco
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

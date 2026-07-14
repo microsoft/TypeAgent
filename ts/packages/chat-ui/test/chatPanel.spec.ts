@@ -1,7 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describe, it, expect, afterEach, jest } from "@jest/globals";
+import {
+    describe,
+    it,
+    expect,
+    afterEach,
+    beforeEach,
+    jest,
+} from "@jest/globals";
 import { ChatPanel } from "../src/chatPanel.js";
 import { iconStop, iconJumpQueue, iconX } from "../src/icons.js";
 
@@ -43,6 +50,15 @@ afterEach(() => {
 });
 
 describe("user status rail — queue state", () => {
+    // The running ("sent") state schedules a real timer to auto-dismiss;
+    // fake timers make that deterministic and avoid dangling timers.
+    beforeEach(() => {
+        jest.useFakeTimers();
+    });
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
     it("queued: renders 'queued' label + jump + remove, wiring callbacks", () => {
         const { root, panel } = makePanel();
         panel.addUserMessage("hello", "req-1");
@@ -96,6 +112,73 @@ describe("user status rail — queue state", () => {
         expect(
             rail!.querySelector('[data-action="remove-from-queue"]'),
         ).toBeNull();
+    });
+
+    it("running: 'sent' auto-dismisses after the timeout", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("hello", "req-1");
+        panel.setUserBubbleQueueStatus("req-1", "running");
+        // Shown immediately as a transient acknowledgement.
+        expect(userRail(root, "req-1")).not.toBeNull();
+
+        // ...then removed once the timeout elapses, independent of any
+        // agent/completion signal.
+        jest.advanceTimersByTime(1500);
+        expect(userRail(root, "req-1")).toBeNull();
+    });
+
+    it("running: the agent's first message dismisses 'sent' early", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("hello", "req-1");
+        panel.setUserBubbleQueueStatus("req-1", "running");
+        expect(userRail(root, "req-1")).not.toBeNull();
+
+        // Agent starts responding before the timeout — "sent" clears now,
+        // not at completion.
+        panel.addAgentMessage("hi", "agent", undefined, undefined, "req-1");
+        expect(userRail(root, "req-1")).toBeNull();
+    });
+
+    it("running: a later snapshot does not resurrect a dismissed 'sent'", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("hello", "req-1");
+        panel.setUserBubbleQueueStatus("req-1", "running");
+
+        // Dismiss via the timeout.
+        jest.advanceTimersByTime(1500);
+        expect(userRail(root, "req-1")).toBeNull();
+
+        // The server keeps the request `running` and re-broadcasts it on the
+        // next snapshot; the consumed guard keeps "sent" from reappearing.
+        panel.setUserBubbleQueueStatus("req-1", "running");
+        expect(userRail(root, "req-1")).toBeNull();
+    });
+
+    it("queued: persists across the timeout window (only 'sent' is transient)", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("hello", "req-1");
+        panel.setUserBubbleQueueStatus("req-1", "queued", jest.fn(), jest.fn());
+
+        jest.advanceTimersByTime(1500);
+        const rail = userRail(root, "req-1");
+        expect(rail).not.toBeNull();
+        expect(rail!.dataset.status).toBe("queued");
+    });
+
+    it("null: cancels a pending 'sent' timer (no late dismissal)", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("hello", "req-1");
+        panel.setUserBubbleQueueStatus("req-1", "running");
+        panel.setUserBubbleQueueStatus("req-1", null);
+        expect(userRail(root, "req-1")).toBeNull();
+
+        // A full clear resets the id: a fresh running state shows "sent"
+        // again (the earlier timer was cancelled and the consumed marker
+        // dropped), and still auto-dismisses on its own timer.
+        panel.setUserBubbleQueueStatus("req-1", "running");
+        expect(userRail(root, "req-1")).not.toBeNull();
+        jest.advanceTimersByTime(1500);
+        expect(userRail(root, "req-1")).toBeNull();
     });
 
     it("null: clears the state and removes the rail (no empty title row)", () => {
