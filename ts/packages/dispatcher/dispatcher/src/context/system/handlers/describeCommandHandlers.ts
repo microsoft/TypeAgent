@@ -9,7 +9,7 @@ import {
     SessionContext,
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { getAgentSchemas } from "../describe/agentSchemaInfo.js";
 import {
     describeAction,

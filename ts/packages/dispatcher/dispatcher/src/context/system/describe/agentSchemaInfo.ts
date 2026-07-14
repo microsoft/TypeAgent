@@ -13,7 +13,7 @@ import type {
 } from "@typeagent/dispatcher-types";
 import type { ActionSchemaTypeDefinition } from "@typeagent/action-schema";
 import { generateSchemaTypeDefinition } from "@typeagent/action-schema";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
 
 /** Extract action names + descriptions from a parsed action schema. */

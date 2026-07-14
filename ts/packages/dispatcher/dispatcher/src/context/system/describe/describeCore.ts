@@ -2,11 +2,8 @@
 // Licensed under the MIT License.
 
 // Shared resolution + rendering core for agent/action capability discovery.
-// Used by describeCommandHandlers.ts (`@describe`). The NL path
-// (describeActionHandler.ts) forwards to the `@describe` command directly,
-// following the convention used by the other system NL handlers
-// (e.g. configActionHandler.ts, historyActionHandler.ts) rather than calling
-// into this module a second time.
+// Both entry points call into this module directly: the `@describe` command
+// (describeCommandHandlers.ts) and the NL path (describeActionHandler.ts).
 
 import type {
     ActionInfo,
@@ -15,7 +12,7 @@ import type {
 } from "@typeagent/dispatcher-types";
 import { openai } from "@typeagent/aiclient";
 import type { ChatModelWithStreaming } from "@typeagent/aiclient";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { getAgentSchemas } from "./agentSchemaInfo.js";
 
 const MAX_DEFAULT_ACTIONS = 10;
