@@ -73,10 +73,7 @@ function getActionName(value: unknown): string | undefined {
     }
     for (const element of node.value) {
         const property = asRecord(element);
-        if (
-            property?.type === "property" &&
-            property.key === "actionName"
-        ) {
+        if (property?.type === "property" && property.key === "actionName") {
             const propValue = asRecord(property.value);
             if (
                 propValue?.type === "literal" &&
