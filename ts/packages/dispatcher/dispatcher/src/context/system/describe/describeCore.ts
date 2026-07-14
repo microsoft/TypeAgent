@@ -218,9 +218,19 @@ function escapeTableCell(text: string): string {
         .replace(/\r?\n/g, " ");
 }
 
+/** Format a trailing "Did you mean 'x'?" suffix, or "" when there's no suggestion. */
+function didYouMean(suggestion: string | undefined): string {
+    return suggestion ? ` Did you mean '${suggestion}'?` : "";
+}
+
+/** The bolded agent heading shared by the deterministic and LLM-polished views. */
+function agentTitle(agent: AgentSchemaInfo): string {
+    return `**${agent.emoji} The ${agent.name} agent**`;
+}
+
 function buildDeterministicAgentSummary(agent: AgentSchemaInfo): string {
     const description = agent.description.trim().replace(/\.$/, "");
-    return `**${agent.emoji} The ${agent.name} agent** ${description}. It's capable of the following actions:`;
+    return `${agentTitle(agent)} ${description}. It's capable of the following actions:`;
 }
 
 function disabledHints(
@@ -260,13 +270,13 @@ export function renderAgentView(
     if (total === 0) {
         lines.push("It currently exposes no callable actions.");
     } else {
-        const header = showGroup
-            ? "| Action | What it does | Group |"
-            : "| Action | What it does |";
-        const separator = showGroup
-            ? "| ------ | ------------- | ----- |"
-            : "| ------ | ------------- |";
-        lines.push(header, separator);
+        const columns = showGroup
+            ? ["Action", "What it does", "Group"]
+            : ["Action", "What it does"];
+        lines.push(
+            `| ${columns.join(" | ")} |`,
+            `| ${columns.map(() => "---").join(" | ")} |`,
+        );
         for (const row of shown) {
             const cells = showGroup
                 ? [row.name, row.description, row.group]
@@ -312,7 +322,8 @@ function findParametersBlock(
         `actionName:\\s*"${actionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\s*;`,
     );
     const nameMatch = actionNameRe.exec(schemaText);
-    if (nameMatch === undefined || nameMatch === null) return undefined;
+    // exec() returns null (never undefined) when there's no match.
+    if (nameMatch === null) return undefined;
 
     const paramsStart = schemaText.indexOf("parameters", nameMatch.index);
     const braceStart = schemaText.indexOf("{", paramsStart);
@@ -420,19 +431,13 @@ export function renderAmbiguousActionMessage(
 export function renderActionNotFoundMessage(
     resolution: Extract<ActionResolution, { kind: "notFound" }>,
 ): string {
-    const suggestion = resolution.suggestion
-        ? ` Did you mean '${resolution.suggestion}'?`
-        : "";
-    return `No action named '${resolution.actionName}'.${suggestion}`;
+    return `No action named '${resolution.actionName}'.${didYouMean(resolution.suggestion)}`;
 }
 
 export function renderAgentNotFoundMessage(
     resolution: Extract<AgentResolution, { kind: "notFound" }>,
 ): string {
-    const suggestion = resolution.suggestion
-        ? ` Did you mean '${resolution.suggestion}'?`
-        : "";
-    return `No agent named '${resolution.agentName}'.${suggestion}`;
+    return `No agent named '${resolution.agentName}'.${didYouMean(resolution.suggestion)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -454,7 +459,7 @@ function tryCreateDescribeModel(): ChatModelWithStreaming | undefined {
     }
 }
 
-async function complete(
+async function tryComplete(
     model: ChatModelWithStreaming,
     prompt: string,
 ): Promise<string | undefined> {
@@ -493,14 +498,14 @@ export async function polishAgentView(
         `Agent description: ${agent.description}\n` +
         `Actions:\n${actionList}\n\n` +
         `Respond with just the paragraph, no heading or markdown emphasis.`;
-    const polished = await complete(model, prompt);
+    const polished = await tryComplete(model, prompt);
     if (polished === undefined) return deterministic;
 
     // Splice the polished paragraph in place of the deterministic summary
     // line (first line of `deterministic`), keeping the rest (table/footer)
     // unchanged and always deterministic.
     const rest = deterministic.split("\n").slice(1).join("\n");
-    return `**${agent.emoji} The ${agent.name} agent.** ${polished}\n${rest}`;
+    return `${agentTitle(agent)} ${polished}\n${rest}`;
 }
 
 /**
@@ -535,13 +540,18 @@ export async function polishActionView(
         `Parameters:\n${paramList || "(none)"}\n\n` +
         `Format as markdown: a short paragraph, then a "**Parameters**" bullet list (if any), then a ` +
         `"**Example:**" line with a quoted phrase.`;
-    const polished = await complete(model, prompt);
+    const polished = await tryComplete(model, prompt);
     return polished ?? deterministic;
 }
 
 // ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
+
+/** Render a matched action deterministically, then apply LLM polish. */
+function renderAndPolishAction(match: ActionMatch): Promise<string> {
+    return polishActionView(match, renderActionView(match));
+}
 
 export async function describeAction(
     context: CommandHandlerContext,
@@ -555,10 +565,8 @@ export async function describeAction(
             return renderAmbiguousActionMessage(resolution);
         case "notFound":
             return renderActionNotFoundMessage(resolution);
-        case "found": {
-            const deterministic = renderActionView(resolution.match);
-            return polishActionView(resolution.match, deterministic);
-        }
+        case "found":
+            return renderAndPolishAction(resolution.match);
     }
 }
 
@@ -595,10 +603,8 @@ export async function describeAgentOrAction(
 
     const actionResolution = resolveAction(schemas, name);
     switch (actionResolution.kind) {
-        case "found": {
-            const deterministic = renderActionView(actionResolution.match);
-            return polishActionView(actionResolution.match, deterministic);
-        }
+        case "found":
+            return renderAndPolishAction(actionResolution.match);
         case "ambiguous":
             return renderAmbiguousActionMessage(actionResolution);
         case "notFound":

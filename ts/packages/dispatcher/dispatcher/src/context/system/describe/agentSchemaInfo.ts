@@ -42,7 +42,7 @@ export async function getAgentSchemas(
     const agentMap = new Map<string, typeof configs>();
     for (const config of configs) {
         const topName = config.schemaName.split(".")[0];
-        if (agentName != null && topName !== agentName) continue;
+        if (agentName !== undefined && topName !== agentName) continue;
         const list = agentMap.get(topName) ?? [];
         list.push(config);
         agentMap.set(topName, list);
