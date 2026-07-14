@@ -1505,7 +1505,7 @@ export function buildStructuredListResult(
 
     // The current user's own pull requests across repos (gh search prs --author @me)
     if (actionName === "myPullRequests" && "number" in items[0]) {
-        return items
+        const markdownList = items
             .map((pr) => {
                 const repo = pr.repository as
                     | Record<string, unknown>
@@ -1519,6 +1519,9 @@ export function buildStructuredListResult(
                 return `- ${repoPrefix}[#${pr.number} ${pr.title}](${pr.url}) — ${status}`;
             })
             .join("\n");
+        return createActionResultFromMarkdownDisplay(
+            `**${headingText}**\n\n${markdownList}`,
+        );
     }
 
     // Search repos
