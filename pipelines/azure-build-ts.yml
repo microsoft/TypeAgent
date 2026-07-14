@@ -112,17 +112,17 @@ jobs:
       # pull-through: a package published to ADO_REGISTRY only shows up in
       # REGISTRY after something requests it through REGISTRY. Do that request
       # here so freshly published versions are cached in REGISTRY immediately.
+      # npm pack downloads just the tarball (no dep resolution), which is
+      # enough to trigger the upstream fetch.
       - script: |
           set -e
           primeDir=$(mktemp -d)
           cp $(buildDirectory)/.npmrc "$primeDir/.npmrc"
           cd "$primeDir"
-          npm init -y > /dev/null
           for file in $(publishedPackageDirectory)/*.tgz; do
             name=$(tar -xzOf "$file" package/package.json | jq -r .name)
             version=$(tar -xzOf "$file" package/package.json | jq -r .version)
             echo "Priming REGISTRY cache: $name@$version"
-            npm install --no-save --registry=$(REGISTRY) "$name@$version"
+            npm pack --registry=$(REGISTRY) "$name@$version" > /dev/null
           done
         displayName: "Prime REGISTRY cache from upstream"
-        workingDirectory: $(NpmRcDirectory)
