@@ -55,8 +55,8 @@ export function findSingleValueBearingPart(
  */
 export function deriveEffectiveValue(
     rule: GrammarRule,
-    describeRule?: () => string,
     requireValue = false,
+    describeRule?: () => string,
 ): CompiledValueNode | undefined {
     if (rule.value !== undefined) {
         return rule.value;
