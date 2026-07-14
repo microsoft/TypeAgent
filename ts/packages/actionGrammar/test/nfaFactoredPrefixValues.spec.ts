@@ -11,7 +11,7 @@
 // explicit `value` on the factored top-level rule, so grammar-source
 // tests below don't reach the new implicit-derivation code path. The
 // hand-built-AST test further down is what directly exercises
-// `findSingleValueBearingPart`'s forwarding logic.
+// `deriveEffectiveValue`'s forwarding logic.
 //
 // NFA's rejection of tailCall RulesParts (still unsupported) is
 // already covered by grammarOptimizerTailFactoring.spec.ts ("NFA
@@ -72,7 +72,7 @@ describe("NFA compilation of factored shared-prefix grammars", () => {
         // tests above don't exercise this path because
         // `factorCommonPrefixes` and explicit `->` expressions both
         // already stamp `rule.value`, so this is the only test that
-        // directly reaches `findSingleValueBearingPart`'s forwarding case.
+        // directly reaches `deriveEffectiveValue`'s forwarding case.
         const prefixPart = createRulesPart(
             [{ parts: [createStringPart(["please"])] }],
             { optional: true },

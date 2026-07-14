@@ -22,10 +22,7 @@ import {
 import { leadingWordBoundaryScriptPrefix } from "./spacingScripts.js";
 import { leadingNonSeparatorRun } from "./grammarMatcher.js";
 import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
-import {
-    deriveEffectiveValue,
-    findSingleValueBearingPart,
-} from "./grammarValueDeriver.js";
+import { deriveEffectiveValue } from "./grammarValueDeriver.js";
 import {
     globalPhraseSetRegistry,
     PhraseSetMatcher,
@@ -3191,12 +3188,18 @@ function checkForwardingPromotable(
 ): boolean {
     if (parts.length <= 1) return true;
     if (last.variable === undefined) return false;
-    // Multi-part rule: matcher's implicit-default rule requires exactly
-    // one variable-bearing contributor. `last` already carries a
-    // variable, so the shared scan can only return "ambiguous" (2+
-    // contributors) or `last` itself - bail out on "ambiguous" so
-    // baseline missing/multiple-default throws stay observable.
-    return findSingleValueBearingPart(parts) !== "ambiguous";
+    // Multi-part rule: matcher's implicit-default rule requires
+    // exactly one variable-bearing contributor (wildcard / number
+    // always; rules / string / phraseSet only when bound; every
+    // `GrammarPart` carries an optional `variable` field, so a
+    // single `p.variable !== undefined` test covers the union).
+    // Promoting masks the baseline missing/multiple-default throws
+    // at finalize time, so bail out unless the trailing RulesPart
+    // is the sole contributor.
+    for (let i = 0; i < parts.length - 1; i++) {
+        if (parts[i].variable !== undefined) return false;
+    }
+    return true;
 }
 
 /**

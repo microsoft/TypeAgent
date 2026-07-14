@@ -6,47 +6,16 @@
  * nfaCompiler.ts: computing a rule's effective value expression.
  */
 
-import type {
-    CompiledValueNode,
-    GrammarPart,
-    GrammarRule,
-} from "./grammarTypes.js";
-
-/**
- * A part that solely carries a rule's implicit value: the variable name
- * it binds, and the `GrammarPart` itself (so callers that need more than
- * the name - e.g. its type - don't have to re-scan `parts`).
- */
-export type ValueBearingPart = { variable: string; part: GrammarPart };
-
-/**
- * Find the single part (if any) that carries a variable across a rule's
- * parts, so its value can stand in for the whole rule's implicit value
- * when the rule has no explicit `->` expression. Returns `"ambiguous"`
- * when 2+ parts carry a variable, or `undefined` when none do.
- */
-export function findSingleValueBearingPart(
-    parts: GrammarPart[],
-): ValueBearingPart | "ambiguous" | undefined {
-    let found: ValueBearingPart | undefined;
-    for (const p of parts) {
-        const name = p.variable;
-        if (name === undefined) continue;
-        if (found !== undefined) return "ambiguous";
-        found = { variable: name, part: p };
-    }
-    return found;
-}
+import type { CompiledValueNode, GrammarRule } from "./grammarTypes.js";
 
 /**
  * A rule's explicit `->` value when present, otherwise the implicit
- * value from a single variable-bearing part (via
- * `findSingleValueBearingPart`). Throws if a value is required and
- * missing/ambiguous. Not every rule needs a value - only when
- * `requireValue` is set (top-level action rules, or nested rules
- * captured by a parent variable) do ambiguous/missing values throw;
- * otherwise both resolve to `undefined`. `describeRule` is only
- * invoked when an error is thrown.
+ * value from a single variable-bearing part across the rule's `parts`.
+ * Throws if a value is required and missing/ambiguous. Not every rule
+ * needs a value - only when `requireValue` is set (top-level action
+ * rules, or nested rules captured by a parent variable) do
+ * ambiguous/missing values throw; otherwise both resolve to
+ * `undefined`. `describeRule` is only invoked when an error is thrown.
  */
 export function deriveEffectiveValue(
     rule: GrammarRule,
@@ -56,9 +25,9 @@ export function deriveEffectiveValue(
     if (rule.value !== undefined) {
         return rule.value;
     }
-    const result = findSingleValueBearingPart(rule.parts);
-    if (result !== undefined && result !== "ambiguous") {
-        return { type: "variable", name: result.variable };
+    const variableParts = rule.parts.filter((p) => p.variable !== undefined);
+    if (variableParts.length === 1) {
+        return { type: "variable", name: variableParts[0].variable! };
     }
     if (!requireValue) {
         return undefined;
@@ -66,11 +35,11 @@ export function deriveEffectiveValue(
     const description = describeRule?.() ?? "";
     const term = rule.parts.length === 1 ? "term" : "terms";
     const reason =
-        result === "ambiguous"
+        variableParts.length > 1
             ? "more than one part carries a variable - the implicit value is ambiguous"
             : "no part carries a variable";
     throw new Error(
-        `Internal Error : ${description} has ${rule.parts.length} ${term} but no value expression, and ${reason}. ` +
+        `Internal error: ${description} has ${rule.parts.length} ${term} but no value expression, and ${reason}. ` +
             "Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.",
     );
 }
