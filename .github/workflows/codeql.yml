@@ -1,0 +1,103 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# CodeQL advanced setup.
+#
+# Why this is not the stock single-file setup:
+#   Merging is gated by rulesets ("Require code scanning results" + "Require code
+#   quality results"). GitHub's CodeQL *default setup* — and any plain
+#   `on: pull_request` CodeQL workflow — cannot produce results for pull requests
+#   from FORKS, because fork-triggered runs get a read-only GITHUB_TOKEN and no
+#   secrets, so `analyze` cannot upload. Those PRs would then be blocked forever.
+#
+#   To fix that safely, this workflow ANALYZES the code (including untrusted fork
+#   code) in the unprivileged `pull_request` context and, for fork PRs, saves the
+#   SARIF as an artifact instead of uploading it. A separate, privileged workflow
+#   (codeql-fork-upload.yml) triggered by `workflow_run` then uploads that SARIF.
+#   The companion job never checks out or runs fork code, which avoids the
+#   "pwn request" vulnerability class you would get from `pull_request_target`.
+#
+# NOTE: This workflow REPLACES CodeQL "default setup". Disable default setup under
+#   Settings > Advanced Security > Code scanning first, otherwise the analyze step
+#   fails with a "default setup is enabled" conflict.
+
+name: "CodeQL Advanced"
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # upload results for push / internal-branch PRs
+      packages: read # fetch internal CodeQL query packs
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: csharp
+            build-mode: none
+          - language: java-kotlin
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+
+    env:
+      # True only for PRs opened from a fork (head repo != this repo). Those runs
+      # get a read-only token and must defer the upload to codeql-fork-upload.yml.
+      IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # For fork PRs, analyze the PR head commit so results map to the PR.
+          # Otherwise use the default ref (merge ref for internal PRs, branch tip
+          # for pushes).
+          ref: ${{ env.IS_FORK_PR == 'true' && github.event.pull_request.head.sha || github.ref }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # Enable both the security ("code-scanning") and "code-quality" analyses
+          # so both ruleset rules can be satisfied. code-quality is currently a
+          # preview capability; if the analyze step rejects this input, remove the
+          # line and drop the "Require code quality results" rule from the ruleset.
+          analysis-kinds: code-scanning,code-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
+          # Push and internal-branch PRs have a write token and upload directly.
+          # Fork PRs cannot upload here, so write SARIF to disk and hand it to the
+          # privileged companion workflow via an artifact.
+          upload: ${{ env.IS_FORK_PR == 'true' && 'never' || 'always' }}
+          output: sarif-results
+
+      - name: Stage SARIF for fork PR upload
+        if: ${{ env.IS_FORK_PR == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif-${{ matrix.language }}
+          path: sarif-results
+          retention-days: 1

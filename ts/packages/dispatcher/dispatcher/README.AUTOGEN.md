@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=82bd85fd42564ba62e5226e97ae96738eeac731fce659edbec8f5efe80cfb696 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=a68b6d432661f2222fc5201042f3b8f927a47a50ea6aee3929a8558ba6851880 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a core component of the TypeAgent repository, designed to enable personal agents with natural language interfaces. It processes user requests, translates them into structured actions using schemas, and coordinates interactions between multiple agents. The Dispatcher integrates with various front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for application agents.
+The TypeAgent Dispatcher is a core library in the TypeAgent monorepo, designed to facilitate the interaction between users and application agents through natural language interfaces. It acts as the central hub for processing user requests, translating them into structured actions, and coordinating responses from various agents. The Dispatcher is a key component in enabling the creation of extensible and scalable personal agents that can be integrated into different front ends, such as the TypeAgent Shell and CLI.
 
 ## What it does
 
-The Dispatcher serves as the central hub for interpreting and executing user requests. It uses large language models (LLMs) to translate natural language inputs into structured actions defined by application agent schemas. It also manages agent interactions, dynamically switching between them to handle diverse tasks.
+The Dispatcher is responsible for interpreting user inputs, which can be either natural language requests or system commands, and converting them into structured actions. These actions are defined by schemas provided by application agents. The Dispatcher also manages the dynamic switching between agents to handle diverse tasks, ensuring a cohesive user experience.
 
 ### Natural Language Requests
 
-Users can interact with the Dispatcher using natural language to request actions. For example, in the CLI:
+The Dispatcher leverages large language models (LLMs) to translate natural language inputs into structured actions. For example, in the CLI:
 
 ```bash
 [calendar]🤖> can you setup a meeting between 2-3PM
@@ -37,37 +37,42 @@ Other examples of natural language requests include:
 
 ### System Commands
 
-In addition to natural language, the Dispatcher supports system commands prefixed with `@`. These commands allow users to directly configure and interact with the system.
+The Dispatcher also supports system commands prefixed with `@`, allowing users to configure and interact with the system directly. These commands include:
 
-#### Examples of System Commands
-
-- **Toggling agents**: Enable or disable specific agents or groups of agents.
+- **Agent Management**: Enable or disable specific agents or groups of agents.
 
   - `@config agent <agent>`: Enable a specific agent.
   - `@config agent --off <agent>`: Disable a specific agent.
   - `@config agent *`: Enable all agents.
   - `@config agent --reset`: Reset agent configurations to default.
 
-- **Explainer configuration**: Change the explainer used for interpreting translations.
+- **Explainer Configuration**: Configure the explainer used for interpreting translations.
 
   - `@config explainer name <explainer>`: Set the explainer to a specific implementation.
   - `@config explainer`: List all available explainers.
 
-- **Shortcut commands**: Directly invoke specific parts of the Dispatcher system.
-
+- **Shortcut Commands**: Directly invoke specific parts of the Dispatcher system.
   - `@translate <request>`: Perform only the translation step.
   - `@explain <request> => <action>`: Generate an explanation for a request-action pair.
   - `@reasoning [--engine claude|copilot|none] <request>`: Use the reasoning engine on a request.
 
-- **Conversation management**: Manage conversations through commands or natural language.
-  - Examples: "create a new conversation called research", "switch to my work conversation", "list my conversations".
+### Conversation Management
+
+The Dispatcher supports managing conversations through natural language or system commands. Examples include:
+
+- "Create a new conversation called research."
+- "Switch to my work conversation."
+- "List my conversations."
+- "Rename this conversation to project notes."
+
+The Dispatcher translates these requests into structured payloads and forwards them to the client for execution.
 
 ## Setup
 
-The Dispatcher requires the following environment variables to be configured:
+To use the Dispatcher, the following environment variables must be configured:
 
 - `CLAUDE_CUSTOM_PROMPT_FILE`: Path to a custom prompt file for Claude.
-- `CLAUDE_FORCE_REASONING`: Boolean flag to force reasoning with Claude.
+- `CLAUDE_FORCE_REASONING`: Boolean flag to enforce reasoning with Claude.
 - `COPILOT_REASONING_EFFORT`: Effort level for Copilot reasoning.
 - `COPILOT_REASONING_MODEL`: Model identifier for Copilot reasoning.
 - `COSMOSDB_CONNECTION_STRING`: Connection string for Azure Cosmos DB.
@@ -76,15 +81,15 @@ The Dispatcher requires the following environment variables to be configured:
 - `TYPEAGENT_REQUEST_ACTION_LOG_DIR`: Directory for logging request actions.
 - `TYPEAGENT_USER_DATA_DIR`: Directory for storing user data.
 
-Refer to the hand-written README for detailed instructions on obtaining and setting these values.
+Refer to the hand-written README for additional details on obtaining and setting these values.
 
 ## Key Files
 
-The Dispatcher is organized into several key components, each responsible for specific functionality:
+The Dispatcher is organized into several key components, each with specific responsibilities:
 
 ### Handlers
 
-Handlers process specific commands and are located in [./src/context/dispatcher/handlers/](./src/context/dispatcher/handlers/). Key files include:
+Handlers are responsible for processing specific commands and are located in [./src/context/dispatcher/handlers/](./src/context/dispatcher/handlers/). Key files include:
 
 - [explainCommandHandler.ts](./src/context/dispatcher/handlers/explainCommandHandler.ts): Handles the `@explain` command.
 - [matchCommandHandler.ts](./src/context/dispatcher/handlers/matchCommandHandler.ts): Handles matching-related commands.
@@ -116,14 +121,14 @@ Utility functions and classes are provided in [./src/helpers/](./src/helpers/). 
 
 ## How to extend
 
-To extend the functionality of the Dispatcher, follow these steps:
+To extend the Dispatcher, follow these steps:
 
-1. **Create a new handler**:
+1. **Add a New Handler**:
 
-   - Add a new file in [./src/context/dispatcher/handlers/](./src/context/dispatcher/handlers/).
+   - Create a new file in [./src/context/dispatcher/handlers/](./src/context/dispatcher/handlers/).
    - Implement the logic for the new command or action.
 
-2. **Define a new schema**:
+2. **Define a New Schema**:
 
    - Add a new file in [./src/context/dispatcher/schema/](./src/context/dispatcher/schema/).
    - Define the structure of the new action or command.
@@ -133,9 +138,13 @@ To extend the functionality of the Dispatcher, follow these steps:
    - Modify the Dispatcher to recognize and process the new handler and schema.
    - Ensure the new functionality integrates with existing components.
 
-4. **Test the changes**:
-   - Write and run tests to verify the new functionality.
+4. **Test Your Changes**:
+
+   - Write unit tests for the new functionality.
    - Use the CLI or Shell to validate the integration in real-world scenarios.
+
+5. **Documentation**:
+   - Update the hand-written README or other relevant documentation to reflect the new functionality.
 
 For more details on the architecture and design of the Dispatcher, refer to the dispatcher architecture documentation.
 
@@ -145,16 +154,16 @@ For more details on the architecture and design of the Dispatcher, refer to the 
 
 ### Entry points
 
-- default → `./dist/index.js` _(not found on disk)_
-- `./helpers/console` → `./dist/helpers/console.js` _(not found on disk)_
-- `./helpers/data` → `./dist/helpers/userData.js` _(not found on disk)_
-- `./helpers/userSettings` → `./dist/helpers/userSettings.js` _(not found on disk)_
-- `./helpers/config` → `./dist/helpers/config.js` _(not found on disk)_
-- `./helpers/status` → `./dist/helpers/status.js` _(not found on disk)_
-- `./helpers/command` → `./dist/helpers/command.js` _(not found on disk)_
-- `./helpers/completion` → `./dist/helpers/completion/index.js` _(not found on disk)_
-- `./internal` → `./dist/internal.js` _(not found on disk)_
-- `./explorer` → `./dist/explorer.js` _(not found on disk)_
+- default → [./dist/index.js](./dist/index.js)
+- `./helpers/console` → [./dist/helpers/console.js](./dist/helpers/console.js)
+- `./helpers/data` → [./dist/helpers/userData.js](./dist/helpers/userData.js)
+- `./helpers/userSettings` → [./dist/helpers/userSettings.js](./dist/helpers/userSettings.js)
+- `./helpers/config` → [./dist/helpers/config.js](./dist/helpers/config.js)
+- `./helpers/status` → [./dist/helpers/status.js](./dist/helpers/status.js)
+- `./helpers/command` → [./dist/helpers/command.js](./dist/helpers/command.js)
+- `./helpers/completion` → [./dist/helpers/completion/index.js](./dist/helpers/completion/index.js)
+- `./internal` → [./dist/internal.js](./dist/internal.js)
+- `./explorer` → [./dist/explorer.js](./dist/explorer.js)
 
 ### Dependencies
 
@@ -185,6 +194,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-r
 
 ### Used by
 
+- [@typeagent/docs-autogen](../../../tools/docsAutogen/README.md)
 - [agent-api](../../../packages/api/README.md)
 - [agent-cache-explorer](../../../packages/cacheExplorer/README.md)
 - [agent-cli](../../../packages/cli/README.md)
@@ -194,8 +204,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-r
 - [default-agent-provider](../../../packages/defaultAgentProvider/README.md)
 - [dispatcher-node-providers](../../../packages/dispatcher/nodeProviders/README.md)
 - [greeting-agent](../../../packages/agents/greeting/README.md)
-- [knowledgevisualizer](../../../packages/knowledgeVisualizer/README.md)
-- _…and 6 more workspace consumers._
+- _…and 7 more workspace consumers._
 
 ### Files of interest
 
@@ -209,7 +218,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-r
 - [./src/context/dispatcher/schema/dispatcherActionSchema.ts](./src/context/dispatcher/schema/dispatcherActionSchema.ts)
 - [./src/context/dispatcher/schema/lookupActionSchema.ts](./src/context/dispatcher/schema/lookupActionSchema.ts)
 - [./src/context/dispatcher/schema/reasoningActionSchema.ts](./src/context/dispatcher/schema/reasoningActionSchema.ts)
-- _…and 203 more under `./src/`._
+- _…and 204 more under `./src/`._
 
 ### Environment variables
 
@@ -227,6 +236,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

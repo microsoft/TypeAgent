@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=fafb72930cf5200c5cddaa5c7aeec4f0f02302e65b74a76cb48f3a932b1a5686 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=96c15ea2d32dde6034c2697c6aea7b5785aa0634e2807607f9d3560c7348a169 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/action-grammar — AI-generated documentation
@@ -12,13 +12,13 @@
 
 ## Overview
 
-The `@typeagent/action-grammar` package is a TypeScript library that serves as the grammar engine for the TypeAgent framework. It provides tools to parse, compile, and match natural language input against grammar rules defined in `.agr` files. These rules enable the conversion of user input, such as natural language commands, into structured JSON action objects that can be processed by agents.
+The `@typeagent/action-grammar` package is a TypeScript library that provides the grammar engine for the TypeAgent framework. It enables the parsing, compilation, and matching of natural language input against grammar rules defined in `.agr` files. These rules allow the conversion of user input, such as natural language commands, into structured JSON action objects that can be processed by agents.
 
-This package is a foundational component of the TypeAgent ecosystem and is utilized by several other packages, including `@typeagent/core`, `@typeagent/action-grammar-compiler`, and `agent-cli`.
+This package is a core component of the TypeAgent ecosystem and is used by several other packages, including `@typeagent/core`, `@typeagent/action-grammar-compiler`, and `agent-cli`.
 
 ## What it does
 
-The package processes natural language input by matching it against predefined grammar rules to produce structured actions. These actions are represented as JSON objects, such as:
+The primary purpose of this package is to process natural language input and match it against predefined grammar rules to generate structured actions. These actions are represented as JSON objects, which can be consumed by other components in the TypeAgent ecosystem. For example:
 
 ```json
 {
@@ -30,27 +30,27 @@ The package processes natural language input by matching it against predefined g
 }
 ```
 
-### Key Capabilities
+### Key Features
 
 1. **Grammar Parsing**:
 
-   - Parses `.agr` files written in a custom domain-specific language (DSL) for defining natural language grammar rules.
-   - Supports constructs like literals, wildcards, alternation, optionals, repetition, rule references, imports, and entity declarations.
+   - Parses `.agr` files, which are written in a custom domain-specific language (DSL) for defining natural language grammar rules.
+   - The DSL supports constructs such as literals, wildcards, alternation, optionals, repetition, rule references, imports, and entity declarations.
    - The `parseGrammarRules` function converts `.agr` files into an Abstract Syntax Tree (AST).
 
 2. **Grammar Compilation**:
 
-   - Converts parsed grammar rules into an optimized in-memory `Grammar` representation using the `compileGrammar` function.
+   - The `compileGrammar` function transforms parsed grammar rules into an optimized in-memory `Grammar` representation.
 
 3. **Matching**:
 
-   - Provides two matching backends:
+   - Two matching backends are available:
      - **Recursive Backtracking Matcher**: Operates directly on the `Grammar` AST and supports complex patterns with wildcards and nested rules.
      - **NFA/DFA Pipeline**: Compiles grammar into a token-based Non-deterministic Finite Automaton (NFA) and optionally further into a Deterministic Finite Automaton (DFA) for faster matching.
 
 4. **Entity Management**:
 
-   - Includes an entity system for defining and managing entities such as dates, times, and numbers.
+   - Provides an entity system for defining and managing entities such as dates, times, and numbers.
    - Entities can be used within grammar rules to capture and validate specific types of input.
 
 5. **Dynamic Grammar Loading**:
@@ -58,22 +58,30 @@ The package processes natural language input by matching it against predefined g
    - Supports runtime loading and caching of grammar rules, enabling dynamic updates to the grammar.
 
 6. **Grammar Generation**:
-   - Provides tools for generating grammar rules from schemas and examples using large language models (LLMs) like Claude.
+   - Includes tools for generating grammar rules from schemas and examples using large language models (LLMs) like Claude.
 
 ## Setup
 
-To use the `@typeagent/action-grammar` package, ensure the following dependencies are installed in your project:
+To use the `@typeagent/action-grammar` package, follow these steps:
 
-- `@anthropic-ai/claude-agent-sdk`
-- `debug`
-- `dotenv`
-- `regexp.escape`
+1. Install the package and its dependencies:
 
-Install these dependencies using `pnpm install`. If additional setup steps are required, refer to the hand-written README for further details.
+   ```bash
+   pnpm install
+   ```
+
+2. Ensure the following external dependencies are installed in your project:
+
+   - `@anthropic-ai/claude-agent-sdk`
+   - `debug`
+   - `dotenv`
+   - `regexp.escape`
+
+3. If additional setup steps are required, refer to the hand-written README for further details.
 
 ## Key Files
 
-The package is organized into several key components, each responsible for specific functionality:
+The package is organized into several key files, each responsible for specific functionality:
 
 ### Parsing and Compilation
 
@@ -111,11 +119,11 @@ The package is organized into several key components, each responsible for speci
 
 ## How to extend
 
-To extend the functionality of the `@typeagent/action-grammar` package, follow these steps:
+To extend the `@typeagent/action-grammar` package, you can follow these steps:
 
-1. **Add New Grammar Rules**:
+1. **Add or Modify Grammar Rules**:
 
-   - Create or modify `.agr` files with new rules.
+   - Create or update `.agr` files with new rules.
    - Use `parseGrammarRules` to parse the new rules into an AST.
    - Compile the rules into a `Grammar` object using `compileGrammar`.
 
@@ -137,7 +145,7 @@ To extend the functionality of the `@typeagent/action-grammar` package, follow t
    - Write unit tests for any new functionality.
    - Use the benchmark scripts in the `bench` directory to evaluate performance impacts.
 
-For contributors new to the package, a good starting point is [grammarRuleParser.ts](./src/grammarRuleParser.ts) to understand how `.agr` files are parsed, and [grammarMatcher.ts](./src/grammarMatcher.ts) for the matching logic. Be sure to follow the existing patterns and conventions in the codebase.
+For new contributors, a good starting point is [grammarRuleParser.ts](./src/grammarRuleParser.ts) to understand how `.agr` files are parsed, and [grammarMatcher.ts](./src/grammarMatcher.ts) for the matching logic. Be sure to follow the existing patterns and conventions in the codebase.
 
 ## Reference
 
@@ -145,10 +153,10 @@ For contributors new to the package, a good starting point is [grammarRuleParser
 
 ### Entry points
 
-- default → `./dist/index.js` _(not found on disk)_
-- `./completion` → `./dist/completion.js` _(not found on disk)_
-- `./rules` → `./dist/indexRules.js` _(not found on disk)_
-- `./generation` → `./dist/generation/index.js` _(not found on disk)_
+- default → [./dist/index.js](./dist/index.js)
+- `./completion` → [./dist/completion.js](./dist/completion.js)
+- `./rules` → [./dist/indexRules.js](./dist/indexRules.js)
+- `./generation` → [./dist/generation/index.js](./dist/generation/index.js)
 
 ### Dependencies
 
@@ -185,10 +193,10 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`, `dotenv`, `regexp.escape`
 - [./src/builtInEntities.agr](./src/builtInEntities.agr)
 - [./src/builtInEntities.ts](./src/builtInEntities.ts)
 - [./src/builtInFileLoader.ts](./src/builtInFileLoader.ts)
-- _…and 56 more under `./src/`._
+- _…and 57 more under `./src/`._
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-grammar docs:verify-links` to spot-check._
+_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-grammar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
