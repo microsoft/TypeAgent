@@ -363,7 +363,9 @@ function normalizeRule(
     );
     if (tailCallPart !== undefined) {
         throw new Error(
-            `normalizeGrammar: ${tailCallNotYetSupportedMessage(tailCallPart.name)}`,
+            `normalizeGrammar: tail RulesPart (name='${tailCallPart.name ?? "<unnamed>"}') is not yet supported by the ` +
+                "NFA/DFA backend - disable `tailFactoring` / `promoteTailRulesParts` in the " +
+                "grammar optimizer for NFA/DFA paths.",
         );
     }
 
@@ -462,19 +464,6 @@ function stripDispatch(part: RulesPart): RulesPart {
         repeat: part.repeat,
         tailCall: part.tailCall,
     });
-}
-
-/**
- * Message for the NFA/DFA backend's tailCall gap (NYI, not a fundamental
- * limitation - see `RulesPart.tailCall` in grammarTypes.ts), shared by
- * every throw site for consistent wording.
- */
-function tailCallNotYetSupportedMessage(partName: string | undefined): string {
-    return (
-        `tail RulesPart (name='${partName ?? "<unnamed>"}') is not yet supported by the ` +
-        "NFA/DFA backend - disable `tailFactoring` / `promoteTailRulesParts` in the " +
-        "grammar optimizer for NFA/DFA paths."
-    );
 }
 
 /**
@@ -1383,11 +1372,6 @@ function compileRulesPart(
     checkedVariables?: Set<string>,
     overrideVariableName?: string,
 ): number {
-    if (part.tailCall) {
-        throw new Error(
-            `compileRulesPart: ${tailCallNotYetSupportedMessage(part.name)}`,
-        );
-    }
     if (part.alternatives.length === 0) {
         // Empty rules - epsilon transition
         builder.addEpsilonTransition(fromState, toState);
@@ -1462,11 +1446,6 @@ function compileRulesPartWithSlots(
     toState: number,
     context: RuleCompilationContext,
 ): number {
-    if (part.tailCall) {
-        throw new Error(
-            `compileRulesPartWithSlots: ${tailCallNotYetSupportedMessage(part.name)}`,
-        );
-    }
     if (part.alternatives.length === 0) {
         // Empty rules - epsilon transition
         builder.addEpsilonTransition(fromState, toState);

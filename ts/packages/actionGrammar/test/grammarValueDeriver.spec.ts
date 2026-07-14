@@ -68,8 +68,7 @@ describe("findSingleValueBearingPart", () => {
 });
 
 describe("deriveEffectiveValue (requireValue: false)", () => {
-    const derive = (rule: GrammarRule) =>
-        deriveEffectiveValue(rule, () => "", false);
+    const derive = (rule: GrammarRule) => deriveEffectiveValue(rule);
 
     it("returns the rule's explicit value when present, ignoring parts", () => {
         const rule: GrammarRule = {

@@ -55,8 +55,8 @@ export function findSingleValueBearingPart(
  */
 export function deriveEffectiveValue(
     rule: GrammarRule,
-    describeRule: () => string,
-    requireValue: boolean,
+    describeRule?: () => string,
+    requireValue = false,
 ): CompiledValueNode | undefined {
     if (rule.value !== undefined) {
         return rule.value;
@@ -72,15 +72,16 @@ export function deriveEffectiveValue(
         rule.parts.length === 1
             ? "has 1 term"
             : `has ${rule.parts.length} terms`;
+    const description = describeRule?.() ?? "";
     if (result === "ambiguous") {
         throw new Error(
-            `${describeRule()} ${termsDescription} but no value expression, ` +
+            `${description} ${termsDescription} but no value expression, ` +
                 `and more than one part carries a variable - the implicit value is ambiguous. ` +
                 `Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.`,
         );
     }
     throw new Error(
-        `${describeRule()} ${termsDescription} but no value expression, and no part carries a variable. ` +
+        `${description} ${termsDescription} but no value expression, and no part carries a variable. ` +
             `Rules must have an explicit value expression (using ->) unless exactly one part carries a variable.`,
     );
 }
