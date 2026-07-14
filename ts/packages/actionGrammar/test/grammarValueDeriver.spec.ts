@@ -2,17 +2,17 @@
 // Licensed under the MIT License.
 
 // Direct unit tests for the pure helpers in grammarValueDeriver.ts, shared
-// by grammarOptimizer.ts (`checkForwardingPromotable`) and
-// nfaCompiler.ts (via `deriveEffectiveValue`, which - along with
-// `deriveValue` - now lives in this module).
+// by grammarOptimizer.ts (`checkForwardingPromotable`) and nfaCompiler.ts
+// (via `deriveEffectiveValue`, which lives in this module).
 // The consumers' own spec files (grammarOptimizerPromoteTail.spec.ts,
 // nfaFactoredPrefixValues.spec.ts) already cover end-to-end wiring and
-// throw/promote decisions; these tests isolate the pure derivation logic
-// itself.
+// promote decisions; nfaCompilerValueErrors.spec.ts covers
+// `deriveEffectiveValue`'s throwing (requireValue: true) paths. These
+// tests isolate its non-throwing (requireValue: false) derivation logic.
 
 import {
     findSingleValueBearingPart,
-    deriveValue,
+    deriveEffectiveValue,
 } from "../src/grammarValueDeriver.js";
 import {
     createStringPart,
@@ -67,7 +67,10 @@ describe("findSingleValueBearingPart", () => {
     });
 });
 
-describe("deriveValue", () => {
+describe("deriveEffectiveValue (requireValue: false)", () => {
+    const derive = (rule: GrammarRule) =>
+        deriveEffectiveValue(rule, () => "", false);
+
     it("returns the rule's explicit value when present, ignoring parts", () => {
         const rule: GrammarRule = {
             parts: [
@@ -76,20 +79,17 @@ describe("deriveValue", () => {
             ],
             value: { type: "literal", value: "explicit" },
         };
-        expect(deriveValue(rule)).toEqual({
-            kind: "value",
-            value: { type: "literal", value: "explicit" },
-        });
+        expect(derive(rule)).toEqual({ type: "literal", value: "explicit" });
     });
 
-    it('returns "none" for a rule with no parts and no value', () => {
+    it("returns undefined for a rule with no parts and no value", () => {
         const rule: GrammarRule = { parts: [] };
-        expect(deriveValue(rule)).toEqual({ kind: "none" });
+        expect(derive(rule)).toBeUndefined();
     });
 
-    it('returns "none" for a single part with no variable', () => {
+    it("returns undefined for a single part with no variable", () => {
         const rule: GrammarRule = { parts: [createStringPart(["foo"])] };
-        expect(deriveValue(rule)).toEqual({ kind: "none" });
+        expect(derive(rule)).toBeUndefined();
     });
 
     it("forwards a single part's variable as the implicit value", () => {
@@ -99,10 +99,7 @@ describe("deriveValue", () => {
                 createWildcardPart("x", "wildcard"),
             ],
         };
-        expect(deriveValue(rule)).toEqual({
-            kind: "value",
-            value: { type: "variable", name: "x" },
-        });
+        expect(derive(rule)).toEqual({ type: "variable", name: "x" });
     });
 
     it("forwards a nested RulesPart's captured variable", () => {
@@ -115,26 +112,23 @@ describe("deriveValue", () => {
         const rule: GrammarRule = {
             parts: [createStringPart(["prefix"]), nested],
         };
-        expect(deriveValue(rule)).toEqual({
-            kind: "value",
-            value: { type: "variable", name: "chosen" },
-        });
+        expect(derive(rule)).toEqual({ type: "variable", name: "chosen" });
     });
 
-    it('returns "ambiguous" when 2+ parts carry a variable and there is no explicit value', () => {
+    it("returns undefined when 2+ parts carry a variable and there is no explicit value", () => {
         const rule: GrammarRule = {
             parts: [
                 createStringPart(["foo"], "x"),
                 createStringPart(["bar"], "y"),
             ],
         };
-        expect(deriveValue(rule)).toEqual({ kind: "ambiguous" });
+        expect(derive(rule)).toBeUndefined();
     });
 
-    it('returns "none" for a multi-part rule where nothing carries a variable', () => {
+    it("returns undefined for a multi-part rule where nothing carries a variable", () => {
         const rule: GrammarRule = {
             parts: [createStringPart(["foo"]), createStringPart(["bar"])],
         };
-        expect(deriveValue(rule)).toEqual({ kind: "none" });
+        expect(derive(rule)).toBeUndefined();
     });
 });

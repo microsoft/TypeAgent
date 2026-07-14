@@ -41,12 +41,9 @@ describe("deriveEffectiveValue error messages", () => {
         // and no top-level `value`. String-literal single-part rules are
         // auto-normalized (isSingleLiteralRule) to stamp a matched-text
         // value, so this uses an unbound phraseSet part instead - a
-        // shape normalizeRule does not special-case. Before
-        // deriveEffectiveValue was consolidated to call `deriveValue`
-        // uniformly, a rule this shape short-circuited to `rule.value`
-        // (undefined) without throwing. It now throws like any other
-        // value-less rule - guard here that the message accurately
-        // reflects a 1-term rule instead of the multi-term wording.
+        // shape normalizeRule does not special-case. Guard here that the
+        // message accurately reflects a 1-term rule instead of the
+        // multi-term wording.
         const grammar: Grammar = {
             alternatives: [{ parts: [createPhraseSetPart("Polite")] }],
         };
