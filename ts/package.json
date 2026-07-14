@@ -37,6 +37,7 @@
     "copilot:dev": "node packages/copilot-plugin/scripts/launch-dev.mjs",
     "devtunnel:setup": "node tools/scripts/setup-devtunnel.mjs",
     "devtunnel:status": "node tools/scripts/list-tunnels.mjs",
+    "docs:action-browser": "node tools/actionBrowser/dist/cli.js",
     "docs:generate": "node tools/docsAutogen/bin/docs-autogen.cjs --render --write",
     "docs:generate:dry": "node tools/docsAutogen/bin/docs-autogen.cjs --render --dry-run",
     "docs:generate:llm": "node tools/docsAutogen/bin/docs-autogen.cjs --render --write --llm",
