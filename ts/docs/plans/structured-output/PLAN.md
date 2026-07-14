@@ -552,6 +552,73 @@ prerequisites, not a backlog to burn down.
 4. **Naming** — `StructuredContent` / `type: "structured"` vs
    `RichContent` / `"rich"`. Current lean: `structured`.
 
+## Future enhancements (backlog)
+
+Ideas beyond the shipped scope (block document + sort/filter/pagination +
+`rawData`). Not scheduled; pull into a phase when a concrete agent needs
+it. Ordered roughly by value-to-effort within each group.
+
+### Interactivity (largest remaining feature)
+
+- **Row actions** (open question #3) — wire the reserved `cell.href` /
+  `block.action` fields so a row click can trigger an agent action
+  (merge a PR, reply to an email, delete a calendar event). Requires a
+  **client → agent transport** (a response channel back into the agent,
+  the same prerequisite as agent-driven paging). This is the natural
+  "v2" and unlocks a whole class of interactive agents.
+- **Column visibility / reorder** — let the user hide or reorder columns
+  on wide tables (chat-ui only; pure client state).
+- **Pinned columns** — `TableColumn.pinned` is already reserved; wire the
+  `position: sticky` CSS when a wide, horizontally-scrolling table
+  actually ships.
+
+### New block / cell types
+
+- **`progress` block** — determinate bar or spinner for long-running
+  agents (screencapture build, onboarding phases, calendar sign-in),
+  replacing today's streamed `kind: "status"` text.
+- **`chart` block** — minimal bar/line/sparkline derived from `rawData`
+  (weather forecast, github contributor counts, dependabot severity).
+  Currently the iframe escape hatch is the only option (explicit v1
+  non-goal).
+- **Richer cell types** — `boolean` (checkmark), `duration`,
+  `relative-date` ("3 days ago"), `percent` (inline bar), `currency`.
+- **Nested / expandable rows** — a row expands to a detail block (email →
+  body, PR → description); hooks into the reserved `block.action`.
+
+### Consistency & developer experience
+
+- **Extract remaining inline builders** — `email`, `discord`, `taskflow`,
+  `onboarding`, `screencapture` still build blocks inline. Pull them into
+  pure exported functions + unit tests, matching the
+  github-cli / calendar / weather / ipconfig / list pattern. Closes the
+  last test-coverage gap.
+- **Shared column-spec DSL** — a typed `{ field, header, type, format }`
+  spec on top of `fromRecords` to cut per-adopter cell-mapping
+  boilerplate and standardize date/badge/number rendering.
+- **`validateStructuredContent(blocks)` helper** — catch malformed tables
+  (ragged rows, unknown column ids, bad cell shapes) at build/test time.
+
+### Client / rendering reach
+
+- **CLI table rendering** — `enhancedConsole.ts` gets the plain-text
+  fallback today; a box-drawing table would improve the terminal.
+- **MCP `outputSchema`** — Phase 6 carries `rawData` but not
+  `dataSchema`; derive JSON Schema from the block document so MCP /
+  Claude clients can validate typed output.
+- **Browser-extension fallback** — teach the Chrome/Edge extension to
+  prefer the markdown alternate (`getStructuredFallback`); this is the
+  prerequisite that unblocks Phase 8a (browser search results).
+- **Accessibility pass** — ARIA sort states, `scope`, and live-region
+  announcements for sort / filter / pagination in `setContent.ts`.
+
+### Data-scale
+
+- **Virtualized tables** — render-on-scroll for very large `rawData`
+  tables instead of pagination (chat-ui only).
+- **Agent-driven / server-side paging** — fetch page N on demand; shares
+  the client → agent transport prerequisite with row actions.
+
 ## Key files
 
 | Area | Path |

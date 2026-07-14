@@ -118,6 +118,14 @@ for `weather`, `ipconfig`, and `list` (calendar already had one).
 remain inline (validated by build/typecheck); their block shapes are
 covered transitively by the specs above.
 
+## Future enhancements (backlog)
+
+Not scheduled. Full list in [PLAN.md](./PLAN.md) → "Future enhancements".
+Highest-leverage items: **row actions** (needs a client → agent
+transport; the "v2"), extracting the 5 remaining inline builders into
+tested pure functions, and a `progress` / `chart` block. Pull into a
+phase when a concrete agent needs it.
+
 ## Open questions
 
 | # | Question | Resolution |
