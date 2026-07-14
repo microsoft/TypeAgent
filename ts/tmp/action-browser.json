@@ -16,11 +16,7 @@
               "actionName": "captureScreenshot",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "screenshot",
-                "capture screen",
-                "take screenshot"
-              ]
+              "phrasings": ["screenshot", "capture screen", "take screenshot"]
             },
             {
               "actionName": "changeSearchProvider",
@@ -62,19 +58,13 @@
               "actionName": "closeAllWebPages",
               "description": "Close all web page views",
               "parameters": [],
-              "phrasings": [
-                "tabs",
-                "pages"
-              ]
+              "phrasings": ["tabs", "pages"]
             },
             {
               "actionName": "closeWebPage",
               "description": "Close the current web site view",
               "parameters": [],
-              "phrasings": [
-                "close tab",
-                "close page"
-              ]
+              "phrasings": ["close tab", "close page"]
             },
             {
               "actionName": "createInferredFlow",
@@ -87,9 +77,7 @@
                   "description": "The indices of the inferred actions to create (1-based), or \"all\" to create all"
                 }
               ],
-              "phrasings": [
-                "all flows"
-              ]
+              "phrasings": ["all flows"]
             },
             {
               "actionName": "executeAdHocScript",
@@ -177,17 +165,13 @@
               "actionName": "goBack",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "back"
-              ]
+              "phrasings": ["back"]
             },
             {
               "actionName": "goForward",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "forward"
-              ]
+              "phrasings": ["forward"]
             },
             {
               "actionName": "openSearchResult",
@@ -249,34 +233,25 @@
               "actionName": "readPageContent",
               "description": "Read the web page contents aloud",
               "parameters": [],
-              "phrasings": [
-                "page"
-              ]
+              "phrasings": ["page"]
             },
             {
               "actionName": "reloadPage",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "refresh page",
-                "reload page"
-              ]
+              "phrasings": ["refresh page", "reload page"]
             },
             {
               "actionName": "scrollDown",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "down"
-              ]
+              "phrasings": ["down"]
             },
             {
               "actionName": "scrollUp",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "up"
-              ]
+              "phrasings": ["up"]
             },
             {
               "actionName": "searchImageAction",
@@ -307,33 +282,25 @@
               "actionName": "stopReadPageContent",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "stop reading"
-              ]
+              "phrasings": ["stop reading"]
             },
             {
               "actionName": "zoomIn",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "in"
-              ]
+              "phrasings": ["in"]
             },
             {
               "actionName": "zoomOut",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "out"
-              ]
+              "phrasings": ["out"]
             },
             {
               "actionName": "zoomReset",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "reset zoom"
-              ]
+              "phrasings": ["reset zoom"]
             }
           ]
         },
@@ -835,9 +802,7 @@
                   "description": "Who to add (required) - plain string"
                 }
               ],
-              "phrasings": [
-                "include {participant} in {description}"
-              ]
+              "phrasings": ["include {participant} in {description}"]
             },
             {
               "actionName": "findEvents",
@@ -1173,9 +1138,7 @@
               "actionName": "removeAllBreakpoints",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "'remove' 'all' 'breakpoints'"
-              ]
+              "phrasings": ["'remove' 'all' 'breakpoints'"]
             },
             {
               "actionName": "removeBreakpoint",
@@ -1231,17 +1194,13 @@
               "actionName": "showDebugPanel",
               "description": "Show debug panel or window in the editor or code window, if not already visible",
               "parameters": [],
-              "phrasings": [
-                "'show' 'debug' 'panel'"
-              ]
+              "phrasings": ["'show' 'debug' 'panel'"]
             },
             {
               "actionName": "showHover",
               "description": "Show hover",
               "parameters": [],
-              "phrasings": [
-                "'show' 'hover'"
-              ]
+              "phrasings": ["'show' 'hover'"]
             },
             {
               "actionName": "startDebugging",
@@ -1260,10 +1219,7 @@
                   "description": "Optional: run without debugging"
                 }
               ],
-              "phrasings": [
-                "'debug'",
-                "'start' 'debugging'"
-              ]
+              "phrasings": ["'debug'", "'start' 'debugging'"]
             },
             {
               "actionName": "step",
@@ -1276,20 +1232,13 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "'over'",
-                "'out'",
-                "'into'",
-                "'step in'"
-              ]
+              "phrasings": ["'over'", "'out'", "'into'", "'step in'"]
             },
             {
               "actionName": "stopDebugging",
               "description": "Stop debugging",
               "parameters": [],
-              "phrasings": [
-                "'stop' 'debugging'"
-              ]
+              "phrasings": ["'stop' 'debugging'"]
             },
             {
               "actionName": "toggleBreakpoint",
@@ -1328,114 +1277,85 @@
               "actionName": "closeEditor",
               "description": "Close the current editor",
               "parameters": [],
-              "phrasings": [
-                "'close' 'editor'"
-              ]
+              "phrasings": ["'close' 'editor'"]
             },
             {
               "actionName": "fontZoomReset",
               "description": "Zoom reset",
               "parameters": [],
-              "phrasings": [
-                "'zoom' 'reset'",
-                "'reset' 'zoom'"
-              ]
+              "phrasings": ["'zoom' 'reset'", "'reset' 'zoom'"]
             },
             {
               "actionName": "openMarkdownPreview",
               "description": "Open markdown preview",
               "parameters": [],
-              "phrasings": [
-                "'open' 'markdown preview'"
-              ]
+              "phrasings": ["'open' 'markdown preview'"]
             },
             {
               "actionName": "openMarkdownPreviewToSide",
               "description": "Open markdown preview to the side",
               "parameters": [],
-              "phrasings": [
-                "'open' 'markdown preview' 'to' 'side'"
-              ]
+              "phrasings": ["'open' 'markdown preview' 'to' 'side'"]
             },
             {
               "actionName": "openSettings",
               "description": "Open settings",
               "parameters": [],
-              "phrasings": [
-                "'open' 'settings'"
-              ]
+              "phrasings": ["'open' 'settings'"]
             },
             {
               "actionName": "replaceInFiles",
               "description": "Replace in files",
               "parameters": [],
-              "phrasings": [
-                "'replace in' 'files'"
-              ]
+              "phrasings": ["'replace in' 'files'"]
             },
             {
               "actionName": "showExplorer",
               "description": "Show explorer/show the file explorer",
               "parameters": [],
-              "phrasings": [
-                "'show' 'explorer'"
-              ]
+              "phrasings": ["'show' 'explorer'"]
             },
             {
               "actionName": "showOutputPanel",
               "description": "Show output panel",
               "parameters": [],
-              "phrasings": [
-                "'show' 'output'"
-              ]
+              "phrasings": ["'show' 'output'"]
             },
             {
               "actionName": "showSearch",
               "description": "Show search or replace pane/window in the sidebar to search for text in the files Note that this is not for searching or finding files",
               "parameters": [],
-              "phrasings": [
-                "'show' 'search'"
-              ]
+              "phrasings": ["'show' 'search'"]
             },
             {
               "actionName": "showSourceControl",
               "description": "Show source control",
               "parameters": [],
-              "phrasings": [
-                "'show' 'source control'"
-              ]
+              "phrasings": ["'show' 'source control'"]
             },
             {
               "actionName": "toggleSearchDetails",
               "description": "Toggle search details",
               "parameters": [],
-              "phrasings": [
-                "'toggle' 'search details'"
-              ]
+              "phrasings": ["'toggle' 'search details'"]
             },
             {
               "actionName": "zenMode",
               "description": "Code in Zen Mode",
               "parameters": [],
-              "phrasings": [
-                "'zen mode'"
-              ]
+              "phrasings": ["'zen mode'"]
             },
             {
               "actionName": "zoomIn",
               "description": "Zoom in the editor",
               "parameters": [],
-              "phrasings": [
-                "in'"
-              ]
+              "phrasings": ["in'"]
             },
             {
               "actionName": "zoomOut",
               "description": "Zoom out the editor",
               "parameters": [],
-              "phrasings": [
-                "out'"
-              ]
+              "phrasings": ["out'"]
             }
           ]
         },
@@ -1975,17 +1895,13 @@
               "actionName": "reloadWindow",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "'reload' 'window'"
-              ]
+              "phrasings": ["'reload' 'window'"]
             },
             {
               "actionName": "showExtensions",
               "description": "Show the extensions panel",
               "parameters": [],
-              "phrasings": [
-                "'show' 'extensions'"
-              ]
+              "phrasings": ["'show' 'extensions'"]
             }
           ]
         },
@@ -2012,35 +1928,25 @@
                   "description": "file name, line number, or symbol name, don't fill this property if the file name, line number or symbol name is not provided in the user request"
                 }
               ],
-              "phrasings": [
-                "'symbol'",
-                "'line'",
-                "'file'"
-              ]
+              "phrasings": ["'symbol'", "'line'", "'file'"]
             },
             {
               "actionName": "showCommandPalette",
               "description": "Show or open the command palette that allows to search and execute commands Trigger this action only when asked to show/open the command palette explicitly",
               "parameters": [],
-              "phrasings": [
-                "'show' 'command palette'"
-              ]
+              "phrasings": ["'show' 'command palette'"]
             },
             {
               "actionName": "showKeyboardShortcuts",
               "description": "Show keyboard shortcuts",
               "parameters": [],
-              "phrasings": [
-                "'show' 'keyboard shortcuts'"
-              ]
+              "phrasings": ["'show' 'keyboard shortcuts'"]
             },
             {
               "actionName": "showUserSettings",
               "description": "Show user settings",
               "parameters": [],
-              "phrasings": [
-                "'show' 'settings'"
-              ]
+              "phrasings": ["'show' 'settings'"]
             }
           ]
         },
@@ -2061,9 +1967,7 @@
                   "description": "The display name of the conversation to delete. If omitted, the user will be shown a picker in the extension UI."
                 }
               ],
-              "phrasings": [
-                "'delete' 'chat'"
-              ]
+              "phrasings": ["'delete' 'chat'"]
             },
             {
               "actionName": "newConversation",
@@ -2076,9 +1980,7 @@
                   "description": "Optional display name for the new conversation. If omitted, the user will be prompted in the extension UI."
                 }
               ],
-              "phrasings": [
-                "'new' 'chat'"
-              ]
+              "phrasings": ["'new' 'chat'"]
             },
             {
               "actionName": "renameConversation",
@@ -2104,9 +2006,7 @@
                   "description": "The display name of the conversation to switch to. If omitted, the user will be shown a picker in the extension UI. If the named conversation does not exist, a new one will be created."
                 }
               ],
-              "phrasings": [
-                "'switch' 'chat'"
-              ]
+              "phrasings": ["'switch' 'chat'"]
             }
           ]
         },
@@ -2145,9 +2045,7 @@
                   "description": "Optional: reuse current terminal or open new one, default is true"
                 }
               ],
-              "phrasings": [
-                "'open' 'terminal'"
-              ]
+              "phrasings": ["'open' 'terminal'"]
             },
             {
               "actionName": "workbenchBuildRelatedTask",
@@ -2394,9 +2292,7 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "desktop"
-              ]
+              "phrasings": ["desktop"]
             },
             {
               "actionName": "Debug",
@@ -2408,9 +2304,7 @@
               "actionName": "DisconnectWifi",
               "description": "Disconnects from the current wifi network",
               "parameters": [],
-              "phrasings": [
-                "disconnect wifi"
-              ]
+              "phrasings": ["disconnect wifi"]
             },
             {
               "actionName": "EnableWifi",
@@ -2423,12 +2317,7 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "disable wifi",
-                "enable wifi",
-                "wi-fi",
-                "wifi"
-              ]
+              "phrasings": ["disable wifi", "enable wifi", "wi-fi", "wifi"]
             },
             {
               "actionName": "LaunchProgram",
@@ -2475,10 +2364,7 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "make {program} full screen",
-                "maximize {program}"
-              ]
+              "phrasings": ["make {program} full screen", "maximize {program}"]
             },
             {
               "actionName": "Minimize",
@@ -2491,10 +2377,7 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "hide {program}",
-                "minimize {program}"
-              ]
+              "phrasings": ["hide {program}", "minimize {program}"]
             },
             {
               "actionName": "MoveWindowToDesktop",
@@ -2526,18 +2409,13 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "unmute",
-                "mute"
-              ]
+              "phrasings": ["unmute", "mute"]
             },
             {
               "actionName": "NextDesktop",
               "description": "switches to the next Windows Desktop",
               "parameters": [],
-              "phrasings": [
-                "next desktop"
-              ]
+              "phrasings": ["next desktop"]
             },
             {
               "actionName": "PinWindow",
@@ -2556,9 +2434,7 @@
               "actionName": "PreviousDesktop",
               "description": "switches to the previous Windows Desktop",
               "parameters": [],
-              "phrasings": [
-                "previous desktop"
-              ]
+              "phrasings": ["previous desktop"]
             },
             {
               "actionName": "RestartService",
@@ -2589,9 +2465,7 @@
               "actionName": "RestoreVolume",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "restore volume"
-              ]
+              "phrasings": ["restore volume"]
             },
             {
               "actionName": "SetScreenResolution",
@@ -2764,10 +2638,7 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "volume {level}",
-                "set volume to {level}"
-              ]
+              "phrasings": ["volume {level}", "set volume to {level}"]
             }
           ]
         },
@@ -3512,11 +3383,7 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "forget window locations",
-                "positions",
-                "locations"
-              ]
+              "phrasings": ["forget window locations", "positions", "locations"]
             },
             {
               "actionName": "ShowFileExtensions",
@@ -4546,10 +4413,7 @@
               "actionName": "listChannels",
               "description": "List all channels in the current Discord server.",
               "parameters": [],
-              "phrasings": [
-                "what channels",
-                "list channels"
-              ]
+              "phrasings": ["what channels", "list channels"]
             },
             {
               "actionName": "listJoinedPrivateArchivedThreads",
@@ -4729,10 +4593,7 @@
               "actionName": "refreshChannels",
               "description": "Refresh the channel cache from the Discord server.",
               "parameters": [],
-              "phrasings": [
-                "update channel cache",
-                "refresh cache"
-              ]
+              "phrasings": ["update channel cache", "refresh cache"]
             },
             {
               "actionName": "removeThreadMember",
@@ -5488,9 +5349,7 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "into GitHub"
-              ]
+              "phrasings": ["into GitHub"]
             },
             {
               "actionName": "authLogout",
@@ -5503,9 +5362,7 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "out of GitHub"
-              ]
+              "phrasings": ["out of GitHub"]
             },
             {
               "actionName": "authStatus",
@@ -5524,9 +5381,7 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "check my GitHub authentication"
-              ]
+              "phrasings": ["check my GitHub authentication"]
             },
             {
               "actionName": "browseIssue",
@@ -5768,9 +5623,7 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "my gists"
-              ]
+              "phrasings": ["my gists"]
             },
             {
               "actionName": "gpgKeyAdd",
@@ -6450,9 +6303,7 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "add an SSH key for me"
-              ]
+              "phrasings": ["add an SSH key for me"]
             },
             {
               "actionName": "starRepo",
@@ -6471,10 +6322,7 @@
                   "description": ""
                 }
               ],
-              "phrasings": [
-                "unstar {repo}",
-                "star {repo}"
-              ]
+              "phrasings": ["unstar {repo}", "star {repo}"]
             },
             {
               "actionName": "statusPrint",
@@ -6954,18 +6802,13 @@
                   "description": "Amount to change volume by (can be negative)"
                 }
               ],
-              "phrasings": [
-                "turn down volume",
-                "turn up volume"
-              ]
+              "phrasings": ["turn down volume", "turn up volume"]
             },
             {
               "actionName": "clearQueue",
               "description": "Clear the playback queue",
               "parameters": [],
-              "phrasings": [
-                "clear queue"
-              ]
+              "phrasings": ["clear queue"]
             },
             {
               "actionName": "listFiles",
@@ -6991,26 +6834,19 @@
                   "description": "true to mute, false to unmute"
                 }
               ],
-              "phrasings": [
-                "unmute",
-                "mute"
-              ]
+              "phrasings": ["unmute", "mute"]
             },
             {
               "actionName": "next",
               "description": "Skip to next track",
               "parameters": [],
-              "phrasings": [
-                "next"
-              ]
+              "phrasings": ["next"]
             },
             {
               "actionName": "pause",
               "description": "Pause playback",
               "parameters": [],
-              "phrasings": [
-                "pause"
-              ]
+              "phrasings": ["pause"]
             },
             {
               "actionName": "playFile",
@@ -7061,9 +6897,7 @@
               "actionName": "previous",
               "description": "Go to previous track",
               "parameters": [],
-              "phrasings": [
-                "previous"
-              ]
+              "phrasings": ["previous"]
             },
             {
               "actionName": "repeat",
@@ -7082,9 +6916,7 @@
               "actionName": "resume",
               "description": "Resume playback",
               "parameters": [],
-              "phrasings": [
-                "resume"
-              ]
+              "phrasings": ["resume"]
             },
             {
               "actionName": "searchFiles",
@@ -7135,9 +6967,7 @@
               "actionName": "showQueue",
               "description": "Show the current playback queue",
               "parameters": [],
-              "phrasings": [
-                "show queue"
-              ]
+              "phrasings": ["show queue"]
             },
             {
               "actionName": "shuffle",
@@ -7156,17 +6986,13 @@
               "actionName": "status",
               "description": "Show now playing status including track information and playback state",
               "parameters": [],
-              "phrasings": [
-                "what 's"
-              ]
+              "phrasings": ["what 's"]
             },
             {
               "actionName": "stop",
               "description": "Stop playback completely",
               "parameters": [],
-              "phrasings": [
-                "stop"
-              ]
+              "phrasings": ["stop"]
             }
           ]
         }
@@ -8053,20 +7879,13 @@
               "actionName": "listPatterns",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "what patterns",
-                "show patterns",
-                "list patterns"
-              ]
+              "phrasings": ["what patterns", "show patterns", "list patterns"]
             },
             {
               "actionName": "listTemplates",
               "description": "",
               "parameters": [],
-              "phrasings": [
-                "show templates",
-                "list templates"
-              ]
+              "phrasings": ["show templates", "list templates"]
             },
             {
               "actionName": "scaffoldAgent",
@@ -8320,9 +8139,7 @@
               "actionName": "syncOsNotifications",
               "description": "Re-emit currently-present OS notifications through the agent pipeline. Triggers the build prompt (yes/no card) when the helper exe is missing. Windows only; surfaces a warning on Linux/macOS.",
               "parameters": [],
-              "phrasings": [
-                "'sync' 'notification' 's'?"
-              ]
+              "phrasings": ["'sync' 'notification' 's'?"]
             },
             {
               "actionName": "testOsNotification",
@@ -8561,21 +8378,13 @@
               "actionName": "next",
               "description": "next track",
               "parameters": [],
-              "phrasings": [
-                "skip track",
-                "skip",
-                "next"
-              ]
+              "phrasings": ["skip track", "skip", "next"]
             },
             {
               "actionName": "pause",
               "description": "pause playback",
               "parameters": [],
-              "phrasings": [
-                "pause the music",
-                "pause music",
-                "pause"
-              ]
+              "phrasings": ["pause the music", "pause music", "pause"]
             },
             {
               "actionName": "playAlbum",
@@ -8720,11 +8529,7 @@
               "actionName": "resume",
               "description": "resume playback",
               "parameters": [],
-              "phrasings": [
-                "resume the music",
-                "resume music",
-                "resume"
-              ]
+              "phrasings": ["resume the music", "resume music", "resume"]
             },
             {
               "actionName": "searchForPlaylists",
@@ -8910,9 +8715,7 @@
                   "description": "Name of the PowerShell flow to delete"
                 }
               ],
-              "phrasings": [
-                "delete powershell flow {name}"
-              ]
+              "phrasings": ["delete powershell flow {name}"]
             },
             {
               "actionName": "editPowerShellFlow",
@@ -8987,17 +8790,13 @@
                   "description": "Optional: override the generated action name"
                 }
               ],
-              "phrasings": [
-                "import script {filePath}"
-              ]
+              "phrasings": ["import script {filePath}"]
             },
             {
               "actionName": "listPowerShellFlows",
               "description": "Lists all registered PowerShell flows",
               "parameters": [],
-              "phrasings": [
-                "show me powershell flows"
-              ]
+              "phrasings": ["show me powershell flows"]
             }
           ]
         }
@@ -9636,19 +9435,13 @@
                   "description": "The reminder id (returned from setReminder), or \"all\" to cancel every pending reminder."
                 }
               ],
-              "phrasings": [
-                "clear reminders",
-                "all reminders"
-              ]
+              "phrasings": ["clear reminders", "all reminders"]
             },
             {
               "actionName": "listReminders",
               "description": "List all pending reminders.",
               "parameters": [],
-              "phrasings": [
-                "what reminders",
-                "reminders"
-              ]
+              "phrasings": ["what reminders", "reminders"]
             },
             {
               "actionName": "repeatReminder",
@@ -9679,10 +9472,7 @@
                   "description": "Optional max number of times to fire. If omitted, fires until explicitly cancelled."
                 }
               ],
-              "phrasings": [
-                "inline",
-                "toast"
-              ]
+              "phrasings": ["inline", "toast"]
             },
             {
               "actionName": "setReminder",
@@ -9707,11 +9497,7 @@
                   "description": "How the fired reminder should render. Defaults to \"bubble\"."
                 }
               ],
-              "phrasings": [
-                "bubble",
-                "inline",
-                "toast"
-              ]
+              "phrasings": ["bubble", "inline", "toast"]
             }
           ]
         }
@@ -9807,10 +9593,7 @@
                   "description": "Absolute or relative path to the file"
                 }
               ],
-              "phrasings": [
-                "get {path}",
-                "read {path}"
-              ]
+              "phrasings": ["get {path}", "read {path}"]
             },
             {
               "actionName": "webFetch",
@@ -9823,10 +9606,7 @@
                   "description": "URL to fetch"
                 }
               ],
-              "phrasings": [
-                "get {url}",
-                "fetch {url}"
-              ]
+              "phrasings": ["get {url}", "fetch {url}"]
             },
             {
               "actionName": "webSearch",
@@ -10218,10 +9998,7 @@
               "actionName": "stepInto",
               "description": "Steps into the next function call, if possible. User: \"Can you step into the next function call, please?\" Agent: \"Stepping into the next function call.\"",
               "parameters": [],
-              "phrasings": [
-                "function",
-                "function call"
-              ]
+              "phrasings": ["function", "function call"]
             },
             {
               "actionName": "stepOut",
@@ -10237,9 +10014,7 @@
               "actionName": "stepOver",
               "description": "Steps over the next function call. User: \"Can you step over the next function call, please?\" Agent: \"Stepping over the next function call.\"",
               "parameters": [],
-              "phrasings": [
-                "call"
-              ]
+              "phrasings": ["call"]
             },
             {
               "actionName": "stop",
