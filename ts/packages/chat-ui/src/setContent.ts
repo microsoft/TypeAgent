@@ -158,52 +158,91 @@ function renderMarkdownToHtml(text: string): string {
     return ansiUpMarkdownToHtml.ansi_to_html(rendered);
 }
 
+function renderTextBlock(
+    block: Extract<StructuredBlock, { kind: "text" }>,
+): string {
+    const raw =
+        typeof block.text === "string"
+            ? block.text
+            : Array.isArray(block.text) && typeof block.text[0] === "string"
+              ? (block.text as string[]).join("\n")
+              : (block.text as string[][])
+                    .map((row) => row.join(" | "))
+                    .join("\n");
+    const fmt = block.format ?? "markdown";
+    if (fmt === "text") {
+        return `<p class="sc-text">${textToHtml(raw)}</p>`;
+    }
+    return `<div class="sc-text">${renderMarkdownToHtml(raw)}</div>`;
+}
+
+function renderListBlock(
+    block: Extract<StructuredBlock, { kind: "list" }>,
+): string {
+    const tag = block.ordered ? "ol" : "ul";
+    const items = block.items
+        .map((item) => {
+            const label = item.href
+                ? `<a href="${esc(item.href)}" target="_blank">${esc(item.text)}</a>`
+                : esc(item.text);
+            const subtitle = item.subtitle
+                ? ` <span class="sc-list-subtitle">${esc(item.subtitle)}</span>`
+                : "";
+            const badges = (item.badges ?? [])
+                .map((tone) => {
+                    const label = tone.charAt(0).toUpperCase() + tone.slice(1);
+                    return `<span class="${esc(badgeClass(tone))}">${esc(label)}</span>`;
+                })
+                .join(" ");
+            return `<li>${label}${subtitle}${badges ? " " + badges : ""}</li>`;
+        })
+        .join("");
+    return `<${tag} class="sc-list">${items}</${tag}>`;
+}
+
+function renderCardBlock(
+    block: Extract<StructuredBlock, { kind: "card" }>,
+): string {
+    const parts: string[] = [`<div class="sc-card">`];
+    if (block.title) {
+        const title = block.href
+            ? `<a href="${esc(block.href)}" target="_blank">${esc(block.title)}</a>`
+            : esc(block.title);
+        parts.push(`<div class="sc-card-title">${title}</div>`);
+    }
+    if (block.subtitle) {
+        parts.push(
+            `<div class="sc-card-subtitle">${esc(block.subtitle)}</div>`,
+        );
+    }
+    if (block.fields && block.fields.length > 0) {
+        const rows = block.fields
+            .map(
+                (pair) =>
+                    `<tr><th scope="row" class="sc-kv-label">${esc(pair.label)}</th>` +
+                    `<td class="sc-kv-value">${renderTableCell(pair.value, undefined)}</td></tr>`,
+            )
+            .join("");
+        parts.push(
+            `<table class="sc-kv-table sc-card-fields"><tbody>${rows}</tbody></table>`,
+        );
+    }
+    parts.push("</div>");
+    return parts.join("");
+}
+
 function renderBlock(block: StructuredBlock): string {
     switch (block.kind) {
         case "heading": {
             const level = block.level ?? 1;
             return `<h${level} class="sc-heading sc-heading-${level}">${esc(block.text)}</h${level}>`;
         }
-        case "text": {
-            const raw =
-                typeof block.text === "string"
-                    ? block.text
-                    : Array.isArray(block.text) &&
-                        typeof block.text[0] === "string"
-                      ? (block.text as string[]).join("\n")
-                      : (block.text as string[][])
-                            .map((row) => row.join(" | "))
-                            .join("\n");
-            const fmt = block.format ?? "markdown";
-            if (fmt === "text") {
-                return `<p class="sc-text">${textToHtml(raw)}</p>`;
-            }
-            return `<div class="sc-text">${renderMarkdownToHtml(raw)}</div>`;
-        }
+        case "text":
+            return renderTextBlock(block);
         case "table":
             return renderTableBlock(block);
-        case "list": {
-            const tag = block.ordered ? "ol" : "ul";
-            const items = block.items
-                .map((item) => {
-                    const label = item.href
-                        ? `<a href="${esc(item.href)}" target="_blank">${esc(item.text)}</a>`
-                        : esc(item.text);
-                    const subtitle = item.subtitle
-                        ? ` <span class="sc-list-subtitle">${esc(item.subtitle)}</span>`
-                        : "";
-                    const badges = (item.badges ?? [])
-                        .map((tone) => {
-                            const label =
-                                tone.charAt(0).toUpperCase() + tone.slice(1);
-                            return `<span class="${esc(badgeClass(tone))}">${esc(label)}</span>`;
-                        })
-                        .join(" ");
-                    return `<li>${label}${subtitle}${badges ? " " + badges : ""}</li>`;
-                })
-                .join("");
-            return `<${tag} class="sc-list">${items}</${tag}>`;
-        }
+        case "list":
+            return renderListBlock(block);
         case "keyValue": {
             const rows = block.pairs
                 .map(
@@ -214,34 +253,8 @@ function renderBlock(block: StructuredBlock): string {
                 .join("");
             return `<table class="sc-kv-table"><tbody>${rows}</tbody></table>`;
         }
-        case "card": {
-            const parts: string[] = [`<div class="sc-card">`];
-            if (block.title) {
-                const title = block.href
-                    ? `<a href="${esc(block.href)}" target="_blank">${esc(block.title)}</a>`
-                    : esc(block.title);
-                parts.push(`<div class="sc-card-title">${title}</div>`);
-            }
-            if (block.subtitle) {
-                parts.push(
-                    `<div class="sc-card-subtitle">${esc(block.subtitle)}</div>`,
-                );
-            }
-            if (block.fields && block.fields.length > 0) {
-                const rows = block.fields
-                    .map(
-                        (pair) =>
-                            `<tr><th scope="row" class="sc-kv-label">${esc(pair.label)}</th>` +
-                            `<td class="sc-kv-value">${renderTableCell(pair.value, undefined)}</td></tr>`,
-                    )
-                    .join("");
-                parts.push(
-                    `<table class="sc-kv-table sc-card-fields"><tbody>${rows}</tbody></table>`,
-                );
-            }
-            parts.push("</div>");
-            return parts.join("");
-        }
+        case "card":
+            return renderCardBlock(block);
         case "image": {
             const widthAttr = block.width ? ` width="${block.width}"` : "";
             const heightAttr = block.height ? ` height="${block.height}"` : "";
