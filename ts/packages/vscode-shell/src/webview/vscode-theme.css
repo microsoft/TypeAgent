@@ -174,12 +174,12 @@
   background-size: cover !important;
   color: transparent !important;
 }
+/* The shell paints the agent avatar disc the same color as the message
+   surface, so the emoji reads as a bare glyph with no visible circle. A
+   contrasting badge color here drew a disc behind the icon that the shell
+   never shows, so keep it transparent to match. */
 .agent-icon {
-  background-color: var(
-    --vscode-badge-background,
-    var(--vscode-editorWidget-background, #3c3c3c)
-  ) !important;
-  color: var(--vscode-badge-foreground, var(--vscode-foreground)) !important;
+  background-color: transparent !important;
 }
 
 /* Timestamps */
