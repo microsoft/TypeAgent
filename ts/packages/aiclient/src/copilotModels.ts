@@ -3,44 +3,30 @@
 
 import {
     CopilotClient,
+    RuntimeConnection,
     approveAll,
     type SessionConfig,
-    type CopilotSession,
-    type AssistantMessageEvent,
 } from "@github/copilot-sdk";
-import {
-    PromptSection,
-    Result,
-    success,
-    error,
-    ImagePromptContent,
-    MultimodalPromptContent,
-} from "typechat";
 import { execSync } from "node:child_process";
 import registerDebug from "debug";
-import {
-    ChatModelWithStreaming,
-    CompletionSettings,
-    CompletionJsonSchema,
-    CompleteUsageStatsCallback,
-} from "./models.js";
-import { CompletionUsageStats } from "./openai.js";
+import { ChatModelWithStreaming, CompletionSettings } from "./models.js";
 import {
     CopilotApiSettings,
     copilotApiSettingsFromConfig,
     COPILOT_FALLBACK_MODEL,
 } from "./copilotSettings.js";
-import { TokenCounter } from "./tokenCounter.js";
+import {
+    CopilotEndpoint,
+    CopilotEndpointProvider,
+    CopilotEndpointUnavailableError,
+    createCopilotDirectChatModel,
+} from "./copilotDirectTransport.js";
 
 const debug = registerDebug("typeagent:aiclient:copilot");
 // Per-phase latency breakdown (client start / session create / send / total)
 // and real model time vs. SDK/session overhead. Enable with
 // DEBUG=typeagent:aiclient:copilot:timing.
 const debugTiming = registerDebug("typeagent:aiclient:copilot:timing");
-// The final, transformed prompt the CLI actually sends to the model (shows
-// any XML wrapping / augmentation bloat added on top of our prompt). Enable
-// with DEBUG=typeagent:aiclient:copilot:prompt.
-const debugPrompt = registerDebug("typeagent:aiclient:copilot:prompt");
 
 type CopilotSdkLogLevel =
     | "none"
@@ -56,45 +42,6 @@ function sdkLogLevel(): CopilotSdkLogLevel | undefined {
     const v = process.env.TYPEAGENT_COPILOT_SDK_LOG_LEVEL?.trim().toLowerCase();
     const valid = ["none", "error", "warning", "info", "debug", "all"];
     return v && valid.includes(v) ? (v as CopilotSdkLogLevel) : undefined;
-}
-
-// Subscribe to the SDK's usage / final-prompt events so we can attribute the
-// wall-clock time of a request to model latency vs. our own session overhead.
-// Listeners are only attached when a diagnostic namespace is enabled, so this
-// is a no-op on the hot path in production.
-function attachDiagnostics(session: CopilotSession): {
-    getApiDurationMs: () => number | undefined;
-    dispose: () => void;
-} {
-    let apiDurationMs: number | undefined;
-    if (!debugTiming.enabled && !debugPrompt.enabled) {
-        return { getApiDurationMs: () => undefined, dispose: () => {} };
-    }
-    const offUsage = session.on("assistant.usage", (event: any) => {
-        const d = event?.data;
-        apiDurationMs = d?.duration;
-        debugTiming(
-            `assistant.usage model=${d?.model} api=${d?.duration}ms ` +
-                `in=${d?.inputTokens} out=${d?.outputTokens} ` +
-                `cacheRead=${d?.cacheReadTokens} providerCallId=${d?.providerCallId}`,
-        );
-    });
-    const offUser = session.on("user.message", (event: any) => {
-        if (!debugPrompt.enabled) return;
-        const tc = event?.data?.transformedContent;
-        if (typeof tc === "string") {
-            debugPrompt(
-                `final transformedContent (${tc.length} chars):\n${tc}`,
-            );
-        }
-    });
-    return {
-        getApiDurationMs: () => apiDurationMs,
-        dispose: () => {
-            offUsage();
-            offUser();
-        },
-    };
 }
 
 // Replaces the Copilot CLI's default "terminal coding assistant" system
@@ -158,7 +105,9 @@ async function getClient(
         const tStart = Date.now();
         const level = sdkLogLevel();
         const client = new CopilotClient({
-            ...(cliUrl ? { cliUrl } : { cliPath: cliPath! }),
+            connection: cliUrl
+                ? RuntimeConnection.forUri(cliUrl)
+                : RuntimeConnection.forStdio(cliPath ? { path: cliPath } : {}),
             ...(level ? { logLevel: level } : {}),
         });
         try {
@@ -266,64 +215,21 @@ export async function warmupCopilotFromConfig(): Promise<void> {
         });
         await ensureModelList(client);
     } catch {}
-}
-
-function withAbortSignal<T>(
-    promise: Promise<T>,
-    signal: AbortSignal | undefined,
-): Promise<T> {
-    if (!signal) return promise;
-    if (signal.aborted) return Promise.reject(signal.reason);
-    return new Promise<T>((resolve, reject) => {
-        const onAbort = () => reject(signal.reason);
-        signal.addEventListener("abort", onAbort, { once: true });
-        promise.then(
-            (value) => {
-                signal.removeEventListener("abort", onAbort);
-                resolve(value);
-            },
-            (err) => {
-                signal.removeEventListener("abort", onAbort);
-                reject(err);
-            },
+    // Pre-mint the direct-CAPI endpoint here (same place we warm the
+    // CLI/session) so the first real request skips the getEndpoint round-trip.
+    // Best-effort: on failure the request path mints it on demand.
+    try {
+        const t = Date.now();
+        await createCopilotEndpointProvider(settings).getEndpoint();
+        debugTiming(`warm endpoint ${Date.now() - t}ms`);
+        debug("Copilot direct endpoint pre-warmed");
+    } catch (err) {
+        debug(
+            `Copilot endpoint pre-warm skipped: ${
+                err instanceof Error ? err.message : String(err)
+            }`,
         );
-    });
-}
-
-function rejectImageContent(messages: PromptSection[]): void {
-    const isImage = (c: MultimodalPromptContent) =>
-        (c as ImagePromptContent).type === "image_url";
-    for (const ps of messages) {
-        if (Array.isArray(ps.content) && ps.content.some(isImage)) {
-            throw new Error(
-                "Image content is not supported by the Copilot chat adapter",
-            );
-        }
     }
-}
-
-function renderPrompt(prompt: string | PromptSection[]): string {
-    if (typeof prompt === "string") return prompt;
-    const sections = prompt;
-    rejectImageContent(sections);
-    const parts: string[] = [];
-    for (const section of sections) {
-        const content =
-            typeof section.content === "string"
-                ? section.content
-                : section.content
-                      .map((c) =>
-                          typeof c === "string"
-                              ? c
-                              : "text" in c && typeof c.text === "string"
-                                ? c.text
-                                : "",
-                      )
-                      .join("");
-        const role = section.role ?? "user";
-        parts.push(`[${role}]\n${content}`);
-    }
-    return parts.join("\n\n");
 }
 
 // Cached per-model capability info, populated from client.listModels() once per
@@ -436,10 +342,134 @@ function buildSessionConfig(
     return config;
 }
 
-function estimateTokens(text: string): number {
-    // Coarse char-based estimate so TokenCounter still has something to
-    // report when the SDK doesn't surface real usage. ~4 chars/token.
-    return Math.max(0, Math.ceil(text.length / 4));
+// Structural subset of the SDK's `ProviderEndpoint` (not exported from the
+// package root) — only the fields the direct transport consumes.
+type SdkProviderEndpoint = {
+    baseUrl: string;
+    apiKey?: string | undefined;
+    headers?: { [k: string]: string | undefined } | undefined;
+    sessionToken?:
+        | { token: string; header: string; expiresAt?: string | undefined }
+        | undefined;
+};
+
+// Refresh a little before the real expiry to avoid racing a 401.
+const ENDPOINT_EXPIRY_SKEW_MS = 60_000;
+
+// Process-wide endpoint cache + in-flight coalescing, keyed by requested model
+// so the warmup path and the request path share a single acquisition.
+const endpointCache = new Map<string, CopilotEndpoint>();
+const endpointInflight = new Map<string, Promise<CopilotEndpoint>>();
+
+function endpointExpired(ep: CopilotEndpoint): boolean {
+    return (
+        ep.expiresAt !== undefined &&
+        Date.now() >= ep.expiresAt - ENDPOINT_EXPIRY_SKEW_MS
+    );
+}
+
+function mapEndpoint(ep: SdkProviderEndpoint, model: string): CopilotEndpoint {
+    const base = ep.baseUrl.replace(/\/+$/, "");
+    const url = `${base}/chat/completions`;
+    const headers: Record<string, string> = {};
+    for (const [k, v] of Object.entries(ep.headers ?? {})) {
+        if (v !== undefined) headers[k] = v;
+    }
+    if (
+        ep.apiKey &&
+        headers.Authorization === undefined &&
+        headers.authorization === undefined
+    ) {
+        headers.Authorization = ["Bearer", ep.apiKey].join(" ");
+    }
+    let expiresAt: number | undefined;
+    if (ep.sessionToken) {
+        headers[ep.sessionToken.header] = ep.sessionToken.token;
+        if (ep.sessionToken.expiresAt) {
+            const ms = Date.parse(ep.sessionToken.expiresAt);
+            if (!Number.isNaN(ms)) expiresAt = ms;
+        }
+    }
+    return { url, model, headers, expiresAt };
+}
+
+// Acquire a fresh endpoint snapshot through a short-lived SDK session. Passing a
+// concrete `modelId` binds the endpoint to that model; when the requested model
+// isn't offered by the tenant (resolveModel falls back to "auto"), we throw
+// `CopilotEndpointUnavailableError` rather than dealing with an auto-bound
+// session token.
+async function acquireEndpoint(
+    settings: CopilotApiSettings,
+): Promise<CopilotEndpoint> {
+    // Defensive: the gate is normally set in copilotApiSettingsFromConfig, but
+    // set it here too in case this settings object came from elsewhere. Note it
+    // only takes effect if set before the CLI child is spawned.
+    if (!process.env.COPILOT_ALLOW_GET_PROVIDER_ENDPOINT) {
+        process.env.COPILOT_ALLOW_GET_PROVIDER_ENDPOINT = "true";
+    }
+    const client = await getClient({
+        cliPath: settings.cliPath,
+        cliUrl: settings.cliUrl,
+    });
+    const resolved = await resolveModel(client, settings.modelName);
+    if (resolved.model === COPILOT_FALLBACK_MODEL) {
+        throw new CopilotEndpointUnavailableError(
+            `Model "${settings.modelName}" is not available in this tenant; ` +
+                `direct transport requires a concrete model.`,
+        );
+    }
+    const tCreate = Date.now();
+    const session = await client.createSession(
+        buildSessionConfig(settings, {}, false, resolved),
+    );
+    try {
+        const tGet = Date.now();
+        const ep = (await session.rpc.provider.getEndpoint({
+            modelId: resolved.model,
+        })) as SdkProviderEndpoint;
+        debugTiming(
+            `getEndpoint session ${tGet - tCreate}ms get ${Date.now() - tGet}ms`,
+        );
+        return mapEndpoint(ep, resolved.model);
+    } finally {
+        session.disconnect().catch(() => {});
+    }
+}
+
+/**
+ * Create an endpoint provider for the direct-CAPI transport. Backed by a
+ * process-wide cache keyed by model, so repeated models (and warmup) reuse one
+ * acquisition. Refreshes are coalesced.
+ */
+export function createCopilotEndpointProvider(
+    settings: CopilotApiSettings,
+): CopilotEndpointProvider {
+    const key = settings.modelName;
+    return {
+        async getEndpoint(force = false): Promise<CopilotEndpoint> {
+            if (force) {
+                endpointCache.delete(key);
+            } else {
+                const cached = endpointCache.get(key);
+                if (cached && !endpointExpired(cached)) {
+                    return cached;
+                }
+            }
+            let inflight = endpointInflight.get(key);
+            if (inflight === undefined) {
+                inflight = acquireEndpoint(settings)
+                    .then((ep) => {
+                        endpointCache.set(key, ep);
+                        return ep;
+                    })
+                    .finally(() => {
+                        endpointInflight.delete(key);
+                    });
+                endpointInflight.set(key, inflight);
+            }
+            return inflight;
+        },
+    };
 }
 
 export function createCopilotChatModel(
@@ -448,300 +478,15 @@ export function createCopilotChatModel(
     completionCallback?: (request: any, response: any) => void,
     tags?: string[],
 ): ChatModelWithStreaming {
-    completionSettings ??= {};
-    completionSettings.n ??= 1;
-
-    const model: ChatModelWithStreaming = {
+    // The Copilot provider uses the direct-CAPI transport exclusively: the SDK
+    // is used only to mint a provider endpoint, then translation requests are
+    // issued as plain HTTP chat/completions calls.
+    const endpointProvider = createCopilotEndpointProvider(settings);
+    return createCopilotDirectChatModel(
+        settings,
         completionSettings,
         completionCallback,
-        complete,
-        completeStream,
-    };
-    return model;
-
-    function reportUsage(
-        promptText: string,
-        responseText: string,
-        usageCallback?: CompleteUsageStatsCallback,
-    ) {
-        const prompt_tokens = estimateTokens(promptText);
-        const completion_tokens = estimateTokens(responseText);
-        const usage: CompletionUsageStats = {
-            prompt_tokens,
-            completion_tokens,
-            total_tokens: prompt_tokens + completion_tokens,
-        };
-        try {
-            TokenCounter.getInstance().add(usage, tags);
-            usageCallback?.(usage);
-        } catch {}
-    }
-
-    async function complete(
-        prompt: string | PromptSection[],
-        usageCallback?: CompleteUsageStatsCallback,
-        _jsonSchema?: CompletionJsonSchema,
-        logFn?: (msg: any) => void,
-        signal?: AbortSignal,
-    ): Promise<Result<string>> {
-        const messages: PromptSection[] =
-            typeof prompt === "string"
-                ? [{ role: "user", content: prompt }]
-                : prompt;
-        const promptText = renderPrompt(messages);
-        if (debugPrompt.enabled) {
-            debugPrompt(
-                `prompt to Copilot: ${promptText.length} chars ` +
-                    `(~${estimateTokens(promptText)} tokens), model=${settings.modelName}`,
-            );
-        }
-
-        const tTotal = Date.now();
-        let client: CopilotClient;
-        const tClient = Date.now();
-        try {
-            client = await getClient({
-                cliPath: settings.cliPath,
-                cliUrl: settings.cliUrl,
-            });
-        } catch (err) {
-            return error(err instanceof Error ? err.message : String(err));
-        }
-        debugTiming(`getClient ${Date.now() - tClient}ms`);
-
-        let session: CopilotSession;
-        const tCreate = Date.now();
-        try {
-            const resolved = await resolveModel(client, settings.modelName);
-            session = await client.createSession(
-                buildSessionConfig(
-                    settings,
-                    completionSettings!,
-                    false,
-                    resolved,
-                ),
-            );
-        } catch (err) {
-            return error(
-                `Failed to create Copilot session: ${err instanceof Error ? err.message : String(err)}`,
-            );
-        }
-        debugTiming(`createSession ${Date.now() - tCreate}ms`);
-
-        const diag = attachDiagnostics(session);
-        try {
-            const tSend = Date.now();
-            const response: AssistantMessageEvent | undefined =
-                await withAbortSignal(
-                    session.sendAndWait({ prompt: promptText }),
-                    signal,
-                );
-            const sendMs = Date.now() - tSend;
-            const apiMs = diag.getApiDurationMs();
-            debugTiming(
-                `sendAndWait ${sendMs}ms ` +
-                    `(model≈${apiMs ?? "?"}ms, ` +
-                    `sdk/session overhead≈${apiMs !== undefined ? sendMs - apiMs : "?"}ms)`,
-            );
-            const text = response?.data?.content ?? "";
-            if (model.completionCallback) {
-                model.completionCallback(
-                    { prompt: promptText, model: settings.modelName },
-                    response,
-                );
-            }
-            try {
-                if (settings.enableModelRequestLogging && logFn) {
-                    logFn({
-                        prompt: messages,
-                        response: text,
-                        tags,
-                    });
-                }
-            } catch {}
-            reportUsage(promptText, text, usageCallback);
-            return success(text);
-        } catch (err) {
-            return error(err instanceof Error ? err.message : String(err));
-        } finally {
-            diag.dispose();
-            session.disconnect().catch(() => {});
-            debugTiming(`complete total ${Date.now() - tTotal}ms`);
-        }
-    }
-
-    async function completeStream(
-        prompt: string | PromptSection[],
-        usageCallback?: CompleteUsageStatsCallback,
-        _jsonSchema?: CompletionJsonSchema,
-        logFn?: (msg: any) => void,
-        signal?: AbortSignal,
-    ): Promise<Result<AsyncIterableIterator<string>>> {
-        const messages: PromptSection[] =
-            typeof prompt === "string"
-                ? [{ role: "user", content: prompt }]
-                : prompt;
-        const promptText = renderPrompt(messages);
-        if (debugPrompt.enabled) {
-            debugPrompt(
-                `stream prompt to Copilot: ${promptText.length} chars ` +
-                    `(~${estimateTokens(promptText)} tokens), model=${settings.modelName}`,
-            );
-        }
-
-        const tTotal = Date.now();
-        let client: CopilotClient;
-        const tClient = Date.now();
-        try {
-            client = await getClient({
-                cliPath: settings.cliPath,
-                cliUrl: settings.cliUrl,
-            });
-        } catch (err) {
-            return error(err instanceof Error ? err.message : String(err));
-        }
-        debugTiming(`getClient ${Date.now() - tClient}ms`);
-
-        let session: CopilotSession;
-        const tCreate = Date.now();
-        try {
-            const resolved = await resolveModel(client, settings.modelName);
-            session = await client.createSession(
-                buildSessionConfig(
-                    settings,
-                    completionSettings!,
-                    true,
-                    resolved,
-                ),
-            );
-        } catch (err) {
-            return error(
-                `Failed to create Copilot session: ${err instanceof Error ? err.message : String(err)}`,
-            );
-        }
-        debugTiming(`createSession ${Date.now() - tCreate}ms`);
-
-        const diag = attachDiagnostics(session);
-        // Buffer streaming deltas; the consumer pulls from a queue.
-        const queue: Array<{ value?: string; done?: boolean; err?: Error }> =
-            [];
-        let resolveNext: (() => void) | undefined;
-        let collected = "";
-
-        const wake = () => {
-            if (resolveNext) {
-                const r = resolveNext;
-                resolveNext = undefined;
-                r();
-            }
-        };
-
-        const unsubscribeDelta = session.on(
-            "assistant.message_delta",
-            (event: any) => {
-                const delta = event?.data?.deltaContent;
-                if (typeof delta === "string" && delta.length > 0) {
-                    collected += delta;
-                    queue.push({ value: delta });
-                    wake();
-                }
-            },
-        );
-        const unsubscribeMessage = session.on(
-            "assistant.message",
-            (event: any) => {
-                // When the SDK doesn't emit deltas (e.g. streaming
-                // disabled), surface the final content as one chunk.
-                if (collected.length === 0) {
-                    const content = event?.data?.content;
-                    if (typeof content === "string" && content.length > 0) {
-                        collected = content;
-                        queue.push({ value: content });
-                    }
-                }
-            },
-        );
-
-        const tSend = Date.now();
-        const completion = withAbortSignal(
-            session.sendAndWait({ prompt: promptText }),
-            signal,
-        )
-            .then((response) => {
-                const sendMs = Date.now() - tSend;
-                const apiMs = diag.getApiDurationMs();
-                debugTiming(
-                    `sendAndWait(stream) ${sendMs}ms ` +
-                        `(model≈${apiMs ?? "?"}ms, ` +
-                        `sdk/session overhead≈${apiMs !== undefined ? sendMs - apiMs : "?"}ms)`,
-                );
-                if (model.completionCallback) {
-                    model.completionCallback(
-                        { prompt: promptText, model: settings.modelName },
-                        response,
-                    );
-                }
-                try {
-                    if (settings.enableModelRequestLogging && logFn) {
-                        logFn({
-                            prompt: messages,
-                            response: collected,
-                            tags,
-                        });
-                    }
-                } catch {}
-                reportUsage(promptText, collected, usageCallback);
-                queue.push({ done: true });
-                wake();
-            })
-            .catch((err: unknown) => {
-                queue.push({
-                    err: err instanceof Error ? err : new Error(String(err)),
-                });
-                wake();
-            });
-
-        const iterator: AsyncIterableIterator<string> = {
-            [Symbol.asyncIterator]() {
-                return this;
-            },
-            async next(): Promise<IteratorResult<string>> {
-                while (true) {
-                    if (queue.length > 0) {
-                        const item = queue.shift()!;
-                        if (item.err) {
-                            await cleanup();
-                            throw item.err;
-                        }
-                        if (item.done) {
-                            await cleanup();
-                            return { value: undefined, done: true };
-                        }
-                        return { value: item.value!, done: false };
-                    }
-                    await new Promise<void>((resolve) => {
-                        resolveNext = resolve;
-                    });
-                }
-            },
-            async return(): Promise<IteratorResult<string>> {
-                await cleanup();
-                return { value: undefined, done: true };
-            },
-        };
-
-        let cleaned = false;
-        async function cleanup() {
-            if (cleaned) return;
-            cleaned = true;
-            unsubscribeDelta();
-            unsubscribeMessage();
-            diag.dispose();
-            await completion.catch(() => {});
-            await session.disconnect().catch(() => {});
-            debugTiming(`completeStream total ${Date.now() - tTotal}ms`);
-        }
-
-        return success(iterator);
-    }
+        tags,
+        endpointProvider,
+    );
 }
