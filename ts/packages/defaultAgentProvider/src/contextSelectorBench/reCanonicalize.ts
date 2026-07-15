@@ -14,9 +14,9 @@ import {
     writeKeywordFile,
 } from "agent-dispatcher/contextSelector";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 // contextSelectorBench -> src -> defaultAgentProvider -> packages -> ts
-const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..");
+const TS_ROOT = path.resolve(MODULE_DIR, "..", "..", "..", "..");
 const AGENTS_DIR = path.join(TS_ROOT, "packages", "agents");
 
 function findKeywordFiles(dir: string): string[] {

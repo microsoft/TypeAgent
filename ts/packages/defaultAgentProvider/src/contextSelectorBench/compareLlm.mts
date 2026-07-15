@@ -11,7 +11,9 @@
 //   - contextSelector: the real deterministic scorer (resolve to an agent, or
 //     abstain -> falls through to the LLM).
 //   - LLM-only (contextSelector OFF): the real `aiclient` model — the same LLM
-//     the standard resolution path uses — picks the agent (or "unclear").
+//     the standard resolution path uses — picks the agent, declines both
+//     ("C"/neither), or ties ("unclear"), returned as a TypeChat-validated typed
+//     response (no hand-rolled JSON parsing).
 //
 // The decision-relevant metrics per tier:
 //   - LLM-only accuracy (the "contextSelector off" baseline).
@@ -30,6 +32,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfigSync } from "@typeagent/config";
 import { openai } from "@typeagent/aiclient";
+import { createJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
 import { loadRoster } from "./metricRoster.mjs";
 import { resolveReportPath, upsertLlmSection } from "./reportFile.mjs";
 import { SCENARIOS } from "./metricRealisticDialogue.mjs";
@@ -40,9 +44,9 @@ import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import { getAllActionConfigProvider } from "agent-dispatcher/internal";
 import { getDefaultAppAgentProviders } from "../index.js";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..");
-const CACHE_PATH = path.join(HERE, "llm-cache.json");
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const TS_ROOT = path.resolve(MODULE_DIR, "..", "..", "..", "..");
+const CACHE_PATH = path.join(MODULE_DIR, "llm-cache.json");
 const CFG: DecisionConfig = { minUniqueTokens: 2, minMass: 1.0, margin: 0.5 };
 
 // Mirror production (session.ts negationGuard default on) so the CS-ON arm here
@@ -56,7 +60,21 @@ const NEGATION_GUARD = process.env.CS_NEGATION_GUARD !== "0";
 // getAllActionConfigProvider. No hand-authored blurbs, so the LLM arm stays
 // honest and cannot drift from the shipped descriptions as agents change.
 
-type LlmChoice = "A" | "B" | "unclear";
+// The LLM's verdict, defined as a schema and validated by TypeChat (no hand-rolled
+// JSON parsing). "C" (neither) lets the model decline BOTH colliding candidates —
+// distinct from "unclear" (a genuine A-vs-B toss-up). Both count as "no commit"
+// when scoring, but the split is honest signal on adversarial/negation cases.
+const VERDICT_TYPE = "CollisionVerdict";
+const VERDICT_SCHEMA = `export type ${VERDICT_TYPE} = {
+    // Which agent should handle the user's final request:
+    //   "A" | "B": that candidate agent.
+    //   "C": neither candidate — the user wants some other agent entirely.
+    //   "unclear": the conversation genuinely does not favor A over B.
+    agent: "A" | "B" | "C" | "unclear";
+};`;
+type CollisionVerdict = { agent: "A" | "B" | "C" | "unclear" };
+type LlmChoice = CollisionVerdict["agent"];
+
 // Cache keyed by scenario id ONLY. The prompt's agent descriptions now come from
 // the live agent configs (see descOf in main), so if an agent's schema.description
 // changes the prompt changes but this key does NOT. Wipe llm-cache.json (to `{}`)
@@ -92,25 +110,8 @@ function buildPrompt(
         `A) ${aSchema}: ${aDesc}`,
         `B) ${bSchema}: ${bDesc}`,
         "",
-        'Judge what the user ACTUALLY wants — account for negation ("not X"), sarcasm, and words that are quoting someone else. If the conversation genuinely does not favor one agent over the other, answer "unclear".',
-        'Respond ONLY with JSON of the form {"agent": "A"} or {"agent": "B"} or {"agent": "unclear"}.',
+        'Judge what the user ACTUALLY wants — account for negation ("not X"), sarcasm, and words that are quoting someone else. If the conversation genuinely does not favor one agent over the other, the verdict is "unclear"; if the user wants neither of these two agents, it is "C".',
     ].join("\n");
-}
-
-function parseChoice(text: string): LlmChoice {
-    try {
-        const m = text.match(/\{[\s\S]*\}/);
-        const obj = m ? JSON.parse(m[0]) : JSON.parse(text);
-        const a = String(obj.agent).toLowerCase();
-        if (a === "a") return "A";
-        if (a === "b") return "B";
-        return "unclear";
-    } catch {
-        const t = text.toLowerCase();
-        if (t.includes('"a"') || /\bagent a\b/.test(t)) return "A";
-        if (t.includes('"b"') || /\bagent b\b/.test(t)) return "B";
-        return "unclear";
-    }
 }
 
 async function main() {
@@ -147,6 +148,13 @@ async function main() {
         undefined,
         ["cs-benchmark-compare"],
     );
+    // TypeChat validates the model's JSON against VERDICT_SCHEMA (and repairs on
+    // failure), replacing the hand-rolled parse; temperature 0 kept for determinism.
+    const validator = createTypeScriptJsonValidator<CollisionVerdict>(
+        VERDICT_SCHEMA,
+        VERDICT_TYPE,
+    );
+    const translator = createJsonTranslator<CollisionVerdict>(model, validator);
     const cache = loadCache();
 
     // contextSelector's decision (offline).
@@ -192,7 +200,7 @@ async function main() {
         // LLM arm (cached).
         let cached = cache[s.id];
         if (cached === undefined) {
-            const prompt = buildPrompt(
+            const request = buildPrompt(
                 s.dialogue,
                 s.ask,
                 aSchema,
@@ -200,9 +208,10 @@ async function main() {
                 descOf(aSchema),
                 descOf(bSchema),
             );
-            const r = await model.complete(prompt);
-            const raw = r.success ? r.data : `ERROR: ${r.message}`;
-            cached = { choice: r.success ? parseChoice(raw) : "unclear", raw };
+            const r = await translator.translate(request);
+            cached = r.success
+                ? { choice: r.data.agent, raw: JSON.stringify(r.data) }
+                : { choice: "unclear", raw: `ERROR: ${r.message}` };
             cache[s.id] = cached;
             called++;
             if (called % 10 === 0) {
@@ -218,7 +227,9 @@ async function main() {
                 ? aSchema
                 : cached.choice === "B"
                   ? bSchema
-                  : "unclear";
+                  : cached.choice === "C"
+                    ? "neither"
+                    : "unclear";
 
         const cs = csDecide(s);
         rows.push({
@@ -241,7 +252,7 @@ async function main() {
             ? r.cs === "resolve"
                 ? r.csSchema
                 : undefined
-            : r.llm === "unclear"
+            : r.llm === "unclear" || r.llm === "neither"
               ? undefined
               : r.llm;
     const armCorrect = (arm: "cs" | "llm", r: (typeof rows)[number]) => {
@@ -321,7 +332,7 @@ async function main() {
         "\n**How to read it.** *LLM-only accuracy* is the standard path with contextSelector off. *CS-ON system accuracy* is the deployed behavior (resolve, else fall through to the LLM). *Regressions* are the price of enabling contextSelector — collisions it resolves to the wrong agent that the LLM alone would have routed correctly. *Correct saves* are the payoff — right answers delivered without an LLM call.\n",
     );
     md.push(
-        "\n**Fidelity caveat — this LLM arm is a proxy, not the production fallback.** The real fallback (when contextSelector abstains with `escalate-to-llm`) is the full translation pipeline: it selects among *all* active agents using their real action schemas and emits a complete typed action, on the configured translation model. This arm instead asks a default chat model to pick between just the *two* colliding agents, described by their real `schema.description` from the agent configs (the summary the translator sees, not the full action schema), and scores only the agent label. It also explicitly prompts the model to watch for negation/sarcasm/quoting, a hint production translation does not get. Net effect: the arm makes the LLM look **stronger** than production would (easier 2-way task, hinted), so treat the realistic-tier *0 regressions* as a robust floor, but read the adversarial-tier regression count as a **worst-case** cost for contextSelector, not an expected one. A faithful measurement needs an L3 live-dispatcher replay through the real translator (a listed follow-up).\n",
+        '\n**Fidelity caveat — this LLM arm is a proxy, not the production fallback.** The real fallback (when contextSelector abstains with `escalate-to-llm`) is the full translation pipeline: it selects among *all* active agents using their real action schemas and emits a complete typed action, on the configured translation model. This arm instead asks a TypeChat-validated chat model to pick between the *two* colliding agents (or decline both as "neither"), described by their real `schema.description` from the agent configs (the summary the translator sees, not the full action schema), and scores only the agent label. It also explicitly prompts the model to watch for negation/sarcasm/quoting, a hint production translation does not get. Net effect: the arm makes the LLM look **stronger** than production would (easier 2-way task, hinted), so treat the realistic-tier *0 regressions* as a robust floor, but read the adversarial-tier regression count as a **worst-case** cost for contextSelector, not an expected one. A faithful measurement needs an L3 live-dispatcher replay through the real translator (a listed follow-up).\n',
     );
     const reportPath = resolveReportPath();
     upsertLlmSection(reportPath, md.join("\n"));

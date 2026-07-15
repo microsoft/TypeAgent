@@ -25,9 +25,9 @@ import {
     loadKeywordFile,
 } from "agent-dispatcher/contextSelector";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 // contextSelectorBench -> src -> defaultAgentProvider -> packages -> ts
-const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..");
+const TS_ROOT = path.resolve(MODULE_DIR, "..", "..", "..", "..");
 const LIST_SRC = path.join(TS_ROOT, "packages/agents/list/src/listSchema.ts");
 
 // REAL production defaults (session.ts:467-473).

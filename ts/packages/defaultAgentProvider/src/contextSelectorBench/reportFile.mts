@@ -21,8 +21,8 @@ export const REPORT_FILENAME = "contextSelector-report.md";
 // current on every run without a manual copy. Resolved from this module's own
 // location: contextSelectorBench -> src -> defaultAgentProvider ->
 // packages -> ts, then docs/architecture/collision.
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..");
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const TS_ROOT = path.resolve(MODULE_DIR, "..", "..", "..", "..");
 const DEFAULT_REPORT_DIR = path.join(
     TS_ROOT,
     "docs",

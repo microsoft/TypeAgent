@@ -21,9 +21,9 @@ import {
 import type { ContextVector } from "agent-dispatcher/contextSelector";
 import type { ScorerCandidate } from "agent-dispatcher/contextSelector";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 // contextSelectorBench -> src -> defaultAgentProvider -> packages -> ts
-const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..");
+const TS_ROOT = path.resolve(MODULE_DIR, "..", "..", "..", "..");
 
 // The REAL production defaults (session.ts:467-473).
 const CONFIG = { minUniqueTokens: 2, minMass: 1.0, margin: 0.5 };

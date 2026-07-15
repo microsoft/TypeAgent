@@ -129,7 +129,9 @@ generator** under "How the benchmark is built".
   re-runs are free; run: `npx tsx src/contextSelectorBench/compareLlm.mts`. The
   two candidate agents are described to the LLM by their real `schema.description`
   from the agent configs (not hand-authored blurbs), so the baseline reflects the
-  same summaries the production translator sees.
+  same summaries the production translator sees. The call goes through **TypeChat**
+  (a schema-validated typed verdict — no hand-rolled JSON parsing); the model may
+  pick `A`, `B`, `C` (neither candidate), or `unclear` (a genuine A-vs-B toss-up).
 - **`reportFile.mts`** — shared output target: resolves the single
   `contextSelector-report.md` path (honoring `--out`, default the tracked
   `docs/architecture/collision/` folder) and provides the base-write /
@@ -169,10 +171,10 @@ standard path with it OFF (the LLM disambiguating the collision)?
 
 | Tier        | LLM-only acc (CS off) | CS-ON system acc | LLM calls saved | Regressions |
 | ----------- | --------------------- | ---------------- | --------------- | ----------- |
-| Simple      | 92%                   | 100%             | 36              | **0**       |
-| Realistic   | 68%                   | 76%              | 34              | **0**       |
-| Hard        | 76%                   | 82%              | 18              | **0**       |
-| Adversarial | 56%                   | **30%**          | 28              | **13**      |
+| Simple      | 88%                   | 96%              | 36              | **0**       |
+| Realistic   | 64%                   | 70%              | 34              | **0**       |
+| Hard        | 70%                   | 78%              | 18              | **0**       |
+| Adversarial | 54%                   | **30%**          | 28              | **12**      |
 
 _LLM-arm figures are a snapshot — the LLM tier is mildly nondeterministic on a
 cold cache (candidates are the real `schema.description`, cached in
@@ -185,9 +187,9 @@ the generated `docs/architecture/collision/contextSelector-report.md`._
   conservative than the LLM, which tends to over-commit on genuinely ambiguous
   input where contextSelector correctly abstains.
 - **On adversarial input it is harmful:** turning it ON drops system accuracy from
-  56% (LLM-only) to **30%**, causing **13 regressions** — collisions it confidently
+  54% (LLM-only) to **30%**, causing **12 regressions** — collisions it confidently
   misroutes (loaded negation, sarcasm, quoted speech) that the LLM alone would have
-  routed correctly. The LLM is far from perfect here (56%) but it is not _fooled_
+  routed correctly. The LLM is far from perfect here (54%) but it is not _fooled_
   the way lexical matching is.
 - **Net:** contextSelector is a safe, call-saving win on realistic traffic and a
   liability only under adversarial phrasing — which reinforces the mitigation

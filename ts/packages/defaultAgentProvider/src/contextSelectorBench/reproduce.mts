@@ -23,7 +23,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveReportPath } from "./reportFile.mjs";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 // Forwarded to both arms (e.g. `--out <dir>`) so they share one report file.
 const passthrough = process.argv.slice(2);
 
@@ -53,12 +53,16 @@ function childEnv(): NodeJS.ProcessEnv {
 function run(script: string, args: string[]): number {
     const label = [script, ...args].join(" ");
     console.log(`\n=== contextSelector benchmark — ${label} ===`);
-    const res = spawnSync("npx", ["tsx", path.join(HERE, script), ...args], {
-        stdio: "inherit",
-        // npx resolves to npx.cmd on Windows; a shell handles that.
-        shell: process.platform === "win32",
-        env: childEnv(),
-    });
+    const res = spawnSync(
+        "npx",
+        ["tsx", path.join(MODULE_DIR, script), ...args],
+        {
+            stdio: "inherit",
+            // npx resolves to npx.cmd on Windows; a shell handles that.
+            shell: process.platform === "win32",
+            env: childEnv(),
+        },
+    );
     return res.status ?? 1;
 }
 

@@ -28,8 +28,8 @@ import {
 import { TfIdfScorer } from "agent-dispatcher/contextSelector";
 import { ContextVector } from "agent-dispatcher/contextSelector";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..");
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const TS_ROOT = path.resolve(MODULE_DIR, "..", "..", "..", "..");
 const LIST_SRC = path.join(TS_ROOT, "packages/agents/list/src/listSchema.ts");
 const LIST_PAS = path.join(
     TS_ROOT,
