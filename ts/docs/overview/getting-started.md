@@ -91,9 +91,12 @@ browser extension, Android, and the web API.
 ## Build your own agent
 
 To add action dispatch for your own scenario, create a **custom agent** that
-plugs into the Shell and routes through the dispatcher. The
-[Tutorial: build an agent](./tutorial-build-an-agent.md) walks through building
-an Echo agent as a standalone npm package, and the
+plugs into the Shell and routes through the dispatcher.
+[Build an agent](../guides/build-an-agent/index.md) is the canonical guide:
+picking a pattern, scaffolding, defining actions and grammar, iterating
+locally, and distributing via path / catalog / feed. The
+[Echo tutorial](../guides/build-an-agent/tutorial-echo.md) is a concrete
+standalone-package walkthrough. The
 [TypeAgent SDK](https://github.com/microsoft/TypeAgent/tree/main/ts/packages/agentSdk/)
 defines the interface between the dispatcher and an agent. See also
 [Add an agent](../contributing/add-an-agent.md) for how an agent surfaces in

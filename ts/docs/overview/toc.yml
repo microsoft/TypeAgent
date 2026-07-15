@@ -18,11 +18,11 @@
       href: service-keys.md
     - name: Developer tips & troubleshooting
       href: developer-tips.md
-    - name: "Tutorial: build an agent"
-      href: tutorial-build-an-agent.md
 - name: Surfaces
   href: surfaces.md
 - name: Command reference
   href: command-reference.md
+- name: Action browser
+  href: action-browser.html
 - name: Glossary
   href: glossary.md

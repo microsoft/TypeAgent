@@ -4,6 +4,7 @@
 import {
     ActionContext,
     AppAgent,
+    AppAgentEvent,
     AppAgentManifest,
     CompletionGroup,
     ParsedCommandParams,
@@ -60,13 +61,16 @@ export interface InstalledAgentSourceApi {
     // config with the manifest default as fallback. Returns which
     // source matched plus any warnings once the record is committed. `onStatus`,
     // when supplied, is called as each source is probed during the sequential
-    // resolution walk so the caller can show a live status line.
+    // resolution walk so the caller can show a live status line. `abortSignal`,
+    // when supplied, cancels a long install (the feed source's `npm install`)
+    // mid flight.
     install(
         nameOrTarget: string,
         ref: string | undefined,
         sourceName: string | undefined,
         issuingHost: AppAgentHost,
         onStatus?: SourceStatus,
+        abortSignal?: AbortSignal,
     ): Promise<InstallResult>;
     // Dry-run: report how a one/two-argument target would resolve (winning
     // source, match kind, installed name, and the full shadow set) without
@@ -102,10 +106,12 @@ export interface InstalledAgentSourceApi {
     // are never loaded at once (required because an agent's persisted storage is
     // keyed by agent name and cannot be shared between versions). The whole swap
     // is enqueued on every session's idle-gated applicator — including the
-    // issuing one — so this returns as soon as the record is committed ("update
-    // started"); the swap settles asynchronously and rolls back to v1 on
-    // timeout/failed-start. `onOutcome`: the final status (updated / reverted)
-    // once the swap settles.
+    // issuing one — so this returns as soon as the record is committed. A
+    // COMMITTED swap is announced by the cross-session fan-out ("Agent 'x' was
+    // updated."), exactly as install announces an add, so callers need not echo
+    // it. `onOutcome` reports the final status: `updated` (committed), `reverted`
+    // (a rollback to v1 on timeout/failed-start), or `unchanged` (the requested
+    // version was already serving — a no-op the fan-out cannot express).
     update(
         name: string,
         range: string | undefined,
@@ -335,12 +341,23 @@ class InstallCommandHandler implements CommandHandler {
     }): string {
         switch (m.matchKind) {
             case "defaultAgentName":
-                return `as default agent name '${m.name}'`;
+                return `default agent name '${m.name}'`;
             case "packageName":
-                return `as package '${m.packageName ?? "?"}'`;
+                return `package '${m.packageName ?? "?"}'`;
             case "path":
-                return `as path '${m.path ?? "?"}'`;
+                return `path '${m.path ?? "?"}'`;
         }
+    }
+
+    // "<kind> source '<name>'" (e.g. "catalog source 'workspace'"), or just
+    // "source '<name>'" when the kind is unknown.
+    private describeSource(m: {
+        source: string;
+        sourceKind?: string | undefined;
+    }): string {
+        return m.sourceKind !== undefined
+            ? `${m.sourceKind} source '${m.source}'`
+            : `source '${m.source}'`;
     }
 
     public async run(
@@ -386,7 +403,9 @@ class InstallCommandHandler implements CommandHandler {
                 return;
             }
             const { winner, matches } = preview;
-            let message = `'${target}' would resolve via source '${winner.source}' ${this.describeMatch(
+            let message = `'${target}' would resolve via ${this.describeSource(
+                winner,
+            )} as ${this.describeMatch(
                 winner,
             )} and install as '${winner.name}'.`;
             const shadows = matches.slice(1);
@@ -394,7 +413,9 @@ class InstallCommandHandler implements CommandHandler {
                 const list = shadows
                     .map(
                         (m) =>
-                            `source '${m.source}' (${this.describeMatch(m)})`,
+                            `${this.describeSource(m)} (${this.describeMatch(
+                                m,
+                            )})`,
                     )
                     .join(", ");
                 message += ` Also matched: ${list}.`;
@@ -415,6 +436,7 @@ class InstallCommandHandler implements CommandHandler {
             sourceName,
             appAgentHost,
             (message) => displayStatus(message, context),
+            context.abortSignal,
         );
         // Show any non-fatal source warnings once, for this command.
         for (const warning of result.warnings ?? []) {
@@ -424,20 +446,11 @@ class InstallCommandHandler implements CommandHandler {
             result.packageName !== undefined
                 ? ` from package '${result.packageName}'`
                 : "";
-        // "<kind> source '<name>'" (e.g. "catalog source 'workspace'"), or just
-        // the name if the kind is unknown.
-        const sourceLabel =
-            result.sourceKind !== undefined
-                ? `${result.sourceKind} source '${result.source}'`
-                : `source '${result.source}'`;
-        let message = `Agent '${result.name}' installed${pkgPart} via ${sourceLabel}; it will load in each session shortly.`;
-        if (result.ref !== undefined && result.ref !== result.packageName) {
-            message += ` Durable ref: ${result.ref}.`;
-        }
-        displayResult(message, context);
+        const sourceLabel = this.describeSource(result);
         // One-argument (inferred) installs clarify HOW the single ambiguous
-        // token matched, as a separate follow-up line. A two-argument install
-        // typed the name explicitly, so there is nothing to clarify.
+        // token matched, on a separate line shown before the install
+        // confirmation. A two-argument install typed the name explicitly, so
+        // there is nothing to clarify.
         if (!explicit) {
             const matchKind: InstallMatchKind = deriveMatchKind({
                 matchedByName: result.matchedByName,
@@ -453,6 +466,11 @@ class InstallCommandHandler implements CommandHandler {
                 context,
             );
         }
+        let message = `Agent '${result.name}' installed${pkgPart} via ${sourceLabel}; it will load in each session shortly.`;
+        if (result.ref !== undefined && result.ref !== result.packageName) {
+            message += ` Durable ref: ${result.ref}.`;
+        }
+        displayResult(message, context);
     }
 
     public async getCompletion(
@@ -507,23 +525,42 @@ class UninstallCommandHandler implements CommandHandler {
     ) {
         const { appAgentHost, source } = context.sessionContext.agentContext;
         const name = params.args.name;
-        // Start the coordinated teardown + fan out removeProvider to every
+        // Start the coordinated teardown and fan out the removal to every
         // session — including this one — through its idle-gated applicator, each
-        // notified. This returns as soon as the teardown
-        // starts; the unload lands at each session's next idle, and the final
-        // outcome (uninstalled / reverted-on-timeout) arrives via `onOutcome`.
+        // notified with a system message ("Agent 'x' was removed."), exactly as
+        // install announces an add. This returns as soon as the teardown starts.
+        //
+        // A COMMITTED uninstall is therefore announced by that cross-session
+        // fan-out, delivered uniformly to every session; the command adds no
+        // echo of its own (which would double the message and, firing after the
+        // command's ActionContext is finished, could not render anyway). Only a
+        // ROLLBACK — a phase timeout that leaves the agent installed and changes
+        // nothing, so the fan-out is silent — is surfaced here, through the
+        // session's notification channel (which survives command completion).
+        let settledSynchronously = false;
         await source.uninstall(name, appAgentHost, (outcome) => {
-            displayStatus(
-                outcome === "uninstalled"
-                    ? `Agent '${name}' uninstalled.`
-                    : `Agent '${name}' uninstall reverted; the agent is still installed.`,
+            settledSynchronously = true;
+            if (outcome === "reverted") {
+                context.sessionContext.notify(
+                    AppAgentEvent.Inline,
+                    `Agent '${name}' uninstall reverted; the agent is still installed.`,
+                );
+            }
+        });
+        // The barrier teardown settles asynchronously, so print the "started"
+        // acknowledgement. The `settledSynchronously` guard mirrors the update
+        // handler and stays defensive: if a source ever reported its outcome
+        // synchronously (before this await resolved), the "was removed" fan-out
+        // would already be the whole story and a "will unload shortly" line
+        // would be misleading. Today's uninstall path never settles that way (a
+        // recorded name is torn down through the barrier; a non-active recorded
+        // name throws before reaching here), so this branch normally prints.
+        if (!settledSynchronously) {
+            displayResult(
+                `Agent '${name}' uninstall started; it will unload from each session shortly.`,
                 context,
             );
-        });
-        displayResult(
-            `Agent '${name}' uninstall started; it will unload from each session shortly.`,
-            context,
-        );
+        }
     }
 
     public async getCompletion(
@@ -569,27 +606,44 @@ class UpdateCommandHandler implements CommandHandler {
 
         // The source materializes the new version first and only rewrites the
         // record after it succeeds, so a failed update is a no-op and that
-        // error is thrown here. It then starts a coordinated, time-bounded
-        // swap (no two versions loaded at once) that
-        // is enqueued on every session's idle-gated applicator — including this
-        // one — so this returns as soon as the record is committed ("update
-        // started"); the old version drains and the new one re-adds
-        // asynchronously (or rolls back to v1 on timeout), reported via the
-        // `onOutcome` status callback + per-session fan-out notifications.
+        // error is thrown here. It then starts a coordinated, time-bounded swap
+        // (no two versions loaded at once) enqueued on every session's
+        // idle-gated applicator — including this one — returning as soon as the
+        // record is committed.
+        //
+        // A COMMITTED swap is announced by the source's cross-session fan-out
+        // ("Agent 'x' was updated."), delivered uniformly to every session
+        // exactly as install announces an add; the command adds no echo of its
+        // own. Only the outcomes the fan-out cannot express are surfaced here,
+        // through the session's notification channel (which survives command
+        // completion): a ROLLBACK (v1 restored, nothing changed) and an
+        // UNCHANGED no-op (the requested version was already serving).
+        let settledSynchronously = false;
         await source.update(name, range, appAgentHost, (outcome) => {
-            // Final status for the issuing conversation. The command
-            // already returned "update started"; report the
-            // settled outcome as a follow-up status line.
-            const message =
-                outcome === "updated"
-                    ? `Agent '${name}' updated.`
-                    : `Agent '${name}' update failed; reverted to the previous version.`;
-            displayStatus(message, context);
+            settledSynchronously = true;
+            if (outcome === "reverted") {
+                context.sessionContext.notify(
+                    AppAgentEvent.Inline,
+                    `Agent '${name}' update failed; reverted to the previous version.`,
+                );
+            } else if (outcome === "unchanged") {
+                context.sessionContext.notify(
+                    AppAgentEvent.Inline,
+                    `Agent '${name}' is already up to date.`,
+                );
+            }
         });
-        displayResult(
-            `Agent '${name}' update started; it will reload in each session shortly.`,
-            context,
-        );
+        // The barrier swap settles asynchronously, so print the "started"
+        // acknowledgement — unless the source already settled inline (an
+        // already-current no-op, or a non-active agent added with no barrier),
+        // in which case the inline outcome / fan-out is the whole story and a
+        // "will reload shortly" line would be misleading.
+        if (!settledSynchronously) {
+            displayResult(
+                `Agent '${name}' update started; it will reload in each session shortly.`,
+                context,
+            );
+        }
     }
 
     public async getCompletion(

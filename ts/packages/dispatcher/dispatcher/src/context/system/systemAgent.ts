@@ -14,6 +14,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { executeConversationAction } from "./action/conversationActionHandler.js";
 import { executeConfigAction } from "./action/configActionHandler.js";
+import { executeDescribeAction } from "./action/describeActionHandler.js";
 import {
     type CommandHandlerContext,
     getRequestId,
@@ -33,6 +34,7 @@ import { executeHistoryAction } from "./action/historyActionHandler.js";
 import { executeGrammarAction } from "./action/grammarActionHandler.js";
 import { executeSettingsAction } from "./action/settingsActionHandler.js";
 import { ConfigAction } from "./schema/configActionSchema.js";
+import { DescribeAction } from "./schema/describeActionSchema.js";
 import { NotificationAction } from "./schema/notificationActionSchema.js";
 import { HistoryAction } from "./schema/historyActionSchema.js";
 import { ConversationAction } from "./schema/conversationActionSchema.js";
@@ -57,6 +59,7 @@ import { DisplayCommandHandler } from "./handlers/displayCommandHandler.js";
 import { getTokenCommandHandlers } from "./handlers/tokenCommandHandler.js";
 import { getEnvCommandHandlers } from "./handlers/envCommandHandler.js";
 import { ActionCommandHandler } from "./handlers/actionCommandHandler.js";
+import { DescribeCommandHandler } from "./handlers/describeCommandHandlers.js";
 import { RunCommandScriptHandler } from "./handlers/runScriptCommandHandler.js";
 import { HelpCommandHandler } from "./handlers/helpCommandHandler.js";
 import { OpenCommandHandler } from "./handlers/openCommandHandler.js";
@@ -93,6 +96,7 @@ export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
     commands: {
         action: new ActionCommandHandler(),
+        describe: new DescribeCommandHandler(),
         session: getSessionCommandHandlers(),
         conversation: getConversationCommandHandlers(),
         copilot: getCopilotCommandHandlers(),
@@ -147,7 +151,8 @@ function executeSystemAction(
         | TypeAgentAction<NotificationAction, "system.notify">
         | TypeAgentAction<HistoryAction, "system.history">
         | TypeAgentAction<GrammarAction, "system.grammar">
-        | TypeAgentAction<UserSettingsAction, "system.settings">,
+        | TypeAgentAction<UserSettingsAction, "system.settings">
+        | TypeAgentAction<DescribeAction, "system.describe">,
     context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.schemaName) {
@@ -163,6 +168,8 @@ function executeSystemAction(
             return executeGrammarAction(action, context);
         case "system.settings":
             return executeSettingsAction(action, context);
+        case "system.describe":
+            return executeDescribeAction(action, context);
         default:
             throw new Error(
                 `Invalid system sub-translator: ${(action as TypeAgentAction).schemaName}`,
@@ -244,6 +251,21 @@ export const systemManifest: AppAgentManifest = {
                 schemaFile:
                     "./src/context/system/schema/settingsActionSchema.ts",
                 schemaType: "UserSettingsAction",
+            },
+        },
+        describe: {
+            schema: {
+                description:
+                    "Describe what an agent or action can do — capability discovery, not execution. " +
+                    "Use this when the user wants to know WHAT an agent or action does, e.g. " +
+                    "'what can the spotify agent do', 'describe the calendar agent', " +
+                    "'show me all of spotify's actions', 'what does the play action do', " +
+                    "'describe spotify's play action'. This works even for installed-but-disabled " +
+                    "agents. Do NOT use this to execute an action or to list all agents " +
+                    "(that's a config command).",
+                schemaFile:
+                    "./src/context/system/schema/describeActionSchema.ts",
+                schemaType: "DescribeAction",
             },
         },
     },
