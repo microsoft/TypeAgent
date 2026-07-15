@@ -790,13 +790,13 @@ function dropAgentConfig(
 }
 
 /**
- * Emit the cross-session fan-out system message for a single add/remove:
+ * Emit the cross-session fan-out system message for a single add/remove/update:
  * name the agent and its resulting state so the change is
  * visible, not silent. Exported for unit testing of the wording/visibility.
  */
 export function emitAgentChangeNotification(
     clientIO: ClientIO,
-    op: "add" | "remove",
+    op: "add" | "remove" | "update",
     provider: AppAgentProvider,
     enable: boolean,
 ) {
@@ -804,10 +804,24 @@ export function emitAgentChangeNotification(
         const message =
             op === "remove"
                 ? `Agent '${name}' was removed.`
-                : enable
-                  ? `Agent '${name}' was added — enabled.`
-                  : `Agent '${name}' was added — disabled (\`@config agent ${name}\` to enable).`;
-        clientIO.notify(undefined, AppAgentEvent.Info, message, DispatcherName);
+                : op === "update"
+                  ? enable
+                      ? `Agent '${name}' was updated.`
+                      : `Agent '${name}' was updated — disabled (\`@config agent ${name}\` to enable).`
+                  : enable
+                    ? `Agent '${name}' was added — enabled.`
+                    : `Agent '${name}' was added — disabled (\`@config agent ${name}\` to enable).`;
+        // Emit as an Inline notification (not Info) so the confirmation shows
+        // inline in the conversation — Info notifications are only collected in
+        // the shell's notifications tray, so the "agent added/removed/updated"
+        // message would otherwise never appear in the session. Inline events
+        // are both rendered inline (shell + CLI) and captured in the tray.
+        clientIO.notify(
+            undefined,
+            AppAgentEvent.Inline,
+            message,
+            DispatcherName,
+        );
     }
 }
 
@@ -928,6 +942,50 @@ async function hostRemoveProvider(
             false,
         );
     }
+}
+
+/**
+ * The consolidated sibling notification for a {@link AppAgentHost.replaceProvider}
+ * swap: one message for the swap's net effect instead of the raw remove-then-add
+ * pair. `op` is "update" (a new version replaced the old — report "updated"),
+ * "remove" (the old version was uninstalled with no replacement — report
+ * "removed"), or undefined (a rollback restored the old version — nothing
+ * changed, stay silent). The enabled state is read from the session's own config
+ * so each session's message reflects its local preference (preserved across a
+ * version bump).
+ */
+function hostNotifyReplace(
+    context: CommandHandlerContext,
+    op: "update" | "remove" | undefined,
+    oldProvider: AppAgentProvider,
+    newProvider: AppAgentProvider | undefined,
+) {
+    if (op === undefined) {
+        // Rollback: the old version was restored, so nothing changed for this
+        // session — no message.
+        return;
+    }
+    if (op === "remove") {
+        emitAgentChangeNotification(
+            context.clientIO,
+            "remove",
+            oldProvider,
+            false,
+        );
+        return;
+    }
+    // Update: report the agent as updated, carrying this session's own
+    // enabled state (the preference is preserved across the version bump).
+    if (newProvider === undefined) {
+        return;
+    }
+    const name = newProvider.getAppAgentNames()[0];
+    emitAgentChangeNotification(
+        context.clientIO,
+        "update",
+        newProvider,
+        isAgentEnabled(context, name),
+    );
 }
 
 // code-complexity-allow: context bootstrap wiring many optional subsystems
@@ -1182,6 +1240,8 @@ export async function initializeCommandHandlerContext(
                 hostAddProvider(context, provider, notify),
             applyRemove: (provider, notify, dropConfig) =>
                 hostRemoveProvider(context, provider, notify, dropConfig),
+            notifyReplace: (op, oldProvider, newProvider) =>
+                hostNotifyReplace(context, op, oldProvider, newProvider),
         };
         context.appAgentHost = new AppAgentHostApplicator(
             context.commandLock,
