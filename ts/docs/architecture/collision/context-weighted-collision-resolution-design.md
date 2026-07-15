@@ -1023,10 +1023,10 @@ learned-preference bootstrap** (confirm-then-learn).
   a learned/built-in construction lives in a single agent's namespace, so an ambiguous phrase
   the cache has committed returns a **single** validated match. `contextSelector` needs ≥2
   candidates (`resolveContextSelector` → `skip` below 2), so the cached answer wins and topic
-  never weighs in — the reason live demos need `@const builtin off`. It pre-empts *every*
+  never weighs in — the reason live demos need `@const builtin off`. It pre-empts _every_
   resolver, since the cache sits upstream of all collision detection in `matchRequest`.
   **TODO — integrate registry-first with `contextSelector`:** use
-  `resolveGrammarRegistryFirst`'s neighborhood registry as the *detector* (it can flag a single
+  `resolveGrammarRegistryFirst`'s neighborhood registry as the _detector_ (it can flag a single
   cache match as known-ambiguous via `detectRegistryAmbiguity`), re-expand the candidate set
   from the neighborhood siblings, and feed it to the (match-agnostic) TF-IDF scorer so the
   topical winner resolves automatically — pinning + re-translating a winning sibling that has no
