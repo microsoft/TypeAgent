@@ -41,6 +41,7 @@ export { validateAction } from "./validate.js";
 
 // Utils for any schemas
 export {
+    getActionDescription,
     getPropertyType,
     getParameterNames,
     resolveTypeReference,
