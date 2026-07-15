@@ -58,8 +58,7 @@ docfx build ts/docs/docfx.json
 docfx ts/docs/docfx.json --serve
 ```
 
-> Always run `node ts/docs/scripts/build-wiki.mjs` **before**
-> `docfx build`. A fresh checkout has no staged package docs or generated
+> Always run `node ts/docs/scripts/build-wiki.mjs` **before** > `docfx build`. A fresh checkout has no staged package docs or generated
 > `toc.yml` files until it runs. See
 > [Build the wiki locally](./build-locally.md) for details.
 
