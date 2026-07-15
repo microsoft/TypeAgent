@@ -56,7 +56,6 @@ const CAL_SRC = path.join(
 
 const listVec = loadVector(LIST_SRC, "addItems");
 const calVec = loadVector(CAL_SRC, "findTodaysEvents");
-const listText = fs.readFileSync(LIST_SRC, "utf8").toLowerCase();
 const calText = fs.readFileSync(CAL_SRC, "utf8").toLowerCase();
 
 console.log("=== contextSelector committed-keyword USE validation ===\n");
@@ -157,8 +156,8 @@ ok("without them, the outcome flips away from calendar (misroute or abstain)");
 console.log(
     `\n✅ VALIDATED: the committed keyword vectors are USED by the real decision function.\n   The LLM synonyms { ${L1}, ${L2} } move calendar.findTodaysEvents from ${
         b.decision.kind === "resolve"
-            ? `LOSING to ${(b.decision as any).winner.schemaName}`
-            : `an ABSTAIN (${(b.decision as any).reason})`
+            ? `LOSING to ${b.decision.winner.schemaName}`
+            : `an ABSTAIN (${b.decision.reason})`
     } to WINNING the collision — a decision the lexical floor cannot make.`,
 );
 process.exit(0);
