@@ -80,7 +80,7 @@ jobs:
         parameters:
           buildDirectory: $(buildDirectory)
           nodeVersion: $(nodeVersion)
-          registry: $(REGISTRY)
+          registry: $(INSTALL_REGISTRY)
           # Manual/scheduled; skip store caching (the Windows post-job cache save
           # can exceed its timeout and fail the job after a successful publish).
           enableCache: false
