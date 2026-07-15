@@ -22,7 +22,7 @@
 // Also runs the B-6 threshold sweep on the combined corpus as a safety-boundary
 // study, and writes a markdown + JSON report.
 //
-// Run: npx tsx src/validation/contextselector/measureMetrics.mts [--out <dir>]
+// Run: npx tsx src/contextSelectorBench/measureMetrics.mts [--out <dir>]
 
 import { resolveReportPath, writeBaseReport } from "./reportFile.mjs";
 import { loadRoster, buildRoster } from "./metricRoster.mjs";
@@ -548,7 +548,7 @@ function md(): string {
 
     L.push("## How to regenerate this report\n");
     L.push(
-        "```\ncd packages/dispatcher/dispatcher\nnpx tsx src/validation/contextselector/reproduce.mts\n```\n",
+        "```\ncd packages/defaultAgentProvider\nnpx tsx src/contextSelectorBench/reproduce.mts\n```\n",
     );
     L.push(
         `Runs the whole suite — this report plus the LLM comparison appended at the end — and overwrites this tracked file (\`docs/architecture/collision/contextSelector-report.md\`) in place. Deterministic, so re-running produces the same numbers.\n`,

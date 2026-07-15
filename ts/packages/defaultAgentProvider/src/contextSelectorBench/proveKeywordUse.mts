@@ -13,17 +13,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { TfIdfStrategy } from "../../context/contextSelector/strategy.js";
+import { TfIdfStrategy } from "agent-dispatcher/contextSelector";
 import {
     keywordFilePathFor,
     loadKeywordFile,
-} from "../../context/contextSelector/keywordFile.js";
-import type { ContextVector } from "../../context/contextSelector/conversationSignal.js";
-import type { ScorerCandidate } from "../../context/contextSelector/scorer.js";
+} from "agent-dispatcher/contextSelector";
+import type { ContextVector } from "agent-dispatcher/contextSelector";
+import type { ScorerCandidate } from "agent-dispatcher/contextSelector";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-// contextSelector -> benchmark -> dispatcher -> dispatcher -> packages -> ts
-const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..", "..", "..");
+// contextSelectorBench -> src -> defaultAgentProvider -> packages -> ts
+const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..");
 
 // The REAL production defaults (session.ts:467-473).
 const CONFIG = { minUniqueTokens: 2, minMass: 1.0, margin: 0.5 };

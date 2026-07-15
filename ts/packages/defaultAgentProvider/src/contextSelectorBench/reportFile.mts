@@ -19,10 +19,10 @@ export const REPORT_FILENAME = "contextSelector-report.md";
 // Default output directory: the committed collision design-docs folder, so the
 // tracked report at docs/architecture/collision/contextSelector-report.md stays
 // current on every run without a manual copy. Resolved from this module's own
-// location: contextselector -> validation -> src -> dispatcher -> dispatcher ->
+// location: contextSelectorBench -> src -> defaultAgentProvider ->
 // packages -> ts, then docs/architecture/collision.
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..", "..", "..");
+const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..");
 const DEFAULT_REPORT_DIR = path.join(
     TS_ROOT,
     "docs",

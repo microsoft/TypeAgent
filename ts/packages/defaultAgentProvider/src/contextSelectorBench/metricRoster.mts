@@ -17,17 +17,17 @@ import {
     KeywordFile,
     loadKeywordFile,
     KEYWORD_FILE_SUFFIX,
-} from "../../context/contextSelector/keywordFile.js";
+} from "agent-dispatcher/contextSelector";
 import {
     ActionSchemaSource,
     KeywordIndex,
-} from "../../context/contextSelector/keywordIndex.js";
-import { KeywordSidecar } from "../../context/contextSelector/keywordSidecar.js";
-import { KeywordVector } from "../../context/contextSelector/keywordVector.js";
+} from "agent-dispatcher/contextSelector";
+import { KeywordSidecar } from "agent-dispatcher/contextSelector";
+import { KeywordVector } from "agent-dispatcher/contextSelector";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-// contextSelector -> benchmark -> dispatcher -> dispatcher -> packages -> ts
-const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..", "..", "..");
+// contextSelectorBench -> src -> defaultAgentProvider -> packages -> ts
+const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..");
 const AGENTS_DIR = path.join(TS_ROOT, "packages", "agents");
 
 // One committed action vector, resolved through the real index.

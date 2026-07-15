@@ -17,11 +17,11 @@
   },
   "stopwatch-intervals": {
     "choice": "B",
-    "raw": "{\n  \"agent\": \"B\"\n}"
+    "raw": "{\"agent\": \"B\"}"
   },
   "debug-fix-source": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "choice": "B",
+    "raw": "{\"agent\": \"B\"}"
   },
   "debugger-inspect-state": {
     "choice": "B",
@@ -57,15 +57,15 @@
   },
   "schedule-ambiguous": {
     "choice": "A",
-    "raw": "{\"agent\": \"A\"}"
+    "raw": "{\n  \"agent\": \"A\"\n}"
   },
   "code-generic-runtime": {
     "choice": "B",
-    "raw": "{\"agent\": \"B\"}"
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "image-generic-visual": {
     "choice": "A",
-    "raw": "{\"agent\": \"A\"}"
+    "raw": "{\n  \"agent\": \"A\"\n}"
   },
   "web-generic-url": {
     "choice": "A",
@@ -73,7 +73,7 @@
   },
   "topic-drift-weather": {
     "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "stale-bookmark": {
     "choice": "A",
@@ -85,7 +85,7 @@
   },
   "markdown-doc": {
     "choice": "B",
-    "raw": "{\n  \"agent\": \"B\"\n}"
+    "raw": "{\"agent\": \"B\"}"
   },
   "grocery-list": {
     "choice": "A",
@@ -100,8 +100,8 @@
     "raw": "{\"agent\": \"A\"}"
   },
   "fix-null-bug": {
-    "choice": "B",
-    "raw": "{\"agent\": \"B\"}"
+    "choice": "A",
+    "raw": "{\"agent\": \"A\"}"
   },
   "hide-taskbar": {
     "choice": "A",
@@ -121,7 +121,7 @@
   },
   "montage-organize": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "sunset-photo": {
     "choice": "B",
@@ -133,11 +133,11 @@
   },
   "planning-ambiguous": {
     "choice": "B",
-    "raw": "{\"agent\": \"B\"}"
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "dev-generic": {
-    "choice": "B",
-    "raw": "{\n  \"agent\": \"B\"\n}"
+    "choice": "A",
+    "raw": "{\n  \"agent\": \"A\"\n}"
   },
   "display-generic": {
     "choice": "B",
@@ -145,15 +145,15 @@
   },
   "alert-ambiguous": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "picture-generic": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "choice": "B",
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "drift-lunch": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "stale-meeting": {
     "choice": "B",
@@ -169,55 +169,55 @@
   },
   "dentist-reminder": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "world-clock": {
     "choice": "B",
     "raw": "{\"agent\": \"B\"}"
   },
   "syntax-error": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
-  },
-  "watch-variable": {
     "choice": "B",
     "raw": "{\"agent\": \"B\"}"
   },
-  "browsing-history": {
+  "watch-variable": {
     "choice": "A",
     "raw": "{\"agent\": \"A\"}"
   },
+  "browsing-history": {
+    "choice": "A",
+    "raw": "{\n  \"agent\": \"A\"\n}"
+  },
   "fetch-html": {
     "choice": "B",
-    "raw": "{\n  \"agent\": \"B\"\n}"
+    "raw": "{\"agent\": \"B\"}"
   },
   "baby-photo": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "book-conference": {
     "choice": "A",
     "raw": "{\n  \"agent\": \"A\"\n}"
   },
   "hard-thin-player": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "hard-thin-localplayer": {
     "choice": "B",
-    "raw": "{\n  \"agent\": \"B\"\n}"
+    "raw": "{\"agent\": \"B\"}"
   },
   "hard-thin-calendar": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "hard-thin-code": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "hard-thin-photo": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "hard-thin-browser": {
     "choice": "A",
@@ -229,23 +229,23 @@
   },
   "hard-thin-github": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "hard-vocab-calendar": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "hard-vocab-player": {
     "choice": "A",
     "raw": "{\n  \"agent\": \"A\"\n}"
   },
   "hard-vocab-code": {
-    "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "choice": "B",
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "hard-vocab-weather": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "hard-neg-noaffirm": {
     "choice": "unclear",
@@ -256,12 +256,12 @@
     "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "hard-neg-calendar": {
-    "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "choice": "B",
+    "raw": "{\"agent\": \"B\"}"
   },
   "hard-neg-affirm-github": {
     "choice": "B",
-    "raw": "{\"agent\": \"B\"}"
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "hard-neg-affirm-image": {
     "choice": "B",
@@ -269,7 +269,7 @@
   },
   "hard-neg-affirm-utility": {
     "choice": "B",
-    "raw": "{\"agent\": \"B\"}"
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "hard-shift-to-github": {
     "choice": "B",
@@ -281,7 +281,7 @@
   },
   "hard-shift-to-timer": {
     "choice": "B",
-    "raw": "{\n  \"agent\": \"B\"\n}"
+    "raw": "{\"agent\": \"B\"}"
   },
   "hard-shift-to-image": {
     "choice": "B",
@@ -300,12 +300,12 @@
     "raw": "{\n  \"agent\": \"A\"\n}"
   },
   "hard-trap-code": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "choice": "B",
+    "raw": "{\"agent\": \"B\"}"
   },
   "hard-trap-player": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "hard-trap-calendar": {
     "choice": "A",
@@ -313,15 +313,15 @@
   },
   "hard-trap-github": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "hard-trap-browser": {
     "choice": "A",
     "raw": "{\n  \"agent\": \"A\"\n}"
   },
   "hard-tie-music": {
-    "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "choice": "B",
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "hard-tie-schedule": {
     "choice": "unclear",
@@ -333,43 +333,43 @@
   },
   "hard-tie-visual": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "hard-tie-web": {
-    "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "choice": "A",
+    "raw": "{\n  \"agent\": \"A\"\n}"
   },
   "hard-tie-repo": {
     "choice": "unclear",
     "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "hard-stale-player": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "hard-stale-calendar": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "hard-stale-code": {
     "choice": "unclear",
     "raw": "{\"agent\": \"unclear\"}"
   },
   "hard-stale-photo": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "hard-stale-email": {
     "choice": "A",
-    "raw": "{\"agent\": \"A\"}"
+    "raw": "{\n  \"agent\": \"A\"\n}"
   },
   "hard-drift-cooking": {
     "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "hard-homonym-book": {
     "choice": "B",
-    "raw": "{\"agent\": \"B\"}"
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "hard-homonym-play": {
     "choice": "B",
@@ -400,8 +400,8 @@
     "raw": "{\n  \"agent\": \"A\"\n}"
   },
   "xh-negload-code": {
-    "choice": "A",
-    "raw": "{\"agent\": \"A\"}"
+    "choice": "B",
+    "raw": "{\"agent\": \"B\"}"
   },
   "xh-negload-vs": {
     "choice": "B",
@@ -413,11 +413,11 @@
   },
   "xh-negload-utility": {
     "choice": "B",
-    "raw": "{\"agent\": \"B\"}"
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "xh-negload-timer": {
     "choice": "B",
-    "raw": "{\n  \"agent\": \"B\"\n}"
+    "raw": "{\"agent\": \"B\"}"
   },
   "xh-negload-image": {
     "choice": "B",
@@ -429,7 +429,7 @@
   },
   "xh-negload-markdown": {
     "choice": "B",
-    "raw": "{\n  \"agent\": \"B\"\n}"
+    "raw": "{\"agent\": \"B\"}"
   },
   "xh-sarcasm-stream": {
     "choice": "A",
@@ -440,16 +440,16 @@
     "raw": "{\"agent\": \"unclear\"}"
   },
   "xh-sarcasm-debugger": {
-    "choice": "B",
-    "raw": "{\"agent\": \"B\"}"
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "xh-sarcasm-meeting": {
     "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "xh-sarcasm-bookmark": {
     "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "xh-sarcasm-email": {
     "choice": "A",
@@ -473,27 +473,27 @@
   },
   "xh-quote-code": {
     "choice": "B",
-    "raw": "{\n  \"agent\": \"B\"\n}"
+    "raw": "{\"agent\": \"B\"}"
   },
   "xh-quote-markdown": {
     "choice": "B",
     "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "xh-third-video-local": {
-    "choice": "A",
-    "raw": "{\"agent\": \"A\"}"
-  },
-  "xh-third-chat-photo": {
-    "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
-  },
-  "xh-third-settings-desktop": {
     "choice": "B",
     "raw": "{\n  \"agent\": \"B\"\n}"
   },
-  "xh-third-weather-timer": {
+  "xh-third-chat-photo": {
     "choice": "A",
     "raw": "{\n  \"agent\": \"A\"\n}"
+  },
+  "xh-third-settings-desktop": {
+    "choice": "unclear",
+    "raw": "{\"agent\": \"unclear\"}"
+  },
+  "xh-third-weather-timer": {
+    "choice": "A",
+    "raw": "{\"agent\": \"A\"}"
   },
   "xh-third-email-markdown": {
     "choice": "A",
@@ -512,20 +512,20 @@
     "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "xh-dense-web": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
-  },
-  "xh-dense-schedule": {
     "choice": "unclear",
     "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
+  "xh-dense-schedule": {
+    "choice": "A",
+    "raw": "{\n  \"agent\": \"A\"\n}"
+  },
   "xh-dense-visual": {
     "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "xh-dense-repo": {
     "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "xh-churn-1": {
     "choice": "A",
@@ -533,15 +533,15 @@
   },
   "xh-churn-2": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "xh-churn-3": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "choice": "B",
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "xh-churn-4": {
     "choice": "A",
-    "raw": "{\"agent\": \"A\"}"
+    "raw": "{\n  \"agent\": \"A\"\n}"
   },
   "xh-churn-5": {
     "choice": "B",
@@ -549,11 +549,11 @@
   },
   "xh-homonym-stream-data": {
     "choice": "unclear",
-    "raw": "{\n  \"unclear\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "xh-homonym-current-weather": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "xh-homonym-file-legal": {
     "choice": "unclear",
@@ -561,7 +561,7 @@
   },
   "xh-homonym-book-verb": {
     "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "xh-homonym-watch-video": {
     "choice": "unclear",
@@ -580,8 +580,8 @@
     "raw": "{\n  \"agent\": \"A\"\n}"
   },
   "xh-typo-code": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "choice": "B",
+    "raw": "{\"agent\": \"B\"}"
   },
   "xh-typo-photo": {
     "choice": "A",
@@ -597,7 +597,7 @@
   },
   "xh-sarcasm-alarm": {
     "choice": "B",
-    "raw": "{\n  \"agent\": \"B\"\n}"
+    "raw": "{\"agent\": \"B\"}"
   },
   "s-player": {
     "choice": "A",
@@ -609,11 +609,11 @@
   },
   "s-calendar": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "s-timer": {
     "choice": "B",
-    "raw": "{\n  \"agent\": \"B\"\n}"
+    "raw": "{\"agent\": \"B\"}"
   },
   "s-windowsclock": {
     "choice": "B",
@@ -621,15 +621,15 @@
   },
   "s-timer-2": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "s-code": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "choice": "B",
+    "raw": "{\"agent\": \"B\"}"
   },
   "s-vs": {
     "choice": "B",
-    "raw": "{\n  \"agent\": \"B\"\n}"
+    "raw": "{\"agent\": \"B\"}"
   },
   "s-photo": {
     "choice": "A",
@@ -645,7 +645,7 @@
   },
   "s-utility": {
     "choice": "B",
-    "raw": "{\n  \"agent\": \"B\"\n}"
+    "raw": "{\"agent\": \"B\"}"
   },
   "s-powershell": {
     "choice": "A",
@@ -661,19 +661,19 @@
   },
   "s-markdown": {
     "choice": "B",
-    "raw": "{\"agent\": \"B\"}"
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "s-list": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "s-github": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "s-desktop": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "s-settings": {
     "choice": "B",
@@ -681,11 +681,11 @@
   },
   "s-weather": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "s-chat": {
-    "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "choice": "unclear",
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "s-montage": {
     "choice": "A",
@@ -693,7 +693,7 @@
   },
   "s-player-2": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "s-localplayer-2": {
     "choice": "B",
@@ -704,8 +704,8 @@
     "raw": "{\n  \"agent\": \"A\"\n}"
   },
   "s-code-2": {
-    "choice": "A",
-    "raw": "{\"agent\": \"A\"}"
+    "choice": "B",
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "s-photo-2": {
     "choice": "A",
@@ -725,7 +725,7 @@
   },
   "s-weather-2": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "s-markdown-2": {
     "choice": "A",
@@ -745,7 +745,7 @@
   },
   "s-empty-1": {
     "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "s-empty-2": {
     "choice": "unclear",
@@ -777,7 +777,7 @@
   },
   "s-empty-9": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "s-empty-10": {
     "choice": "unclear",
@@ -789,11 +789,11 @@
   },
   "s-empty-12": {
     "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "s-empty-13": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "s-empty-14": {
     "choice": "unclear",
@@ -801,7 +801,7 @@
   },
   "nc-empty-music": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "nc-empty-schedule": {
     "choice": "unclear",
@@ -809,31 +809,31 @@
   },
   "nc-empty-code": {
     "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "nc-empty-photo": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "nc-empty-web": {
     "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "nc-empty-clock": {
-    "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "choice": "B",
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "nc-empty-doc": {
     "choice": "unclear",
     "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "nc-empty-list": {
-    "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "choice": "A",
+    "raw": "{\"agent\": \"A\"}"
   },
   "nc-greet-1": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "nc-greet-2": {
     "choice": "unclear",
@@ -853,7 +853,7 @@
   },
   "nc-greet-6": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "nc-greet-7": {
     "choice": "unclear",
@@ -869,7 +869,7 @@
   },
   "nc-greet-10": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "nc-food-1": {
     "choice": "unclear",
@@ -885,15 +885,15 @@
   },
   "nc-feel-1": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "nc-food-2": {
     "choice": "unclear",
     "raw": "{\"agent\": \"unclear\"}"
   },
   "nc-sport-1": {
-    "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "choice": "B",
+    "raw": "{\"agent\": \"B\"}"
   },
   "nc-family-2": {
     "choice": "B",
@@ -921,7 +921,7 @@
   },
   "nc-food-3": {
     "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "nc-family-3": {
     "choice": "B",
@@ -933,7 +933,7 @@
   },
   "nc-feel-3": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "nc-hobby-2": {
     "choice": "unclear",
@@ -945,43 +945,43 @@
   },
   "nc-family-4": {
     "choice": "B",
-    "raw": "{\"agent\": \"B\"}"
+    "raw": "{\n  \"agent\": \"B\"\n}"
   },
   "nc-pet-1": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "nc-meta-1": {
     "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "raw": "{\n  \"agent\": \"unclear\"\n}"
   },
   "nc-meta-2": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "nc-meta-3": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "nc-meta-4": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   },
   "nc-meta-5": {
     "choice": "unclear",
     "raw": "{\"agent\": \"unclear\"}"
   },
   "nc-meta-6": {
-    "choice": "unclear",
-    "raw": "{\"agent\": \"unclear\"}"
+    "choice": "B",
+    "raw": "{\"agent\": \"B\"}"
   },
   "nc-meta-7": {
-    "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "choice": "B",
+    "raw": "{\"agent\": \"B\"}"
   },
   "nc-meta-8": {
     "choice": "A",
-    "raw": "{\n  \"agent\": \"A\"\n}"
+    "raw": "{\"agent\": \"A\"}"
   },
   "nc-meta-9": {
     "choice": "unclear",
@@ -997,6 +997,6 @@
   },
   "nc-unrelated-money": {
     "choice": "unclear",
-    "raw": "{\n  \"agent\": \"unclear\"\n}"
+    "raw": "{\"agent\": \"unclear\"}"
   }
 }

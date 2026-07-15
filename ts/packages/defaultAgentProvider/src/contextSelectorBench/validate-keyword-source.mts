@@ -17,19 +17,19 @@ import { fromJSONParsedActionSchema } from "@typeagent/action-schema";
 import {
     KeywordIndex,
     ActionSchemaSource,
-} from "../../context/contextSelector/keywordIndex.js";
-import { KeywordSidecar } from "../../context/contextSelector/keywordSidecar.js";
+} from "agent-dispatcher/contextSelector";
+import { KeywordSidecar } from "agent-dispatcher/contextSelector";
 import {
     loadKeywordFile,
     writeKeywordFile,
     keywordFilePathFor,
     KeywordFile,
-} from "../../context/contextSelector/keywordFile.js";
-import { TfIdfScorer } from "../../context/contextSelector/scorer.js";
-import { ContextVector } from "../../context/contextSelector/conversationSignal.js";
+} from "agent-dispatcher/contextSelector";
+import { TfIdfScorer } from "agent-dispatcher/contextSelector";
+import { ContextVector } from "agent-dispatcher/contextSelector";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..", "..", "..");
+const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..");
 const LIST_SRC = path.join(TS_ROOT, "packages/agents/list/src/listSchema.ts");
 const LIST_PAS = path.join(
     TS_ROOT,

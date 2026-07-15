@@ -325,7 +325,7 @@ const CONSOLE_ALLOWED_GLOBS = [
     // The contextSelector benchmark/validation harness (measureMetrics,
     // compareLlm, reproduce, prove*, validate-keyword-source) are tsx-run CLI
     // scripts whose sole purpose is printing human-readable reports to stdout.
-    "**/validation/contextselector/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
+    "**/contextSelectorBench/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
 ];
 
 function buildConfig(

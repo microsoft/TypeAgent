@@ -16,7 +16,7 @@
 //      can't complete the deterministic report above is unaffected.
 //
 // Run (no build needed — tsx runs the sources directly):
-//   npx tsx src/validation/contextselector/reproduce.mts [--out <dir>]
+//   npx tsx src/contextSelectorBench/reproduce.mts [--out <dir>]
 
 import { spawnSync } from "node:child_process";
 import path from "node:path";

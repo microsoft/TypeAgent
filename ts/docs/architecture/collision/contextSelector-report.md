@@ -1,6 +1,6 @@
 # contextSelector benchmark
 
-_Generated 2026-07-14T23:36:53.210Z._
+_Generated 2026-07-15T22:04:06.341Z._
 
 ## What this measures
 
@@ -48,8 +48,8 @@ The metrics throughout the report are just different views of those four outcome
 ## How to regenerate this report
 
 ```
-cd packages/dispatcher/dispatcher
-npx tsx src/validation/contextselector/reproduce.mts
+cd packages/defaultAgentProvider
+npx tsx src/contextSelectorBench/reproduce.mts
 ```
 
 Runs the whole suite — this report plus the LLM comparison appended at the end — and overwrites this tracked file (`docs/architecture/collision/contextSelector-report.md`) in place. Deterministic, so re-running produces the same numbers.
@@ -428,7 +428,7 @@ The dispatcher's other grammar-collision strategies (`first-match`, `score-rank`
 
 # contextSelector vs the LLM resolution path
 
-_Generated 2026-07-14T23:36:55.964Z · 250 labeled collisions · LLM arm = real `aiclient` model (the standard path's LLM), temperature 0, cached._
+_Generated 2026-07-15T22:05:20.798Z · 250 labeled collisions · LLM arm = real `aiclient` model (the standard path's LLM), temperature 0, cached._
 
 **Goal:** the report above shows contextSelector is safe and instant, but the dispatcher could instead just ask the LLM to resolve every collision. This section asks the shipping question head-on: versus letting the LLM decide, what does turning contextSelector on gain, and what does it cost? The same 250 labeled collisions are scored both ways.
 
@@ -436,13 +436,13 @@ _Generated 2026-07-14T23:36:55.964Z · 250 labeled collisions · LLM arm = real 
 
 | Tier             | LLM-only acc (CS off) | CS-ON system acc | CS resolves (LLM calls saved) | Regressions (CS wrong, LLM right) | Correct saves |
 | ---------------- | --------------------- | ---------------- | ----------------------------- | --------------------------------- | ------------- |
-| Simple (50)      | 100% (50/50)          | 100% (50/50)     | 36                            | **0**                             | 36            |
-| Realistic (50)   | 76% (38/50)           | 76% (38/50)      | 34                            | **0**                             | 34            |
-| Hard (50)        | 84% (42/50)           | 86% (43/50)      | 18                            | **0**                             | 18            |
-| Adversarial (50) | 56% (28/50)           | 28% (14/50)      | 28                            | **14**                            | 2             |
+| Simple (50)      | 92% (46/50)           | 100% (50/50)     | 36                            | **0**                             | 36            |
+| Realistic (50)   | 68% (34/50)           | 76% (38/50)      | 34                            | **0**                             | 34            |
+| Hard (50)        | 76% (38/50)           | 82% (41/50)      | 18                            | **0**                             | 18            |
+| Adversarial (50) | 56% (28/50)           | 30% (15/50)      | 28                            | **13**                            | 2             |
 
 **How to read it.** _LLM-only accuracy_ is the standard path with contextSelector off. _CS-ON system accuracy_ is the deployed behavior (resolve, else fall through to the LLM). _Regressions_ are the price of enabling contextSelector — collisions it resolves to the wrong agent that the LLM alone would have routed correctly. _Correct saves_ are the payoff — right answers delivered without an LLM call.
 
-**Fidelity caveat — this LLM arm is a proxy, not the production fallback.** The real fallback (when contextSelector abstains with `escalate-to-llm`) is the full translation pipeline: it selects among _all_ active agents using their real action schemas and emits a complete typed action, on the configured translation model. This arm instead asks a default chat model to pick between just the _two_ colliding agents, described by one-line blurbs, and scores only the agent label. It also explicitly prompts the model to watch for negation/sarcasm/quoting, a hint production translation does not get. Net effect: the arm makes the LLM look **stronger** than production would (easier 2-way task, hinted), so treat the realistic-tier _0 regressions_ as a robust floor, but read the adversarial-tier regression count as a **worst-case** cost for contextSelector, not an expected one. A faithful measurement needs an L3 live-dispatcher replay through the real translator (a listed follow-up).
+**Fidelity caveat — this LLM arm is a proxy, not the production fallback.** The real fallback (when contextSelector abstains with `escalate-to-llm`) is the full translation pipeline: it selects among _all_ active agents using their real action schemas and emits a complete typed action, on the configured translation model. This arm instead asks a default chat model to pick between just the _two_ colliding agents, described by their real `schema.description` from the agent configs (the summary the translator sees, not the full action schema), and scores only the agent label. It also explicitly prompts the model to watch for negation/sarcasm/quoting, a hint production translation does not get. Net effect: the arm makes the LLM look **stronger** than production would (easier 2-way task, hinted), so treat the realistic-tier _0 regressions_ as a robust floor, but read the adversarial-tier regression count as a **worst-case** cost for contextSelector, not an expected one. A faithful measurement needs an L3 live-dispatcher replay through the real translator (a listed follow-up).
 
 <!-- END contextSelector-vs-llm -->

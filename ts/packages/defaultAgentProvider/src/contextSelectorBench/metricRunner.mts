@@ -21,10 +21,10 @@
 import {
     RingBufferSignalSource,
     ContextVector,
-} from "../../context/contextSelector/conversationSignal.js";
-import { TfIdfStrategy } from "../../context/contextSelector/strategy.js";
-import { ScorerCandidate } from "../../context/contextSelector/scorer.js";
-import { DecisionConfig } from "../../context/contextSelector/decision.js";
+} from "agent-dispatcher/contextSelector";
+import { TfIdfStrategy } from "agent-dispatcher/contextSelector";
+import { ScorerCandidate } from "agent-dispatcher/contextSelector";
+import { DecisionConfig } from "agent-dispatcher/contextSelector";
 import { Roster } from "./metricRoster.mjs";
 import { Fixture } from "./metricCorpus.mjs";
 

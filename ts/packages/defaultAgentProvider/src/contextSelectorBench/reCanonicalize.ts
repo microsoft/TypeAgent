@@ -12,11 +12,11 @@ import { fileURLToPath } from "node:url";
 import {
     parseKeywordFileContent,
     writeKeywordFile,
-} from "../../context/contextSelector/keywordFile.js";
+} from "agent-dispatcher/contextSelector";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-// contextSelector -> benchmark -> dispatcher -> dispatcher -> packages -> ts
-const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..", "..", "..");
+// contextSelectorBench -> src -> defaultAgentProvider -> packages -> ts
+const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..");
 const AGENTS_DIR = path.join(TS_ROOT, "packages", "agents");
 
 function findKeywordFiles(dir: string): string[] {

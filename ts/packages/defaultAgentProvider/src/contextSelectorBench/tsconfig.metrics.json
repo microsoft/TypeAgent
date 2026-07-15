@@ -1,5 +1,5 @@
 {
-  "extends": "../../../../../../tsconfig.base.json",
+  "extends": "../../../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
     "composite": false,
@@ -18,6 +18,10 @@
     "metricRealPairs.mts",
     "metricRealisticDialogue.mts",
     "compareLlm.mts",
-    "reproduce.mts"
+    "reproduce.mts",
+    "proveContextFlip.mts",
+    "proveKeywordUse.mts",
+    "validate-keyword-source.mts",
+    "reCanonicalize.ts"
   ]
 }

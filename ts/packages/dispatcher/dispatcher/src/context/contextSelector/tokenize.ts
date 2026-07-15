@@ -209,6 +209,14 @@ export type TokenizeOptions = {
 // "sheet" (the comma closes the scope). Purely lexical and deterministic (§12);
 // contractions ("don't") are not handled in v1 — a parked lever. Off by default
 // so it never touches keyword vectors.
+//
+// LOCALIZATION (English-only in v1, by design): the cue/reset lexicons below —
+// like the plural stemmer above — are ENGLISH. On non-English input the negation
+// guard effectively no-ops: negated topics are not suppressed, so loaded-negation
+// misroutes can resurface. Localizing this needs per-language cue/reset lexicons
+// and locale-aware clause-boundary handling/stemming, keyed off the request or
+// session locale.
+// TODO(localization): add non-English negation lexicons + locale-aware scoping.
 const NEGATION_CUES: ReadonlySet<string> = new Set([
     "not",
     "no",

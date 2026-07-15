@@ -23,22 +23,25 @@
 //
 // LLM responses are cached to llm-cache.json so the run is re-runnable and does
 // not re-spend. Requires model config (config.local.yaml); NOT deterministic on
-// a cold cache. Run: npx tsx src/validation/contextselector/compareLlm.mts [--out dir]
+// a cold cache. Run: npx tsx src/contextSelectorBench/compareLlm.mts [--out dir]
 
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfigSync } from "../../../../../config/dist/index.js";
-import { openai } from "../../../../../aiclient/dist/index.js";
+import { loadConfigSync } from "@typeagent/config";
+import { openai } from "@typeagent/aiclient";
 import { loadRoster } from "./metricRoster.mjs";
 import { resolveReportPath, upsertLlmSection } from "./reportFile.mjs";
 import { SCENARIOS } from "./metricRealisticDialogue.mjs";
-import { RingBufferSignalSource } from "../../context/contextSelector/conversationSignal.js";
-import { TfIdfStrategy } from "../../context/contextSelector/strategy.js";
-import { DecisionConfig } from "../../context/contextSelector/decision.js";
+import { RingBufferSignalSource } from "agent-dispatcher/contextSelector";
+import { TfIdfStrategy } from "agent-dispatcher/contextSelector";
+import { DecisionConfig } from "agent-dispatcher/contextSelector";
+import { getInstanceDir } from "agent-dispatcher/helpers/data";
+import { getAllActionConfigProvider } from "agent-dispatcher/internal";
+import { getDefaultAppAgentProviders } from "../index.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..", "..", "..");
+const TS_ROOT = path.resolve(HERE, "..", "..", "..", "..");
 const CACHE_PATH = path.join(HERE, "llm-cache.json");
 const CFG: DecisionConfig = { minUniqueTokens: 2, minMass: 1.0, margin: 0.5 };
 
@@ -47,48 +50,18 @@ const CFG: DecisionConfig = { minUniqueTokens: 2, minMass: 1.0, margin: 0.5 };
 // the pre-guard baseline, consistent with metricRunner.
 const NEGATION_GUARD = process.env.CS_NEGATION_GUARD !== "0";
 
-// Concise, accurate one-liners for the featured agents so the LLM knows what
-// each does (a stand-in for the schema/action descriptions the real translator
-// sees).
-const DESC: Record<string, string> = {
-    player: "Streaming music player (Spotify-style): play/queue tracks, playlists, favorites, mixes.",
-    localPlayer:
-        "Local music player: play audio files stored on disk (mp3, flac, wav, ogg).",
-    calendar:
-        "Calendar: create events, meetings, appointments; invite participants.",
-    timer: "Reminders & alarms: set timers, alarms, and pending notifications for tasks.",
-    windowsClock:
-        "Windows Clock app: stopwatch, countdown, world clock, timezones.",
-    "code.code-debug":
-        "Code editor/debugger: edit source files, fix bugs, manage breakpoints.",
-    visualStudio:
-        "Visual Studio debugger: break, inspect threads, call stack, variables, memory.",
-    photo: "Camera/photos: take real photos, selfies, and snapshots with the camera.",
-    image: "AI image generation: create illustrations, digital art, paintings, sketches.",
-    "browser.external":
-        "Web browser: open tabs, bookmarks, and history; navigate to websites.",
-    utility:
-        "Web-fetch utility: fetch raw HTML content from a URL or web resource.",
-    powershell: "PowerShell: run scripts and shell commands.",
-    taskflow:
-        "Task-flow automation: run reusable task-flow templates and steps.",
-    email: "Email: read/search the inbox, compose messages to recipients.",
-    markdown:
-        "Markdown documents: open and edit markdown docs, notes, and outlines.",
-    list: "Lists: manage grocery/todo checklists, inventories, and items.",
-    "github-cli":
-        "GitHub CLI: manage repositories, caches, packages, and CI builds.",
-    "desktop.desktop-taskbar":
-        "Desktop taskbar settings: hide/show the taskbar, toolbar, and menus.",
-    settings:
-        "System display settings: monitor resolution and multi-monitor layout.",
-    weather: "Weather: forecasts, current conditions, and storm alerts.",
-    montage:
-        "Photo montage: search a photo collection by tags, people, and location.",
-    chat: "Chat: show or share image files, screenshots, and icons.",
-};
+// The candidate descriptions the LLM sees come from the REAL agent configs
+// (each agent manifest's `schema.description`) — the same summary text the
+// production translator is given — resolved once in main() via
+// getAllActionConfigProvider. No hand-authored blurbs, so the LLM arm stays
+// honest and cannot drift from the shipped descriptions as agents change.
 
 type LlmChoice = "A" | "B" | "unclear";
+// Cache keyed by scenario id ONLY. The prompt's agent descriptions now come from
+// the live agent configs (see descOf in main), so if an agent's schema.description
+// changes the prompt changes but this key does NOT. Wipe llm-cache.json (to `{}`)
+// after any description/prompt change to force a clean regenerate — a stale cache
+// would serve choices computed against the old description text.
 type Cache = Record<string, { choice: LlmChoice; raw: string }>;
 
 function loadCache(): Cache {
@@ -104,6 +77,8 @@ function buildPrompt(
     ask: string,
     aSchema: string,
     bSchema: string,
+    aDesc: string,
+    bDesc: string,
 ): string {
     const convo = dialogue.map((t, i) => `[${i + 1}] ${t}`).join("\n");
     return [
@@ -114,8 +89,8 @@ function buildPrompt(
         `Final request: "${ask}"`,
         "",
         "Candidate agents:",
-        `A) ${aSchema}: ${DESC[aSchema] ?? aSchema}`,
-        `B) ${bSchema}: ${DESC[bSchema] ?? bSchema}`,
+        `A) ${aSchema}: ${aDesc}`,
+        `B) ${bSchema}: ${bDesc}`,
         "",
         'Judge what the user ACTUALLY wants — account for negation ("not X"), sarcasm, and words that are quoting someone else. If the conversation genuinely does not favor one agent over the other, answer "unclear".',
         'Respond ONLY with JSON of the form {"agent": "A"} or {"agent": "B"} or {"agent": "unclear"}.',
@@ -141,6 +116,16 @@ function parseChoice(text: string): LlmChoice {
 async function main() {
     loadConfigSync({ workspaceRoot: TS_ROOT });
     const roster = loadRoster({ minVectorSize: 8 });
+
+    // Real agent descriptions (each manifest's `schema.description`, the same
+    // summary the production translator sees) instead of hand-authored blurbs.
+    // Offline: manifests are read and flattened only — no agent code runs, no
+    // network. Unknown schemas fall back to the bare schema name.
+    const { provider: actionConfigProvider } = await getAllActionConfigProvider(
+        getDefaultAppAgentProviders(getInstanceDir()),
+    );
+    const descOf = (schema: string): string =>
+        actionConfigProvider.tryGetActionConfig(schema)?.description ?? schema;
     const best = new Map<string, { schemaName: string; actionName: string }>();
     for (const a of roster.actions) {
         const cur = best.get(a.schemaName);
@@ -207,7 +192,14 @@ async function main() {
         // LLM arm (cached).
         let cached = cache[s.id];
         if (cached === undefined) {
-            const prompt = buildPrompt(s.dialogue, s.ask, aSchema, bSchema);
+            const prompt = buildPrompt(
+                s.dialogue,
+                s.ask,
+                aSchema,
+                bSchema,
+                descOf(aSchema),
+                descOf(bSchema),
+            );
             const r = await model.complete(prompt);
             const raw = r.success ? r.data : `ERROR: ${r.message}`;
             cached = { choice: r.success ? parseChoice(raw) : "unclear", raw };
@@ -329,7 +321,7 @@ async function main() {
         "\n**How to read it.** *LLM-only accuracy* is the standard path with contextSelector off. *CS-ON system accuracy* is the deployed behavior (resolve, else fall through to the LLM). *Regressions* are the price of enabling contextSelector — collisions it resolves to the wrong agent that the LLM alone would have routed correctly. *Correct saves* are the payoff — right answers delivered without an LLM call.\n",
     );
     md.push(
-        "\n**Fidelity caveat — this LLM arm is a proxy, not the production fallback.** The real fallback (when contextSelector abstains with `escalate-to-llm`) is the full translation pipeline: it selects among *all* active agents using their real action schemas and emits a complete typed action, on the configured translation model. This arm instead asks a default chat model to pick between just the *two* colliding agents, described by one-line blurbs, and scores only the agent label. It also explicitly prompts the model to watch for negation/sarcasm/quoting, a hint production translation does not get. Net effect: the arm makes the LLM look **stronger** than production would (easier 2-way task, hinted), so treat the realistic-tier *0 regressions* as a robust floor, but read the adversarial-tier regression count as a **worst-case** cost for contextSelector, not an expected one. A faithful measurement needs an L3 live-dispatcher replay through the real translator (a listed follow-up).\n",
+        "\n**Fidelity caveat — this LLM arm is a proxy, not the production fallback.** The real fallback (when contextSelector abstains with `escalate-to-llm`) is the full translation pipeline: it selects among *all* active agents using their real action schemas and emits a complete typed action, on the configured translation model. This arm instead asks a default chat model to pick between just the *two* colliding agents, described by their real `schema.description` from the agent configs (the summary the translator sees, not the full action schema), and scores only the agent label. It also explicitly prompts the model to watch for negation/sarcasm/quoting, a hint production translation does not get. Net effect: the arm makes the LLM look **stronger** than production would (easier 2-way task, hinted), so treat the realistic-tier *0 regressions* as a robust floor, but read the adversarial-tier regression count as a **worst-case** cost for contextSelector, not an expected one. A faithful measurement needs an L3 live-dispatcher replay through the real translator (a listed follow-up).\n",
     );
     const reportPath = resolveReportPath();
     upsertLlmSection(reportPath, md.join("\n"));

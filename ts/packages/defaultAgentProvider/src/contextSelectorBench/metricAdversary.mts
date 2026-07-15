@@ -18,8 +18,8 @@
 import {
     KeywordFile,
     KEYWORD_FILE_SCHEMA_VERSION,
-} from "../../context/contextSelector/keywordFile.js";
-import { tokenize } from "../../context/contextSelector/tokenize.js";
+} from "agent-dispatcher/contextSelector";
+import { tokenize } from "agent-dispatcher/contextSelector";
 import { Roster, buildRoster } from "./metricRoster.mjs";
 import {
     Fixture,

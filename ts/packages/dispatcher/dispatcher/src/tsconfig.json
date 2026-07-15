@@ -6,7 +6,6 @@
     "outDir": "../dist"
   },
   "include": ["./**/*"],
-  "exclude": ["validation/contextselector/**/*"],
   "ts-node": {
     "esm": true
   }
