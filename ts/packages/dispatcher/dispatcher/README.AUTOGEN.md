@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=a68b6d432661f2222fc5201042f3b8f927a47a50ea6aee3929a8558ba6851880 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=30e0b89af6df1186cf8dfba60b3ead1927a967bbe00edf43f23e12854fb3c94c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a core library in the TypeAgent monorepo, designed to facilitate the interaction between users and application agents through natural language interfaces. It acts as the central hub for processing user requests, translating them into structured actions, and coordinating responses from various agents. The Dispatcher is a key component in enabling the creation of extensible and scalable personal agents that can be integrated into different front ends, such as the TypeAgent Shell and CLI.
+The TypeAgent Dispatcher is a TypeScript library that serves as the central hub for processing user requests and coordinating interactions between various application agents in the TypeAgent ecosystem. It enables natural language interfaces by leveraging large language models (LLMs) to translate user inputs into structured actions. The Dispatcher is designed to be extensible and scalable, making it a critical component for building personal agents that can be integrated into different front ends, such as the TypeAgent Shell and CLI.
 
 ## What it does
 
-The Dispatcher is responsible for interpreting user inputs, which can be either natural language requests or system commands, and converting them into structured actions. These actions are defined by schemas provided by application agents. The Dispatcher also manages the dynamic switching between agents to handle diverse tasks, ensuring a cohesive user experience.
+The Dispatcher is responsible for interpreting user inputs, which can be either natural language requests or system commands, and converting them into structured actions. These actions are defined by schemas provided by application agents. The Dispatcher also manages dynamic switching between agents to handle diverse tasks, ensuring a cohesive user experience.
 
 ### Natural Language Requests
 
-The Dispatcher leverages large language models (LLMs) to translate natural language inputs into structured actions. For example, in the CLI:
+The Dispatcher uses LLMs to process natural language inputs and translate them into structured actions. For example, in the CLI:
 
 ```bash
 [calendar]🤖> can you setup a meeting between 2-3PM
@@ -37,7 +37,7 @@ Other examples of natural language requests include:
 
 ### System Commands
 
-The Dispatcher also supports system commands prefixed with `@`, allowing users to configure and interact with the system directly. These commands include:
+The Dispatcher supports system commands prefixed with `@`, allowing users to configure and interact with the system directly. These commands include:
 
 - **Agent Management**: Enable or disable specific agents or groups of agents.
 
@@ -69,7 +69,7 @@ The Dispatcher translates these requests into structured payloads and forwards t
 
 ## Setup
 
-To use the Dispatcher, the following environment variables must be configured:
+To use the Dispatcher, you need to configure the following environment variables:
 
 - `CLAUDE_CUSTOM_PROMPT_FILE`: Path to a custom prompt file for Claude.
 - `CLAUDE_FORCE_REASONING`: Boolean flag to enforce reasoning with Claude.
@@ -194,6 +194,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-r
 
 ### Used by
 
+- [@typeagent/action-browser](../../../tools/actionBrowser/README.md)
 - [@typeagent/docs-autogen](../../../tools/docsAutogen/README.md)
 - [agent-api](../../../packages/api/README.md)
 - [agent-cache-explorer](../../../packages/cacheExplorer/README.md)
@@ -203,8 +204,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-r
 - [cache-rest-endpoint](../../../examples/cacheRESTEndpoint/README.md)
 - [default-agent-provider](../../../packages/defaultAgentProvider/README.md)
 - [dispatcher-node-providers](../../../packages/dispatcher/nodeProviders/README.md)
-- [greeting-agent](../../../packages/agents/greeting/README.md)
-- _…and 7 more workspace consumers._
+- _…and 8 more workspace consumers._
 
 ### Files of interest
 
@@ -218,7 +218,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-r
 - [./src/context/dispatcher/schema/dispatcherActionSchema.ts](./src/context/dispatcher/schema/dispatcherActionSchema.ts)
 - [./src/context/dispatcher/schema/lookupActionSchema.ts](./src/context/dispatcher/schema/lookupActionSchema.ts)
 - [./src/context/dispatcher/schema/reasoningActionSchema.ts](./src/context/dispatcher/schema/reasoningActionSchema.ts)
-- _…and 204 more under `./src/`._
+- _…and 209 more under `./src/`._
 
 ### Environment variables
 
@@ -236,6 +236,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `5c9fc637c2f0a96d75d41a3bc9054d06247d26d8` on `2026-07-15T08:50:41.068Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
