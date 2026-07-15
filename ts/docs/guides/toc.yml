@@ -3,5 +3,14 @@
 
 - name: Guides
   href: index.md
+- name: Build an agent
+  href: build-an-agent/index.md
+  items:
+    - name: Overview
+      href: build-an-agent/index.md
+    - name: User interaction (ActionIO)
+      href: build-an-agent/user-interaction.md
+    - name: "Tutorial: Echo agent (standalone package)"
+      href: build-an-agent/tutorial-echo.md
 - name: Embedding the dispatcher
   href: embedding-dispatcher.md

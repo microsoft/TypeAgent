@@ -4,6 +4,7 @@
 import test, { expect, Page } from "@playwright/test";
 import {
     clearMessages,
+    getAllAgentMessages,
     runTestCallback,
     sendUserRequestAndWaitForCompletion,
     sendUserRequestAndWaitForResponse,
@@ -153,6 +154,28 @@ test.describe("@session Commands", () => {
             await mainWindow
                 .locator(".choice-button", { hasText: "Yes" })
                 .click();
+
+            // Wait for the clear to fully complete before exiting. Clicking Yes
+            // triggers a full context reinitialize inside the @session clear
+            // handler (setSessionOnCommandHandlerContext: close all agents,
+            // re-init memory, rebuild the agent cache, re-activate agents). If we
+            // exit while that is still in-flight, @exit races it and the shell's
+            // shutdown queue-drain (up to 30s) blocks the app from quitting, so
+            // close() times out. A follow-up command completes only after the
+            // clear ahead of it drains from the FIFO request queue, which
+            // guarantees a quiescent shutdown.
+            await sendUserRequestAndWaitForCompletion(
+                `@session info`,
+                mainWindow,
+            );
+
+            // The clear's success message is emitted only after the
+            // reinitialize finishes, so it must be present by now.
+            const messages = await getAllAgentMessages(mainWindow);
+            expect(
+                messages.some((m) => m.includes("Session data cleared.")),
+                "Session data was not cleared.",
+            ).toBeTruthy();
 
             // close the application
         });

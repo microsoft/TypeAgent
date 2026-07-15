@@ -6,12 +6,14 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import semver from "semver";
+import registerDebug from "debug";
 import {
     InstallSource,
     FeedSourceConfig,
     InstalledAgentRecord,
     MaterializedInstallRecord,
     ResolvedCandidate,
+    SourceStatus,
     AGENT_INSTALL_ROOTS_SUBDIR,
     AvailableInstallRow,
 } from "./config.js";
@@ -24,6 +26,8 @@ import {
 } from "./feedAuth.js";
 
 const execFileAsync = promisify(execFile);
+
+const debug = registerDebug("typeagent:dispatcher:installSource:feed");
 
 // The sentinel keyword an app agent declares in its package.json.
 export const AGENT_KEYWORD = "typeagent-agent";
@@ -142,6 +146,9 @@ export interface NpmInstallArgs {
     cwd: string;
     registry: string;
     userconfig: string;
+    // When supplied, cancels the npm child process mid flight (kills it and
+    // rejects with an AbortError). Omitted for callers that cannot cancel.
+    signal?: AbortSignal;
 }
 
 export interface FeedSourceDeps {
@@ -242,7 +249,7 @@ async function defaultNpmInstall(args: NpmInstallArgs): Promise<void> {
             "--userconfig",
             args.userconfig,
         ],
-        { cwd: args.cwd, shell: isWindows },
+        { cwd: args.cwd, shell: isWindows, signal: args.signal },
     );
 }
 
@@ -288,6 +295,9 @@ async function listScopedPackages(
         }
         const data = (await res.json()) as AzurePackagesResponse;
         const page = Array.isArray(data.value) ? data.value : [];
+        debug(
+            `listScopedPackages: GET ${url} -> ${res.status} ${res.statusText}, ${page.length} package(s)`,
+        );
         for (const pkg of page) {
             const nameValue = pkg.normalizedName ?? pkg.name;
             const name = typeof nameValue === "string" ? nameValue : undefined;
@@ -304,6 +314,9 @@ async function listScopedPackages(
         }
         skip += top;
     }
+    debug(
+        `listScopedPackages: ${names.length} package(s) matched scopes [${scopes.join(", ")}]: ${names.join(", ")}`,
+    );
     return names;
 }
 
@@ -320,11 +333,18 @@ async function isAgentPackage(
         headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
+        debug(
+            `isAgentPackage: GET ${url} -> ${res.status} ${res.statusText} (treated as non-agent)`,
+        );
         return false;
     }
     const packument = asRecord(await res.json());
     const keywords: unknown = packument?.keywords;
-    return Array.isArray(keywords) && keywords.includes(AGENT_KEYWORD);
+    const isAgent = Array.isArray(keywords) && keywords.includes(AGENT_KEYWORD);
+    debug(
+        `isAgentPackage: ${packageName} keywords=[${Array.isArray(keywords) ? keywords.join(", ") : ""}] -> ${isAgent}`,
+    );
+    return isAgent;
 }
 
 // Fetch and parse a package's packument. Returns undefined
@@ -342,10 +362,22 @@ async function fetchPackument(
             headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
+            debug(
+                `fetchPackument: GET ${url} -> ${res.status} ${res.statusText} (no packument)`,
+            );
             return undefined;
         }
-        return await res.json();
-    } catch {
+        const packument = await res.json();
+        const record = asRecord(packument);
+        const versions = asRecord(record?.versions);
+        const distTags = asRecord(record?.["dist-tags"]);
+        const versionCount = versions ? Object.keys(versions).length : 0;
+        debug(
+            `fetchPackument: ${packageName} -> ${versionCount} version(s), dist-tags=${JSON.stringify(distTags ?? {})}`,
+        );
+        return packument;
+    } catch (e) {
+        debug(`fetchPackument: ${packageName} failed: ${e}`);
         return undefined;
     }
 }
@@ -505,6 +537,14 @@ async function enumerateFeedAgentDescriptors(
         }
         descriptors.push(descriptor);
     }
+    debug(
+        `enumerateFeedAgentDescriptors: ${descriptors.length} agent package(s): ${descriptors
+            .map(
+                (d) =>
+                    `${d.packageName}@${d.latestVersion}${d.defaultAgentName ? ` (${d.defaultAgentName})` : ""}`,
+            )
+            .join(", ")}`,
+    );
     return descriptors;
 }
 
@@ -742,6 +782,37 @@ export function createFeedSource(
         kind: "feed",
         find,
         findName,
+        describe(): string {
+            // Reuse the same resolution as find/materialize
+            // (resolveFeedRegistry / resolveFeedScopes). Annotate a value with
+            // its env var only when the env var actually supplied it (config
+            // was silent AND the env var was set).
+            const resolvedRegistry = resolveFeedRegistry(config);
+            const registryFromEnv =
+                config.registry === undefined && resolvedRegistry !== undefined;
+            const registryDetail =
+                resolvedRegistry === undefined
+                    ? "<unset>"
+                    : registryFromEnv
+                      ? `${resolvedRegistry} (env: TYPEAGENT_FEED_REGISTRY)`
+                      : resolvedRegistry;
+
+            const scopeList = resolveFeedScopes(config);
+            const scopes =
+                scopeList.length > 0
+                    ? `scopes: ${scopeList.join(", ")}`
+                    : "scopes: (none)";
+            // Match resolveFeedScopes' check: an explicit `scopes: []` in
+            // config uses config, not env.
+            const scopesFromEnv =
+                config.scopes === undefined &&
+                process.env.TYPEAGENT_FEED_SCOPES !== undefined;
+            const scopeDetail = scopesFromEnv
+                ? `${scopes} (env: TYPEAGENT_FEED_SCOPES)`
+                : scopes;
+
+            return `${registryDetail}\n${scopeDetail}`;
+        },
         async refresh(): Promise<void> {
             // Fetch fresh descriptors and atomically swap them in on success;
             // a fetch failure throws (leaving the prior cache intact) so
@@ -809,6 +880,8 @@ export function createFeedSource(
         },
         async materialize(
             candidate: ResolvedCandidate,
+            onStatus?: SourceStatus,
+            abortSignal?: AbortSignal,
         ): Promise<MaterializedInstallRecord> {
             const registry = resolveFeedRegistry(config);
             if (registry === undefined) {
@@ -880,6 +953,7 @@ export function createFeedSource(
             // content-addressed root -> reuse it with no npm install at all
             // (dedup / same-version no-op).
             if (fs.existsSync(installedPkgJsonUnder(finalRoot))) {
+                onStatus?.(`Reusing installed ${moduleName}@${version}...`);
                 return buildRecord();
             }
 
@@ -888,6 +962,7 @@ export function createFeedSource(
             // behind (atomicity), then adopt it as `module@version`. If the final
             // root already exists (a prior/concurrent install of the same version
             // won the race) discard the temp and reuse it (dedup).
+            abortSignal?.throwIfAborted();
             const tempRoot = path.join(rootsDir, `.tmp-${makeInstallId()}`);
             ensureInstallRoot(tempRoot);
             let adopted = false;
@@ -896,14 +971,38 @@ export function createFeedSource(
                     registry,
                     tokenRunner,
                 );
+                // Report the long step and, since `npm install` reports nothing
+                // back until it exits, drive a heartbeat while it runs.
+                onStatus?.(
+                    `Downloading and installing ${moduleName}@${version}...`,
+                );
+                const installStart = now();
+                const heartbeat =
+                    onStatus !== undefined
+                        ? setInterval(() => {
+                              const elapsed = Math.round(
+                                  (now() - installStart) / 1000,
+                              );
+                              onStatus(
+                                  `Still working... (${elapsed}s elapsed)`,
+                              );
+                          }, 2500)
+                        : undefined;
+                heartbeat?.unref?.();
                 try {
                     await npmInstall({
                         spec: installSpec,
                         cwd: tempRoot,
                         registry,
                         userconfig,
+                        ...(abortSignal !== undefined
+                            ? { signal: abortSignal }
+                            : {}),
                     });
                 } finally {
+                    if (heartbeat !== undefined) {
+                        clearInterval(heartbeat);
+                    }
                     removeTransientNpmAuth(userconfig);
                 }
                 if (!fs.existsSync(installedPkgJsonUnder(tempRoot))) {
@@ -919,6 +1018,7 @@ export function createFeedSource(
                 // Adopt the temp root as the content-addressed final root. Clear
                 // any stale/partial directory first so the rename can't fail on
                 // an existing incomplete root.
+                onStatus?.("Finalizing...");
                 fs.rmSync(finalRoot, { recursive: true, force: true });
                 fs.renameSync(tempRoot, finalRoot);
                 adopted = true;

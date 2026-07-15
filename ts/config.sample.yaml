@@ -140,7 +140,11 @@ openAI:
 # --- Copilot (Copilot SDK chat + local embeddings) -------------------------
 # modelProvider: copilot
 # copilot:
-#   defaultModel: claude-sonnet-4.5   # requires an authenticated `copilot` CLI
+#   defaultModel: claude-haiku-4.5   # requires an authenticated `copilot` CLI;
+#                          # fast, non-reasoning default optimized for low
+#                          # latency. Falls back to `auto` if the tenant doesn't
+#                          # offer it. Use a reasoning model (e.g. gpt-5-mini)
+#                          # for higher-quality but slower translation.
 #   # Optional: connect to an already-running Copilot CLI server over TCP
 #   # instead of spawning a CLI child per host. Eliminates the one-time
 #   # (multi-second) CLI startup latency. Format: "host:port" / "port".

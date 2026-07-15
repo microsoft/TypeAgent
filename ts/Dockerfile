@@ -47,6 +47,11 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
 FROM base AS build
 COPY ./ /usr/src/app
 WORKDIR /usr/src/app
+# onnxruntime-node's postinstall otherwise downloads the large CUDA/GPU
+# onnxruntime build from GitHub releases. This image is CPU-only (no CUDA
+# runtime) and that download is flaky in CI (fails with ECONNRESET), so skip
+# it — the bundled CPU execution provider is all this container uses.
+ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
 RUN pnpm install --frozen-lockfile
 RUN pnpm run -r build
 RUN pnpm deploy --legacy --filter=agent-api --prod /prod/api

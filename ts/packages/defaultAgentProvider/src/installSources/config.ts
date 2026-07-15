@@ -110,6 +110,7 @@ export function deriveMatchKind(m: {
  */
 export interface InstallPreviewMatch {
     readonly source: string;
+    readonly sourceKind?: string; // path / catalog / feed, for the preview message
     readonly matchKind: InstallMatchKind;
     readonly name: string; // dispatcher name it would install as
     readonly packageName?: string;
@@ -240,9 +241,13 @@ export type SourceStatus = (message: string) => void;
  * `@package update` settles asynchronously. `updated` = the swap
  * committed to `v2`; `reverted` = a phase timeout (a straggler that would not
  * idle, or a `v2` that would not start) rolled back to `v1`, leaving `v1` serving
- * in every session.
+ * in every session; `unchanged` = the requested version was already the installed,
+ * serving version, so nothing was swapped (a no-op the fan-out cannot express).
+ * A committed `updated` is announced by the source's cross-session fan-out (like
+ * an install's add); `reverted` and `unchanged` change no live session state, so
+ * the fan-out is silent and only the issuing conversation is told.
  */
-export type UpdateOutcomeStatus = "updated" | "reverted";
+export type UpdateOutcomeStatus = "updated" | "reverted" | "unchanged";
 
 /**
  * The terminal outcome the issuing conversation is told about after a coordinated
@@ -375,9 +380,16 @@ export interface InstallSource {
     /** Performs the install (npm install / copy / record data). A source that
      * needs a per-agent, version-scoped install root names it from the
      * candidate's package name. Sources whose materialize is already
-     * non-destructive (`path`, `catalog`) have no such root. */
+     * non-destructive (`path`, `catalog`) have no such root. `onStatus`, when
+     * supplied, is a per-command callback the source calls with live progress
+     * messages during a long install (the feed source's `npm install`); sources
+     * that materialize instantly ignore it. `abortSignal`, when supplied, lets
+     * the caller cancel a long install (the feed source's `npm install`) mid
+     * flight; sources that materialize instantly ignore it. */
     materialize(
         candidate: ResolvedCandidate,
+        onStatus?: SourceStatus,
+        abortSignal?: AbortSignal,
     ): Promise<MaterializedInstallRecord>;
     /** Sources that can list their agents (catalog, feed) implement this; `path` cannot.
      * Returns one row per default agent name and/or package name it can offer. */
@@ -388,4 +400,8 @@ export interface InstallSource {
      * throws the fetch error so the command can fail rather than guess from stale
      * data. Cacheless sources (path, catalog) omit this. */
     refresh?(onWarn?: SourceWarning): Promise<void>;
+    /** One-line summary of this source's config for `@package source list`
+     * (e.g. a feed's registry URL, a path's base dir). Each source formats
+     * its own config. */
+    describe(): string;
 }

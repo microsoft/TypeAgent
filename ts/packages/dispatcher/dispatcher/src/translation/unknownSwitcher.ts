@@ -10,6 +10,7 @@ import registerDebug from "debug";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import {
     generateSchemaTypeDefinition,
+    getActionDescription,
     SchemaCreator as sc,
 } from "@typeagent/action-schema";
 import { getCombinedActionSchemaTypeName } from "./agentTranslators.js";
@@ -35,9 +36,10 @@ function createSelectionActionTypeDefinition(
         name,
         info,
     ] of actionSchemaFile.parsedActionSchema.actionSchemas.entries()) {
+        const description = getActionDescription(info);
         actionNames.push(name);
         actionComments.push(
-            ` "${name}"${info.comments ? ` - ${info.comments[0].trim()}` : ""}`,
+            ` "${name}"${description ? ` - ${description}` : ""}`,
         );
     }
 
