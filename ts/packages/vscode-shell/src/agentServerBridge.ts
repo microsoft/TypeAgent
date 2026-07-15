@@ -56,9 +56,9 @@ export type {
 
 // Auto-reconnect gives up after this many failed attempts and surfaces a
 // "stopped" ribbon with manual Retry / Start links instead of retrying
-// forever. With the 2s→30s backoff this is roughly a 5-minute window; a
+// forever. With the 5s→60s backoff this is roughly a 2-minute window; a
 // manual retry resets the counter and resumes from here.
-const MAX_RECONNECT_ATTEMPTS = 12;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 /** HTML-escape untrusted strings (names, ids, errors) for inline notification HTML. */
 function escapeHtml(str: string): string {
@@ -155,12 +155,12 @@ export class AgentServerBridge {
     // wait between reconnect attempts. Replaces the old behavior of
     // broadcasting a fresh error/disconnect message every retry cycle.
     private reconnectCountdown: NodeJS.Timeout | undefined;
-    // Exponential backoff (2s, 4s, 8s, … capped at 30s) shared with the Studio
-    // service connection. Quick first retries recover fast when the server
-    // restarts; the cap keeps the long-tail polite for genuinely-down servers.
+    // Exponential backoff (5s, 10s, 20s, 40s, capped at 60s). Longer gaps keep
+    // retries polite for a genuinely-down server; the quick-ish first retry
+    // still recovers fast when the server just restarted.
     private readonly reconnectBackoff: Backoff = createBackoff({
-        baseMs: 2000,
-        maxMs: 30000,
+        baseMs: 5000,
+        maxMs: 60000,
     });
     private reconnectRemainingSec: number | undefined;
     private lastConnectError: string | undefined;
