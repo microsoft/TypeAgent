@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=627d03c64ac5791a62839c7c3c1fc4196417215627f41d8b255c537752fdf8c2 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b603cf92cecb6dc379f818c4d3e49274945d53dd353ecee84efc524d292e3763 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/dispatcher-types — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `@typeagent/dispatcher-types` package provides a centralized collection of TypeScript type definitions for the TypeAgent dispatcher. These types are critical for ensuring consistent and type-safe communication between various components of the TypeAgent ecosystem, such as agents, clients, and dispatchers. By standardizing the data structures and interfaces, this package helps maintain compatibility and reliability across the system.
+The `@typeagent/dispatcher-types` package provides a centralized collection of TypeScript type definitions for the TypeAgent dispatcher. These types are essential for ensuring consistent and type-safe communication between various components of the TypeAgent ecosystem, such as agents, clients, and dispatchers. By standardizing the data structures and interfaces, this package helps maintain compatibility and reliability across the system.
 
 ## What it does
 
-The primary purpose of this package is to define and export TypeScript types that are used throughout the TypeAgent dispatcher and its related components. These types are consumed by multiple packages in the TypeAgent monorepo, including `@typeagent/agent-server-protocol`, `@typeagent/copilot-plugin`, and `agent-dispatcher`. The key functionalities provided by this package include:
+This package defines and exports TypeScript types that are used throughout the TypeAgent dispatcher and its related components. These types are consumed by multiple packages in the TypeAgent monorepo, including `@typeagent/agent-server-protocol`, `@typeagent/copilot-plugin`, and `agent-dispatcher`. The key functionalities provided by this package include:
 
 - **Dispatcher Requests and Responses**: Types such as `RequestId`, `PendingInteractionRequest`, and `PendingInteractionResponse` define the structure of requests and responses handled by the dispatcher.
 - **Client Input/Output Operations**: Types like `IAgentMessage`, `TemplateEditConfig`, and `NotifyExplainedData` are used to manage client interactions, including message formatting and data exchange.
@@ -72,8 +72,8 @@ By following these steps, you can effectively contribute to the `@typeagent/disp
 
 ### Entry points
 
-- default → `./dist/index.js` _(not found on disk)_
-- `./helpers/status` → `./dist/helpers/status.js` _(not found on disk)_
+- default → [./dist/index.js](./dist/index.js)
+- `./helpers/status` → [./dist/helpers/status.js](./dist/helpers/status.js)
 
 ### Dependencies
 
@@ -103,6 +103,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `ff379b098decfab4eb45f78b6fa318358d7fbd75` on `2026-07-01T09:05:58.471Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-types docs:verify-links` to spot-check._
+_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-types docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

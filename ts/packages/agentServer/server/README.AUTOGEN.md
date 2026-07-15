@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=33d1e54f8459a2edfda72d6388dfe6a524a3aa779587a58f6c4f0e5ff7a52adf -->
+<!-- AUTOGEN:DOCS:HASH:sha256=44122fe38d940b33340723afe63f6fe9ab68b596f2dbc1364c2158d771391b1a -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-server — AI-generated documentation
@@ -12,25 +12,29 @@
 
 ## Overview
 
-The `agent-server` package is a TypeScript library that provides a long-running WebSocket server for hosting TypeAgent dispatchers. It is responsible for managing conversations, handling client connections, and facilitating communication between clients and agents. The server is designed to support multiple clients and conversations simultaneously, with features like conversation persistence, idle timeouts, and graceful shutdown.
+The `agent-server` package is a TypeScript library that provides a long-running WebSocket server for hosting TypeAgent dispatchers. It manages client connections, facilitates communication between clients and agents, and handles conversation management. The server is designed to support multiple clients and conversations simultaneously, with features such as conversation persistence, idle timeouts, and graceful shutdown.
 
 ## What it does
 
-The `agent-server` package enables conversation management and server control through a WebSocket interface. It supports the following key actions:
+The `agent-server` package serves as the backbone for managing conversations and facilitating communication between clients and agents. It provides the following key functionalities:
 
-- **Conversation Management**: Actions such as `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation` allow clients to interact with and manage conversations.
-- **Server Control**: The `shutdown` action enables a graceful shutdown of the server, ensuring that all resources are properly released.
-- **Idle Timeout**: The server can be configured to shut down automatically after a specified period of inactivity using the `--idle-timeout` flag.
-- **Ephemeral Conversation Cleanup**: On startup, the server automatically removes temporary conversations left over from previous sessions, such as those created by CLI processes.
+- **Conversation Management**: The server supports actions like `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation`. These actions allow clients to manage and interact with conversations effectively.
+- **Server Control**: The `shutdown` action enables a controlled shutdown of the server, ensuring that resources are released properly.
+- **Idle Timeout**: The server can be configured to automatically shut down after a specified period of inactivity using the `--idle-timeout` flag.
+- **Ephemeral Conversation Cleanup**: On startup, the server removes temporary conversations (e.g., those created by CLI processes) to free up resources.
 
-The server listens on a WebSocket endpoint and processes these actions by interacting with its core components: the `ConversationManager` and `SharedDispatcher`. It also integrates with other TypeAgent packages, such as `@typeagent/agent-server-client` and `@typeagent/agent-server-protocol`, to provide a consistent and extensible framework for agent-based communication.
+The server listens on a WebSocket endpoint and processes these actions by interacting with its core components, such as the `ConversationManager` and `SharedDispatcher`. It integrates with other TypeAgent packages, including `@typeagent/agent-server-client` and `@typeagent/agent-server-protocol`, to provide a consistent framework for agent-based communication.
 
 ## Setup
 
-To set up the `agent-server`, ensure the following environment variables are configured:
+To set up the `agent-server`, you need to configure the following environment variables:
 
 - `AGENT_SERVER_PORT`: Specifies the port on which the server listens for WebSocket connections. Defaults to `8999` if not set.
-- `TYPEAGENT_USER_NAME`: The username for the TypeAgent user. This can be set to override the default OS user name.
+- `SPEECH_SDK_ENDPOINT`: The endpoint for the speech SDK. Refer to the hand-written README for details on obtaining this value.
+- `SPEECH_SDK_KEY`: The API key for the speech SDK. Refer to the hand-written README for details on obtaining this value.
+- `SPEECH_SDK_REGION`: The region for the speech SDK. Refer to the hand-written README for details on obtaining this value.
+- `TYPEAGENT_DEV`: A flag to enable development mode. Set this to `true` for development purposes.
+- `TYPEAGENT_USER_NAME`: The username for the TypeAgent user. This can override the default OS user name.
 - `XDG_CONFIG_HOME`: Specifies the base directory for configuration files. If not set, the default is typically `~/.config`.
 
 You can set these variables in your environment or define them in a `.env` file in the `ts/` directory. For additional details, refer to the hand-written README.
@@ -145,18 +149,22 @@ External: `@azure/identity`, `better-sqlite3`, `debug`, `dotenv`, `ws`
 
 ### Files of interest
 
-`./src/connectionHandler.ts`, `./src/conversationManager.ts`, `./src/copilot/displayLogSynthesis.ts`, …and 10 more under `./src/`.
+`./src/connectionHandler.ts`, `./src/conversationManager.ts`, `./src/copilot/displayLogSynthesis.ts`, …and 11 more under `./src/`.
 
 ### Environment variables
 
-_3 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_7 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `AGENT_SERVER_PORT`
+- `SPEECH_SDK_ENDPOINT`
+- `SPEECH_SDK_KEY`
+- `SPEECH_SDK_REGION`
+- `TYPEAGENT_DEV`
 - `TYPEAGENT_USER_NAME`
 - `XDG_CONFIG_HOME`
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
+_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

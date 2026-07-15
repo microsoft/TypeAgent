@@ -500,11 +500,8 @@ export function classifyRuleValue(rule: GrammarRule): RuleValueKind {
     }
     const variableParts = rule.parts.filter((p) => p.variable !== undefined);
     if (variableParts.length === 1) {
-        return {
-            kind: "variable",
-            variableName: variableParts[0].variable!,
-            part: variableParts[0],
-        };
+        const part = variableParts[0];
+        return { kind: "variable", variableName: part.variable!, part };
     }
     if (variableParts.length === 0 && rule.parts.length === 1) {
         const part = rule.parts[0];

@@ -164,6 +164,7 @@ function createTestUpdateableSource(
         kind: "test-updateable",
         find,
         materialize,
+        describe: () => "(test-updateable)",
         async update(record) {
             if (record.path === undefined) {
                 throw new Error(
@@ -468,6 +469,7 @@ describe("getDefaultAppAgentSource", () => {
                 name: config.name,
                 kind: config.kind,
                 find: async () => undefined,
+                describe: () => "(test)",
                 materialize: async () => {
                     throw new Error("not used");
                 },

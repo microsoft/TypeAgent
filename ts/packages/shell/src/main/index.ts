@@ -153,10 +153,19 @@ async function detectRunningAgentServer(port: number): Promise<boolean> {
 // latter would fail to acquire the shared instance-directory lock and abort
 // startup with "Another agent-server (or shell) is already using the instance
 // directory".
+//
+// Never probe in test mode (--test). The smoke/e2e harness launches its own
+// isolated instance (per-worker INSTANCE_NAME/PORT, --mock-greetings) and must
+// stay hermetic: if the probe found any agent-server on the default port — e.g.
+// the detached background server the CLI smoke step leaves on 8999, or a
+// developer's dogfooding session — the test shell would connect to that foreign
+// server instead of hosting its own, never reach the expected ready state, and
+// time out.
 let effectiveConnect = parsedArgs.connect;
 if (
     effectiveConnect === undefined &&
     !isProd &&
+    !isTest &&
     parsedArgs.data === undefined &&
     !parsedArgs.clean &&
     !parsedArgs.reset &&
