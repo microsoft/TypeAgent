@@ -154,9 +154,11 @@ async function loadModuleAgent(
             `Failed to load agent '${appAgentName}' package '${info.name}': missing 'instantiate' function.`,
         );
     }
+    // `count` is a HOLDER refcount owned by `loadAppAgent`; a freshly loaded
+    // agent has zero holders until a caller takes one.
     return {
         appAgent: module.instantiate(),
-        count: 1,
+        count: 0,
     };
 }
 
@@ -166,6 +168,62 @@ export function createNpmAppAgentProvider(
 ): AppAgentProvider {
     const moduleAgents = new Map<string, AgentProcess>();
     const manifests = new Map<string, AppAgentManifest>();
+    // In-flight first-loads, keyed by agent name. `loadAppAgent` awaits between
+    // the cache-miss check and the map insert (the actual module/process load),
+    // so without coalescing two CONCURRENT first-loads of the same agent (e.g.
+    // an installed agent being enabled in two sessions at once, which share this
+    // one provider instance) would each spawn a duplicate agent process and the
+    // second insert would clobber the first: a leaked process AND a lost
+    // refcount (two holders, count 1), which later over-unloads and throws.
+    // Sharing one in-flight load keeps the refcount honest (one increment per
+    // holder) and the process count at one.
+    const loadingAgents = new Map<string, Promise<AgentProcess>>();
+
+    // Load + cache the shared AgentProcess for a name, once. Refcount-free: it
+    // yields a zero-holder process (see `loadModuleAgent`) and `loadAppAgent` is
+    // the sole place a hold is taken.
+    async function loadSharedAgent(
+        appAgentName: string,
+        config: NpmAppAgentInfo,
+    ): Promise<AgentProcess> {
+        try {
+            const agent = await loadModuleAgent(
+                config,
+                appAgentName,
+                requirePath,
+            );
+            moduleAgents.set(appAgentName, agent);
+            return agent;
+        } finally {
+            // Clear the in-flight marker once settled (success or failure), so a
+            // failed load is retriable and a completed one is served from
+            // `moduleAgents`.
+            loadingAgents.delete(appAgentName);
+        }
+    }
+
+    // Resolve the shared AgentProcess, coalescing concurrent first-loads onto a
+    // single load. Does NOT touch the refcount.
+    async function ensureModuleAgent(
+        appAgentName: string,
+    ): Promise<AgentProcess> {
+        const existing = moduleAgents.get(appAgentName);
+        if (existing) {
+            return existing;
+        }
+        let loadingP = loadingAgents.get(appAgentName);
+        if (loadingP === undefined) {
+            const config = configs[appAgentName];
+            if (config === undefined) {
+                throw new Error(`Invalid app agent: ${appAgentName}`);
+            }
+            // Register the in-flight promise SYNCHRONOUSLY (before any await) so
+            // a concurrent first-load joins it instead of starting its own.
+            loadingP = loadSharedAgent(appAgentName, config);
+            loadingAgents.set(appAgentName, loadingP);
+        }
+        return loadingP;
+    }
     return {
         getAppAgentNames() {
             return Object.keys(configs);
@@ -192,22 +250,9 @@ export function createNpmAppAgentProvider(
             }
         },
         async loadAppAgent(appAgentName: string) {
-            const existing = moduleAgents.get(appAgentName);
-            if (existing) {
-                existing.count++;
-                return existing.appAgent;
-            }
-            const config = configs[appAgentName];
-            if (config === undefined) {
-                throw new Error(`Invalid app agent: ${appAgentName}`);
-            }
-            // Load on demand
-            const agent = await loadModuleAgent(
-                config,
-                appAgentName,
-                requirePath,
-            );
-            moduleAgents.set(appAgentName, agent);
+            // Take a fresh hold on the (possibly already-loaded) shared agent.
+            const agent = await ensureModuleAgent(appAgentName);
+            agent.count++;
             return agent.appAgent;
         },
         async unloadAppAgent(appAgentName: string) {
