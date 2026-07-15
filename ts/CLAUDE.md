@@ -105,6 +105,16 @@ Agents implement `AppAgent` from `@typeagent/agent-sdk`:
   // Licensed under the MIT License.
   ```
 
+### Comments
+
+- Write comments in plain, direct language. Say what the code does and
+  why. Avoid "consultant speak" - filler like "owns its own X," "single
+  source of truth," "never has to know about Y," or restating a design
+  principle instead of explaining the code. Technical terms are fine; use
+  the precise word rather than talking around it.
+- Don't use em-dashes (—) in comments. Use `-`, `:`, parentheses, or two
+  sentences instead.
+
 ### Package references
 
 - Internal packages use `"workspace:*"` protocol in `package.json`
