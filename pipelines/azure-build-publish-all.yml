@@ -56,10 +56,6 @@ parameters:
     displayName: "Publish signed MSI to feed + Azure Blob Storage"
 
   # ── Build options ─────────────────────────────────────────────────
-  - name: runTests
-    type: boolean
-    default: true
-    displayName: "Run test gate (test:local + lint + policy) before publish"
   - name: variant
     type: string
     default: external
@@ -368,7 +364,7 @@ stages:
   - stage: Test
     displayName: "Test gate"
     dependsOn: Build
-    condition: and(succeeded(), eq('${{ parameters.runTests }}', 'true'))
+    condition: succeeded()
     jobs:
       - job: unit_tests
         displayName: "Unit tests, lint, policy"
@@ -728,9 +724,9 @@ stages:
                   Write-Error "Failed to pull certificate from Key Vault"
                   exit $LASTEXITCODE
                 }
-              env:
-                PUPPETEER_SKIP_DOWNLOAD: "true"
-                PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+            env:
+              PUPPETEER_SKIP_DOWNLOAD: "true"
+              PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
 
           # Build the MSI using pre-built artifacts (--skip-download).
           - pwsh: |
@@ -798,8 +794,8 @@ stages:
                   --name "$packageName" --version "$(packageVersion)" `
                   --path "$publishPath" `
                   --description "TypeAgent MSI installer for $(msiRid)"
-              env:
-                AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
 
       # ── Publish MSI to Azure Blob Storage ─────────────────────────
       - deployment: publish_msi_blob
