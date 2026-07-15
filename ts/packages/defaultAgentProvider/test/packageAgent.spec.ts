@@ -62,13 +62,35 @@ function makeSource(overrides: Partial<InstalledAgentSourceApi> = {}): {
 
 function fakeActionContext(agentContext: PackageAgentContext) {
     return {
-        sessionContext: { agentContext },
+        sessionContext: { agentContext, notify: () => {} },
         actionIO: {
             appendDisplay: () => {},
             setDisplay: () => {},
             takeAction: () => {},
         },
     } as any;
+}
+
+// An action context that captures both inline displays (actionIO) and the
+// session notifications (sessionContext.notify) — the terminal
+// uninstall/update outcomes are delivered through the latter because they
+// settle after the command's ActionContext is already finished.
+function notifyCapturingActionContext(agentContext: PackageAgentContext) {
+    const notifications: string[] = [];
+    const context = {
+        sessionContext: {
+            agentContext,
+            notify: (_event: unknown, message: string) => {
+                notifications.push(message);
+            },
+        },
+        actionIO: {
+            appendDisplay: () => {},
+            setDisplay: () => {},
+            takeAction: () => {},
+        },
+    } as any;
+    return { context, notifications };
 }
 
 function fakeSessionContext(agentContext: PackageAgentContext) {
@@ -212,6 +234,132 @@ describe("@package agent", () => {
             { args: { name: "foo", range: "^1.0" } } as any,
         );
         expect(calls).toEqual([{ op: "update", name: "foo", range: "^1.0" }]);
+    });
+
+    it("uninstall does not echo a committed teardown (the source fan-out owns it)", async () => {
+        // A committed uninstall is announced by the source's cross-session
+        // fan-out ("was removed"), like install's "was added" — the command
+        // adds no echo of its own.
+        const { api } = makeSource({
+            uninstall: async (_name, _host, onOutcome) => {
+                onOutcome?.("uninstalled");
+            },
+        });
+        const handler = getHandler(api, "uninstall");
+        const { context, notifications } = notifyCapturingActionContext({
+            appAgentHost: noopHost,
+            source: api,
+        });
+        await handler.run(context, { args: { name: "foo" } } as any);
+        expect(notifications).toEqual([]);
+    });
+
+    it("uninstall reports started when teardown outcome is asynchronous", async () => {
+        const { api } = makeSource({
+            uninstall: async () => {
+                // Intentionally no immediate outcome callback: this models the
+                // real drain path, where completion settles later.
+            },
+        });
+        const handler = getHandler(api, "uninstall");
+        const { context, output } = capturingActionContext({
+            appAgentHost: noopHost,
+            source: api,
+        });
+        await handler.run(context, { args: { name: "foo" } } as any);
+        expect(output()).toContain(
+            "Agent 'foo' uninstall started; it will unload from each session shortly.",
+        );
+    });
+
+    it("uninstall surfaces a reverted teardown (the fan-out is silent on rollback)", async () => {
+        const { api } = makeSource({
+            uninstall: async (_name, _host, onOutcome) => {
+                onOutcome?.("reverted");
+            },
+        });
+        const handler = getHandler(api, "uninstall");
+        const { context, notifications } = notifyCapturingActionContext({
+            appAgentHost: noopHost,
+            source: api,
+        });
+        await handler.run(context, { args: { name: "foo" } } as any);
+        expect(notifications).toEqual([
+            "Agent 'foo' uninstall reverted; the agent is still installed.",
+        ]);
+    });
+
+    it("update does not echo a committed swap (the source fan-out owns it)", async () => {
+        const { api } = makeSource({
+            update: async (_name, _range, _host, onOutcome) => {
+                onOutcome?.("updated");
+            },
+        });
+        const handler = getHandler(api, "update");
+        const { context, notifications } = notifyCapturingActionContext({
+            appAgentHost: noopHost,
+            source: api,
+        });
+        await handler.run(context, {
+            args: { name: "foo", range: undefined },
+        } as any);
+        expect(notifications).toEqual([]);
+    });
+
+    it("update surfaces a reverted swap", async () => {
+        const { api } = makeSource({
+            update: async (_name, _range, _host, onOutcome) => {
+                onOutcome?.("reverted");
+            },
+        });
+        const handler = getHandler(api, "update");
+        const { context, notifications } = notifyCapturingActionContext({
+            appAgentHost: noopHost,
+            source: api,
+        });
+        await handler.run(context, {
+            args: { name: "foo", range: undefined },
+        } as any);
+        expect(notifications).toEqual([
+            "Agent 'foo' update failed; reverted to the previous version.",
+        ]);
+    });
+
+    it("update surfaces an already-current no-op", async () => {
+        const { api } = makeSource({
+            update: async (_name, _range, _host, onOutcome) => {
+                onOutcome?.("unchanged");
+            },
+        });
+        const handler = getHandler(api, "update");
+        const { context, notifications } = notifyCapturingActionContext({
+            appAgentHost: noopHost,
+            source: api,
+        });
+        await handler.run(context, {
+            args: { name: "foo", range: undefined },
+        } as any);
+        expect(notifications).toEqual(["Agent 'foo' is already up to date."]);
+    });
+
+    it("update reports started when swap outcome is asynchronous", async () => {
+        const { api } = makeSource({
+            update: async () => {
+                // Intentionally no immediate outcome callback: this models the
+                // real barrier swap path, where completion settles later.
+            },
+        });
+        const handler = getHandler(api, "update");
+        const { context, output } = capturingActionContext({
+            appAgentHost: noopHost,
+            source: api,
+        });
+        await handler.run(context, {
+            args: { name: "foo", range: undefined },
+        } as any);
+        expect(output()).toContain(
+            "Agent 'foo' update started; it will reload in each session shortly.",
+        );
     });
 });
 
@@ -559,7 +707,7 @@ describe("@package install one-argument, dry-run, and refresh", () => {
         expect(text).toContain(
             "Agent 'weather' installed from package '@typeagent/weather-agent' via feed source 'typeagent';",
         );
-        expect(text).toContain("Matched as default agent name 'weather'.");
+        expect(text).toContain("Matched default agent name 'weather'.");
     });
 
     it("two-argument install omits the match-kind note (the name was explicit)", async () => {

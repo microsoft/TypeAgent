@@ -136,3 +136,11 @@ export function getParameterNames(
         }
     }
 }
+
+// The action's description is the first line of its documentation comment, or
+// undefined when the action has no comment.
+export function getActionDescription(
+    actionType: ActionSchemaTypeDefinition,
+): string | undefined {
+    return actionType.comments?.[0]?.trim() || undefined;
+}

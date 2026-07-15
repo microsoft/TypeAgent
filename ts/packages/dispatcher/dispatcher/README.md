@@ -118,6 +118,20 @@ There are other short cut commands to exercise specify part of the TypeAgent Dis
 - `@explain <request> => <action>` - only do the explanation of the request/action combo
 - `@reasoning [--engine claude|copilot|none] <request>` - Invoke the reasoning engine on a request. If `--engine` is omitted, the configured default from `@config execution reasoning` is used. Also available as `@reason`.
 
+### Describe agents and actions
+
+`@describe` answers "what can this do?" — a capability summary, not execution (that's `@action`).
+It works even for installed-but-disabled agents, so you can discover what an agent offers before
+enabling it.
+
+- `@describe <agent>` — agent summary + a table of its first 10 actions.
+- `@describe <agent> --all` (`-a`) — the full action table, no truncation.
+- `@describe <agent> <action>` — detailed explanation of one action, including its parameters.
+- `@describe <action>` — same as above when the action name alone is unambiguous across agents.
+
+Also reachable via natural language (the `system.describe` schema), e.g. "what can the spotify
+agent do", "show me all of spotify's actions", "what does the play action do".
+
 ### Conversations
 
 Conversation management commands can also be invoked via natural language through the `system.conversation` agent. Examples:

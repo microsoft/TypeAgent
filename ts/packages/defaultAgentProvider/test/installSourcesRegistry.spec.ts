@@ -152,8 +152,8 @@ describe("InstallSourceRegistry resolution", () => {
             (m) => status.push(m),
         );
         expect(status).toEqual([
-            "Trying source 'a'...",
-            "Trying source 'b'...",
+            "Trying catalog source 'a'...",
+            "Trying catalog source 'b'...",
         ]);
     });
 
@@ -169,7 +169,7 @@ describe("InstallSourceRegistry resolution", () => {
             (m) => status.push(m),
         );
         expect(status).toEqual([
-            "Resolving '@scope/shared-pkg' from source 'b'...",
+            "Resolving '@scope/shared-pkg' from catalog source 'b'...",
         ]);
     });
 

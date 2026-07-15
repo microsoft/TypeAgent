@@ -194,4 +194,28 @@ describe("npm provider refcount (5.6 verify-0)", () => {
         const provider = makeProvider();
         expect(provider.isLoaded?.("nope")).toBe(false);
     });
+
+    it("coalesces concurrent first-loads into one shared load with an honest refcount", async () => {
+        const provider = makeProvider();
+
+        // Two concurrent first-loads (e.g. an installed agent enabled in two
+        // sessions at once, which share this one provider instance). Each must
+        // take its own refcount hold onto a SINGLE shared load — not spawn a
+        // duplicate that leaks and desyncs the count.
+        const [a, b] = await Promise.all([
+            provider.loadAppAgent("test"),
+            provider.loadAppAgent("test"),
+        ]);
+        // Same shared instance for both holders.
+        expect(a).toBe(b);
+        expect(provider.isLoaded?.("test")).toBe(true);
+
+        // Two holders → exactly two unloads to fully release. If the concurrent
+        // loads had desynced the count (2 holders, count 1), the second unload
+        // would throw "Invalid app agent".
+        await provider.unloadAppAgent("test");
+        expect(provider.isLoaded?.("test")).toBe(true);
+        await expect(provider.unloadAppAgent("test")).resolves.toBeUndefined();
+        expect(provider.isLoaded?.("test")).toBe(false);
+    });
 });

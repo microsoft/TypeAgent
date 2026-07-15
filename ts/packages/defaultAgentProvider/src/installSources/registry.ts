@@ -79,12 +79,15 @@ export interface DefaultInstallSourceRegistry {
     // Either way the winning candidate is materialized into a named record.
     // `onWarn`, when supplied, receives non-fatal source problem messages;
     // `onStatus`, when supplied, reports each source as it is probed.
+    // `abortSignal`, when supplied, cancels a long install (the feed source's
+    // `npm install`) mid flight.
     resolve(
         nameOrTarget: string,
         ref?: string,
         sourceName?: string,
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
+        abortSignal?: AbortSignal,
     ): Promise<ResolveResult>;
     // Dry-run: report which source would win (and the full shadow set) without
     // materializing. Mirrors `resolve`'s arity: `ref` omitted runs the inferred
@@ -278,23 +281,6 @@ export function createInstallSourceRegistry(
         return eligible.map((e) => e.source);
     }
 
-    // The host-rendered one-line summary the core shows for `@package source list`. This
-    // is where the kind is interpreted (the core never sees it).
-    function describe(config: InstallSourceConfig): string {
-        switch (config.kind) {
-            case "feed":
-                return config.registry ?? "(env: TYPEAGENT_FEED_REGISTRY)";
-            case "catalog":
-                return config.catalog;
-            case "path":
-                return config.baseDir ?? "(default base)";
-            default: {
-                const exhaustive: never = config;
-                return String(exhaustive);
-            }
-        }
-    }
-
     function addConfig(config: InstallSourceConfig): void {
         if (entries.has(config.name)) {
             throw new Error(`source '${config.name}' already exists`);
@@ -349,8 +335,8 @@ export function createInstallSourceRegistry(
         for (const source of sourcesFor(sourceName)) {
             onStatus?.(
                 sourceName !== undefined
-                    ? `Resolving '${ref}' from source '${source.name}'...`
-                    : `Trying source '${source.name}'...`,
+                    ? `Resolving '${ref}' from ${describeSource(source.name)}...`
+                    : `Trying ${describeSource(source.name)}...`,
             );
             const candidate = await source.find(ref, onWarn);
             if (candidate !== undefined) {
@@ -378,7 +364,7 @@ export function createInstallSourceRegistry(
                 if (source.findName === undefined) {
                     continue;
                 }
-                onStatus?.(`Trying source '${source.name}'...`);
+                onStatus?.(`Trying ${describeSource(source.name)}...`);
                 const candidate = await source.findName(target, onWarn);
                 if (candidate !== undefined) {
                     yield { source, candidate, matchedByName: true };
@@ -387,7 +373,7 @@ export function createInstallSourceRegistry(
         }
         // Phase 2: ref (package name / path).
         for (const source of sources) {
-            onStatus?.(`Trying source '${source.name}'...`);
+            onStatus?.(`Trying ${describeSource(source.name)}...`);
             const candidate = await source.find(target, onWarn);
             if (candidate !== undefined) {
                 yield { source, candidate, matchedByName: false };
@@ -470,6 +456,7 @@ export function createInstallSourceRegistry(
         sourceName?: string,
         onWarn?: SourceWarning,
         onStatus?: SourceStatus,
+        abortSignal?: AbortSignal,
     ): Promise<ResolveResult> {
         // EXPLICIT (ref supplied) and INFER (ref omitted) modes differ only in
         // which walk runs and how the installed name is chosen; the not-found
@@ -500,7 +487,11 @@ export function createInstallSourceRegistry(
             ref !== undefined
                 ? nameOrTarget
                 : requireInferredName(match.candidate, nameOrTarget);
-        const record = await match.source.materialize(match.candidate);
+        const record = await match.source.materialize(
+            match.candidate,
+            onStatus,
+            abortSignal,
+        );
         const result: ResolveResult = {
             record: { ...record, name },
             matchedByName: match.matchedByName,
@@ -513,10 +504,10 @@ export function createInstallSourceRegistry(
 
     return {
         list(): InstallSourceInfo[] {
-            return Array.from(entries.values(), ({ config }) => ({
+            return Array.from(entries.values(), ({ config, source }) => ({
                 name: config.name,
                 kind: config.kind,
-                detail: describe(config),
+                detail: source.describe(),
             }));
         },
         get(name: string): InstallSource | undefined {
@@ -564,7 +555,7 @@ export function createInstallSourceRegistry(
             const loaded = entry.source.load(record, onWarn);
             if (loaded === undefined) {
                 throw new Error(
-                    `agent '${record.name}' is no longer resolvable from source '${record.source}'.`,
+                    `agent '${record.name}' is no longer resolvable from ${describeSource(record.source)}.`,
                 );
             }
             return { ...loaded, name: record.name };
@@ -575,6 +566,7 @@ export function createInstallSourceRegistry(
             sourceName?: string,
             onWarn?: SourceWarning,
             onStatus?: SourceStatus,
+            abortSignal?: AbortSignal,
         ): Promise<ResolveResult> {
             // The whole install op (resolve -> materialize) runs under the
             // shared limiter. The installer reuses the
@@ -586,6 +578,7 @@ export function createInstallSourceRegistry(
                     sourceName,
                     onWarn,
                     onStatus,
+                    abortSignal,
                 ),
             );
         },
@@ -604,18 +597,18 @@ export function createInstallSourceRegistry(
                 if (entry === undefined) {
                     // The recorded source was removed since install.
                     throw new Error(
-                        `Source '${record.source}' for agent '${record.name}' is no longer configured; ` +
+                        `Agent '${record.name}' was installed from ${describeSource(record.source)}, which is no longer configured; ` +
                             `re-add it with '@package source add' to update, or '@package uninstall ${record.name}'.`,
                     );
                 }
                 if (entry.source.update === undefined) {
                     throw new Error(
-                        `Source '${record.source}' does not support updating agent '${record.name}'. ` +
+                        `The ${describeSource(record.source)} does not support updating agent '${record.name}'. ` +
                             `Only feed-sourced agents can be updated; uninstall and reinstall this agent to pick up changes.`,
                     );
                 }
                 onStatus?.(
-                    `Updating '${record.name}' from source '${record.source}'...`,
+                    `Updating '${record.name}' from ${describeSource(record.source)}...`,
                 );
                 return entry.source.update(
                     record,

@@ -164,6 +164,7 @@ function createTestUpdateableSource(
         kind: "test-updateable",
         find,
         materialize,
+        describe: () => "(test-updateable)",
         async update(record) {
             if (record.path === undefined) {
                 throw new Error(
@@ -468,6 +469,7 @@ describe("getDefaultAppAgentSource", () => {
                 name: config.name,
                 kind: config.kind,
                 find: async () => undefined,
+                describe: () => "(test)",
                 materialize: async () => {
                     throw new Error("not used");
                 },
@@ -731,6 +733,37 @@ describe("AppAgentSource fan-out (4, )", () => {
         expect(sibling.calls).toEqual([
             { op: "remove", name: "foo", notify: true },
         ]);
+    });
+
+    it("uninstall of a name recorded but not active in this source errors (out-of-band inconsistency)", async () => {
+        // A second source constructed BEFORE the agent exists never seeds an
+        // active entry for it. In supported deployments this can't happen (one
+        // process per store, a single shared source per process), so a recorded
+        // name with no active entry is an out-of-band inconsistency: fail loudly
+        // rather than silently mutating the store.
+        const instanceDir = pathOnlyInstanceDir();
+        const stale = createDefaultInstalledAgentSource(instanceDir);
+        const installer = createDefaultInstalledAgentSource(instanceDir);
+        await installer.testApi.install(
+            "foo",
+            makePathAgentDir(),
+            undefined,
+            noopHost,
+        );
+
+        const issuing = recordingHost();
+        const sibling = recordingHost();
+        stale.connect(issuing.host);
+        stale.connect(sibling.host);
+
+        await expect(
+            stale.testApi.uninstall("foo", issuing.host),
+        ).rejects.toThrow(/not active in this source/i);
+
+        // Nothing was torn down and the record is left intact (not dropped).
+        expect(issuing.calls).toEqual([]);
+        expect(sibling.calls).toEqual([]);
+        expect(readAgentsJson(instanceDir)?.agents.foo).toBeDefined();
     });
 
     it("threads dropConfig=true for uninstall and false for update to every remove leg (Model B)", async () => {
