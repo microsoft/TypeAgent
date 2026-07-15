@@ -400,8 +400,9 @@ export function extractActionParameters(
 
 export function renderActionView(match: ActionMatch): string {
     const { agent, subSchema, action } = match;
+    const summary = action.description ? ` — ${action.description}` : "";
     const lines: string[] = [
-        `**${agent.emoji} ${subSchema.schemaName}.${action.name}** — ${action.description}`,
+        `**${agent.emoji} ${subSchema.schemaName}.${action.name}**${summary}`,
     ];
 
     const params = extractActionParameters(subSchema.schemaText, action.name);

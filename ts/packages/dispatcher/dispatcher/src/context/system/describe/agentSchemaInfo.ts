@@ -12,7 +12,10 @@ import type {
     AgentSubSchemaInfo,
 } from "@typeagent/dispatcher-types";
 import type { ActionSchemaTypeDefinition } from "@typeagent/action-schema";
-import { generateSchemaTypeDefinition } from "@typeagent/action-schema";
+import {
+    generateSchemaTypeDefinition,
+    getActionDescription,
+} from "@typeagent/action-schema";
 import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { getAppAgentName } from "../../../translation/agentTranslators.js";
 
@@ -22,13 +25,10 @@ export function extractActions(
 ): ActionInfo[] {
     const actions: ActionInfo[] = [];
     for (const [name, actionDef] of actionSchemas) {
-        const description =
-            (actionDef.comments?.[0] ?? "").trim() ||
-            name
-                .replace(/([A-Z])/g, " $1")
-                .replace(/^./, (c) => c.toUpperCase())
-                .trim();
-        actions.push({ name, description });
+        actions.push({
+            name,
+            description: getActionDescription(actionDef) ?? "",
+        });
     }
     return actions;
 }
