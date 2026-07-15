@@ -149,9 +149,6 @@ async function getValidatedMatches(
             debugConstValidation(
                 `Wildcard match accepted: ${match.match.actions}`,
             );
-            console.log(
-                `[Cache Validation Success] Wildcard match validated and accepted`,
-            );
             accepted.push(match);
             continue;
         }
