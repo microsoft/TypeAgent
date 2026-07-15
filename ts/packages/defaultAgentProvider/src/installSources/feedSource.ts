@@ -13,6 +13,7 @@ import {
     InstalledAgentRecord,
     MaterializedInstallRecord,
     ResolvedCandidate,
+    SourceStatus,
     AGENT_INSTALL_ROOTS_SUBDIR,
     AvailableInstallRow,
 } from "./config.js";
@@ -145,6 +146,9 @@ export interface NpmInstallArgs {
     cwd: string;
     registry: string;
     userconfig: string;
+    // When supplied, cancels the npm child process mid flight (kills it and
+    // rejects with an AbortError). Omitted for callers that cannot cancel.
+    signal?: AbortSignal;
 }
 
 export interface FeedSourceDeps {
@@ -245,7 +249,7 @@ async function defaultNpmInstall(args: NpmInstallArgs): Promise<void> {
             "--userconfig",
             args.userconfig,
         ],
-        { cwd: args.cwd, shell: isWindows },
+        { cwd: args.cwd, shell: isWindows, signal: args.signal },
     );
 }
 
@@ -876,6 +880,8 @@ export function createFeedSource(
         },
         async materialize(
             candidate: ResolvedCandidate,
+            onStatus?: SourceStatus,
+            abortSignal?: AbortSignal,
         ): Promise<MaterializedInstallRecord> {
             const registry = resolveFeedRegistry(config);
             if (registry === undefined) {
@@ -947,6 +953,7 @@ export function createFeedSource(
             // content-addressed root -> reuse it with no npm install at all
             // (dedup / same-version no-op).
             if (fs.existsSync(installedPkgJsonUnder(finalRoot))) {
+                onStatus?.(`Reusing installed ${moduleName}@${version}...`);
                 return buildRecord();
             }
 
@@ -955,6 +962,7 @@ export function createFeedSource(
             // behind (atomicity), then adopt it as `module@version`. If the final
             // root already exists (a prior/concurrent install of the same version
             // won the race) discard the temp and reuse it (dedup).
+            abortSignal?.throwIfAborted();
             const tempRoot = path.join(rootsDir, `.tmp-${makeInstallId()}`);
             ensureInstallRoot(tempRoot);
             let adopted = false;
@@ -963,14 +971,38 @@ export function createFeedSource(
                     registry,
                     tokenRunner,
                 );
+                // Report the long step and, since `npm install` reports nothing
+                // back until it exits, drive a heartbeat while it runs.
+                onStatus?.(
+                    `Downloading and installing ${moduleName}@${version}...`,
+                );
+                const installStart = now();
+                const heartbeat =
+                    onStatus !== undefined
+                        ? setInterval(() => {
+                              const elapsed = Math.round(
+                                  (now() - installStart) / 1000,
+                              );
+                              onStatus(
+                                  `Still working... (${elapsed}s elapsed)`,
+                              );
+                          }, 2500)
+                        : undefined;
+                heartbeat?.unref?.();
                 try {
                     await npmInstall({
                         spec: installSpec,
                         cwd: tempRoot,
                         registry,
                         userconfig,
+                        ...(abortSignal !== undefined
+                            ? { signal: abortSignal }
+                            : {}),
                     });
                 } finally {
+                    if (heartbeat !== undefined) {
+                        clearInterval(heartbeat);
+                    }
                     removeTransientNpmAuth(userconfig);
                 }
                 if (!fs.existsSync(installedPkgJsonUnder(tempRoot))) {
@@ -986,6 +1018,7 @@ export function createFeedSource(
                 // Adopt the temp root as the content-addressed final root. Clear
                 // any stale/partial directory first so the rename can't fail on
                 // an existing incomplete root.
+                onStatus?.("Finalizing...");
                 fs.rmSync(finalRoot, { recursive: true, force: true });
                 fs.renameSync(tempRoot, finalRoot);
                 adopted = true;

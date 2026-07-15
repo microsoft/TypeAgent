@@ -134,6 +134,9 @@ export async function createAgentProcess(
             channelProvider,
             agentInterface,
         ),
-        count: 1,
+        // `count` is a HOLDER refcount owned by the caller (the npm provider's
+        // load/unload). A freshly created process has no holders yet; the
+        // loader takes the first hold.
+        count: 0,
     };
 }

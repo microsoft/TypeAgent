@@ -6,12 +6,7 @@ import {
     DynamicDisplay,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
-import type {
-    ActionInfo,
-    AgentSchemaInfo,
-    AgentSubSchemaInfo,
-    CommandResult,
-} from "@typeagent/dispatcher-types";
+import type { CommandResult } from "@typeagent/dispatcher-types";
 import {
     ConnectionId,
     Dispatcher,
@@ -38,8 +33,7 @@ import {
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
 import { randomUUID } from "node:crypto";
-import type { ActionSchemaTypeDefinition } from "@typeagent/action-schema";
-import { generateSchemaTypeDefinition } from "@typeagent/action-schema";
+import { getAgentSchemas } from "./context/system/describe/agentSchemaInfo.js";
 
 async function getDynamicDisplay(
     context: CommandHandlerContext,
@@ -137,88 +131,6 @@ async function checkCache(
     // Cache hit - execute the command normally to get the full result
     // This will execute the cached actions and return proper results through ClientIO
     return await processCommand(request, context, requestId);
-}
-
-/** Extract action names + descriptions from a parsed action schema. */
-function extractActions(
-    actionSchemas: Map<string, ActionSchemaTypeDefinition>,
-): ActionInfo[] {
-    const actions: ActionInfo[] = [];
-    for (const [name, actionDef] of actionSchemas) {
-        const description =
-            (actionDef.comments?.[0] ?? "").trim() ||
-            name
-                .replace(/([A-Z])/g, " $1")
-                .replace(/^./, (c) => c.toUpperCase())
-                .trim();
-        actions.push({ name, description });
-    }
-    return actions;
-}
-
-async function getAgentSchemas(
-    context: CommandHandlerContext,
-    agentName?: string,
-): Promise<AgentSchemaInfo[]> {
-    await context.agents.waitUntilReady();
-    const configs = context.agents.getActionConfigs();
-    // Group configs by top-level agent name (part before first '.')
-    const agentMap = new Map<string, typeof configs>();
-    for (const config of configs) {
-        const topName = config.schemaName.split(".")[0];
-        if (agentName != null && topName !== agentName) continue;
-        const list = agentMap.get(topName) ?? [];
-        list.push(config);
-        agentMap.set(topName, list);
-    }
-
-    const result: AgentSchemaInfo[] = [];
-    for (const [name, configList] of agentMap) {
-        // Sort: main schema (schemaName === name) first, sub-schemas after
-        const sorted = [...configList].sort((a, b) => {
-            if (a.schemaName === name) return -1;
-            if (b.schemaName === name) return 1;
-            return a.schemaName.localeCompare(b.schemaName);
-        });
-
-        const subSchemas: AgentSubSchemaInfo[] = [];
-        for (const config of sorted) {
-            let schemaFile;
-            try {
-                schemaFile = context.agents.tryGetActionSchemaFile(
-                    config.schemaName,
-                );
-            } catch {
-                continue;
-            }
-            const actions = schemaFile
-                ? extractActions(schemaFile.parsedActionSchema.actionSchemas)
-                : [];
-            if (actions.length === 0) continue;
-            const schemaText = schemaFile?.parsedActionSchema.entry.action
-                ? generateSchemaTypeDefinition(
-                      schemaFile.parsedActionSchema.entry.action,
-                  )
-                : undefined;
-            subSchemas.push({
-                schemaName: config.schemaName,
-                description: config.description,
-                schemaText,
-                actions,
-            });
-        }
-        if (subSchemas.length === 0) continue;
-
-        const mainConfig =
-            configList.find((c) => c.schemaName === name) ?? configList[0];
-        result.push({
-            name,
-            emoji: mainConfig.emojiChar,
-            description: context.agents.getAppAgentDescription(name),
-            subSchemas,
-        });
-    }
-    return result;
 }
 
 /**

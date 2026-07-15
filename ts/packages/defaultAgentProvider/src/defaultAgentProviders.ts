@@ -696,6 +696,41 @@ export function createDefaultInstalledAgentSource(
         maybeAdvance(entry.barrier);
     }
 
+    // The fan-out target set for a mutation: every connected session PLUS the
+    // issuing one (which may not have formally connected). A fresh copy so a
+    // concurrent connect/disconnect can't mutate it mid-iteration.
+    function fanOutTargets(issuingHost: AppAgentHost): Set<AppAgentHost> {
+        const targets = new Set<AppAgentHost>(clients);
+        targets.add(issuingHost);
+        return targets;
+    }
+
+    // Prune a version-scoped install root once its version is confirmed down —
+    // but only if no other agent's record still references it (content-addressed
+    // roots are shared). A no-op for an undefined root.
+    function pruneRootIfUnreferenced(
+        root: string | undefined,
+        excludeName: string,
+    ): void {
+        if (!isRootReferenced(instanceDir, root, excludeName)) {
+            // installDir is guaranteed resolved above (the source throws
+            // otherwise); the `!` bridges TS's lack of narrowing across this
+            // nested closure.
+            pruneAgentRoot(installDir!, root);
+        }
+    }
+
+    // Read `agents.json`, apply `mutate` to its record map, and write it back.
+    // The single read-modify-write site for the store; a throw from `mutate`
+    // (e.g. the install existing-name check) aborts before the write.
+    function mutateAgentsJson(
+        mutate: (agents: Record<string, InstalledAgentRecord>) => void,
+    ): void {
+        const current = readAgentsJson(instanceDir) ?? { agents: {} };
+        mutate(current.agents);
+        writeAgentsJson(instanceDir, current);
+    }
+
     // Begin a coordinated teardown/swap across every connected session,
     // time-bounded so a stall rolls it back. Every host
     // — INCLUDING the issuing one — runs `replaceProvider` on its own idle-gated
@@ -738,8 +773,7 @@ export function createDefaultInstalledAgentSource(
         } = params;
         // The issuing host is always part of the barrier even if it never
         // formally connected (defensive); it is otherwise treated as a sibling.
-        const targets = new Set<AppAgentHost>(clients);
-        targets.add(issuingHost);
+        const targets = fanOutTargets(issuingHost);
         let resolveDecided!: () => void;
         const whenDecided = new Promise<void>((resolve) => {
             resolveDecided = resolve;
@@ -809,8 +843,7 @@ export function createDefaultInstalledAgentSource(
         provider: AppAgentProvider,
         issuingHost: AppAgentHost,
     ): void {
-        const targets = new Set<AppAgentHost>(clients);
-        targets.add(issuingHost);
+        const targets = fanOutTargets(issuingHost);
         for (const host of targets) {
             host.addProvider(provider, true).catch((e) => {
                 debug(`addProvider failed: ${e}`);
@@ -825,6 +858,7 @@ export function createDefaultInstalledAgentSource(
             sourceName: string | undefined,
             issuingHost: AppAgentHost,
             onStatus?: SourceStatus,
+            abortSignal?: AbortSignal,
         ): Promise<InstallResult> {
             const explicit = ref !== undefined;
             // Explicit (two-argument) mode knows the installed name up front, so
@@ -851,6 +885,7 @@ export function createDefaultInstalledAgentSource(
                     sourceName,
                     (m) => warningSet.add(m),
                     onStatus,
+                    abortSignal,
                 );
                 const record = resolved.record;
                 const name = record.name;
@@ -883,14 +918,12 @@ export function createDefaultInstalledAgentSource(
                 // install that resolved to the same inferred name) cannot enter
                 // until the first commits, so the existing-agent check catches it.
                 await limiter(async () => {
-                    const current = readAgentsJson(instanceDir) ?? {
-                        agents: {},
-                    };
-                    if (current.agents[name] !== undefined) {
-                        throw new Error(`Agent '${name}' already exists`);
-                    }
-                    current.agents[name] = record;
-                    writeAgentsJson(instanceDir, current);
+                    mutateAgentsJson((agents) => {
+                        if (agents[name] !== undefined) {
+                            throw new Error(`Agent '${name}' already exists`);
+                        }
+                        agents[name] = record;
+                    });
                 });
                 // Mark the name active so later connects vend it.
                 entries.set(name, { status: "active", provider });
@@ -955,18 +988,24 @@ export function createDefaultInstalledAgentSource(
                     throw new Error(`Agent '${name}' not found`);
                 }
                 const uninstalledRoot = deletedRecord.installRoot;
-                // Drop the record only at the barrier COMMIT (in `onDecided`
-                // below), NOT here: while the teardown is in flight the agent
-                // stays the recorded-current install, so a crash mid-uninstall
-                // recovers to the still-installed agent rather than a half-removed
-                // state, and a rollback needs nothing restored.
-                const deleteInstalledRecord = () => {
-                    const current = readAgentsJson(instanceDir) ?? {
-                        agents: {},
-                    };
-                    delete current.agents[name];
-                    writeAgentsJson(instanceDir, current);
-                };
+
+                // Invariant: a recorded name is `active` in this source (a name
+                // mid-teardown — `removing` — was already rejected by
+                // `assertNameFree` above, and every record is seeded active at
+                // construction). Reaching here with no active entry means
+                // `agents.json` and this source's live set disagree, which can
+                // only come from an OUT-OF-BAND mutation of the store: the
+                // instance-dir lock keeps one process per `agents.json`, and both
+                // multi-dispatcher hosts (agent server + web API) run a single
+                // shared source per process, so no concurrent sibling source can
+                // add a record this source never seeded. Fail loudly rather than
+                // silently mutating the store on an inconsistency.
+                if (entry?.status !== "active") {
+                    throw new Error(
+                        `Agent '${name}' is recorded but not active in this source; the install store may have been modified out of band.`,
+                    );
+                }
+                const oldProvider = entry.provider;
                 // The barrier decision is the commit point. Now tear
                 // the live agent down across every connected session through the
                 // coordinated barrier (active → removing → absent): each
@@ -982,70 +1021,62 @@ export function createDefaultInstalledAgentSource(
                 // never idles the barrier times out and ROLLS BACK:
                 // `v1` is re-added everywhere and the record restored, so the name
                 // is never freed while its process may still be running.
-                if (entry?.status === "active") {
-                    startReplace({
-                        name,
-                        oldProvider: entry.provider,
-                        issuingHost,
-                        dropConfig: true,
-                        newProvider: undefined,
-                        onDecided: (outcome) => {
-                            if (outcome === "committed") {
-                                // Flip in-memory FIRST (never throws) so the name
-                                // is never stranded in `removing`, then drop the
-                                // record — the durable commit point.
-                                entries.delete(name);
-                                deleteInstalledRecord();
-                            } else {
-                                // Rollback: the record was never dropped, so there
-                                // is nothing to restore — just keep v1 live.
-                                entries.set(name, {
-                                    status: "active",
-                                    provider: entry.provider,
-                                });
+                startReplace({
+                    name,
+                    oldProvider,
+                    issuingHost,
+                    dropConfig: true,
+                    newProvider: undefined,
+                    onDecided: (outcome) => {
+                        if (outcome === "committed") {
+                            // Flip in-memory FIRST (never throws) so the name
+                            // is never stranded in `removing`, then drop the
+                            // record — the durable commit point. The record is
+                            // dropped ONLY here (not before the barrier): while
+                            // the teardown is in flight the agent stays the
+                            // recorded-current install, so a crash mid-uninstall
+                            // recovers to the still-installed agent and a rollback
+                            // needs nothing restored.
+                            entries.delete(name);
+                            mutateAgentsJson((agents) => {
+                                delete agents[name];
+                            });
+                        } else {
+                            // Rollback: the record was never dropped, so there
+                            // is nothing to restore — just keep v1 live.
+                            entries.set(name, {
+                                status: "active",
+                                provider: oldProvider,
+                            });
+                        }
+                    },
+                    finalizeGc: (outcome) => {
+                        // Prune the version-scoped root only on a committed
+                        // uninstall whose record drop actually landed; a
+                        // rollback (or a commit-drop write that failed, leaving
+                        // the record present) keeps `v1` intact.
+                        if (outcome === "committed") {
+                            const stillRecorded =
+                                readAgentsJson(instanceDir)?.agents[name];
+                            if (stillRecorded === undefined) {
+                                pruneRootIfUnreferenced(uninstalledRoot, name);
                             }
-                        },
-                        finalizeGc: (outcome) => {
-                            // Prune the version-scoped root only on a committed
-                            // uninstall whose record drop actually landed; a
-                            // rollback (or a commit-drop write that failed, leaving
-                            // the record present) keeps `v1` intact.
-                            if (outcome === "committed") {
-                                const stillRecorded =
-                                    readAgentsJson(instanceDir)?.agents[name];
-                                if (
-                                    stillRecorded === undefined &&
-                                    !isRootReferenced(
-                                        instanceDir,
-                                        uninstalledRoot,
-                                        name,
-                                    )
-                                ) {
-                                    pruneAgentRoot(installDir, uninstalledRoot);
-                                }
-                            }
-                        },
-                        // Report the final status: a
-                        // committed uninstall is `uninstalled`; a straggler-timeout
-                        // rollback is `reverted` (the agent stays installed), so the
-                        // issuing conversation is never left believing a reverted
-                        // uninstall succeeded.
-                        onOutcome: onOutcome
-                            ? (status) =>
-                                  onOutcome(
-                                      status === "updated"
-                                          ? "uninstalled"
-                                          : "reverted",
-                                  )
-                            : undefined,
-                    });
-                } else {
-                    deleteInstalledRecord();
-                    if (!isRootReferenced(instanceDir, uninstalledRoot, name)) {
-                        pruneAgentRoot(installDir, uninstalledRoot);
-                    }
-                    onOutcome?.("uninstalled");
-                }
+                        }
+                    },
+                    // Report the final status: a
+                    // committed uninstall is `uninstalled`; a straggler-timeout
+                    // rollback is `reverted` (the agent stays installed), so the
+                    // issuing conversation is never left believing a reverted
+                    // uninstall succeeded.
+                    onOutcome: onOutcome
+                        ? (status) =>
+                              onOutcome(
+                                  status === "updated"
+                                      ? "uninstalled"
+                                      : "reverted",
+                              )
+                        : undefined,
+                });
             } finally {
                 busy.delete(name);
             }
@@ -1086,11 +1117,9 @@ export function createDefaultInstalledAgentSource(
                 // unverified v2 with v1 already pruned. A
                 // failed materialize above is a no-op that leaves v1 intact.
                 const writeInstalledRecord = () => {
-                    const current = readAgentsJson(instanceDir) ?? {
-                        agents: {},
-                    };
-                    current.agents[name] = record;
-                    writeAgentsJson(instanceDir, current);
+                    mutateAgentsJson((agents) => {
+                        agents[name] = record;
+                    });
                 };
                 // Same-version no-op: a source-owned update that lands on a
                 // byte-identical content-addressed install root means
@@ -1104,7 +1133,11 @@ export function createDefaultInstalledAgentSource(
                 // pick up an in-place manifest edit.
                 if (updateResult.status === "no-op") {
                     writeInstalledRecord();
-                    onOutcome?.("updated");
+                    // Nothing swapped in any session, so the cross-session
+                    // fan-out has nothing to announce; report the no-op to the
+                    // issuing conversation directly so `@package update` on an
+                    // already-current agent is not silent.
+                    onOutcome?.("unchanged");
                     return;
                 }
                 // Coordinated update: tear the OLD
@@ -1188,26 +1221,12 @@ export function createDefaultInstalledAgentSource(
                                     readAgentsJson(instanceDir)?.agents[name];
                                 if (
                                     committed?.installRoot === newRoot &&
-                                    oldRoot !== newRoot &&
-                                    !isRootReferenced(
-                                        instanceDir,
-                                        oldRoot,
-                                        name,
-                                    )
+                                    oldRoot !== newRoot
                                 ) {
-                                    pruneAgentRoot(installDir, oldRoot);
+                                    pruneRootIfUnreferenced(oldRoot, name);
                                 }
-                            } else {
-                                if (
-                                    oldRoot !== newRoot &&
-                                    !isRootReferenced(
-                                        instanceDir,
-                                        newRoot,
-                                        name,
-                                    )
-                                ) {
-                                    pruneAgentRoot(installDir, newRoot);
-                                }
+                            } else if (oldRoot !== newRoot) {
+                                pruneRootIfUnreferenced(newRoot, name);
                             }
                         },
                         onOutcome,
@@ -1222,11 +1241,8 @@ export function createDefaultInstalledAgentSource(
                         status: "active",
                         provider: newProvider,
                     });
-                    if (
-                        oldRoot !== record.installRoot &&
-                        !isRootReferenced(instanceDir, oldRoot, name)
-                    ) {
-                        pruneAgentRoot(installDir, oldRoot);
+                    if (oldRoot !== record.installRoot) {
+                        pruneRootIfUnreferenced(oldRoot, name);
                     }
                     fanOutAdd(newProvider, issuingHost);
                     onOutcome?.("updated");
@@ -1328,12 +1344,17 @@ export function createDefaultInstalledAgentSource(
                 });
                 const im: {
                     source: string;
+                    sourceKind?: string;
                     matchKind: InstallMatchKind;
                     name: string;
                     packageName?: string;
                     path?: string;
                     ref?: string;
                 } = { source: m.source, matchKind, name: m.name };
+                const sourceKind = registry.get(m.source)?.kind;
+                if (sourceKind !== undefined) {
+                    im.sourceKind = sourceKind;
+                }
                 if (m.candidate.packageName !== undefined) {
                     im.packageName = m.candidate.packageName;
                 }
