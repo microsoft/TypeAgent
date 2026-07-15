@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 import {
-    createCopilotDirectChatModel,
+    createCopilotTransportModel,
     CopilotEndpoint,
     CopilotEndpointProvider,
     CopilotEndpointUnavailableError,
-} from "../src/copilotDirectTransport.js";
+} from "../src/copilotModels.js";
 import { CopilotApiSettings } from "../src/copilotSettings.js";
 import { ModelType } from "../src/openai.js";
 import { PromptSection } from "typechat";
@@ -112,7 +112,7 @@ const CAPI_OK = {
     usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
 };
 
-describe("createCopilotDirectChatModel", () => {
+describe("createCopilotTransportModel", () => {
     const origFetch = globalThis.fetch;
     afterEach(() => {
         globalThis.fetch = origFetch;
@@ -126,7 +126,7 @@ describe("createCopilotDirectChatModel", () => {
         };
 
         const { provider } = makeProvider([makeEndpoint()]);
-        const model = createCopilotDirectChatModel(
+        const model = createCopilotTransportModel(
             makeSettings(),
             {},
             undefined,
@@ -157,7 +157,7 @@ describe("createCopilotDirectChatModel", () => {
         (globalThis as any).fetch = async () => jsonResponse(200, CAPI_OK);
         const { provider } = makeProvider([makeEndpoint()]);
         const usage: any[] = [];
-        const model = createCopilotDirectChatModel(
+        const model = createCopilotTransportModel(
             makeSettings(),
             {},
             undefined,
@@ -181,7 +181,7 @@ describe("createCopilotDirectChatModel", () => {
             makeEndpoint(),
             makeEndpoint({ url: "https://api.example/v2/chat/completions" }),
         ]);
-        const model = createCopilotDirectChatModel(
+        const model = createCopilotTransportModel(
             makeSettings(),
             {},
             undefined,
@@ -203,7 +203,7 @@ describe("createCopilotDirectChatModel", () => {
         (globalThis as any).fetch = async () =>
             jsonResponse(401, { error: "expired" });
         const { provider, forceCalls } = makeProvider([makeEndpoint()]);
-        const model = createCopilotDirectChatModel(
+        const model = createCopilotTransportModel(
             makeSettings(),
             {},
             undefined,
@@ -226,7 +226,7 @@ describe("createCopilotDirectChatModel", () => {
         const { provider } = makeProvider([
             new CopilotEndpointUnavailableError("no concrete model"),
         ]);
-        const model = createCopilotDirectChatModel(
+        const model = createCopilotTransportModel(
             makeSettings(),
             {},
             undefined,
@@ -247,7 +247,7 @@ describe("createCopilotDirectChatModel", () => {
             return jsonResponse(200, CAPI_OK);
         };
         const { provider } = makeProvider([makeEndpoint()]);
-        const model = createCopilotDirectChatModel(
+        const model = createCopilotTransportModel(
             makeSettings(),
             {},
             undefined,
@@ -279,7 +279,7 @@ describe("createCopilotDirectChatModel", () => {
         };
         const { provider } = makeProvider([makeEndpoint()]);
         const usage: any[] = [];
-        const model = createCopilotDirectChatModel(
+        const model = createCopilotTransportModel(
             makeSettings(),
             {},
             undefined,
@@ -316,7 +316,7 @@ describe("createCopilotDirectChatModel", () => {
             makeEndpoint(),
             makeEndpoint(),
         ]);
-        const model = createCopilotDirectChatModel(
+        const model = createCopilotTransportModel(
             makeSettings(),
             {},
             undefined,
@@ -337,7 +337,7 @@ describe("createCopilotDirectChatModel", () => {
         (globalThis as any).fetch = async () =>
             jsonResponse(401, { error: "expired" });
         const { provider } = makeProvider([makeEndpoint()]);
-        const model = createCopilotDirectChatModel(
+        const model = createCopilotTransportModel(
             makeSettings(),
             {},
             undefined,
@@ -356,7 +356,7 @@ describe("createCopilotDirectChatModel", () => {
             return sseResponse([deltaChunk("x"), "[DONE]"]);
         };
         const { provider } = makeProvider([makeEndpoint()]);
-        const model = createCopilotDirectChatModel(
+        const model = createCopilotTransportModel(
             makeSettings(),
             {},
             undefined,
