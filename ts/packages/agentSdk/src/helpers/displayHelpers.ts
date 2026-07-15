@@ -162,7 +162,7 @@ export function fromRecords<T>(
     },
 ): StructuredContent {
     const columns: TableColumn[] = columnSpec.map(
-        ({ value, ...column }) => column,
+        ({ value: _value, ...column }) => column,
     );
     const rows: TableCell[][] = objects.map((object) =>
         columnSpec.map((column) => column.value(object)),

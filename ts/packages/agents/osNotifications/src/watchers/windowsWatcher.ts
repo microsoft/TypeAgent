@@ -32,6 +32,10 @@ export class HelperNotBuiltError extends Error {
     }
 }
 
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
 // Spawns the bundled OsNotificationListener.exe helper. The helper subscribes
 // to Windows.UI.Notifications.Management.UserNotificationListener and writes
 // JSON-per-line on stdout in the OsNotificationEvent shape from
@@ -90,7 +94,7 @@ export function startWindowsWatcher(
                 try {
                     const evt = JSON.parse(line) as OsNotificationEvent;
                     listener(evt);
-                } catch (e: any) {
+                } catch {
                     debug("invalid line from helper: %s", line);
                 }
             }
@@ -485,7 +489,7 @@ async function ensureCertTrustedLocalMachine(opts: {
             os.homedir(),
             opts,
         );
-    } catch (e: any) {
+    } catch (error: unknown) {
         throw new Error(
             "Failed to trust the dev cert at LocalMachine scope " +
                 "(the elevation prompt may have been declined). Either re-run " +
@@ -494,7 +498,7 @@ async function ensureCertTrustedLocalMachine(opts: {
                 `  $cer = '${cerPath}'\n` +
                 "  Import-Certificate -FilePath $cer -CertStoreLocation Cert:\\LocalMachine\\Root\n" +
                 "  Import-Certificate -FilePath $cer -CertStoreLocation Cert:\\LocalMachine\\TrustedPeople\n" +
-                `Original error: ${e?.message ?? e}`,
+                `Original error: ${getErrorMessage(error)}`,
         );
     }
     if (!isCertTrustedLocalMachine()) {
@@ -546,8 +550,8 @@ async function registerSparsePackage(
             path.dirname(msixPath),
             opts,
         );
-    } catch (e: any) {
-        const msg = e?.message ?? String(e);
+    } catch (error: unknown) {
+        const msg = getErrorMessage(error);
         if (msg.includes("0x800B0109")) {
             throw new Error(
                 "Add-AppxPackage failed with CERT_E_UNTRUSTEDROOT even after the " +
@@ -559,7 +563,7 @@ async function registerSparsePackage(
                     "Then retry. (One-time per machine; cert renewals via getCert renew keep the same Subject so this stays valid.)",
             );
         }
-        throw e;
+        throw error;
     }
 }
 

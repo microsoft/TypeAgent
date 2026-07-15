@@ -139,18 +139,12 @@ function renderTableBlock(block: TableBlock): string {
 
 function renderMarkdownToHtml(text: string): string {
     const md = new MarkdownIt({ html: true });
-    const defaultRender =
-        md.renderer.rules.link_open ||
-        function (tokens: any, idx: any, options: any, _env: any, self: any) {
-            return self.renderToken(tokens, idx, options);
-        };
-    md.renderer.rules.link_open = (
-        tokens: any,
-        idx: any,
-        options: any,
-        env: any,
-        self: any,
-    ) => {
+    type LinkOpenRenderRule = NonNullable<typeof md.renderer.rules.link_open>;
+    const defaultRender: LinkOpenRenderRule =
+        md.renderer.rules.link_open ??
+        ((tokens, idx, options, _env, self) =>
+            self.renderToken(tokens, idx, options));
+    md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
         tokens[idx].attrSet("target", "_blank");
         return defaultRender(tokens, idx, options, env, self);
     };
