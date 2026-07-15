@@ -406,27 +406,38 @@ export type MetricsResult = {
     strategies: StrategyComparison;
 };
 
-export function runMetrics(
-    roster: Roster,
-    fixtures: Fixture[],
-    thresholds: Thresholds = DEFAULT_THRESHOLDS,
-): MetricsResult {
-    let resolvable = 0;
-    let abstainable = 0;
-    let triggeredOnResolvable = 0;
-    let abstainedOnAbstainable = 0;
-    let spuriousResolve = 0;
-    let totalResolves = 0;
-    let trueResolve = 0;
-    let wrongTarget = 0;
-    let clarifyOrLlmAvoided = 0;
-    // Standalone correct/wrong/deferred tallies per baseline strategy, over the
-    // resolvable set.
+// All mutable counters the per-fixture loop accumulates. Per-strategy maps are
+// seeded to zero for every baseline / silent strategy up front so the loop body
+// never has to test for first-touch.
+type MetricsTally = {
+    resolvable: number;
+    abstainable: number;
+    triggeredOnResolvable: number;
+    abstainedOnAbstainable: number;
+    spuriousResolve: number;
+    totalResolves: number;
+    trueResolve: number;
+    wrongTarget: number;
+    clarifyOrLlmAvoided: number;
+    // Standalone correct/wrong/deferred per baseline strategy, over resolvable.
+    stratCorrect: Record<string, number>;
+    stratWrong: Record<string, number>;
+    stratDeferred: Record<string, number>;
+    // Deployed (CS-on-top-of-X) correct tally + per-target-class base/treat for
+    // the no-regression gate, per silent auto-resolver X.
+    deployedCorrect: Record<string, number>;
+    perClassByStrat: Record<
+        string,
+        Map<string, { base: number; treat: number }>
+    >;
+    spuriousByReason: Record<string, number>;
+    abstainByReason: Record<string, number>;
+};
+
+function createTally(): MetricsTally {
     const stratCorrect: Record<string, number> = {};
     const stratWrong: Record<string, number> = {};
     const stratDeferred: Record<string, number> = {};
-    // Deployed (CS-on-top-of-X) correct tally + per-target-class base/treat for
-    // the no-regression gate, for each silent auto-resolver X.
     const deployedCorrect: Record<string, number> = {};
     const perClassByStrat: Record<
         string,
@@ -441,100 +452,119 @@ export function runMetrics(
         deployedCorrect[s] = 0;
         perClassByStrat[s] = new Map();
     }
-    const spuriousByReason: Record<string, number> = {};
-    const abstainByReason: Record<string, number> = {};
+    return {
+        resolvable: 0,
+        abstainable: 0,
+        triggeredOnResolvable: 0,
+        abstainedOnAbstainable: 0,
+        spuriousResolve: 0,
+        totalResolves: 0,
+        trueResolve: 0,
+        wrongTarget: 0,
+        clarifyOrLlmAvoided: 0,
+        stratCorrect,
+        stratWrong,
+        stratDeferred,
+        deployedCorrect,
+        perClassByStrat,
+        spuriousByReason: {},
+        abstainByReason: {},
+    };
+}
 
-    for (const fixture of fixtures) {
-        const decision = decide(roster, fixture, thresholds);
-        if (decision.kind === "resolve") {
-            totalResolves++;
-            clarifyOrLlmAvoided++;
-        }
-
-        if (fixture.label.kind === "resolve") {
-            resolvable++;
-            const target = fixture.label.target;
-            const cls = target.split(".")[0];
-            const csResolvedCorrect =
-                decision.kind === "resolve" && decision.target === target;
-
-            for (const s of BASELINE_STRATEGIES) {
-                const pick = baselinePick(s, fixture.candidates);
-                const xCorrect = pick !== undefined && pick === target;
-                if (pick === undefined) {
-                    stratDeferred[s]++;
-                } else if (xCorrect) {
-                    stratCorrect[s]++;
-                } else {
-                    stratWrong[s]++;
-                }
-                // Deployed: CS resolves -> its pick; else fall back to X.
-                if (s in perClassByStrat) {
-                    const deployed =
-                        decision.kind === "resolve"
-                            ? csResolvedCorrect
-                            : xCorrect;
-                    if (deployed) {
-                        deployedCorrect[s]++;
-                    }
-                    const pc = perClassByStrat[s].get(cls) ?? {
-                        base: 0,
-                        treat: 0,
-                    };
-                    if (xCorrect) pc.base++;
-                    if (deployed) pc.treat++;
-                    perClassByStrat[s].set(cls, pc);
-                }
-            }
-
-            if (decision.kind === "resolve") {
-                triggeredOnResolvable++;
-                if (csResolvedCorrect) trueResolve++;
-                else wrongTarget++;
-            }
+// Tally every context-blind baseline for one resolvable fixture, plus the
+// deployed CS-on-top-of-X projection (per-target-class base/treat) used by the
+// no-regression gate. `csResolves`/`csResolvedCorrect` describe contextSelector's
+// decision on this fixture.
+function tallyBaselines(
+    tally: MetricsTally,
+    fixture: Fixture,
+    target: string,
+    cls: string,
+    csResolves: boolean,
+    csResolvedCorrect: boolean,
+): void {
+    for (const s of BASELINE_STRATEGIES) {
+        const pick = baselinePick(s, fixture.candidates);
+        const xCorrect = pick !== undefined && pick === target;
+        if (pick === undefined) {
+            tally.stratDeferred[s]++;
+        } else if (xCorrect) {
+            tally.stratCorrect[s]++;
         } else {
-            abstainable++;
-            abstainByReason[fixture.label.reason] =
-                (abstainByReason[fixture.label.reason] ?? 0) + 1;
-            if (decision.kind === "resolve") {
-                spuriousResolve++;
-                spuriousByReason[fixture.label.reason] =
-                    (spuriousByReason[fixture.label.reason] ?? 0) + 1;
-            } else {
-                abstainedOnAbstainable++;
-            }
+            tally.stratWrong[s]++;
         }
+        // Deployed: CS resolves -> its pick; else fall back to X. Only silent
+        // auto-resolvers are projected (seeded in perClassByStrat).
+        if (!(s in tally.perClassByStrat)) {
+            continue;
+        }
+        const deployed = csResolves ? csResolvedCorrect : xCorrect;
+        if (deployed) {
+            tally.deployedCorrect[s]++;
+        }
+        const pc = tally.perClassByStrat[s].get(cls) ?? { base: 0, treat: 0 };
+        if (xCorrect) pc.base++;
+        if (deployed) pc.treat++;
+        tally.perClassByStrat[s].set(cls, pc);
     }
+}
 
-    const total = fixtures.length;
-    const r = Math.max(1, resolvable);
-    const ab = Math.max(1, abstainable);
+// Accumulate one fixture whose label is "resolve": bump the resolvable count,
+// fan out across the baselines, and record contextSelector's own hit/miss.
+function tallyResolvable(
+    tally: MetricsTally,
+    fixture: Fixture,
+    decision: Decision,
+    target: string,
+): void {
+    tally.resolvable++;
+    const cls = target.split(".")[0];
+    const csResolvedCorrect =
+        decision.kind === "resolve" && decision.target === target;
+    tallyBaselines(
+        tally,
+        fixture,
+        target,
+        cls,
+        decision.kind === "resolve",
+        csResolvedCorrect,
+    );
+    if (decision.kind === "resolve") {
+        tally.triggeredOnResolvable++;
+        if (csResolvedCorrect) tally.trueResolve++;
+        else tally.wrongTarget++;
+    }
+}
 
-    // Deployed routing-lift of CS-on-top-of-X, for each silent auto-resolver.
-    const deployed: DeployedLift[] = SILENT_STRATEGIES.map((s) => {
-        const baselineAccuracy = stratCorrect[s] / r;
-        const deployedAccuracy = deployedCorrect[s] / r;
-        return {
-            strategy: s,
-            baselineAccuracy,
-            deployedAccuracy,
-            lift: deployedAccuracy - baselineAccuracy,
-            noRegression: [...perClassByStrat[s].values()].every(
-                (c) => c.treat >= c.base,
-            ),
-        };
-    });
-    // Legacy first-match A/B view is just the first-match deployed entry.
-    const firstMatchDeployed = deployed.find(
-        (d) => d.strategy === "first-match",
-    )!;
+// Accumulate one fixture whose label is "abstain": bump the abstainable count
+// and record whether contextSelector correctly abstained or spuriously resolved.
+function tallyAbstainable(
+    tally: MetricsTally,
+    decision: Decision,
+    reason: string,
+): void {
+    tally.abstainable++;
+    tally.abstainByReason[reason] = (tally.abstainByReason[reason] ?? 0) + 1;
+    if (decision.kind === "resolve") {
+        tally.spuriousResolve++;
+        tally.spuriousByReason[reason] =
+            (tally.spuriousByReason[reason] ?? 0) + 1;
+    } else {
+        tally.abstainedOnAbstainable++;
+    }
+}
 
-    const mkAccuracy = (
-        name: string,
-        correct: number,
-        wrong: number,
-        deferred: number,
-    ): StrategyAccuracy => ({
+// One strategy's StrategyAccuracy over the resolvable set (`r` = max(1,
+// resolvable)).
+function makeAccuracy(
+    name: string,
+    correct: number,
+    wrong: number,
+    deferred: number,
+    r: number,
+): StrategyAccuracy {
+    return {
         strategy: name,
         correct,
         wrong,
@@ -542,20 +572,34 @@ export function runMetrics(
         accuracy: correct / r,
         misrouteRate: wrong / r,
         deferRate: deferred / r,
-    });
+    };
+}
 
-    // contextSelector standalone on the resolvable set: resolve->target = correct,
-    // resolve->other = misroute, abstain = deferred (missed, not wrong).
-    const csAbstainedOnResolvable = resolvable - triggeredOnResolvable;
-    const csAccuracy = mkAccuracy(
-        "contextSelector",
-        trueResolve,
-        wrongTarget,
-        csAbstainedOnResolvable,
-    );
-    const baselines = BASELINE_STRATEGIES.map((s) =>
-        mkAccuracy(s, stratCorrect[s], stratWrong[s], stratDeferred[s]),
-    );
+// Deployed routing-lift of CS-on-top-of-X, for each silent auto-resolver.
+function buildDeployedLifts(tally: MetricsTally, r: number): DeployedLift[] {
+    return SILENT_STRATEGIES.map((s) => {
+        const baselineAccuracy = tally.stratCorrect[s] / r;
+        const deployedAccuracy = tally.deployedCorrect[s] / r;
+        return {
+            strategy: s,
+            baselineAccuracy,
+            deployedAccuracy,
+            lift: deployedAccuracy - baselineAccuracy,
+            noRegression: [...tally.perClassByStrat[s].values()].every(
+                (c) => c.treat >= c.base,
+            ),
+        };
+    });
+}
+
+// The head-to-head StrategyComparison: contextSelector's lift and misroute delta
+// over each baseline, plus the deployed lifts.
+function buildStrategyComparison(
+    tally: MetricsTally,
+    deployed: DeployedLift[],
+    csAccuracy: StrategyAccuracy,
+    baselines: StrategyAccuracy[],
+): StrategyComparison {
     const liftOverBaseline: Record<string, number> = {};
     const misrouteDeltaVsBaseline: Record<string, number> = {};
     for (const b of baselines) {
@@ -563,6 +607,66 @@ export function runMetrics(
         misrouteDeltaVsBaseline[b.strategy] =
             csAccuracy.misrouteRate - b.misrouteRate;
     }
+    return {
+        resolvable: tally.resolvable,
+        contextSelector: csAccuracy,
+        baselines,
+        liftOverBaseline,
+        misrouteDeltaVsBaseline,
+        deployed,
+    };
+}
+
+export function runMetrics(
+    roster: Roster,
+    fixtures: Fixture[],
+    thresholds: Thresholds = DEFAULT_THRESHOLDS,
+): MetricsResult {
+    const tally = createTally();
+
+    for (const fixture of fixtures) {
+        const decision = decide(roster, fixture, thresholds);
+        if (decision.kind === "resolve") {
+            tally.totalResolves++;
+            tally.clarifyOrLlmAvoided++;
+        }
+        if (fixture.label.kind === "resolve") {
+            tallyResolvable(tally, fixture, decision, fixture.label.target);
+        } else {
+            tallyAbstainable(tally, decision, fixture.label.reason);
+        }
+    }
+
+    const total = fixtures.length;
+    const r = Math.max(1, tally.resolvable);
+    const ab = Math.max(1, tally.abstainable);
+
+    const deployed = buildDeployedLifts(tally, r);
+    // Legacy first-match A/B view is just the first-match deployed entry.
+    const firstMatchDeployed = deployed.find(
+        (d) => d.strategy === "first-match",
+    )!;
+
+    // contextSelector standalone on the resolvable set: resolve->target = correct,
+    // resolve->other = misroute, abstain = deferred (missed, not wrong).
+    const csAbstainedOnResolvable =
+        tally.resolvable - tally.triggeredOnResolvable;
+    const csAccuracy = makeAccuracy(
+        "contextSelector",
+        tally.trueResolve,
+        tally.wrongTarget,
+        csAbstainedOnResolvable,
+        r,
+    );
+    const baselines = BASELINE_STRATEGIES.map((s) =>
+        makeAccuracy(
+            s,
+            tally.stratCorrect[s],
+            tally.stratWrong[s],
+            tally.stratDeferred[s],
+            r,
+        ),
+    );
 
     return {
         total,
@@ -570,44 +674,46 @@ export function runMetrics(
         retrieval: measureRetrieval(roster, fixtures, thresholds),
         properties: retrievalPropertyChecks(thresholds),
         trigger: {
-            resolvable,
-            abstainable,
-            triggeredOnResolvable,
-            yield: triggeredOnResolvable / r,
-            abstainedOnAbstainable,
-            abstentionCorrectness: abstainedOnAbstainable / ab,
-            spuriousResolve,
-            spuriousResolveRate: spuriousResolve / ab,
+            resolvable: tally.resolvable,
+            abstainable: tally.abstainable,
+            triggeredOnResolvable: tally.triggeredOnResolvable,
+            yield: tally.triggeredOnResolvable / r,
+            abstainedOnAbstainable: tally.abstainedOnAbstainable,
+            abstentionCorrectness: tally.abstainedOnAbstainable / ab,
+            spuriousResolve: tally.spuriousResolve,
+            spuriousResolveRate: tally.spuriousResolve / ab,
             triggerPrecision:
-                totalResolves > 0 ? triggeredOnResolvable / totalResolves : 1,
-            spuriousByReason,
-            abstainByReason,
+                tally.totalResolves > 0
+                    ? tally.triggeredOnResolvable / tally.totalResolves
+                    : 1,
+            spuriousByReason: tally.spuriousByReason,
+            abstainByReason: tally.abstainByReason,
         },
         resolution: {
-            resolves: triggeredOnResolvable,
-            trueResolve,
-            wrongTarget,
+            resolves: tally.triggeredOnResolvable,
+            trueResolve: tally.trueResolve,
+            wrongTarget: tally.wrongTarget,
             targetAccuracy:
-                triggeredOnResolvable > 0
-                    ? trueResolve / triggeredOnResolvable
+                tally.triggeredOnResolvable > 0
+                    ? tally.trueResolve / tally.triggeredOnResolvable
                     : 1,
-            wrongTargetCount: wrongTarget,
-            wrr: (wrongTarget + spuriousResolve) / Math.max(1, total),
+            wrongTargetCount: tally.wrongTarget,
+            wrr:
+                (tally.wrongTarget + tally.spuriousResolve) /
+                Math.max(1, total),
         },
         ab: {
             baselineAccuracy: firstMatchDeployed.baselineAccuracy,
             treatmentAccuracy: firstMatchDeployed.deployedAccuracy,
             routingAccuracyLift: firstMatchDeployed.lift,
             noRegression: firstMatchDeployed.noRegression,
-            clarifyOrLlmAvoided,
+            clarifyOrLlmAvoided: tally.clarifyOrLlmAvoided,
         },
-        strategies: {
-            resolvable,
-            contextSelector: csAccuracy,
-            baselines,
-            liftOverBaseline,
-            misrouteDeltaVsBaseline,
+        strategies: buildStrategyComparison(
+            tally,
             deployed,
-        },
+            csAccuracy,
+            baselines,
+        ),
     };
 }

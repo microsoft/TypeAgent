@@ -300,74 +300,107 @@ export function deCamelCase(identifier: string): string {
     return splitCamelCase(identifier).replace(/[_\-]+/g, " ");
 }
 
+type ResolvedTokenizeOptions = {
+    dropStopwords: boolean;
+    dropGenericVerbs: boolean;
+    minLength: number;
+    applyStem: boolean;
+    dropNegatedSpans: boolean;
+};
+
+function resolveTokenizeOptions(
+    options?: TokenizeOptions,
+): ResolvedTokenizeOptions {
+    return {
+        dropStopwords: options?.dropStopwords ?? true,
+        dropGenericVerbs: options?.dropGenericVerbs ?? true,
+        minLength: options?.minLength ?? 2,
+        applyStem: options?.stem ?? true,
+        dropNegatedSpans: options?.dropNegatedSpans ?? false,
+    };
+}
+
+// True when a stemmed word token should be dropped by the length/vocabulary
+// filters (order matches the original inline checks).
+function isDroppedWord(token: string, opts: ResolvedTokenizeOptions): boolean {
+    if (token.length < opts.minLength) {
+        return true;
+    }
+    if (opts.dropStopwords && STOPWORDS.has(token)) {
+        return true;
+    }
+    if (opts.dropGenericVerbs && GENERIC_VERBS.has(token)) {
+        return true;
+    }
+    return false;
+}
+
+// Classify one raw regex match into the token to emit, or undefined to skip it.
+// Protected (non-[a-z0-9]) tokens bypass stemming and the vocabulary filters.
+// Negation cues/resets mutate `neg` and are themselves dropped; `neg.active` is
+// only consulted when negation-span suppression is enabled.
+function classifyToken(
+    raw: string,
+    opts: ResolvedTokenizeOptions,
+    neg: { active: boolean },
+): string | undefined {
+    const isProtected = raw.length > 0 && !/^[a-z0-9]+$/.test(raw);
+    if (isProtected) {
+        return opts.dropNegatedSpans && neg.active ? undefined : raw;
+    }
+    const token = opts.applyStem ? stem(raw) : raw;
+    // Negation cues/resets are inspected before the vocabulary drops because the
+    // cues ("not", "no") are themselves stopwords.
+    if (opts.dropNegatedSpans) {
+        if (NEGATION_CUES.has(token)) {
+            neg.active = true;
+            return undefined;
+        }
+        if (neg.active && NEGATION_RESETS.has(token)) {
+            neg.active = false;
+            return undefined;
+        }
+    }
+    if (isDroppedWord(token, opts)) {
+        return undefined;
+    }
+    if (opts.dropNegatedSpans && neg.active) {
+        return undefined;
+    }
+    return token;
+}
+
 // Canonicalize + tokenize. NFKC-normalize, lowercase, extract protected/word
 // tokens, stem plurals, then drop stopwords, generic verbs, and sub-minimum-
 // length tokens. Deterministic and order-preserving (a caller that needs
 // multiplicity gets it). Stemming runs before the vocabulary checks so that
 // inflected generic verbs ("removes" -> "remove") are still dropped.
 export function tokenize(text: string, options?: TokenizeOptions): string[] {
-    const dropStopwords = options?.dropStopwords ?? true;
-    const dropGenericVerbs = options?.dropGenericVerbs ?? true;
-    const minLength = options?.minLength ?? 2;
-    const applyStem = options?.stem ?? true;
-    const dropNegatedSpans = options?.dropNegatedSpans ?? false;
-
     if (!text) {
         return [];
     }
+    const opts = resolveTokenizeOptions(options);
     const normalized = text.normalize("NFKC").toLowerCase();
     const re = tokenRegExp();
     const out: string[] = [];
-    let negated = false;
+    const neg = { active: false };
     let prevEnd = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(normalized)) !== null) {
         // A negation scope closes at the first clause boundary (punctuation) in
         // the untokenized gap before this token.
         if (
-            dropNegatedSpans &&
-            negated &&
+            opts.dropNegatedSpans &&
+            neg.active &&
             CLAUSE_BOUNDARY.test(normalized.slice(prevEnd, m.index))
         ) {
-            negated = false;
+            neg.active = false;
         }
         prevEnd = re.lastIndex;
-
-        const raw = m[0];
-        const isProtected = raw.length > 0 && !/^[a-z0-9]+$/.test(raw);
-        if (isProtected) {
-            if (dropNegatedSpans && negated) {
-                continue;
-            }
-            out.push(raw);
-            continue;
+        const emitted = classifyToken(m[0], opts, neg);
+        if (emitted !== undefined) {
+            out.push(emitted);
         }
-        const token = applyStem ? stem(raw) : raw;
-        // Negation cues / resets are inspected before the vocabulary drops
-        // because the cues ("not", "no") are themselves stopwords.
-        if (dropNegatedSpans) {
-            if (NEGATION_CUES.has(token)) {
-                negated = true;
-                continue;
-            }
-            if (negated && NEGATION_RESETS.has(token)) {
-                negated = false;
-                continue;
-            }
-        }
-        if (token.length < minLength) {
-            continue;
-        }
-        if (dropStopwords && STOPWORDS.has(token)) {
-            continue;
-        }
-        if (dropGenericVerbs && GENERIC_VERBS.has(token)) {
-            continue;
-        }
-        if (dropNegatedSpans && negated) {
-            continue;
-        }
-        out.push(token);
     }
     return out;
 }
