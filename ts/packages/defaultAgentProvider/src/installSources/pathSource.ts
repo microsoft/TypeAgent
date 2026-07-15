@@ -56,6 +56,9 @@ export function createPathSource(config: PathSourceConfig): InstallSource {
         name: config.name,
         kind: "path",
         find,
+        describe(): string {
+            return baseDir ?? "(default base)";
+        },
         async materialize(
             candidate: ResolvedCandidate,
         ): Promise<MaterializedInstallRecord> {
