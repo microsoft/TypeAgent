@@ -35,7 +35,7 @@
  *   --force                     Overwrite an existing config.local.yaml.
  *   --ollama-host <url>         Ollama base URL (default http://localhost:11434).
  *   --chat-model <name>         Ollama chat model (default llama3.2).
- *   --copilot-model <name>      Copilot chat model (default claude-sonnet-4.5).
+ *   --copilot-model <name>      Copilot chat model (default claude-haiku-4.5).
  *   --embedding <mode>          local (default) | ollama | openai | none.
  *   --embedding-endpoint <url>  Embedding endpoint (openai mode; full path).
  *   --embedding-model <name>    Embedding model name.
@@ -53,7 +53,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DEFAULT_OLLAMA_HOST = "http://localhost:11434";
 const DEFAULT_OLLAMA_CHAT_MODEL = "llama3.2";
-const DEFAULT_COPILOT_MODEL = "claude-sonnet-4.5";
+const DEFAULT_COPILOT_MODEL = "claude-haiku-4.5";
 const DEFAULT_LOCAL_EMBEDDING_MODEL = "Xenova/all-MiniLM-L6-v2";
 const DEFAULT_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text";
 

@@ -16,7 +16,17 @@ export type CopilotApiSettings = CommonApiSettings & {
     disableInfiniteSessions: boolean;
 };
 
-const DEFAULT_MODEL = "claude-sonnet-4.5";
+// claude-haiku-4.5 is a fast, non-reasoning model. It is the effective default
+// for Copilot provider mode because simple translation calls don't benefit from
+// model-side "thinking" and pay a large latency penalty for it. If a tenant
+// doesn't expose this model, the adapter falls back to "auto" at request time.
+// Users can still opt into any model via `copilot.defaultModel` in the config.
+const DEFAULT_MODEL = "claude-haiku-4.5";
+
+// Fallback used when the configured/default model is not available in the
+// current Copilot tenant (client.listModels() doesn't list it). "auto" is
+// always present and lets the CLI pick an available model.
+export const COPILOT_FALLBACK_MODEL = "auto";
 
 export function copilotApiSettingsFromConfig(
     modelName?: string,

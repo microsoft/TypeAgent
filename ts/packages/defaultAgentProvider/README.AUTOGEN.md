@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=136471a7a82eb1caa8743602a733020585d6fd70fcbdd7a0a5302d2ebb07ad7b -->
+<!-- AUTOGEN:DOCS:HASH:sha256=06332effa2be587266efdd7d586665f1b3083b5b43a06cbdfdbac0ef5a715b8e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # default-agent-provider — AI-generated documentation
@@ -12,24 +12,24 @@
 
 ## Overview
 
-The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent framework. It is a foundational component used by the shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents and configurations are available for the proper functioning of the TypeAgent ecosystem.
+The `default-agent-provider` package is a TypeScript library that acts as the default agent provider for the TypeAgent framework. It is a core component used by the shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents and configurations are available to support the TypeAgent ecosystem.
 
 ## What it does
 
-The `default-agent-provider` package provides essential functionality for managing agents and their configurations. Its key responsibilities include:
+The `default-agent-provider` package provides a centralized mechanism for managing agents and their configurations. Its primary responsibilities include:
 
-- **Default Agent Providers**: Functions such as `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` supply pre-configured agent providers and construction mechanisms for initializing agents.
+- **Default Agent Providers**: Functions like `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` supply pre-configured agent providers and construction mechanisms for initializing agents.
 - **Agent Source Management**: The `getDefaultAppAgentSource` function manages the connected app-agent source, including the installed-agent record store and the host-owned `@package` agent.
 - **Dispatcher Configuration**: The `getDefaultDispatcherOptions` function provides default settings for the dispatcher, which routes actions to the appropriate agents.
 - **Indexing Service Registry**: The `getIndexingServiceRegistry` function organizes and retrieves agent-related data through an indexing service.
 
-The package also includes operational scripts under the `collisions` directory. These scripts are used to test and validate dispatcher functionality and agent behavior under various scenarios, such as action collision detection and optimization pipelines.
+The package also includes operational scripts for testing and validating dispatcher functionality and agent behavior under various scenarios, such as action collision detection and optimization pipelines. These scripts are located in the `collisions` directory and are primarily used for internal testing and debugging.
 
-Additionally, the package supports test agents like the `vampire` agent, which is used to evaluate dispatcher subsystems such as action collision detection. These test agents are disabled by default in production but can be enabled for testing purposes.
+Additionally, the package supports test agents, such as the `vampire` agent, which is used to evaluate dispatcher subsystems like action collision detection. These test agents are disabled by default in production but can be enabled for testing purposes.
 
 ## Setup
 
-To use the `default-agent-provider` package, follow these steps:
+To set up and use the `default-agent-provider` package, follow these steps:
 
 1. **Install dependencies**:
 
@@ -38,7 +38,7 @@ To use the `default-agent-provider` package, follow these steps:
 
 2. **Set environment variables**:
 
-   - `TYPEAGENT_FEED_REGISTRY`: Specifies the registry for the agent feed. Refer to the hand-written README for details on how to configure this value.
+   - `TYPEAGENT_FEED_REGISTRY`: Specifies the registry for the agent feed. This value should be set in your environment. Refer to the hand-written README for details on how to configure this variable.
    - `TYPEAGENT_FEED_SCOPES`: Defines the scopes for the agent feed. Ensure this variable is set appropriately for your environment.
 
 3. **Optional setup for non-bundled agents**:
@@ -103,8 +103,8 @@ By following these steps, you can effectively extend the `default-agent-provider
 
 ### Entry points
 
-- default → `./dist/index.js` _(not found on disk)_
-- `./test` → `./dist/test/index.js` _(not found on disk)_
+- default → [./dist/index.js](./dist/index.js)
+- `./test` → [./dist/test/index.js](./dist/test/index.js)
 
 ### Dependencies
 
@@ -160,6 +160,8 @@ External: `@modelcontextprotocol/sdk`, `@modelcontextprotocol/server-filesystem`
 
 ### Used by
 
+- [@typeagent/action-browser](../../tools/actionBrowser/README.md)
+- [@typeagent/docs-autogen](../../tools/docsAutogen/README.md)
 - [agent-api](../../packages/api/README.md)
 - [agent-cli](../../packages/cli/README.md)
 - [agent-server](../../packages/agentServer/server/README.md)
@@ -181,6 +183,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
+_Auto-generated against commit `5c9fc637c2f0a96d75d41a3bc9054d06247d26d8` on `2026-07-15T08:50:41.068Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
