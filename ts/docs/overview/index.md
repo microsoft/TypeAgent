@@ -152,7 +152,8 @@ action dispatch.
 | [Architecture](../architecture/index.md) | Cross-cutting deep dives: the dispatcher, action grammar, cache, memory (Structured RAG), agent patterns, completion, the workflow system, and more. |
 | [Packages](../packages/index.md)         | Reference for every library and app package under `ts/packages/**` — the building blocks the agents and shell are composed from.                     |
 | [Agents](../agents/index.md)             | Reference for every application agent under `ts/packages/agents/**`, plus the nine agent patterns they follow.                                       |
-| [Contributing](../contributing/index.md) | How to build the wiki, add and edit pages, how new packages/agents flow in, the doc-autogen pipeline, and the style guide.                           |
+| [Guides](../guides/index.md)             | Task-oriented how-tos for **building on** TypeAgent: authoring your own application agent and embedding the dispatcher in your own host process.     |
+| [Contributing](../contributing/index.md) | How to contribute to the repo: development setup, and how to change the wiki (add pages, packages, agents, the doc-autogen pipeline, style guide).   |
 
 The rest of this Overview section: **[Getting started](./getting-started.md)**
 (build, configure, and run the Shell) and the
