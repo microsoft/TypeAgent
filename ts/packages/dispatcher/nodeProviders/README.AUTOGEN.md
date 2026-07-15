@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=3432c19faeb32251b064c2d12595e95585c191107a3f11fd491a17e3a3c70302 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=9c810579ad4988de628f0a1930b74adb31224cff3d291c7530877c8d7768a1c5 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # dispatcher-node-providers — AI-generated documentation
@@ -12,50 +12,66 @@
 
 ## Overview
 
-The `dispatcher-node-providers` package is a TypeScript library within the TypeAgent monorepo. It provides node implementations for various dispatcher providers, enabling the execution and management of agents in different environments.
+The `dispatcher-node-providers` package is a TypeScript library in the TypeAgent monorepo. It provides node-based implementations for dispatcher providers, enabling the creation, execution, and management of agents in various runtime environments. This package is a core component of the TypeAgent system, facilitating agent execution in both separate processes and dispatcher-managed processes.
 
 ## What it does
 
-This package offers several key functionalities:
+The package focuses on enabling flexible and efficient agent execution by providing the following key functionalities:
 
-- **Agent Providers**: It includes implementations for creating and managing agents, such as the `createNpmAppAgentProvider` function found in [npmAgentProvider.ts](./src/agentProvider/npmAgentProvider.ts). These providers facilitate the execution of agents in different modes, such as separate processes or dispatcher processes.
-- **Storage Providers**: The package includes a file system storage provider, `getFsStorageProvider`, which allows agents to read and write data to the file system securely.
-- **Agent Processes**: It provides mechanisms for handling agent processes, including creating and managing child processes, as seen in [agentProcess.ts](./src/agentProvider/process/agentProcess.ts) and [agentProcessShim.ts](./src/agentProvider/process/agentProcessShim.ts).
+- **Agent Providers**: Implements mechanisms for creating and managing agents. For example, the `createNpmAppAgentProvider` function in [npmAgentProvider.ts](./src/agentProvider/npmAgentProvider.ts) supports NPM-based agents and handles execution modes (`separate` or `dispatcher`).
+- **Agent Processes**: Manages the lifecycle of agent processes, including their creation, communication, and termination. This is handled in files like [agentProcess.ts](./src/agentProvider/process/agentProcess.ts) and [agentProcessShim.ts](./src/agentProvider/process/agentProcessShim.ts).
+- **Storage Providers**: Includes a file system-based storage provider, implemented in [fsStorageProvider.ts](./src/storageProvider/fsStorageProvider.ts), which allows agents to securely read and write data to the file system.
+
+These features make the package a critical part of the TypeAgent ecosystem, enabling agents to operate in diverse environments while maintaining a consistent interface for execution and storage.
 
 ## Setup
 
-To set up the `dispatcher-node-providers` package, you need to configure the following environment variable:
+To use the `dispatcher-node-providers` package, you need to configure the following environment variable:
 
-- `TYPEAGENT_EXECMODE`: This variable determines the execution mode for the agents. It can be set to either `separate` or `dispatcher` depending on the desired execution environment.
+- `TYPEAGENT_EXECMODE`: Specifies the execution mode for agents. It can be set to either `separate` (for separate processes) or `dispatcher` (for dispatcher-managed processes). The appropriate value depends on the desired runtime environment for your agents.
 
-For detailed setup instructions, including how to obtain and configure the environment variable, please refer to the hand-written README.
+For additional details on configuring this variable, refer to the hand-written README.
 
 ## Key Files
 
-The package is structured into several key components:
+The `dispatcher-node-providers` package is organized into several key files and directories, each responsible for specific functionality:
 
-- **Agent Providers**: Located in the `agentProvider` directory, these files handle the creation and management of agents. For example, [npmAgentProvider.ts](./src/agentProvider/npmAgentProvider.ts) includes functions for creating NPM-based agents.
-- **Agent Processes**: The `process` subdirectory within `agentProvider` contains files like [agentProcess.ts](./src/agentProvider/process/agentProcess.ts) and [agentProcessShim.ts](./src/agentProvider/process/agentProcessShim.ts), which manage the lifecycle and communication of agent processes.
-- **Storage Providers**: The [fsStorageProvider.ts](./src/storageProvider/fsStorageProvider.ts) file implements a file system-based storage provider, allowing agents to interact with the file system for data storage.
+### Core Files
 
-### Key Files and Their Responsibilities
+- **[index.ts](./src/index.ts)**: The main entry point of the package. It exports key functions such as `createNpmAppAgentProvider` and `getFsStorageProvider`.
 
-- **[index.ts](./src/index.ts)**: This file serves as the entry point for the package, exporting key functionalities such as `createNpmAppAgentProvider` and `getFsStorageProvider`.
-- **[npmAgentProvider.ts](./src/agentProvider/npmAgentProvider.ts)**: Contains the implementation for creating NPM-based agents, including handling execution modes and patching paths in manifests.
-- **[agentProcess.ts](./src/agentProvider/process/agentProcess.ts)**: Manages the lifecycle of agent processes, including setup, communication, and termination.
-- **[agentProcessShim.ts](./src/agentProvider/process/agentProcessShim.ts)**: Provides a shim for creating and managing agent processes, ensuring compatibility with different environments.
-- **[fsStorageProvider.ts](./src/storageProvider/fsStorageProvider.ts)**: Implements a file system-based storage provider, allowing agents to securely read and write data.
+### Agent Providers
+
+- **[npmAgentProvider.ts](./src/agentProvider/npmAgentProvider.ts)**: Implements the `createNpmAppAgentProvider` function, which is responsible for creating NPM-based agents. This file also defines the `ExecutionMode` type and includes logic for patching paths in agent manifests.
+
+### Agent Processes
+
+- **[agentProcess.ts](./src/agentProvider/process/agentProcess.ts)**: Manages the lifecycle of agent processes, including setup, inter-process communication, and termination. It ensures that agent processes are properly initialized and can communicate with the parent process.
+- **[agentProcessShim.ts](./src/agentProvider/process/agentProcessShim.ts)**: Provides a compatibility layer for creating and managing agent processes. It includes logic for determining the appropriate Node.js executable to use, particularly in environments like Electron.
+
+### Storage Providers
+
+- **[fsStorageProvider.ts](./src/storageProvider/fsStorageProvider.ts)**: Implements a file system-based storage provider. This allows agents to perform operations such as reading, writing, and listing files in a secure and structured manner.
 
 ## How to extend
 
-To extend the `dispatcher-node-providers` package, follow these steps:
+To extend the functionality of the `dispatcher-node-providers` package, follow these steps:
 
-1. **Identify the component to extend**: Determine whether you need to add functionality to agent providers, agent processes, or storage providers.
-2. **Modify or add files**: Based on the component, modify existing files or add new ones. For example, to add a new agent provider, you might create a new file in the `agentProvider` directory.
-3. **Implement the required functionality**: Follow the patterns established in the existing files. For instance, if adding a new agent provider, ensure it implements the necessary interfaces and handles agent creation and management.
-4. **Test your changes**: Write tests to verify the new functionality. Ensure that the tests cover various scenarios and edge cases.
+1. **Understand the existing structure**: Familiarize yourself with the key files and their responsibilities. For example, review [npmAgentProvider.ts](./src/agentProvider/npmAgentProvider.ts) for agent provider logic or [agentProcess.ts](./src/agentProvider/process/agentProcess.ts) for process management.
 
-Start by exploring the existing files such as [npmAgentProvider.ts](./src/agentProvider/npmAgentProvider.ts) and [agentProcess.ts](./src/agentProvider/process/agentProcess.ts) to understand the current implementation patterns.
+2. **Identify the area to extend**: Determine whether you need to add a new agent provider, enhance process management, or implement a new storage provider.
+
+3. **Add or modify files**:
+
+   - To add a new agent provider, create a new file in the `agentProvider` directory and implement the necessary interfaces.
+   - To extend process management, modify or add files in the `process` subdirectory under `agentProvider`.
+   - To create a new storage provider, add a file in the `storageProvider` directory and implement the `StorageProvider` interface.
+
+4. **Follow existing patterns**: Use the existing code as a guide for implementing new functionality. For example, ensure that new agent providers handle execution modes and path patching as seen in [npmAgentProvider.ts](./src/agentProvider/npmAgentProvider.ts).
+
+5. **Test your changes**: Write comprehensive tests to validate your new functionality. Ensure that your tests cover various scenarios, including edge cases.
+
+By following these steps, you can effectively extend the `dispatcher-node-providers` package to meet your specific requirements.
 
 ## Reference
 
@@ -97,6 +113,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `556ab5f7a233a9f2daa1716328e0b13e5130f7e6` on `2026-05-15T10:06:08.874Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter dispatcher-node-providers docs:verify-links` to spot-check._
+_Auto-generated against commit `5c9fc637c2f0a96d75d41a3bc9054d06247d26d8` on `2026-07-15T08:50:41.068Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter dispatcher-node-providers docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
