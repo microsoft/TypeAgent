@@ -680,6 +680,30 @@ stages:
             artifact: copilot-plugin
             displayName: "Download copilot-plugin"
 
+          # Set up internal npm registry (required by org policy).
+          - bash: |
+              echo "registry=$(INSTALL_REGISTRY)" > .npmrc
+              cat .npmrc
+            displayName: "Set npm registry"
+            workingDirectory: $(buildDirectory)
+
+          - task: npmAuthenticate@0
+            displayName: "Authenticate to npm registry"
+            inputs:
+              workingFile: $(buildDirectory)/.npmrc
+
+          - template: include-install-pnpm.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+
+          - script: |
+              pnpm install --frozen-lockfile --strict-peer-dependencies
+            displayName: "Install dependencies"
+            workingDirectory: $(buildDirectory)
+            env:
+              PUPPETEER_SKIP_DOWNLOAD: "true"
+              PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+
           # Ensure WiX Toolset is available.
           - pwsh: |
               $wixCandidates = @(
@@ -715,18 +739,11 @@ stages:
               scriptLocation: inlineScript
               inlineScript: |
                 Set-Location "$(buildDirectory)"
-                # getCert.mjs needs npm dependencies — install just the
-                # script's requirements.
-                npm install -g pnpm
-                pnpm install --frozen-lockfile --strict-peer-dependencies
                 node .\tools\scripts\getCert.mjs pull --verbose
                 if ($LASTEXITCODE -ne 0) {
                   Write-Error "Failed to pull certificate from Key Vault"
                   exit $LASTEXITCODE
                 }
-            env:
-              PUPPETEER_SKIP_DOWNLOAD: "true"
-              PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
 
           # Build the MSI using pre-built artifacts (--skip-download).
           - pwsh: |
