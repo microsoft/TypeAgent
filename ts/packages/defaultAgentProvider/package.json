@@ -22,6 +22,7 @@
     "data"
   ],
   "scripts": {
+    "bench:cs": "npx tsx src/contextSelectorBench/reproduce.mts",
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
@@ -32,7 +33,6 @@
     "test:live:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.test\\.js\"",
     "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\" --testPathIgnorePatterns=\"grammarNfaIntegration[.]spec[.]js\"",
     "test:local:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
-    "bench:cs": "npx tsx src/contextSelectorBench/reproduce.mts",
     "tsc": "tsc -b"
   },
   "dependencies": {
