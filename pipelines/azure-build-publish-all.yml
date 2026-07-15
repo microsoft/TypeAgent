@@ -1,0 +1,852 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Consolidated build & publish pipeline for TypeAgent.
+#
+# Replaces the individual azure-build-publish-agent-server.yml,
+# azure-build-publish-copilot-plugin.yml, azure-build-publish-mcp.yml,
+# azure-build-package-shell.yml, azure-build-package-agent-server-msi.yml,
+# and azure-build-ts.yml pipelines with a single multi-stage pipeline that
+# builds once and fans out to publish each artifact under a unified version.
+#
+# What stays separate (and why):
+#   - azure-smoke-tests.yml          — PR required status check, must stay fast
+#   - azure-build-docker-container.yml — builds inside ACR, orthogonal
+#   - azure-docs-aggregation-signal.yml — documentation only
+#   - component-detection.yml        — security/compliance scan
+#
+# Design doc: codeDocs/TypeAgent/forAgent/projects/inProgress/
+#             2026-07-15_consolidated-build-pipeline/README.md
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    exclude:
+      - "*"
+
+parameters:
+  # ── Publish toggles ──────────────────────────────────────────────
+  - name: publishNpm
+    type: boolean
+    default: true
+    displayName: "Publish @typeagent/* npm packages"
+  - name: publishAgentServer
+    type: boolean
+    default: true
+    displayName: "Publish agent-server Universal packages"
+  - name: publishCopilotPlugin
+    type: boolean
+    default: true
+    displayName: "Publish copilot-plugin Universal package"
+  - name: publishMcp
+    type: boolean
+    default: true
+    displayName: "Publish typeagent-mcp Universal packages"
+  - name: publishShell
+    type: boolean
+    default: true
+    displayName: "Publish shell installers to Azure Blob Storage"
+  - name: publishMsi
+    type: boolean
+    default: true
+    displayName: "Publish signed MSI to feed + Azure Blob Storage"
+
+  # ── Build options ─────────────────────────────────────────────────
+  - name: runTests
+    type: boolean
+    default: true
+    displayName: "Run test gate (test:local + lint + policy) before publish"
+  - name: variant
+    type: string
+    default: external
+    values: [external, full]
+    displayName: "agent-server variant (external = lean, full = bundled CLIs)"
+  - name: profile
+    type: string
+    default: service
+    displayName: "agent-server provider profile"
+  - name: publishOptionalAgents
+    type: boolean
+    default: true
+    displayName: "Publish optional agent bundles alongside agent-server"
+  - name: channel
+    type: string
+    default: test
+    values: [test, lkg]
+    displayName: "Shell / MSI blob channel (manual only; CI runs use 'ci')"
+
+variables:
+  - name: buildDirectory
+    value: $(Build.SourcesDirectory)/ts
+  - name: nodeVersion
+    value: "22"
+  # Unified version — every artifact from this run shares the same version.
+  - name: packageVersion
+    value: 0.0.1-$(Build.BuildId)
+  # Channel: manual runs use the parameter; CI runs use 'ci'.
+  - name: resolvedChannel
+    ${{ if eq(variables['Build.Reason'], 'Manual') }}:
+      value: ${{ parameters.channel }}
+    ${{ if ne(variables['Build.Reason'], 'Manual') }}:
+      value: ci
+  # Azure Artifacts feed coordinates.
+  - name: adoOrgUrl
+    value: https://dev.azure.com/msctoproj
+  - name: adoProject
+    value: AI_Systems
+  - name: adoFeed
+    value: typeagent
+  # Directories.
+  - name: stagingDir
+    value: $(Build.ArtifactStagingDirectory)
+  - name: shell_folder
+    value: $(buildDirectory)/packages/shell
+  # Electron caching.
+  - name: ELECTRON_CACHE_DIR
+    value: $(Pipeline.Workspace)/cache/
+  - name: ELECTRON_CACHE
+    value: $(ELECTRON_CACHE_DIR)electron
+  - name: ELECTRON_BUILDER_CACHE
+    value: $(ELECTRON_CACHE_DIR)electron-builder-cache
+  # Shell platform list for the publish loop.
+  - name: shellPlatforms
+    value: win,linux,mac
+
+# ════════════════════════════════════════════════════════════════════
+#  STAGE 1 — BUILD
+# ════════════════════════════════════════════════════════════════════
+stages:
+  - stage: Build
+    displayName: "Build all artifacts"
+    jobs:
+      # ── Job 1a: Full monorepo build (ubuntu) ─────────────────────
+      # Produces: npm tarballs, copilot-plugin dist (platform-neutral).
+      - job: build_monorepo
+        displayName: "Build monorepo (ubuntu)"
+        pool:
+          vmImage: ubuntu-latest
+        variables:
+          packageDirectory: $(stagingDir)/packages
+          publishedPackageDirectory: $(stagingDir)/packages/published
+        steps:
+          - template: include-prepare-repo.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              nodeVersion: $(nodeVersion)
+              registry: $(INSTALL_REGISTRY)
+              enableCache: false
+
+          - template: include-update-package-version.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              prerelease: ci.$(Build.BuildId)
+
+          - script: |
+              npm run build
+            displayName: "Build (full monorepo)"
+            workingDirectory: $(buildDirectory)
+
+          # Pack @typeagent/* published packages.
+          - script: |
+              pnpm pack --filter @typeagent/* --pack-destination $(publishedPackageDirectory)
+            displayName: "Pack published npm packages"
+            workingDirectory: $(buildDirectory)
+
+          # Pack non-published packages (for reference/debugging).
+          - script: |
+              pnpm pack --filter=\!@typeagent/* --pack-destination $(packageDirectory)
+            displayName: "Pack non-published npm packages"
+            workingDirectory: $(buildDirectory)
+
+          - publish: $(packageDirectory)
+            displayName: "Upload artifact: npm-packages"
+            artifact: npm-packages
+
+          # Stage copilot-plugin dist (platform-neutral; used by plugin
+          # publish and MSI build).
+          - bash: |
+              set -euo pipefail
+              PLUGIN_SRC="$(buildDirectory)/packages/copilot-plugin"
+              STAGE="$(stagingDir)/copilot-plugin"
+              mkdir -p "$STAGE"
+
+              cp -r "$PLUGIN_SRC/dist"        "$STAGE/dist"
+              cp    "$PLUGIN_SRC/hooks.json"  "$STAGE/hooks.json"
+              cp    "$PLUGIN_SRC/.mcp.json"   "$STAGE/.mcp.json"
+              cp    "$PLUGIN_SRC/plugin.json"  "$STAGE/plugin.json"
+              cp -r "$PLUGIN_SRC/agents"      "$STAGE/agents"
+              cp -r "$PLUGIN_SRC/skills"      "$STAGE/skills"
+
+              echo "Staged copilot-plugin artifact:"
+              find "$STAGE" -type f | head -20
+            displayName: "Stage copilot-plugin artifact"
+            workingDirectory: $(buildDirectory)
+
+          - publish: $(stagingDir)/copilot-plugin
+            displayName: "Upload artifact: copilot-plugin"
+            artifact: copilot-plugin
+
+      # ── Job 1b: Platform-specific artifacts (matrix) ──────────────
+      # Produces: agent-server deploy, optional agents, MCP exe per RID.
+      - job: build_platform_artifacts
+        displayName: "Build platform artifacts"
+        strategy:
+          matrix:
+            win32_x64:
+              image: windows-latest
+              platform: win32
+              arch: x64
+              rid: win-x64
+            linux_x64:
+              image: ubuntu-latest
+              platform: linux
+              arch: x64
+              rid: linux-x64
+            osx_x64:
+              image: macos-latest
+              platform: darwin
+              arch: x64
+              rid: osx-x64
+        pool:
+          vmImage: $(image)
+        steps:
+          - template: include-prepare-repo.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              nodeVersion: $(nodeVersion)
+              registry: $(INSTALL_REGISTRY)
+              enableCache: false
+
+          - template: include-update-package-version.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              prerelease: ci.$(Build.BuildId)
+
+          # Build agent-server (superset of copilot-plugin deps, so both
+          # are built by fluid-build's dependency resolution).
+          - script: |
+              pnpm run build agent-server
+            displayName: "Build agent-server (+ deps)"
+            workingDirectory: $(buildDirectory)
+
+          # Also build copilot-plugin (may already be built as an
+          # agent-server dep; this ensures the full plugin is ready).
+          - script: |
+              pnpm run build copilot-plugin
+            displayName: "Build copilot-plugin (+ deps)"
+            workingDirectory: $(buildDirectory)
+
+          # Deploy agent-server for this platform.
+          - bash: |
+              set -euo pipefail
+              EXTRA=""
+              if [ "${{ parameters.variant }}" = "external" ]; then EXTRA="--external-cli"; fi
+              node tools/scripts/deployAgentServer.mjs \
+                --out "$(stagingDir)/agent-server" \
+                --platform "$(platform)" --arch "$(arch)" \
+                --profile "${{ parameters.profile }}" $EXTRA
+            displayName: "Deploy agent-server ($(platform)-$(arch))"
+            workingDirectory: $(buildDirectory)
+
+          - publish: $(stagingDir)/agent-server
+            displayName: "Upload artifact: agent-server-$(platform)-$(arch)"
+            artifact: agent-server-$(platform)-$(arch)
+
+          # Package optional agents.
+          - ${{ if eq(parameters.publishOptionalAgents, true) }}:
+              - bash: |
+                  set -euo pipefail
+                  node tools/scripts/packageOptionalAgents.mjs \
+                    --out "$(stagingDir)/optional-agents" \
+                    --profile "${{ parameters.profile }}" \
+                    --platform "$(platform)" --arch "$(arch)"
+                displayName: "Package optional agents ($(platform)-$(arch))"
+                workingDirectory: $(buildDirectory)
+
+              - publish: $(stagingDir)/optional-agents
+                displayName: "Upload artifact: optional-agents-$(platform)-$(arch)"
+                artifact: optional-agents-$(platform)-$(arch)
+
+          # Build MCP single-file executable (Node SEA).
+          - script: |
+              pnpm --filter @typeagent/copilot-plugin run build:exe
+            displayName: "Build typeagent-mcp exe ($(rid))"
+            workingDirectory: $(buildDirectory)
+
+          - bash: |
+              set -euo pipefail
+              mkdir -p "$(stagingDir)/mcp-exe"
+              src="$(buildDirectory)/packages/copilot-plugin/dist-exe"
+              if [ -f "$src/typeagent-mcp.exe" ]; then
+                cp "$src/typeagent-mcp.exe" "$(stagingDir)/mcp-exe/"
+              else
+                cp "$src/typeagent-mcp" "$(stagingDir)/mcp-exe/"
+              fi
+              ls -la "$(stagingDir)/mcp-exe"
+            displayName: "Stage MCP executable"
+            workingDirectory: $(buildDirectory)
+
+          - publish: $(stagingDir)/mcp-exe
+            displayName: "Upload artifact: mcp-exe-$(rid)"
+            artifact: mcp-exe-$(rid)
+
+      # ── Job 1c: Shell packaging (matrix) ──────────────────────────
+      - job: build_shell
+        displayName: "Build shell installer"
+        strategy:
+          matrix:
+            windows:
+              image: windows-latest
+              shellPlatform: win
+            linux:
+              image: ubuntu-latest
+              shellPlatform: linux
+            mac:
+              image: macos-latest
+              shellPlatform: mac
+        pool:
+          vmImage: $(image)
+        steps:
+          - template: include-prepare-repo.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              nodeVersion: $(nodeVersion)
+              registry: $(INSTALL_REGISTRY)
+
+          - template: include-update-package-version.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              prerelease: $(resolvedChannel).$(Build.BuildNumber)
+
+          - script: |
+              pnpm run build:shell
+            displayName: "Build shell"
+            workingDirectory: $(buildDirectory)
+
+          - task: Cache@2
+            displayName: Cache Electron Builder
+            inputs:
+              key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(buildDirectory)/pnpm-lock.yaml
+              path: $(ELECTRON_CACHE_DIR)
+              restoreKeys: |
+                electron | $(Agent.OS) | $(Agent.OSArchitecture)
+
+          - bash: |
+              pnpm store prune
+              find $(buildDirectory)/packages -maxdepth 2 -type d -name "node_modules" ! -path "*/shell/*" -exec rm -rf {} + 2>/dev/null || true
+              df -h / || true
+            displayName: "Free disk space before packaging"
+            condition: eq(variables['Agent.OS'], 'Linux')
+
+          - script: |
+              pnpm run shell:package
+            displayName: "Package shell"
+            workingDirectory: $(buildDirectory)
+            env:
+              ELECTRON_BUILDER_CHANNEL: $(resolvedChannel)
+
+          # Backward-compat: copy windows x64 channel file to default name.
+          - script: |
+              copy %ELECTRON_BUILDER_CHANNEL%-x64.yml %ELECTRON_BUILDER_CHANNEL%.yml
+            displayName: "Copy windows x64 to default channel file"
+            condition: eq(variables['Agent.OS'], 'Windows_NT')
+            workingDirectory: $(shell_folder)/dist
+            env:
+              ELECTRON_BUILDER_CHANNEL: $(resolvedChannel)
+
+          - publish: $(shell_folder)/dist
+            displayName: "Upload artifact: shell-$(shellPlatform)"
+            artifact: shell-$(shellPlatform)
+
+  # ════════════════════════════════════════════════════════════════════
+  #  STAGE 2 — TEST (optional)
+  # ════════════════════════════════════════════════════════════════════
+  - stage: Test
+    displayName: "Test gate"
+    dependsOn: Build
+    condition: and(succeeded(), eq('${{ parameters.runTests }}', 'true'))
+    jobs:
+      - job: unit_tests
+        displayName: "Unit tests, lint, policy"
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - template: include-prepare-repo.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              nodeVersion: $(nodeVersion)
+              registry: $(INSTALL_REGISTRY)
+              enableCache: false
+
+          - template: include-update-package-version.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              prerelease: ci.$(Build.BuildId)
+
+          - script: |
+              npm run build
+            displayName: "Build"
+            workingDirectory: $(buildDirectory)
+
+          - script: |
+              sudo apt install libsecret-1-0
+            displayName: "Install libsecret-1-0"
+
+          - script: |
+              npm run test:local
+            displayName: "Run Tests (Local)"
+            workingDirectory: $(buildDirectory)
+
+          - script: |
+              Xvfb :99 -screen 0 1600x1200x24 &
+              export DISPLAY=:99
+              npm run test:ui
+            displayName: "UI tests (requires display)"
+            workingDirectory: $(buildDirectory)
+
+          - script: |
+              npm run lint
+            displayName: "Lint"
+            workingDirectory: $(buildDirectory)
+
+          - script: |
+              npm run check:policy
+            displayName: "Check Policy"
+            workingDirectory: $(buildDirectory)
+
+  # ════════════════════════════════════════════════════════════════════
+  #  STAGE 3 — PUBLISH
+  # ════════════════════════════════════════════════════════════════════
+  - stage: Publish
+    displayName: "Publish all artifacts"
+    dependsOn:
+      - Build
+      - Test
+    # Run if Build succeeded and Test either succeeded or was skipped.
+    condition: |
+      and(
+        eq(stageDependencies.Build.result, 'Succeeded'),
+        in(stageDependencies.Test.result, 'Succeeded', 'Skipped')
+      )
+    variables:
+      NpmRcDirectory: $(Build.SourcesDirectory)
+    jobs:
+      # ── Publish npm packages ──────────────────────────────────────
+      - job: publish_npm
+        displayName: "Publish npm packages"
+        condition: eq('${{ parameters.publishNpm }}', 'true')
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            displayName: "Checkout (for .npmrc)"
+            path: typeagent
+
+          - task: UseNode@1
+            displayName: "Setup Node.js"
+            inputs:
+              version: $(nodeVersion)
+              checkLatest: true
+
+          - download: current
+            artifact: npm-packages
+            displayName: "Download npm-packages artifact"
+
+          - bash: |
+              echo "registry=$(PUBLISH_REGISTRY)" > "$(Build.SourcesDirectory)/.npmrc"
+              cat "$(Build.SourcesDirectory)/.npmrc"
+            displayName: "Create .npmrc"
+
+          - task: npmAuthenticate@0
+            displayName: "Authenticate with Azure Artifacts"
+            inputs:
+              workingFile: "$(Build.SourcesDirectory)/.npmrc"
+
+          - script: |
+              for file in $(Pipeline.Workspace)/npm-packages/published/*.tgz; do
+                echo "Publishing file: $file"
+                npm publish --registry=$(PUBLISH_REGISTRY) --tag=latest "$file"
+              done
+            displayName: "Publish packages"
+            workingDirectory: $(Build.SourcesDirectory)
+
+          # Prime INSTALL_REGISTRY so freshly published versions are
+          # immediately available via the upstream pull-through cache.
+          - bash: |
+              set -euo pipefail
+              echo "registry=$(INSTALL_REGISTRY)" > /tmp/prime/.npmrc 2>/dev/null || true
+              mkdir -p /tmp/prime
+              echo "registry=$(INSTALL_REGISTRY)" > /tmp/prime/.npmrc
+              cd /tmp/prime
+              for file in $(Pipeline.Workspace)/npm-packages/published/*.tgz; do
+                name=$(tar -xzOf "$file" package/package.json | jq -r .name)
+                version=$(tar -xzOf "$file" package/package.json | jq -r .version)
+                echo "Priming INSTALL_REGISTRY cache: $name@$version"
+                npm pack --registry=$(INSTALL_REGISTRY) "$name@$version" > /dev/null || true
+              done
+            displayName: "Prime INSTALL_REGISTRY cache"
+
+      # ── Publish agent-server Universal packages ───────────────────
+      - job: publish_agent_server
+        displayName: "Publish agent-server"
+        condition: eq('${{ parameters.publishAgentServer }}', 'true')
+        strategy:
+          matrix:
+            win32_x64:
+              platform: win32
+              arch: x64
+            linux_x64:
+              platform: linux
+              arch: x64
+            osx_x64:
+              platform: darwin
+              arch: x64
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: none
+
+          - download: current
+            artifact: agent-server-$(platform)-$(arch)
+            displayName: "Download agent-server-$(platform)-$(arch)"
+
+          - bash: |
+              set -euo pipefail
+              az extension add --name azure-devops --only-show-errors || true
+              RID="$(platform)-$(arch)"
+              echo "Publishing agent-server.${RID} v$(packageVersion)"
+              az artifacts universal publish \
+                --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project \
+                --feed "$(adoFeed)" \
+                --name "agent-server.${RID}" --version "$(packageVersion)" \
+                --path "$(Pipeline.Workspace)/agent-server-$(platform)-$(arch)" \
+                --description "TypeAgent agent-server (${{ parameters.variant }}, profile=${{ parameters.profile }}) for ${RID}"
+            displayName: "Publish agent-server.$(platform)-$(arch)"
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+          - ${{ if eq(parameters.publishOptionalAgents, true) }}:
+              - download: current
+                artifact: optional-agents-$(platform)-$(arch)
+                displayName: "Download optional-agents-$(platform)-$(arch)"
+
+              - bash: |
+                  set -euo pipefail
+                  az extension add --name azure-devops --only-show-errors || true
+                  RID="$(platform)-$(arch)"
+                  for dir in "$(Pipeline.Workspace)"/optional-agents-$(platform)-$(arch)/*/; do
+                    [ -d "$dir" ] || continue
+                    name="$(basename "$dir")"
+                    echo "Publishing ${name}.${RID} v$(packageVersion)"
+                    az artifacts universal publish \
+                      --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project \
+                      --feed "$(adoFeed)" \
+                      --name "${name}.${RID}" --version "$(packageVersion)" \
+                      --path "$dir" \
+                      --description "TypeAgent optional agent ${name} for ${RID}"
+                  done
+                displayName: "Publish optional agents ($(platform)-$(arch))"
+                env:
+                  AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+      # ── Publish copilot-plugin Universal package ──────────────────
+      - job: publish_copilot_plugin
+        displayName: "Publish copilot-plugin"
+        condition: eq('${{ parameters.publishCopilotPlugin }}', 'true')
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: none
+
+          - download: current
+            artifact: copilot-plugin
+            displayName: "Download copilot-plugin artifact"
+
+          - bash: |
+              set -euo pipefail
+              az extension add --name azure-devops --only-show-errors || true
+              echo "Publishing typeagent-copilot-plugin v$(packageVersion)"
+              az artifacts universal publish \
+                --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project \
+                --feed "$(adoFeed)" \
+                --name "typeagent-copilot-plugin" \
+                --version "$(packageVersion)" \
+                --path "$(Pipeline.Workspace)/copilot-plugin" \
+                --description "TypeAgent Copilot CLI plugin (hooks, MCP server, agents)"
+            displayName: "Publish typeagent-copilot-plugin"
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+          - publish: $(Pipeline.Workspace)/copilot-plugin
+            displayName: "Upload pipeline artifact (for inspection)"
+            artifact: copilot-plugin-published
+
+      # ── Publish MCP exe Universal packages ────────────────────────
+      - job: publish_mcp
+        displayName: "Publish typeagent-mcp"
+        condition: eq('${{ parameters.publishMcp }}', 'true')
+        strategy:
+          matrix:
+            win_x64:
+              rid: win-x64
+            linux_x64:
+              rid: linux-x64
+            osx_x64:
+              rid: osx-x64
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: none
+
+          - download: current
+            artifact: mcp-exe-$(rid)
+            displayName: "Download mcp-exe-$(rid)"
+
+          - bash: |
+              set -euo pipefail
+              az extension add --name azure-devops --only-show-errors || true
+              echo "Publishing typeagent-mcp.$(rid) v$(packageVersion)"
+              az artifacts universal publish \
+                --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project \
+                --feed "$(adoFeed)" \
+                --name "typeagent-mcp.$(rid)" --version "$(packageVersion)" \
+                --path "$(Pipeline.Workspace)/mcp-exe-$(rid)" \
+                --description "TypeAgent MCP server (single-file) for $(rid)"
+            displayName: "Publish typeagent-mcp.$(rid)"
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+      # ── Publish shell installers to Azure Blob Storage ────────────
+      - deployment: publish_shell
+        displayName: "Publish shell to Azure Storage"
+        condition: eq('${{ parameters.publishShell }}', 'true')
+        environment: typeagent-shell-$(resolvedChannel)
+        pool:
+          # AzureFileCopy requires Windows.
+          vmImage: windows-latest
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - ${{ each platform in split(variables.shellPlatforms, ',') }}:
+                    - download: current
+                      artifact: shell-${{ platform }}
+                      displayName: "Download shell-${{ platform }}"
+                      patterns: |
+                        TypeAgent Shell[-_]*
+                        typeagentshell-*
+                        $(resolvedChannel)*.yml
+                      condition: succeeded()
+
+                    - task: AzureFileCopy@6
+                      displayName: "Upload Azure Storage - ${{ platform }}"
+                      inputs:
+                        SourcePath: $(Pipeline.Workspace)\shell-${{ platform }}\**
+                        Destination: AzureBlob
+                        azureSubscription: $(azureSubscription)
+                        storage: $(azureStorageAccountName)
+                        ContainerName: $(azureStorageContainerName)
+                      condition: succeeded()
+
+      # ── Build, sign, and publish MSI ──────────────────────────────
+      # The MSI job must run on Windows (WiX + signtool). It downloads
+      # the agent-server and copilot-plugin artifacts built in Stage 1
+      # instead of rebuilding from source.
+      - job: build_sign_publish_msi
+        displayName: "Build, sign & publish MSI"
+        condition: eq('${{ parameters.publishMsi }}', 'true')
+        pool:
+          vmImage: windows-latest
+        variables:
+          msiRid: win32-x64
+          MSI_BUILD_DIR: $(stagingDir)/msi
+        steps:
+          - checkout: self
+            displayName: "Checkout (for build scripts)"
+            path: typeagent
+
+          - task: UseNode@1
+            displayName: "Setup Node.js"
+            inputs:
+              version: $(nodeVersion)
+              checkLatest: true
+
+          # Download pre-built artifacts from the Build stage.
+          - download: current
+            artifact: agent-server-win32-x64
+            displayName: "Download agent-server-win32-x64"
+
+          - download: current
+            artifact: copilot-plugin
+            displayName: "Download copilot-plugin"
+
+          # Ensure WiX Toolset is available.
+          - pwsh: |
+              $wixCandidates = @(
+                "C:\Program Files (x86)\WiX Toolset v3.14\bin\candle.exe",
+                "C:\Program Files (x86)\WiX Toolset v3.11\bin\candle.exe",
+                "C:\Program Files\WiX Toolset v3.14\bin\candle.exe",
+                "C:\Program Files\WiX Toolset v3.11\bin\candle.exe"
+              )
+              $existing = $wixCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+              if ($existing) {
+                Write-Host "✅ WiX already installed at: $existing"
+                return
+              }
+              $choco = Get-Command choco -ErrorAction SilentlyContinue
+              if (-not $choco) {
+                Write-Error "WiX not found and Chocolatey is unavailable."
+                exit 1
+              }
+              Write-Host "Installing WiX Toolset with Chocolatey..."
+              choco install wixtoolset --version=3.14.1 -y --no-progress
+              if ($LASTEXITCODE -ne 0) { Write-Error "WiX install failed"; exit 1 }
+              $existing = $wixCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+              if (-not $existing) { Write-Error "candle.exe not found after install"; exit 1 }
+              Write-Host "✅ WiX installed at: $existing"
+            displayName: "Ensure WiX Toolset"
+
+          # Pull signing certificate from Key Vault.
+          - task: AzureCLI@2
+            displayName: "Pull dev certificate from Key Vault"
+            inputs:
+              azureSubscription: $(azureSubscription)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                Set-Location "$(buildDirectory)"
+                # getCert.mjs needs npm dependencies — install just the
+                # script's requirements.
+                npm install -g pnpm
+                pnpm install --frozen-lockfile --strict-peer-dependencies
+                node .\tools\scripts\getCert.mjs pull --verbose
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Failed to pull certificate from Key Vault"
+                  exit $LASTEXITCODE
+                }
+              env:
+                PUPPETEER_SKIP_DOWNLOAD: "true"
+                PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+
+          # Build the MSI using pre-built artifacts (--skip-download).
+          - pwsh: |
+              Set-Location "$(buildDirectory)/tools/scripts"
+              $agentDir  = "$(Pipeline.Workspace)/agent-server-win32-x64"
+              $pluginDir = "$(Pipeline.Workspace)/copilot-plugin"
+              Write-Host "Building MSI with:"
+              Write-Host "  - RID:        $(msiRid)"
+              Write-Host "  - Version:    $(packageVersion)"
+              Write-Host "  - Agent dir:  $agentDir"
+              Write-Host "  - Plugin dir: $pluginDir"
+
+              node .\build-msi.mjs `
+                --rid "$(msiRid)" `
+                --skip-download `
+                --agent-dir "$agentDir" `
+                --plugin-dir "$pluginDir" `
+                --version "$(packageVersion)" `
+                --plugin-version "$(packageVersion)" `
+                --output "$(MSI_BUILD_DIR)"
+            displayName: "Build MSI"
+
+          # Sign the MSI.
+          - task: AzureCLI@2
+            displayName: "Sign MSI"
+            inputs:
+              azureSubscription: $(azureSubscription)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                Set-Location "$(buildDirectory)/tools/scripts"
+                $msiPath = Get-ChildItem "$(MSI_BUILD_DIR)" -Filter "*.msi" | Select-Object -First 1
+                if ($null -eq $msiPath) {
+                  Write-Error "No MSI file found in $(MSI_BUILD_DIR)"
+                  exit 1
+                }
+                Write-Host "Signing MSI: $($msiPath.FullName)"
+                node .\sign-msi.mjs "$($msiPath.FullName)"
+
+          # Publish MSI as pipeline artifact.
+          - publish: $(MSI_BUILD_DIR)
+            displayName: "Upload artifact: msi-$(msiRid)"
+            artifact: msi-$(msiRid)
+
+          # Publish MSI to Universal feed.
+          - task: AzureCLI@2
+            displayName: "Publish MSI to Universal feed"
+            inputs:
+              azureSubscription: $(azureSubscription)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                $publishPath = "$(MSI_BUILD_DIR)"
+                $msi = Get-ChildItem $publishPath -Filter "*.msi" | Select-Object -First 1
+                if ($null -eq $msi) {
+                  Write-Error "No MSI found in $publishPath"
+                  exit 1
+                }
+                az extension add --name azure-devops --only-show-errors | Out-Null
+                $packageName = "typeagent-msi.$(msiRid)"
+                Write-Host "Publishing $packageName v$(packageVersion)"
+                az artifacts universal publish `
+                  --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project `
+                  --feed "$(adoFeed)" `
+                  --name "$packageName" --version "$(packageVersion)" `
+                  --path "$publishPath" `
+                  --description "TypeAgent MSI installer for $(msiRid)"
+              env:
+                AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
+      # ── Publish MSI to Azure Blob Storage ─────────────────────────
+      - deployment: publish_msi_blob
+        displayName: "Publish MSI to Azure Storage"
+        dependsOn: build_sign_publish_msi
+        condition: and(succeeded(), eq('${{ parameters.publishMsi }}', 'true'))
+        environment: typeagent-shell-$(resolvedChannel)
+        pool:
+          vmImage: windows-latest
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: msi-win32-x64
+                  displayName: "Download signed MSI artifact"
+
+                - pwsh: |
+                    $src  = "$(Pipeline.Workspace)/msi-win32-x64"
+                    $dest = "$(stagingDir)/msi-publish"
+                    New-Item -ItemType Directory -Force $dest | Out-Null
+
+                    $msi = Get-ChildItem $src -Filter "*.msi" | Select-Object -First 1
+                    if ($null -eq $msi) {
+                      Write-Error "No MSI found in $src"
+                      exit 1
+                    }
+                    Copy-Item $msi.FullName $dest
+
+                    $hash = (Get-FileHash $msi.FullName -Algorithm SHA256).Hash.ToLower()
+                    $meta = [ordered]@{
+                      version = "$(packageVersion)"
+                      file    = $msi.Name
+                      sha256  = $hash
+                    }
+                    $meta | ConvertTo-Json | Set-Content -Path (Join-Path $dest "latest.json") -Encoding utf8
+
+                    Write-Host "Staged for blob publish:"
+                    Get-ChildItem $dest | ForEach-Object { Write-Host "  $($_.Name)" }
+                  displayName: "Stage signed MSI + latest.json"
+
+                - task: AzureFileCopy@6
+                  displayName: "Upload MSI to Azure Storage (msi/$(resolvedChannel))"
+                  inputs:
+                    SourcePath: $(stagingDir)/msi-publish/*
+                    Destination: AzureBlob
+                    azureSubscription: $(azureSubscription)
+                    storage: $(azureStorageAccountName)
+                    ContainerName: $(azureStorageContainerName)
+                    BlobPrefix: msi/$(resolvedChannel)
