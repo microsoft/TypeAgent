@@ -1,0 +1,99 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Composite action: the shared "generate" core used by both docs workflows -
+# docs-refresh.yml (scheduled sweep) and docs-pr-amend.yml (per-PR amender).
+# It sets up the toolchain, builds the docs-autogen CLI, and regenerates the
+# README.AUTOGEN.md companions for packages whose source changed since `since`,
+# authoring prose via GitHub Models.
+#
+# The CALLER is responsible for checking out the repository first and for
+# publishing the result afterwards (open a PR, or commit back to a branch).
+# This action only regenerates + formats the files in the working tree.
+# docs-autogen skips any package whose embedded content hash still matches its
+# inputs, so a re-run regenerates nothing.
+
+name: docs-generate
+description: Regenerate README.AUTOGEN.md companions for changed packages via GitHub Models.
+
+inputs:
+  since:
+    description: >-
+      Git ref/SHA to diff against; only packages whose source changed since it
+      are regenerated. Empty selects docs-autogen's smart default (full sweep).
+    required: false
+    default: ""
+  github-token:
+    description: "Token sent as the GitHub Models bearer credential (needs `models: read`)."
+    required: true
+  model:
+    description: GitHub Models model id used for authoring.
+    required: false
+    default: openai/gpt-4o
+  dry-run:
+    description: When "true", analyse and render only - never write to disk.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+      with:
+        package_json_file: ts/package.json
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: pnpm
+        cache-dependency-path: ts/pnpm-lock.yaml
+
+    - name: Install ts dependencies
+      shell: bash
+      working-directory: ts
+      run: |
+        corepack enable
+        pnpm install --frozen-lockfile
+
+    - name: Build docs-autogen tool
+      shell: bash
+      working-directory: ts
+      # Trailing `...` builds the tool AND its transitive workspace deps.
+      run: pnpm --filter '@typeagent/docs-autogen...' build
+
+    - name: Regenerate changed READMEs (GitHub Models)
+      shell: bash
+      working-directory: ts
+      env:
+        DEBUG: "docs-autogen:*"
+        # aiclient generic OpenAI path -> GitHub Models (no Azure OpenAI, no
+        # federated credential, no stored secret).
+        OPENAI_ENDPOINT: https://models.github.ai/inference/chat/completions
+        OPENAI_MODEL: ${{ inputs.model }}
+        OPENAI_MAX_CONCURRENCY: "1"
+        # Bearer credential for GitHub Models; never expanded into the command.
+        OPENAI_API_KEY: ${{ inputs.github-token }}
+        INPUT_SINCE: ${{ inputs.since }}
+        INPUT_DRY_RUN: ${{ inputs.dry-run }}
+      run: |
+        set -o pipefail
+        # No per-run cap: selection stays change-scoped via --since, and the
+        # content-hash gate drops any selected package whose inputs are
+        # unchanged.
+        ARGS=(--render --llm --max-packages 100000)
+        if [ "$INPUT_DRY_RUN" = "true" ]; then
+          ARGS+=(--dry-run)
+        else
+          ARGS+=(--write)
+        fi
+        if [ -n "$INPUT_SINCE" ]; then
+          ARGS+=(--since "$INPUT_SINCE")
+        fi
+        node tools/docsAutogen/bin/docs-autogen.cjs "${ARGS[@]}" \
+          | tee /tmp/docs-autogen.log
+
+    - name: Format generated docs with prettier
+      if: ${{ inputs.dry-run != 'true' }}
+      shell: bash
+      working-directory: ts
+      run: npx prettier --write 'packages/**/README.AUTOGEN.md'
