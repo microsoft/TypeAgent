@@ -240,13 +240,13 @@ describe("createCopilotDirectChatModel", () => {
         expect(fetchCalls).toBe(0);
     });
 
-    test("returns an error for image content without acquiring an endpoint", async () => {
-        let fetchCalls = 0;
-        (globalThis as any).fetch = async () => {
-            fetchCalls++;
+    test("sends image content through as vision input", async () => {
+        const fetchArgs: Array<{ url: string; init: RequestInit }> = [];
+        (globalThis as any).fetch = async (url: string, init: RequestInit) => {
+            fetchArgs.push({ url, init });
             return jsonResponse(200, CAPI_OK);
         };
-        const { provider, forceCalls } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeEndpoint()]);
         const model = createCopilotDirectChatModel(
             makeSettings(),
             {},
@@ -256,9 +256,10 @@ describe("createCopilotDirectChatModel", () => {
         );
 
         const result = await model.complete(IMAGE_PROMPT);
-        expect(result.success).toBe(false);
-        expect(fetchCalls).toBe(0);
-        expect(forceCalls).toHaveLength(0);
+        expect(result.success).toBe(true);
+        expect(fetchArgs).toHaveLength(1);
+        const body = JSON.parse(fetchArgs[0].init.body as string);
+        expect(body.messages).toEqual(IMAGE_PROMPT);
     });
 
     test("streams direct deltas and reports final usage", async () => {
@@ -348,13 +349,13 @@ describe("createCopilotDirectChatModel", () => {
         expect(result.success).toBe(false);
     });
 
-    test("returns an error for image content when streaming", async () => {
-        let fetchCalls = 0;
-        (globalThis as any).fetch = async () => {
-            fetchCalls++;
+    test("disables include_usage when streaming image content", async () => {
+        const fetchArgs: Array<{ url: string; init: RequestInit }> = [];
+        (globalThis as any).fetch = async (url: string, init: RequestInit) => {
+            fetchArgs.push({ url, init });
             return sseResponse([deltaChunk("x"), "[DONE]"]);
         };
-        const { provider, forceCalls } = makeProvider([makeEndpoint()]);
+        const { provider } = makeProvider([makeEndpoint()]);
         const model = createCopilotDirectChatModel(
             makeSettings(),
             {},
@@ -364,8 +365,12 @@ describe("createCopilotDirectChatModel", () => {
         );
 
         const result = await model.completeStream!(IMAGE_PROMPT);
-        expect(result.success).toBe(false);
-        expect(fetchCalls).toBe(0);
-        expect(forceCalls).toHaveLength(0);
+        expect(result.success).toBe(true);
+        if (!result.success) return;
+        await drain(result.data);
+        const body = JSON.parse(fetchArgs[0].init.body as string);
+        expect(body.messages).toEqual(IMAGE_PROMPT);
+        expect(body.stream).toBe(true);
+        expect(body.stream_options).toEqual({ include_usage: false });
     });
 });

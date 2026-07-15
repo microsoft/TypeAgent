@@ -11,7 +11,8 @@
 // behavior around retries, timeouts and throttling matches the rest of the
 // stack. A single reactive endpoint refresh is attempted on a non-2xx (e.g. an
 // expired credential); on continued failure the request returns an error (no
-// SDK fallback). Image content isn't supported over this transport.
+// SDK fallback). Vision input (image_url content) is passed through natively
+// since CAPI's chat/completions is OpenAI-compatible.
 
 import {
     PromptSection,
@@ -108,8 +109,9 @@ function hasImageContent(messages: PromptSection[]): boolean {
 }
 
 /**
- * Create a Copilot chat model backed by the direct-CAPI transport. Image
- * content isn't supported by this transport and returns an error.
+ * Create a Copilot chat model backed by the direct-CAPI transport. Vision
+ * input (image_url content) is supported; for streaming requests carrying
+ * images, token-usage reporting is disabled (see completeStream).
  */
 export function createCopilotDirectChatModel(
     settings: CopilotApiSettings,
@@ -191,13 +193,6 @@ export function createCopilotDirectChatModel(
                 ? [{ role: "user", content: prompt }]
                 : prompt;
 
-        // Images aren't supported over this transport.
-        if (hasImageContent(messages)) {
-            return error(
-                "Image content is not supported by the Copilot direct transport",
-            );
-        }
-
         const params = getParams(messages);
         const request = buildRequest(params);
         const options = {
@@ -267,8 +262,8 @@ export function createCopilotDirectChatModel(
 
     // Stream translation output as it arrives, mirroring the Azure/OpenAI
     // streaming path (SSE via `readServerEventStream`, with a final usage chunk
-    // from `stream_options.include_usage`). Returns an error for images or when
-    // the direct connection can't be established (after one reactive refresh).
+    // from `stream_options.include_usage`). Returns an error when the direct
+    // connection can't be established (after one reactive refresh).
     async function completeStream(
         prompt: string | PromptSection[],
         usageCallback?: CompleteUsageStatsCallback,
@@ -281,16 +276,16 @@ export function createCopilotDirectChatModel(
                 ? [{ role: "user", content: prompt }]
                 : prompt;
 
-        if (hasImageContent(messages)) {
-            return error(
-                "Image content is not supported by the Copilot direct transport",
-            );
-        }
+        // BUGBUG - image_url content with streaming token usage reporting is
+        // broken on the Azure-backed endpoints (usage chunk never arrives). We
+        // mirror the Azure path (openai.ts) and disable include_usage when the
+        // prompt carries images. Vision input itself streams fine.
+        const includeUsage = !hasImageContent(messages);
 
         const params = {
             ...getParams(messages),
             stream: true,
-            stream_options: { include_usage: true },
+            stream_options: { include_usage: includeUsage },
         };
         const request = buildRequest(params);
         const options = {
