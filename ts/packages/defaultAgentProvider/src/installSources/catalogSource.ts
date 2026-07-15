@@ -175,6 +175,9 @@ export function createCatalogSource(
     return {
         name: config.name,
         kind: "catalog",
+        describe(): string {
+            return config.catalog;
+        },
         async find(
             ref: string,
             onWarn?: SourceWarning,

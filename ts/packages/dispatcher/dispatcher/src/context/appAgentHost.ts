@@ -42,6 +42,21 @@ export type AppAgentHostApplyFns = {
         notify: boolean,
         dropConfig: boolean,
     ) => Promise<void>;
+    // Emit a SINGLE consolidated sibling fan-out system message for a
+    // `replaceProvider` swap's NET effect, so an update reads as one "updated"
+    // line instead of the raw remove-then-add pair. `op` is:
+    //   - "update": a new version replaced the old (report "updated"),
+    //   - "remove": the old version was uninstalled with no replacement
+    //     (report "removed"),
+    //   - undefined: a rollback restored the old version — nothing changed, so
+    //     stay silent.
+    // Only invoked when the replace requested `notify`. Optional so unit tests
+    // that exercise the applicator in isolation need not supply it.
+    notifyReplace?: (
+        op: "update" | "remove" | undefined,
+        oldProvider: AppAgentProvider,
+        newProvider: AppAgentProvider | undefined,
+    ) => void;
 };
 
 /**
@@ -126,8 +141,10 @@ export class AppAgentHostApplicator implements AppAgentHost {
         // or dispatch a command.
         const run = async () => {
             // 1. Teardown leg: unload `old` + drop routing (decrement the shared
-            //    refcount), exactly like a remove.
-            await this.apply.applyRemove(oldProvider, notify, dropConfig);
+            //    refcount), exactly like a remove. Its own sibling notification
+            //    is SUPPRESSED (notify=false): a replace reports its NET effect
+            //    once, below, so an update never surfaces as a bare "removed".
+            await this.apply.applyRemove(oldProvider, false, dropConfig);
             // 2. Let the source fill this host's barrier slot, park (still
             //    holding the command lock), and decide what should be added.
             const newProvider = await resolveReplacement();
@@ -141,7 +158,9 @@ export class AppAgentHostApplicator implements AppAgentHost {
             // 3. Startup leg: add whatever the source returned. The source
             //    decides post-barrier: the NEW version on a committed update, the OLD version on a
             //    cancelled/timed-out update that ROLLS BACK (v1 restored), or
-            //    `undefined` (no add) on a committed uninstall (`old → ∅`).
+            //    `undefined` (no add) on a committed uninstall (`old → ∅`). Its
+            //    own notification is likewise SUPPRESSED; the consolidated one
+            //    below carries the net effect.
             if (newProvider !== undefined) {
                 const newNames = newProvider.getAppAgentNames();
                 if (newNames.length !== 1) {
@@ -149,7 +168,21 @@ export class AppAgentHostApplicator implements AppAgentHost {
                         `AppAgentHost.replaceProvider requires a single-agent new provider; got ${newNames.length} name(s): [${newNames.join(", ")}]`,
                     );
                 }
-                await this.apply.applyAdd(newProvider, notify);
+                await this.apply.applyAdd(newProvider, false);
+            }
+            // Consolidated sibling notification: ONE message for the swap's net
+            // effect. Distinguished by identity of the decided provider:
+            //   - undefined         -> committed uninstall  -> "remove"
+            //   - === oldProvider   -> rollback (v1 restored) -> silent
+            //   - a new provider    -> committed update      -> "update"
+            if (notify) {
+                const op =
+                    newProvider === undefined
+                        ? "remove"
+                        : newProvider === oldProvider
+                          ? undefined
+                          : "update";
+                this.apply.notifyReplace?.(op, oldProvider, newProvider);
             }
         };
         return this.enqueue("replace", run);
