@@ -1,9 +1,19 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# Daily regeneration of package-level README.AUTOGEN.md companion files
-# under ts/packages/**, opened as a pull request by the TypeAgent-Bot
-# GitHub App.
+# Twice-monthly (1st & 15th) regeneration of package-level
+# README.AUTOGEN.md companion files under ts/packages/**, opened as a pull
+# request by the TypeAgent-Bot GitHub App.
+#
+# Per-PR regeneration is now handled inline by docs-pr-amend.yml, which
+# commits the companions for the packages a PR changed straight onto that
+# PR. This scheduled workflow is the backstop for what no single PR covers:
+# fork PRs (which cannot be pushed to inline), inline runs that failed or
+# were skipped, and repo-wide regenerations when the generator or its
+# templates change - that shifts every package's content hash, so the next
+# sweep refreshes them all. Because docs-autogen skips any package whose
+# embedded content hash still matches its inputs, a run only opens a PR when
+# something genuinely drifted.
 #
 # Why this shape (no federated credentials, no stored secrets):
 #
@@ -39,16 +49,16 @@
 #      refuses to open a PR if anything other than those files changed. A PR
 #      is opened only when at least one README.AUTOGEN.md actually changed.
 #
-#   4. Lifecycle. One daily run. A human reviewer merges the PR; if a new
-#      run produces a fresh PR first, the previous open bot PR is closed
-#      (--delete-branch) so only one is ever live.
+#   4. Lifecycle. One run on the 1st and 15th. A human reviewer merges the
+#      PR; if a new run produces a fresh PR first, the previous open bot PR
+#      is closed (--delete-branch) so only one is ever live.
 
-name: docs-generate
+name: docs-refresh
 
 on:
   schedule:
-    # Daily at 08:00 UTC.
-    - cron: "0 8 * * *"
+    # Twice a month: the 1st and 15th at 08:00 UTC.
+    - cron: "0 8 1,15 * *"
   workflow_dispatch:
     inputs:
       dry-run:
@@ -78,16 +88,6 @@ permissions:
   # Reach GitHub Models inference with the built-in GITHUB_TOKEN.
   models: read
 
-env:
-  # aiclient generic OpenAI path -> GitHub Models. OPENAI_API_KEY is the
-  # job's GITHUB_TOKEN, injected per-step (never echoed). See the regen step.
-  OPENAI_ENDPOINT: https://models.github.ai/inference/chat/completions
-  OPENAI_MODEL: ${{ inputs.model || 'openai/gpt-4o' }}
-  # One in-flight completion at a time — orderly pacing for a possibly
-  # large (uncapped) run. The microsoft-tenant GitHub Models limits are
-  # ample, so this is courtesy, not necessity.
-  OPENAI_MAX_CONCURRENCY: "1"
-
 jobs:
   regenerate:
     runs-on: ubuntu-latest
@@ -98,31 +98,6 @@ jobs:
           # Full history so the --since baseline (last README.AUTOGEN.md
           # commit) resolves and the diff against it is complete.
           fetch-depth: 0
-
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          package_json_file: ts/package.json
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: "pnpm"
-          cache-dependency-path: ts/pnpm-lock.yaml
-
-      - name: Install ts dependencies
-        working-directory: ts
-        run: |
-          corepack enable
-          pnpm install --frozen-lockfile
-
-      - name: Build docs-autogen tool
-        working-directory: ts
-        # Trailing `...` builds the named package AND its transitive
-        # workspace dependencies (aiclient -> @typeagent/config, etc.) in
-        # topological order; without it tsc fails on missing workspace-dep
-        # type declarations. Same pattern as build-dotnet.yml.
-        run: pnpm --filter '@typeagent/docs-autogen...' build
 
       # Validate the free-text dispatch inputs that reach a shell before
       # they are used. Strict allowlists prevent shell-metachar injection
@@ -170,43 +145,16 @@ jobs:
             echo "No README.AUTOGEN.md history found — docs-autogen will do a first-run full sweep (bounded by --max-packages)."
           fi
 
-      - name: Regenerate README.AUTOGEN.md files (GitHub Models)
-        id: regen
-        working-directory: ts
-        env:
-          DEBUG: "docs-autogen:*"
-          # OPENAI_API_KEY = the job's GITHUB_TOKEN; aiclient sends it as a
-          # Bearer token to GitHub Models. Never expanded into the command
-          # line, only exported into the process environment.
-          OPENAI_API_KEY: ${{ github.token }}
-          INPUT_SINCE: ${{ steps.baseline.outputs.since }}
-          INPUT_DRY_RUN: ${{ inputs.dry-run }}
-        run: |
-          set -o pipefail
-          # No per-run package cap: pass a bound far above the workspace size
-          # so the tool's cost guard never truncates. Selection stays
-          # change-scoped via --since, so this only matters on the rare run
-          # where a large number of packages genuinely drifted.
-          ARGS=("--render" "--llm" "--max-packages" "100000")
-          if [ "$INPUT_DRY_RUN" = "true" ]; then
-            ARGS+=("--dry-run")
-          else
-            ARGS+=("--write")
-          fi
-          if [ -n "$INPUT_SINCE" ]; then
-            ARGS+=("--since" "$INPUT_SINCE")
-          fi
-          echo "Invoking docs-autogen with ${#ARGS[@]} args (model: $OPENAI_MODEL)"
-          node tools/docsAutogen/bin/docs-autogen.cjs "${ARGS[@]}" \
-            | tee /tmp/docs-autogen.log
-
-      # Re-format freshly written files with the workspace prettier so the
-      # resulting PR passes the repo's `prettier --check .` gate. Skipped on
-      # dry runs (nothing was written).
-      - name: Format generated docs with prettier
-        if: ${{ inputs.dry-run != true }}
-        working-directory: ts
-        run: npx prettier --write 'packages/**/README.AUTOGEN.md'
+      # Regenerate the companions for packages changed since the baseline.
+      # The shared composite installs deps, builds the docs-autogen CLI, runs
+      # it against GitHub Models, and prettier-formats the written files.
+      - name: Regenerate README.AUTOGEN.md files
+        uses: ./.github/actions/docs-generate
+        with:
+          since: ${{ steps.baseline.outputs.since }}
+          github-token: ${{ github.token }}
+          model: ${{ inputs.model || 'openai/gpt-4o' }}
+          dry-run: ${{ inputs.dry-run }}
 
       # Decide whether anything changed. README.md is never touched, so we
       # scope strictly to README.AUTOGEN.md. A clean tree => no PR.
@@ -275,7 +223,7 @@ jobs:
 
           git commit -m "docs: regenerate package README.AUTOGEN.md files ($(date +%Y-%m-%d))
 
-          Automated by the docs-generate workflow. AI body authored via
+          Automated by the docs-refresh workflow. AI body authored via
           GitHub Models; deterministic Reference computed from source.
 
           ${{ steps.detect.outputs.changed_files }} file(s) updated.
