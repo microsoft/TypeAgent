@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=e70a34de09e04d0701e2a11f057e8107bf406bb4ecff169a7fb214eb2f057f33 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=60f174f16aa21f40b499c8a449ff4c108eb0439902de42411ab79f363897349f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # onboarding-agent — AI-generated documentation
@@ -12,13 +12,13 @@
 
 ## Overview
 
-The `onboarding-agent` is a TypeAgent application agent that automates the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each managed by a sub-agent. This agent is particularly effective when used with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
+The `onboarding-agent` is a TypeAgent application agent designed to automate the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each managed by a sub-agent. This agent is particularly effective when used with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
 
 ## What it does
 
 The `onboarding-agent` provides a structured, multi-phase approach to integrating new applications or APIs into the TypeAgent ecosystem. It supports the following actions:
 
-- **`startOnboarding`**: Begins the onboarding process for a new integration by specifying the integration name and optional details such as a description or API type.
+- **`startOnboarding`**: Initiates the onboarding process for a new integration by specifying the integration name and optional details such as a description or API type.
 - **`resumeOnboarding`**: Resumes an in-progress onboarding process, optionally starting from a specific phase such as discovery, schema generation, or testing.
 - **`getOnboardingStatus`**: Retrieves the current status of an ongoing integration, including the current phase and progress.
 - **`listIntegrations`**: Lists all integrations, optionally filtered by their status (e.g., in-progress or complete).
@@ -100,8 +100,8 @@ By following these steps, you can enhance the `onboarding-agent` to support addi
 ### Entry points
 
 - `./agent/manifest` → [./src/onboardingManifest.json](./src/onboardingManifest.json)
-- `./agent/handlers` → `./dist/onboardingActionHandler.js` _(not found on disk)_
-- `./uiCapture` → `./dist/uiCapture/index.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/onboardingActionHandler.js](./dist/onboardingActionHandler.js)
+- `./uiCapture` → [./dist/uiCapture/index.js](./dist/uiCapture/index.js)
 
 ### Dependencies
 
@@ -164,6 +164,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/onboa
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

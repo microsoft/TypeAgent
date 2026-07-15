@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=30e0b89af6df1186cf8dfba60b3ead1927a967bbe00edf43f23e12854fb3c94c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2607aa7ed6622243879a6f81e6889443673c8ac62a26cc49cd85e70c98c889d3 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a TypeScript library that serves as the central hub for processing user requests and coordinating interactions between various application agents in the TypeAgent ecosystem. It enables natural language interfaces by leveraging large language models (LLMs) to translate user inputs into structured actions. The Dispatcher is designed to be extensible and scalable, making it a critical component for building personal agents that can be integrated into different front ends, such as the TypeAgent Shell and CLI.
+The TypeAgent Dispatcher is a TypeScript library that acts as the central hub for processing user requests and coordinating interactions between various application agents in the TypeAgent ecosystem. It enables natural language interfaces by leveraging large language models (LLMs) to translate user inputs into structured actions. The Dispatcher is designed to be extensible and scalable, making it a critical component for building personal agents that can be integrated into different front ends, such as the TypeAgent Shell and CLI.
 
 ## What it does
 
-The Dispatcher is responsible for interpreting user inputs, which can be either natural language requests or system commands, and converting them into structured actions. These actions are defined by schemas provided by application agents. The Dispatcher also manages dynamic switching between agents to handle diverse tasks, ensuring a cohesive user experience.
+The Dispatcher interprets user inputs, which can be either natural language requests or system commands, and converts them into structured actions. These actions are defined by schemas provided by application agents. The Dispatcher also dynamically switches between agents to handle diverse tasks, ensuring a unified user experience.
 
 ### Natural Language Requests
 
@@ -236,6 +236,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `5c9fc637c2f0a96d75d41a3bc9054d06247d26d8` on `2026-07-15T08:50:41.068Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

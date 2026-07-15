@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4779f737a82cf603fcfe9ffd587ae28a9e7ba8358f5cdadef9ab4e11cf22e448 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=769d2520af91734965d6d3986ed621db4f678346610637daad26defd4e3327d6 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-ui — AI-generated documentation
@@ -12,20 +12,20 @@
 
 ## Overview
 
-The `chat-ui` package provides a shared, framework-free chat user interface for TypeAgent applications. It is designed to be used across multiple platforms, including the VS Code shell extension, the browser extension chat panel, and the Visual Studio extension webview. The package supports user and agent interactions, streaming updates, chat history management, command completions, feedback collection, and connection status indicators. Its platform-agnostic design ensures consistent functionality and appearance across different environments.
+The `chat-ui` package provides a shared, framework-free chat user interface for TypeAgent applications. It is designed to be used across multiple platforms, including the VS Code shell extension, the browser extension chat panel, and the Visual Studio extension webview. The package enables consistent rendering and interaction for chat interfaces, supporting features like user and agent messages, streaming updates, chat history replay, command completions, feedback collection, and connection status indicators.
 
 ## What it does
 
-The `chat-ui` package offers the following key features:
+The `chat-ui` package offers a set of components and utilities to build and manage chat interfaces. Key features include:
 
-- **ChatPanel**: The core component for rendering the chat interface. It supports:
+- **ChatPanel**: The primary component for rendering the chat interface. It supports:
 
-  - Adding user and agent messages with `addAgentMessage`.
-  - Updating display metadata using `setDisplayInfo`.
+  - Adding user and agent messages using `addAgentMessage`.
+  - Updating display metadata with `setDisplayInfo`.
   - Replaying historical chat entries via `replayHistory`.
   - Streaming updates for dynamic content display.
 
-- **FeedbackWidget**: A component for collecting user feedback on chat interactions. It supports thumbs-up/thumbs-down ratings, comments, and contextual information.
+- **FeedbackWidget**: A component for collecting user feedback on chat interactions. It supports thumbs-up/thumbs-down ratings, comments, and contextual feedback.
 
 - **PartialCompletion**: Integrates with the `@typeagent/completion-ui` package to handle command completions, including input updates, acceptance, and dismissal.
 
@@ -33,9 +33,9 @@ The `chat-ui` package offers the following key features:
 
 - **PlatformAdapter**: Abstracts platform-specific behaviors, such as handling link clicks and settings, to ensure compatibility across different environments.
 
-- **Shared Styles**: Includes a CSS file (`styles/chat.css`) to ensure a consistent appearance for the chat UI across all host applications.
+- **Shared Styles**: A CSS file (`styles/chat.css`) ensures a consistent appearance for the chat UI across all host applications.
 
-The package is utilized by several TypeAgent components, such as the VS Code shell, the browser extension, and the Visual Studio extension webview.
+The package is used by several TypeAgent components, including the VS Code shell, the browser extension, and the Visual Studio extension webview.
 
 ## Setup
 
@@ -119,6 +119,6 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ---
 
-_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

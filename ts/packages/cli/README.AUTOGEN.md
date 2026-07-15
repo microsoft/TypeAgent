@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=379153755e64cc3874d3d2391debc2c5b4a3ec03c67b484349627b511e4b1ee5 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=dc46815195a0847d417c9138be18f82ced8524cfdb8d2666c95f57fccb854cf4 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-cli — AI-generated documentation
@@ -12,46 +12,62 @@
 
 ## Overview
 
-The `agent-cli` package provides a command-line interface (CLI) for interacting with the TypeAgent system. It enables users to connect to the TypeAgent Dispatcher, send requests, and manage conversations with agents. The CLI supports various subcommands for different functionalities, including connecting to the dispatcher, running commands non-interactively, and replaying chat histories for testing purposes.
+The `agent-cli` package is a command-line interface (CLI) for interacting with the TypeAgent system. It serves as a front-end to the TypeAgent Dispatcher, enabling users to send requests, manage conversations, and perform various operations with agents. The CLI supports multiple subcommands, including interactive and non-interactive modes, as well as tools for testing and managing data.
 
 ## What it does
 
-The `agent-cli` package offers several subcommands to interact with the TypeAgent system. The primary subcommand is `connect`, which is the default when no subcommand is specified. This command allows users to interact with the TypeAgent Dispatcher in real-time, sending requests and receiving responses. Other subcommands include:
+The `agent-cli` package provides several subcommands to interact with the TypeAgent system:
 
-- **`run`**: Execute dispatcher commands non-interactively. This includes sending requests, translating them, or generating explanations.
-- **`replay`**: Replay chat histories for regression testing or generating test files.
-- **`conversations`**: Manage conversations on the agent server, including creating, deleting, listing, and renaming conversations.
-- **`data`**: Manage explanation test data, such as adding new data or comparing differences between datasets.
+- **`connect`**: The default subcommand, used for real-time interaction with the TypeAgent Dispatcher. Users can send requests, receive responses, and manage conversations interactively.
+- **`run`**: Executes dispatcher commands non-interactively. This includes:
+  - `request`: Sends a request to the dispatcher without confirmation.
+  - `translate`: Translates a user request into an action.
+  - `explain`: Generates an explanation for a specific request-to-action mapping.
+- **`replay`**: Replays chat histories for regression testing or generating test files. Supports options for translation-only mode and test file generation.
+- **`conversations`**: Manages conversations on the agent server. Subcommands include:
+  - `create`: Creates a new conversation.
+  - `delete`: Deletes an existing conversation.
+  - `list`: Lists all conversations.
+  - `rename`: Renames a conversation.
+- **`data`**: Manages explanation test data. Subcommands include:
+  - `add`: Adds new data to the explanation test dataset.
+  - `diff`: Compares differences between datasets.
 
-These commands provide a comprehensive interface for interacting with the TypeAgent system, enabling users to perform actions, translate requests, and manage conversations effectively.
+These commands provide a comprehensive interface for interacting with the TypeAgent system, enabling users to perform actions, manage conversations, and test functionalities effectively.
 
 ## Setup
 
 To set up and use the `agent-cli` package, follow these steps:
 
-1. **Build the workspace**: Ensure the workspace root (repo `ts` directory) is set up and built. Run `pnpm setup` to create the global bin for `pnpm` if not already done.
+1. **Build the workspace**:
+
+   - Navigate to the workspace root (repo `ts` directory) and run `pnpm setup` to initialize the environment.
+   - Build the project using the appropriate commands in the workspace root.
+
 2. **Run the CLI**:
+
    - From the workspace root, use `pnpm run cli` or `pnpm run cli:dev` to start the CLI.
    - Alternatively, navigate to the `agent-cli` package directory and run the CLI directly:
      - On Linux: `./bin/run.js` (or `./bin/dev.js` for development).
      - On Windows: `.\bin\run` (or `.\bin\dev` for development).
+
 3. **Optional global linking**:
    - Run `pnpm link --global` in the package directory to link the CLI globally.
    - Use `agent-cli` (or `agent-cli-dev` for the development version) to invoke the CLI globally.
    - To unlink, run `pnpm uninstall --global agent-cli`.
 
-For more details on setup and usage, refer to the hand-written README.
+For additional details, refer to the hand-written README.
 
 ## Key Files
 
-The `agent-cli` package is organized into several key files and directories, each responsible for specific functionalities:
+The `agent-cli` package is organized into several key files and directories:
 
-- **`src/commands/`**: Contains the implementation of CLI subcommands.
+- **`src/commands/`**: Contains the implementation of all CLI subcommands.
 
-  - **`connect.ts`**: Implements the `connect` subcommand, which allows users to interact with the TypeAgent Dispatcher in real-time.
-  - **`run/index.ts`**: Handles the `run` subcommand for executing dispatcher commands non-interactively.
-  - **`replay.ts`**: Manages the `replay` subcommand for replaying chat histories.
-  - **`conversations/`**: Includes commands for managing conversations:
+  - **`connect.ts`**: Implements the `connect` subcommand for real-time interaction with the TypeAgent Dispatcher.
+  - **`run/index.ts`**: Handles the `run` subcommand for non-interactive dispatcher commands.
+  - **`replay.ts`**: Implements the `replay` subcommand for replaying chat histories.
+  - **`conversations/`**: Contains commands for managing conversations:
     - `create.ts`: Create a new conversation.
     - `delete.ts`: Delete an existing conversation.
     - `list.ts`: List all conversations.
@@ -60,9 +76,9 @@ The `agent-cli` package is organized into several key files and directories, eac
     - `add.ts`: Add new data to the explanation test dataset.
     - `diff.ts`: Compare differences between datasets.
 
-- **Dependencies**: The package relies on several internal dependencies from the TypeAgent monorepo, such as:
-  - `@typeagent/action-schema`, `@typeagent/agent-sdk`, `@typeagent/agent-server-client`, and others for core functionality.
-  - External libraries like `@oclif/core` for CLI scaffolding and `chalk` for terminal output formatting.
+- **Dependencies**:
+  - Internal dependencies include `@typeagent/action-schema`, `@typeagent/agent-sdk`, `@typeagent/agent-server-client`, and others for core functionality.
+  - External dependencies include `@oclif/core` for CLI scaffolding, `chalk` for terminal output formatting, and `dotenv` for environment variable management.
 
 ## How to extend
 
@@ -71,7 +87,7 @@ To extend the `agent-cli` package, follow these steps:
 1. **Identify the command to extend or create**:
 
    - Explore the `src/commands/` directory to locate existing commands.
-   - If creating a new command, decide on its purpose and structure.
+   - If creating a new command, determine its purpose and structure.
 
 2. **Create a new command**:
 
@@ -93,8 +109,6 @@ To extend the `agent-cli` package, follow these steps:
    - Document the new command in the hand-written README, including usage examples and available flags.
 
 For example, to add a command for exporting conversation logs, you might create a file `src/commands/conversations/export.ts` and implement logic to fetch and save logs from the agent server.
-
-By following these steps, you can extend the `agent-cli` package to support additional functionalities and improve its utility.
 
 ## Reference
 
@@ -131,6 +145,6 @@ External: `@oclif/core`, `@oclif/plugin-help`, `chalk`, `debug`, `dotenv`, `html
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
+_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

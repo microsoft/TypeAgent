@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=abe08dc25887cf6e97e9ba932ed8fe636200fe6ed1ae075170307d8caa3d126e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c8cbd1b78acc3acf37d057a067eb9f385993aa21bee56a94c57d03fdd9af22a7 -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # ipconfig-agent — AI-generated documentation
@@ -12,18 +12,18 @@
 
 ## Overview
 
-The `ipconfig-agent` is a TypeAgent application agent that provides a conversational interface to the Windows `ipconfig` command-line tool. It allows users to perform network configuration tasks such as managing IP addresses, DNS settings, and DHCP configurations using natural language commands. This agent simplifies the process of interacting with `ipconfig` by abstracting its command-line syntax into user-friendly actions.
+The `ipconfig-agent` is a TypeAgent application agent designed to provide a conversational interface to the Windows `ipconfig` command-line tool. It enables users to perform various network configuration tasks, such as managing IP addresses, DNS settings, and DHCP configurations, through natural language commands. By abstracting the complexities of the `ipconfig` command-line syntax, this agent simplifies network management for users.
 
 ## What it does
 
-The `ipconfig-agent` supports a wide range of actions that can be grouped into the following categories:
+The `ipconfig-agent` supports a comprehensive set of actions that can be grouped into the following categories:
 
 ### Help and Information Display
 
-- **`displayHelpMessage`**: Provides the help message for the `ipconfig` command.
-- **`displayFullConfigurationInformation`**: Displays detailed network configuration information, including IP addresses, DNS settings, and adapter details.
-- **`displayDNSResolverCacheContents`**: Shows the current contents of the DNS resolver cache.
-- **`displayDHCPClassIDs`** and **`displayIPv6DHCPClassIDs`**: Display the DHCP class IDs for IPv4 and IPv6 adapters, respectively.
+- **`displayHelpMessage`**: Displays the help message for the `ipconfig` command, providing an overview of its capabilities.
+- **`displayFullConfigurationInformation`**: Shows detailed network configuration information, including IP addresses, DNS settings, and adapter details.
+- **`displayDNSResolverCacheContents`**: Displays the current contents of the DNS resolver cache.
+- **`displayDHCPClassIDs`** and **`displayIPv6DHCPClassIDs`**: Show the DHCP class IDs for IPv4 and IPv6 adapters, respectively.
 
 ### IP Address Management
 
@@ -32,11 +32,11 @@ The `ipconfig-agent` supports a wide range of actions that can be grouped into t
 
 ### DNS and DHCP Management
 
-- **`purgeDNSResolverCache`**: Clears the DNS resolver cache.
-- **`refreshDHCPLeasesAndReRegisterDNSNames`**: Refreshes all DHCP leases and re-registers DNS names.
-- **`modifyDHCPClassID`** and **`modifyIPv6DHCPClassID`**: Modify the DHCP class ID for IPv4 and IPv6 adapters, respectively.
+- **`purgeDNSResolverCache`**: Clears the DNS resolver cache to resolve potential DNS-related issues.
+- **`refreshDHCPLeasesAndReRegisterDNSNames`**: Refreshes all DHCP leases and re-registers DNS names to ensure up-to-date network configurations.
+- **`modifyDHCPClassID`** and **`modifyIPv6DHCPClassID`**: Modify the DHCP class ID for IPv4 and IPv6 adapters, respectively, allowing for advanced network configuration.
 
-These actions enable users to manage their network settings effectively, whether for troubleshooting, updating configurations, or managing DNS and DHCP settings.
+These actions enable users to perform a wide range of network management tasks, from troubleshooting connectivity issues to updating configurations and managing DNS and DHCP settings.
 
 ## Setup
 
@@ -48,15 +48,15 @@ The `ipconfig-agent` requires minimal setup. Follow these steps to get started:
    pnpm install
    ```
 
-No additional environment variables, API keys, or external accounts are required.
+No additional environment variables, API keys, or external accounts are required for this package.
 
 ## Key Files
 
-The functionality of the `ipconfig-agent` is implemented across several key files:
+The `ipconfig-agent` is implemented across several key files, each serving a specific purpose:
 
 - **[ipconfigActionHandler.ts](./src/ipconfigActionHandler.ts)**:
 
-  - Contains the core logic for handling actions.
+  - Implements the core logic for handling actions.
   - The `runCli` function executes the `ipconfig` command with the appropriate arguments, while the `buildArgs` function constructs the command-line arguments based on the action and its parameters.
 
 - **[ipconfigManifest.json](./src/ipconfigManifest.json)**:
@@ -74,9 +74,11 @@ The functionality of the `ipconfig-agent` is implemented across several key file
 - **[tsconfig.json](./src/tsconfig.json)**:
   - Configures the TypeScript compiler for the project, including paths for source and output files.
 
+These files collectively define the agent's behavior, from parsing user input to executing the corresponding `ipconfig` commands.
+
 ## How to extend
 
-To add new functionality to the `ipconfig-agent`, follow these steps:
+To extend the `ipconfig-agent` with new functionality, follow these steps:
 
 1. **Define a new action**:
 
@@ -110,7 +112,7 @@ By following these steps, you can extend the `ipconfig-agent` to support additio
 ### Entry points
 
 - `./agent/manifest` → [./src/ipconfigManifest.json](./src/ipconfigManifest.json)
-- `./agent/handlers` → `./dist/ipconfigActionHandler.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/ipconfigActionHandler.js](./dist/ipconfigActionHandler.js)
 
 ### Dependencies
 
@@ -159,6 +161,6 @@ _13 actions implemented by this agent, parsed deterministically from `./src/ipco
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter ipconfig-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter ipconfig-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
