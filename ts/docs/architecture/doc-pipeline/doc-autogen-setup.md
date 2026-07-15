@@ -121,8 +121,7 @@ reads its endpoint + key from `ts/config.local.yaml` (loaded by
 [`@typeagent/config`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/config/README.md)).
 
 For CI, this workflow piggy-backs on the **existing federated
-credential** that `smoke-tests.yml` and `build-docker-container.yml`
-already use. The auth chain is:
+credential** that `smoke-tests.yml` already uses. The auth chain is:
 
 > GitHub OIDC token → existing Entra App registration → Key Vault
 > `build-pipeline-kv` → consolidated `typeagent-config` secret →
@@ -212,9 +211,9 @@ variables → Actions** and add the following entries.
 ### Secrets (Repository **secrets** tab or the `development-fork` **environment**)
 
 The `docs-generate` job is bound to the `development-fork` GitHub
-environment (the same environment used by `smoke-tests.yml` and
-`build-docker-container.yml`). The three `AZUREAPPSERVICE_*` secrets
-listed below are **environment-scoped** to `development-fork` —
+environment (the same environment used by `smoke-tests.yml`). The
+three `AZUREAPPSERVICE_*` secrets listed below are
+**environment-scoped** to `development-fork` —
 that's what scopes the Entra federated-credential subject claim to
 `repo:<org>/<repo>:environment:development-fork`, matching the
 subject the build-pipeline App registration is already configured to
@@ -455,8 +454,8 @@ Disable workflow**. To remove it permanently:
 2. Uninstall the docs-bot GitHub App from the repository.
 3. Remove the `DOCS_BOT_APP_ID` variable and the
    `DOCS_BOT_APP_PRIVATE_KEY` secret. The `AZUREAPPSERVICE_*`
-   secrets are shared with `smoke-tests.yml` /
-   `build-docker-container.yml` — **do not delete them**.
+   secrets are shared with `smoke-tests.yml` — **do not delete
+   them**.
 4. (Optional) Delete the `docs-bot/last-run` tag: `git push origin
 :refs/tags/docs-bot/last-run`.
 

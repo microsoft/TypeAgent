@@ -1,0 +1,96 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Build and push the TypeAgent Docker image to Azure Container Registry
+# (typeagentContainerRegistry), tagged :latest. Pushing :latest is what the
+# 'typeagent' Azure Web App watches for continuous deployment, so this pipeline
+# is the "Build and deploy Node.js app to Azure Web App" step.
+#
+# Azure DevOps port of .github/workflows/build-docker-container.yml. The image
+# build runs entirely inside ACR via `az acr build`: the agent only uploads the
+# ts/ build context (Dockerfile + sources) and ACR's build agents run the
+# multi-stage build (pnpm install + build + pnpm deploy) — see ts/Dockerfile.
+#
+# Differences from the GitHub Actions version, and why:
+#   * Credentials moved out of GitHub. The GitHub job authenticated with
+#     azure/login (OIDC) using the AZUREAPPSERVICE_CLIENTID / TENANTID /
+#     SUBSCRIPTIONID repo secrets. Those secrets no longer exist in GitHub;
+#     Azure auth is now an Azure Resource Manager service connection (Workload
+#     Identity Federation) referenced by $(azureSubscription). The AzureCLI@2
+#     task signs in through it with no stored secret to rotate.
+#   * Node / pnpm setup and docker/setup-buildx-action are dropped. `az acr
+#     build` performs the whole image build inside ACR from ts/Dockerfile, so
+#     the agent never runs pnpm, Node, or a local Docker build — those GitHub
+#     steps contributed nothing to the actual build.
+#   * dorny/paths-filter is replaced by the trigger `paths` filter below (build
+#     only when ts/** or this pipeline changes), matching that filter's intent.
+#   * "Setup Git LF" is dropped because .gitattributes already pins `* text
+#     eol=lf`, so checkout produces LF regardless of core.autocrlf.
+#
+# Prerequisites:
+#   * Azure Resource Manager service connection (Workload Identity Federation),
+#     referenced by the $(azureSubscription) pipeline variable. Its backing
+#     service principal must have push access to the target registry — the
+#     'AcrPush' role (or 'Contributor') on the 'typeagentContainerRegistry'
+#     Azure Container Registry — and the service connection must target the
+#     subscription that hosts the registry. Authorize the pipeline to use the
+#     connection on first run.
+#   * Pipeline variable (define in the pipeline UI or a linked variable group):
+#       - azureSubscription   name of the ARM service connection above.
+#     Optional overrides are defaulted below (containerRegistry / imageName /
+#     imageTag).
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - ts/**
+      - pipelines/azure-build-docker-container.yml
+
+# Image builds target main only; do not run on pull requests.
+pr:
+  branches:
+    exclude:
+      - "*"
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - name: buildDirectory
+    value: $(Build.SourcesDirectory)/ts
+  # Target Azure Container Registry (name only, no .azurecr.io suffix).
+  - name: containerRegistry
+    value: typeagentContainerRegistry
+  - name: imageName
+    value: typeagent
+  - name: imageTag
+    value: latest
+
+jobs:
+  - job: build_docker_container
+    displayName: Build & push TypeAgent container image
+    steps:
+      - checkout: self
+        displayName: Checkout TypeAgent repository
+
+      # Federated (secret-free) login via the ARM service connection, then hand
+      # the build off to ACR. `az acr build` uploads $(buildDirectory) as the
+      # build context, runs ts/Dockerfile on ACR's build agents, and pushes the
+      # result as $(containerRegistry).azurecr.io/$(imageName):$(imageTag).
+      - task: AzureCLI@2
+        displayName: Build image in ACR (az acr build)
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            set -euo pipefail
+            az account show --query "{subscription:name, id:id}" -o table
+            az acr build \
+              --registry "$(containerRegistry)" \
+              --image "$(imageName):$(imageTag)" \
+              --file "$(buildDirectory)/Dockerfile" \
+              "$(buildDirectory)"
