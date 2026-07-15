@@ -30,7 +30,10 @@ test.describe("Shell startup/shutdown", () => {
             // against shutdown-hang regressions (e.g. in-flight work blocking
             // the dispatcher's shutdown queue-drain). exitAndAwaitCleanShutdown
             // throws \u2014 failing this test \u2014 if the process does not exit in time.
-            const elapsedMs = await exitAndAwaitCleanShutdown(mainWindow, 30000);
+            const elapsedMs = await exitAndAwaitCleanShutdown(
+                mainWindow,
+                30000,
+            );
             console.log(`Shell shut down cleanly in ${elapsedMs}ms`);
         },
     );

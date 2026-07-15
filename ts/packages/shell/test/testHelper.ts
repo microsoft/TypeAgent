@@ -212,9 +212,7 @@ export async function exitAndAwaitCleanShutdown(
     const instanceName = process.env["INSTANCE_NAME"]!;
     const existing = runningApplications.get(instanceName);
     if (existing === undefined) {
-        throw new Error(
-            `No running instance '${instanceName}' to shut down.`,
-        );
+        throw new Error(`No running instance '${instanceName}' to shut down.`);
     }
     const proc = existing.process();
     const start = Date.now();
