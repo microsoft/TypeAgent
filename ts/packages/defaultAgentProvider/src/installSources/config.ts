@@ -388,4 +388,8 @@ export interface InstallSource {
      * throws the fetch error so the command can fail rather than guess from stale
      * data. Cacheless sources (path, catalog) omit this. */
     refresh?(onWarn?: SourceWarning): Promise<void>;
+    /** One-line summary of this source's config for `@package source list`
+     * (e.g. a feed's registry URL, a path's base dir). Each source formats
+     * its own config. */
+    describe(): string;
 }

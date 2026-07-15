@@ -30,29 +30,25 @@ state, and what output it produces:
 | `view-ui`                | Rich interactive web-view UI             | `turtle`, `montage`, `markdown` |
 | `command-handler`        | Simple settings-style direct dispatch    | `settings`, `test`              |
 
-## Anatomy of an agent
-
-Each agent typically follows this layout:
-
-```
-packages/agents/<name>/src/
-  <name>Manifest.json    # metadata, schema pointers, emoji
-  <name>Schema.ts        # typed action/activity definitions
-  <name>Schema.agr       # grammar rules (NL → structured actions)
-  <name>ActionHandler.ts # implements instantiate(): AppAgent
-```
-
-The dispatcher calls `executeAction(action, context)` with already-validated,
-typed actions — agents never parse natural language directly.
-
 ## Adding an agent
 
-After scaffolding a new agent (often via the
-[`onboarding`](../architecture/agents/agent-patterns.md) agent), regenerate the
-navigation:
+Building a new application agent? Start with
+[Build an agent](../guides/build-an-agent/index.md) - the canonical guide for
+picking a pattern, scaffolding (often via the `onboarding` agent), defining
+actions and grammar, and distributing your agent. The
+[Echo tutorial](../guides/build-an-agent/tutorial-echo.md) is a concrete
+standalone-package walkthrough if you'd rather start with working code.
+
+An agent does not need to live in this repo. Standalone agents in their own
+packages can be surfaced via `@package install` from a local path, catalog,
+or feed - see [Agent install sources](../architecture/lifecycle/agent-sources.md).
+
+If the agent **does** live in this repo under `ts/packages/agents/**`, its
+README shows up in the navigation above once you regenerate the wiki:
 
 ```bash
 node ts/docs/scripts/build-wiki.mjs
 ```
 
-See [Add an agent](../contributing/add-an-agent.md) for the full checklist.
+See [Add an agent](../contributing/add-an-agent.md) for the full
+wiki-registration checklist.
