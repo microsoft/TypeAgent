@@ -25,6 +25,7 @@ permissions:
 env:
   ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
+  NODE_OPTIONS: --max_old_space_size=8192
 
 jobs:
   build_package_shell:
@@ -99,4 +100,3 @@ jobs:
       #     name: typeagent-shell-${{ matrix.os }}-${{ github.run_number }} 
       #     path: ts/packages/shell/dist/**                             # files/dirs to include
       #     retention-days: 7
-
