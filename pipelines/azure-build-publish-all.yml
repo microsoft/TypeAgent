@@ -335,8 +335,44 @@ stages:
                 electron | $(Agent.OS) | $(Agent.OSArchitecture)
 
           - bash: |
+              # Free disk space aggressively on Linux — the .deb fpm/tar step
+              # needs several GB of temp space beyond the unpacked app.
+              #
+              # Key insight: `pnpm run shell:package` triggers pnpm's internal
+              # dep-status check which re-runs postinstall. The disk must be
+              # clean BEFORE that, and we must also remove things pnpm won't
+              # touch.
+
+              echo "=== Disk before cleanup ==="
+              df -h / || true
+
+              # 1. Remove pnpm content-addressable store (already hard-linked
+              #    into node_modules; freeing inodes helps even if blocks are
+              #    shared on some FS).
               pnpm store prune
+              rm -rf $(Pipeline.Workspace)/.pnpm-store 2>/dev/null || true
+
+              # 2. Remove node_modules for everything except shell and its
+              #    transitive workspace deps.
               find $(buildDirectory)/packages -maxdepth 2 -type d -name "node_modules" ! -path "*/shell/*" -exec rm -rf {} + 2>/dev/null || true
+
+              # 3. Remove examples, docs, test output — not needed for packaging.
+              rm -rf $(buildDirectory)/examples 2>/dev/null || true
+              rm -rf $(buildDirectory)/docs 2>/dev/null || true
+              find $(buildDirectory)/packages -type d -name "dist" -path "*/test/*" -exec rm -rf {} + 2>/dev/null || true
+
+              # 4. Remove .cache and temp directories.
+              rm -rf $(buildDirectory)/node_modules/.cache 2>/dev/null || true
+
+              # 5. Remove pre-installed tools/SDKs that ADO hosted agents ship
+              #    but we don't need. These are the biggest space hogs (~10 GB).
+              sudo rm -rf /usr/share/dotnet 2>/dev/null || true
+              sudo rm -rf /usr/local/lib/android 2>/dev/null || true
+              sudo rm -rf /opt/ghc 2>/dev/null || true
+              sudo rm -rf /usr/share/swift 2>/dev/null || true
+              sudo rm -rf /usr/local/share/boost 2>/dev/null || true
+
+              echo "=== Disk after cleanup ==="
               df -h / || true
             displayName: "Free disk space before packaging"
             condition: eq(variables['Agent.OS'], 'Linux')
