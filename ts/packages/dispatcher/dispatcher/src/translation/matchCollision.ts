@@ -35,9 +35,11 @@ export type GrammarCollisionDecision =
      * registry sibling the grammar didn't match. Abort grammar matching and fall
      * through to LLM translation, where `pickInitialSchema` pins the schema to
      * the chosen candidate (via `collisionOneShotPicks` for an explicit pick, or
-     * `pendingTopicalRoute` for a contextSelector topical route).
+     * `pendingTopicalRoute` for a contextSelector topical route). The routing
+     * note (when any) travels with `pendingTopicalRoute` and is shown at the
+     * translation commit site, not on this decision.
      */
-    | { kind: "fallthrough"; note?: string };
+    | { kind: "fallthrough" };
 
 /**
  * Build a `CollisionCandidate` from a cache `MatchResult`, propagating
@@ -102,6 +104,21 @@ export function isCollision(
     );
 }
 
+// Find the validated cache match whose primary (schema, action) equals `member`,
+// or undefined when `member` is a registry sibling the grammar didn't produce.
+function findValidatedByMember(
+    validated: MatchResult[],
+    member: PreferenceMember,
+): MatchResult | undefined {
+    return validated.find((m) => {
+        const p = getPrimary(m);
+        return (
+            p.schemaName === member.schemaName &&
+            p.actionName === member.actionName
+        );
+    });
+}
+
 /**
  * Registry-first detection + resolution for the grammar/cache path. Independent
  * of `grammarMatch.detect` and the collision classifier: even a single confident
@@ -147,13 +164,7 @@ export function resolveGrammarRegistryFirst(
     // duplicates indefinitely.
     const pick = peekOneShotPick(members, ctx);
     if (pick !== undefined) {
-        const matched = validated.find((m) => {
-            const p = getPrimary(m);
-            return (
-                p.schemaName === pick.schemaName &&
-                p.actionName === pick.actionName
-            );
-        });
+        const matched = findValidatedByMember(validated, pick);
         if (matched !== undefined) {
             consumeOneShotPick(pick, ctx);
             return { kind: "match", match: matched };
@@ -178,13 +189,7 @@ export function resolveGrammarRegistryFirst(
         );
         if (pref !== undefined) {
             ctx.collisionPreferences.recordHit(pref.key);
-            const matched = validated.find((m) => {
-                const p = getPrimary(m);
-                return (
-                    p.schemaName === pref.chosen.schemaName &&
-                    p.actionName === pref.chosen.actionName
-                );
-            });
+            const matched = findValidatedByMember(validated, pref.chosen);
             if (matched !== undefined) {
                 return { kind: "match", match: matched };
             }

@@ -91,6 +91,32 @@ function preferRepresentative(existing: Candidate, next: Candidate): Candidate {
     return isBetterMatch(next.match, existing.match) ? next : existing;
 }
 
+// Build a scorer candidate for one (schema, action). Effective keywords = the
+// derived lexical floor layered with sidecar overrides (§5–6), resolved for any
+// action — including a registry sibling that has no cache match.
+function makeCandidate(
+    schemaName: string,
+    actionName: string,
+    ctx: CommandHandlerContext,
+    match: MatchResult | undefined,
+): Candidate {
+    return {
+        schemaName,
+        actionName,
+        keywords: ctx.contextSelectorKeywords.effective(schemaName, actionName),
+        match,
+    };
+}
+
+// Adapt a cache MatchResult (via its primary action) into a scorer candidate.
+function candidateFromMatch(
+    match: MatchResult,
+    ctx: CommandHandlerContext,
+): Candidate {
+    const { schemaName, actionName } = getPrimary(match);
+    return makeCandidate(schemaName, actionName, ctx, match);
+}
+
 function toTelemetryCandidates(scores: CandidateScore[]): CollisionCandidate[] {
     return scores.map((s) => ({
         schemaName: s.schemaName,
@@ -224,18 +250,7 @@ export function resolveContextSelector(
     request: string,
     firstMatchCandidate: CollisionCandidate,
 ): ContextSelectorOutcome {
-    const candidates: Candidate[] = validated.map((match) => {
-        const { schemaName, actionName } = getPrimary(match);
-        return {
-            schemaName,
-            actionName,
-            keywords: ctx.contextSelectorKeywords.effective(
-                schemaName,
-                actionName,
-            ),
-            match,
-        };
-    });
+    const candidates = validated.map((match) => candidateFromMatch(match, ctx));
     return scoreAndDecide(candidates, ctx, request, firstMatchCandidate);
 }
 
@@ -256,33 +271,15 @@ export function resolveContextSelectorMembers(
     request: string,
     firstMatchCandidate: CollisionCandidate,
 ): ContextSelectorOutcome {
-    const candidates: Candidate[] = members.map((member) => ({
-        schemaName: member.schemaName,
-        actionName: member.actionName,
-        keywords: ctx.contextSelectorKeywords.effective(
-            member.schemaName,
-            member.actionName,
-        ),
-        match: undefined,
-    }));
+    const candidates: Candidate[] = members.map((member) =>
+        makeCandidate(member.schemaName, member.actionName, ctx, undefined),
+    );
     // Every validated cache match is a real, executable candidate; add it so a
     // multi-match collision scores its full set (dedup in `scoreAndDecide` keeps
     // the match-carrying representative when a member and a validated match share
     // an id, so the matched neighborhood member still routes without the LLM).
     for (const match of validated) {
-        const { schemaName, actionName } = getPrimary(match);
-        if (schemaName === "" || actionName === "") {
-            continue;
-        }
-        candidates.push({
-            schemaName,
-            actionName,
-            keywords: ctx.contextSelectorKeywords.effective(
-                schemaName,
-                actionName,
-            ),
-            match,
-        });
+        candidates.push(candidateFromMatch(match, ctx));
     }
     return scoreAndDecide(candidates, ctx, request, firstMatchCandidate);
 }
