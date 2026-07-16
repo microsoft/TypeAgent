@@ -1,10 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 import {
+    displayInfo,
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { CommandHandlerContext } from "../context/commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    PendingTopicalRoute,
+} from "../context/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {
     createExecutableAction,
@@ -245,19 +249,22 @@ async function getTranslatorForSelectedActions(
 }
 
 /**
- * Result type for pickInitialSchema. Returns a chosen schemaName, or a
+ * Result type for pickInitialSchema. Returns a chosen schemaName (optionally
+ * with a `note` to surface when that choice is a committed route the caller
+ * should announce, e.g. a registry-first contextSelector topical route), or a
  * pre-built ExecutableAction representing a clarify request when LLM-select
  * collision detection determined the embedding result was ambiguous and the
  * configured strategy is "user-clarify".
  */
 type PickInitialSchemaResult =
-    | { kind: "schema"; schemaName: string }
+    | { kind: "schema"; schemaName: string; note?: string }
     | { kind: "clarify"; clarify: ExecutableAction };
 
-async function pickInitialSchema(
+export async function pickInitialSchema(
     request: string,
     activeSchemas: Set<string>,
     systemContext: CommandHandlerContext,
+    topicalRoute?: PendingTopicalRoute,
 ): Promise<PickInitialSchemaResult> {
     const switchConfig = systemContext.session.getConfig().translation.switch;
     const collisionCfg = systemContext.session.getConfig().collision.llmSelect;
@@ -268,6 +275,23 @@ async function pickInitialSchema(
         }
         // Fixed pin overrides any ambiguity detection by definition.
         return { kind: "schema", schemaName: switchConfig.fixed };
+    }
+
+    // Honor a registry-first contextSelector topical route (§11.4): the grammar
+    // path resolved this request to a neighborhood sibling the cache couldn't
+    // match, so pin that schema (the LLM fills the action) and surface the note
+    // now that the route is actually committed. Runs before embedding selection
+    // so it holds even when embedding-based selection is off. The schema was
+    // already active-filtered upstream; re-check defensively.
+    if (
+        topicalRoute !== undefined &&
+        activeSchemas.has(topicalRoute.schemaName)
+    ) {
+        return {
+            kind: "schema",
+            schemaName: topicalRoute.schemaName,
+            note: topicalRoute.note,
+        };
     }
 
     // Start with the last translator used
@@ -1086,10 +1110,16 @@ async function translateRequestWithActiveSchemas(
     provider: ActionConfigProvider,
 ): Promise<ExecutableAction | ExecutableAction[]> {
     const systemContext = context.sessionContext.agentContext;
+    // Consume the request-scoped topical route (set by matchRequest's registry
+    // Tier 1.5 sibling resolve, §11.4). Read-and-clear so a route that isn't
+    // ultimately honored can never leak into a later request.
+    const topicalRoute = systemContext.pendingTopicalRoute;
+    systemContext.pendingTopicalRoute = undefined;
     const picked = await pickInitialSchema(
         request,
         activeSchemas,
         systemContext,
+        topicalRoute,
     );
 
     if (picked.kind === "clarify") {
@@ -1097,6 +1127,11 @@ async function translateRequestWithActiveSchemas(
         // Short-circuit translation; downstream execution dispatches the
         // synthesized ClarifyMultipleAgentMatches action.
         return picked.clarify;
+    }
+    if (picked.note !== undefined) {
+        // A committed route the caller asked us to announce (the contextSelector
+        // topical reroute affordance, shown only now that the route is taken).
+        await displayInfo(picked.note, context);
     }
     const schemaName = picked.schemaName;
 

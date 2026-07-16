@@ -286,12 +286,25 @@ export async function matchRequest(
     let chosen = validated[0];
 
     // Registry-first detection runs independently of grammarMatch.detect: a
-    // single confident cache match can still be registry-known-ambiguous.
+    // single confident cache match can still be registry-known-ambiguous. On the
+    // registry path `contextSelector` (Tier 1.5) may resolve a cache-masked
+    // collision here (§13.3). A `match` decision commits the route now (no LLM),
+    // so its note is shown here; a sibling `fallthrough` defers the note to the
+    // translation commit site (via `pendingTopicalRoute`). The active-schema set
+    // bounds registry siblings to executable routes.
     let decision = resolveGrammarRegistryFirst(
         validated,
         systemContext,
         request,
+        new Set(activeSchemaNames),
     );
+    if (
+        decision !== undefined &&
+        decision.kind === "match" &&
+        decision.note !== undefined
+    ) {
+        await displayInfo(decision.note, context);
+    }
     if (
         decision === undefined &&
         (contextSelectorCfg.detect || collisionCfg.detect) &&
@@ -308,7 +321,9 @@ export async function matchRequest(
                 request,
                 toCandidate(validated[0], systemContext),
             );
-            if (outcome.kind === "resolve") {
+            if (outcome.kind === "resolve" && outcome.match !== undefined) {
+                // Every validated candidate carries its MatchResult, so a resolve
+                // here always routes without the LLM.
                 decision = { kind: "match", match: outcome.match };
                 await displayInfo(outcome.note, context);
             } else if (outcome.kind === "abstain") {

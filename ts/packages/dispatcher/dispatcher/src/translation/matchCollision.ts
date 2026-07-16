@@ -25,16 +25,19 @@ import {
     getPreferenceContext,
 } from "../context/collisionResolution.js";
 import { PreferenceMember } from "../context/collisionPreferences.js";
+import { resolveContextSelectorMembers } from "./matchContextSelector.js";
 
 export type GrammarCollisionDecision =
-    | { kind: "match"; match: MatchResult }
+    | { kind: "match"; match: MatchResult; note?: string }
     | { kind: "clarify"; clarify: ClarifyMultipleAgentMatches }
     /**
-     * A pending one-shot pick names a registry sibling the grammar didn't
-     * match. Abort grammar matching and fall through to LLM translation, where
-     * `pickInitialSchema` pins the schema to the chosen candidate.
+     * A pending one-shot pick (or a registry-first topical route) names a
+     * registry sibling the grammar didn't match. Abort grammar matching and fall
+     * through to LLM translation, where `pickInitialSchema` pins the schema to
+     * the chosen candidate (via `collisionOneShotPicks` for an explicit pick, or
+     * `pendingTopicalRoute` for a contextSelector topical route).
      */
-    | { kind: "fallthrough" };
+    | { kind: "fallthrough"; note?: string };
 
 /**
  * Build a `CollisionCandidate` from a cache `MatchResult`, propagating
@@ -100,20 +103,30 @@ export function isCollision(
 }
 
 /**
- * Registry-first detection for the grammar/cache path. Independent of
- * `grammarMatch.detect` and the collision classifier: even a single confident
- * cache match can be "known to be ambiguous" via the neighborhood registry.
+ * Registry-first detection + resolution for the grammar/cache path. Independent
+ * of `grammarMatch.detect` and the collision classifier: even a single confident
+ * cache match can be "known to be ambiguous" via the neighborhood registry —
+ * which is exactly the cache-masked collision the construction cache would
+ * otherwise hide from `contextSelector` (§13.3).
  *
- * Scans the validated cache matches against the registry and, when any is a
- * known-ambiguous member, returns a clarify decision whose options are the
- * matched member plus its registry siblings (which may not themselves be in
- * the cache match set). Returns undefined when registry-first is off or no
- * match is a registry member.
+ * Scans the validated cache matches against the registry; when any is a
+ * known-ambiguous member it re-expands the candidate set to that member plus its
+ * registry siblings and walks a resolution ladder:
+ *   Tier 0 — a pending one-shot pick from a resolved clarify card,
+ *   Tier 1 — a learned/explicit preference,
+ *   Tier 1.5 — `contextSelector`: a confident recent-topic pick over the
+ *              re-expanded neighborhood (resolves with no LLM when the winner is
+ *              a cache match, or pins + falls through when it is a sibling), and
+ *   Tier 2 — clarify with the sibling-enriched options.
+ * Tiers 0 and 1 run ahead of `contextSelector`, so an explicit user choice is
+ * never overridden. Returns undefined when registry-first is off or no match is
+ * a registry member.
  */
 export function resolveGrammarRegistryFirst(
     validated: MatchResult[],
     ctx: CommandHandlerContext,
     request: string,
+    activeSchemas?: ReadonlySet<string>,
 ): GrammarCollisionDecision | undefined {
     if (!ctx.session.getConfig().collision.preference.registryFirst) {
         return undefined;
@@ -182,6 +195,22 @@ export function resolveGrammarRegistryFirst(
         }
     }
 
+    // Tier 1.5: contextSelector. The registry re-expanded a (possibly single)
+    // cache match into its neighborhood, so the topical scorer can now see ≥2
+    // candidates and resolve a cache-masked collision that `isCollision` never
+    // saw (§13.3). Runs after Tiers 0/1 so it never overrides an explicit choice;
+    // on abstain it falls through to the Tier 2 clarify below.
+    const decision = resolveRegistryContextSelector(
+        members,
+        validated,
+        ctx,
+        request,
+        activeSchemas,
+    );
+    if (decision !== undefined) {
+        return decision;
+    }
+
     const clarify = buildClarifyMultipleAgentMatches(
         request,
         members,
@@ -207,6 +236,65 @@ export function resolveGrammarRegistryFirst(
         ctx,
     );
     return { kind: "clarify", clarify };
+}
+
+/**
+ * Tier 1.5 of {@link resolveGrammarRegistryFirst}: run `contextSelector` over the
+ * registry-expanded neighborhood (`members` = matched cache action + siblings).
+ *
+ * Registry siblings are filtered to `activeSchemas` first — a sibling for a
+ * disabled / out-of-activity agent is not executable, so it must not win a route
+ * (the validated cache matches are always active). When `activeSchemas` is
+ * undefined (no host filter, e.g. tests) all members are eligible.
+ *
+ * Returns a routing decision on a confident topical resolve — a `match` when the
+ * winner is a cache construction (no LLM), or a `fallthrough` (after pinning a
+ * one-shot pick) when the winner is a registry sibling the cache never produced,
+ * so LLM translation pins the schema. Returns undefined when `contextSelector` is
+ * off, abstains, or skips — the caller then falls to the Tier 2 clarify.
+ */
+function resolveRegistryContextSelector(
+    members: PreferenceMember[],
+    validated: MatchResult[],
+    ctx: CommandHandlerContext,
+    request: string,
+    activeSchemas?: ReadonlySet<string>,
+): GrammarCollisionDecision | undefined {
+    if (!ctx.session.getConfig().collision.contextSelector?.detect) {
+        return undefined;
+    }
+    // Only route to schemas active this turn. `contextSelector` resolves
+    // automatically (no clarify card), so an inactive sibling winner would emit a
+    // misleading note and then be rejected downstream — filter it out up front.
+    const routable =
+        activeSchemas === undefined
+            ? members
+            : members.filter((m) => activeSchemas.has(m.schemaName));
+    const outcome = resolveContextSelectorMembers(
+        routable,
+        validated,
+        ctx,
+        request,
+        toCandidate(validated[0], ctx),
+    );
+    if (outcome.kind !== "resolve") {
+        // abstain / skip — let the caller fall through to Tier 2 clarify.
+        return undefined;
+    }
+    if (outcome.match !== undefined) {
+        // Winner is a cache construction — resolve directly (no LLM). The note
+        // is displayed by the caller since the route is committed here.
+        return { kind: "match", match: outcome.match, note: outcome.note };
+    }
+    // Winner is a registry sibling the grammar never matched. Record a
+    // request-scoped topical route so this same request's LLM translation pins
+    // the schema and shows the note at that (committed) point — not preemptively
+    // here, where the route isn't yet guaranteed. See `PendingTopicalRoute`.
+    ctx.pendingTopicalRoute = {
+        schemaName: outcome.schemaName,
+        note: outcome.note,
+    };
+    return { kind: "fallthrough" };
 }
 
 function parsePriorityOrder(s: string): string[] {

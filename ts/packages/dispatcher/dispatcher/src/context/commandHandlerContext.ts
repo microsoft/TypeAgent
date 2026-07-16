@@ -188,6 +188,20 @@ export type CopilotImporter = (
     onProgress?: (progress: CopilotImportProgress) => void,
 ) => Promise<CopilotImportSummary>;
 
+// A request-scoped route chosen by the registry-first contextSelector tier
+// (§11.4) when the topical winner is a neighborhood sibling the construction
+// cache could not match (so there is no MatchResult to route to directly).
+// Unlike `collisionOneShotPicks` — durable, cross-turn, explicit user picks that
+// survive to a re-run — this is set in `matchRequest` and consumed within the
+// SAME request by `pickInitialSchema`, which pins the schema for LLM translation
+// and surfaces the routing note only then. Deferring the note to the commit site
+// keeps the affordance from claiming a route that isn't taken, and the
+// read-and-clear consumption keeps a stale hint from leaking into a later turn.
+export type PendingTopicalRoute = {
+    schemaName: string;
+    note: string;
+};
+
 // Command Handler Context definition.
 export type CommandHandlerContext = {
     readonly agents: AppAgentManager;
@@ -313,6 +327,13 @@ export type CommandHandlerContext = {
     // chosen candidate; consumed on first read. Covers the "don't remember"
     // case (no durable preference written).
     collisionOneShotPicks: Set<string>;
+
+    // Request-scoped topical route from the registry-first contextSelector tier
+    // (§11.4). Set in `matchRequest` when the topical winner is a neighborhood
+    // sibling with no cache match; consumed (read-and-cleared) by
+    // `pickInitialSchema` in the same request, which pins the schema and shows
+    // the routing note. See `PendingTopicalRoute`.
+    pendingTopicalRoute: PendingTopicalRoute | undefined;
 
     // contextSelector (§11). The conversation signal source (produces the
     // per-turn context vector), the effective-keyword index (derived floor +
@@ -1152,6 +1173,7 @@ export async function initializeCommandHandlerContext(
                 session.getConfig().collision.preference.registryPath,
             collisionChoiceManager: new ChoiceManager(),
             collisionOneShotPicks: new Set(),
+            pendingTopicalRoute: undefined,
             conversationSignal: new RingBufferSignalSource(
                 () => session.getConfig().collision.contextSelector,
             ),
