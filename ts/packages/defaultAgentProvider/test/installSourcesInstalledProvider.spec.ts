@@ -1736,9 +1736,13 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         straggler.calls.length = 0;
 
         const outcomes: string[] = [];
-        await built.testApi.update("foo", undefined, issuing.host, (o) =>
-            outcomes.push(o),
+        const result = await built.testApi.update(
+            "foo",
+            undefined,
+            issuing.host,
+            (o) => outcomes.push(o),
         );
+        expect(result).toEqual({ status: "started" });
         // The straggler never quiesces → the phase-1 backstop fires → rollback.
         await settle();
 

@@ -35,6 +35,7 @@ import {
     SourceStatus,
     UninstallOutcomeStatus,
     UpdateOutcomeStatus,
+    UpdateResult,
 } from "./config.js";
 
 // A legal dispatcher agent identifier (matches existing agent names such as
@@ -116,15 +117,15 @@ export interface InstalledAgentSourceApi {
     // issuing one — so this returns as soon as the record is committed. A
     // COMMITTED swap is announced by the cross-session fan-out ("Agent 'x' was
     // updated."), exactly as install announces an add, so callers need not echo
-    // it. `onOutcome` reports the final status: `updated` (committed), `reverted`
-    // (a rollback to v1 on timeout/failed-start), or `unchanged` (the requested
-    // version was already serving — a no-op the fan-out cannot express).
+    // it. Returns the immediate disposition: `unchanged`, or `started` with
+    // package version details when available. `onOutcome` reports the later
+    // barrier status: `updated` (committed) or `reverted` (rolled back).
     update(
         name: string,
         range: string | undefined,
         issuingController: AppAgentProviderSetController,
         onOutcome?: (status: UpdateOutcomeStatus) => void,
-    ): Promise<void>;
+    ): Promise<UpdateResult>;
     // Host-rendered summaries of installed agents, backing `@package list`.
     listInstalled(): InstalledAgentInfo[];
     // Source names in resolution order (for `@package install --source`).
@@ -550,12 +551,10 @@ class UninstallCommandHandler implements CommandHandler {
         // ROLLBACK — a phase timeout that leaves the agent installed and changes
         // nothing, so the fan-out is silent — is surfaced here, through the
         // session's notification channel (which survives command completion).
-        let settledSynchronously = false;
         await source.uninstall(
             name,
             appAgentProviderSetController,
             (outcome) => {
-                settledSynchronously = true;
                 if (outcome === "reverted") {
                     context.sessionContext.notify(
                         AppAgentEvent.Inline,
@@ -564,20 +563,13 @@ class UninstallCommandHandler implements CommandHandler {
                 }
             },
         );
-        // The barrier teardown settles asynchronously, so print the "started"
-        // acknowledgement. The `settledSynchronously` guard mirrors the update
-        // handler and stays defensive: if a source ever reported its outcome
-        // synchronously (before this await resolved), the "was removed" fan-out
-        // would already be the whole story and a "will unload shortly" line
-        // would be misleading. Today's uninstall path never settles that way (a
-        // recorded name is torn down through the barrier; a non-active recorded
-        // name throws before reaching here), so this branch normally prints.
-        if (!settledSynchronously) {
-            displayResult(
-                `Agent '${name}' uninstall started; it will unload from each session shortly.`,
-                context,
-            );
-        }
+        // A successful return means the asynchronous barrier was armed. Its
+        // terminal outcome cannot arrive in the issuing session until this
+        // command releases that session's command lock.
+        displayResult(
+            `Agent '${name}' uninstall started; it will unload from each session shortly.`,
+            context,
+        );
     }
 
     public async getCompletion(
@@ -634,41 +626,36 @@ class UpdateCommandHandler implements CommandHandler {
         // A COMMITTED swap is announced by the source's cross-session fan-out
         // ("Agent 'x' was updated."), delivered uniformly to every session
         // exactly as install announces an add; the command adds no echo of its
-        // own. Only the outcomes the fan-out cannot express are surfaced here,
-        // through the session's notification channel (which survives command
-        // completion): a ROLLBACK (v1 restored, nothing changed) and an
-        // UNCHANGED no-op (the requested version was already serving).
-        let settledSynchronously = false;
-        await source.update(
+        // own. A rollback is surfaced through the session's notification
+        // channel, which survives command completion. An unchanged no-op is
+        // returned immediately and displayed as part of this command.
+        const result = await source.update(
             name,
             range,
             appAgentProviderSetController,
             (outcome) => {
-                settledSynchronously = true;
                 if (outcome === "reverted") {
                     context.sessionContext.notify(
                         AppAgentEvent.Inline,
                         `Agent '${name}' update failed; reverted to the previous version.`,
                     );
-                } else if (outcome === "unchanged") {
-                    context.sessionContext.notify(
-                        AppAgentEvent.Inline,
-                        `Agent '${name}' is already up to date.`,
-                    );
                 }
             },
         );
-        // The barrier swap settles asynchronously, so print the "started"
-        // acknowledgement — unless the source already settled inline (an
-        // already-current no-op, or a non-active agent added with no barrier),
-        // in which case the inline outcome / fan-out is the whole story and a
-        // "will reload shortly" line would be misleading.
-        if (!settledSynchronously) {
-            displayResult(
-                `Agent '${name}' update started; it will reload in each session shortly.`,
-                context,
-            );
+        if (result.status === "unchanged") {
+            displayResult(`Agent '${name}' is already up to date.`, context);
+            return;
         }
+        const versionChange =
+            result.packageName !== undefined &&
+            result.oldVersion !== undefined &&
+            result.newVersion !== undefined
+                ? ` for package '${result.packageName}' (${result.oldVersion} -> ${result.newVersion})`
+                : "";
+        displayResult(
+            `Agent '${name}' update${versionChange} started; it will reload in each session shortly.`,
+            context,
+        );
     }
 
     public async getCompletion(

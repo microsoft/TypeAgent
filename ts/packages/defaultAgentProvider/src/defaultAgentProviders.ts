@@ -21,6 +21,7 @@ import {
     InstallPreview,
     InstallPreviewMatch,
     InstallResult,
+    UpdateResult,
     deriveMatchKind,
 } from "./installSources/config.js";
 import {
@@ -1078,7 +1079,7 @@ export function createDefaultInstalledAgentSource(
             range: string | undefined,
             issuingController: AppAgentProviderSetController,
             onOutcome?: (status: UpdateOutcomeStatus) => void,
-        ): Promise<void> {
+        ): Promise<UpdateResult> {
             if (isBuiltin(name)) {
                 throw new Error(
                     `Agent '${name}' is built-in and cannot be updated`,
@@ -1131,12 +1132,7 @@ export function createDefaultInstalledAgentSource(
                 // pick up an in-place manifest edit.
                 if (updateResult.status === "no-op") {
                     writeInstalledRecord();
-                    // Nothing swapped in any session, so the cross-session
-                    // fan-out has nothing to announce; report the no-op to the
-                    // issuing conversation directly so `@package update` on an
-                    // already-current agent is not silent.
-                    onOutcome?.("unchanged");
-                    return;
+                    return { status: "unchanged" };
                 }
                 // Coordinated update: tear the OLD
                 // version down across every session and add the NEW one as ONE
@@ -1227,6 +1223,18 @@ export function createDefaultInstalledAgentSource(
                     },
                     onOutcome,
                 });
+                return {
+                    status: "started",
+                    ...(updateResult.packageName !== undefined
+                        ? { packageName: updateResult.packageName }
+                        : {}),
+                    ...(updateResult.oldVersion !== undefined
+                        ? { oldVersion: updateResult.oldVersion }
+                        : {}),
+                    ...(updateResult.newVersion !== undefined
+                        ? { newVersion: updateResult.newVersion }
+                        : {}),
+                };
             } finally {
                 busy.delete(name);
             }

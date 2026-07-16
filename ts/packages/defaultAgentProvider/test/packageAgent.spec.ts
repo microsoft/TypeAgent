@@ -54,6 +54,7 @@ function makeSource(overrides: Partial<InstalledAgentSourceApi> = {}): {
         },
         update: async (name, range) => {
             calls.push({ op: "update", name, range });
+            return { status: "started" };
         },
         listInstalled: () => [],
         listSources: () => [],
@@ -252,7 +253,7 @@ describe("@package agent", () => {
         expect(calls).toEqual([{ op: "update", name: "foo", range: "^1.0" }]);
     });
 
-    it("uninstall does not echo a committed teardown (the source fan-out owns it)", async () => {
+    it("uninstall acknowledges start without echoing a committed teardown", async () => {
         // A committed uninstall is announced by the source's cross-session
         // fan-out ("was removed"), like install's "was added" — the command
         // adds no echo of its own.
@@ -262,12 +263,15 @@ describe("@package agent", () => {
             },
         });
         const handler = getHandler(api, "uninstall");
-        const { context, notifications } = notifyCapturingActionContext({
+        const { context, output } = capturingActionContext({
             appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, { args: { name: "foo" } } as any);
-        expect(notifications).toEqual([]);
+        expect(output()).toContain(
+            "Agent 'foo' uninstall started; it will unload from each session shortly.",
+        );
+        expect(output()).not.toContain("was removed");
     });
 
     it("uninstall reports started when teardown outcome is asynchronous", async () => {
@@ -309,6 +313,7 @@ describe("@package agent", () => {
         const { api } = makeSource({
             update: async (_name, _range, _host, onOutcome) => {
                 onOutcome?.("updated");
+                return { status: "started" };
             },
         });
         const handler = getHandler(api, "update");
@@ -326,6 +331,7 @@ describe("@package agent", () => {
         const { api } = makeSource({
             update: async (_name, _range, _host, onOutcome) => {
                 onOutcome?.("reverted");
+                return { status: "started" };
             },
         });
         const handler = getHandler(api, "update");
@@ -343,27 +349,22 @@ describe("@package agent", () => {
 
     it("update surfaces an already-current no-op", async () => {
         const { api } = makeSource({
-            update: async (_name, _range, _host, onOutcome) => {
-                onOutcome?.("unchanged");
-            },
+            update: async () => ({ status: "unchanged" }),
         });
         const handler = getHandler(api, "update");
-        const { context, notifications } = notifyCapturingActionContext({
+        const { context, output } = capturingActionContext({
             appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
             args: { name: "foo", range: undefined },
         } as any);
-        expect(notifications).toEqual(["Agent 'foo' is already up to date."]);
+        expect(output()).toContain("Agent 'foo' is already up to date.");
     });
 
     it("update reports started when swap outcome is asynchronous", async () => {
         const { api } = makeSource({
-            update: async () => {
-                // Intentionally no immediate outcome callback: this models the
-                // real barrier swap path, where completion settles later.
-            },
+            update: async () => ({ status: "started" }),
         });
         const handler = getHandler(api, "update");
         const { context, output } = capturingActionContext({
@@ -375,6 +376,28 @@ describe("@package agent", () => {
         } as any);
         expect(output()).toContain(
             "Agent 'foo' update started; it will reload in each session shortly.",
+        );
+    });
+
+    it("update reports the package version change when available", async () => {
+        const { api } = makeSource({
+            update: async () => ({
+                status: "started",
+                packageName: "@typeagent/foo-agent",
+                oldVersion: "1.0.0",
+                newVersion: "1.4.0",
+            }),
+        });
+        const handler = getHandler(api, "update");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+        });
+        await handler.run(context, {
+            args: { name: "foo", range: undefined },
+        } as any);
+        expect(output()).toContain(
+            "Agent 'foo' update for package '@typeagent/foo-agent' (1.0.0 -> 1.4.0) started; it will reload in each session shortly.",
         );
     });
 });

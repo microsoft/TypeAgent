@@ -351,11 +351,13 @@ clean rollback.
 
 Because the swap spans a cross-session restart, `@update` and `@uninstall` cannot
 block the command lock waiting on it. The issuing session enqueues the op like a
-sibling and returns _"update started"_; the terminal outcome is delivered later
+sibling. Update immediately returns `unchanged` when the resolved package version
+is already serving, or `started` with the old and new package versions when the
+source provides them. A started swap's terminal outcome is delivered later
 through a one-shot `onOutcome(status)` callback (`updated`/`reverted` for update,
 `uninstalled`/`reverted` for uninstall) that the `@package` handler maps to a
 follow-up status line. This removes the inline "immediate" apply path; every
-op on every dispatcher now flows through the one idle-gated queue.
+swap on every dispatcher flows through the one idle-gated queue.
 
 ### Failure semantics and edge cases
 

@@ -386,6 +386,11 @@ describe("feedSource.update", () => {
         expect(result.record.module).toBe("@typeagent/foo-agent");
         expect(result.record.ref).toBe("@typeagent/foo-agent@^1.0.0");
         expect(result.record.installRoot).toBe("_typeagent_foo-agent@1.4.0");
+        if (result.status === "updated") {
+            expect(result.packageName).toBe("@typeagent/foo-agent");
+            expect(result.oldVersion).toBe("1.0.0");
+            expect(result.newVersion).toBe("1.4.0");
+        }
     });
 
     it("applies a version range to the module", async () => {
@@ -404,6 +409,10 @@ describe("feedSource.update", () => {
         expect(result.status).toBe("updated");
         expect(result.record.ref).toBe("@typeagent/foo-agent@^2.0.0");
         expect(result.record.installRoot).toBe("_typeagent_foo-agent@2.0.0");
+        if (result.status === "updated") {
+            expect(result.oldVersion).toBe("1.0.0");
+            expect(result.newVersion).toBe("2.0.0");
+        }
     });
 
     it("rejects a shell-injection range before it reaches npm", async () => {
