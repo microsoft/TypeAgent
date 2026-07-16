@@ -307,6 +307,10 @@ export type CollisionConfig = {
         minMass: number;
         // Clear-winner margin the winner must beat the runner-up by (default 0.5).
         margin: number;
+        // Suppress negated content words ("not the spreadsheet") from the context
+        // vector before scoring (default true). Guards the loaded-negation
+        // adversarial misroutes; purely lexical (§7 tokenize).
+        negationGuard: boolean;
         // On abstain: hand to the configured grammar strategy (default) or
         // escalate the request to the LLM translation path.
         abstainFallback: "defer-to-strategy" | "escalate-to-llm";
@@ -495,12 +499,19 @@ const defaultSessionConfig: SessionConfig = {
             strategy: "first-match",
         },
         contextSelector: {
-            detect: false,
+            // On by default: the context-weighted collision resolver runs as a
+            // deterministic, LLM-free first pass. On a confident topical pick it
+            // resolves the collision; otherwise it abstains and (with the
+            // defer-to-strategy fallback below) hands off to the grammar
+            // strategy — strictly additive over first-match, never a silent
+            // misroute (see docs/architecture/collision/contextSelector-report.md).
+            detect: true,
             windowTurns: 20,
             decay: 0.9,
             minUniqueTokens: 2,
             minMass: 1.0,
             margin: 0.5,
+            negationGuard: true,
             abstainFallback: "defer-to-strategy",
         },
         priorityOrder: "",

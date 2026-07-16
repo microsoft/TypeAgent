@@ -22,7 +22,8 @@
     "./helpers/command": "./dist/helpers/command.js",
     "./helpers/completion": "./dist/helpers/completion/index.js",
     "./internal": "./dist/internal.js",
-    "./explorer": "./dist/explorer.js"
+    "./explorer": "./dist/explorer.js",
+    "./contextSelector": "./dist/context/contextSelector/index.js"
   },
   "files": [
     "dist",
@@ -46,7 +47,7 @@
     "@azure/core-rest-pipeline": "^1.22.0",
     "@azure/cosmos": "^4.2.1",
     "@azure/identity": "^4.10.0",
-    "@github/copilot-sdk": "0.2.0",
+    "@github/copilot-sdk": "1.0.5",
     "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
