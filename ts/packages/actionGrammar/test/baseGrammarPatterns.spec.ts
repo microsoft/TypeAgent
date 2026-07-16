@@ -193,7 +193,9 @@ describe("Base Grammar Pattern Tests", () => {
             expect(result.length).toBeGreaterThan(0);
             const action = result[0].match as any;
             expect(action.actionName).toBe("playMusic");
-            expect(action.parameters.target.trackName).toBe("Bohemian Rhapsody");
+            expect(action.parameters.target.trackName).toBe(
+                "Bohemian Rhapsody",
+            );
             expect(action.parameters.target.albumName).toBe(
                 "A Night at the Opera",
             );
