@@ -55,7 +55,7 @@ import {
     CopilotApiSettings,
     copilotApiSettingsFromConfig,
 } from "./copilotSettings.js";
-import { createCopilotChatModel } from "./copilotModels.js";
+import { getProviderChatModel } from "./providerChatModelRegistry.js";
 import { getActiveModelProvider, resolveTarget } from "./providerMode.js";
 
 export { azureApiSettingsFromEnv, openAIApiSettingsFromEnv };
@@ -559,8 +559,9 @@ export function createChatModel(
             tags,
         );
     }
-    if (settings.provider === "copilot") {
-        return createCopilotChatModel(
+    const providerFactory = getProviderChatModel(settings.provider);
+    if (providerFactory !== undefined) {
+        return providerFactory(
             settings,
             completionSettings,
             completionCallback,

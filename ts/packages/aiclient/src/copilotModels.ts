@@ -38,6 +38,7 @@ import {
 import { readServerEventStream } from "./serverEvents.js";
 import { TokenCounter } from "./tokenCounter.js";
 import { CompletionUsageStats } from "./openai.js";
+import { registerProviderChatModel } from "./providerChatModelRegistry.js";
 
 const debug = registerDebug("typeagent:aiclient:copilot");
 // Per-phase latency breakdown (client start / session create / send / total)
@@ -530,6 +531,20 @@ export function createCopilotEndpointProvider(
         },
     };
 }
+
+// The copilot provider registers its chat-model factory here so that
+// openai.ts can dispatch to it via the registry without importing this
+// module directly (breaks a circular dependency).
+registerProviderChatModel(
+    "copilot",
+    (settings, completionSettings, completionCallback, tags) =>
+        createCopilotChatModel(
+            settings as CopilotApiSettings,
+            completionSettings,
+            completionCallback,
+            tags,
+        ),
+);
 
 export function createCopilotChatModel(
     settings: CopilotApiSettings,
