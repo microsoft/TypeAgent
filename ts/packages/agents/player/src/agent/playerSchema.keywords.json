@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "schema": "player",
   "generatedBy": "llm",
-  "generatedAt": "2026-07-16T00:05:46.405Z",
-  "sourceHash": "tSOpsZ/Sgf9xaz0zA6jfmTdwKKFzPoDGP11KWk9Hgjc=",
+  "generatedAt": "2026-07-16T00:37:16.702Z",
+  "sourceHash": "kB4Ogob+UuGl3wZjGe1RRFI7o9aqISNeZoAIiCh0io8=",
   "actions": {
     "playMusic": [
       "music",
@@ -49,7 +49,8 @@
       "album",
       "artist",
       "genre",
-      "nowplaying"
+      "nowplaying",
+      "tune"
     ],
     "pause": [
       "music",
@@ -57,8 +58,8 @@
       "audio",
       "song",
       "track",
-      "playlist",
       "album",
+      "playlist",
       "artist",
       "tune",
       "sound"
@@ -73,19 +74,7 @@
       "playlist",
       "artist",
       "tune",
-      "melody"
-    ],
-    "replaySong": [
-      "music",
-      "song",
-      "track",
-      "audio",
-      "playlist",
-      "album",
-      "artist",
-      "tune",
       "melody",
-      "record",
       "sound"
     ],
     "next": [
@@ -108,8 +97,9 @@
       "playlist",
       "album",
       "artist",
-      "player",
-      "sound"
+      "genre",
+      "tune",
+      "record"
     ],
     "shuffle": [
       "music",
@@ -131,12 +121,12 @@
       "speaker",
       "headphone",
       "output",
-      "sound",
-      "streaming"
+      "sound"
     ],
     "setDefaultDevice": [
       "music",
       "device",
+      "player",
       "audio",
       "speaker",
       "playlist",
@@ -144,11 +134,11 @@
       "track",
       "album",
       "artist",
-      "player",
+      "streaming",
       "headphone",
       "output",
-      "streaming",
-      "sound"
+      "sound",
+      "stereo"
     ],
     "selectDevice": [
       "music",
@@ -177,8 +167,7 @@
       "playback",
       "song",
       "track",
-      "playlist",
-      "tune"
+      "playlist"
     ],
     "setMaxVolume": [
       "music",
@@ -187,10 +176,7 @@
       "sound",
       "playback",
       "device",
-      "speaker",
-      "song",
-      "track",
-      "playlist"
+      "speaker"
     ],
     "changeVolume": [
       "music",
@@ -212,8 +198,7 @@
       "album",
       "artist",
       "library",
-      "collection",
-      "genre"
+      "collection"
     ],
     "getPlaylist": [
       "playlist",
@@ -246,7 +231,8 @@
       "artist",
       "audio",
       "record",
-      "listening"
+      "listening",
+      "collection"
     ],
     "getFavorites": [
       "music",
@@ -285,8 +271,7 @@
       "artist",
       "library",
       "tune",
-      "record",
-      "sound"
+      "recording"
     ],
     "addToPlaylistFromCurrentTrackList": [
       "music",
@@ -302,9 +287,9 @@
     ],
     "addSongsToPlaylist": [
       "music",
+      "playlist",
       "song",
       "track",
-      "playlist",
       "artist",
       "album",
       "audio"
