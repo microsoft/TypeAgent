@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
+<!--
+  Standalone design prototype for the vscode-shell chat webview.
+
+  Goal: explore fixes for (1) too many scrollbars and (2) narrow messages,
+  WITHOUT touching the shared chat-ui package. Every redesign option below is
+  scoped under a `body.opt-*` class exactly the way it would later be ported
+  into packages/vscode-shell/src/webview/vscode-theme.css (which only affects
+  vscode-shell, never the Electron shell).
+
+  The base rules copied here mirror the real cascade:
+    - packages/chat-ui/styles/chat.css        (message layout + widths + pre)
+    - packages/vscode-shell/src/webview/vscode-theme.css (theme overlay)
+
+  Open this file directly in a browser (or VS Code Simple Browser) to compare.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>vscode-shell chat — width & scrollbar prototypes</title>
+    <style>
+      /* ===================================================================
+         VS Code Dark+ theme variables (subset used by the chat webview)
+         =================================================================== */
+      :root {
+        --vscode-editor-background: #1e1e1e;
+        --vscode-foreground: #cccccc;
+        --vscode-editorWidget-background: #252526;
+        --vscode-editorWidget-border: #454545;
+        --vscode-input-background: #3c3c3c;
+        --vscode-input-border: #3c3c3c;
+        --vscode-panel-border: #2b2b2b;
+        --vscode-descriptionForeground: #9d9d9d;
+        --vscode-editorWarning-foreground: #cca700;
+        --vscode-errorForeground: #f14c4c;
+        --vscode-textLink-foreground: #3794ff;
+        --vscode-focusBorder: #007fd4;
+        --vscode-badge-background: #4d4d4d;
+        --vscode-font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        --vscode-font-size: 13px;
+        --vscode-editor-font-family: Consolas, "Courier New", monospace;
+        --vscode-scrollbarSlider-background: rgba(121, 121, 121, 0.4);
+        --vscode-scrollbarSlider-hoverBackground: rgba(100, 100, 100, 0.7);
+        --accent: #3794ff;
+      }
+
+      /* ===================================================================
+         Prototype chrome (NOT part of the real webview)
+         =================================================================== */
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        font-family: var(--vscode-font-family);
+        font-size: 13px;
+        color: #e0e0e0;
+        background: #141414;
+        display: flex;
+        flex-direction: column;
+      }
+      .toolbar {
+        flex-shrink: 0;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        background: #0b0b0b;
+        border-bottom: 1px solid #333;
+      }
+      .toolbar .group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding-right: 12px;
+        margin-right: 4px;
+        border-right: 1px solid #333;
+      }
+      .toolbar .group:last-child {
+        border-right: none;
+      }
+      .toolbar label.title {
+        font-weight: 600;
+        color: #9d9d9d;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .toolbar button {
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 11px;
+        border-radius: 5px;
+        border: 1px solid #3a3a3a;
+        background: #232323;
+        color: #ddd;
+        cursor: pointer;
+      }
+      .toolbar button:hover {
+        background: #2d2d2d;
+      }
+      .toolbar button.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      .desc {
+        flex-shrink: 0;
+        padding: 8px 14px;
+        background: #101010;
+        border-bottom: 1px solid #262626;
+        color: #b8b8b8;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .desc code {
+        background: #000;
+        padding: 1px 5px;
+        border-radius: 3px;
+        color: #d7ba7d;
+        font-family: var(--vscode-editor-font-family);
+      }
+      .stage {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        justify-content: center;
+        align-items: stretch;
+        padding: 18px;
+        overflow: auto;
+        background: #141414;
+      }
+      /* Simulated VS Code panel. Width is switchable to mimic a docked-narrow
+         sidebar vs a wide bottom/editor-area panel. */
+      .viewport {
+        width: 900px;
+        max-width: 100%;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid #333;
+        border-radius: 6px;
+        overflow: hidden;
+        box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+        transition: width 0.15s ease;
+      }
+      .viewport-caption {
+        flex-shrink: 0;
+        padding: 4px 10px;
+        background: #000;
+        color: #777;
+        font-size: 11px;
+        border-bottom: 1px solid #2a2a2a;
+      }
+
+      /* ===================================================================
+         HOST PAGE  (mirror of vscode-shell media/chat.css + vscode-theme.css)
+         =================================================================== */
+      #chat-container {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        background: var(--vscode-editor-background);
+        color: var(--vscode-foreground);
+      }
+      #chat-root {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        display: flex;
+      }
+      .chat-panel-wrapper {
+        flex: 1;
+        min-height: 0;
+        height: 100%;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        background: var(--vscode-editor-background);
+        color: var(--vscode-foreground);
+        font-family: var(--vscode-font-family);
+        font-size: 14px;
+      }
+      /* Scrollable message area (chat.css: column-reverse; we use column here
+         so the sample reads top-to-bottom like the screenshot). */
+      .chat {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px;
+        background: var(--vscode-editor-background);
+        color: var(--vscode-foreground);
+        font-family: inherit;
+      }
+
+      /* ===================================================================
+         BASE chat-ui message rules  (verbatim from chat.css — the CURRENT
+         behavior we are trying to improve)
+         =================================================================== */
+      .chat-message-container-agent,
+      .chat-message-container-user {
+        position: relative; /* real app relies on transform; relative is equiv. for icons */
+        padding-left: 10px;
+        padding-right: 10px;
+        margin-top: 2px;
+        margin-bottom: 8px;
+        width: 55%; /* <-- THE WIDTH CONSTRAINT */
+      }
+      .chat-message-container-agent {
+        margin-left: 10px;
+      }
+      .chat-message-container-user {
+        margin-right: 10px;
+        align-self: flex-end;
+      }
+
+      .chat-timestamp-agent {
+        font-size: 10px;
+        color: darkgray;
+        margin: 4px;
+        margin-left: 34px;
+      }
+      .chat-timestamp-user {
+        font-size: 10px;
+        color: darkgray;
+        margin: 4px;
+        text-align: end;
+        margin-right: 35px;
+      }
+      .agent-name {
+        font-weight: bold;
+        margin-right: 8px;
+      }
+
+      .agent-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 15px;
+        position: absolute;
+        left: 0;
+        top: 20px;
+        font-size: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        background: transparent; /* vscode-theme.css parity */
+      }
+      .user-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 15px;
+        position: absolute;
+        right: 0;
+        top: 20px;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        background: plum;
+        color: purple;
+      }
+
+      /* Bubble surfaces — vscode-theme.css overlay (uses !important in real file) */
+      .chat-message-agent {
+        position: relative;
+        left: 30px; /* icon gutter shift — overflows when widened */
+        border-radius: 8px;
+        margin-bottom: 4px;
+        background-color: var(--vscode-editorWidget-background) !important;
+        border: 1px solid var(--vscode-editorWidget-border) !important;
+        color: var(--vscode-foreground) !important;
+      }
+      .chat-message-user {
+        position: relative;
+        margin-right: 30px; /* icon gutter */
+        border-radius: 8px;
+        margin-bottom: 4px;
+        background-color: var(--vscode-input-background) !important;
+        border: 1px solid var(--vscode-input-border) !important;
+        color: var(--vscode-foreground) !important;
+      }
+
+      .chat-message-content {
+        padding: 6px 15px;
+        word-wrap: break-word;
+        overflow-x: auto; /* <-- outer bubble horizontal scrollbar */
+        border-radius: 8px;
+      }
+      .chat-message-user-text {
+        white-space: break-spaces;
+      }
+
+      /* Reasoning "Thinking" and fenced code both render as <pre> in the real
+         chat-ui DOM (real markup used below). chat-ui adds NO rule for either,
+         so they keep the UA `white-space: pre` (no wrap) and get a horizontal
+         scrollbar per bubble via `.chat-message-content { overflow-x: auto }`.
+         The subtle background/padding here only approximates a markdown code
+         block; the no-wrap horizontal scroll is the faithful part.
+           reasoning: <details class="reasoning-thinking"><summary>Thinking
+                      </summary><pre>...</pre></details>
+           code:      <pre><code class="language-...">...</code></pre>  */
+      .chat-message-content pre {
+        margin: 6px 0;
+        padding: 8px;
+        background: rgba(127, 127, 127, 0.1);
+        border-radius: 6px;
+        font-family: var(--vscode-editor-font-family);
+        font-size: 12px;
+        line-height: 1.4;
+        white-space: pre; /* no wrap -> horizontal scrollbar */
+        overflow-x: auto;
+      }
+
+      .chat-message-kind-error {
+        font-style: italic;
+        color: var(--vscode-errorForeground) !important;
+      }
+
+      /* collapsible action details JSON */
+      .chat-message-details {
+        display: block;
+        font-size: 12px;
+        padding: 4px 12px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        max-height: 160px;
+        overflow-y: auto; /* <-- vertical scrollbar */
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .chat-message-details pre {
+        margin: 0;
+        padding: 8px;
+        background: rgba(127, 127, 127, 0.1);
+        border-radius: 6px;
+        white-space: pre; /* <-- no wrap -> horizontal scrollbar */
+        overflow-x: auto;
+        font-family: var(--vscode-editor-font-family);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      /* =====================================================================
+         OPTION A — "Roomy bubbles + wrap everything"
+         Keep the bubble aesthetic. Widen to ~96%. Wrap ALL preformatted
+         content so no horizontal scrollbars remain anywhere.
+         ===================================================================== */
+      body.opt-a .chat-message-container-agent,
+      body.opt-a .chat-message-container-user {
+        width: auto;
+        max-width: 96%;
+      }
+      body.opt-a .chat-message-agent {
+        left: 0;
+        margin-left: 34px; /* clear the icon without a relative shift */
+      }
+      body.opt-a .chat-message-user {
+        margin-right: 34px;
+      }
+      body.opt-a .chat-message-content {
+        overflow-x: hidden;
+      }
+      body.opt-a .chat-message-content pre,
+      body.opt-a .chat-message-details pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-x: hidden;
+      }
+
+      /* =====================================================================
+         OPTION B — "Full-width IDE" (Copilot-chat style)
+         Remove bubbles entirely. Messages span the full panel width with a
+         thin provenance rail on the left; icons move into a left gutter.
+         Maximizes horizontal space; wraps everything.
+         ===================================================================== */
+      body.opt-b .chat-message-container-agent,
+      body.opt-b .chat-message-container-user {
+        width: auto;
+        max-width: 100%;
+        align-self: stretch;
+        margin-left: 0;
+        margin-right: 0;
+      }
+      body.opt-b .chat-message-agent,
+      body.opt-b .chat-message-user {
+        left: 0 !important;
+        margin: 0 0 4px 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        border: none !important;
+        border-left: 2px solid var(--vscode-panel-border) !important;
+      }
+      body.opt-b .chat-message-agent {
+        border-left-color: var(--accent) !important;
+      }
+      body.opt-b .chat-message-user {
+        background: rgba(127, 127, 127, 0.06) !important;
+        border-left-color: var(--vscode-focusBorder) !important;
+      }
+      body.opt-b .chat-message-content {
+        overflow-x: hidden;
+        padding: 4px 12px 4px 40px; /* left gutter for the icon */
+      }
+      body.opt-b .agent-icon {
+        left: 6px;
+        top: 22px;
+      }
+      body.opt-b .user-icon {
+        left: 6px;
+        right: auto;
+        top: 22px;
+      }
+      body.opt-b .chat-timestamp-user {
+        text-align: left;
+        margin-left: 40px;
+        margin-right: 4px;
+      }
+      body.opt-b .chat-message-content pre,
+      body.opt-b .chat-message-details pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-x: hidden;
+      }
+
+      /* =====================================================================
+         OPTION C — "Roomy bubbles, code scrolls"
+         Widen to ~96% like A, and wrap PROSE / reasoning text, but keep real
+         fenced CODE blocks horizontally scrollable (so code alignment is
+         preserved) with slim, theme-colored scrollbars and a height cap.
+         ===================================================================== */
+      body.opt-c .chat-message-container-agent,
+      body.opt-c .chat-message-container-user {
+        width: auto;
+        max-width: 96%;
+      }
+      body.opt-c .chat-message-agent {
+        left: 0;
+        margin-left: 34px;
+      }
+      body.opt-c .chat-message-user {
+        margin-right: 34px;
+      }
+      body.opt-c .chat-message-content {
+        overflow-x: hidden;
+      }
+      /* Real code blocks (markdown fenced code -> <pre><code>) keep horizontal
+         scroll, contained to the bubble width and height-capped. Mirrors the
+         shipped vscode-theme.css rule 4. */
+      body.opt-c .chat-message-content pre {
+        max-width: 100%;
+        overflow-x: auto;
+        max-height: 420px;
+        overflow-y: auto;
+      }
+      /* Reasoning "Thinking" is prose: box the disclosure and wrap the <pre>
+         (more specific than the code rule above, so wrap wins). Mirrors the
+         shipped vscode-theme.css rule 5. */
+      body.opt-c .chat-message-content .reasoning-thinking {
+        margin: 2px 0;
+        border: 1px solid
+          var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.25));
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      body.opt-c .chat-message-content .reasoning-thinking > summary {
+        padding: 3px 8px;
+        cursor: pointer;
+        font-size: 12px;
+        color: var(--vscode-descriptionForeground, gray);
+        background-color: rgba(127, 127, 127, 0.06);
+      }
+      body.opt-c .chat-message-content .reasoning-thinking > pre {
+        margin: 0;
+        padding: 8px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-x: hidden;
+        max-height: none;
+        background: none; /* the box provides the surface; prototype base pre has a bg */
+        border-radius: 0;
+        font-family: var(--vscode-editor-font-family);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      /* Slim, theme-colored scrollbars for code + JSON details. */
+      body.opt-c .chat-message-content pre::-webkit-scrollbar,
+      body.opt-c .chat-message-details pre::-webkit-scrollbar {
+        width: 10px;
+        height: 8px;
+      }
+      body.opt-c .chat-message-content pre::-webkit-scrollbar-thumb,
+      body.opt-c .chat-message-details pre::-webkit-scrollbar-thumb {
+        background: var(--vscode-scrollbarSlider-background);
+        border-radius: 5px;
+      }
+      body.opt-c .chat-message-content pre::-webkit-scrollbar-thumb:hover,
+      body.opt-c .chat-message-details pre::-webkit-scrollbar-thumb:hover {
+        background: var(--vscode-scrollbarSlider-hoverBackground);
+      }
+
+      /* Slim themed scrollbars for the message list in every redesign option */
+      body.opt-a .chat::-webkit-scrollbar,
+      body.opt-b .chat::-webkit-scrollbar,
+      body.opt-c .chat::-webkit-scrollbar {
+        width: 10px;
+      }
+      body.opt-a .chat::-webkit-scrollbar-thumb,
+      body.opt-b .chat::-webkit-scrollbar-thumb,
+      body.opt-c .chat::-webkit-scrollbar-thumb {
+        background: var(--vscode-scrollbarSlider-background);
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body class="opt-current">
+    <div class="toolbar">
+      <div class="group">
+        <label class="title">Design</label>
+        <button data-opt="opt-current" class="active">Current (55%)</button>
+        <button data-opt="opt-a">A · Roomy + Wrap</button>
+        <button data-opt="opt-b">B · Full-width IDE</button>
+        <button data-opt="opt-c">C · Wide, code scrolls</button>
+      </div>
+      <div class="group">
+        <label class="title">Panel width</label>
+        <button data-w="380">Narrow 380</button>
+        <button data-w="550">Medium 550</button>
+        <button data-w="900" class="active">Wide 900</button>
+      </div>
+    </div>
+
+    <div class="desc" id="desc"></div>
+
+    <div class="stage">
+      <div class="viewport" id="viewport">
+        <div class="viewport-caption" id="caption">Panel width: 900px</div>
+        <div id="chat-container">
+          <div id="chat-root">
+            <div class="chat-panel-wrapper">
+              <div class="chat" id="chat">
+                <!-- USER -->
+                <div class="chat-message-container-user">
+                  <div class="chat-timestamp-user">
+                    <span class="agent-name">you</span
+                    ><span class="timestring">- 4:53:44 PM</span>
+                  </div>
+                  <div class="user-icon">R</div>
+                  <div class="chat-message-body-hide-metrics chat-message-user">
+                    <div class="chat-message-content">
+                      <span class="chat-message-user-text">run the powershell flow test and fix whatever is failing</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- AGENT: reasoning "Thinking" -->
+                <div class="chat-message-container-agent">
+                  <div class="chat-timestamp-agent">
+                    <span class="agent-name"
+                      >dispatcher.reasoningAction.copilot</span
+                    ><span class="timestring">- 4:53:51 PM</span>
+                  </div>
+                  <div class="agent-icon">✨</div>
+                  <div class="chat-message-body-hide-metrics chat-message-agent">
+                    <div class="chat-message-content">
+                      <details class="reasoning-thinking" open>
+                        <summary>Thinking</summary>
+                        <pre>The testPowerShellFlow is failing because the sandbox doesn't allow external executables to spawn child processes without an explicit allowlist entry, so the conditional branch never runs and the here-string is parsed as a literal.</pre>
+                      </details>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- AGENT: tool call -->
+                <div class="chat-message-container-agent">
+                  <div class="chat-timestamp-agent">
+                    <span class="agent-name"
+                      >dispatcher.reasoningAction.copilot</span
+                    ><span class="timestring">- 4:53:51 PM</span>
+                  </div>
+                  <div class="agent-icon">✨</div>
+                  <div class="chat-message-body-hide-metrics chat-message-agent">
+                    <div class="chat-message-content">
+                      <p><strong>Tool:</strong> execute_action — <code>powershell.?</code></p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- AGENT: reasoning "Thinking" #2 -->
+                <div class="chat-message-container-agent">
+                  <div class="chat-timestamp-agent">
+                    <span class="agent-name"
+                      >dispatcher.reasoningAction.copilot</span
+                    ><span class="timestring">- 4:53:55 PM</span>
+                  </div>
+                  <div class="agent-icon">✨</div>
+                  <div class="chat-message-body-hide-metrics chat-message-agent">
+                    <div class="chat-message-content">
+                      <details class="reasoning-thinking" open>
+                        <summary>Thinking</summary>
+                        <pre>The PowerShell test keeps breaking—maybe the sandbox doesn't support conditional statements in the way the harness expects, or the mocked Invoke-Expression shim swallows the exit code before assertion.</pre>
+                      </details>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- AGENT: normal reply with a fenced code block + details -->
+                <div class="chat-message-container-agent">
+                  <div class="chat-timestamp-agent">
+                    <span class="agent-name">dispatcher</span
+                    ><span class="timestring">- 4:54:03 PM</span>
+                  </div>
+                  <div class="agent-icon">🤖</div>
+                  <div class="chat-message-body-hide-metrics chat-message-agent">
+                    <div class="chat-message-content">
+                      <div>
+                        Here is the failing assertion and a suggested fix for the
+                        allowlist entry:
+                      </div>
+                      <pre><code class="language-powershell">Describe "testPowerShellFlow" {
+    It "runs the conditional branch when the allowlist entry is present" {
+        $result = Invoke-Flow -Name 'powershell.conditional' -AllowList @('pwsh.exe','cmd.exe')
+        $result.ExitCode | Should -Be 0        # was failing: sandbox blocked child process spawn
+    }
+}</code></pre>
+                    </div>
+                    <div class="chat-message-details">
+                      <pre>{
+  "actionName": "executePowerShell",
+  "parameters": { "script": "if ($ok) { Write-Output 'done' } else { throw 'sandbox blocked external executable spawn without allowlist entry' }", "timeoutMs": 60000 }
+}</pre>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- AGENT: error -->
+                <div class="chat-message-container-agent">
+                  <div class="chat-timestamp-agent">
+                    <span class="agent-name">dispatcher</span
+                    ><span class="timestring">- 4:54:03 PM</span>
+                  </div>
+                  <div class="agent-icon">🤖</div>
+                  <div class="chat-message-body-hide-metrics chat-message-agent">
+                    <div class="chat-message-content chat-message-kind-error">
+                      Error: Timeout after 60000ms waiting for session.idle
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const descriptions = {
+        "opt-current":
+          "<strong>Current.</strong> Messages are capped at <code>width: 55%</code> and <code>.chat-message-content</code> + every <code>&lt;pre&gt;</code> use <code>overflow-x: auto</code> with <code>white-space: pre</code> — so each reasoning block, code block and JSON detail gets its own horizontal scrollbar, and the whole column wastes ~45% of the panel.",
+        "opt-a":
+          "<strong>Option A · Roomy bubbles + wrap.</strong> Keeps the bubble look. Widens to <code>max-width: 96%</code>, neutralizes the icon-gutter offset, and switches all preformatted content to <code>white-space: pre-wrap</code> — <em>zero</em> horizontal scrollbars. Smallest, safest change.",
+        "opt-b":
+          "<strong>Option B · Full-width IDE.</strong> Drops the bubbles for a Copilot-chat look: messages span <code>100%</code> with a thin left provenance rail, icons in a left gutter, everything wrapped. Maximum horizontal space, most native to VS Code — largest visual departure.",
+        "opt-c":
+          "<strong>Option C · Wide, code scrolls.</strong> Like A (wide bubbles, wrapped prose &amp; reasoning) but real fenced <code>&lt;pre&gt;&lt;code&gt;</code> and JSON details keep a horizontal scrollbar so code alignment is preserved — now slim, theme-colored and height-capped instead of chunky default bars. This option mirrors the shipped <code>vscode-theme.css</code>.",
+      };
+      const body = document.body;
+      const desc = document.getElementById("desc");
+      const viewport = document.getElementById("viewport");
+      const caption = document.getElementById("caption");
+
+      function setOption(opt) {
+        body.className = opt;
+        desc.innerHTML = descriptions[opt];
+        document
+          .querySelectorAll(".toolbar button[data-opt]")
+          .forEach((b) =>
+            b.classList.toggle("active", b.dataset.opt === opt),
+          );
+      }
+      function setWidth(w) {
+        viewport.style.width = w + "px";
+        caption.textContent = "Panel width: " + w + "px";
+        document
+          .querySelectorAll(".toolbar button[data-w]")
+          .forEach((b) =>
+            b.classList.toggle("active", b.dataset.w === String(w)),
+          );
+      }
+
+      document
+        .querySelectorAll(".toolbar button[data-opt]")
+        .forEach((b) =>
+          b.addEventListener("click", () => setOption(b.dataset.opt)),
+        );
+      document
+        .querySelectorAll(".toolbar button[data-w]")
+        .forEach((b) =>
+          b.addEventListener("click", () => setWidth(Number(b.dataset.w))),
+        );
+
+      setOption("opt-current");
+      setWidth(900);
+    </script>
+  </body>
+</html>

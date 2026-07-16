@@ -288,3 +288,113 @@
 .completion-toggle {
   color: var(--vscode-textLink-foreground, var(--vscode-foreground)) !important;
 }
+
+/* ── Message width + scrollbars (vscode-shell only) ─────────────────
+   The shared chat-ui base (packages/chat-ui/styles/chat.css) caps every
+   message at `width: 55%` and lets `.chat-message-content` plus each
+   markdown <pre> scroll horizontally (`overflow-x: auto` over the UA
+   `white-space: pre` default). In a docked VS Code panel that wastes
+   ~45% of the width and stacks a horizontal scrollbar on every reasoning
+   "Thinking" block, code block and JSON detail.
+
+   These rules widen the column and wrap prose while keeping real code
+   blocks scrollable. They live here (not in chat.css) so only vscode-shell
+   is affected: the Electron shell reads its own overlay
+   (packages/shell/src/renderer/assets/styles.less) and is untouched.
+   Injected after chat.css (see webview/main.ts injectStyles order), so
+   they win at equal specificity without needing !important. */
+
+/* 1. Widen messages: replace the 55% cap with a near-full-width column. */
+.chat-message-container-agent,
+.chat-message-container-user {
+  width: auto;
+  max-width: 96%;
+}
+
+/* 2. The base offsets the bubble to clear the absolutely-positioned avatar
+      (agent `left: 30px`, user `margin-right: 30px`). At 55% that fits; at
+      96% the agent's relative `left` shift overflows the panel and adds a
+      page-level horizontal scrollbar. Swap it for a left margin (which
+      reduces width instead of shifting) so the avatar gutter is preserved
+      without overflow. */
+.chat-message-agent {
+  left: 0;
+  margin-left: 34px;
+}
+.chat-message-user {
+  margin-right: 34px;
+}
+
+/* 3. The bubble itself no longer scrolls horizontally; its children manage
+      their own overflow (prose wraps, code scrolls in its own box). */
+.chat-message-content {
+  overflow-x: hidden;
+}
+
+/* 4. Real code blocks (markdown fenced code -> <pre><code>) keep their
+      horizontal scroll so alignment is preserved, but stay contained to
+      the bubble width and are height-capped instead of ballooning the
+      message. */
+.chat-message-content pre {
+  max-width: 100%;
+  overflow-x: auto;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+/* 5. Reasoning "Thinking" is prose, not code. The engine emits it as
+      <details class="reasoning-thinking"><summary>Thinking</summary>
+      <pre>...</pre></details> (dispatcher reasoning/copilot.ts) and the
+      base leaves the <pre> at the UA `white-space: pre` default, so long
+      lines scroll. Group it into a subtle box and wrap the text (more
+      specific than rule 4, so wrapping wins over the code-scroll rule). */
+.chat-message-content .reasoning-thinking {
+  margin: 2px 0;
+  border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.25));
+  border-radius: 6px;
+  overflow: hidden;
+}
+.chat-message-content .reasoning-thinking > summary {
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground, gray);
+  background-color: rgba(127, 127, 127, 0.06);
+}
+.chat-message-content .reasoning-thinking > pre {
+  margin: 0;
+  padding: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: hidden;
+  max-height: none;
+  font-family: var(
+    --vscode-editor-font-family,
+    Consolas,
+    "Courier New",
+    monospace
+  );
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* 6. Slim, theme-colored scrollbars for the remaining scroll areas: code
+      blocks and the collapsible JSON action details. */
+.chat-message-content pre::-webkit-scrollbar,
+.chat-message-details pre::-webkit-scrollbar {
+  width: 10px;
+  height: 8px;
+}
+.chat-message-content pre::-webkit-scrollbar-thumb,
+.chat-message-details pre::-webkit-scrollbar-thumb {
+  background-color: var(--vscode-scrollbarSlider-background);
+  border-radius: 5px;
+}
+.chat-message-content pre::-webkit-scrollbar-thumb:hover,
+.chat-message-details pre::-webkit-scrollbar-thumb:hover {
+  background-color: var(--vscode-scrollbarSlider-hoverBackground);
+}
+.chat-message-content pre::-webkit-scrollbar-track,
+.chat-message-details pre::-webkit-scrollbar-track {
+  background-color: transparent;
+}
