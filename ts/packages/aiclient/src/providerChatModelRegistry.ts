@@ -11,7 +11,7 @@ import type { ApiSettings, ModelProviders } from "./openai.js";
 export type ProviderChatModelFactory = (
     settings: ApiSettings,
     completionSettings?: CompletionSettings,
-    completionCallback?: (request: any, response: any) => void,
+    completionCallback?: (request: unknown, response: unknown) => void,
     tags?: string[],
 ) => ChatModelWithStreaming;
 
