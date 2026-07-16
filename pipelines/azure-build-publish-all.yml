@@ -435,39 +435,61 @@ stages:
             artifact: npm-packages
             displayName: "Download npm-packages artifact"
 
+          # Fail fast if required pipeline variables are not configured.
           - bash: |
-              echo "registry=$(PUBLISH_REGISTRY)" > "$(Build.SourcesDirectory)/.npmrc"
+              if [ -z "$PUBLISH_REGISTRY" ]; then
+                echo "##[error]PUBLISH_REGISTRY pipeline variable is not set. Configure it in the pipeline definition (ADO UI)."
+                exit 1
+              fi
+              if [ -z "$INSTALL_REGISTRY" ]; then
+                echo "##[error]INSTALL_REGISTRY pipeline variable is not set. Configure it in the pipeline definition (ADO UI)."
+                exit 1
+              fi
+              echo "PUBLISH_REGISTRY=$PUBLISH_REGISTRY"
+              echo "INSTALL_REGISTRY=$INSTALL_REGISTRY"
+            displayName: "Validate registry variables"
+            env:
+              PUBLISH_REGISTRY: $(PUBLISH_REGISTRY)
+              INSTALL_REGISTRY: $(INSTALL_REGISTRY)
+
+          - bash: |
+              echo "registry=$PUBLISH_REGISTRY" > "$(Build.SourcesDirectory)/.npmrc"
               cat "$(Build.SourcesDirectory)/.npmrc"
             displayName: "Create .npmrc"
+            env:
+              PUBLISH_REGISTRY: $(PUBLISH_REGISTRY)
 
           - task: npmAuthenticate@0
             displayName: "Authenticate with Azure Artifacts"
             inputs:
               workingFile: "$(Build.SourcesDirectory)/.npmrc"
 
-          - script: |
+          - bash: |
               for file in $(Pipeline.Workspace)/npm-packages/published/*.tgz; do
                 echo "Publishing file: $file"
-                npm publish --registry=$(PUBLISH_REGISTRY) --tag=latest "$file"
+                npm publish --registry="$PUBLISH_REGISTRY" --tag=latest "$file"
               done
             displayName: "Publish packages"
             workingDirectory: $(Build.SourcesDirectory)
+            env:
+              PUBLISH_REGISTRY: $(PUBLISH_REGISTRY)
 
           # Prime INSTALL_REGISTRY so freshly published versions are
           # immediately available via the upstream pull-through cache.
           - bash: |
               set -euo pipefail
-              echo "registry=$(INSTALL_REGISTRY)" > /tmp/prime/.npmrc 2>/dev/null || true
               mkdir -p /tmp/prime
-              echo "registry=$(INSTALL_REGISTRY)" > /tmp/prime/.npmrc
+              echo "registry=$INSTALL_REGISTRY" > /tmp/prime/.npmrc
               cd /tmp/prime
               for file in $(Pipeline.Workspace)/npm-packages/published/*.tgz; do
                 name=$(tar -xzOf "$file" package/package.json | jq -r .name)
                 version=$(tar -xzOf "$file" package/package.json | jq -r .version)
                 echo "Priming INSTALL_REGISTRY cache: $name@$version"
-                npm pack --registry=$(INSTALL_REGISTRY) "$name@$version" > /dev/null || true
+                npm pack --registry="$INSTALL_REGISTRY" "$name@$version" > /dev/null || true
               done
             displayName: "Prime INSTALL_REGISTRY cache"
+            env:
+              INSTALL_REGISTRY: $(INSTALL_REGISTRY)
 
       # ── Publish agent-server Universal packages ───────────────────
       - job: publish_agent_server
@@ -664,10 +686,12 @@ stages:
 
           # Set up internal npm registry (required by org policy).
           - bash: |
-              echo "registry=$(INSTALL_REGISTRY)" > .npmrc
+              echo "registry=$INSTALL_REGISTRY" > .npmrc
               cat .npmrc
             displayName: "Set npm registry"
             workingDirectory: $(buildDirectory)
+            env:
+              INSTALL_REGISTRY: $(INSTALL_REGISTRY)
 
           - task: npmAuthenticate@0
             displayName: "Authenticate to npm registry"
