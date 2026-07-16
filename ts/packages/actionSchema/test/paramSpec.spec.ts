@@ -212,4 +212,75 @@ describe("Action Schema with param specs", () => {
             "Error parsing schema 'test': Schema Config Error: Invalid parameter name 'foo.other' for action 'someAction': property 'other' does not exist",
         );
     });
+
+    it("union member field", async () => {
+        const schemaConfig = {
+            paramSpec: {
+                someAction: {
+                    "target.trackName": "checked_wildcard",
+                },
+            },
+        } as const;
+
+        const result = await parseActionSchemaSource(
+            `export type AllActions = SomeAction;\ntype ByTrack = { kind: "track", trackName: string, artists?: string[] };\ntype ByArtist = { kind: "artist", artist: string };\ntype Target = ByTrack | ByArtist;\ntype SomeAction = { actionName: "someAction", parameters: { target: Target } }`,
+            "test",
+            "AllActions",
+            "",
+            schemaConfig,
+            false,
+        );
+        const def = result.actionSchemas.get("someAction");
+        expect(def).toBeDefined();
+        expect(def?.paramSpecs).toMatchObject(
+            schemaConfig.paramSpec.someAction,
+        );
+    });
+
+    it("union member array field", async () => {
+        const schemaConfig = {
+            paramSpec: {
+                someAction: {
+                    "target.artists.*": "checked_wildcard",
+                },
+            },
+        } as const;
+
+        const result = await parseActionSchemaSource(
+            `export type AllActions = SomeAction;\ntype ByTrack = { kind: "track", trackName: string, artists?: string[] };\ntype ByArtist = { kind: "artist", artist: string };\ntype Target = ByTrack | ByArtist;\ntype SomeAction = { actionName: "someAction", parameters: { target: Target } }`,
+            "test",
+            "AllActions",
+            "",
+            schemaConfig,
+            false,
+        );
+        const def = result.actionSchemas.get("someAction");
+        expect(def).toBeDefined();
+        expect(def?.paramSpecs).toMatchObject(
+            schemaConfig.paramSpec.someAction,
+        );
+    });
+
+    it("Reject - field not in any union member", async () => {
+        const schemaConfig = {
+            paramSpec: {
+                someAction: {
+                    "target.nonexistent": "wildcard",
+                },
+            },
+        } as const;
+
+        expect(async () =>
+            parseActionSchemaSource(
+                `export type AllActions = SomeAction;\ntype ByTrack = { kind: "track", trackName: string };\ntype ByArtist = { kind: "artist", artist: string };\ntype Target = ByTrack | ByArtist;\ntype SomeAction = { actionName: "someAction", parameters: { target: Target } }`,
+                "test",
+                "AllActions",
+                "",
+                schemaConfig,
+                false,
+            ),
+        ).rejects.toThrow(
+            "Error parsing schema 'test': Schema Config Error: Invalid parameter name 'target.nonexistent' for action 'someAction': property 'nonexistent' does not exist",
+        );
+    });
 });

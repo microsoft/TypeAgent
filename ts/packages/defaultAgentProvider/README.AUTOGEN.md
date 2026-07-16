@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=fbf67311a5655ddd9bb173383f61dd40bc848df392aa9000b4658228e7df237d -->
+<!-- AUTOGEN:DOCS:HASH:sha256=f66d060c2d28196c6ce519d1f47eae3a71746ffdfb788d747d9c0f0657ff6ce1 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # default-agent-provider — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent framework. It is a foundational component used by the shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents and configurations are available to support the TypeAgent ecosystem, including test agents and dispatcher configurations.
+The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent framework. It is a core component used by the shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents and configurations are available to support the TypeAgent ecosystem, including test agents and dispatcher configurations.
 
 ## What it does
 
-The `default-agent-provider` package provides a centralized mechanism for managing agents and their configurations. Its key responsibilities include:
+The `default-agent-provider` package provides a centralized mechanism for managing agents and their configurations. Its primary responsibilities include:
 
 - **Default Agent Providers**: Functions like `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` supply pre-configured agent providers and construction mechanisms for initializing agents.
 - **Agent Source Management**: The `getDefaultAppAgentSource` function manages the connected app-agent source, including the installed-agent record store and the host-owned `@package` agent.
@@ -195,6 +195,6 @@ _4 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `27016facc11ab05d8556e8b89c421f6a0a90f2e2` on `2026-07-15T22:35:06.059Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
+_Auto-generated against commit `5fc3c615e8d9fa175d635713c0ef64d7bda1ae1d` on `2026-07-15T22:53:07.031Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

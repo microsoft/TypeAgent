@@ -10,12 +10,8 @@ import {
 } from "typechat";
 import { getEnvSetting } from "./common.js";
 import { ChatModelWithStreaming, CompletionSettings } from "./models.js";
-import {
-    CommonApiSettings,
-    CompletionUsageStats,
-    EnvVars,
-    ModelType,
-} from "./openai.js";
+import { CompletionUsageStats, EnvVars, ModelType } from "./apiTypes.js";
+import type { CommonApiSettings } from "./openai.js";
 import {
     callApi,
     callJsonApi,

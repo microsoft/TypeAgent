@@ -1,35 +1,24 @@
 {
   "paramSpec": {
-    "playRandom": {
+    "playMusic": {
+      "target.trackName": "checked_wildcard",
+      "target.artists.*": "checked_wildcard",
+      "target.albumName": "checked_wildcard",
+      "target.artist": "checked_wildcard",
       "quantity": "number"
     },
-    "playTrack": {
-      "trackName": "checked_wildcard",
-      "artists.*": "checked_wildcard"
+    "findMusic": {
+      "target.trackName": "checked_wildcard",
+      "target.artists.*": "checked_wildcard",
+      "target.albumName": "checked_wildcard",
+      "target.artist": "checked_wildcard",
+      "quantity": "number"
     },
     "playFromCurrentTrackList": {
       "trackNumber": "ordinal"
     },
     "getFromCurrentPlaylistList": {
       "playlistNumber": "ordinal"
-    },
-    "playAlbum": {
-      "albumName": "checked_wildcard",
-      "artists.*": "checked_wildcard",
-      "trackNumber.*": "ordinal"
-    },
-    "playAlbumTrack": {
-      "albumName": "checked_wildcard",
-      "trackName": "checked_wildcard",
-      "artists.*": "checked_wildcard"
-    },
-    "playArtist": {
-      "artist": "checked_wildcard",
-      "quantity": "number"
-    },
-    "playGenre": {
-      "genre": "checked_wildcard",
-      "quantity": "number"
     },
     "setVolume": {
       "newVolumeLevel": "number"
@@ -61,21 +50,17 @@
     }
   },
   "paramCompletionEmojis": {
-    "playTrack": {
-      "trackName": "🎶",
-      "artists.*": "🎼"
+    "playMusic": {
+      "target.trackName": "🎶",
+      "target.albumName": "💿",
+      "target.artist": "🎼",
+      "target.artists.*": "🎼"
     },
-    "playAlbum": {
-      "albumName": "💿",
-      "artists.*": "🎼"
-    },
-    "playAlbumTrack": {
-      "albumName": "💿",
-      "trackName": "🎶",
-      "artists.*": "🎼"
-    },
-    "playArtist": {
-      "artist": "🎼"
+    "findMusic": {
+      "target.trackName": "🎶",
+      "target.albumName": "💿",
+      "target.artist": "🎼",
+      "target.artists.*": "🎼"
     },
     "getPlaylist": {
       "name": "📃"
