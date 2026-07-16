@@ -37,7 +37,7 @@ import {
 } from "./restClient.js";
 import { readServerEventStream } from "./serverEvents.js";
 import { TokenCounter } from "./tokenCounter.js";
-import { CompletionUsageStats } from "./openai.js";
+import { CompletionUsageStats } from "./apiTypes.js";
 import { registerProviderChatModel } from "./providerChatModelRegistry.js";
 
 const debug = registerDebug("typeagent:aiclient:copilot");

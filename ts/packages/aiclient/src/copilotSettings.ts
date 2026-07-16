@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommonApiSettings, ModelType } from "./openai.js";
+import { ModelType } from "./apiTypes.js";
+import type { CommonApiSettings } from "./openai.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
 
 export type CopilotReasoningEffort = "low" | "medium" | "high" | "xhigh";
