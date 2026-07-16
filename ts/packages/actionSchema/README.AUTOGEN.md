@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=18a2f23010db57a54c4e3e41931846a44352087732157a8893550750b1dd2d4c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=07ac322ec82bbe9c21c73cdecb98e532472e23bc01f53fa844d042c0c79acf9f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/action-schema — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `@typeagent/action-schema` package is a TypeScript library designed to facilitate the parsing, generation, and validation of action schemas within the TypeAgent framework. Action schemas define the structure and constraints of actions, ensuring consistency and correctness across the system. This package is a foundational component of the TypeAgent ecosystem and is widely used by other packages in the monorepo.
+The `@typeagent/action-schema` package is a TypeScript library that provides tools for parsing, generating, and validating action schemas within the TypeAgent framework. Action schemas are used to define the structure, types, and constraints of actions, ensuring consistency and correctness across the system. This package is a core utility in the TypeAgent ecosystem and is widely used by other packages in the monorepo.
 
 ## What it does
 
-The `@typeagent/action-schema` package provides a comprehensive set of tools for working with action schemas. Its key capabilities include:
+The `@typeagent/action-schema` package offers a range of functionalities to support the creation and management of action schemas:
 
 - **Parsing Action Schemas**: Extract schema definitions from TypeScript source files using functions like `parseActionSchemaSource` and `parseSchemaSource`.
 - **Schema Generation**: Generate schema definitions from TypeScript types with utilities such as `generateActionSchema` and `generateSchemaTypeDefinition`.
@@ -24,21 +24,21 @@ The `@typeagent/action-schema` package provides a comprehensive set of tools for
 - **Validation**: Validate actions against their defined schemas using the `validateAction` function.
 - **Serialization**: Serialize and deserialize parsed action schemas with `toJSONParsedActionSchema` and `fromJSONParsedActionSchema`.
 
-These features enable the package to serve as a critical tool for defining, managing, and enforcing structured action schemas in TypeAgent-based projects. It is a dependency for several other packages in the monorepo, including `@typeagent/action-grammar`, `@typeagent/action-grammar-compiler`, and `@typeagent/core`.
+These capabilities make the package essential for defining and enforcing structured action schemas, which are used extensively across the TypeAgent ecosystem. It is a dependency for numerous other packages, including `@typeagent/action-grammar`, `@typeagent/action-grammar-compiler`, and `@typeagent/core`.
 
 ## Setup
 
-To use the `@typeagent/action-schema` package, install it along with its external dependencies. Run the following command:
+To use the `@typeagent/action-schema` package, install it along with its external dependencies by running the following command:
 
 ```sh
 pnpm install @typeagent/action-schema debug typescript
 ```
 
-No additional setup, such as environment variables or external services, is required. For more details, refer to the hand-written README.
+No additional setup, such as environment variables or external services, is required.
 
 ## Key Files
 
-The package is organized into several key modules, each responsible for specific aspects of schema handling:
+The package is structured into several key modules, each responsible for specific functionality:
 
 - **[index.ts](./src/index.ts)**: The main entry point of the package. It exports core types and functions for schema parsing, generation, validation, and serialization.
 - **[creator.ts](./src/creator.ts)**: Provides utilities for creating schema types, such as `string`, `number`, `boolean`, and more complex types like `array` and `object`. This is the starting point for defining new schema types.
@@ -51,7 +51,7 @@ The package is organized into several key modules, each responsible for specific
 
 ## How to extend
 
-To extend the `@typeagent/action-schema` package, follow these steps:
+To extend the functionality of the `@typeagent/action-schema` package, follow these steps:
 
 1. **Identify the area to extend**:
 
@@ -111,6 +111,6 @@ External: `debug`, `typescript`
 
 ---
 
-_Auto-generated against commit `5c9fc637c2f0a96d75d41a3bc9054d06247d26d8` on `2026-07-15T08:50:41.068Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-schema docs:verify-links` to spot-check._
+_Auto-generated against commit `2a8c6e65a1638c435219fd5b8688faeeec78d4c7` on `2026-07-16T01:20:16.260Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-schema docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

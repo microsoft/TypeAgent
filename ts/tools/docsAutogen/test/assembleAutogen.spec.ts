@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { assembleAutogenBlock } from "../src/assembleAutogen.js";
+import {
+    assembleAutogenBlock,
+    computeInputHash,
+} from "../src/assembleAutogen.js";
+import { parseHashComment } from "../src/contentHash.js";
 import type { PackageInputs } from "../src/packageInputs.js";
 import type { WorkspacePackage } from "../src/workspaceGraph.js";
 
@@ -102,6 +106,37 @@ describe("assembleAutogenBlock", () => {
             { headSha: "x", isoDate: "d" },
         );
         expect(a.hash).not.toBe(b.hash);
+    });
+
+    // The idempotency gate in cli.ts computes computeInputHash(inputs) and
+    // compares it to the hash parsed out of the on-disk file. If these two
+    // ever diverge the gate silently stops skipping (or skips wrongly), so
+    // lock the invariant: the standalone hash equals the embedded comment.
+    it("computeInputHash equals the hash embedded in the body", () => {
+        const inputs = makeInputs();
+        const block = assembleAutogenBlock(inputs, {
+            headSha: "sha",
+            isoDate: "date",
+        });
+        expect(computeInputHash(inputs)).toBe(block.hash);
+        expect(computeInputHash(inputs)).toBe(parseHashComment(block.body));
+    });
+
+    it("computeInputHash ignores the LLM body and footer", () => {
+        const inputs = makeInputs();
+        const withLlm = assembleAutogenBlock(inputs, {
+            headSha: "x",
+            isoDate: "2026-01-01",
+            llmDocumentationBody: "## Overview\n\nSomething specific.",
+        });
+        const withoutLlm = assembleAutogenBlock(inputs, {
+            headSha: "y",
+            isoDate: "2099-12-31",
+        });
+        expect(parseHashComment(withLlm.body)).toBe(computeInputHash(inputs));
+        expect(parseHashComment(withoutLlm.body)).toBe(
+            computeInputHash(inputs),
+        );
     });
 
     it("embeds the LLM-authored body when supplied", () => {

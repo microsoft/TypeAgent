@@ -1,0 +1,126 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Inline per-PR regeneration of package-level README.AUTOGEN.md companion
+# files. When a pull request changes a package's source, this workflow
+# regenerates that package's companion doc and commits it back onto the PR
+# branch, so the documentation update travels in the same PR that changed
+# the code - reviewed by the same person, gated by the same checks. This
+# replaces the standalone daily bot PR for the common case; docs-refresh.yml
+# now runs only twice a month as a backstop (forks, failed inline runs, and
+# repo-wide regenerations when the generator or templates change).
+#
+# No loop, by construction. The regenerated doc is committed with the
+# TypeAgent-Bot App token so the normal PR checks re-run on it (same reason
+# format-pr.yml uses that token). That commit re-triggers THIS workflow too,
+# but docs-autogen embeds a content hash of each package's deterministic
+# inputs and skips any package whose hash still matches - so the second run
+# regenerates nothing, commits nothing, and the cycle terminates. No path
+# exclusion or "skip my own commit" guard is needed; idempotency does it.
+#
+# Fork PRs are not handled here: a pull_request from a fork gets a read-only
+# token (cannot push back) and no `models: read` token. The twice-monthly
+# docs-refresh sweep regenerates fork-introduced drift after merge.
+
+name: docs-pr-amend
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "ts/packages/**"
+      - ".github/workflows/docs-pr-amend.yml"
+      - ".github/actions/docs-generate/**"
+
+# One in-flight run per PR; a new push supersedes the previous run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  # Push the regenerated companions back onto the PR branch.
+  contents: write
+  # Reach GitHub Models inference with the built-in GITHUB_TOKEN.
+  models: read
+
+jobs:
+  regenerate:
+    # Same-repo PRs only. Fork PRs get a read-only token (cannot push the
+    # commit back) and no models token; the docs-refresh sweep covers them.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      # `vars`/`secrets` cannot be used directly in step `if` conditions, so
+      # expose whether the App credentials are configured as a string. The
+      # App id is a repo variable and the private key a secret - the same
+      # convention docs-refresh.yml uses.
+      HAS_APP_CREDS: ${{ vars.DEPENDABOT_APP_ID != '' }}
+    steps:
+      - name: Setup Git LF
+        run: git config --global core.autocrlf false
+
+      # Mint a short-lived TypeAgent-Bot App token. Pushing the regenerated
+      # commit with it re-triggers the normal PR checks on that commit (the
+      # default GITHUB_TOKEN would not). When the App secrets are absent the
+      # step is skipped and the push falls back to GITHUB_TOKEN (the commit
+      # still lands, but downstream checks are not re-triggered on it).
+      - name: Generate app token
+        id: app-token
+        if: env.HAS_APP_CREDS == 'true'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.DEPENDABOT_APP_ID }}
+          private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          # Full history so the merge-base with the base branch resolves.
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Fetch base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --no-tags origin "$BASE_REF"
+
+      # Scope to exactly the packages this PR changed by diffing against the
+      # merge-base with the target branch (equivalent to the PR's three-dot
+      # diff). The content-hash gate then drops any of those whose inputs did
+      # not actually change, so a re-triggered run is a no-op.
+      - name: Resolve PR merge-base
+        id: base
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          MERGE_BASE="$(git merge-base "origin/${BASE_REF}" HEAD)"
+          echo "since=$MERGE_BASE" >> "$GITHUB_OUTPUT"
+          echo "Regenerating packages changed since merge-base $MERGE_BASE"
+
+      # Advisory: a docs hiccup (LLM error, rate limit, transient failure)
+      # must never block the code PR. The twice-monthly docs-refresh sweep is
+      # the authority/backstop, and docs-autogen preserves the existing AI
+      # body when a package's authoring fails. The shared composite installs
+      # deps, builds the CLI, runs it against GitHub Models, and prettier-
+      # formats the written files.
+      - name: Regenerate changed READMEs
+        continue-on-error: true
+        uses: ./.github/actions/docs-generate
+        with:
+          since: ${{ steps.base.outputs.since }}
+          github-token: ${{ github.token }}
+
+      # Commit only the regenerated companions back onto the PR branch. The
+      # action no-ops when nothing changed (e.g. every changed package was
+      # skipped by the content-hash gate), which is what makes a re-triggered
+      # run terminate instead of looping. README.md is never touched.
+      - name: Commit regenerated docs
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: regenerate README.AUTOGEN.md for changed packages"
+          commit_user_name: typeagent-bot
+          commit_user_email: typeagent-bot[bot]@users.noreply.github.com
+          commit_author: "typeagent-bot <typeagent-bot[bot]@users.noreply.github.com>"
+          file_pattern: "ts/packages/**/README.AUTOGEN.md"

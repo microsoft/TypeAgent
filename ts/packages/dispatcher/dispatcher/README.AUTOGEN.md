@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=30e0b89af6df1186cf8dfba60b3ead1927a967bbe00edf43f23e12854fb3c94c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=60bfcf5595e55db4ea32b9f8799e93ac976d9ba34d5ceaa10bf94a2a890ad91d -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a TypeScript library that serves as the central hub for processing user requests and coordinating interactions between various application agents in the TypeAgent ecosystem. It enables natural language interfaces by leveraging large language models (LLMs) to translate user inputs into structured actions. The Dispatcher is designed to be extensible and scalable, making it a critical component for building personal agents that can be integrated into different front ends, such as the TypeAgent Shell and CLI.
+The TypeAgent Dispatcher is a TypeScript library that acts as the central hub for processing user requests and coordinating interactions between various application agents in the TypeAgent ecosystem. It enables natural language interfaces by leveraging large language models (LLMs) to translate user inputs into structured actions. The Dispatcher is designed to be extensible and scalable, making it a critical component for building personal agents that can be integrated into different front ends, such as the TypeAgent Shell and CLI.
 
 ## What it does
 
@@ -236,6 +236,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `5c9fc637c2f0a96d75d41a3bc9054d06247d26d8` on `2026-07-15T08:50:41.068Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `2a8c6e65a1638c435219fd5b8688faeeec78d4c7` on `2026-07-16T01:20:16.260Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

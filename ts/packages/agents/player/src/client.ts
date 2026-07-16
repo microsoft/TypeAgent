@@ -701,7 +701,11 @@ async function playMusicAction(
     if (target.kind === "playlist") {
         return showMatchingPlaylists(target.query, clientContext);
     }
-    const collection = await resolveMusicTarget(target, clientContext, quantity);
+    const collection = await resolveMusicTarget(
+        target,
+        clientContext,
+        quantity,
+    );
     if (collection === undefined) {
         return createNotFoundActionResult("music");
     }
@@ -716,7 +720,11 @@ async function findMusicAction(
     if (target.kind === "playlist") {
         return showMatchingPlaylists(target.query, clientContext);
     }
-    const collection = await resolveMusicTarget(target, clientContext, quantity);
+    const collection = await resolveMusicTarget(
+        target,
+        clientContext,
+        quantity,
+    );
     if (collection === undefined) {
         return createNotFoundActionResult("music");
     }
