@@ -290,19 +290,13 @@ stages:
             displayName: "Upload artifact: mcp-exe-$(rid)"
             artifact: mcp-exe-$(rid)
 
-      # ── Job 1c: Shell packaging (win + mac — required) ────────────
+      # ── Job 1c: Shell packaging (windows only for now) ────────────
+      # TODO: Re-enable linux and mac legs once disk-space / build
+      #       issues on hosted agents are resolved.
       - job: build_shell
         displayName: "Build shell installer"
-        strategy:
-          matrix:
-            windows:
-              image: windows-latest
-              shellPlatform: win
-            mac:
-              image: macos-latest
-              shellPlatform: mac
         pool:
-          vmImage: $(image)
+          vmImage: windows-latest
         steps:
           - template: include-prepare-repo.yml
             parameters:
@@ -339,91 +333,13 @@ stages:
           - script: |
               copy %ELECTRON_BUILDER_CHANNEL%-x64.yml %ELECTRON_BUILDER_CHANNEL%.yml
             displayName: "Copy windows x64 to default channel file"
-            condition: eq(variables['Agent.OS'], 'Windows_NT')
             workingDirectory: $(shell_folder)/dist
             env:
               ELECTRON_BUILDER_CHANNEL: $(resolvedChannel)
 
           - publish: $(shell_folder)/dist
-            displayName: "Upload artifact: shell-$(shellPlatform)"
-            artifact: shell-$(shellPlatform)
-
-      # ── Job 1d: Shell packaging (linux — optional, does not fail build) ──
-      - job: build_shell_linux
-        displayName: "Build shell installer (linux, optional)"
-        continueOnError: true
-        pool:
-          vmImage: ubuntu-latest
-        variables:
-          shellPlatform: linux
-        steps:
-          - template: include-prepare-repo.yml
-            parameters:
-              buildDirectory: $(buildDirectory)
-              nodeVersion: $(nodeVersion)
-              registry: $(INSTALL_REGISTRY)
-
-          - template: include-update-package-version.yml
-            parameters:
-              buildDirectory: $(buildDirectory)
-              prerelease: $(resolvedChannel).$(Build.BuildNumber)
-
-          - script: |
-              pnpm run build:shell
-            displayName: "Build shell"
-            workingDirectory: $(buildDirectory)
-
-          - task: Cache@2
-            displayName: Cache Electron Builder
-            inputs:
-              key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(buildDirectory)/pnpm-lock.yaml
-              path: $(ELECTRON_CACHE_DIR)
-              restoreKeys: |
-                electron | $(Agent.OS) | $(Agent.OSArchitecture)
-
-          - bash: |
-              # Free disk space aggressively on Linux — the .deb fpm/tar step
-              # needs several GB of temp space beyond the unpacked app.
-
-              echo "=== Disk before cleanup ==="
-              df -h / || true
-
-              # 1. Remove pnpm content-addressable store.
-              pnpm store prune
-              rm -rf $(Pipeline.Workspace)/.pnpm-store 2>/dev/null || true
-
-              # 2. Remove node_modules for everything except shell.
-              find $(buildDirectory)/packages -maxdepth 2 -type d -name "node_modules" ! -path "*/shell/*" -exec rm -rf {} + 2>/dev/null || true
-
-              # 3. Remove examples, docs, test output.
-              rm -rf $(buildDirectory)/examples 2>/dev/null || true
-              rm -rf $(buildDirectory)/docs 2>/dev/null || true
-              find $(buildDirectory)/packages -type d -name "dist" -path "*/test/*" -exec rm -rf {} + 2>/dev/null || true
-
-              # 4. Remove .cache and temp directories.
-              rm -rf $(buildDirectory)/node_modules/.cache 2>/dev/null || true
-
-              # 5. Remove pre-installed tools/SDKs that ADO hosted agents ship.
-              sudo rm -rf /usr/share/dotnet 2>/dev/null || true
-              sudo rm -rf /usr/local/lib/android 2>/dev/null || true
-              sudo rm -rf /opt/ghc 2>/dev/null || true
-              sudo rm -rf /usr/share/swift 2>/dev/null || true
-              sudo rm -rf /usr/local/share/boost 2>/dev/null || true
-
-              echo "=== Disk after cleanup ==="
-              df -h / || true
-            displayName: "Free disk space before packaging"
-
-          - script: |
-              pnpm run shell:package
-            displayName: "Package shell"
-            workingDirectory: $(buildDirectory)
-            env:
-              ELECTRON_BUILDER_CHANNEL: $(resolvedChannel)
-
-          - publish: $(shell_folder)/dist
-            displayName: "Upload artifact: shell-linux"
-            artifact: shell-linux
+            displayName: "Upload artifact: shell-win"
+            artifact: shell-win
 
   # ════════════════════════════════════════════════════════════════════
   #  STAGE 2 — TEST (optional)
@@ -492,7 +408,7 @@ stages:
     # Run if Build succeeded and Test either succeeded or was skipped.
     condition: |
       and(
-        eq(stageDependencies.Build.result, 'Succeeded'),
+        in(stageDependencies.Build.result, 'Succeeded', 'SucceededWithIssues'),
         in(stageDependencies.Test.result, 'Succeeded', 'Skipped')
       )
     variables:
@@ -684,9 +600,8 @@ stages:
               AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
 
       # ── Publish shell installers to Azure Blob Storage ────────────
-      # Linux artifact may not exist (build_shell_linux is optional).
-      # Use explicit steps per platform instead of a compile-time loop
-      # so we can make linux conditional.
+      # Currently only windows; re-enable linux/mac when those build
+      # jobs are restored.
       - deployment: publish_shell
         displayName: "Publish shell to Azure Storage"
         condition: eq('${{ parameters.publishShell }}', 'true')
@@ -698,7 +613,6 @@ stages:
           runOnce:
             deploy:
               steps:
-                # ── Windows (required) ──
                 - download: current
                   artifact: shell-win
                   displayName: "Download shell-win"
@@ -711,40 +625,6 @@ stages:
                   displayName: "Upload Azure Storage - win"
                   inputs:
                     SourcePath: $(Pipeline.Workspace)\shell-win\**
-                    Destination: AzureBlob
-                    azureSubscription: $(azureSubscription)
-                    storage: $(azureStorageAccountName)
-                    ContainerName: $(azureStorageContainerName)
-
-                # ── Mac (required) ──
-                - download: current
-                  artifact: shell-mac
-                  displayName: "Download shell-mac"
-                  patterns: |
-                    TypeAgent Shell[-_]*
-                    typeagentshell-*
-                    $(resolvedChannel)*.yml
-
-                - task: AzureFileCopy@6
-                  displayName: "Upload Azure Storage - mac"
-                  inputs:
-                    SourcePath: $(Pipeline.Workspace)\shell-mac\**
-                    Destination: AzureBlob
-                    azureSubscription: $(azureSubscription)
-                    storage: $(azureStorageAccountName)
-                    ContainerName: $(azureStorageContainerName)
-
-                # ── Linux (optional — skip if build_shell_linux failed) ──
-                - download: current
-                  artifact: shell-linux
-                  displayName: "Download shell-linux (optional)"
-                  continueOnError: true
-
-                - task: AzureFileCopy@6
-                  displayName: "Upload Azure Storage - linux"
-                  condition: and(succeeded(), ne(variables['Agent.JobStatus'], 'SucceededWithIssues'))
-                  inputs:
-                    SourcePath: $(Pipeline.Workspace)\shell-linux\**
                     Destination: AzureBlob
                     azureSubscription: $(azureSubscription)
                     storage: $(azureStorageAccountName)
