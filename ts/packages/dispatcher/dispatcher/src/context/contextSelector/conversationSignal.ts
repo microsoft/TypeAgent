@@ -41,6 +41,10 @@ export type SignalConfig = {
     windowTurns: number;
     // Per-turn recency decay lambda (default 0.9).
     decay: number;
+    // Suppress negated content words from the context vector (§7). Optional so
+    // test constructors and non-signal callers stay simple; treated as off when
+    // unset. Production enables it via the contextSelector config default.
+    negationGuard?: boolean;
 };
 
 // V1 source (§7.2): a contextSelector-owned ring buffer of recent raw user
@@ -76,16 +80,19 @@ export class RingBufferSignalSource implements ConversationSignalSource {
     // completes), so the newest buffered turn is age 1 — history-only by
     // construction (§10, §14).
     public getContextVector(): ContextVector {
-        const { decay } = this.getConfig();
+        const { decay, negationGuard } = this.getConfig();
         const cap = this.cap();
         const start = Math.max(0, this.buffer.length - cap);
         const turns = this.buffer.slice(start);
         const len = turns.length;
+        const tokenizeOptions = negationGuard
+            ? { dropNegatedSpans: true }
+            : undefined;
         const vector = new Map<string, number>();
         for (let i = 0; i < len; i++) {
             const age = len - i;
             const weight = Math.pow(decay, age);
-            for (const token of tokenize(turns[i])) {
+            for (const token of tokenize(turns[i], tokenizeOptions)) {
                 vector.set(token, (vector.get(token) ?? 0) + weight);
             }
         }
