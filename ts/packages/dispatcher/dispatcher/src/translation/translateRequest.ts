@@ -999,7 +999,10 @@ async function finalizeAction(
         // This is the second action lookup, stop it and return unknown
         const unknownAction: UnknownAction = {
             actionName: "unknown",
-            parameters: { request: currentAction.parameters.request },
+            parameters: {
+                request: currentAction.parameters.request,
+                reason: "The follow-up action lookup did not resolve to a known action.",
+            },
         };
         currentAction = unknownAction;
     }

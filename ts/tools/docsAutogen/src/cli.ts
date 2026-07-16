@@ -18,7 +18,8 @@ import {
 } from "./workspaceGraph.js";
 import { detectChangedPackages } from "./changeDetection.js";
 import { gatherPackageInputs } from "./packageInputs.js";
-import { assembleAutogenBlock } from "./assembleAutogen.js";
+import { assembleAutogenBlock, computeInputHash } from "./assembleAutogen.js";
+import { parseHashComment } from "./contentHash.js";
 import { renderReferenceSection } from "./renderReference.js";
 import { decideCompact } from "./compactMode.js";
 import { generateDocumentation } from "./generateDocumentation.js";
@@ -517,6 +518,45 @@ async function renderSelected(
 
     for (const pkg of selected) {
         const inputs = await gatherPackageInputs(pkg, graph, monorepoRoot);
+        const autogenPath = path.join(pkg.dir, AUTOGEN_FILE_NAME);
+
+        // Idempotency gate. When writing, skip a package entirely (no LLM
+        // call, no write) if its README.AUTOGEN.md was generated from the
+        // same inputs. The embedded hash digests the deterministic prompt
+        // inputs, not the nondeterministic LLM prose, so an unchanged hash
+        // means a regenerated file would differ only by churn. This keeps
+        // the tool idempotent, so it can run on every pull request without
+        // the commit-back retriggering itself into a loop. First generation
+        // (no file / no hash) and stdout preview (no --write) fall through.
+        if (opts.write && !opts.dryRun) {
+            const existingHash = await readEmbeddedHash(autogenPath);
+            const currentHash = computeInputHash(inputs);
+            if (existingHash !== null && existingHash === currentHash) {
+                records.push({
+                    package: pkg.name,
+                    relDir: pkg.relDir,
+                    compact: decideCompact(inputs).compact,
+                    hash: currentHash,
+                    body: "",
+                    documentation: {
+                        mode: "skeleton",
+                        status: "unchanged-inputs",
+                        attempts: 0,
+                        isPlaceholder: false,
+                        wordCount: null,
+                        diagnostics: [],
+                    },
+                    links: { total: 0, broken: [], stripped: 0 },
+                    write: {
+                        attempted: false,
+                        verdict: "unchanged",
+                        note: "inputs unchanged (content-hash match); regeneration skipped",
+                        filePath: autogenPath,
+                    },
+                });
+                continue;
+            }
+        }
 
         let llmBody: string | undefined;
         let docMeta: RenderRecord["documentation"] = {
@@ -559,7 +599,6 @@ async function renderSelected(
         // Validate links against the file we'd be writing — link
         // resolution is anchored at the file's directory.
         const links = extractMarkdownLinks(block.body);
-        const autogenPath = path.join(pkg.dir, AUTOGEN_FILE_NAME);
         const validation = await validateLinks(links, autogenPath);
 
         // Recover gracefully from broken links: drop the link wrapper
@@ -742,6 +781,21 @@ async function verifyLinksMode(
     }
     const totalBroken = records.reduce((acc, r) => acc + r.broken.length, 0);
     return totalBroken === 0 ? 0 : 1;
+}
+
+/**
+ * Read the content hash embedded in an existing README.AUTOGEN.md, or
+ * null when the file is missing or carries no hash comment. Used by the
+ * idempotency gate in `renderSelected` to decide whether a package's
+ * inputs changed since it was last generated.
+ */
+async function readEmbeddedHash(filePath: string): Promise<string | null> {
+    try {
+        const content = await fsPromises.readFile(filePath, "utf8");
+        return parseHashComment(content);
+    } catch {
+        return null;
+    }
 }
 
 /**
