@@ -29,7 +29,8 @@ import type {
     EndpointPool,
     EndpointPoolMember,
 } from "./endpointPool.js";
-import { ApiSettings, ModelProviders, ModelType } from "./openai.js";
+import { ModelProviders, ModelType } from "./apiTypes.js";
+import type { ApiSettings } from "./openai.js";
 import type { FetchThrottler } from "./restClient.js";
 
 const debugPool = registerDebug("typeagent:pool");
