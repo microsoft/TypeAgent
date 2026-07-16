@@ -35,6 +35,7 @@ import {
 import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { createLimiter } from "@typeagent/common-utils";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 
@@ -542,6 +543,24 @@ function getCopilotSessionConfig(
     // Define custom tools using Copilot SDK (mirrors Claude's MCP tools)
     let actionIndex = 1;
 
+    // Serialize execute_action invocations (see its handler below): the display
+    // capture there swaps the shared systemContext.clientIO around an await, and
+    // the Copilot SDK dispatches parallel tool calls concurrently. Overlapping
+    // handlers would clobber that slot and strand clientIO on an abandoned
+    // capture buffer, dropping the final answer and hanging the UI spinner.
+    //
+    // TODO: Revisit parallel action execution in the dispatcher. This mutex
+    // makes concurrent execute_action calls safe by running them one at a time,
+    // which is fine for fast actions but loses real overlap when a turn fires
+    // multiple slow I/O actions (e.g. two webFetch or claudeTask calls). Doing
+    // it properly means capturing per call instead of swapping the shared
+    // clientIO (thread a clientIO sink through executeAction/getActionContext),
+    // AND isolating the other per-session state executeAction mutates
+    // (lastActionSchemaName, streamingActionContext, commandResult accumulation,
+    // activityContext, actionIndex). The dispatcher is serial by design today
+    // (commandLock = createLimiter(1)), so this is a broader change.
+    const executeActionLock = createLimiter(1);
+
     const discoverTool = defineTool("discover_actions", {
         description: [
             "Discover actions available with a schema name.",
@@ -609,67 +628,70 @@ function getCopilotSessionConfig(
             },
             required: ["schemaName", "action"],
         },
-        handler: async (args: any) => {
-            const { schemaName, action: actionJson } = args;
-            debug(`Executing action: ${schemaName}.${actionJson.actionName}`);
-            const validator = validators.get(schemaName);
-            if (!validator) {
-                throw new Error(`Invalid schema name '${schemaName}'`);
-            }
-
-            const validationResult = validator.validate(actionJson);
-            if (!validationResult.success) {
-                throw new Error(validationResult.message);
-            }
-
-            // Capture action execution results (same as Claude)
-            const result: IAgentMessage[] = [];
-            const capturingClientIO: ClientIO = {
-                ...nullClientIO,
-                setDisplay: (message) => {
-                    result.push(message);
-                },
-                appendDisplay: (message, mode) => {
-                    if (mode !== "temporary") {
-                        result.push(message);
-                    }
-                },
-            };
-
-            const savedClientIO = systemContext.clientIO;
-            try {
-                systemContext.clientIO = capturingClientIO;
-                await executeAction(
-                    {
-                        action: {
-                            schemaName,
-                            ...actionJson,
-                        },
-                    },
-                    context,
-                    actionIndex++,
+        handler: async (args: any) =>
+            executeActionLock(async () => {
+                const { schemaName, action: actionJson } = args;
+                debug(
+                    `Executing action: ${schemaName}.${actionJson.actionName}`,
                 );
-                systemContext.clientIO = savedClientIO;
+                const validator = validators.get(schemaName);
+                if (!validator) {
+                    throw new Error(`Invalid schema name '${schemaName}'`);
+                }
 
-                // Return result in Copilot SDK format
-                return {
-                    textResultForLlm: JSON.stringify(result),
-                    resultType: "success" as const,
-                };
-            } catch (error) {
-                systemContext.clientIO = savedClientIO;
-                const errorMessage =
-                    error instanceof Error ? error.message : String(error);
-                debug(`Error executing action: ${errorMessage}`);
+                const validationResult = validator.validate(actionJson);
+                if (!validationResult.success) {
+                    throw new Error(validationResult.message);
+                }
 
-                // Return error in Copilot SDK format
-                return {
-                    textResultForLlm: `Error executing ${schemaName}.${actionJson.actionName}: ${errorMessage}`,
-                    resultType: "failure" as const,
-                    error: errorMessage,
+                // Capture action execution results (same as Claude)
+                const result: IAgentMessage[] = [];
+                const capturingClientIO: ClientIO = {
+                    ...nullClientIO,
+                    setDisplay: (message) => {
+                        result.push(message);
+                    },
+                    appendDisplay: (message, mode) => {
+                        if (mode !== "temporary") {
+                            result.push(message);
+                        }
+                    },
                 };
-            }
-        },
+
+                const savedClientIO = systemContext.clientIO;
+                try {
+                    systemContext.clientIO = capturingClientIO;
+                    await executeAction(
+                        {
+                            action: {
+                                schemaName,
+                                ...actionJson,
+                            },
+                        },
+                        context,
+                        actionIndex++,
+                    );
+                    systemContext.clientIO = savedClientIO;
+
+                    // Return result in Copilot SDK format
+                    return {
+                        textResultForLlm: JSON.stringify(result),
+                        resultType: "success" as const,
+                    };
+                } catch (error) {
+                    systemContext.clientIO = savedClientIO;
+                    const errorMessage =
+                        error instanceof Error ? error.message : String(error);
+                    debug(`Error executing action: ${errorMessage}`);
+
+                    // Return error in Copilot SDK format
+                    return {
+                        textResultForLlm: `Error executing ${schemaName}.${actionJson.actionName}: ${errorMessage}`,
+                        resultType: "failure" as const,
+                        error: errorMessage,
+                    };
+                }
+            }),
     });
 
     const searchMemoryTool = defineTool("search_memory", {
