@@ -21,6 +21,7 @@ import {
     DispatcherName,
 } from "../context/dispatcher/dispatcherUtils.js";
 import {
+    GrammarCollisionDecision,
     isCollision,
     resolveGrammarCollision,
     resolveGrammarRegistryFirst,
@@ -218,6 +219,90 @@ export function getActivityNamespaceSuffix(
 // Prefixes that must always reach Claude reasoning — never matched by grammar.
 const REASONING_PREFIXES = ["learn:", "dev:", "remember how to ", "record "];
 
+/**
+ * Resolve a grammar-collision decision for a set of validated cache matches, all
+ * LLM-free: the registry-first tiers, then (on an unresolved topical collision)
+ * the contextSelector and configured grammar strategy. Returns `escalate` when
+ * contextSelector abstains under `escalate-to-llm` so the caller falls back to
+ * LLM translation; otherwise the resolved `decision` (undefined = use validated[0]).
+ */
+async function resolveGrammarMatchDecision(
+    validated: MatchResult[],
+    context: ActionContext<CommandHandlerContext>,
+    request: string,
+    activeSchemaNames: string[],
+): Promise<
+    | { kind: "escalate" }
+    | { kind: "decision"; decision: GrammarCollisionDecision | undefined }
+> {
+    const systemContext = context.sessionContext.agentContext;
+    const config = systemContext.session.getConfig();
+    const collisionCfg = config.collision.grammarMatch;
+    const contextSelectorCfg = config.collision.contextSelector;
+
+    // Registry-first runs independently of grammarMatch.detect (a single cache
+    // match can be registry-known-ambiguous, §13.3). A `match` commits the route
+    // now, so its note is shown here; a sibling `fallthrough` defers the note to
+    // the translation commit site. activeSchemaNames bounds siblings to executable
+    // routes.
+    let decision = resolveGrammarRegistryFirst(
+        validated,
+        systemContext,
+        request,
+        new Set(activeSchemaNames),
+    );
+    if (
+        decision !== undefined &&
+        decision.kind === "match" &&
+        decision.note !== undefined
+    ) {
+        await displayInfo(decision.note, context);
+    }
+    if (
+        decision === undefined &&
+        (contextSelectorCfg.detect || collisionCfg.detect) &&
+        isCollision(validated, collisionCfg.classifier)
+    ) {
+        // contextSelector tier (§11): a confident topical pick resolves here on
+        // the cache path (no LLM). On abstain it either defers to the configured
+        // grammar strategy or escalates the request to LLM translation.
+        let deferToStrategy = false;
+        if (contextSelectorCfg.detect) {
+            const outcome = resolveContextSelector(
+                validated,
+                systemContext,
+                request,
+                toCandidate(validated[0], systemContext),
+            );
+            if (outcome.kind === "resolve" && outcome.match !== undefined) {
+                // Validated candidates always carry a MatchResult — no LLM.
+                decision = { kind: "match", match: outcome.match };
+                await displayInfo(outcome.note, context);
+            } else if (outcome.kind === "abstain") {
+                if (contextSelectorCfg.abstainFallback === "escalate-to-llm") {
+                    return { kind: "escalate" };
+                }
+                // defer-to-strategy: hand the collision to the configured grammar
+                // strategy below, even if grammarMatch.detect is off (§11.1).
+                deferToStrategy = true;
+            }
+            // outcome.kind === "skip" (not a topical collision): fall through to
+            // today's behavior — never escalate.
+        }
+        if (
+            decision === undefined &&
+            (collisionCfg.detect || deferToStrategy)
+        ) {
+            decision = resolveGrammarCollision(
+                validated,
+                systemContext,
+                request,
+            );
+        }
+    }
+    return { kind: "decision", decision };
+}
+
 export async function matchRequest(
     context: ActionContext<CommandHandlerContext>,
     request: string,
@@ -281,70 +366,19 @@ export async function matchRequest(
 
     // Collision detection — opt-in via session config. With detect=false this
     // is a no-op and we use validated[0], identical to legacy behavior.
-    const collisionCfg = config.collision.grammarMatch;
-    const contextSelectorCfg = config.collision.contextSelector;
     let chosen = validated[0];
 
-    // Registry-first runs independently of grammarMatch.detect (a single cache
-    // match can be registry-known-ambiguous, §13.3). A `match` commits the route
-    // now, so its note is shown here; a sibling `fallthrough` defers the note to
-    // the translation commit site. activeSchemaNames bounds siblings to executable
-    // routes.
-    let decision = resolveGrammarRegistryFirst(
+    const resolved = await resolveGrammarMatchDecision(
         validated,
-        systemContext,
+        context,
         request,
-        new Set(activeSchemaNames),
+        activeSchemaNames,
     );
-    if (
-        decision !== undefined &&
-        decision.kind === "match" &&
-        decision.note !== undefined
-    ) {
-        await displayInfo(decision.note, context);
+    if (resolved.kind === "escalate") {
+        // contextSelector abstained under escalate-to-llm: fall through to LLM.
+        return undefined;
     }
-    if (
-        decision === undefined &&
-        (contextSelectorCfg.detect || collisionCfg.detect) &&
-        isCollision(validated, collisionCfg.classifier)
-    ) {
-        // contextSelector tier (§11): a confident topical pick resolves here on
-        // the cache path (no LLM). On abstain it either defers to the configured
-        // grammar strategy or escalates the request to LLM translation.
-        let deferToStrategy = false;
-        if (contextSelectorCfg.detect) {
-            const outcome = resolveContextSelector(
-                validated,
-                systemContext,
-                request,
-                toCandidate(validated[0], systemContext),
-            );
-            if (outcome.kind === "resolve" && outcome.match !== undefined) {
-                // Validated candidates always carry a MatchResult — no LLM.
-                decision = { kind: "match", match: outcome.match };
-                await displayInfo(outcome.note, context);
-            } else if (outcome.kind === "abstain") {
-                if (contextSelectorCfg.abstainFallback === "escalate-to-llm") {
-                    return undefined;
-                }
-                // defer-to-strategy: hand the collision to the configured grammar
-                // strategy below, even if grammarMatch.detect is off (§11.1).
-                deferToStrategy = true;
-            }
-            // outcome.kind === "skip" (not a topical collision): fall through to
-            // today's behavior — never escalate.
-        }
-        if (
-            decision === undefined &&
-            (collisionCfg.detect || deferToStrategy)
-        ) {
-            decision = resolveGrammarCollision(
-                validated,
-                systemContext,
-                request,
-            );
-        }
-    }
+    const decision = resolved.decision;
     if (decision !== undefined) {
         if (decision.kind === "fallthrough") {
             // A pending one-shot pick names a registry sibling the grammar
