@@ -466,7 +466,20 @@ function formatToolCallDisplay(toolName: string, input: any): string {
         return `**Tool:** discover_actions — schema: \`${schema}\``;
     } else if (toolName === "execute_action") {
         const schema = input?.schemaName ?? "?";
-        const actionName = input?.action?.actionName ?? "?";
+        // The model sometimes supplies `action` as a JSON string rather than an
+        // object, and at tool.execution_start that string can still be
+        // mid-stream (truncated). Parse it when possible, otherwise pull the
+        // actionName out directly so the label shows the real action, not "?".
+        let action = input?.action;
+        if (typeof action === "string") {
+            try {
+                action = JSON.parse(action);
+            } catch {
+                const match = action.match(/"actionName"\s*:\s*"([^"]+)"/);
+                action = match ? { actionName: match[1] } : undefined;
+            }
+        }
+        const actionName = action?.actionName ?? "?";
         return `**Tool:** execute_action — \`${schema}.${actionName}\``;
     } else if (toolName === "search_memory") {
         const question = input?.question ?? JSON.stringify(input);
