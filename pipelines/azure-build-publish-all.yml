@@ -178,7 +178,7 @@ stages:
               cp -r "$PLUGIN_SRC/skills"      "$STAGE/skills"
 
               echo "Staged copilot-plugin artifact:"
-              find "$STAGE" -type f | head -20
+              find "$STAGE" -type f | head -20 || true
             displayName: "Stage copilot-plugin artifact"
             workingDirectory: $(buildDirectory)
 
@@ -268,8 +268,11 @@ stages:
                 artifact: optional-agents-$(platform)-$(arch)
 
           # Build MCP single-file executable (Node SEA).
+          # Run via node directly instead of `pnpm --filter ... run` because
+          # pnpm 11's dep-status check triggers `pnpm install --production`
+          # which fails on packages/shell's run-script-os devDep postinstall.
           - script: |
-              pnpm --filter @typeagent/copilot-plugin run build:exe
+              cd packages/copilot-plugin && node scripts/build-mcp-exe.mjs
             displayName: "Build typeagent-mcp exe ($(rid))"
             workingDirectory: $(buildDirectory)
 
