@@ -57,7 +57,7 @@ export function assembleAutogenBlock(
 ): AssembledAutogen {
     const decision = decideCompact(inputs);
 
-    const hash = computeContentHash(hashInputs(inputs));
+    const hash = computeInputHash(inputs);
     const documentation = renderAiDocumentation(
         inputs,
         options.llmDocumentationBody,
@@ -89,6 +89,18 @@ export function assembleAutogenBlock(
     ].join("\n");
 
     return { body, hash, compact: decision.compact };
+}
+
+/**
+ * Compute the content hash for a package's inputs — the same digest
+ * `assembleAutogenBlock` embeds in the README.AUTOGEN.md body. Exposed
+ * so callers can decide whether regenerating a package would be
+ * meaningful (inputs changed) or pure churn (hash unchanged) WITHOUT
+ * rendering or calling the LLM. Covers deterministic prompt-input
+ * proxies, never the rendered output.
+ */
+export function computeInputHash(inputs: PackageInputs): string {
+    return computeContentHash(hashInputs(inputs));
 }
 
 /**
