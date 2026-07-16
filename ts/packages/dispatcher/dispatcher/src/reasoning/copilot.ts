@@ -69,6 +69,35 @@ const FALLBACK_MODEL = "claude-opus-4.8";
 // instead of narrating an intent ("Let me confirm…") and stopping.
 const FALLBACK_REASONING_EFFORT = "high" as const;
 
+// Largest delay Node's setTimeout accepts without overflowing (~24.8 days). The
+// Copilot SDK feeds sendAndWait's timeout straight into setTimeout, so a larger
+// value (or Infinity) would wrap around to a near-zero delay and fire immediately.
+const MAX_SETTIMEOUT_MS = 2_147_483_647;
+
+// Client-side cap on how long session.sendAndWait blocks waiting for the Copilot
+// session to go idle (finish one full agentic turn). The SDK default is only 60s,
+// which spuriously fails legitimate multi-tool reasoning turns that run longer:
+// the wait does not abort the agent's in-flight work, so a too-short cap just
+// rejects a turn that is still making progress. Genuine cancellation stays with
+// context.abortSignal. Matches the Claude path's DEFAULT_REASONING_TIMEOUT_MS and
+// honors the same TYPEAGENT_REASONING_TIMEOUT_MS override.
+const DEFAULT_REASONING_TIMEOUT_MS = 20 * 60 * 1000;
+
+// Resolve the sendAndWait idle-wait timeout (ms) from TYPEAGENT_REASONING_TIMEOUT_MS,
+// falling back to DEFAULT_REASONING_TIMEOUT_MS. 0 means "disabled"; since the SDK
+// cannot take 0/Infinity (setTimeout would fire immediately), disabled and any
+// too-large value are clamped to the largest delay setTimeout accepts.
+export function resolveReasoningTimeoutMs(): number {
+    const raw = process.env.TYPEAGENT_REASONING_TIMEOUT_MS;
+    const parsed = raw !== undefined ? Number(raw) : NaN;
+    if (!Number.isFinite(parsed) || parsed < 0) {
+        return DEFAULT_REASONING_TIMEOUT_MS;
+    }
+    return parsed === 0
+        ? MAX_SETTIMEOUT_MS
+        : Math.min(parsed, MAX_SETTIMEOUT_MS);
+}
+
 function resolveModel(context: ActionContext<CommandHandlerContext>): string {
     // Live @config override wins, then the COPILOT_REASONING_MODEL env var
     // (from config.yaml), then the built-in fallback.
@@ -1111,7 +1140,7 @@ async function executeReasoningWithoutPlanning(
         }
 
         const response: any = await withAbortSignal(
-            session.sendAndWait({ prompt }),
+            session.sendAndWait({ prompt }, resolveReasoningTimeoutMs()),
             context.abortSignal,
         );
         debug("Received response from Copilot");
@@ -1390,7 +1419,7 @@ async function executeReasoningWithTracing(
             debug(`Sending prompt: ${prompt.substring(0, 100)}...`);
 
             const response: any = await withAbortSignal(
-                session.sendAndWait({ prompt }),
+                session.sendAndWait({ prompt }, resolveReasoningTimeoutMs()),
                 context.abortSignal,
             );
             debug("Received response from Copilot");
