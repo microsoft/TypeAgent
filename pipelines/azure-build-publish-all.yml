@@ -341,6 +341,48 @@ stages:
             displayName: "Upload artifact: shell-win"
             artifact: shell-win
 
+      # macOS shell build — optional (continueOnError).
+      - job: build_shell_mac
+        displayName: "Build shell installer (macOS)"
+        continueOnError: true
+        pool:
+          vmImage: macos-latest
+        steps:
+          - template: include-prepare-repo.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              nodeVersion: $(nodeVersion)
+              registry: $(INSTALL_REGISTRY)
+
+          - template: include-update-package-version.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              prerelease: $(resolvedChannel).$(Build.BuildNumber)
+
+          - script: |
+              pnpm run build:shell
+            displayName: "Build shell"
+            workingDirectory: $(buildDirectory)
+
+          - task: Cache@2
+            displayName: Cache Electron Builder
+            inputs:
+              key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(buildDirectory)/pnpm-lock.yaml
+              path: $(ELECTRON_CACHE_DIR)
+              restoreKeys: |
+                electron | $(Agent.OS) | $(Agent.OSArchitecture)
+
+          - script: |
+              pnpm run shell:package
+            displayName: "Package shell"
+            workingDirectory: $(buildDirectory)
+            env:
+              ELECTRON_BUILDER_CHANNEL: $(resolvedChannel)
+
+          - publish: $(shell_folder)/dist
+            displayName: "Upload artifact: shell-mac"
+            artifact: shell-mac
+
   # ════════════════════════════════════════════════════════════════════
   #  STAGE 2 — TEST (optional)
   # ════════════════════════════════════════════════════════════════════
@@ -622,8 +664,6 @@ stages:
               AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
 
       # ── Publish shell installers to Azure Blob Storage ────────────
-      # Currently only windows; re-enable linux/mac when those build
-      # jobs are restored.
       - deployment: publish_shell
         displayName: "Publish shell to Azure Storage"
         condition: eq('${{ parameters.publishShell }}', 'true')
@@ -647,6 +687,24 @@ stages:
                   displayName: "Upload Azure Storage - win"
                   inputs:
                     SourcePath: $(Pipeline.Workspace)\shell-win\**
+                    Destination: AzureBlob
+                    azureSubscription: $(azureSubscription)
+                    storage: $(azureStorageAccountName)
+                    ContainerName: $(azureStorageContainerName)
+
+                # macOS artifact — only upload if the optional build succeeded.
+                - download: current
+                  artifact: shell-mac
+                  displayName: "Download shell-mac (optional)"
+                  condition: |
+                    in(stageDependencies.Build.build_shell_mac.result, 'Succeeded', 'SucceededWithIssues')
+
+                - task: AzureFileCopy@6
+                  displayName: "Upload Azure Storage - mac"
+                  condition: |
+                    in(stageDependencies.Build.build_shell_mac.result, 'Succeeded', 'SucceededWithIssues')
+                  inputs:
+                    SourcePath: $(Pipeline.Workspace)\shell-mac\**
                     Destination: AzureBlob
                     azureSubscription: $(azureSubscription)
                     storage: $(azureStorageAccountName)
