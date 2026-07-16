@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAgentHost } from "agent-dispatcher";
+import { AppAgentProviderSetController } from "agent-dispatcher";
 import {
     buildPackageCommandTable,
     createPackageAppAgentProvider,
@@ -11,10 +11,14 @@ import {
 } from "../src/installSources/packageAgent.js";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 
-const noopHost: AppAgentHost = {
-    addProvider: async () => {},
-    removeProvider: async () => {},
-    replaceProvider: async () => {},
+const noopHost: AppAgentProviderSetController = {
+    runExclusive: async (callback) => {
+        const value = await callback({
+            addProvider: async () => {},
+            removeProvider: async () => {},
+        });
+        return { status: "completed", value };
+    },
 };
 
 type SourceCall =
@@ -163,7 +167,7 @@ describe("@package agent", () => {
     it("vends a command-only agent named 'package' with the host-owned context", async () => {
         const { api } = makeSource();
         const ctx: PackageAgentContext = {
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         };
         const provider = createPackageAppAgentProvider(ctx);
@@ -185,7 +189,10 @@ describe("@package agent", () => {
         const { api, calls } = makeSource();
         const handler = getHandler(api, "install");
         await handler.run(
-            fakeActionContext({ appAgentHost: noopHost, source: api }),
+            fakeActionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+            }),
             {
                 args: { target: "/some/path", name: "foo" },
                 flags: { source: "path" },
@@ -206,7 +213,10 @@ describe("@package agent", () => {
         const handler = getHandler(api, "install");
         await expect(
             handler.run(
-                fakeActionContext({ appAgentHost: noopHost, source: api }),
+                fakeActionContext({
+                    appAgentProviderSetController: noopHost,
+                    source: api,
+                }),
                 {
                     args: { target: "/x", name: "bad name!" },
                     flags: {},
@@ -220,7 +230,10 @@ describe("@package agent", () => {
         const { api, calls } = makeSource();
         const handler = getHandler(api, "uninstall");
         await handler.run(
-            fakeActionContext({ appAgentHost: noopHost, source: api }),
+            fakeActionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+            }),
             { args: { name: "foo" } } as any,
         );
         expect(calls).toEqual([{ op: "uninstall", name: "foo" }]);
@@ -230,7 +243,10 @@ describe("@package agent", () => {
         const { api, calls } = makeSource();
         const handler = getHandler(api, "update");
         await handler.run(
-            fakeActionContext({ appAgentHost: noopHost, source: api }),
+            fakeActionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+            }),
             { args: { name: "foo", range: "^1.0" } } as any,
         );
         expect(calls).toEqual([{ op: "update", name: "foo", range: "^1.0" }]);
@@ -247,7 +263,7 @@ describe("@package agent", () => {
         });
         const handler = getHandler(api, "uninstall");
         const { context, notifications } = notifyCapturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, { args: { name: "foo" } } as any);
@@ -263,7 +279,7 @@ describe("@package agent", () => {
         });
         const handler = getHandler(api, "uninstall");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, { args: { name: "foo" } } as any);
@@ -280,7 +296,7 @@ describe("@package agent", () => {
         });
         const handler = getHandler(api, "uninstall");
         const { context, notifications } = notifyCapturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, { args: { name: "foo" } } as any);
@@ -297,7 +313,7 @@ describe("@package agent", () => {
         });
         const handler = getHandler(api, "update");
         const { context, notifications } = notifyCapturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -314,7 +330,7 @@ describe("@package agent", () => {
         });
         const handler = getHandler(api, "update");
         const { context, notifications } = notifyCapturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -333,7 +349,7 @@ describe("@package agent", () => {
         });
         const handler = getHandler(api, "update");
         const { context, notifications } = notifyCapturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -351,7 +367,7 @@ describe("@package agent", () => {
         });
         const handler = getHandler(api, "update");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -394,7 +410,10 @@ describe("@package handler error handling", () => {
         const handler = getHandler(api, "install");
         await expect(
             handler.run(
-                fakeActionContext({ appAgentHost: noopHost, source: api }),
+                fakeActionContext({
+                    appAgentProviderSetController: noopHost,
+                    source: api,
+                }),
                 { args: { target: "bad" }, flags: {} } as any,
             ),
         ).rejects.toThrow(/resolution failed/);
@@ -409,7 +428,10 @@ describe("@package handler error handling", () => {
         const handler = getHandler(api, "uninstall");
         await expect(
             handler.run(
-                fakeActionContext({ appAgentHost: noopHost, source: api }),
+                fakeActionContext({
+                    appAgentProviderSetController: noopHost,
+                    source: api,
+                }),
                 { args: { name: "missing" } } as any,
             ),
         ).rejects.toThrow(/not found/);
@@ -424,7 +446,10 @@ describe("@package handler error handling", () => {
         const handler = getHandler(api, "update");
         await expect(
             handler.run(
-                fakeActionContext({ appAgentHost: noopHost, source: api }),
+                fakeActionContext({
+                    appAgentProviderSetController: noopHost,
+                    source: api,
+                }),
                 { args: { name: "foo" } } as any,
             ),
         ).rejects.toThrow(/no longer configured/);
@@ -452,7 +477,10 @@ describe("@package handler completions", () => {
         });
         const handler = getHandler(api, "install");
         const result = await handler.getCompletion!(
-            fakeSessionContext({ appAgentHost: noopHost, source: api }),
+            fakeSessionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+            }),
             {} as any,
             ["target", "--source"],
         );
@@ -500,7 +528,10 @@ describe("@package handler completions", () => {
         });
         const handler = getHandler(api, "install");
         const result = await handler.getCompletion!(
-            fakeSessionContext({ appAgentHost: noopHost, source: api }),
+            fakeSessionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+            }),
             { flags: { source: "catalog" } } as any,
             ["target"],
         );
@@ -523,7 +554,10 @@ describe("@package handler completions", () => {
         for (const which of ["uninstall", "update"] as const) {
             const handler = getHandler(api, which);
             const result = await handler.getCompletion!(
-                fakeSessionContext({ appAgentHost: noopHost, source: api }),
+                fakeSessionContext({
+                    appAgentProviderSetController: noopHost,
+                    source: api,
+                }),
                 {} as any,
                 ["name"],
             );
@@ -561,7 +595,7 @@ describe("@package available", () => {
         });
         const handler = getHandler(api, "available");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, { args: {}, flags: {} } as any);
@@ -580,7 +614,7 @@ describe("@package available", () => {
         });
         const handler = getHandler(api, "available");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, { args: {}, flags: {} } as any);
@@ -618,7 +652,7 @@ describe("@package available", () => {
         });
         const handler = getHandler(api, "available");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -636,7 +670,10 @@ describe("@package available", () => {
         });
         const handler = getHandler(api, "available");
         const result = await handler.getCompletion!(
-            fakeSessionContext({ appAgentHost: noopHost, source: api }),
+            fakeSessionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+            }),
             {} as any,
             ["--source"],
         );
@@ -657,7 +694,7 @@ describe("@package list", () => {
         });
         const handler = getHandler(api, "list");
         const { context, output } = tightlyCapturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
 
@@ -685,7 +722,7 @@ describe("@package install one-argument, dry-run, and refresh", () => {
         });
         const handler = getHandler(api, "install");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -721,7 +758,7 @@ describe("@package install one-argument, dry-run, and refresh", () => {
         });
         const handler = getHandler(api, "install");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -771,7 +808,7 @@ describe("@package install one-argument, dry-run, and refresh", () => {
         });
         const handler = getHandler(api, "install");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -801,7 +838,7 @@ describe("@package install one-argument, dry-run, and refresh", () => {
         });
         const handler = getHandler(api, "install");
         const { context } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {

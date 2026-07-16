@@ -22,9 +22,8 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import {
-    AppAgentHost,
     AppAgentProvider,
-    InstalledAgentInfo,
+    AppAgentProviderSetController,
 } from "agent-dispatcher";
 import chalk from "chalk";
 import {
@@ -42,11 +41,19 @@ import {
 // "github-cli", "osNotifications").
 const AGENT_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
+/** A host-rendered summary of one installed agent for `@package list`. */
+export interface InstalledAgentInfo {
+    name: string;
+    source: string;
+    // Feed specifier, package name, or path. Omitted when none is recorded.
+    ref?: string;
+}
+
 /**
  * The record-store / registry API the `@package` handlers use, supplied by
  * the host's `AppAgentSource`. All `agents.json` access, source resolution, and
  * the cross-session fan-out live behind this, so the handlers never touch the
- * dispatcher's internals. Each mutating op takes the `issuingHost` (the session
+ * dispatcher's internals. Each mutating op takes the `issuingController` (the session
  * that ran the command, reached off the package agent's own `agentContext`) so
  * the source can register/tear down the agent in the issuing session (awaited)
  * while fanning out to the other sessions best-effort as a follow-up.
@@ -68,7 +75,7 @@ export interface InstalledAgentSourceApi {
         nameOrTarget: string,
         ref: string | undefined,
         sourceName: string | undefined,
-        issuingHost: AppAgentHost,
+        issuingController: AppAgentProviderSetController,
         onStatus?: SourceStatus,
         abortSignal?: AbortSignal,
     ): Promise<InstallResult>;
@@ -96,7 +103,7 @@ export interface InstalledAgentSourceApi {
     // the unload lands at each session's next idle.
     uninstall(
         name: string,
-        issuingHost: AppAgentHost,
+        issuingController: AppAgentProviderSetController,
         onOutcome?: (status: UninstallOutcomeStatus) => void,
     ): Promise<void>;
     // Re-materialize against the recorded source (fails fast on error), write the
@@ -115,7 +122,7 @@ export interface InstalledAgentSourceApi {
     update(
         name: string,
         range: string | undefined,
-        issuingHost: AppAgentHost,
+        issuingController: AppAgentProviderSetController,
         onOutcome?: (status: UpdateOutcomeStatus) => void,
     ): Promise<void>;
     // Host-rendered summaries of installed agents, backing `@package list`.
@@ -134,12 +141,12 @@ export interface InstalledAgentSourceApi {
 /**
  * The host-owned `agentContext` of the `@package` app agent. It is not the
  * dispatcher's `CommandHandlerContext`: the only dispatcher access it exposes
- * is the narrow {@link AppAgentHost} (to register/tear down agents in
+ * is the narrow {@link AppAgentProviderSetController} (to register/tear down agents in
  * the issuing session), plus the host's own {@link InstalledAgentSourceApi}
  * closures. So a handler can never reach back into dispatcher internals.
  */
 export interface PackageAgentContext {
-    readonly appAgentHost: AppAgentHost;
+    readonly appAgentProviderSetController: AppAgentProviderSetController;
     readonly source: InstalledAgentSourceApi;
 }
 
@@ -364,7 +371,10 @@ class InstallCommandHandler implements CommandHandler {
         context: PackageActionContext,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const { appAgentHost, source } = context.sessionContext.agentContext;
+        const {
+            appAgentProviderSetController: appAgentProviderSetController,
+            source,
+        } = context.sessionContext.agentContext;
         const { args, flags } = params;
         const { target, name } = args;
         const sourceName = flags.source ?? undefined;
@@ -434,7 +444,7 @@ class InstallCommandHandler implements CommandHandler {
             nameOrTarget,
             ref,
             sourceName,
-            appAgentHost,
+            appAgentProviderSetController,
             (message) => displayStatus(message, context),
             context.abortSignal,
         );
@@ -523,7 +533,10 @@ class UninstallCommandHandler implements CommandHandler {
         context: PackageActionContext,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const { appAgentHost, source } = context.sessionContext.agentContext;
+        const {
+            appAgentProviderSetController: appAgentProviderSetController,
+            source,
+        } = context.sessionContext.agentContext;
         const name = params.args.name;
         // Start the coordinated teardown and fan out the removal to every
         // session — including this one — through its idle-gated applicator, each
@@ -538,15 +551,19 @@ class UninstallCommandHandler implements CommandHandler {
         // nothing, so the fan-out is silent — is surfaced here, through the
         // session's notification channel (which survives command completion).
         let settledSynchronously = false;
-        await source.uninstall(name, appAgentHost, (outcome) => {
-            settledSynchronously = true;
-            if (outcome === "reverted") {
-                context.sessionContext.notify(
-                    AppAgentEvent.Inline,
-                    `Agent '${name}' uninstall reverted; the agent is still installed.`,
-                );
-            }
-        });
+        await source.uninstall(
+            name,
+            appAgentProviderSetController,
+            (outcome) => {
+                settledSynchronously = true;
+                if (outcome === "reverted") {
+                    context.sessionContext.notify(
+                        AppAgentEvent.Inline,
+                        `Agent '${name}' uninstall reverted; the agent is still installed.`,
+                    );
+                }
+            },
+        );
         // The barrier teardown settles asynchronously, so print the "started"
         // acknowledgement. The `settledSynchronously` guard mirrors the update
         // handler and stays defensive: if a source ever reported its outcome
@@ -601,7 +618,10 @@ class UpdateCommandHandler implements CommandHandler {
         context: PackageActionContext,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const { appAgentHost, source } = context.sessionContext.agentContext;
+        const {
+            appAgentProviderSetController: appAgentProviderSetController,
+            source,
+        } = context.sessionContext.agentContext;
         const { name, range } = params.args;
 
         // The source materializes the new version first and only rewrites the
@@ -619,20 +639,25 @@ class UpdateCommandHandler implements CommandHandler {
         // completion): a ROLLBACK (v1 restored, nothing changed) and an
         // UNCHANGED no-op (the requested version was already serving).
         let settledSynchronously = false;
-        await source.update(name, range, appAgentHost, (outcome) => {
-            settledSynchronously = true;
-            if (outcome === "reverted") {
-                context.sessionContext.notify(
-                    AppAgentEvent.Inline,
-                    `Agent '${name}' update failed; reverted to the previous version.`,
-                );
-            } else if (outcome === "unchanged") {
-                context.sessionContext.notify(
-                    AppAgentEvent.Inline,
-                    `Agent '${name}' is already up to date.`,
-                );
-            }
-        });
+        await source.update(
+            name,
+            range,
+            appAgentProviderSetController,
+            (outcome) => {
+                settledSynchronously = true;
+                if (outcome === "reverted") {
+                    context.sessionContext.notify(
+                        AppAgentEvent.Inline,
+                        `Agent '${name}' update failed; reverted to the previous version.`,
+                    );
+                } else if (outcome === "unchanged") {
+                    context.sessionContext.notify(
+                        AppAgentEvent.Inline,
+                        `Agent '${name}' is already up to date.`,
+                    );
+                }
+            },
+        );
         // The barrier swap settles asynchronously, so print the "started"
         // acknowledgement — unless the source already settled inline (an
         // already-current no-op, or a non-active agent added with no barrier),
@@ -708,7 +733,7 @@ export function buildPackageCommandTable(
  * Build an in-memory {@link AppAgentProvider} that vends the single command-only
  * `@package` agent bound to the given host-owned context. One is
  * created per connected dispatcher (its `agentContext` carries that session's
- * {@link AppAgentHost}).
+ * {@link AppAgentProviderSetController}).
  */
 export function createPackageAppAgentProvider(
     ctx: PackageAgentContext,

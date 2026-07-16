@@ -44,6 +44,7 @@
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "browser-typeagent": "workspace:*",

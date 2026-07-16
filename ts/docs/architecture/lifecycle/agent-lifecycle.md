@@ -17,8 +17,8 @@ The set of agents a dispatcher can run is split by **how it changes**:
   `AppAgentProvider`s and never changes for the life of the session.
 - The **dynamic** set (installed agents) is owned by a host-side
   `AppAgentSource`. A dispatcher _connects_ to the source; `connect()` returns the
-  shared provider instances to register and hands the source a small callback
-  (`AppAgentHost`) it uses to register/unregister agents as the set changes.
+  shared provider instances to register and hands the source an
+  `AppAgentProviderSetController` it uses to change that session's live provider set.
 
 ```mermaid
 flowchart TB
@@ -26,16 +26,17 @@ flowchart TB
         src["AppAgentSource<br/>(record store + registry + lifecycle tracker)"]
         pkg["@package app agent"]
     end
-    d1["Dispatcher A"] -- connect(hostA) --> src
-    d2["Dispatcher B"] -- connect(hostB) --> src
-    src -. addProvider / removeProvider .-> d1 & d2
+    d1["Dispatcher A"] -- connect(controllerA) --> src
+    d2["Dispatcher B"] -- connect(controllerB) --> src
+    src -. runExclusive(mutation) .-> d1 & d2
 ```
 
-| Package                                                                                                              | Role                                                                                                                                                                                              |
-| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`agent-dispatcher`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher)             | Defines `AppAgentSource`, `AppAgentConnection`, `AppAgentHost`; implements the dispatcher-side host (the idle-gated applicator) and the low-level `AppAgentManager.addProvider`/`removeProvider`. |
-| [`default-agent-provider`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider)        | Implements `AppAgentSource`: record store, per-name tracker, fan-out registry, the `@package` app agent, and the update/uninstall barrier.                                                        |
-| [`dispatcher-node-providers`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/nodeProviders) | Refcounted npm provider (`createNpmAppAgentProvider`) whose `isLoaded` the barrier reads to verify a version is fully released.                                                                   |
+| Package                                                                                                              | Role                                                                                                                                                           |
+| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`dispatcher-types`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/types)                  | Defines the dependency-neutral `AppAgentProvider`, `AppAgentProviderSetController`, and callback-scoped `AppAgentProviderSetMutation` hosting contracts.       |
+| [`agent-dispatcher`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher)             | Defines `AppAgentSource` and `AppAgentConnection`; implements the dispatcher-side controller and the low-level `AppAgentManager.addProvider`/`removeProvider`. |
+| [`default-agent-provider`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider)        | Implements `AppAgentSource`: record store, per-name tracker, fan-out registry, the `@package` app agent, and the update/uninstall barrier.                     |
+| [`dispatcher-node-providers`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/nodeProviders) | Refcounted npm provider (`createNpmAppAgentProvider`) whose `isLoaded` the barrier reads to verify a version is fully released.                                |
 
 ## Design goals and non-goals
 
@@ -70,7 +71,7 @@ The interfaces live in
 **`AppAgentSource`** is the dynamic set. Its dispatcher-facing interface is just:
 
 ```ts
-connect(host: AppAgentHost): AppAgentConnection;
+connect(controller: AppAgentProviderSetController): AppAgentConnection;
 ```
 
 `connect()` returns a teardown handle plus a promise of the **shared** provider
@@ -79,34 +80,33 @@ Providers are shared singletons: every `connect()` resolves with the same
 instance, so a loaded `AppAgent` is refcounted across all sessions rather than
 cloned per session.
 
-**`AppAgentHost`** is the dispatcher-side callback the source uses to mutate one
-session's live agent set. It is the _only_ interface the source touches — it never
-reaches into grammars, collision detection, or the embedding cache:
+**`AppAgentProviderSetController`** is the dispatcher-side capability the source uses to
+mutate one session's live agent set. It exposes one operation:
 
-- `addProvider(provider, notify?)` — register an agent into this session.
-- `removeProvider(provider, notify?, dropConfig?)` — unload and drop an agent.
-- `replaceProvider(oldProvider, resolveReplacement)` — the coordinated teardown/swap
-  primitive both `@update` and `@uninstall` fan out through (see
-  [Update coordination](#update-coordination)).
+- `runExclusive(callback)` acquires the session's command lock and passes an
+  `AppAgentProviderSetMutation` to the callback.
+- The mutation exposes `addProvider` and `removeProvider`. It is valid only while
+  that callback is active and rejects use after the callback returns.
 
-Every op is applied through an **idle-gated FIFO applicator** and resolves when
-the op is _applied_ — the ack the source's lifecycle tracker waits on.
+The source composes install, uninstall, and replacement from these two mutation
+primitives while the dispatcher holds the lock. Add/remove are not available on
+the controller itself, so they cannot be called outside the exclusive section.
 
 ## The host ↔ source contract
 
-The dispatcher and the source meet at exactly two interfaces — the dispatcher
-implements `AppAgentHost`, the source implements `AppAgentSource` /
+The dispatcher and the source meet at two interfaces: the dispatcher implements
+`AppAgentProviderSetController`, and the source implements `AppAgentSource` /
 `AppAgentConnection` — and each side owes the other a small set of guarantees. A
 custom source (an embedder not using `default-agent-provider`) must uphold the
 right-hand column; the dispatcher upholds the left.
 
-| Stage                | The dispatcher (`AppAgentHost`) guarantees                                                                                                                    | The source (`AppAgentSource` / `AppAgentConnection`) must                                                                                                                                      |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Connect**          | calls `connect(host)` once per session, awaits the returned connection's `providers` under its held command lock, then registers them before serving          | return **shared singleton** providers (the same instances on every connect) through `providers: Promise<...>` and an idempotent `dispose()`; record `host` for later fan-out                   |
-| **Mutate**           | applies `addProvider` / `removeProvider` / `replaceProvider` in **FIFO** order, gated on session idle, resolving each promise only once the op is **applied** | mutate a session **only** through its `AppAgentHost`; never reach into grammars, collision detection, or the dispatcher's context                                                              |
-| **Coordinated swap** | runs `replaceProvider` as **one command-lock-held section** (remove → park on the replacement promise → add) so no request interleaves the swap               | resolve `replaceProvider`'s replacement promise only after every host has quiesced **and** the old version's shared refcount is verified `0` (see [Update coordination](#update-coordination)) |
-| **Leaf ops**         | runs the teardown and startup legs under the held command lock                                                                                                | keep those legs **leaf ops** — process teardown/launch only, never dispatching a command or reacquiring the lock                                                                               |
-| **Teardown**         | unregisters the providers from its own `AppAgentManager` and calls `dispose()`                                                                                | stop fanning out to a host once its connection is disposed; a fan-out that raced `dispose()` must no-op                                                                                        |
+| Stage                | The dispatcher (`AppAgentProviderSetController`) guarantees                                                                                                | The source (`AppAgentSource` / `AppAgentConnection`) must                                                                                                                             |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Connect**          | calls `connect(controller)` once per session, awaits the returned connection's `providers` under its held command lock, then registers them before serving | return **shared singleton** providers (the same instances on every connect) through `providers: Promise<...>` and an idempotent `dispose()`; record `controller` for later fan-out    |
+| **Mutate**           | exposes add/remove only through the temporary mutation passed to `runExclusive` and revokes it when the callback ends                                      | mutate a session **only** inside `runExclusive`; never reach into grammars, collision detection, or the dispatcher's context                                                          |
+| **Coordinated swap** | holds the command lock for the whole callback, so no request interleaves remove, barrier wait, and add                                                     | remove, quiesce, await the shared decision, and add the decided provider inside one callback; decide only after every controller quiesces and the old shared refcount is verified `0` |
+| **Leaf ops**         | runs the teardown and startup legs under the held command lock                                                                                             | keep those legs **leaf ops** — process teardown/launch only, never dispatching a command or reacquiring the lock                                                                      |
+| **Teardown**         | unregisters the providers from its own `AppAgentManager` and closes the controller                                                                         | stop fanning out to a controller once its connection is disposed; a fan-out that raced `dispose()` must no-op                                                                         |
 
 The interface definitions in
 [`agentProvider.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/agentProvider/agentProvider.ts)
@@ -125,7 +125,7 @@ owning agent's context: `@package …` resolves to the package agent, so its
 the dispatcher's `CommandHandlerContext`. A host handler therefore cannot cast
 its way into dispatcher internals. The one dispatcher access these handlers
 legitimately need, mutating the live session, arrives through the narrow
-`AppAgentHost` on the package agent's own `agentContext`, which is per-dispatcher
+`AppAgentProviderSetController` on the package agent's own `agentContext`, which is per-dispatcher
 by construction, so a handler automatically reaches _its_ session with no lookup.
 
 The package agent registers under the name `package`, is command-only (no
@@ -190,7 +190,7 @@ entry so a fresh reinstall starts clean from the manifest default.
 Dispatchers are created and torn down dynamically (per conversation, with grace
 timers). The source must never fan out to a disposed dispatcher.
 
-- **Connect** at context init: the dispatcher calls `source.connect(host)` for
+- **Connect** at context init: the dispatcher calls `source.connect(controller)` for
   each injected `AppAgentSource`, awaits `connection.providers` under its held
   command lock, and registers the resolved providers so it neither loads a
   doomed version nor processes a command while an upgrading agent is mid-swap.
@@ -215,7 +215,7 @@ by name and shared across dispatchers, **two versions of a name must never run a
 once** — an update is fundamentally a _restart of one shared process_, not an
 overlapping swap. The mechanism lives in the source barrier
 ([`defaultAgentProviders.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/src/defaultAgentProviders.ts))
-plus the `replaceProvider` primitive on `AppAgentHost`.
+plus the scoped `AppAgentProviderSetController.runExclusive` primitive.
 
 ### What the swap must guarantee
 
@@ -232,7 +232,7 @@ things true on every dispatcher at once:
    mismatch. Every update is therefore treated as potentially schema-changing and
    freezes all dispatchers together across the swap.
 
-The slip happens if update is applied as two separate applicator operations:
+The slip happens if update is applied as two separate lock acquisitions:
 `removeProvider(v1)` acquires and releases the command lock, then
 `addProvider(v2)` acquires it later after the shared process has drained. Any
 request that arrives in that released gap sees the name and schemas as absent.
@@ -258,11 +258,10 @@ traffic. The command lock is the existing request boundary and keeps the routing
 seams (`isAppAgentName`, active schemas, and execution) consistent through one
 atomic local swap.
 
-Structurally the held section is **`uninstall(v1)` immediately followed by
-`install(v2)`** under one lock, so update reuses the uninstall/install primitives
-rather than a custom state machine. Both `@update` and `@uninstall` fan out
-through the one `replaceProvider(oldProvider, resolveReplacement)` primitive —
-one op is one lock acquisition, so the whole freeze is a single awaitable unit.
+Structurally the held section is **`removeProvider(v1)` followed by the barrier
+wait and `addProvider(v2)`** inside one `runExclusive` callback. A rollback adds
+v1 instead; a committed uninstall adds nothing. The source builds all three
+outcomes from the same two mutation primitives.
 
 ### Sequence
 
@@ -383,16 +382,17 @@ op on every dispatcher now flows through the one idle-gated queue.
 
 ## Implementation map
 
-| Concern                                                             | File                                                                                                                                                                   |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AppAgentHost` / `AppAgentSource` / `AppAgentConnection` interfaces | [`agentProvider.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/agentProvider/agentProvider.ts)                            |
-| Idle-gated FIFO applicator                                          | [`context/appAgentHost.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/context/appAgentHost.ts)                            |
-| Applicator wiring, `commandLock`, connect/teardown                  | [`context/commandHandlerContext.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts)          |
-| `addProvider` / `removeProvider` / lazy load                        | [`context/appAgentManager.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts)                      |
-| Refcounted npm provider (`isLoaded`, `close()`)                     | [`nodeProviders/.../npmAgentProvider.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/nodeProviders/src/agentProvider/npmAgentProvider.ts) |
-| Per-name tracker + install/uninstall/update + barrier               | [`defaultAgentProviders.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/src/defaultAgentProviders.ts)                           |
-| `@package` app agent handlers                                       | [`installSources/packageAgent.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/src/installSources/packageAgent.ts)               |
-| Installed-agent provider building + `agents.json` store             | [`installSources/installedAgents.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/src/installSources/installedAgents.ts)         |
+| Concern                                                                                        | File                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AppAgentProvider` / `AppAgentProviderSetController` / `AppAgentProviderSetMutation` contracts | [`agentHosting.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/types/src/agentHosting.ts)                                                 |
+| `AppAgentSource` / `AppAgentConnection` interfaces                                             | [`agentProvider.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/agentProvider/agentProvider.ts)                            |
+| Scoped controller implementation                                                               | [`context/appAgentSetController.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/context/appAgentSetController.ts)          |
+| Controller wiring, `commandLock`, connect/teardown                                             | [`context/commandHandlerContext.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts)          |
+| `addProvider` / `removeProvider` / lazy load                                                   | [`context/appAgentManager.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts)                      |
+| Refcounted npm provider (`isLoaded`, `close()`)                                                | [`nodeProviders/.../npmAgentProvider.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/dispatcher/nodeProviders/src/agentProvider/npmAgentProvider.ts) |
+| Per-name tracker + install/uninstall/update + barrier                                          | [`defaultAgentProviders.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/src/defaultAgentProviders.ts)                           |
+| `@package` app agent handlers                                                                  | [`installSources/packageAgent.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/src/installSources/packageAgent.ts)               |
+| Installed-agent provider building + `agents.json` store                                        | [`installSources/installedAgents.ts`](https://github.com/microsoft/TypeAgent/blob/main/ts/packages/defaultAgentProvider/src/installSources/installedAgents.ts)         |
 
 ## Related
 
@@ -401,6 +401,6 @@ op on every dispatcher now flows through the one idle-gated queue.
 - [Embedding the dispatcher](../../guides/embedding-dispatcher.md) — wiring
   `appAgentProviders` and `appAgentSources` into a host.
 - [Dispatcher](../core/dispatcher.md) — command routing and the `AppAgentManager`
-  the applicator drives.
+  the controller drives.
 - [Agent-server conversations](../agents/agentServerConversations.md) — how one
   shared source serves many per-conversation dispatchers.

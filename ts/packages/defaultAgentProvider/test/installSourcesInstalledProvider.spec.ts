@@ -22,41 +22,47 @@ import {
     InstallSourceConfig,
     InstalledAgentRecord,
 } from "../src/installSources/config.js";
-import { AppAgentProvider, AppAgentHost } from "agent-dispatcher";
+import {
+    AppAgentProvider,
+    AppAgentProviderSetController,
+    AppAgentProviderSetMutation,
+} from "agent-dispatcher";
 import { createLimiter } from "@typeagent/common-utils";
 
-// Compose a faithful `replaceProvider` for a test host from its own add/remove,
-// modelling the applicator's single-lock section (5.7): remove the old version,
-// then call the async thunk that quiesces, awaits the shared barrier, and
-// decides what to add. This preserves both the recorded remove-then-add op order
-// AND the barrier gating (a host that blocks its removeProvider keeps the
-// barrier pending until released).
-function withReplace(
-    host: Pick<AppAgentHost, "addProvider" | "removeProvider">,
-): AppAgentHost {
+type TestMutationFns = {
+    addProvider(provider: AppAgentProvider, notify?: boolean): Promise<void>;
+    removeProvider(
+        provider: AppAgentProvider,
+        notify?: boolean,
+        dropConfig?: boolean,
+    ): Promise<void>;
+};
+
+// Adapt test add/remove recorders to the callback-scoped controller contract.
+// The callback itself models the one command-lock-held section.
+function withReplace(host: TestMutationFns): AppAgentProviderSetController {
     return {
-        addProvider: host.addProvider,
-        removeProvider: host.removeProvider,
-        replaceProvider: async (
-            oldProvider,
-            resolveReplacement,
-            notify = false,
-            dropConfig = false,
-        ) => {
-            await host.removeProvider(oldProvider, notify, dropConfig);
-            // The source decides post-barrier what to add: v2 (commit update),
-            // v1 (rollback), or nothing (commit uninstall).
-            const newProvider = await resolveReplacement();
-            if (newProvider !== undefined) {
-                await host.addProvider(newProvider, notify);
-            }
+        async runExclusive<T>(
+            callback: (mutation: AppAgentProviderSetMutation) => Promise<T> | T,
+        ) {
+            const value = await callback({
+                addProvider: (provider, options) =>
+                    host.addProvider(provider, options?.notify),
+                removeProvider: (provider, options) =>
+                    host.removeProvider(
+                        provider,
+                        options?.notify,
+                        options?.dropConfig,
+                    ),
+            });
+            return { status: "completed", value };
         },
     };
 }
 
 // A no-op issuing host used by tests that only exercise the record store or the
 // vended provider set (fan-out behavior is covered by its own describe).
-const noopHost: AppAgentHost = withReplace({
+const noopHost: AppAgentProviderSetController = withReplace({
     addProvider: async () => {},
     removeProvider: async () => {},
 });
@@ -616,7 +622,7 @@ describe("AppAgentSource fan-out (4, )", () => {
         | { op: "remove"; name: string; notify: boolean };
 
     function recordingHost(onAdd?: () => void): {
-        host: AppAgentHost;
+        host: AppAgentProviderSetController;
         calls: HostCall[];
     } {
         const calls: HostCall[] = [];
@@ -761,6 +767,31 @@ describe("AppAgentSource fan-out (4, )", () => {
         ).rejects.toThrow(/not active in this source/i);
 
         // Nothing was torn down and the record is left intact (not dropped).
+        expect(issuing.calls).toEqual([]);
+        expect(sibling.calls).toEqual([]);
+        expect(readAgentsJson(instanceDir)?.agents.foo).toBeDefined();
+    });
+
+    it("update of a name recorded but not active in this source errors (out-of-band inconsistency)", async () => {
+        const instanceDir = updateableTestInstanceDir();
+        const stale = createTestUpdateableInstalledAgentSource(instanceDir);
+        const installer = createTestUpdateableInstalledAgentSource(instanceDir);
+        await installer.testApi.install(
+            "foo",
+            makePathAgentDir(),
+            undefined,
+            noopHost,
+        );
+
+        const issuing = recordingHost();
+        const sibling = recordingHost();
+        stale.connect(issuing.host);
+        stale.connect(sibling.host);
+
+        await expect(
+            stale.testApi.update("foo", undefined, issuing.host),
+        ).rejects.toThrow(/not active in this source/i);
+
         expect(issuing.calls).toEqual([]);
         expect(sibling.calls).toEqual([]);
         expect(readAgentsJson(instanceDir)?.agents.foo).toBeDefined();
@@ -913,7 +944,7 @@ describe("AppAgentSource fan-out (4, )", () => {
         // apply lands only once the command releases it.
         const commandLock = createLimiter(1);
         const applied: HostCall[] = [];
-        const issuing: AppAgentHost = withReplace({
+        const issuing: AppAgentProviderSetController = withReplace({
             addProvider: (p, notify) =>
                 commandLock(async () => {
                     applied.push({
@@ -989,7 +1020,7 @@ describe("AppAgentSource fan-out (4, )", () => {
 
 describe("AppAgentSource lifecycle tracker (7)", () => {
     // An issuing host whose ops resolve immediately.
-    function fastHost(): AppAgentHost {
+    function fastHost(): AppAgentProviderSetController {
         return withReplace({
             addProvider: async () => {},
             removeProvider: async () => {},
@@ -1037,7 +1068,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
 
     async function installFoo(
         built: ReturnType<typeof createDefaultInstalledAgentSource>,
-        issuing: AppAgentHost,
+        issuing: AppAgentProviderSetController,
     ) {
         await built.testApi.install(
             "foo",
@@ -1413,7 +1444,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         // A sibling whose removeProvider always rejects: its barrier slot must
         // still be filled (the per-host catch → quiesce, 5.7) so the
         // barrier completes and the re-add fires — exactly once, never twice.
-        const throwingSibling: AppAgentHost = withReplace({
+        const throwingSibling: AppAgentProviderSetController = withReplace({
             addProvider: async () => {},
             removeProvider: async () => {
                 throw new Error("sibling remove boom");
@@ -1450,7 +1481,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         // but whose ADD leg then throws. The source's per-host catch calls
         // `quiesce` a SECOND time; the barrier is already settled, so the double
         // quiesce must be a harmless no-op (no double onComplete / re-add).
-        const throwingAddSibling: AppAgentHost = withReplace({
+        const throwingAddSibling: AppAgentProviderSetController = withReplace({
             addProvider: async () => {
                 throw new Error("sibling add boom");
             },
@@ -1585,7 +1616,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = fastHost();
-        const throwingSibling: AppAgentHost = withReplace({
+        const throwingSibling: AppAgentProviderSetController = withReplace({
             addProvider: async () => {},
             removeProvider: async () => {
                 throw new Error("sibling remove boom");
@@ -1664,7 +1695,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
     async function installFooV1(
         built: ReturnType<typeof createDefaultInstalledAgentSource>,
         instanceDir: string,
-        issuing: AppAgentHost,
+        issuing: AppAgentProviderSetController,
     ): Promise<string> {
         await built.testApi.install(
             "foo",
@@ -1777,14 +1808,12 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
             },
         });
         const issuing = recordingHost();
-        // A session whose `replaceProvider` auto-acks WITHOUT running its thunk
+        // A session whose controller reports closed without running its callback
         // (models its barrier op queued-not-started at close): it fills its
         // phase-1 slot from the success continuation, which can empty `pending`
         // BEFORE its teardown has dropped the shared v1 ref.
-        const closingHost: AppAgentHost = {
-            addProvider: async () => {},
-            removeProvider: async () => {},
-            replaceProvider: async () => {},
+        const closingHost: AppAgentProviderSetController = {
+            runExclusive: async () => ({ status: "closed" }),
         };
         built.connect(issuing.host);
         const closingConn = built.connect(closingHost);
@@ -1943,14 +1972,11 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
             },
         });
         const issuing = recordingHost();
-        // A closed/disposed host: its `replaceProvider` auto-acks immediately
-        // WITHOUT ever running its thunk or awaiting `whenDecided` (models an
-        // applicator closed at enqueue time). The barrier must still fill its
+        // A closed/disposed controller reports closed without running its callback
+        // or awaiting `whenDecided`. The barrier must still fill its
         // phase-1 slot for it via the success continuation.
-        const closedHost: AppAgentHost = {
-            addProvider: async () => {},
-            removeProvider: async () => {},
-            replaceProvider: async () => {},
+        const closedHost: AppAgentProviderSetController = {
+            runExclusive: async () => ({ status: "closed" }),
         };
         built.connect(issuing.host);
         built.connect(closedHost);
@@ -2032,10 +2058,8 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         const gate = new Promise<void>((r) => (releaseLive = r));
         const liveStraggler = recordingHost(gate);
         // Closed host: auto-acks + fills its slot from the success path.
-        const closedHost: AppAgentHost = {
-            addProvider: async () => {},
-            removeProvider: async () => {},
-            replaceProvider: async () => {},
+        const closedHost: AppAgentProviderSetController = {
+            runExclusive: async () => ({ status: "closed" }),
         };
         built.connect(issuing.host);
         built.connect(liveStraggler.host);
@@ -2074,7 +2098,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
     // A no-op issuing host: the record-store logic is independent of the
     // fan-out, so these tests pass a host whose add/remove do nothing. Fan-out /
     // enable / notification behavior is covered by the "fan-out" describe below.
-    const host: AppAgentHost = withReplace({
+    const host: AppAgentProviderSetController = withReplace({
         addProvider: async () => {},
         removeProvider: async () => {},
     });

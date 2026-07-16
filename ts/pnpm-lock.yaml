@@ -4341,6 +4341,9 @@ importers:
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../dispatcher/types
       agent-cache:
         specifier: workspace:*
         version: link:../cache

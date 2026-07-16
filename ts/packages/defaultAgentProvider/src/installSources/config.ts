@@ -5,7 +5,7 @@
 // `InstallSourceInfo`, and the install-record shapes (`ResolvedCandidate` /
 // `InstalledAgentRecord`). These live in the host (default-agent-provider), not
 // the dispatcher core: the core knows nothing about how sources are configured,
-// listed, resolved, or recorded - it only exposes the per-session `AppAgentHost`
+// listed, resolved, or recorded - it only exposes the per-session controller
 // the host uses to register and tear down agents. The host contributes the whole
 // `@package` command table (`@package install`/`uninstall`/`update`/`list`, with
 // the source table nested as `@package source`) via
