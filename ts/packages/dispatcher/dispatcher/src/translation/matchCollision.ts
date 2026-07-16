@@ -31,13 +31,10 @@ export type GrammarCollisionDecision =
     | { kind: "match"; match: MatchResult; note?: string }
     | { kind: "clarify"; clarify: ClarifyMultipleAgentMatches }
     /**
-     * A pending one-shot pick (or a registry-first topical route) names a
-     * registry sibling the grammar didn't match. Abort grammar matching and fall
-     * through to LLM translation, where `pickInitialSchema` pins the schema to
-     * the chosen candidate (via `collisionOneShotPicks` for an explicit pick, or
-     * `pendingTopicalRoute` for a contextSelector topical route). The routing
-     * note (when any) travels with `pendingTopicalRoute` and is shown at the
-     * translation commit site, not on this decision.
+     * A one-shot pick or a topical route names a registry sibling the grammar
+     * didn't match. Abort grammar matching; LLM translation pins the schema —
+     * via `collisionOneShotPicks` for an explicit pick, or `pendingTopicalRoute`
+     * for a contextSelector route (which also carries the note, shown there).
      */
     | { kind: "fallthrough" };
 
@@ -120,24 +117,14 @@ function findValidatedByMember(
 }
 
 /**
- * Registry-first detection + resolution for the grammar/cache path. Independent
- * of `grammarMatch.detect` and the collision classifier: even a single confident
- * cache match can be "known to be ambiguous" via the neighborhood registry —
- * which is exactly the cache-masked collision the construction cache would
- * otherwise hide from `contextSelector` (§13.3).
- *
- * Scans the validated cache matches against the registry; when any is a
- * known-ambiguous member it re-expands the candidate set to that member plus its
- * registry siblings and walks a resolution ladder:
- *   Tier 0 — a pending one-shot pick from a resolved clarify card,
- *   Tier 1 — a learned/explicit preference,
- *   Tier 1.5 — `contextSelector`: a confident recent-topic pick over the
- *              re-expanded neighborhood (resolves with no LLM when the winner is
- *              a cache match, or pins + falls through when it is a sibling), and
- *   Tier 2 — clarify with the sibling-enriched options.
- * Tiers 0 and 1 run ahead of `contextSelector`, so an explicit user choice is
- * never overridden. Returns undefined when registry-first is off or no match is
- * a registry member.
+ * Registry-first detection + resolution on the grammar/cache path. Independent
+ * of `grammarMatch.detect`: even a single cache match can be registry-known-
+ * ambiguous — the cache-masked collision `contextSelector` otherwise can't see
+ * (§13.3). When the registry flags a match, re-expands to {member + siblings}
+ * and walks a ladder: Tier 0 one-shot pick → Tier 1 preference → Tier 1.5
+ * `contextSelector` (topical, no LLM) → Tier 2 clarify. Tiers 0/1 run ahead of
+ * contextSelector so an explicit choice is never overridden. Returns undefined
+ * when registry-first is off or no match is a registry member.
  */
 export function resolveGrammarRegistryFirst(
     validated: MatchResult[],
@@ -157,11 +144,8 @@ export function resolveGrammarRegistryFirst(
     }
     const { members, neighborhoodIds } = match;
 
-    // Honor a pending one-shot pick from a previously-resolved clarify card so
-    // that re-running the original request routes to the user's choice instead
-    // of re-showing the same card. Without this, the grammar cache re-matches
-    // the same action, registry-first re-detects the ambiguity, and the card
-    // duplicates indefinitely.
+    // Tier 0: honor a pending one-shot pick from a resolved clarify card, so the
+    // re-run routes to the user's choice instead of re-showing the same card.
     const pick = peekOneShotPick(members, ctx);
     if (pick !== undefined) {
         const matched = findValidatedByMember(validated, pick);
@@ -169,18 +153,13 @@ export function resolveGrammarRegistryFirst(
             consumeOneShotPick(pick, ctx);
             return { kind: "match", match: matched };
         }
-        // The pick is a registry sibling the grammar didn't match. Leave the
-        // pick in place and fall through to translation, which pins the schema.
+        // Sibling the grammar didn't match — leave the pick for translation to pin.
         return { kind: "fallthrough" };
     }
 
-    // Tier 1: honor a learned/explicit preference so "remember this choice"
-    // actually auto-resolves on the registry-first path. Without this the card
-    // re-appears every time even after the user asked to remember, and
-    // `@collision preferences clear` looks like a no-op (the preference was
-    // never being consulted). When a preference matches and is in the grammar's
-    // validated set, resolve to it; when it names a sibling the grammar didn't
-    // produce, pin it via a one-shot and fall through to translation.
+    // Tier 1: honor a learned/explicit preference. If it's in the validated set,
+    // resolve to it; if it names a sibling the grammar didn't produce, pin a
+    // one-shot and fall through to translation.
     const prefCfg = ctx.session.getConfig().collision.preference;
     if (prefCfg.enabled) {
         const pref = ctx.collisionPreferences.find(
@@ -200,11 +179,9 @@ export function resolveGrammarRegistryFirst(
         }
     }
 
-    // Tier 1.5: contextSelector. The registry re-expanded a (possibly single)
-    // cache match into its neighborhood, so the topical scorer can now see ≥2
-    // candidates and resolve a cache-masked collision that `isCollision` never
-    // saw (§13.3). Runs after Tiers 0/1 so it never overrides an explicit choice;
-    // on abstain it falls through to the Tier 2 clarify below.
+    // Tier 1.5: contextSelector over the re-expanded neighborhood — resolves a
+    // cache-masked collision `isCollision` never saw (§13.3). After Tiers 0/1 so
+    // it never overrides an explicit choice; abstains to the Tier 2 clarify below.
     const decision = resolveRegistryContextSelector(
         members,
         validated,
@@ -245,18 +222,12 @@ export function resolveGrammarRegistryFirst(
 
 /**
  * Tier 1.5 of {@link resolveGrammarRegistryFirst}: run `contextSelector` over the
- * registry-expanded neighborhood (`members` = matched cache action + siblings).
- *
- * Registry siblings are filtered to `activeSchemas` first — a sibling for a
- * disabled / out-of-activity agent is not executable, so it must not win a route
- * (the validated cache matches are always active). When `activeSchemas` is
- * undefined (no host filter, e.g. tests) all members are eligible.
- *
- * Returns a routing decision on a confident topical resolve — a `match` when the
- * winner is a cache construction (no LLM), or a `fallthrough` (after pinning a
- * one-shot pick) when the winner is a registry sibling the cache never produced,
- * so LLM translation pins the schema. Returns undefined when `contextSelector` is
- * off, abstains, or skips — the caller then falls to the Tier 2 clarify.
+ * registry-expanded neighborhood. Siblings are filtered to `activeSchemas` first
+ * (an inactive sibling isn't executable and must not win a route; undefined = no
+ * filter, e.g. tests). On a confident resolve returns a `match` (cache winner, no
+ * LLM) or a `fallthrough` after recording a `pendingTopicalRoute` (sibling winner
+ * — translation pins the schema). Undefined otherwise (off / abstain / skip), so
+ * the caller falls to the Tier 2 clarify.
  */
 function resolveRegistryContextSelector(
     members: PreferenceMember[],
@@ -268,9 +239,8 @@ function resolveRegistryContextSelector(
     if (!ctx.session.getConfig().collision.contextSelector?.detect) {
         return undefined;
     }
-    // Only route to schemas active this turn. `contextSelector` resolves
-    // automatically (no clarify card), so an inactive sibling winner would emit a
-    // misleading note and then be rejected downstream — filter it out up front.
+    // Only route to schemas active this turn — an inactive sibling would emit a
+    // misleading note and be rejected downstream (this tier auto-routes, no card).
     const routable =
         activeSchemas === undefined
             ? members
@@ -283,18 +253,15 @@ function resolveRegistryContextSelector(
         toCandidate(validated[0], ctx),
     );
     if (outcome.kind !== "resolve") {
-        // abstain / skip — let the caller fall through to Tier 2 clarify.
         return undefined;
     }
     if (outcome.match !== undefined) {
-        // Winner is a cache construction — resolve directly (no LLM). The note
-        // is displayed by the caller since the route is committed here.
+        // Cache winner — resolve directly (no LLM); the caller shows the note.
         return { kind: "match", match: outcome.match, note: outcome.note };
     }
-    // Winner is a registry sibling the grammar never matched. Record a
-    // request-scoped topical route so this same request's LLM translation pins
-    // the schema and shows the note at that (committed) point — not preemptively
-    // here, where the route isn't yet guaranteed. See `PendingTopicalRoute`.
+    // Sibling winner: record a request-scoped route so this request's translation
+    // pins the schema and shows the note at that (committed) point, not here where
+    // the route isn't yet guaranteed. See `PendingTopicalRoute`.
     ctx.pendingTopicalRoute = {
         schemaName: outcome.schemaName,
         note: outcome.note,

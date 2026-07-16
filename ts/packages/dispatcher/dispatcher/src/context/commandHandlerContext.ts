@@ -189,14 +189,11 @@ export type CopilotImporter = (
 ) => Promise<CopilotImportSummary>;
 
 // A request-scoped route chosen by the registry-first contextSelector tier
-// (§11.4) when the topical winner is a neighborhood sibling the construction
-// cache could not match (so there is no MatchResult to route to directly).
-// Unlike `collisionOneShotPicks` — durable, cross-turn, explicit user picks that
-// survive to a re-run — this is set in `matchRequest` and consumed within the
-// SAME request by `pickInitialSchema`, which pins the schema for LLM translation
-// and surfaces the routing note only then. Deferring the note to the commit site
-// keeps the affordance from claiming a route that isn't taken, and the
-// read-and-clear consumption keeps a stale hint from leaking into a later turn.
+// (§11.4) when the topical winner is a neighborhood sibling with no cache
+// MatchResult. Unlike `collisionOneShotPicks` (durable, cross-turn, explicit
+// picks), this is set in `matchRequest` and consumed within the SAME request by
+// `pickInitialSchema`, which pins the schema and shows the note only then — so
+// the affordance can't claim an untaken route and a stale hint can't leak.
 export type PendingTopicalRoute = {
     schemaName: string;
     note: string;
@@ -328,11 +325,7 @@ export type CommandHandlerContext = {
     // case (no durable preference written).
     collisionOneShotPicks: Set<string>;
 
-    // Request-scoped topical route from the registry-first contextSelector tier
-    // (§11.4). Set in `matchRequest` when the topical winner is a neighborhood
-    // sibling with no cache match; consumed (read-and-cleared) by
-    // `pickInitialSchema` in the same request, which pins the schema and shows
-    // the routing note. See `PendingTopicalRoute`.
+    // Request-scoped topical route (§11.4); see `PendingTopicalRoute`.
     pendingTopicalRoute: PendingTopicalRoute | undefined;
 
     // contextSelector (§11). The conversation signal source (produces the
