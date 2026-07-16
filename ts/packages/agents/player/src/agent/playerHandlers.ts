@@ -196,30 +196,34 @@ async function validatePlayerWildcardMatch(
         return true;
     }
     switch (action.actionName) {
-        case "playTrack":
-            console.log(
-                `  [Player Validation] Validating track: "${action.parameters.trackName}", artists: [${action.parameters.artists?.join(", ") || "none"}]`,
-            );
-            return validateTrack(
-                action.parameters.trackName,
-                action.parameters.artists,
-                action.parameters.albumName,
-                clientContext,
-            );
-
-        case "playAlbum":
-            return await validateAlbum(
-                action.parameters.albumName,
-                action.parameters.artists,
-                clientContext,
-            );
-        case "playArtist":
-            return await validateArtist(
-                action.parameters.artist,
-                clientContext,
-            );
-        case "playGenre":
-            return false;
+        case "playMusic":
+        case "findMusic": {
+            const target = action.parameters.target;
+            switch (target.kind) {
+                case "track":
+                    console.log(
+                        `  [Player Validation] Validating track: "${target.trackName}", artists: [${target.artists?.join(", ") || "none"}]`,
+                    );
+                    return validateTrack(
+                        target.trackName,
+                        target.artists,
+                        target.albumName,
+                        clientContext,
+                    );
+                case "album":
+                    return await validateAlbum(
+                        target.albumName,
+                        target.artists,
+                        clientContext,
+                    );
+                case "artist":
+                    return await validateArtist(target.artist, clientContext);
+                case "genre":
+                    return false;
+                default:
+                    return true;
+            }
+        }
         case "playPlaylist":
             return await validatePlayList(
                 action.parameters.name,
@@ -466,34 +470,25 @@ async function getPlayerActionCompletion(
     let album = false;
     let playlist = false;
     switch (action.actionName) {
-        case "playTrack":
-            if (propertyName === "parameters.trackName") {
+        case "playMusic":
+        case "findMusic":
+            // Track / artist / album names live inside the MusicTarget union
+            // under parameters.target, so completion property paths are nested
+            // one level deeper than the old flat play* actions. A single target
+            // may expose a track name + artists + album (kind "track"), an
+            // album + artists (kind "album"), or a single artist (kind
+            // "artist"); the checks below cover all of them.
+            if (propertyName === "parameters.target.trackName") {
                 track = true;
             } else if (
-                propertyName === "parameters.artists" ||
-                propertyName.startsWith("parameters.artists.")
+                propertyName === "parameters.target.artists" ||
+                propertyName.startsWith("parameters.target.artists.") ||
+                propertyName === "parameters.target.artist"
             ) {
                 artist = true;
-            } else if (propertyName === "parameters.albumName") {
+            } else if (propertyName === "parameters.target.albumName") {
                 album = true;
             }
-            break;
-        case "playAlbum":
-            if (propertyName === "parameters.albumName") {
-                album = true;
-            } else if (
-                propertyName === "parameters.artists" ||
-                propertyName.startsWith("parameters.artists.")
-            ) {
-                artist = true;
-            }
-            break;
-        case "playArtist":
-            if (propertyName === "parameters.artist") {
-                artist = true;
-            }
-            break;
-        case "playGenre":
             break;
         case "playPlaylist":
             if (propertyName === "parameters.name") {

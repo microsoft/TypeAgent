@@ -5,16 +5,13 @@ import {
     DeletePlaylistAction,
     GetFavoritesAction,
     GetPlaylistAction,
-    PlayAlbumAction,
     PlayFromCurrentTrackListAction,
-    PlayArtistAction,
     PlayerActions,
-    PlayGenreAction,
-    PlayRandomAction,
-    PlayTrackAction,
+    PlayMusicAction,
+    FindMusicAction,
+    MusicTarget,
+    PlayByTrack,
     PlayPlaylistAction,
-    SearchTracksAction,
-    SearchForPlaylistsAction,
     GetFromCurrentPlaylistListAction,
     AddCurrentTrackToPlaylistAction,
     AddToPlaylistFromCurrentTrackListAction,
@@ -618,46 +615,171 @@ function randomShuffle<T>(array: T[]) {
     return result;
 }
 
-async function playRandomAction(
+// Resolve a MusicTarget (other than a playlist search) into a track collection,
+// reusing the same helpers the old per-target actions used. Returns undefined
+// if nothing matches.
+async function resolveMusicTarget(
+    target: MusicTarget,
     clientContext: IClientContext,
-    action: PlayRandomAction,
-) {
-    const quantity = action.parameters?.quantity ?? 0;
-    const savedTracks = await getRecentlyPlayed(clientContext.service);
-    if (savedTracks && savedTracks.length > 0) {
-        if (quantity > 0) {
-            savedTracks.splice(quantity);
+    quantity: number | undefined,
+): Promise<ITrackCollection | undefined> {
+    switch (target.kind) {
+        case "track":
+            return resolveTrackTarget(clientContext, target);
+        case "any": {
+            const savedTracks = await getRecentlyPlayed(clientContext.service);
+            if (!savedTracks || savedTracks.length === 0) {
+                return undefined;
+            }
+            const uniqueTracks = new Map<string, SpotifyApi.TrackObjectFull>();
+            for (const item of savedTracks) {
+                uniqueTracks.set(item.track.id, item.track);
+            }
+            let tracks = randomShuffle(Array.from(uniqueTracks.values()));
+            if (quantity && quantity > 0) {
+                tracks = tracks.slice(0, quantity);
+            }
+            return new TrackCollection(tracks);
         }
-        const rawTracks = savedTracks.map((track) => track.track);
-        const uniqueTracks = new Map<string, SpotifyApi.TrackObjectFull>();
-        for (const track of rawTracks) {
-            uniqueTracks.set(track.id, track);
+        case "album": {
+            const albums = await findAlbums(
+                target.albumName,
+                target.artists,
+                clientContext,
+                undefined,
+                undefined,
+            );
+            return new AlbumTrackCollection(albums[0]);
         }
-        const tracks = randomShuffle(Array.from(uniqueTracks.values()));
-        const collection = new TrackCollection(tracks);
-        return playTrackCollection(collection, clientContext);
+        case "artist": {
+            const tracks = await (target.genre
+                ? findArtistTracksWithGenre(
+                      target.artist,
+                      target.genre,
+                      clientContext,
+                      undefined,
+                  )
+                : findArtistTopTracks(target.artist, clientContext, undefined));
+            return new TrackCollection(
+                quantity && quantity > 0 ? tracks.slice(0, quantity) : tracks,
+            );
+        }
+        case "genre": {
+            const tracks = await findTracksWithGenre(
+                clientContext,
+                target.genre,
+                quantity,
+            );
+            return new TrackCollection(tracks);
+        }
+        case "description": {
+            return searchTracks(target.query, clientContext);
+        }
+        default:
+            return undefined;
     }
-    const message = "No recently played tracks found";
-    return createActionResultFromTextDisplay(chalk.red(message), message);
 }
 
-async function playTrackAction(
+// Search for playlists matching a phrase and show them (no playback).
+async function showMatchingPlaylists(
+    query: string,
     clientContext: IClientContext,
-    action: TypeAgentAction<PlayTrackAction>,
 ): Promise<ActionResult> {
-    if (action.parameters.albumName) {
-        return playTrackWithAlbum(clientContext, action);
+    const playlists = await searchForPlaylists(query, clientContext);
+    if (playlists) {
+        updatePlaylistList(playlists, clientContext);
+        return htmlPlaylistNames(playlists, "PlaylistSearch Results");
     }
+    return createNotFoundActionResult("playlists", query);
+}
+
+async function playMusicAction(
+    clientContext: IClientContext,
+    action: PlayMusicAction,
+): Promise<ActionResult> {
+    const { target, quantity } = action.parameters;
+    if (target.kind === "playlist") {
+        return showMatchingPlaylists(target.query, clientContext);
+    }
+    const collection = await resolveMusicTarget(target, clientContext, quantity);
+    if (collection === undefined) {
+        return createNotFoundActionResult("music");
+    }
+    return playTrackCollection(collection, clientContext);
+}
+
+async function findMusicAction(
+    clientContext: IClientContext,
+    action: FindMusicAction,
+): Promise<ActionResult> {
+    const { target, play, quantity } = action.parameters;
+    if (target.kind === "playlist") {
+        return showMatchingPlaylists(target.query, clientContext);
+    }
+    const collection = await resolveMusicTarget(target, clientContext, quantity);
+    if (collection === undefined) {
+        return createNotFoundActionResult("music");
+    }
+    if (play) {
+        return playTrackCollection(collection, clientContext);
+    }
+    console.log(chalk.magentaBright("Search Results:"));
+    await updateTrackListAndPrint(collection, clientContext);
+    return htmlTrackNames(collection, "Search Results");
+}
+
+// Resolve a specific-track target to a track collection. Mirrors the old
+// PlayTrack handling: a plain track/artist search, or (when an album is given)
+// locating the track within that album. Returns undefined if not found.
+async function resolveTrackTarget(
+    clientContext: IClientContext,
+    target: PlayByTrack,
+): Promise<ITrackCollection | undefined> {
+    if (target.albumName) {
+        const trackFromEntity = await getTrackFromEntity(
+            target.trackName,
+            clientContext,
+            undefined,
+        );
+        if (
+            trackFromEntity !== undefined &&
+            isTrackMatch(trackFromEntity, target.albumName, target.artists)
+        ) {
+            return new TrackCollection([trackFromEntity]);
+        }
+        const albums = await findAlbums(
+            target.albumName,
+            target.artists,
+            clientContext,
+            undefined,
+            undefined,
+        );
+        if (
+            trackFromEntity !== undefined &&
+            albums.some((album) => album.id === trackFromEntity.album.id)
+        ) {
+            return new TrackCollection([trackFromEntity]);
+        }
+        for (const album of albums) {
+            const track = album.tracks.items.find((t) =>
+                t.name.toLowerCase().includes(target.trackName.toLowerCase()),
+            );
+            if (track !== undefined) {
+                return new TrackCollection([toTrackObjectFull(track, album)]);
+            }
+        }
+        return undefined;
+    }
+
     const tracks = await findTracks(
         clientContext,
-        action.parameters.trackName,
-        action.parameters.artists,
-        action.entities?.trackName,
-        action.entities?.artists,
+        target.trackName,
+        target.artists,
+        undefined,
+        undefined,
         3,
     );
-
-    if (equivalentNames(action.parameters.trackName, tracks[0].name)) {
+    if (equivalentNames(target.trackName, tracks[0].name)) {
         tracks.splice(1);
         const userData = clientContext.userData;
         if (userData) {
@@ -665,8 +787,7 @@ async function playTrackAction(
             await saveUserData(userData.instanceStorage, userData.data);
         }
     }
-    const collection = new TrackCollection(tracks);
-    return playTrackCollection(collection, clientContext);
+    return new TrackCollection(tracks);
 }
 
 function isTrackMatch(
@@ -684,66 +805,6 @@ function isTrackMatch(
         track.album.artists.some((albumArtist) =>
             equivalentNames(artist, albumArtist.name),
         ),
-    );
-}
-
-async function playTrackWithAlbum(
-    clientContext: IClientContext,
-    action: TypeAgentAction<PlayTrackAction>,
-): Promise<ActionResult> {
-    const albumName = action.parameters.albumName!;
-    const trackName = action.parameters.trackName;
-    const trackFromEntity = await getTrackFromEntity(
-        trackName,
-        clientContext,
-        action.entities?.trackName,
-    );
-    if (trackFromEntity !== undefined) {
-        if (
-            isTrackMatch(trackFromEntity, albumName, action.parameters.artists)
-        ) {
-            return playTrackCollection(
-                new TrackCollection([trackFromEntity]),
-                clientContext,
-            );
-        }
-    }
-    const albums = await findAlbums(
-        albumName,
-        action.parameters.artists,
-        clientContext,
-        action.entities?.albumName,
-        action.entities?.artists,
-    );
-
-    if (trackFromEntity !== undefined) {
-        if (albums.some((album) => album.id === trackFromEntity.album.id)) {
-            return playTrackCollection(
-                new TrackCollection([trackFromEntity]),
-                clientContext,
-            );
-        }
-    }
-
-    for (const album of albums) {
-        const track = album.tracks.items.find(
-            // TODO: Might want to use fuzzy matching here.
-            (track) =>
-                track.name
-                    .toLowerCase()
-                    .includes(action.parameters.trackName.toLowerCase()),
-        );
-        if (track !== undefined) {
-            return playTrackCollection(
-                new TrackCollection([toTrackObjectFull(track, album)]),
-                clientContext,
-            );
-        }
-    }
-
-    // Even though we search thru all the possible matched albums, just use the first one
-    return createErrorActionResult(
-        `Track ${trackName} not found in album ${albums[0].name}`,
     );
 }
 
@@ -766,85 +827,6 @@ async function playFromCurrentTrackListAction(
         return createErrorActionResult("No current track list");
     }
 }
-async function playAlbumAction(
-    clientContext: IClientContext,
-    action: TypeAgentAction<PlayAlbumAction>,
-): Promise<ActionResult> {
-    const albums = await findAlbums(
-        action.parameters.albumName,
-        action.parameters.artists,
-        clientContext,
-        action.entities?.albumName,
-        action.entities?.artists,
-    );
-
-    const album = albums[0];
-    if (action.parameters.trackNumber === undefined) {
-        return playTrackCollection(
-            new AlbumTrackCollection(album),
-            clientContext,
-        );
-    }
-    const tracks: SpotifyApi.TrackObjectSimplified[] = [];
-    for (const trackNumber of action.parameters.trackNumber) {
-        const track = album.tracks.items.find(
-            (track) => track.track_number === trackNumber,
-        );
-        if (track === undefined) {
-            return createErrorActionResult(
-                `Track number ${trackNumber} not found in album ${album.name}`,
-            );
-        }
-        tracks.push(track);
-    }
-
-    return playTrackCollection(
-        new TrackCollection(
-            tracks.map((track) => toTrackObjectFull(track, album)),
-        ),
-        clientContext,
-    );
-}
-
-async function playArtistAction(
-    clientContext: IClientContext,
-    action: TypeAgentAction<PlayArtistAction>,
-): Promise<ActionResult> {
-    const tracks = await (action.parameters.genre
-        ? findArtistTracksWithGenre(
-              action.parameters.artist,
-              action.parameters.genre,
-              clientContext,
-              action.entities?.artist,
-          )
-        : findArtistTopTracks(
-              action.parameters.artist,
-              clientContext,
-              action.entities?.artist,
-          ));
-
-    const quantity = action.parameters.quantity ?? 0;
-    if (quantity > 0) {
-        tracks.splice(quantity);
-    }
-    const collection = new TrackCollection(tracks);
-    return playTrackCollection(collection, clientContext);
-}
-
-async function playGenreAction(
-    clientContext: IClientContext,
-    playAction: PlayGenreAction,
-): Promise<ActionResult> {
-    const tracks = await findTracksWithGenre(
-        clientContext,
-        playAction.parameters.genre,
-        playAction.parameters.quantity,
-    );
-
-    const collection = new TrackCollection(tracks);
-    return playTrackCollection(collection, clientContext);
-}
-
 async function playPlaylistAction(
     clientContext: IClientContext,
     action: PlayPlaylistAction,
@@ -992,18 +974,12 @@ export async function handleCall(
     tokenUsage?: ActionTokenUsage,
 ): Promise<ActionResult> {
     switch (action.actionName) {
-        case "playRandom":
-            return playRandomAction(clientContext, action);
-        case "playTrack":
-            return playTrackAction(clientContext, action);
+        case "playMusic":
+            return playMusicAction(clientContext, action);
+        case "findMusic":
+            return findMusicAction(clientContext, action);
         case "playFromCurrentTrackList":
             return playFromCurrentTrackListAction(clientContext, action);
-        case "playAlbum":
-            return playAlbumAction(clientContext, action);
-        case "playArtist":
-            return playArtistAction(clientContext, action);
-        case "playGenre":
-            return playGenreAction(clientContext, action);
         case "playPlaylist":
             return playPlaylistAction(clientContext, action);
         case "status": {
@@ -1045,7 +1021,7 @@ export async function handleCall(
         case "shuffle": {
             return shuffleActionCall(clientContext, action.parameters.on);
         }
-        case "resume": {
+        case "resumePlayback": {
             return resumeActionCall(clientContext);
         }
         case "listDevices": {
@@ -1085,30 +1061,6 @@ export async function handleCall(
                 action.parameters.volumeChangePercentage,
                 actionIO,
             );
-        }
-        case "searchTracks": {
-            const searchTracksAction = action as SearchTracksAction;
-            const queryString = searchTracksAction.parameters.query;
-            const searchResult = await searchTracks(queryString, clientContext);
-            if (searchResult) {
-                console.log(chalk.magentaBright("Search Results:"));
-                updateTrackListAndPrint(searchResult, clientContext);
-                return htmlTrackNames(searchResult, "Search Results");
-            }
-            return createNotFoundActionResult("tracks", queryString);
-        }
-        case "searchForPlaylists": {
-            const searchPlaylistsAction = action as SearchForPlaylistsAction;
-            const queryString = searchPlaylistsAction.parameters.query;
-            const playlists = await searchForPlaylists(
-                queryString,
-                clientContext,
-            );
-            if (playlists) {
-                updatePlaylistList(playlists, clientContext);
-                return htmlPlaylistNames(playlists, "PlaylistSearch Results");
-            }
-            return createNotFoundActionResult("playlists", queryString);
         }
         case "listPlaylists": {
             if (clientContext.userData !== undefined) {
