@@ -90,6 +90,7 @@ permissions:
 
 jobs:
   regenerate:
+    name: Regenerate docs
     runs-on: ubuntu-latest
 
     steps:
