@@ -123,7 +123,11 @@ async function gitRefRelPath(
         return undefined;
     }
     const relPath = path.relative(gitRoot, real).split(path.sep).join("/");
-    if (relPath.startsWith("..") || path.isAbsolute(relPath)) {
+    // A leading ".." *segment* means the path escapes the repo root. A segment
+    // that merely begins with two dots (e.g. "..foo") is a real in-repo file and
+    // must be allowed, so match the segment, not a raw "..".
+    const escapesRepo = relPath === ".." || relPath.startsWith("../");
+    if (escapesRepo || path.isAbsolute(relPath)) {
         return undefined;
     }
     return { gitRoot, relPath };

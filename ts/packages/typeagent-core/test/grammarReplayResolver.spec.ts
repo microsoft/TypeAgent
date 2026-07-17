@@ -561,6 +561,51 @@ describe("resolveGrammarReplayTarget + schema enrichment (L1)", () => {
         expect(res.action).toEqual({ schemaName: "demo", actionName: "pause" });
     });
 
+    it("omits the action schema source for a side that produced no action", async () => {
+        const { agentRoots } = scaffoldAgentPackage(dir);
+        const target = await resolveGrammarReplayTarget(
+            agentRoots,
+            "demo",
+            dir,
+        );
+        expect(target?.schema?.sourceFilePath).toBeDefined();
+        const resolver = createGrammarReplayResolver({ target: target! });
+        await resolver.prepare(
+            { kind: "workingTree" },
+            { kind: "workingTree" },
+        );
+
+        // "nonsense" matches no rule, so the action stage is a miss: with no
+        // resolved action the node must not carry a schema for the viewer to
+        // offer a jump or A/B compare against.
+        const miss = await resolver.resolveWithTrace(
+            entry("miss", "nonsense"),
+            { kind: "workingTree" },
+            "A",
+        );
+        const missAction = miss.sideTrace.nodes.find(
+            (n) => n.kind === "action",
+        );
+        expect(missAction?.kind === "action" && missAction.outcome).toBe(
+            "miss",
+        );
+        expect(
+            missAction?.kind === "action" && missAction.schema,
+        ).toBeUndefined();
+
+        // A produced action still carries its schema source.
+        const hit = await resolver.resolveWithTrace(
+            entry("hit", "pause"),
+            { kind: "workingTree" },
+            "A",
+        );
+        const hitAction = hit.sideTrace.nodes.find((n) => n.kind === "action");
+        expect(hitAction?.kind === "action" && hitAction.outcome).toBe("hit");
+        expect(
+            hitAction?.kind === "action" && hitAction.schema?.sourceFilePath,
+        ).toMatch(/demoSchema\.ts$/);
+    });
+
     it("falls back to a non-enriched resolver when no schema is discoverable", async () => {
         const grammarPath = path.join(dir, "schema.agr");
         writeFileSync(grammarPath, GRAMMAR_V1, "utf8");

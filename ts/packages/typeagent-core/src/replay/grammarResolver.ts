@@ -865,13 +865,17 @@ function actionNode(
     artifacts: SideResolutionArtifacts,
 ): ActionTraceNode {
     const action = artifacts.finalAction;
+    const produced = action !== undefined;
     const rec =
         action !== null && typeof action === "object"
             ? (action as Record<string, unknown>)
             : undefined;
     const actionName =
         typeof rec?.actionName === "string" ? rec.actionName : undefined;
-    const sourceFilePath = target.schema?.sourceFilePath;
+    // Only surface the schema source for a side that actually produced an
+    // action. On a miss there is no resolved action, so the viewer must not
+    // offer a schema jump or A/B compare for this stage.
+    const sourceFilePath = produced ? target.schema?.sourceFilePath : undefined;
     const schema =
         sourceFilePath !== undefined || actionName !== undefined
             ? {
@@ -882,8 +886,8 @@ function actionNode(
     return {
         kind: "action",
         execution: "ran",
-        outcome: action !== undefined ? "hit" : "miss",
-        ...(action !== undefined ? { action } : {}),
+        outcome: produced ? "hit" : "miss",
+        ...(produced ? { action } : {}),
         ...(schema !== undefined ? { schema } : {}),
     };
 }

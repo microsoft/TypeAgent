@@ -115,8 +115,9 @@ let currentTotal = 0;
 // Raw deltas of the current result keyed by utterance id, so a row drill-in can
 // build the action A/B diff without the host re-sending the payload.
 let currentRawById = new Map<string, ActionDelta>();
-// Utterance ids that captured a resolution trace this run (only red rows do), so
-// the drill-in offers "Open trace" exactly for the rows the viewer can show.
+// Utterance ids that captured a resolution trace this run (changed rows first,
+// then equal rows up to the capture cap), so the drill-in offers "Open trace"
+// exactly for the rows the viewer can show.
 let tracedIds: Set<string> = new Set();
 // The utterance id whose drill-in detail is open, or undefined when closed; kept
 // so a filter re-render can re-assert (or drop) the open detail.
@@ -1387,11 +1388,9 @@ function closeDetail(): void {
     detailEl.textContent = "";
 }
 
-/** Paint the detail pane: a header (utterance + optional trace drill-in +
- *  close) and the unified A/B diff of the two resolved actions. */
-/** Paint the detail pane: a header (utterance + close) and, below it, the two
- *  resolved actions as a unified A/B diff — which for an equal row is the
- *  resolved action JSON shown as all-context lines. */
+/** Paint the detail pane: a header (utterance, an optional trace drill-in, and
+ *  close) and, below it, the two resolved actions as a unified A/B diff. For an
+ *  equal row that diff is the resolved action JSON shown as all-context lines. */
 function renderDetail(delta: ActionDelta): void {
     detailEl.textContent = "";
     const diff = toActionDiff(delta);
