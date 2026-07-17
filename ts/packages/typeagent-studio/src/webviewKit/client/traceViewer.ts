@@ -746,6 +746,15 @@ function resultBlock(vm: TraceDivergenceViewModel): HTMLElement {
     );
     block.appendChild(head);
 
+    // An unchanged result collapses to the same compact one-liner the agreeing
+    // pre-action stages use, so a converged Result reads consistently with them
+    // rather than expanding a redundant A/B split of one identical action. A
+    // changed result keeps the side-by-side, its output diff, and — when the
+    // action payload is the cause — the schema diff chip.
+    if (diff.identical && stage !== undefined) {
+        block.appendChild(compactBody(stage));
+        return block;
+    }
     const body = el("div", "stage-body");
     body.appendChild(sideBySide(stage?.a, stage?.b, "action"));
     if (!diff.identical) {

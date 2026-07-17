@@ -251,6 +251,12 @@ code.mono,
 .stage.is-result.is-cause {
   border-color: var(--vscode-charts-orange, rgba(200, 150, 0, 0.5));
 }
+/* A converged Result collapses like the agreeing pre-action stages: no card
+   border, just the compact one-liner, so "same" reads the same way down the
+   whole pipeline. A diverged Result keeps its bordered card for the A/B split. */
+.stage.is-result.status-agree {
+  border-color: transparent;
+}
 
 /* Compact (converged / one-sided / n/a) stage: a single summary line. */
 .stage-compact .stage-summary {
