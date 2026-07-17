@@ -476,43 +476,63 @@ function formatThinkingDisplay(thinking: string): string {
 /**
  * Format a tool call as a persistent display line.
  */
-function formatToolCallDisplay(toolName: string, input: any): string {
-    if (toolName === "discover_actions") {
-        const schema = input?.schemaName ?? JSON.stringify(input);
-        return `**Tool:** discover_actions — schema: \`${schema}\``;
-    } else if (toolName === "execute_action") {
-        const schema = input?.schemaName ?? "?";
-        // The model sometimes supplies `action` as a JSON string rather than an
-        // object, and at tool.execution_start that string can still be
-        // mid-stream (truncated). Parse it when possible, otherwise pull the
-        // actionName out directly so the label shows the real action, not "?".
-        let action = input?.action;
-        if (typeof action === "string") {
-            try {
-                action = JSON.parse(action);
-            } catch {
-                const match = action.match(/"actionName"\s*:\s*"([^"]+)"/);
-                action = match ? { actionName: match[1] } : undefined;
-            }
-        }
-        const actionName = action?.actionName ?? "?";
-        return `**Tool:** execute_action — \`${schema}.${actionName}\``;
-    } else if (toolName === "search_memory") {
-        const question = input?.question ?? JSON.stringify(input);
-        return `**Tool:** search_memory — \`${question}\``;
-    } else if (toolName === "remember") {
-        return `**Tool:** remember`;
+function parseActionInput(action: unknown): any {
+    if (typeof action !== "string") {
+        return action;
     }
-    // Built-in tools (shell, github/fs/*, github/search/*, ...): show the
-    // primary argument so parallel or similar calls are distinguishable
-    // instead of rendering as identical "Tool: <name>" bubbles.
+
+    try {
+        return JSON.parse(action);
+    } catch {
+        const match = action.match(/"actionName"\s*:\s*"([^"]+)"/);
+        return match ? { actionName: match[1] } : undefined;
+    }
+}
+
+function formatExecuteActionDisplay(input: any): string {
+    const schema = input?.schemaName ?? "?";
+    // The model sometimes supplies `action` as a JSON string rather than an
+    // object, and at tool.execution_start that string can still be
+    // mid-stream (truncated). Parse it when possible, otherwise pull the
+    // actionName out directly so the label shows the real action, not "?".
+    const action = parseActionInput(input?.action);
+    const actionName = action?.actionName ?? "?";
+    return `**Tool:** execute_action — \`${schema}.${actionName}\``;
+}
+
+function getPrimaryToolArg(input: any): string | undefined {
     const primaryArg =
         input?.command ??
         input?.path ??
         input?.filePath ??
         input?.query ??
         input?.pattern;
-    if (typeof primaryArg === "string" && primaryArg.length > 0) {
+    return typeof primaryArg === "string" && primaryArg.length > 0
+        ? primaryArg
+        : undefined;
+}
+
+function formatToolCallDisplay(toolName: string, input: any): string {
+    switch (toolName) {
+        case "discover_actions": {
+            const schema = input?.schemaName ?? JSON.stringify(input);
+            return `**Tool:** discover_actions — schema: \`${schema}\``;
+        }
+        case "execute_action":
+            return formatExecuteActionDisplay(input);
+        case "search_memory": {
+            const question = input?.question ?? JSON.stringify(input);
+            return `**Tool:** search_memory — \`${question}\``;
+        }
+        case "remember":
+            return `**Tool:** remember`;
+    }
+
+    // Built-in tools (shell, github/fs/*, github/search/*, ...): show the
+    // primary argument so parallel or similar calls are distinguishable
+    // instead of rendering as identical "Tool: <name>" bubbles.
+    const primaryArg = getPrimaryToolArg(input);
+    if (primaryArg) {
         return `**Tool:** ${toolName} — \`${primaryArg}\``;
     }
     return `**Tool:** ${toolName}`;
