@@ -238,9 +238,12 @@ export class AppAgentProviderSetControllerImpl
             }
             change.notify ||= mutation.notify;
             if (mutation.kind === "remove") {
-                change.oldProvider ??= mutation.provider;
                 if (change.newProvider === mutation.provider) {
+                    // A remove that cancels an earlier add in the same run has
+                    // no baseline old provider to report.
                     change.newProvider = undefined;
+                } else {
+                    change.oldProvider ??= mutation.provider;
                 }
             } else {
                 change.newProvider = mutation.provider;

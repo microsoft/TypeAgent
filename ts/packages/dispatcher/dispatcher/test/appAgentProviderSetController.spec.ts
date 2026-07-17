@@ -255,4 +255,18 @@ describe("AppAgentProviderSetController", () => {
         });
         expect(notifications).toEqual([]);
     });
+
+    it("stays silent when an add is canceled by remove in the same run", async () => {
+        const notifications: string[] = [];
+        const provider = fakeProvider("foo");
+        const controller = createController({
+            notifyChange: (kind) => notifications.push(kind),
+        });
+
+        await controller.runExclusive(async (mutation) => {
+            await mutation.addProvider(provider, { notify: true });
+            await mutation.removeProvider(provider, { notify: true });
+        });
+        expect(notifications).toEqual([]);
+    });
 });
