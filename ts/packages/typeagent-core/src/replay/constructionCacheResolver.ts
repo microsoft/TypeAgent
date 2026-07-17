@@ -169,7 +169,7 @@ function findSchemaNamespace(
         if (name.includes("|")) {
             continue;
         }
-        const [foundSchemaName, hash] = name.split(",", 2);
+        const [foundSchemaName, hash] = name.split(",", 3);
         if (foundSchemaName === schemaName) {
             return {
                 namespaceName: name,

@@ -12,7 +12,7 @@ import {
 
 const FIXTURE_HASH = "fixture-hash=";
 
-function writeFixtureCache(dir: string): string {
+function writeFixtureCache(dir: string, activityName = ""): string {
     const cacheFilePath = path.join(dir, "constructions.json");
     writeFileSync(
         cacheFilePath,
@@ -43,7 +43,7 @@ function writeFixtureCache(dir: string): string {
             ],
             constructionNamespaces: [
                 {
-                    name: `player,${FIXTURE_HASH},`,
+                    name: `player,${FIXTURE_HASH},${activityName}`,
                     constructions: [
                         {
                             parts: [
@@ -245,6 +245,24 @@ describe("loadConstructionCacheLayer", () => {
             const play = layer.match("play despacito");
             expect(play?.schemaName).toBe("player");
             expect(typeof play?.actionName).toBe("string");
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test("valid: a non-empty activity suffix still validates the hash", async () => {
+        const dir = tempDir();
+        try {
+            const layer = await loadConstructionCacheLayer({
+                cacheFilePath: writeFixtureCache(dir, "playMusic"),
+                schemaName: "player",
+                currentHash: FIXTURE_HASH,
+            });
+            expect(layer.status).toBe("valid");
+            expect(layer.match("pause")).toEqual({
+                schemaName: "player",
+                actionName: "pause",
+            });
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
