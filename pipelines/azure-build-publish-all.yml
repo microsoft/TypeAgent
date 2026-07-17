@@ -3,7 +3,7 @@
 
 # Consolidated build & publish pipeline for TypeAgent.
 #
-# Replaces the individual azure-build-publish-agent-server.yml,
+# This replaces the individual azure-build-publish-agent-server.yml,
 # azure-build-publish-copilot-plugin.yml, azure-build-publish-mcp.yml,
 # azure-build-package-shell.yml, azure-build-package-agent-server-msi.yml,
 # and azure-build-ts.yml pipelines with a single multi-stage pipeline that
