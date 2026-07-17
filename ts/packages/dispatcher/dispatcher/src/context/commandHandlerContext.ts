@@ -76,6 +76,7 @@ import {
 import {
     AppAgentProviderSetApplyFns,
     AppAgentProviderSetControllerImpl,
+    AppAgentProviderSetRemoveResult,
 } from "./appAgentSetController.js";
 import { getSchemaNamePrefix } from "../execute/actionHandlers.js";
 import { RequestMetricsManager } from "../utils/metrics.js";
@@ -892,17 +893,17 @@ async function hostAddProvider(
  * idle-gated applicator. On a sibling fan-out (`notify`), surfaces
  * a system message.
  *
- * `dropConfig`: when true (explicit `@package uninstall`), also
- * clears the agent's persisted enable preference so a fresh reinstall starts
- * from the manifest default. An `@package update` passes `false` so the remove leg of
- * its remove-then-add swap leaves the user's per-session preference intact
- * across a version bump.
+ * `dropConfig`: when true (explicit `@package uninstall`), returns the captured
+ * agent and schema names needed to clear the persisted enable preference. The
+ * controller passes that data to `finalizeRemove` only for a net removal. A
+ * rollback that restores the provider keeps the preference. An `@package update`
+ * passes `false` so its remove-then-add swap preserves the preference.
  */
 async function hostRemoveProvider(
     context: CommandHandlerContext,
     provider: AppAgentProvider,
     dropConfig: boolean,
-) {
+): Promise<AppAgentProviderSetRemoveResult | undefined> {
     const names = provider.getAppAgentNames();
     // Capture the agent's schema names before removal so we can clear their
     // persisted config entries afterward.
@@ -915,10 +916,8 @@ async function hostRemoveProvider(
         context.agentCache.grammarStore,
     );
 
-    if (dropConfig) {
-        dropAgentConfig(context, names, schemaNames);
-    }
     removeKnownAgents(context, names);
+    return dropConfig ? { agentNames: names, schemaNames } : undefined;
 }
 
 /**
@@ -1208,6 +1207,8 @@ export async function initializeCommandHandlerContext(
                 hostAddProvider(context, provider, recordAsKnown),
             applyRemove: (provider, dropConfig) =>
                 hostRemoveProvider(context, provider, dropConfig),
+            finalizeRemove: ({ agentNames, schemaNames }) =>
+                dropAgentConfig(context, agentNames, schemaNames),
             notifyChange: (op, oldProvider, newProvider) =>
                 hostNotifyChange(context, op, oldProvider, newProvider),
         };

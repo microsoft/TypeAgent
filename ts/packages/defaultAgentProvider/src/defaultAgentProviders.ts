@@ -371,6 +371,8 @@ export function createDefaultInstalledAgentSource(
     options?: DefaultAppAgentSourceOptions,
     /** Host extension point for supplying alternate install sources. */
     sourceFactory?: InstallSourceFactory,
+    /** @internal Test-only store writer for exercising commit failures. */
+    storeWriter: typeof writeAgentsJson = writeAgentsJson,
 ): InstalledAgentSourceForTest {
     const instanceConfigs = getInstanceConfigProvider(instanceDir);
     const installDir = getInstallDir(instanceConfigs);
@@ -563,25 +565,31 @@ export function createDefaultInstalledAgentSource(
         if (barrier.outcome !== undefined) {
             return;
         }
-        barrier.outcome = outcome;
         if (barrier.quiesceTimer !== undefined) {
             clearTimeout(barrier.quiesceTimer);
             barrier.quiesceTimer = undefined;
         }
-        // Flip source state BEFORE unblocking hosts (name active(v2)/absent on
-        // commit; active(v1) + record restored on rollback). A throw here (e.g. a
-        // synchronous agents.json write error during a rollback restore) must NOT
-        // skip `resolveDecided()` — the parked hosts would deadlock. They add the
-        // decided provider from `barrier.outcome`, independent
-        // of the entry flip, so unblocking after a partial `onDecided` still
-        // restores the right version everywhere.
+        // Apply the source state and durable record before publishing the
+        // outcome. A commit write failure selects rollback, so hosts restore v1
+        // instead of reporting success with runtime and agents.json disagreeing.
         try {
             barrier.onDecided(outcome);
         } catch (e) {
             debug(
                 `barrier '${barrier.name}': onDecided(${outcome}) threw: ${e}`,
             );
+            if (outcome === "committed") {
+                outcome = "rolledback";
+                try {
+                    barrier.onDecided(outcome);
+                } catch (rollbackError) {
+                    debug(
+                        `barrier '${barrier.name}': onDecided(${outcome}) threw: ${rollbackError}`,
+                    );
+                }
+            }
         }
+        barrier.outcome = outcome;
         // Unblock participant controllers parked in `runExclusive` and late joiners
         // parked in `connect()`. `onDecided` already flipped the entry, so late
         // joiners re-snapshot the decided version (`v2` commit / `v1` rollback /
@@ -709,7 +717,7 @@ export function createDefaultInstalledAgentSource(
     ): void {
         const current = readAgentsJson(instanceDir) ?? { agents: {} };
         mutate(current.agents);
-        writeAgentsJson(instanceDir, current);
+        storeWriter(instanceDir, current);
     }
 
     // Begin a coordinated teardown/swap across every connected session,
@@ -1000,16 +1008,15 @@ export function createDefaultInstalledAgentSource(
                     );
                 }
                 const oldProvider = entry.provider;
-                // The barrier decision is the commit point. Now tear
-                // the live agent down across every connected session through the
+                // Tear the live agent down across every connected session through the
                 // coordinated barrier (active → removing → absent): each
                 // session's `runExclusive` callback (no new-version
                 // thunk) unloads under one held command lock, then the name is
                 // freed only once verify-0 confirms the shared process is down
                 // everywhere. The name stays off-limits until the barrier
-                // completes. Uninstall drops each session's persisted enable
-                // preference (dropConfig=true) so a fresh reinstall starts from
-                // the manifest default. Once confirmed down,
+                // completes. A committed uninstall drops each session's
+                // persisted enable preference so a fresh reinstall starts from
+                // the manifest default; rollback preserves it. Once confirmed down,
                 // the agent's version-scoped install root is pruned; the startup
                 // orphan sweep is the backstop. If a straggler
                 // never idles the barrier times out and ROLLS BACK:
@@ -1029,18 +1036,22 @@ export function createDefaultInstalledAgentSource(
                             // dropped ONLY here (not before the barrier): while
                             // the teardown is in flight the agent stays the
                             // recorded-current install, so a crash mid-uninstall
-                            // recovers to the still-installed agent and a rollback
-                            // needs nothing restored.
+                            // recovers to the still-installed agent.
                             entries.delete(name);
                             mutateAgentsJson((agents) => {
                                 delete agents[name];
                             });
                         } else {
-                            // Rollback: the record was never dropped, so there
-                            // is nothing to restore — just keep v1 live.
+                            // Restore both source state and the durable v1 record.
+                            // The write is normally idempotent, and also repairs a
+                            // commit write that failed after partially replacing
+                            // agents.json.
                             entries.set(name, {
                                 status: "active",
                                 provider: oldProvider,
+                            });
+                            mutateAgentsJson((agents) => {
+                                agents[name] = deletedRecord;
                             });
                         }
                     },
@@ -1191,13 +1202,16 @@ export function createDefaultInstalledAgentSource(
                             });
                             writeInstalledRecord();
                         } else {
-                            // Rollback: v1 was never overwritten in the store,
-                            // so there is nothing to restore — just keep v1
-                            // live and discard v2, as if the update never
-                            // happened.
+                            // Restore both source state and the durable v1 record.
+                            // The write is normally idempotent, and also repairs a
+                            // commit write that failed after partially replacing
+                            // agents.json.
                             entries.set(name, {
                                 status: "active",
                                 provider: oldEntry.provider,
+                            });
+                            mutateAgentsJson((agents) => {
+                                agents[name] = existing;
                             });
                         }
                     },

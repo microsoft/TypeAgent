@@ -20,6 +20,19 @@ type AppliedMutation = {
     kind: "add" | "remove";
     provider: AppAgentProvider;
     notify: boolean;
+    removeResult?: AppAgentProviderSetRemoveResult | undefined;
+};
+
+type NetChange = {
+    oldProvider: AppAgentProvider | undefined;
+    newProvider: AppAgentProvider | undefined;
+    notify: boolean;
+    removeResult: AppAgentProviderSetRemoveResult | undefined;
+};
+
+export type AppAgentProviderSetRemoveResult = {
+    agentNames: readonly string[];
+    schemaNames: readonly string[];
 };
 
 const exclusiveControllerContext =
@@ -34,7 +47,8 @@ export type AppAgentProviderSetApplyFns = {
     applyRemove: (
         provider: AppAgentProvider,
         dropConfig: boolean,
-    ) => Promise<void>;
+    ) => Promise<void | AppAgentProviderSetRemoveResult>;
+    finalizeRemove?: (result: AppAgentProviderSetRemoveResult) => void;
     notifyChange?: (
         kind: "add" | "remove" | "update",
         oldProvider: AppAgentProvider | undefined,
@@ -140,14 +154,16 @@ export class AppAgentProviderSetControllerImpl
                                     provider,
                                     "removeProvider",
                                 );
-                                await this.apply.applyRemove(
-                                    provider,
-                                    options?.dropConfig ?? true,
-                                );
+                                const removeResult =
+                                    await this.apply.applyRemove(
+                                        provider,
+                                        options?.dropConfig ?? true,
+                                    );
                                 applied.push({
                                     kind: "remove",
                                     provider,
                                     notify: options?.notify ?? false,
+                                    removeResult: removeResult ?? undefined,
                                 });
                             }),
                     };
@@ -160,7 +176,9 @@ export class AppAgentProviderSetControllerImpl
                         revoke();
                         await Promise.all(accepted);
                         if (!this.closed) {
-                            this.notifyNetChanges(applied);
+                            const changes = this.collectNetChanges(applied);
+                            this.finalizeNetRemovals(changes);
+                            this.notifyNetChanges(changes);
                         }
                         this.settle(run, () =>
                             resolve({ status: "completed", value }),
@@ -213,18 +231,8 @@ export class AppAgentProviderSetControllerImpl
         }
     }
 
-    private notifyNetChanges(applied: AppliedMutation[]): void {
-        if (this.apply.notifyChange === undefined) {
-            return;
-        }
-        const changes = new Map<
-            string,
-            {
-                oldProvider: AppAgentProvider | undefined;
-                newProvider: AppAgentProvider | undefined;
-                notify: boolean;
-            }
-        >();
+    private collectNetChanges(applied: AppliedMutation[]): NetChange[] {
+        const changes = new Map<string, NetChange>();
         for (const mutation of applied) {
             const name = mutation.provider.getAppAgentNames()[0];
             let change = changes.get(name);
@@ -233,6 +241,7 @@ export class AppAgentProviderSetControllerImpl
                     oldProvider: undefined,
                     newProvider: undefined,
                     notify: false,
+                    removeResult: undefined,
                 };
                 changes.set(name, change);
             }
@@ -244,13 +253,33 @@ export class AppAgentProviderSetControllerImpl
                     change.newProvider = undefined;
                 } else {
                     change.oldProvider ??= mutation.provider;
+                    change.removeResult ??= mutation.removeResult;
                 }
             } else {
                 change.newProvider = mutation.provider;
             }
         }
+        return [...changes.values()];
+    }
 
-        for (const change of changes.values()) {
+    private finalizeNetRemovals(changes: NetChange[]): void {
+        for (const change of changes) {
+            if (
+                change.oldProvider !== undefined &&
+                change.newProvider === undefined
+            ) {
+                if (change.removeResult !== undefined) {
+                    this.apply.finalizeRemove?.(change.removeResult);
+                }
+            }
+        }
+    }
+
+    private notifyNetChanges(changes: NetChange[]): void {
+        if (this.apply.notifyChange === undefined) {
+            return;
+        }
+        for (const change of changes) {
             if (!change.notify || change.oldProvider === change.newProvider) {
                 continue;
             }

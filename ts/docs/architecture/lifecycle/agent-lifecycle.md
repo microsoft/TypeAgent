@@ -361,12 +361,15 @@ swap on every dispatcher flows through the one idle-gated queue.
 
 ### Failure semantics and edge cases
 
-- **Record write is the commit point.** Fan-out is best-effort notification after
-  it.
-- **Issuing client** is awaited; failure is reported but the record is still
-  committed.
-- **Sibling clients** each apply independently; a throw is caught and logged per
-  client.
+- **Record write gates commit.** After every participating host removes v1 and
+  verify-0 passes, the source writes the committed record before publishing the
+  outcome. A write failure selects rollback, restores the v1 record, and makes
+  every host re-add v1.
+- **Per-session config follows the net result.** Uninstall clears each session's
+  persisted enable preference only after its exclusive mutation ends as a net
+  removal. Rollback restores the same provider and leaves the preference intact.
+- **Per-host apply failures** are caught and logged so a closing or broken host
+  cannot wedge the shared barrier.
 - **Leaf-op invariant:** teardown (`unload`/`close`) and startup (`load`/`init`)
   run under the held command lock and must be leaf ops — never dispatch a command
   or reacquire the lock, or the freeze would deadlock.

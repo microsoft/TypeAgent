@@ -206,11 +206,13 @@ function createTestUpdateableSource(
 function createTestUpdateableInstalledAgentSource(
     instanceDir: string,
     options?: Parameters<typeof createDefaultInstalledAgentSource>[1],
+    storeWriter?: Parameters<typeof createDefaultInstalledAgentSource>[3],
 ) {
     return createDefaultInstalledAgentSource(
         instanceDir,
         options,
         createTestUpdateableSource,
+        storeWriter,
     );
 }
 
@@ -1882,6 +1884,78 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         expect(
             readAgentsJson(instanceDir)!.agents.foo.installRoot,
         ).toBeUndefined();
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+    });
+
+    it("rolls an update back when the commit record write fails", async () => {
+        const instanceDir = updateableTestInstanceDir();
+        let failNextWrite = false;
+        const built = createTestUpdateableInstalledAgentSource(
+            instanceDir,
+            undefined,
+            (dir, data) => {
+                if (failNextWrite) {
+                    failNextWrite = false;
+                    throw new Error("commit write failed");
+                }
+                writeAgentsJson(dir, data);
+            },
+        );
+        const issuing = recordingHost();
+        built.connect(issuing.host);
+        await installFooV1(built, instanceDir, issuing.host);
+        const oldRecord = readAgentsJson(instanceDir)!.agents.foo;
+        issuing.calls.length = 0;
+        failNextWrite = true;
+
+        const outcomes: string[] = [];
+        await built.testApi.update("foo", undefined, issuing.host, (outcome) =>
+            outcomes.push(outcome),
+        );
+        await settle();
+
+        expect(outcomes).toEqual(["reverted"]);
+        expect(readAgentsJson(instanceDir)!.agents.foo).toEqual(oldRecord);
+        expect(installedNames(built.testApi)).toContain("foo");
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+    });
+
+    it("rolls an uninstall back when the commit record write fails", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        let failNextWrite = false;
+        const built = createDefaultInstalledAgentSource(
+            instanceDir,
+            undefined,
+            undefined,
+            (dir, data) => {
+                if (failNextWrite) {
+                    failNextWrite = false;
+                    throw new Error("commit write failed");
+                }
+                writeAgentsJson(dir, data);
+            },
+        );
+        const issuing = recordingHost();
+        built.connect(issuing.host);
+        await built.testApi.install(
+            "foo",
+            makePathAgentDir(),
+            undefined,
+            issuing.host,
+        );
+        const oldRecord = readAgentsJson(instanceDir)!.agents.foo;
+        issuing.calls.length = 0;
+        failNextWrite = true;
+
+        const outcomes: string[] = [];
+        await built.testApi.uninstall("foo", issuing.host, (outcome) =>
+            outcomes.push(outcome),
+        );
+        await settle();
+
+        expect(outcomes).toEqual(["reverted"]);
+        expect(readAgentsJson(instanceDir)!.agents.foo).toEqual(oldRecord);
+        expect(installedNames(built.testApi)).toContain("foo");
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
     });
 

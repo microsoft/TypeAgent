@@ -244,8 +244,14 @@ describe("AppAgentProviderSetController", () => {
 
     it("stays silent when rollback restores the same provider", async () => {
         const notifications: string[] = [];
+        const finalized: string[] = [];
         const provider = fakeProvider("foo");
         const controller = createController({
+            applyRemove: async () => ({
+                agentNames: ["foo"],
+                schemaNames: ["foo.schema"],
+            }),
+            finalizeRemove: ({ agentNames }) => finalized.push(agentNames[0]),
             notifyChange: (kind) => notifications.push(kind),
         });
 
@@ -254,6 +260,24 @@ describe("AppAgentProviderSetController", () => {
             await mutation.addProvider(provider, { notify: true });
         });
         expect(notifications).toEqual([]);
+        expect(finalized).toEqual([]);
+    });
+
+    it("finalizes config cleanup for a net removal", async () => {
+        const finalized: string[] = [];
+        const provider = fakeProvider("foo");
+        const controller = createController({
+            applyRemove: async () => ({
+                agentNames: ["foo"],
+                schemaNames: ["foo.schema"],
+            }),
+            finalizeRemove: ({ agentNames }) => finalized.push(agentNames[0]),
+        });
+
+        await controller.runExclusive((mutation) =>
+            mutation.removeProvider(provider),
+        );
+        expect(finalized).toEqual(["foo"]);
     });
 
     it("stays silent when an add is canceled by remove in the same run", async () => {
