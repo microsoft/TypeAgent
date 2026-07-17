@@ -49,6 +49,7 @@ Their _shape_ steers the model.
   { "name": "eggs", "type": ["item"] },
 ]
 
+
 // nothing says eggs is IN grocery
 ```
 
