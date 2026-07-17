@@ -23,7 +23,7 @@ ts/tools/installers/wix/
   └── TypeAgent-AgentServer.wxs   # WiX project definition
 
 pipelines/
-  └── azure-build-package-agent-server-msi.yml   # ADO pipeline
+  └── azure-build-publish-all.yml   # ADO pipeline (build_sign_publish_msi job)
 ```
 
 ## Prerequisites
@@ -277,21 +277,21 @@ no extra config step is needed. `install-shell.ps1` is the Windows sibling of
 
 ### Automatic (on `main` branch)
 
-The pipeline runs automatically when:
-
-- Code changes in `ts/tools/scripts/build-msi.mjs`, `sign-msi.mjs`, or `ts/tools/installers/wix/**`
-- Or on manual trigger via `Run Pipeline`
+The pipeline runs automatically on every push to `main`. The MSI is built,
+signed, and published by the `build_sign_publish_msi` job in the Publish stage.
+It can also be started manually via `Run Pipeline`.
 
 ### Manual Trigger
 
 ```powershell
-az pipelines run --name "azure-build-package-agent-server-msi" --branch main
+az pipelines run --name "azure-build-publish-all" --branch main
 ```
 
 ### Parameters
 
-- **`rid`**: Target RID (`win32-x64`, `win32-arm64`, etc.)
-- **`publishArtifacts`**: Publish to Azure Storage (requires approval)
+- **`publishMsi`**: Publish the signed MSI to the Universal feed + Azure Blob
+  Storage (requires approval).
+- **`channel`**: Release channel for the blob upload (`test`, `lkg`).
 
 ## Troubleshooting
 
