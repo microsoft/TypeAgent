@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=b603cf92cecb6dc379f818c4d3e49274945d53dd353ecee84efc524d292e3763 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4cbb3adc7a21409d9be30640f11cdf9e617796e760e5799d09a74331ae00a3f1 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/dispatcher-types — AI-generated documentation
@@ -12,36 +12,36 @@
 
 ## Overview
 
-The `@typeagent/dispatcher-types` package provides a centralized collection of TypeScript type definitions for the TypeAgent dispatcher. These types are essential for ensuring consistent and type-safe communication between various components of the TypeAgent ecosystem, such as agents, clients, and dispatchers. By standardizing the data structures and interfaces, this package helps maintain compatibility and reliability across the system.
+The `@typeagent/dispatcher-types` package provides a collection of TypeScript type definitions that are essential for the TypeAgent dispatcher and its related components. These types ensure consistent and type-safe communication across the TypeAgent ecosystem, including agents, clients, and dispatchers. By standardizing the data structures and interfaces, this package facilitates integration and interoperability between various components.
 
 ## What it does
 
-This package defines and exports TypeScript types that are used throughout the TypeAgent dispatcher and its related components. These types are consumed by multiple packages in the TypeAgent monorepo, including `@typeagent/agent-server-protocol`, `@typeagent/copilot-plugin`, and `agent-dispatcher`. The key functionalities provided by this package include:
+The primary purpose of this package is to define and export TypeScript types that are used throughout the TypeAgent dispatcher and its associated modules. These types are consumed by multiple packages in the TypeAgent monorepo, such as `@typeagent/agent-server-protocol`, `@typeagent/copilot-plugin`, and `agent-dispatcher`. The key functionalities include:
 
-- **Dispatcher Requests and Responses**: Types such as `RequestId`, `PendingInteractionRequest`, and `PendingInteractionResponse` define the structure of requests and responses handled by the dispatcher.
-- **Client Input/Output Operations**: Types like `IAgentMessage`, `TemplateEditConfig`, and `NotifyExplainedData` are used to manage client interactions, including message formatting and data exchange.
+- **Dispatcher Requests and Responses**: Types like `RequestId`, `PendingInteractionRequest`, and `PendingInteractionResponse` define the structure of requests and responses managed by the dispatcher.
+- **Client Input/Output Operations**: Types such as `IAgentMessage`, `TemplateEditConfig`, and `NotifyExplainedData` are used to handle client interactions, including message formatting and data exchange.
 - **Dispatcher Status Management**: The package includes types and helper functions (e.g., `getStatusSummary` in [status.ts](./src/helpers/status.ts)) to represent and summarize the state of the dispatcher.
-- **Queue Management**: Types such as `QueuedRequest`, `QueueCancelReason`, and `QueueRequestState` define the structure and lifecycle of server-side message queues.
-- **Logging and Display**: Types like `SetDisplayEntry` and `AppendDisplayEntry` in [displayLogEntry.ts](./src/displayLogEntry.ts) are used for managing and formatting log entries for display purposes.
+- **Queue Management**: Types like `QueuedRequest`, `QueueCancelReason`, and `QueueRequestState` define the structure and lifecycle of server-side message queues.
+- **Logging and Display**: Types such as `SetDisplayEntry` and `AppendDisplayEntry` in [displayLogEntry.ts](./src/displayLogEntry.ts) are used for managing and formatting log entries for display purposes.
 
-These types are foundational for the operation of the TypeAgent dispatcher and its integration with other components in the system.
+These types are critical for the operation of the TypeAgent dispatcher and its integration with other components in the system.
 
 ## Setup
 
-This package does not require any special setup beyond installation. To include it in your project, simply run:
+This package does not require any special setup beyond installation. To include it in your project, use the following command:
 
 ```bash
 pnpm install
 ```
 
-For additional details, refer to the hand-written README.
+For further details, refer to the hand-written README.
 
 ## Key Files
 
-The `@typeagent/dispatcher-types` package is organized into several key files, each focusing on a specific aspect of the dispatcher:
+The `@typeagent/dispatcher-types` package is organized into several key files, each serving a specific purpose:
 
-- [src/index.ts](./src/index.ts): The main entry point for the package, exporting all the types and utilities defined in other modules.
-- [src/clientIO.ts](./src/clientIO.ts): Contains types related to client input/output operations, such as `IAgentMessage`, `TemplateEditConfig`, and `NotifyExplainedData`.
+- [src/index.ts](./src/index.ts): The main entry point of the package, exporting all the types and utilities defined in other modules.
+- [src/clientIO.ts](./src/clientIO.ts): Contains types for client input/output operations, such as `IAgentMessage`, `TemplateEditConfig`, and `NotifyExplainedData`.
 - [src/dispatcher.ts](./src/dispatcher.ts): Defines core dispatcher types, including `RequestId`, `DispatcherName`, and `DispatcherEmoji`.
 - [src/displayLogEntry.ts](./src/displayLogEntry.ts): Provides types for logging and displaying information, such as `SetDisplayEntry` and `AppendDisplayEntry`.
 - [src/pendingInteraction.ts](./src/pendingInteraction.ts): Manages types for pending interactions, including `PendingInteractionRequest` and `PendingInteractionResponse`.
@@ -103,6 +103,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-types docs:verify-links` to spot-check._
+_Auto-generated against commit `b1b5bcafdde8ba2387d669eec198eb70e8fa5986` on `2026-07-17T23:52:55.795Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-types docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4779f737a82cf603fcfe9ffd587ae28a9e7ba8358f5cdadef9ab4e11cf22e448 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=a4e83ad5bd6ae0628502eb78b1f571103dfc7572f9521e4de8070a30f41e990b -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-ui — AI-generated documentation
@@ -12,16 +12,16 @@
 
 ## Overview
 
-The `chat-ui` package provides a shared, framework-free chat user interface for TypeAgent applications. It is designed to be used across multiple platforms, including the VS Code shell extension, the browser extension chat panel, and the Visual Studio extension webview. The package supports user and agent interactions, streaming updates, chat history management, command completions, feedback collection, and connection status indicators. Its platform-agnostic design ensures consistent functionality and appearance across different environments.
+The `chat-ui` package provides a shared, framework-free chat user interface for TypeAgent applications. It is designed to be used across multiple platforms, including the VS Code shell extension, the browser extension chat panel, and the Visual Studio extension webview. The package enables consistent and interactive chat experiences by offering components for rendering user and agent messages, managing chat history, handling command completions, and displaying connection statuses.
 
 ## What it does
 
-The `chat-ui` package offers the following key features:
+The `chat-ui` package includes the following key features:
 
-- **ChatPanel**: The core component for rendering the chat interface. It supports:
+- **ChatPanel**: The primary component for rendering the chat interface. It supports:
 
-  - Adding user and agent messages with `addAgentMessage`.
-  - Updating display metadata using `setDisplayInfo`.
+  - Adding user and agent messages using `addAgentMessage`.
+  - Updating display metadata with `setDisplayInfo`.
   - Replaying historical chat entries via `replayHistory`.
   - Streaming updates for dynamic content display.
 
@@ -33,9 +33,9 @@ The `chat-ui` package offers the following key features:
 
 - **PlatformAdapter**: Abstracts platform-specific behaviors, such as handling link clicks and settings, to ensure compatibility across different environments.
 
-- **Shared Styles**: Includes a CSS file (`styles/chat.css`) to ensure a consistent appearance for the chat UI across all host applications.
+- **Shared Styles**: A CSS file (`styles/chat.css`) ensures a consistent appearance for the chat UI across all host applications.
 
-The package is utilized by several TypeAgent components, such as the VS Code shell, the browser extension, and the Visual Studio extension webview.
+The package is used by several TypeAgent components, such as the VS Code shell, the browser extension, and the Visual Studio extension webview.
 
 ## Setup
 
@@ -115,10 +115,10 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/chatPanel.ts`, `./src/connectionStatus.ts`, …and 12 more under `./src/`.
+`./src/index.ts`, `./src/chatPanel.ts`, `./src/connectionStatus.ts`, …and 13 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `b1b5bcafdde8ba2387d669eec198eb70e8fa5986` on `2026-07-17T23:52:55.795Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=44122fe38d940b33340723afe63f6fe9ab68b596f2dbc1364c2158d771391b1a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=add867745d2bfca1745c45cb7177e0dbd1eb45ff53548695f4b02541e23ea091 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-server — AI-generated documentation
@@ -16,14 +16,14 @@ The `agent-server` package is a TypeScript library that provides a long-running 
 
 ## What it does
 
-The `agent-server` package serves as the backbone for managing conversations and facilitating communication between clients and agents. It provides the following key functionalities:
+The `agent-server` package is a core component of the TypeAgent ecosystem, enabling communication between clients and agents through WebSocket connections. It provides the following key functionalities:
 
-- **Conversation Management**: The server supports actions like `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation`. These actions allow clients to manage and interact with conversations effectively.
-- **Server Control**: The `shutdown` action enables a controlled shutdown of the server, ensuring that resources are released properly.
+- **Conversation Management**: The server supports actions such as `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation`. These actions allow clients to manage and interact with conversations.
+- **Server Control**: The `shutdown` action allows for a controlled shutdown of the server, ensuring proper resource cleanup.
 - **Idle Timeout**: The server can be configured to automatically shut down after a specified period of inactivity using the `--idle-timeout` flag.
 - **Ephemeral Conversation Cleanup**: On startup, the server removes temporary conversations (e.g., those created by CLI processes) to free up resources.
 
-The server listens on a WebSocket endpoint and processes these actions by interacting with its core components, such as the `ConversationManager` and `SharedDispatcher`. It integrates with other TypeAgent packages, including `@typeagent/agent-server-client` and `@typeagent/agent-server-protocol`, to provide a consistent framework for agent-based communication.
+The server integrates with other TypeAgent packages, such as `@typeagent/agent-server-client` and `@typeagent/agent-server-protocol`, to provide a consistent framework for agent-based communication. It also supports integration with external services like the Microsoft Speech SDK for speech-related functionalities.
 
 ## Setup
 
@@ -37,25 +37,50 @@ To set up the `agent-server`, you need to configure the following environment va
 - `TYPEAGENT_USER_NAME`: The username for the TypeAgent user. This can override the default OS user name.
 - `XDG_CONFIG_HOME`: Specifies the base directory for configuration files. If not set, the default is typically `~/.config`.
 
-You can set these variables in your environment or define them in a `.env` file in the `ts/` directory. For additional details, refer to the hand-written README.
+These variables can be set in your environment or defined in a `.env` file in the `ts/` directory. For additional details, refer to the hand-written README.
+
+To start the server, you can use the following commands:
+
+- **With `pnpm`**:
+
+  ```bash
+  pnpm --filter agent-server start
+  ```
+
+  Optionally, you can specify a configuration file:
+
+  ```bash
+  pnpm --filter agent-server start -- --config <config-name>
+  ```
+
+- **With Node.js directly**:
+  ```bash
+  node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js
+  ```
+  To use a specific configuration file:
+  ```bash
+  node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js --config <config-name>
+  ```
+
+The server listens on `ws://localhost:8999` by default. It can also be started automatically when clients call `ensureAgentServer()`.
 
 ## Key Files
 
-The `agent-server` package is organized into several key files, each responsible for specific functionality:
+The `agent-server` package is structured into several key files, each with specific responsibilities:
 
-### [server.ts](./src/server.ts) — WebSocket Listener
+### [server.ts](./src/server.ts)
 
-This file initializes the WebSocket server and manages client connections. It performs the following tasks:
+This file initializes the WebSocket server and manages client connections. Key responsibilities include:
 
-1. Creates a `ConversationManager` instance to handle conversation-related operations.
-2. Sets up the WebSocket server using `createWebSocketChannelServer`.
-3. Exposes RPC functions over the `agent-server` channel, including:
+1. Creating a `ConversationManager` instance to handle conversation-related operations.
+2. Setting up the WebSocket server using `createWebSocketChannelServer`.
+3. Exposing RPC functions over the `agent-server` channel, such as:
    - `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation` for conversation management.
    - `shutdown` for graceful server termination.
 
-### [conversationManager.ts](./src/conversationManager.ts) — Conversation Pool
+### [conversationManager.ts](./src/conversationManager.ts)
 
-This file manages the lifecycle of conversations and their associated dispatchers. Key responsibilities include:
+This file manages the lifecycle of conversations and their associated dispatchers. Key features include:
 
 - **Persistence**: Stores conversation metadata and data in the user's configuration directory.
 - **Lazy Initialization**: Creates `SharedDispatcher` instances only when a conversation is accessed.
@@ -63,7 +88,7 @@ This file manages the lifecycle of conversations and their associated dispatcher
 - **Ephemeral Cleanup**: Deletes temporary conversations (e.g., `cli-ephemeral-*`) on server startup.
 - **Idle Shutdown**: Monitors client activity and shuts down the server after a period of inactivity if the `--idle-timeout` flag is set.
 
-### [sharedDispatcher.ts](./src/sharedDispatcher.ts) — Routing Layer
+### [sharedDispatcher.ts](./src/sharedDispatcher.ts)
 
 This file manages multiple client connections within a single conversation. It provides the following functionality:
 
@@ -71,19 +96,19 @@ This file manages multiple client connections within a single conversation. It p
 - Routes client IO methods (e.g., `setDisplay`, `askYesNo`) to the appropriate client based on their `connectionId`.
 - Ensures that each client's interactions are isolated while sharing the same dispatcher and conversation context.
 
-### [connectionHandler.ts](./src/connectionHandler.ts) — Connection Management
+### [connectionHandler.ts](./src/connectionHandler.ts)
 
 This file defines the logic for handling individual client connections. It sets up the necessary RPC channels and integrates with the `ConversationManager` to manage conversations for each connected client.
 
-### [copilot/displayLogSynthesis.ts](./src/copilot/displayLogSynthesis.ts) — Display Log Synthesis
+### [copilot/displayLogSynthesis.ts](./src/copilot/displayLogSynthesis.ts)
 
-This file synthesizes display logs from Copilot session data, enabling imported sessions to be replayed in the conversation UI. It ensures that the synthesized logs are deterministic and idempotent, allowing for consistent re-imports.
+This file synthesizes display logs from Copilot session data, enabling imported sessions to be replayed in the conversation UI. It ensures that the synthesized logs are consistent and can be re-imported without issues.
 
-### [copilot/mirrorImporter.ts](./src/copilot/mirrorImporter.ts) — Copilot Session Importer
+### [copilot/mirrorImporter.ts](./src/copilot/mirrorImporter.ts)
 
 This file provides functionality to import Copilot sessions into the `agent-server`. It supports filtering sessions by repository, timestamp, and session ID, and integrates with the `ConversationManager` to create or update conversations based on the imported data.
 
-### [inProcessAgentServer.ts](./src/inProcessAgentServer.ts) — In-Process Server
+### [inProcessAgentServer.ts](./src/inProcessAgentServer.ts)
 
 This file provides an in-process implementation of the agent server, allowing it to be embedded within other applications. It includes options for user identity resolution, idle timeout, and shutdown handling.
 
@@ -93,7 +118,7 @@ To extend the `agent-server` package, follow these steps:
 
 1. **Understand the Core Components**:
 
-   - Start with [server.ts](./src/server.ts) to understand how the WebSocket server is initialized and how RPC functions are exposed.
+   - Begin with [server.ts](./src/server.ts) to understand how the WebSocket server is initialized and how RPC functions are exposed.
    - Review [conversationManager.ts](./src/conversationManager.ts) to understand how conversations are managed and persisted.
    - Examine [sharedDispatcher.ts](./src/sharedDispatcher.ts) to see how client connections are routed within a conversation.
 
@@ -114,7 +139,7 @@ To extend the `agent-server` package, follow these steps:
    - Use the provided utilities in `status.ts` and `stop.ts` to control the server during testing.
    - Write unit tests for your changes to ensure they work as expected.
 
-By following these guidelines, you can effectively extend the `agent-server` package to support additional functionality or integrate it with other systems.
+By following these steps, you can effectively extend the `agent-server` package to support additional functionality or integrate it with other systems.
 
 ## Reference
 
@@ -149,7 +174,7 @@ External: `@azure/identity`, `better-sqlite3`, `debug`, `dotenv`, `ws`
 
 ### Files of interest
 
-`./src/connectionHandler.ts`, `./src/conversationManager.ts`, `./src/copilot/displayLogSynthesis.ts`, …and 11 more under `./src/`.
+`./src/connectionHandler.ts`, `./src/conversationManager.ts`, `./src/copilot/displayLogSynthesis.ts`, …and 12 more under `./src/`.
 
 ### Environment variables
 
@@ -165,6 +190,6 @@ _7 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
+_Auto-generated against commit `b1b5bcafdde8ba2387d669eec198eb70e8fa5986` on `2026-07-17T23:52:55.795Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

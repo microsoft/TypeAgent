@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c64305fed661fa43ff14753c200236de96337c9aa4300fb28f48d077edaa2bfd -->
+<!-- AUTOGEN:DOCS:HASH:sha256=ccc9e82a9c5b5256f11e3f160471435b5a2e50f99f8af24b73c20c55dfc8ff7b -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-cli — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The `agent-cli` package is a command-line interface (CLI) for interacting with the TypeAgent system. It provides tools for connecting to the TypeAgent Dispatcher, managing conversations, running commands, and testing agent interactions. The CLI is designed to facilitate both interactive and non-interactive workflows, making it a versatile tool for developers working with the TypeAgent framework.
+The `agent-cli` package is a command-line interface (CLI) for interacting with the TypeAgent system. It serves as a versatile tool for developers to connect to the TypeAgent Dispatcher, manage conversations, execute commands, and test agent interactions. The CLI supports both interactive and non-interactive workflows, making it suitable for development, debugging, and testing purposes.
 
 ## What it does
 
-The `agent-cli` package supports several subcommands, each tailored to specific use cases:
+The `agent-cli` package provides several subcommands, each designed for specific tasks:
 
-- **`connect`**: The default subcommand, used for real-time interaction with the TypeAgent Dispatcher. It allows users to send requests, receive responses, and manage conversations interactively.
-- **`run`**: Executes dispatcher commands non-interactively. This includes sending requests, translating them, or generating explanations without user confirmation.
-- **`replay`**: Replays chat histories for regression testing or generating test files. This is useful for validating agent behavior over time.
+- **`connect`**: The default subcommand, enabling real-time interaction with the TypeAgent Dispatcher. Users can send requests, receive responses, and manage conversations interactively. This mode is particularly useful for testing and debugging agent behavior.
+- **`run`**: Allows non-interactive execution of dispatcher commands. This includes sending requests, translating them, or generating explanations without requiring user confirmation.
+- **`replay`**: Replays chat histories for regression testing or generating test files. This is useful for validating agent behavior over time and ensuring consistency.
 - **`conversations`**: Provides tools for managing conversations on the agent server. Subcommands include:
   - `create`: Create a new conversation.
   - `delete`: Delete an existing conversation.
@@ -144,6 +144,6 @@ External: `@oclif/core`, `@oclif/plugin-help`, `chalk`, `debug`, `dotenv`, `html
 
 ---
 
-_Auto-generated against commit `2a8c6e65a1638c435219fd5b8688faeeec78d4c7` on `2026-07-16T01:20:16.260Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
+_Auto-generated against commit `b1b5bcafdde8ba2387d669eec198eb70e8fa5986` on `2026-07-17T23:52:55.795Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

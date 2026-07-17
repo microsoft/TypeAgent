@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=91f7e5035ca24e381e9d4a30374f96df9691549c579c364109850826c8928898 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7af3ebe3051b5b15d6d5748de1b0ca7ecb7507aae077934b203b3f956f73f0d8 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-shell — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, providing a way to interact with TypeAgent conversations directly within the editor. It offers a side panel and editor tabs for managing conversations hosted by a running TypeAgent agent server.
+The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, allowing users to interact with TypeAgent conversations directly within the editor. It provides a dedicated side panel and the ability to open multiple chat tabs in the editor, all connected to a running TypeAgent agent server.
 
 ## What it does
 
-The `vscode-shell` package enables a feature-rich chat experience within Visual Studio Code, tightly integrated with the TypeAgent ecosystem. Its main capabilities include:
+The `vscode-shell` package brings the functionality of the TypeAgent shell into Visual Studio Code, enabling users to manage and interact with conversations in a familiar development environment. Key features include:
 
 - **Chat Interface**:
 
@@ -174,6 +174,6 @@ External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `micr
 
 ---
 
-_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `b1b5bcafdde8ba2387d669eec198eb70e8fa5986` on `2026-07-17T23:52:55.795Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
