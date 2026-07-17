@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=3d4d1f5296b9a1d63236920e33b733ad0c94815b4d15d09c26a7b3276b715383 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=47f4fb7c7ca5e4b1950c4995b1ff6d63b86b5271cc503c03c1fb183c0241803c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a TypeScript library that serves as the central processing hub for user requests within the TypeAgent ecosystem. It leverages large language models (LLMs) to interpret natural language inputs and translate them into structured actions, which are then executed by application agents. The Dispatcher is designed to be extensible, scalable, and capable of integrating with various front-end interfaces, such as the TypeAgent Shell and CLI. It also supports conversational memory and structured retrieval-augmented generation (RAG) to enhance user interactions.
+The TypeAgent Dispatcher is a TypeScript library that serves as the central hub for processing user requests in the TypeAgent ecosystem. It translates natural language inputs into structured actions using large language models (LLMs) and coordinates interactions between various application agents. The Dispatcher is designed to be extensible, scalable, and capable of integrating with multiple front ends, such as the TypeAgent Shell and CLI.
 
 ## What it does
 
-The Dispatcher facilitates communication between users and application agents by translating user inputs into actionable commands. It supports both natural language requests and system commands, enabling a wide range of functionalities.
+The Dispatcher provides a framework for interpreting user inputs and orchestrating actions across different agents. It supports both natural language requests and system commands, enabling a wide range of interactions.
 
 ### Natural Language Requests
 
-The Dispatcher uses LLMs to process natural language inputs and convert them into structured actions defined by application agent schemas. For example:
+The Dispatcher leverages LLMs to process natural language inputs and translate them into structured actions defined by application agent schemas. For example:
 
 ```bash
 [calendar]🤖> can you setup a meeting between 2-3PM
@@ -37,7 +37,7 @@ Other examples include:
 
 ### System Commands
 
-The Dispatcher supports system commands prefixed with `@`, allowing users to configure and interact with the system directly. Key commands include:
+System commands prefixed with `@` allow users to configure and interact with the Dispatcher directly. Key commands include:
 
 - **Agent Management**: Enable or disable specific agents or groups of agents.
 
@@ -69,7 +69,7 @@ The Dispatcher translates these requests into structured payloads and forwards t
 
 ## Setup
 
-To configure and use the Dispatcher, the following environment variables must be set:
+To configure the Dispatcher, the following environment variables must be set:
 
 - `CLAUDE_CUSTOM_PROMPT_FILE`: Path to a custom prompt file for Claude.
 - `CLAUDE_FORCE_REASONING`: Boolean flag to enforce reasoning with Claude.
@@ -89,7 +89,7 @@ The Dispatcher is organized into several key components, each with specific resp
 
 ### Handlers
 
-Handlers are responsible for processing specific commands and are located in [./src/context/dispatcher/handlers/](./src/context/dispatcher/handlers/). Key files include:
+Handlers process specific commands and are located in [./src/context/dispatcher/handlers/](./src/context/dispatcher/handlers/). Key files include:
 
 - [explainCommandHandler.ts](./src/context/dispatcher/handlers/explainCommandHandler.ts): Handles the `@explain` command.
 - [matchCommandHandler.ts](./src/context/dispatcher/handlers/matchCommandHandler.ts): Handles matching-related commands.
@@ -236,6 +236,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `35dcce8d8016eaa0731594b1cc83fb2b2d22302b` on `2026-07-17T16:28:11.775Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `ee4eba45bcb87911335cb938a0ced6a001aa3882` on `2026-07-17T22:05:48.260Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

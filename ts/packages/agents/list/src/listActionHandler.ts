@@ -8,6 +8,7 @@ import {
     Storage,
     ActionResult,
     TypeAgentAction,
+    Entity,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
@@ -238,22 +239,21 @@ async function updateListContext(
     }
 }
 
-function getEntities(list: string, items?: string[]) {
-    const entities = [
-        {
-            name: list,
-            type: ["list"],
-        },
-    ];
-    if (items) {
-        for (const item of items) {
-            entities.push({
-                name: item,
-                type: ["item"],
-            });
-        }
+// Represent a list as a single entity whose current items are carried as a
+// facet (e.g. grocery -> { items: ["eggs", "cheese"] }). Items are deliberately
+// NOT emitted as separate top-level entities: a floating item entity with no
+// link to its list caused follow-up requests ("add cheese") to re-add the prior
+// item, and enumerating the items on the list entity gives the model the
+// containment it needs to resolve references like "the potatoes".
+function getEntities(list: string, items?: string[]): Entity[] {
+    const listEntity: Entity = {
+        name: list,
+        type: ["list"],
+    };
+    if (items && items.length > 0) {
+        listEntity.facets = [{ name: "items", value: items }];
     }
-    return entities;
+    return [listEntity];
 }
 
 function getStore(listContext: ListActionContext) {
@@ -349,7 +349,10 @@ async function handleListAction(
                 displayText,
                 displayText,
             );
-            result.entities = getEntities(listName, items);
+            result.entities = getEntities(
+                listName,
+                Array.from(store.getList(listName)?.itemsSet ?? []),
+            );
             break;
         }
         case "removeItems": {
@@ -369,7 +372,10 @@ async function handleListAction(
                 displayText,
                 displayText,
             );
-            result.entities = getEntities(listName, items);
+            result.entities = getEntities(
+                listName,
+                Array.from(store.getList(listName)?.itemsSet ?? []),
+            );
             break;
         }
         case "createList": {

@@ -14,6 +14,11 @@
 // translateTestCommon.ts) so it bypasses grammar matching. Proper fix: constrain
 // $(listName:...) to reject bare determiners (the/a/an/this/that/these/those/
 // my/your/... + "list") via a registered entity type, then drop skipGrammar.
+//
+// Confirmed 2026-07-17: the `put ... on (the)? ... (list)?` alternative below has
+// the same bug — "put cheese on the list" yields listName="the". With grammar
+// off, the LLM resolves it to the active list from history 10/10. See the schema
+// tuning guide (docs/guides/build-an-agent/schema-tuning.md, note #5).
 <AddItems> = add $(item:wildcard) to (the)? (my)? $(listName:wildcard) list -> {
     actionName: "addItems",
     parameters: {
