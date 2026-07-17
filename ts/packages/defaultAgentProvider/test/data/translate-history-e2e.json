@@ -7,21 +7,27 @@
           {
             "action": {
               "schemaName": "player",
-              "actionName": "playTrack",
+              "actionName": "playMusic",
               "parameters": {
-                "trackName": "Soruwienf",
-                "albumName": "Wxifiel",
-                "artists": ["Bnefisoe"]
+                "target": {
+                  "kind": "track",
+                  "trackName": "Soruwienf",
+                  "albumName": "Wxifiel",
+                  "artists": ["Bnefisoe"]
+                }
               }
             }
           },
           {
             "action": {
               "schemaName": "player",
-              "actionName": "playTrack",
+              "actionName": "playMusic",
               "parameters": {
-                "trackName": "Soruwienf",
-                "albumName": "Wxifiel by artist Bnefisoe"
+                "target": {
+                  "kind": "track",
+                  "trackName": "Soruwienf",
+                  "albumName": "Wxifiel by artist Bnefisoe"
+                }
               }
             },
             "partial": true
@@ -57,11 +63,14 @@
           {
             "action": {
               "schemaName": "player",
-              "actionName": "playTrack",
+              "actionName": "playMusic",
               "parameters": {
-                "trackName": "Soruwienf",
-                "albumName": "Wxifiel",
-                "artists": ["Bnefisoe"]
+                "target": {
+                  "kind": "track",
+                  "trackName": "Soruwienf",
+                  "albumName": "Wxifiel",
+                  "artists": ["Bnefisoe"]
+                }
               }
             },
             "partial": true
