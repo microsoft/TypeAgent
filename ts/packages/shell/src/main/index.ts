@@ -28,12 +28,7 @@ import {
     getShellWindowForMainWindowIpcEvent,
     fatal,
 } from "./instance.js";
-import {
-    isServerRunning,
-    connectAgentServer,
-    AGENT_SERVER_DEFAULT_PORT,
-    type AgentServerConnection,
-} from "@typeagent/agent-server-client";
+import { AGENT_SERVER_DEFAULT_PORT } from "@typeagent/agent-server-client";
 
 import {
     debugShell,
@@ -107,75 +102,33 @@ if (process.platform === "win32") {
     );
 }
 
-/**
- * Probe `port` for an already-running *full* agent-server.
- *
- * `isServerRunning` only confirms that something accepts WebSocket
- * connections there — a standalone shell also listens on this port to serve
- * its discovery channel. To avoid that false positive we additionally issue a
- * connection-level control RPC (`listConversations`); a discovery-only host
- * won't answer, so the probe times out and we report "no server".
- */
-async function detectRunningAgentServer(port: number): Promise<boolean> {
-    const url = `ws://localhost:${port}`;
-    if (!(await isServerRunning(url))) {
-        return false;
-    }
-    let connection: AgentServerConnection | undefined;
-    try {
-        connection = await connectAgentServer(url);
-        await Promise.race([
-            connection.listConversations(),
-            new Promise<never>((_, reject) =>
-                setTimeout(
-                    () => reject(new Error("agent-server probe timed out")),
-                    3000,
-                ),
-            ),
-        ]);
-        return true;
-    } catch (e: any) {
-        debugShell(`No full agent-server on port ${port}: ${e?.message ?? e}`);
-        return false;
-    } finally {
-        try {
-            await connection?.close();
-        } catch {
-            // Best effort — probe connection cleanup.
-        }
-    }
-}
+// Connect mode is the default: the shell connects to a running agent-server,
+// auto-spawning one via ensureAgentServer if none is running (see the connect
+// branch in instance.ts, which uses the generalized server locator to find a
+// separately installed agent-server). The in-process host is opt-in via
+// --standalone (dev boxes). It is also used for the test harness (which needs
+// an isolated per-worker instance) and whenever a custom data dir (--data) or
+// --clean is requested, since those operate on an in-process instance
+// directory. An explicit --connect always selects connect mode.
+const standalone =
+    parsedArgs.standalone ||
+    isTest ||
+    parsedArgs.data !== undefined ||
+    parsedArgs.clean;
 
-// Resolve the effective connect target. An explicit --connect always wins.
-// Otherwise, for a dev launch on the default profile (no --data/--clean/--reset),
-// probe the default agent-server port: if a real agent-server is already
-// running we connect to it instead of hosting an in-process server — the
-// latter would fail to acquire the shared instance-directory lock and abort
-// startup with "Another agent-server (or shell) is already using the instance
-// directory".
-//
-// Never probe in test mode (--test). The smoke/e2e harness launches its own
-// isolated instance (per-worker INSTANCE_NAME/PORT, --mock-greetings) and must
-// stay hermetic: if the probe found any agent-server on the default port — e.g.
-// the detached background server the CLI smoke step leaves on 8999, or a
-// developer's dogfooding session — the test shell would connect to that foreign
-// server instead of hosting its own, never reach the expected ready state, and
-// time out.
-let effectiveConnect = parsedArgs.connect;
-if (
-    effectiveConnect === undefined &&
-    !isProd &&
-    !isTest &&
-    parsedArgs.data === undefined &&
-    !parsedArgs.clean &&
-    !parsedArgs.reset &&
-    (await detectRunningAgentServer(AGENT_SERVER_DEFAULT_PORT))
-) {
-    debugShell(
-        `Detected running agent-server on port ${AGENT_SERVER_DEFAULT_PORT}; connecting instead of hosting in-process.`,
-    );
+let effectiveConnect: number | undefined;
+if (parsedArgs.connect !== undefined) {
+    effectiveConnect = parsedArgs.connect;
+} else if (standalone) {
+    effectiveConnect = undefined;
+} else {
     effectiveConnect = AGENT_SERVER_DEFAULT_PORT;
 }
+debugShell(
+    effectiveConnect !== undefined
+        ? `Connect mode (port ${effectiveConnect})`
+        : "Standalone mode (hosting agent-server in-process)",
+);
 
 const instanceDir =
     effectiveConnect !== undefined

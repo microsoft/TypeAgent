@@ -16,12 +16,6 @@ import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/
 import { ShellWindow } from "./shellWindow.js";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
-import {
-    getDefaultAppAgentSource,
-    getDefaultAppAgentProviders,
-    getDefaultConstructionProvider,
-    getIndexingServiceRegistry,
-} from "default-agent-provider";
 import { getTraceId } from "agent-dispatcher/helpers/data";
 import { createShellAgentProvider } from "./agent.js";
 import { createInlineBrowserControl } from "./inlineBrowserControl.js";
@@ -39,10 +33,7 @@ import {
     QueueSnapshot,
     RequestId,
 } from "agent-dispatcher";
-import {
-    createInProcessAgentServer,
-    type InProcessAgentServer,
-} from "agent-server/in-process";
+import type { InProcessAgentServer } from "agent-server/in-process";
 import type { SubmitResult } from "@typeagent/dispatcher-types";
 import { awaitCommand } from "@typeagent/dispatcher-types";
 import { randomUUID } from "node:crypto";
@@ -50,7 +41,6 @@ import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { setPendingUpdateCallback } from "./commands/update.js";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { isTest } from "./index.js";
-import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
     ensureAgentServer,
     connectAgentServer,
@@ -514,6 +504,22 @@ async function initializeDispatcher(
                     "instanceDir is required when not in connect mode",
                 );
             }
+
+            const [
+                {
+                    getDefaultAppAgentSource,
+                    getDefaultAppAgentProviders,
+                    getDefaultConstructionProvider,
+                    getIndexingServiceRegistry,
+                },
+                { createInProcessAgentServer },
+                { getFsStorageProvider },
+            ] = await Promise.all([
+                import("default-agent-provider"),
+                import("agent-server/in-process"),
+                import("dispatcher-node-providers"),
+            ]);
+
             const configName = isTest ? "test" : undefined;
             const indexingServiceRegistry = await getIndexingServiceRegistry(
                 instanceDir,

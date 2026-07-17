@@ -83,6 +83,10 @@ function usage() {
     echo \ \ \ \ https://\<account\>.blob.core.windows.net/\<container\>. When set,
     echo \ \ \ \ the Azure CLI is not used and \<storage\> is optional.
     echo \ \ SHELL_CHANNEL\ \ - Fallback channel when not passed positionally.
+    echo \ \ SKIP_TYPEAGENT_CHECK - Set to 1 to skip ensuring the agent-server is
+    echo \ \ \ \ installed before the shell \(e.g. when it runs on another machine\).
+    echo \ \ TYPEAGENT_ARGS - Extra args passed to install-typeagent.sh when the
+    echo \ \ \ \ agent-server is missing and gets installed automatically.
 }
 
 function info() {
@@ -135,6 +139,42 @@ else
 fi
 
 CHANNEL=$CHANNEL-$ARCH
+
+# The shipped shell is connect-only: it auto-spawns and connects to a separately
+# installed TypeAgent agent-server. Ensure that server is installed first so the
+# shell has something to connect to, mirroring the MSI ordering (agent service
+# before shell). The agent-server install lays down typeagent-serve.mjs at its
+# InstallDir root (see install-typeagent.sh). Set SKIP_TYPEAGENT_CHECK=1 to
+# bypass (e.g. when the server lives on another machine reached via a tunnel).
+if [[ "${SKIP_TYPEAGENT_CHECK:-}" != "1" ]]; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        AGENT_SERVER_DIR="$HOME/Library/Application Support/TypeAgent/agent-server"
+    else
+        AGENT_SERVER_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/typeagent/agent-server"
+    fi
+    AGENT_SERVER_MARKER="$AGENT_SERVER_DIR/typeagent-serve.mjs"
+    if [[ -f "$AGENT_SERVER_MARKER" ]]; then
+        info "Found TypeAgent agent-server at $AGENT_SERVER_MARKER."
+    else
+        info "TypeAgent agent-server not found at $AGENT_SERVER_MARKER; installing it first via install-typeagent.sh."
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        INSTALL_TYPEAGENT="$SCRIPT_DIR/install-typeagent.sh"
+        if [[ ! -f "$INSTALL_TYPEAGENT" ]]; then
+            error "Cannot find install-typeagent.sh next to install-shell.sh to satisfy the agent-server dependency. Set SKIP_TYPEAGENT_CHECK=1 to bypass."
+            exit 1
+        fi
+        bash "$INSTALL_TYPEAGENT" ${TYPEAGENT_ARGS:-}
+        if [[ $? != 0 ]]; then
+            error "Agent-server install (install-typeagent.sh) failed; aborting shell install."
+            exit 1
+        fi
+        if [[ ! -f "$AGENT_SERVER_MARKER" ]]; then
+            error "install-typeagent.sh completed but agent-server marker still missing at $AGENT_SERVER_MARKER."
+            exit 1
+        fi
+        success "TypeAgent agent-server installed."
+    fi
+fi
 
 DEST=/tmp/install-shell
 cleanup
