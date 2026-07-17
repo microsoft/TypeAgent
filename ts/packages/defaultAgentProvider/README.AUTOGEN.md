@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=9f349bed71fc130bbf43b0f4f0c61a4d23ebeaf850b27e133e72ad4f70af905c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=f66d060c2d28196c6ce519d1f47eae3a71746ffdfb788d747d9c0f0657ff6ce1 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # default-agent-provider — AI-generated documentation
@@ -12,24 +12,32 @@
 
 ## Overview
 
-The `default-agent-provider` package is a TypeScript library that acts as the default agent provider for the TypeAgent framework. It is a core component used by the shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents and configurations are available for the proper operation of the TypeAgent ecosystem.
+The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent framework. It is a core component used by the shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents and configurations are available to support the TypeAgent ecosystem, including test agents and dispatcher configurations.
 
 ## What it does
 
-The `default-agent-provider` package provides a set of default implementations and utilities for managing agents and their configurations. It is responsible for:
+The `default-agent-provider` package provides a centralized mechanism for managing agents and their configurations. Its primary responsibilities include:
 
-- **Default Agent Providers**: Functions like `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` provide pre-configured agent providers and construction mechanisms for initializing agents.
-- **Agent Source Management**: The `getDefaultAppAgentSource` function manages the connected app-agent source, which includes the installed-agent record store and the host-owned `@package` agent.
-- **Dispatcher Options**: The `getDefaultDispatcherOptions` function provides default configurations for the dispatcher, which is responsible for routing actions to the appropriate agents.
-- **Indexing Service Registry**: The `getIndexingServiceRegistry` function manages the indexing service registry, which is used for organizing and retrieving agent-related data.
+- **Default Agent Providers**: Functions like `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` supply pre-configured agent providers and construction mechanisms for initializing agents.
+- **Agent Source Management**: The `getDefaultAppAgentSource` function manages the connected app-agent source, including the installed-agent record store and the host-owned `@package` agent.
+- **Dispatcher Configuration**: The `getDefaultDispatcherOptions` function provides default settings for the dispatcher, which routes actions to the appropriate agents.
+- **Indexing Service Registry**: The `getIndexingServiceRegistry` function organizes and retrieves agent-related data through an indexing service.
 
-Additionally, the package includes a set of operational scripts under the `collisions` directory. These scripts are used to test and validate the functionality of the dispatcher and agent providers. They include tools for running pipelines, generating and analyzing corpora, and testing collision detection mechanisms.
+### Test Agents
 
-The package also supports test agents, such as the `vampire` agent, which is used to test dispatcher subsystems like action collision detection. These agents are disabled by default in production but can be enabled for testing purposes.
+The package includes test agents, such as the `vampire` agent, which are used to evaluate dispatcher subsystems like action collision detection. These agents are disabled by default in production but can be enabled for testing purposes via session configuration.
+
+### Collision Testing
+
+The package also includes operational scripts for testing dispatcher functionality and agent behavior under various scenarios, such as action collision detection and optimization pipelines. These scripts are located in the `collisions` directory and are primarily used for internal testing and debugging.
+
+### Managing Non-Bundled Agents
+
+Some agents, such as `androidMobile` and `vampire`, are not included in the default provider profile. These agents can be installed on demand using the `@package` commands. The catalog source entries for these agents are defined in [../agents/agents.catalog.json](../agents/agents.catalog.json).
 
 ## Setup
 
-To use the `default-agent-provider` package, follow these steps:
+To set up and use the `default-agent-provider` package, follow these steps:
 
 1. **Install dependencies**:
 
@@ -38,23 +46,25 @@ To use the `default-agent-provider` package, follow these steps:
 
 2. **Set environment variables**:
 
-   - `TYPEAGENT_FEED_REGISTRY`: This variable specifies the registry for the agent feed. Refer to the hand-written README for details on how to configure this value.
-   - `TYPEAGENT_FEED_SCOPES`: This variable defines the scopes for the agent feed. Ensure it is set appropriately for your environment.
+   - `CS_BENCH_MAX_OLD_SPACE_MB`: Configure this variable to control the maximum old space memory allocation for the V8 engine.
+   - `CS_NEGATION_GUARD`: Set this variable to enable or disable negation guard functionality.
+   - `TYPEAGENT_FEED_REGISTRY`: Specifies the registry for the agent feed. This value should be set in your environment. Refer to the hand-written README for details on how to configure this variable.
+   - `TYPEAGENT_FEED_SCOPES`: Defines the scopes for the agent feed. Ensure this variable is set appropriately for your environment.
 
 3. **Optional setup for non-bundled agents**:
-   - Some agents, such as `androidMobile` and `vampire`, are not included in the default provider profile. To install these agents, use the following commands:
+   - To install agents like `androidMobile` and `vampire`, use the following commands:
      ```text
      @package install androidMobile
      @package install vampire
      ```
-   - If the installation fails due to a missing catalog source, run `@package source list` to verify the catalog source configuration. The catalog source entries for these agents are defined in [../agents/agents.catalog.json](../agents/agents.catalog.json).
+   - If the installation fails due to a missing catalog source, run `@package source list` to verify the catalog source configuration.
 
 ## Key Files
 
-The `default-agent-provider` package is organized into several key files:
+The `default-agent-provider` package is organized into several key files, each with specific responsibilities:
 
 - [index.ts](./src/index.ts): The main entry point of the package, exporting core functions for retrieving default providers and configurations.
-- [defaultAgentProviders.ts](./src/defaultAgentProviders.ts): Contains the logic for initializing and retrieving default agent providers, including `getDefaultAppAgentProviders`, `getDefaultAppAgentInstaller`, and `getDefaultDispatcherOptions`.
+- [defaultAgentProviders.ts](./src/defaultAgentProviders.ts): Contains logic for initializing and retrieving default agent providers, including `getDefaultAppAgentProviders`, `getDefaultAppAgentInstaller`, and `getDefaultDispatcherOptions`.
 - [defaultConstructionProvider.ts](./src/defaultConstructionProvider.ts): Implements the default construction provider for agents.
 - [mcpAgentProvider.ts](./src/mcpAgentProvider.ts): Defines the Model Context Protocol (MCP) agent provider.
 - [mcpDefaultAgentProvider.ts](./src/mcpDefaultAgentProvider.ts): Initializes and retrieves the default MCP agent provider.
@@ -63,7 +73,7 @@ The `default-agent-provider` package is organized into several key files:
 
 ### Collision Testing Scripts
 
-The `collisions` directory contains scripts for testing the dispatcher's functionality and the behavior of agents under various scenarios. These include:
+The `collisions` directory contains scripts for testing dispatcher functionality and agent behavior under various scenarios. These include:
 
 - [expandedCorpusRunner.ts](./src/collisions/expandedCorpusRunner.ts): Runs an end-to-end pipeline for generating, probing, reanalyzing, and translating corpora.
 - [listModels.ts](./src/collisions/listModels.ts): Lists all chat models configured in the environment for multi-model phrase-corpus generation.
@@ -103,8 +113,8 @@ By following these steps, you can effectively extend the `default-agent-provider
 
 ### Entry points
 
-- default → `./dist/index.js` _(not found on disk)_
-- `./test` → `./dist/test/index.js` _(not found on disk)_
+- default → [./dist/index.js](./dist/index.js)
+- `./test` → [./dist/test/index.js](./dist/test/index.js)
 
 ### Dependencies
 
@@ -160,6 +170,8 @@ External: `@modelcontextprotocol/sdk`, `@modelcontextprotocol/server-filesystem`
 
 ### Used by
 
+- [@typeagent/action-browser](../../tools/actionBrowser/README.md)
+- [@typeagent/docs-autogen](../../tools/docsAutogen/README.md)
 - [agent-api](../../packages/api/README.md)
 - [agent-cli](../../packages/cli/README.md)
 - [agent-server](../../packages/agentServer/server/README.md)
@@ -170,17 +182,19 @@ External: `@modelcontextprotocol/sdk`, `@modelcontextprotocol/server-filesystem`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/collisions/expandedCorpusRunner.ts`, `./src/collisions/listModels.ts`, …and 27 more under `./src/`.
+`./src/index.ts`, `./src/collisions/expandedCorpusRunner.ts`, `./src/collisions/listModels.ts`, …and 45 more under `./src/`.
 
 ### Environment variables
 
-_2 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_4 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
+- `CS_BENCH_MAX_OLD_SPACE_MB`
+- `CS_NEGATION_GUARD`
 - `TYPEAGENT_FEED_REGISTRY`
 - `TYPEAGENT_FEED_SCOPES`
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
+_Auto-generated against commit `5fc3c615e8d9fa175d635713c0ef64d7bda1ae1d` on `2026-07-15T22:53:07.031Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

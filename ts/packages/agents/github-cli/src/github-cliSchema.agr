@@ -161,6 +161,14 @@
         repo
     }
 }
+  | list my open PRs in $(repo:wildcard) -> {
+    actionName: "prList",
+    parameters: {
+        repo,
+        author: "@me",
+        state: "open"
+    }
+}
   | get latest $(limit:number) PRs in $(repo:wildcard) -> {
     actionName: "prList",
     parameters: {
@@ -316,6 +324,25 @@
     parameters: {}
 };
 
+<MyPullRequests> = (show | list) my open (pull requests | PRs) (on github)? -> {
+    actionName: "myPullRequests",
+    parameters: {
+        state: "open"
+    }
+}
+  | (show | list) my (pull requests | PRs) (on github)? -> {
+    actionName: "myPullRequests",
+    parameters: {}
+}
+  | (show | list) (pull requests | PRs) I opened -> {
+    actionName: "myPullRequests",
+    parameters: {}
+}
+  | what (pull requests | PRs) have I opened -> {
+    actionName: "myPullRequests",
+    parameters: {}
+};
+
 <IssueAddLabel> = add label $(label:wildcard) to issue $(number:number) -> {
     actionName: "issueAddLabel",
     parameters: {
@@ -432,6 +459,7 @@ import { GithubCliActions } from "./github-cliSchema.ts";
   | <SearchRepos>
   | <StatusPrint>
   | <MyAssignedIssues>
+  | <MyPullRequests>
   | <IssueAddLabel>
   | <RunView>
   | <WorkflowView>

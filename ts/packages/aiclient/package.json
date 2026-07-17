@@ -34,7 +34,7 @@
   },
   "dependencies": {
     "@azure/identity": "^4.10.0",
-    "@github/copilot-sdk": "0.2.0",
+    "@github/copilot-sdk": "1.0.5",
     "@huggingface/transformers": "^3.8.1",
     "@typeagent/config": "workspace:*",
     "async": "^3.2.5",

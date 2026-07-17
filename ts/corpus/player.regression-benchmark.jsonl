@@ -1,6 +1,6 @@
-{"rowId":"v1-lost-transport:042a6e05a7041b20","variant":"v1-lost-transport","utterance":"resume","actionA":{"schemaName":"player","actionName":"resume"},"actionB":null,"label":"regression"}
-{"rowId":"v1-lost-transport:d2e669136da9012b","variant":"v1-lost-transport","utterance":"resume music","actionA":{"schemaName":"player","actionName":"resume"},"actionB":null,"label":"regression"}
-{"rowId":"v1-lost-transport:927d727d8862d52c","variant":"v1-lost-transport","utterance":"resume the music","actionA":{"schemaName":"player","actionName":"resume"},"actionB":null,"label":"regression"}
+{"rowId":"v1-lost-transport:042a6e05a7041b20","variant":"v1-lost-transport","utterance":"resume","actionA":{"schemaName":"player","actionName":"resumePlayback"},"actionB":null,"label":"regression"}
+{"rowId":"v1-lost-transport:d2e669136da9012b","variant":"v1-lost-transport","utterance":"resume music","actionA":{"schemaName":"player","actionName":"resumePlayback"},"actionB":null,"label":"regression"}
+{"rowId":"v1-lost-transport:927d727d8862d52c","variant":"v1-lost-transport","utterance":"resume the music","actionA":{"schemaName":"player","actionName":"resumePlayback"},"actionB":null,"label":"regression"}
 {"rowId":"v2-lost-track-number:57a70e8e4ba06acd","variant":"v2-lost-track-number","utterance":"play track 5","actionA":{"schemaName":"player","actionName":"playFromCurrentTrackList","parameters":{"trackNumber":5}},"actionB":null,"label":"regression"}
 {"rowId":"v2-lost-track-number:adc8aacb6ff4d857","variant":"v2-lost-track-number","utterance":"play track 12","actionA":{"schemaName":"player","actionName":"playFromCurrentTrackList","parameters":{"trackNumber":12}},"actionB":null,"label":"regression"}
 {"rowId":"v2-lost-track-number:cebf53ab72b65f63","variant":"v2-lost-track-number","utterance":"play track 9","actionA":{"schemaName":"player","actionName":"playFromCurrentTrackList","parameters":{"trackNumber":9}},"actionB":null,"label":"regression"}

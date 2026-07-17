@@ -22,6 +22,7 @@ import {
 import { leadingWordBoundaryScriptPrefix } from "./spacingScripts.js";
 import { leadingNonSeparatorRun } from "./grammarMatcher.js";
 import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
+import { deriveEffectiveValue } from "./grammarValueDeriver.js";
 import {
     globalPhraseSetRegistry,
     PhraseSetMatcher,
@@ -3238,14 +3239,11 @@ function trySubstituteMembers(
     let bailed = false;
     const rewriteOne = (m: GrammarRule): GrammarRule => {
         const renamed = renameAllChildBindings(m.parts, m.value, renameState);
-        const effective =
-            renamed.value !== undefined
-                ? renamed.value
-                : getImplicitDefaultValue({
-                      ...m,
-                      parts: renamed.parts,
-                      value: renamed.value,
-                  });
+        const effective = deriveEffectiveValue({
+            ...m,
+            parts: renamed.parts,
+            value: renamed.value,
+        });
         if (effective === undefined) {
             // Member has no explicit value and we can't synthesize
             // one to substitute (e.g. unbound single-part
@@ -3297,48 +3295,6 @@ function trySubstituteMembers(
             ? EMPTY_FALLBACK_RULES
             : newAlts;
     return { dispatch: newDispatch, alternatives: fallback };
-}
-
-/**
- * Compute a value expression equivalent to what the matcher's
- * implicit-default rule would produce for `rule` if it were matched
- * standalone.  Returns `undefined` if the rule doesn't have a
- * structurally-expressible default (e.g. an unbound single-part
- * `phraseSet` / `string` whose value depends on the matched text).
- *
- * Used by the value-substitution branch of `tryPromoteTrailing` to
- * fold each member's effective value into the parent's value
- * expression.
- */
-function getImplicitDefaultValue(
-    rule: GrammarRule,
-): CompiledValueNode | undefined {
-    if (rule.value !== undefined) return rule.value;
-    const parts = rule.parts;
-    if (parts.length === 0) return undefined;
-    if (parts.length === 1) {
-        // Single-part rule: matcher forwards the part's value.  For
-        // var-bearing parts we can express that as a variable
-        // reference; for unbound `string` / `phraseSet` (whose
-        // matcher value derives from the matched text) and unbound
-        // `rules` (whose value derives from the inner match) we
-        // can't reify the result without changing the AST, so bail.
-        const name = parts[0].variable;
-        return name !== undefined ? { type: "variable", name } : undefined;
-    }
-    // Multi-part: implicit default requires exactly one
-    // var-bearing part.  Same predicate as the inliner's
-    // binding-friendly check for multi-part children.
-    let theVar: string | undefined;
-    for (const p of parts) {
-        const name = p.variable;
-        if (name === undefined) continue;
-        if (theVar !== undefined) return undefined;
-        theVar = name;
-    }
-    return theVar !== undefined
-        ? { type: "variable", name: theVar }
-        : undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -368,7 +368,33 @@ describe("Grammar Optimizer - tailFactoring + NFA compatibility", () => {
             },
         });
         expect(() => compileGrammarToNFA(optimized)).toThrow(
-            /tail RulesParts are not supported by the NFA compiler/,
+            /tail RulesPart .* is not yet supported by the NFA\/DFA backend/,
+        );
+    });
+
+    // Regression test: a rule whose entire `parts` array is just the
+    // tailCall RulesPart (no prefix) is `isPassthroughRule`-eligible, so
+    // it must be caught before that normalization transform runs.
+    it("NFA compile of a single-part tailCall rule throws the same descriptive error", async () => {
+        const { compileGrammarToNFA } = await import("../src/nfaCompiler.js");
+        const memberA: GrammarRule = {
+            parts: [createStringPart(["alpha"])],
+            value: { type: "literal", value: "a" },
+        };
+        const memberB: GrammarRule = {
+            parts: [createStringPart(["beta"])],
+            value: { type: "literal", value: "b" },
+        };
+        const tailPart: RulesPart = {
+            type: "rules",
+            optional: undefined,
+            variable: undefined,
+            alternatives: [memberA, memberB],
+            tailCall: true,
+        };
+        const grammar: Grammar = { alternatives: [{ parts: [tailPart] }] };
+        expect(() => compileGrammarToNFA(grammar)).toThrow(
+            /tail RulesPart .* is not yet supported by the NFA\/DFA backend/,
         );
     });
 });

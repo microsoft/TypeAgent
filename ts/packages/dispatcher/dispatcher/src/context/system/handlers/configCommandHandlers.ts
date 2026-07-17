@@ -1695,19 +1695,37 @@ class ConfigExecutionReasoningCommandHandler implements CommandHandler {
         args: {
             engine: {
                 description:
-                    "Reasoning engine to use (claude, copilot, or none)",
+                    "Reasoning engine to use (claude, copilot, or none). Omit to show the current engine.",
+                optional: true,
             },
         },
-    };
+    } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const engine = params.args.engine;
+        if (engine === undefined) {
+            displayResult(
+                `Reasoning engine is '${context.sessionContext.agentContext.session.getConfig().execution.reasoning}'`,
+                context,
+            );
+            return;
+        }
         if (engine === "claude" || engine === "copilot" || engine === "none") {
-            const agentToggle = {
+            const systemContext = context.sessionContext.agentContext;
+            const strategy =
+                systemContext.session.getConfig().execution.conversationAnswer;
+            // Turning reasoning off while the answer strategy relies on it
+            // ("reasoning-only" disables the conversation-lookup action) would
+            // leave conversation questions unanswerable — re-enable the lookup
+            // action in that case.
+            const agentToggle: Record<string, boolean> = {
                 "dispatcher.reasoning": engine !== "none",
-            } as const;
+            };
+            if (engine === "none" && strategy === "reasoning-only") {
+                agentToggle["dispatcher.lookup"] = true;
+            }
             await changeContextConfig(
                 {
                     translation: { multiple: { enabled: engine === "none" } },
@@ -1749,6 +1767,85 @@ class ConfigExecutionReasoningCommandHandler implements CommandHandler {
     }
 }
 
+class ConfigExecutionReasoningModelCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set the Copilot reasoning model (e.g. claude-opus-4.8). Omit to show the current value.";
+    public readonly parameters = {
+        args: {
+            model: {
+                description:
+                    "Model identifier for Copilot reasoning. Omit to show the current value.",
+                optional: true,
+            },
+        },
+    } as const;
+    async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const model = params.args.model;
+        const current =
+            context.sessionContext.agentContext.session.getConfig().execution
+                .reasoningModel;
+        if (model === undefined) {
+            return displayResult(
+                current
+                    ? `Reasoning model is '${current}'`
+                    : "Reasoning model is not overridden (using the configured default)",
+                context,
+            );
+        }
+        await changeContextConfig(
+            { execution: { reasoningModel: model } },
+            context,
+        );
+        return displayResult(`Reasoning model is set to '${model}'`, context);
+    }
+}
+
+class ConfigExecutionReasoningEffortCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set the Copilot reasoning effort (low, medium, high, xhigh). Only applies to models that support it. Omit to show the current value.";
+    public readonly parameters = {
+        args: {
+            effort: {
+                description:
+                    "'low', 'medium', 'high', or 'xhigh'. Omit to show the current value.",
+                type: "string" as const,
+                enum: ["low", "medium", "high", "xhigh"],
+                optional: true,
+            },
+        },
+    } as const;
+    async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const effort = params.args.effort as
+            | "low"
+            | "medium"
+            | "high"
+            | "xhigh"
+            | undefined;
+        const current =
+            context.sessionContext.agentContext.session.getConfig().execution
+                .reasoningEffort;
+        if (effort === undefined) {
+            return displayResult(
+                current
+                    ? `Reasoning effort is '${current}'`
+                    : "Reasoning effort is not overridden (using the configured default)",
+                context,
+            );
+        }
+        await changeContextConfig(
+            { execution: { reasoningEffort: effort } },
+            context,
+        );
+        return displayResult(`Reasoning effort is set to '${effort}'`, context);
+    }
+}
+
 class ConfigExecutionPlanReuseCommandHandler implements CommandHandler {
     public readonly description =
         "Enable or disable workflow plan reuse for reasoning actions";
@@ -1756,9 +1853,10 @@ class ConfigExecutionPlanReuseCommandHandler implements CommandHandler {
         args: {
             mode: {
                 description:
-                    "Plan reuse mode: 'enabled' to cache and reuse workflow plans, 'disabled' for standard reasoning",
+                    "Plan reuse mode: 'enabled' to cache and reuse workflow plans, 'disabled' for standard reasoning. Omit to show the current value.",
                 type: "string" as const,
                 enum: ["enabled", "disabled"],
+                optional: true,
             },
         },
     } as const;
@@ -1767,7 +1865,13 @@ class ConfigExecutionPlanReuseCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const mode = params.args.mode as "enabled" | "disabled";
+        const mode = params.args.mode as "enabled" | "disabled" | undefined;
+        if (mode === undefined) {
+            return displayResult(
+                `Plan reuse is '${context.sessionContext.agentContext.session.getConfig().execution.planReuse}'`,
+                context,
+            );
+        }
 
         await changeContextConfig({ execution: { planReuse: mode } }, context);
 
@@ -1782,9 +1886,10 @@ class ConfigExecutionScriptReuseCommandHandler implements CommandHandler {
         args: {
             mode: {
                 description:
-                    "Script reuse mode: 'enabled' to capture and reuse PowerShell scripts, 'disabled' for standard reasoning",
+                    "Script reuse mode: 'enabled' to capture and reuse PowerShell scripts, 'disabled' for standard reasoning. Omit to show the current value.",
                 type: "string" as const,
                 enum: ["enabled", "disabled"],
+                optional: true,
             },
         },
     } as const;
@@ -1793,7 +1898,13 @@ class ConfigExecutionScriptReuseCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const mode = params.args.mode as "enabled" | "disabled";
+        const mode = params.args.mode as "enabled" | "disabled" | undefined;
+        if (mode === undefined) {
+            return displayResult(
+                `Script reuse is '${context.sessionContext.agentContext.session.getConfig().execution.scriptReuse}'`,
+                context,
+            );
+        }
 
         await changeContextConfig(
             { execution: { scriptReuse: mode } },
@@ -1804,6 +1915,110 @@ class ConfigExecutionScriptReuseCommandHandler implements CommandHandler {
     }
 }
 
+class ConfigExecutionConversationAnswerCommandHandler
+    implements CommandHandler
+{
+    public readonly description =
+        "How conversation questions are answered: 'lookup' (conversation-memory lookup, reasoning as fallback), 'reasoning-first' (reasoning agent primary, lookup as fallback), or 'reasoning-only' (remove the lookup action; reasoning handles conversation Q&A)";
+    public readonly parameters = {
+        args: {
+            strategy: {
+                description:
+                    "'lookup' (default), 'reasoning-first', or 'reasoning-only'. Omit to show the current strategy.",
+                type: "string" as const,
+                enum: ["lookup", "reasoning-first", "reasoning-only"],
+                optional: true,
+            },
+        },
+    } as const;
+
+    async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const strategy = params.args.strategy as
+            | "lookup"
+            | "reasoning-first"
+            | "reasoning-only"
+            | undefined;
+        if (strategy === undefined) {
+            return displayResult(
+                `Conversation answer strategy is '${systemContext.session.getConfig().execution.conversationAnswer}'`,
+                context,
+            );
+        }
+        const engine = systemContext.session.getConfig().execution.reasoning;
+
+        // "reasoning-only" removes the conversation-lookup action from
+        // translation — but only when a reasoning engine is actually available,
+        // otherwise the user would have no way to answer conversation
+        // questions. In that case the lookup action stays enabled.
+        const disableLookup =
+            strategy === "reasoning-only" && engine !== "none";
+        const agentToggle = {
+            "dispatcher.lookup": !disableLookup,
+        } as const;
+
+        await changeContextConfig(
+            {
+                execution: { conversationAnswer: strategy },
+                schemas: agentToggle,
+                actions: agentToggle,
+            },
+            context,
+        );
+
+        let message = `Conversation answer strategy is set to '${strategy}'`;
+        if (strategy !== "lookup" && engine === "none") {
+            message +=
+                "\nNote: reasoning engine is 'none' — set one with '@config execution reasoning claude|copilot' for this to take effect. Conversation lookup remains enabled until then.";
+        }
+        return displayResult(message, context);
+    }
+}
+
+class ConfigExecutionReasoningHistoryCommandHandler implements CommandHandler {
+    public readonly description =
+        "Number of recent conversation turns included as context in the reasoning prompt";
+    public readonly parameters = {
+        args: {
+            turns: {
+                description:
+                    "Number of recent conversation turns to include (e.g. 4). 0 disables history. Omit to show the current value.",
+                type: "number" as const,
+                optional: true,
+            },
+        },
+    } as const;
+
+    async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const turns = params.args.turns;
+        if (turns === undefined) {
+            return displayResult(
+                `Reasoning history turns is ${context.sessionContext.agentContext.session.getConfig().execution.reasoningHistoryTurns}`,
+                context,
+            );
+        }
+        if (!Number.isInteger(turns) || turns < 0) {
+            throw new Error(
+                `Invalid number of turns: ${turns}. Must be a non-negative integer.`,
+            );
+        }
+        await changeContextConfig(
+            { execution: { reasoningHistoryTurns: turns } },
+            context,
+        );
+        return displayResult(
+            `Reasoning history turns is set to ${turns}`,
+            context,
+        );
+    }
+}
+
 class ConfigExecutionEntityPromptShapeCommandHandler implements CommandHandler {
     public readonly description =
         "Shape used when serializing Entity objects into LLM prompts";
@@ -1811,9 +2026,10 @@ class ConfigExecutionEntityPromptShapeCommandHandler implements CommandHandler {
         args: {
             shape: {
                 description:
-                    "'facets' (default, name+value array), 'flat' (collapse facets into a properties object), or 'facets-with-schema' (facets + append the Entity TS type to the reasoning system prompt)",
+                    "'facets' (default, name+value array), 'flat' (collapse facets into a properties object), or 'facets-with-schema' (facets + append the Entity TS type to the reasoning system prompt). Omit to show the current value.",
                 type: "string" as const,
                 enum: ["facets", "flat", "facets-with-schema"],
+                optional: true,
             },
         },
     } as const;
@@ -1825,7 +2041,14 @@ class ConfigExecutionEntityPromptShapeCommandHandler implements CommandHandler {
         const shape = params.args.shape as
             | "facets"
             | "flat"
-            | "facets-with-schema";
+            | "facets-with-schema"
+            | undefined;
+        if (shape === undefined) {
+            return displayResult(
+                `Entity prompt shape is '${context.sessionContext.agentContext.session.getConfig().execution.entityPromptShape}'`,
+                context,
+            );
+        }
 
         await changeContextConfig(
             { execution: { entityPromptShape: shape } },
@@ -1849,6 +2072,20 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
             },
         ),
         reasoning: new ConfigExecutionReasoningCommandHandler(),
+        reasoningModel: new ConfigExecutionReasoningModelCommandHandler(),
+        reasoningEffort: new ConfigExecutionReasoningEffortCommandHandler(),
+        conversationAnswer:
+            new ConfigExecutionConversationAnswerCommandHandler(),
+        reasoningHistory: new ConfigExecutionReasoningHistoryCommandHandler(),
+        recordUserMessages: getToggleHandlerTable(
+            "record the user's own messages in the conversation transcript (chat history)",
+            async (context, enable) => {
+                await changeContextConfig(
+                    { execution: { recordUserMessages: enable } },
+                    context,
+                );
+            },
+        ),
         planReuse: new ConfigExecutionPlanReuseCommandHandler(),
         scriptReuse: new ConfigExecutionScriptReuseCommandHandler(),
         entityPromptShape: new ConfigExecutionEntityPromptShapeCommandHandler(),
@@ -2169,6 +2406,7 @@ function renderCollisionShowHTML(cfg: {
         minUniqueTokens: number;
         minMass: number;
         margin: number;
+        negationGuard: boolean;
         abstainFallback: string;
     };
 }): string {
@@ -2274,6 +2512,7 @@ function renderCollisionShowHTML(cfg: {
                 minTokens <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.minUniqueTokens}</code>
                 minMass <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.minMass}</code>
                 margin <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.margin}</code>
+                negation ${statusPill(cfg.contextSelector.negationGuard)}
                 abstain <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${escapeHtml(cfg.contextSelector.abstainFallback)}</code>
             </div>
         </div>`;
@@ -2346,6 +2585,7 @@ function renderCollisionShowText(cfg: {
         minUniqueTokens: number;
         minMass: number;
         margin: number;
+        negationGuard: boolean;
         abstainFallback: string;
     };
 }): string[] {
@@ -2363,7 +2603,7 @@ function renderCollisionShowText(cfg: {
         `  multipleActionBehavior: ${cfg.multipleActionBehavior}`,
         `  telemetry: emit=${onOff(cfg.telemetry.emit)} debugLog=${onOff(cfg.telemetry.debugLog)}${expId}`,
         `  preference: enabled=${onOff(cfg.preference.enabled)} source=${cfg.preference.ambiguitySource} registryFirst=${onOff(cfg.preference.registryFirst)} remember=${cfg.preference.remember} registry=${cfg.preference.registryPath ? `"${cfg.preference.registryPath}"` : "(empty)"}`,
-        `  contextSelector: detect=${onOff(cfg.contextSelector.detect)} window=${cfg.contextSelector.windowTurns} decay=${cfg.contextSelector.decay} minTokens=${cfg.contextSelector.minUniqueTokens} minMass=${cfg.contextSelector.minMass} margin=${cfg.contextSelector.margin} abstain=${cfg.contextSelector.abstainFallback}`,
+        `  contextSelector: detect=${onOff(cfg.contextSelector.detect)} window=${cfg.contextSelector.windowTurns} decay=${cfg.contextSelector.decay} minTokens=${cfg.contextSelector.minUniqueTokens} minMass=${cfg.contextSelector.minMass} margin=${cfg.contextSelector.margin} negation=${onOff(cfg.contextSelector.negationGuard)} abstain=${cfg.contextSelector.abstainFallback}`,
     ];
 }
 

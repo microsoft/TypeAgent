@@ -12,24 +12,27 @@
 
 ## Overview
 
-The `timer-agent` package is a TypeAgent application agent designed to manage timers and reminders. It allows users to set, list, and cancel reminders, which are delivered as agent-initiated messages. This agent also serves as a test fixture for validating agent-initiated message flows, such as those triggered by `SessionContext.beginAgentThread` and managed through `startBackgroundTasks` and `stopBackgroundTasks`.
+The `timer-agent` package is a TypeAgent application agent designed to manage timers and reminders. It enables users to set, list, and cancel reminders, which are delivered as agent-initiated messages. This agent also serves as a test fixture for validating agent-initiated message flows, such as those triggered by `SessionContext.beginAgentThread` and managed through `startBackgroundTasks` and `stopBackgroundTasks`.
 
 ## What it does
 
-The `timer-agent` provides functionality for managing reminders and timers through four primary actions:
+The `timer-agent` provides four primary actions for managing reminders:
 
-- **`setReminder`**: Sets a one-time reminder that fires at a specific time. The reminder can be displayed in one of three formats: bubble (default), toast, or inline.
-- **`repeatReminder`**: Sets a recurring reminder that fires at regular intervals. This action supports optional parameters like the number of repetitions (`count`) and the display format (`kind`). It is particularly useful for testing scenarios involving frequent agent-initiated messages.
-- **`listReminders`**: Lists all currently pending reminders, providing an overview of scheduled tasks.
-- **`cancelReminder`**: Cancels a specific reminder by its ID or cancels all reminders.
+- **`setReminder`**: Allows users to set a one-time reminder that triggers at a specific time. The reminder can be displayed in one of three formats: bubble (default), toast, or inline. For example, a user can say, "Remind me to call John in 10 minutes as a toast," and the agent will schedule a toast notification with the specified message.
 
-When a reminder is triggered, the agent sends a message to the user via `SessionContext.beginAgentThread`. This creates an agent-initiated thread, which is not tied to any prior user request. The agent also supports natural language inputs for setting reminders, such as "remind me to take a break in 10 minutes" or "remind me to call John every hour."
+- **`repeatReminder`**: Enables users to set a recurring reminder that triggers at regular intervals. This action supports optional parameters such as the number of repetitions (`count`) and the display format (`kind`). For instance, "Remind me to drink water every hour" will create a recurring reminder that fires every hour.
 
-The agent persists pending reminders in `sessionStorage`, ensuring that reminders are not lost during dispatcher restarts. If a reminder's scheduled time has passed during downtime, it will fire on the next tick after rehydration.
+- **`listReminders`**: Provides a list of all currently pending reminders, allowing users to review their scheduled tasks.
+
+- **`cancelReminder`**: Cancels a specific reminder by its ID or cancels all reminders. For example, a user can say, "Cancel reminder 123" or "Cancel all reminders."
+
+When a reminder is triggered, the agent sends a message to the user via `SessionContext.beginAgentThread`. This creates an agent-initiated thread, which is independent of any prior user request. The agent also supports natural language inputs for setting reminders, such as "remind me to take a break in 10 minutes" or "remind me to call John every hour."
+
+The agent ensures persistence by saving pending reminders to `sessionStorage`. This allows reminders to survive dispatcher restarts. If a reminder's scheduled time has passed during downtime, it will fire on the next tick after rehydration.
 
 ## Setup
 
-The `timer-agent` does not require any external API keys, OAuth credentials, or additional configuration. To get started, simply install the package dependencies using the following command:
+The `timer-agent` does not require any external API keys, OAuth credentials, or additional configuration. To get started, install the package dependencies using the following command:
 
 ```bash
 pnpm install
@@ -39,18 +42,21 @@ For more detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
 
-The `timer-agent` package is organized into several key files that define its functionality:
+The `timer-agent` package is structured around several key files that define its functionality:
 
-- **[timerManifest.json](./src/timerManifest.json)**: Contains the agent's metadata, including its description and the schema it uses.
-- **[timerSchema.ts](./src/timerSchema.ts)**: Defines the TypeScript types for the actions supported by the agent, such as `setReminder`, `repeatReminder`, `listReminders`, and `cancelReminder`.
-- **[timerActionHandler.ts](./src/timerActionHandler.ts)**: Implements the logic for handling the actions defined in the schema. This file is responsible for managing reminders, scheduling their execution, and persisting their state.
-- **[timerSchema.agr](./src/timerSchema.agr)**: Contains the grammar definitions for parsing natural language inputs into structured actions. For example, it maps phrases like "remind me to call John in 10 minutes" to the `setReminder` action with appropriate parameters.
+- **[timerManifest.json](./src/timerManifest.json)**: This file contains metadata about the agent, including its description and the schema it uses. It serves as the entry point for the agent's configuration.
 
-The agent also includes logic for persisting reminders to `sessionStorage/reminders.json`. This ensures that reminders are retained across dispatcher restarts and are rehydrated when the session resumes.
+- **[timerSchema.ts](./src/timerSchema.ts)**: This file defines the TypeScript types for the actions supported by the agent, such as `setReminder`, `repeatReminder`, `listReminders`, and `cancelReminder`. It specifies the parameters required for each action, such as `message`, `when`, and `kind`.
+
+- **[timerActionHandler.ts](./src/timerActionHandler.ts)**: This file implements the logic for handling the actions defined in the schema. It manages the lifecycle of reminders, including scheduling, triggering, and persisting their state. It also handles the execution of agent-initiated messages when reminders are triggered.
+
+- **[timerSchema.agr](./src/timerSchema.agr)**: This file contains the grammar definitions for parsing natural language inputs into structured actions. For example, it maps phrases like "remind me to call John in 10 minutes" to the `setReminder` action with the appropriate parameters.
+
+- **sessionStorage/reminders.json**: This file is used to persist reminders across dispatcher restarts. It stores the state of all pending reminders, including their IDs, messages, fire times, and other relevant details.
 
 ## How to extend
 
-To extend the functionality of the `timer-agent`, follow these steps:
+To extend the `timer-agent` with new functionality, follow these steps:
 
 1. **Define new actions**:
 
@@ -72,7 +78,7 @@ To extend the functionality of the `timer-agent`, follow these steps:
 5. **Test your changes**:
    - Write unit tests to verify the new action and its handler. Ensure that the action integrates correctly with the agent's existing functionality.
 
-By following these steps, you can extend the `timer-agent` to support additional use cases or custom requirements.
+By following these steps, you can extend the `timer-agent` to support additional use cases or custom requirements. For example, you could add support for snoozing reminders, setting reminders with more complex time expressions, or integrating with external calendar services.
 
 ## Open work / deferred polish
 
@@ -147,6 +153,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/timer
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter timer-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter timer-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

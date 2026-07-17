@@ -35,8 +35,6 @@
  *     dir, where the TS project is unavailable) are compared like-for-like.
  *     On failure it prints where the new violations are — the file:line of the
  *     regressed rules in each changed file.
- *     On failure it prints where the new violations are — the file:line of the
- *     regressed rules in each changed file.
  *
  * Outputs (written to --out-dir, default tools/scripts/code/lint-report):
  *   - violations.csv : every violation, ranked
@@ -324,6 +322,10 @@ interface LintOutput {
 // (ratchet mode).
 const CONSOLE_ALLOWED_GLOBS = [
     "**/tools/scripts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
+    // The contextSelector benchmark/validation harness (measureMetrics,
+    // compareLlm, reproduce, prove*, validate-keyword-source) are tsx-run CLI
+    // scripts whose sole purpose is printing human-readable reports to stdout.
+    "**/contextSelectorBench/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
 ];
 
 function buildConfig(

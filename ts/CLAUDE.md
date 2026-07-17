@@ -105,6 +105,16 @@ Agents implement `AppAgent` from `@typeagent/agent-sdk`:
   // Licensed under the MIT License.
   ```
 
+### Comments
+
+- Write comments in plain, direct language. Say what the code does and
+  why. Avoid "consultant speak" - filler like "owns its own X," "single
+  source of truth," "never has to know about Y," or restating a design
+  principle instead of explaining the code. Technical terms are fine; use
+  the precise word rather than talking around it.
+- Don't use em-dashes (—) in comments. Use `-`, `:`, parentheses, or two
+  sentences instead.
+
 ### Package references
 
 - Internal packages use `"workspace:*"` protocol in `package.json`
@@ -131,3 +141,111 @@ Agents implement `AppAgent` from `@typeagent/agent-sdk`:
 - API keys go in `ts/config.local.yaml` (see `config.sample.yaml` for reference). Legacy `.env` is still supported but deprecated.
 - User data stored in `~/.typeagent/`
 - Tracing via the `debug` package — enable with `DEBUG=typeagent:*` env var
+
+## Code Review Guidelines
+
+Use these criteria both when **writing** changes and when **reviewing** code (your
+own or a diff you are asked to review). Report only high-confidence, substantive
+issues — prefer a short list of real problems over an exhaustive nitpick list. For
+each issue, name the file/line, explain _why_ it matters, and suggest a concrete
+fix. Do not comment on formatting that Prettier already enforces.
+
+### Readability & maintainability
+
+- **Clarity first.** Prefer straightforward, self-explanatory code over clever
+  one-liners. A reader should be able to follow the intent without reverse-engineering it.
+- **Meaningful names.** Names should describe intent (`isSchemaEnabled`, not `flag`).
+  Match the vocabulary already used in the surrounding module.
+- **Small, focused units.** Functions should do one thing. Flag deeply nested
+  logic, long parameter lists, and functions that mix unrelated concerns — suggest
+  extracting a helper.
+- **Comment the "why," not the "what."** Per repo style, only comment code that
+  needs clarification (non-obvious intent, workarounds, invariants). Remove
+  redundant comments that merely restate the code. Comment intent accurately —
+  distinguish a temporary **NYI (TODO)** from a fundamental limitation.
+- **Clear signatures.** Order parameters so common callers rely on defaults, make
+  optional callbacks optional, and drop dead/unused parameters instead of threading
+  constants through.
+- **Clean up as you go.** Remove stale comments and tests that reference relocated
+  or deleted code.
+
+### DRY — avoid redundancy
+
+- Flag copy-pasted logic, duplicated constants/literals, and parallel code paths
+  that should share a single implementation.
+- When two implementations of the same logic diverge (even slightly), extract one
+  shared helper and route both callers through it — divergent copies drift and
+  cause bugs. Aim for a single source of truth.
+- Before adding a new helper, check whether an existing utility already covers it
+  (search the package and its workspace dependencies). Reuse over reinvention.
+- Balance DRY against clarity — **don't over-extract.** A small, incidental
+  duplication is preferable to a premature or leaky abstraction that couples
+  unrelated call sites, and a helper with a single real caller — or one that forces
+  the reader to jump away to follow otherwise-simple logic — is a code smell;
+  inline it.
+
+### Consistency with the codebase
+
+- New code should follow the conventions of the **surrounding context** and the
+  broader codebase: file layout, naming, error-handling patterns, import style,
+  and the `AppAgent` / dispatcher contracts described above.
+- Reuse established patterns (e.g., the agent plugin structure, `ActionResult`
+  return shapes, `debug`-based tracing) instead of introducing new ones without
+  justification.
+- Every `.ts`/`.js` file must carry the Microsoft copyright header. Internal
+  dependencies use `workspace:*`.
+- Match the established **file-naming pattern** of the area (e.g., grammar matcher
+  tests are `grammarMatcher<Name>.spec.ts`).
+
+### Abstractions & design
+
+- Abstractions should have a clear, single responsibility and hide the right
+  details. Flag leaky abstractions, unnecessary indirection, and over-engineering
+  (interfaces/layers with a single implementation and no foreseeable second one).
+- Prefer the simplest design that satisfies the requirement. Don't add
+  configurability, generality, or extension points that aren't needed yet.
+- Watch module boundaries: respect package dependency direction and avoid
+  reaching into another package's internals.
+
+### Root-cause fixes & workarounds
+
+- Fix the underlying cause rather than routing around a not-yet-implemented (NYI)
+  gap by weakening defaults or disabling a feature. Prefer making an unsupported
+  path _work_ over changing a default to avoid triggering it.
+- When a temporary workaround is genuinely needed, make it **opt-in and
+  self-deleting**: gate it behind an explicit flag/option and add a `TODO` to remove
+  it once the root fix lands. A workaround baked into a default reads as the intended
+  long-term design.
+- Before adding a new error path or constraint, confirm the existing intended
+  behavior from the relevant `docs/architecture` doc and surrounding code — don't
+  over-constrain a previously-valid case, and keep code and docs in sync.
+
+### Correctness & robustness
+
+- Check edge cases, error/exception paths, `async`/`await` correctness, and
+  resource cleanup. Remember that some constructors (e.g., embedding-model
+  creation) can **throw** rather than return `undefined` — guard construction, not
+  just the call.
+- Validate inputs at trust boundaries; agents receive already-typed, validated
+  actions, so avoid re-parsing natural language in handlers.
+- Validate invariants once, early, and unconditionally — hoist a distinct check
+  (e.g., rejecting an unsupported shape) to a single location rather than mixing it
+  into unrelated logic, which conflates concerns and yields differently-worded
+  errors depending on which branch is hit.
+- Distinguish **user-facing validation errors** from **internal invariant errors**
+  ("should never happen") so the latter aren't mistaken for user mistakes.
+
+### Test coverage
+
+- New or changed behavior should be covered by tests. Unit tests are
+  `test/*.spec.ts` (run offline via `test:local`); live/integration tests are
+  `test/*.test.ts` (`test:live`, require API keys).
+- Tests must exercise meaningful behavior and edge cases, not just the happy path,
+  and should assert on outcomes rather than restating the implementation.
+- Avoid duplicate coverage: check whether existing tests already cover the behavior,
+  and prefer shared/parameterized harnesses (e.g., `describeForEachMatcher`, which
+  runs a case across AST/NFA/DFA) so behavior is verified across all variants.
+  Assert on actual error messages, not guessed substrings.
+- Remember tests run against **compiled output** in `dist/test/` — build before
+  running, and after switching branches run `pnpm run clean` first to purge stale
+  compiled specs.

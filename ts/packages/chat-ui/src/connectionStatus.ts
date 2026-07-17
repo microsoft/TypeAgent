@@ -33,7 +33,7 @@ export interface ConnectionStatus {
 
 export type ConnectionActionHandler = (action: ConnectionActionId) => void;
 
-const DEFAULT_ACTION_LABELS: Record<ConnectionActionId, string> = {
+export const DEFAULT_ACTION_LABELS: Record<ConnectionActionId, string> = {
     retry: "Retry",
     start: "Start server",
 };

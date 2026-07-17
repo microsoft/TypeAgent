@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=8f079666fb865149f81c84a347251bd5f9883472773ff272c991fdfa7be2a688 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6eb646b7486426393bd57cc5e337a04c10b1cdaced058e0be2eb7ed6a15cce6a -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # calendar — AI-generated documentation
@@ -16,7 +16,7 @@ The `calendar` package is a TypeAgent application agent designed to manage calen
 
 ## What it does
 
-The calendar agent provides a comprehensive set of actions to manage calendar events. These actions are grouped into two main categories:
+The calendar agent provides a set of actions to manage and manipulate calendar events. These actions are grouped into two main categories:
 
 ### Event Management
 
@@ -31,7 +31,7 @@ The calendar agent provides a comprehensive set of actions to manage calendar ev
 - **`changeTime`**: Update the time of an existing event.
 - **`changeDescription`**: Modify the description of an existing event.
 
-The agent uses the `graph-utils` library to implement these actions and relies on the `@microsoft/microsoft-graph-client` library for communication with the Microsoft Graph API. The agent's schema and grammar definitions enable it to interpret natural language requests and map them to the appropriate actions.
+The agent uses the `graph-utils` library to implement these actions and relies on the `@microsoft/microsoft-graph-client` library for communication with the Microsoft Graph API. The schema and grammar definitions enable the agent to interpret natural language requests and map them to the appropriate actions.
 
 ## Setup
 
@@ -54,9 +54,9 @@ To use the calendar agent, you need to configure access to the Microsoft Graph A
 
    - Run `pnpm install` to install the required dependencies.
 
-4. **Identity Cache Issues**:
+4. **Resolve Identity Cache Issues**:
    - If you encounter issues with the identity cache, clear it by running the following commands:
-     ```text
+     ```bash
      cd %localappdata%/.IdentityService
      del typeagent-tokencache*
      ```
@@ -118,7 +118,7 @@ By following these steps, you can extend the calendar agent to support additiona
 ### Entry points
 
 - `./agent/manifest` → [./src/calendarManifest.json](./src/calendarManifest.json)
-- `./agent/handlers` → `./dist/calendarActionHandlerV3.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/calendarActionHandlerV3.js](./dist/calendarActionHandlerV3.js)
 
 ### Dependencies
 
@@ -147,6 +147,6 @@ External: `chalk`, `date-fns`, `debug`
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
+_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

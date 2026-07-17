@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CompletionUsageStats } from "./openai.js";
+import { CompletionUsageStats } from "./apiTypes.js";
 import registerDebug from "debug";
 
 const debugTokens = registerDebug("typeagent:tokenCounter");

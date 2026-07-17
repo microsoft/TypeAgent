@@ -21,6 +21,7 @@ import {
     ValueExpression,
 } from "./environment.js";
 import { normalizeToken } from "./nfaMatcher.js";
+import { deriveEffectiveValue } from "./grammarValueDeriver.js";
 
 // Scripts that require a word-boundary separator between adjacent tokens.
 // CJK and other logographic/syllabic scripts are NOT included — no separator needed.
@@ -353,6 +354,21 @@ function normalizeRule(
     rule: GrammarRule,
     cache: Map<GrammarRule[], GrammarRule[]>,
 ): GrammarRule {
+    // tailCall is an NYI NFA/DFA backend gap, unrelated to value
+    // derivation. Checked here since normalizeRule visits every rule
+    // exactly once (top-level and nested) before compilation begins -
+    // the single earliest point to reject it.
+    const tailCallPart = rule.parts.find(
+        (p): p is RulesPart => p.type === "rules" && !!p.tailCall,
+    );
+    if (tailCallPart !== undefined) {
+        throw new Error(
+            `normalizeGrammar: tail RulesPart (name='${tailCallPart.name ?? "<unnamed>"}') is not yet supported by the ` +
+                "NFA/DFA backend - disable `tailFactoring` / `promoteTailRulesParts` in the " +
+                "grammar optimizer for NFA/DFA paths.",
+        );
+    }
+
     // First, normalize all nested RulesParts
     const normalizedParts = rule.parts.map((part) =>
         normalizePart(part, cache),
@@ -448,29 +464,6 @@ function stripDispatch(part: RulesPart): RulesPart {
         repeat: part.repeat,
         tailCall: part.tailCall,
     });
-}
-
-/**
- * Check if a rule is a single-variable rule (e.g., <ArtistName> = $(x:wildcard);)
- * Such rules should implicitly produce their variable's value: -> $(x)
- */
-function isSingleVariableRule(rule: GrammarRule): { variable: string } | false {
-    // A single-variable rule has:
-    // 1. No explicit value expression
-    // 2. Single part that is a wildcard or number with a variable
-    if (rule.value) {
-        return false; // Has explicit value
-    }
-    if (rule.parts.length !== 1) {
-        return false; // Multiple parts
-    }
-    const part = rule.parts[0];
-    if (part.type === "wildcard" || part.type === "number") {
-        if (part.variable) {
-            return { variable: part.variable };
-        }
-    }
-    return false;
 }
 
 /**
@@ -614,24 +607,12 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
     ) {
         const rule = normalizedGrammar.alternatives[ruleIndex];
 
-        // VALIDATION: Multi-term rules MUST have value expressions
-        // Single-term rules can omit value expressions (they inherit from the term)
-        if (rule.parts.length > 1 && !rule.value) {
-            throw new Error(
-                `Grammar rule at index ${ruleIndex} has ${rule.parts.length} terms but no value expression. ` +
-                    `Multi-term rules must have an explicit value expression (using ->).`,
-            );
-        }
-
-        // Check for single-variable rules like <ArtistName> = $(x:wildcard);
-        // These should implicitly produce their variable's value: -> x
-        let effectiveValue = rule.value;
-        if (!effectiveValue) {
-            const singleVar = isSingleVariableRule(rule);
-            if (singleVar) {
-                effectiveValue = { type: "variable", name: singleVar.variable };
-            }
-        }
+        // Check for single-variable / factored rules with no explicit -> value.
+        const effectiveValue = deriveEffectiveValue(
+            rule,
+            true,
+            () => `Grammar rule at index ${ruleIndex}`,
+        );
 
         const ruleEntry = builder.createState(false);
 
@@ -1391,13 +1372,6 @@ function compileRulesPart(
     checkedVariables?: Set<string>,
     overrideVariableName?: string,
 ): number {
-    if (part.tailCall) {
-        throw new Error(
-            `compileRulesPart: tail RulesParts are not supported by the NFA compiler ` +
-                `(part.name='${part.name ?? "<unnamed>"}'). ` +
-                "Disable `tailFactoring` in the grammar optimizer for NFA/DFA paths.",
-        );
-    }
     if (part.alternatives.length === 0) {
         // Empty rules - epsilon transition
         builder.addEpsilonTransition(fromState, toState);
@@ -1472,13 +1446,6 @@ function compileRulesPartWithSlots(
     toState: number,
     context: RuleCompilationContext,
 ): number {
-    if (part.tailCall) {
-        throw new Error(
-            `compileRulesPartWithSlots: tail RulesParts are not supported by the NFA compiler ` +
-                `(part.name='${part.name ?? "<unnamed>"}'). ` +
-                "Disable `tailFactoring` in the grammar optimizer for NFA/DFA paths.",
-        );
-    }
     if (part.alternatives.length === 0) {
         // Empty rules - epsilon transition
         builder.addEpsilonTransition(fromState, toState);
@@ -1528,15 +1495,7 @@ function compileRulesPartWithSlots(
 
         // Compile and store the action value on the entry state FIRST
         // We need to know if there's a value before deciding about environments
-        // Passthrough normalization is done upfront, so rules already have explicit values
-        // Just check for single-variable rules like <ArtistName> = $(x:wildcard);
-        let effectiveValue = rule.value;
-        if (!effectiveValue) {
-            const singleVar = isSingleVariableRule(rule);
-            if (singleVar) {
-                effectiveValue = { type: "variable", name: singleVar.variable };
-            }
-        }
+        const effectiveValue = deriveEffectiveValue(rule);
 
         let compiledValue: ValueExpression | undefined;
         let nestedCompletionActionName: string | undefined;

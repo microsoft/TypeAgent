@@ -85,3 +85,40 @@ describe("contextSelector/conversationSignal", () => {
         expect(s.getContextVector().get("formula")).toBeCloseTo(0.9 * 3, 5);
     });
 });
+
+describe("contextSelector/conversationSignal — negation guard", () => {
+    it("is off by default: a negated topic still deposits", () => {
+        const s = source();
+        s.recordRequest("do not open the spreadsheet");
+        expect(s.getContextVector().has("spreadsheet")).toBe(true);
+    });
+
+    it("when enabled, suppresses negated topics from the context vector", () => {
+        const s = source({ negationGuard: true });
+        s.recordRequest("do not open the spreadsheet");
+        s.recordRequest("no pivot chart");
+        const v = s.getContextVector();
+        expect(v.has("spreadsheet")).toBe(false);
+        expect(v.has("pivot")).toBe(false);
+        expect(v.has("chart")).toBe(false);
+    });
+
+    it("when enabled, a clause boundary keeps the real request", () => {
+        // The comma closes the "no problem" negation so the grocery request lands.
+        const s = source({ negationGuard: true });
+        s.recordRequest("no problem, add eggs to the grocery list");
+        const v = s.getContextVector();
+        expect(v.has("grocery")).toBe(true);
+        expect(v.has("list")).toBe(true);
+    });
+
+    it("applies the guard per turn while preserving recency decay", () => {
+        const s = source({ negationGuard: true });
+        s.recordRequest("the grocery list"); // age 2: grocery, list deposit
+        s.recordRequest("not the vampire"); // age 1: vampire suppressed
+        const v = s.getContextVector();
+        expect(v.get("grocery")).toBeCloseTo(0.81, 5);
+        expect(v.get("list")).toBeCloseTo(0.81, 5);
+        expect(v.has("vampire")).toBe(false);
+    });
+});

@@ -1,0 +1,1002 @@
+{
+  "music-streaming": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "music-offline-files": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "calendar-meeting": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "reminders-pending": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "stopwatch-intervals": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "debug-fix-source": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "debugger-inspect-state": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "camera-selfie": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "generate-artwork": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "browser-bookmark": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "powershell-script": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "montage-search": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "music-ambiguous-shared": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "music-mentions-both": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "schedule-ambiguous": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "code-generic-runtime": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "image-generic-visual": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "web-generic-url": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "topic-drift-weather": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "stale-bookmark": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "email-draft": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "markdown-doc": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "grocery-list": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "meeting-invite": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "github-cache": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "fix-null-bug": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hide-taskbar": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "monitor-layout": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "storm-forecast": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "screenshot-file": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "montage-organize": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "sunset-photo": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "writing-ambiguous": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "planning-ambiguous": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "dev-generic": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "display-generic": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "alert-ambiguous": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "picture-generic": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "drift-lunch": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "stale-meeting": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "beat-playlist": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "podcast-files": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "dentist-reminder": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "world-clock": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "syntax-error": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "watch-variable": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "browsing-history": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "fetch-html": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "baby-photo": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "book-conference": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-thin-player": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-thin-localplayer": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-thin-calendar": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-thin-code": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-thin-photo": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-thin-browser": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-thin-weather": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-thin-github": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-vocab-calendar": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-vocab-player": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-vocab-code": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-vocab-weather": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-neg-noaffirm": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "hard-neg-affirm-local": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-neg-calendar": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-neg-affirm-github": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-neg-affirm-image": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-neg-affirm-utility": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-shift-to-github": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-shift-to-local": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-shift-to-timer": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-shift-to-image": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-shift-to-utility": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-shift-to-markdown": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-trap-photo": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-trap-code": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-trap-player": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "hard-trap-calendar": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-trap-github": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-trap-browser": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-tie-music": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "hard-tie-schedule": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "hard-tie-dev": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-tie-visual": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "hard-tie-web": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "hard-tie-repo": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-stale-player": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-stale-calendar": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-stale-code": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "hard-stale-photo": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-stale-email": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-drift-cooking": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-homonym-book": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-homonym-play": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-sparse-abstain": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-faint-then-noise": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "hard-double-negative": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-trap-strong-distractor": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "hard-weather-vs-timer-real": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "hard-list-vs-calendar-todo": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-negload-code": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-negload-vs": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-negload-local": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-negload-utility": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-negload-timer": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-negload-image": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-negload-codevsgithub": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-negload-markdown": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-sarcasm-stream": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "xh-sarcasm-camera": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "xh-sarcasm-debugger": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-sarcasm-meeting": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-sarcasm-bookmark": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-sarcasm-email": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-quote-utility": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-quote-local": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-quote-image": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-quote-timer": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-quote-code": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-quote-markdown": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-third-video-local": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-third-chat-photo": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-third-settings-desktop": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "xh-third-weather-timer": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-third-email-markdown": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-third-montage-photo": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-dense-music": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "xh-dense-dev": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "xh-dense-web": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "xh-dense-schedule": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "xh-dense-visual": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "xh-dense-repo": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "xh-churn-1": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-churn-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-churn-3": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-churn-4": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-churn-5": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-homonym-stream-data": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "xh-homonym-current-weather": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "xh-homonym-file-legal": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "xh-homonym-book-verb": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-homonym-watch-video": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-typo-github": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-typo-calendar": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-typo-player": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-typo-code": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-typo-photo": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-negload-list": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "xh-quote-browser": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "xh-sarcasm-alarm": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-player": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-localplayer": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-calendar": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-timer": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-windowsclock": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-timer-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-code": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-vs": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-photo": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-image": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-browser": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-utility": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-powershell": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-taskflow": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-email": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-markdown": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-list": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-github": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-desktop": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-settings": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-weather": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-chat": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-montage": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-player-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-localplayer-2": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-calendar-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-code-2": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-photo-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-browser-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-list-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-github-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-weather-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-markdown-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-vs-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-settings-2": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-montage-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-empty-1": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "s-empty-2": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "s-empty-3": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "s-empty-4": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "s-empty-5": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "s-empty-6": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "s-empty-7": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "s-empty-8": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "s-empty-9": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "s-empty-10": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "s-empty-11": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "s-empty-12": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "s-empty-13": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "s-empty-14": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "nc-empty-music": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "nc-empty-schedule": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-empty-code": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "nc-empty-photo": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "nc-empty-web": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-empty-clock": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-empty-doc": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-empty-list": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-greet-1": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "nc-greet-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-greet-3": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "nc-greet-4": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "nc-greet-5": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-greet-6": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-greet-7": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-greet-8": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "nc-greet-9": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "nc-greet-10": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-food-1": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-travel-1": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-family-1": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "nc-feel-1": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "nc-food-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-sport-1": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-family-2": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-chores-1": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-weather-chat": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "nc-hobby-1": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "nc-travel-2": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "nc-feel-2": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-food-3": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-family-3": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-work-1": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "nc-feel-3": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-hobby-2": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-travel-3": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-family-4": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-pet-1": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-meta-1": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "nc-meta-2": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "nc-meta-3": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "nc-meta-4": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-meta-5": {
+    "choice": "unclear",
+    "raw": "{\"agent\":\"unclear\"}"
+  },
+  "nc-meta-6": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-meta-7": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-meta-8": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-meta-9": {
+    "choice": "B",
+    "raw": "{\"agent\":\"B\"}"
+  },
+  "nc-meta-10": {
+    "choice": "A",
+    "raw": "{\"agent\":\"A\"}"
+  },
+  "nc-unrelated-garden": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  },
+  "nc-unrelated-money": {
+    "choice": "C",
+    "raw": "{\"agent\":\"C\"}"
+  }
+}

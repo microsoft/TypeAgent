@@ -5,6 +5,8 @@ import {
     SchemaType,
     ActionSchemaTypeDefinition,
     ResolvedSchemaType,
+    SchemaTypeObject,
+    SchemaTypeUnion,
 } from "./type.js";
 import { validateSchema } from "./validate.js";
 
@@ -46,8 +48,29 @@ export function resolveTypeReference(
     return curr;
 }
 
+// Find the discriminated-union member that declares `fieldName`. Members are
+// resolved through type references; the first one that is an object with the
+// field wins. Returns undefined when no member has it. This is what lets
+// property-path navigation (paramSpec, completion, entity detection) descend
+// into a union like MusicTarget, where `trackName` lives only on the
+// kind:"track" member.
+export function resolveUnionMemberWithField(
+    union: SchemaTypeUnion,
+    fieldName: string,
+): SchemaTypeObject | undefined {
+    for (const member of union.types) {
+        const resolved = resolveTypeReference(member);
+        if (
+            resolved?.type === "object" &&
+            resolved.fields[fieldName] !== undefined
+        ) {
+            return resolved;
+        }
+    }
+    return undefined;
+}
+
 // Unresolved type references are ignored.
-// Type Union is not supported.
 function getPropertyPartType(
     type: SchemaType,
     propertyParts: string[],
@@ -57,7 +80,6 @@ function getPropertyPartType(
         const resolved = resolveTypeReference(curr);
         if (resolved === undefined) {
             // Unresolved type reference.
-            // TODO: doesn't work on union types yet.
             return undefined;
         }
         const maybeIndex = parseInt(propertyPart);
@@ -67,11 +89,18 @@ function getPropertyPartType(
                 return undefined;
             }
             curr = resolved.elementType;
-        } else {
-            if (resolved.type !== "object") {
+        } else if (resolved.type === "object") {
+            curr = resolved.fields[propertyPart]?.type;
+        } else if (resolved.type === "type-union") {
+            // Descend into the discriminated-union member that declares this
+            // field (e.g. `target.trackName` when target's kind is "track").
+            const member = resolveUnionMemberWithField(resolved, propertyPart);
+            if (member === undefined) {
                 return undefined;
             }
-            curr = resolved.fields[propertyPart]?.type;
+            curr = member.fields[propertyPart].type;
+        } else {
+            return undefined;
         }
     }
     // This may not be an unresolved type reference.
@@ -80,7 +109,8 @@ function getPropertyPartType(
 
 // Return the type of the property.  If the property type is a type-reference, it is kept as is.
 // Unresolved type references are ignored.
-// Type Union is not supported.
+// Discriminated unions are supported: a path descends into the union member
+// that declares the field.
 export function getPropertyType(
     type: SchemaType,
     propertyName: string,
@@ -89,7 +119,6 @@ export function getPropertyType(
 }
 
 // Unresolved type references are ignored.
-// Type Union is not supported.
 export function getParameterNames(
     actionType: ActionSchemaTypeDefinition,
     getCurrentValue: (name: string) => any,
@@ -135,4 +164,12 @@ export function getParameterNames(
                 break;
         }
     }
+}
+
+// The action's description is the first line of its documentation comment, or
+// undefined when the action has no comment.
+export function getActionDescription(
+    actionType: ActionSchemaTypeDefinition,
+): string | undefined {
+    return actionType.comments?.[0]?.trim() || undefined;
 }

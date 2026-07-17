@@ -6,7 +6,10 @@ export { createDispatcherFromContext } from "./dispatcher.js";
 export {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
+    prewarmReasoning,
 } from "./context/commandHandlerContext.js";
+export type { CommandHandlerContext } from "./context/commandHandlerContext.js";
+export { collectCommandReferenceMarkdown } from "./command/commandReference.js";
 export { lockInstanceDir } from "./utils/fsUtils.js";
 export { DisplayLog } from "./displayLog.js";
 export type { DisplayLogEntry } from "./displayLog.js";
@@ -72,3 +75,7 @@ export {
 } from "./context/session.js";
 
 export { initializeGeolocation } from "./context/geolocation.js";
+
+// System command handler tree — exposed for tooling that statically enumerates
+// the `@command` surface (e.g. the Action Browser documentation generator).
+export { systemHandlers } from "./context/system/systemAgent.js";

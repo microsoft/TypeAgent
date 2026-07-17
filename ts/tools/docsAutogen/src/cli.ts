@@ -8,7 +8,7 @@ import process from "node:process";
 import chalk from "chalk";
 import { promises as fsPromises } from "node:fs";
 import { Git } from "./git.js";
-import { findMonorepoRoot } from "./paths.js";
+import { findMonorepoRoot, toPosixRelative } from "./paths.js";
 import { resolveSinceRef } from "./sinceResolver.js";
 import {
     buildGraph,
@@ -18,7 +18,8 @@ import {
 } from "./workspaceGraph.js";
 import { detectChangedPackages } from "./changeDetection.js";
 import { gatherPackageInputs } from "./packageInputs.js";
-import { assembleAutogenBlock } from "./assembleAutogen.js";
+import { assembleAutogenBlock, computeInputHash } from "./assembleAutogen.js";
+import { parseHashComment } from "./contentHash.js";
 import { renderReferenceSection } from "./renderReference.js";
 import { decideCompact } from "./compactMode.js";
 import { generateDocumentation } from "./generateDocumentation.js";
@@ -41,6 +42,7 @@ interface CliOptions {
     render: boolean;
     write: boolean;
     verifyLinks: boolean;
+    commandReference: boolean;
     llm: boolean;
     maxPackages: number;
     help: boolean;
@@ -63,6 +65,11 @@ Modes:
   --verify-links      Spot-check the existing ${AUTOGEN_FILE_NAME} links for
                       each selected package. Exits non-zero on any
                       broken link.
+  --command-reference Regenerate docs/overview/command-reference.md from the
+                      dispatcher + agent command descriptors (package selection
+                      is ignored). With --dry-run, print to stdout instead of
+                      writing. Boots a headless read-only dispatcher; no API
+                      keys required.
 
 Selection:
   --since <ref>       Diff against this ref instead of the smart default.
@@ -105,6 +112,7 @@ function parseCli(argv: readonly string[]): CliOptions {
             render: { type: "boolean", default: false },
             write: { type: "boolean", default: false },
             "verify-links": { type: "boolean", default: false },
+            "command-reference": { type: "boolean", default: false },
             llm: { type: "boolean", default: false },
             "max-packages": { type: "string" },
             "dry-run": { type: "boolean", default: false },
@@ -124,6 +132,7 @@ function parseCli(argv: readonly string[]): CliOptions {
         render: values.render === true,
         write: values.write === true,
         verifyLinks: values["verify-links"] === true,
+        commandReference: values["command-reference"] === true,
         llm: values.llm === true,
         maxPackages:
             Number.isFinite(maxParsed) && maxParsed > 0
@@ -168,6 +177,14 @@ async function main(): Promise<number> {
     maybePrintLauncherTip(opts);
 
     const monorepoRoot = findMonorepoRoot(process.cwd());
+
+    // The command reference is a self-contained mode: it regenerates a single
+    // top-level doc from the live command descriptors and ignores package
+    // selection entirely. Handle it before any package/git work.
+    if (opts.commandReference) {
+        return await runCommandReference(monorepoRoot, opts);
+    }
+
     const git = new Git(monorepoRoot);
 
     const allPackages = await loadWorkspaceFromDisk(monorepoRoot);
@@ -287,6 +304,41 @@ async function main(): Promise<number> {
         process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     } else {
         printHumanReport(report);
+    }
+    return 0;
+}
+
+/**
+ * Regenerate docs/overview/command-reference.md from the live dispatcher +
+ * agent command descriptors. Heavy dependencies (agent-dispatcher,
+ * default-agent-provider) are dynamically imported so the normal package flow
+ * never loads the agent tree.
+ */
+async function runCommandReference(
+    monorepoRoot: string,
+    opts: CliOptions,
+): Promise<number> {
+    const { generateCommandReferenceMarkdown, writeCommandReference } =
+        await import("./commandReference.js");
+
+    if (opts.dryRun) {
+        const markdown = await generateCommandReferenceMarkdown();
+        process.stdout.write(markdown);
+        return 0;
+    }
+
+    const { targetPath, changed } = await writeCommandReference(monorepoRoot);
+    const relPath = toPosixRelative(targetPath, monorepoRoot);
+    if (opts.json) {
+        process.stdout.write(
+            `${JSON.stringify({ commandReference: { path: relPath, changed } }, null, 2)}\n`,
+        );
+    } else {
+        process.stdout.write(
+            changed
+                ? `${chalk.green("docs-autogen:")} regenerated ${relPath}\n`
+                : `${chalk.dim("docs-autogen:")} ${relPath} already up to date\n`,
+        );
     }
     return 0;
 }
@@ -466,6 +518,45 @@ async function renderSelected(
 
     for (const pkg of selected) {
         const inputs = await gatherPackageInputs(pkg, graph, monorepoRoot);
+        const autogenPath = path.join(pkg.dir, AUTOGEN_FILE_NAME);
+
+        // Idempotency gate. When writing, skip a package entirely (no LLM
+        // call, no write) if its README.AUTOGEN.md was generated from the
+        // same inputs. The embedded hash digests the deterministic prompt
+        // inputs, not the nondeterministic LLM prose, so an unchanged hash
+        // means a regenerated file would differ only by churn. This keeps
+        // the tool idempotent, so it can run on every pull request without
+        // the commit-back retriggering itself into a loop. First generation
+        // (no file / no hash) and stdout preview (no --write) fall through.
+        if (opts.write && !opts.dryRun) {
+            const existingHash = await readEmbeddedHash(autogenPath);
+            const currentHash = computeInputHash(inputs);
+            if (existingHash !== null && existingHash === currentHash) {
+                records.push({
+                    package: pkg.name,
+                    relDir: pkg.relDir,
+                    compact: decideCompact(inputs).compact,
+                    hash: currentHash,
+                    body: "",
+                    documentation: {
+                        mode: "skeleton",
+                        status: "unchanged-inputs",
+                        attempts: 0,
+                        isPlaceholder: false,
+                        wordCount: null,
+                        diagnostics: [],
+                    },
+                    links: { total: 0, broken: [], stripped: 0 },
+                    write: {
+                        attempted: false,
+                        verdict: "unchanged",
+                        note: "inputs unchanged (content-hash match); regeneration skipped",
+                        filePath: autogenPath,
+                    },
+                });
+                continue;
+            }
+        }
 
         let llmBody: string | undefined;
         let docMeta: RenderRecord["documentation"] = {
@@ -508,7 +599,6 @@ async function renderSelected(
         // Validate links against the file we'd be writing — link
         // resolution is anchored at the file's directory.
         const links = extractMarkdownLinks(block.body);
-        const autogenPath = path.join(pkg.dir, AUTOGEN_FILE_NAME);
         const validation = await validateLinks(links, autogenPath);
 
         // Recover gracefully from broken links: drop the link wrapper
@@ -691,6 +781,21 @@ async function verifyLinksMode(
     }
     const totalBroken = records.reduce((acc, r) => acc + r.broken.length, 0);
     return totalBroken === 0 ? 0 : 1;
+}
+
+/**
+ * Read the content hash embedded in an existing README.AUTOGEN.md, or
+ * null when the file is missing or carries no hash comment. Used by the
+ * idempotency gate in `renderSelected` to decide whether a package's
+ * inputs changed since it was last generated.
+ */
+async function readEmbeddedHash(filePath: string): Promise<string | null> {
+    try {
+        const content = await fsPromises.readFile(filePath, "utf8");
+        return parseHashComment(content);
+    } catch {
+        return null;
+    }
 }
 
 /**

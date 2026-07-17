@@ -22,7 +22,7 @@ import {
 } from "./type.js";
 import ts from "typescript";
 import { ActionParamSpecs, SchemaConfig } from "./schemaConfig.js";
-import { resolveTypeReference } from "./utils.js";
+import { resolveTypeReference, resolveUnionMemberWithField } from "./utils.js";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:schema:parse");
 
@@ -60,14 +60,30 @@ function checkParamSpecs(
                 }
                 unresolvedCurrentType = currentType.elementType;
             } else {
-                if (currentType.type !== "object") {
+                // Descend into a discriminated union (e.g. `target.trackName`
+                // where `target` is MusicTarget): navigate through the member
+                // that declares the field.
+                let objectType: ResolvedSchemaType = currentType;
+                if (objectType.type === "type-union") {
+                    const member = resolveUnionMemberWithField(
+                        objectType,
+                        name,
+                    );
+                    if (member === undefined) {
+                        throw new Error(
+                            `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': property '${name}' does not exist`,
+                        );
+                    }
+                    objectType = member;
+                }
+                if (objectType.type !== "object") {
                     throw new Error(
                         `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': Access property '${name}' of non-object`,
                     );
                 }
 
                 const field: SchemaObjectField | undefined =
-                    currentType.fields[name];
+                    objectType.fields[name];
                 if (field === undefined) {
                     throw new Error(
                         `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': property '${name}' does not exist`,
