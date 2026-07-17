@@ -185,39 +185,13 @@
         "entities": [
           {
             "name": "grocery",
-            "type": ["list"]
-          },
-          {
-            "name": "Ground meat",
-            "type": ["item"]
-          },
-          {
-            "name": "Onions",
-            "type": ["item"]
-          },
-          {
-            "name": "Carrots",
-            "type": ["item"]
-          },
-          {
-            "name": "Peas",
-            "type": ["item"]
-          },
-          {
-            "name": "Worcestershire sauce",
-            "type": ["item"]
-          },
-          {
-            "name": "Beef broth",
-            "type": ["item"]
-          },
-          {
-            "name": "Mashed potatoes",
-            "type": ["item"]
-          },
-          {
-            "name": "cheese",
-            "type": ["item"]
+            "type": ["list"],
+            "facets": [
+              {
+                "name": "items",
+                "value": ["Ground meat", "Onions", "Carrots", "Peas", "Worcestershire sauce", "Beef broth", "Mashed potatoes", "cheese"]
+              }
+            ]
           }
         ]
       }
@@ -230,20 +204,6 @@
         "parameters": {
           "items": ["Mashed potatoes"],
           "listName": "grocery"
-        },
-        "entities": {
-          "items": [
-            {
-              "name": "Mashed potatoes",
-              "sourceAppAgentName": "list",
-              "type": ["item"]
-            }
-          ],
-          "listName": {
-            "name": "grocery",
-            "sourceAppAgentName": "list",
-            "type": ["list"]
-          }
         }
       }
     }
@@ -265,30 +225,21 @@
         "entities": [
           {
             "name": "grocery",
-            "type": ["list"]
-          },
-          {
-            "name": "eggs",
-            "type": ["item"]
+            "type": ["list"],
+            "facets": [{ "name": "items", "value": ["eggs"] }]
           }
         ]
       }
     },
     {
-      "request": "add cheese",
+      "request": "put cheese on the list",
+      "skipGrammar": true,
       "expected": {
         "schemaName": "list",
         "actionName": "addItems",
         "parameters": {
           "items": ["cheese"],
           "listName": "grocery"
-        },
-        "entities": {
-          "listName": {
-            "name": "grocery",
-            "sourceAppAgentName": "list",
-            "type": ["list"]
-          }
         }
       }
     }
