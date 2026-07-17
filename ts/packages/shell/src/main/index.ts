@@ -36,7 +36,7 @@ import {
     debugShellError,
     debugShellInit,
 } from "./debug.js";
-import { loadKeys, loadKeysFromEnvFile, tryLoadYamlConfig } from "./keys.js";
+import { loadKeys, loadKeysFromEnvFile, tryLoadYamlConfig, warmupRuntimeConfig } from "./keys.js";
 import { parseShellCommandLine } from "./args.js";
 import {
     setUpdateConfigPath,
@@ -198,6 +198,12 @@ async function initialize() {
 
     const appPath = app.getAppPath();
     await initializeKeys(appPath);
+    // Standalone hosts the agent-server in-process, so warm up the aiclient
+    // runtime config locally. The connect-only shell delegates all model work
+    // to the remote server and never imports aiclient here.
+    if (standalone) {
+        void warmupRuntimeConfig();
+    }
     protocol.handle("typeagent-browser", (request) => {
         const url = new URL(request.url);
         const pathname = url.pathname;

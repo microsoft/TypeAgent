@@ -10,9 +10,14 @@
  * cannot reliably drop (a bare `!` negation on a node_modules subpath collapses
  * the whole package/scope, and re-include globs do not resurrect it):
  *
- *   1. The non-host-arch native CLI packages for @github/copilot and
- *      @anthropic-ai/claude-agent-sdk (~240MB each). Only the arch being
- *      packaged is kept.
+ *   1. The native CLI packages for @github/copilot and
+ *      @anthropic-ai/claude-agent-sdk (~250MB and ~230MB per platform). The
+ *      connect-only shell delegates ALL model work to the agent-server (speech
+ *      classification, translation, embeddings), so it never spawns these host
+ *      CLIs — every platform-native package is dropped. The small JS wrapper
+ *      packages (@github/copilot, @github/copilot-sdk) are kept so aiclient's
+ *      lazy `import()` still resolves in the unlikely event it is reached; the
+ *      native is only required on first model use, which never happens here.
  *   2. The local-embedding runtime (onnxruntime-node, onnxruntime-web,
  *      @huggingface/transformers, ~340MB). The connect-only shell offloads
  *      embeddings to the agent-server; aiclient loads these lazily via guarded
@@ -38,31 +43,72 @@ if (!fs.existsSync(nodeModules)) {
     process.exit(0);
 }
 
-const hostOs = process.platform; // "win32" | "darwin" | "linux"
-const hostArch =
-    process.env.ELECTRON_BUILDER_ARCH?.trim() ||
-    (process.arch === "arm64" ? "arm64" : "x64");
-const otherArch = hostArch === "arm64" ? "x64" : "arm64";
-
-// Leaf package directory names to delete (the logical node_modules layout).
+// Leaf package directory names to delete outright (exact logical paths).
 const leafTargets = [
-    `@github/copilot-${hostOs}-${otherArch}`,
-    `@anthropic-ai/claude-agent-sdk-${hostOs}-${otherArch}`,
     "onnxruntime-node",
     "onnxruntime-web",
     "@huggingface/transformers",
 ];
 
-// The same packages as pnpm mangles them in the .pnpm store, e.g.
-// `@github+copilot-win32-arm64@1.0.69` or `onnxruntime-node@1.21.0`.
-const pnpmPrefixes = leafTargets.map(
-    (t) => `${t.replace("/", "+")}@`, // "@github/copilot-..." -> "@github+copilot-...@"
-);
+// Platform-native packages for the host CLIs, keyed by scope/base prefix. Any
+// package whose logical name starts with one of these (e.g.
+// `@github/copilot-win32-x64`, `@anthropic-ai/claude-agent-sdk-linux-arm64`)
+// is a per-platform native and is dropped for EVERY os/arch. The exact base
+// names in `keepExact` (the JS wrappers) are preserved.
+const nativePrefixes = [
+    "@github/copilot-",
+    "@anthropic-ai/claude-agent-sdk-",
+];
+const keepExact = new Set([
+    "@github/copilot-sdk", // JS SDK wrapper (small)
+]);
+
+// Recognizes a platform-native suffix like `-win32-x64` / `-linux-arm64` /
+// `-darwin-x64`, so only per-platform native packages match — never the JS
+// wrapper packages (`@github/copilot`, `@github/copilot-sdk`, etc.).
+const platformSuffix = /-(win32|darwin|linux)-(x64|arm64|ia32)$/;
+
+// The same leaf targets as pnpm mangles them in the .pnpm store, e.g.
+// `onnxruntime-node@1.21.0`.
+const pnpmPrefixes = leafTargets.map((t) => `${t.replace("/", "+")}@`);
+// Mangled store prefixes for the platform natives, e.g.
+// `@github+copilot-win32-x64@1.0.69`.
+const pnpmNativePrefixes = nativePrefixes.map((t) => t.replace("/", "+"));
+const pnpmKeepPrefixes = [...keepExact].map((t) => `${t.replace("/", "+")}@`);
+
+function isNativeLeaf(rel) {
+    // rel is a logical node_modules path; the trailing 1-2 segments form the
+    // scoped package name. Match `<prefix>...-<os>-<arch>` platform natives,
+    // but never a kept wrapper.
+    return nativePrefixes.some((prefix) => {
+        const idx = rel.indexOf(prefix);
+        if (idx === -1) {
+            return false;
+        }
+        const name = rel.slice(idx);
+        if (keepExact.has(name)) {
+            return false;
+        }
+        return platformSuffix.test(name);
+    });
+}
+
+function isNativeStoreDir(baseName) {
+    if (pnpmKeepPrefixes.some((p) => baseName.startsWith(p))) {
+        return false;
+    }
+    if (!pnpmNativePrefixes.some((p) => baseName.startsWith(p))) {
+        return false;
+    }
+    // pnpm store dir is `<mangled-name>@<version>`; strip the version and
+    // require a platform suffix so only per-platform natives match.
+    const nameOnly = baseName.replace(/@[^@]*$/, "");
+    return platformSuffix.test(nameOnly);
+}
 
 function matches(relFromNodeModules, baseName) {
-    // Logical leaf path, either at the root of node_modules or nested inside a
-    // consuming package's node_modules (e.g. a symlink at
-    // .pnpm/<consumer>/node_modules/@huggingface/transformers).
+    // Exact logical leaf (local-embedding runtime), at the root of node_modules
+    // or nested inside a consuming package's node_modules.
     if (
         leafTargets.some(
             (t) =>
@@ -72,8 +118,15 @@ function matches(relFromNodeModules, baseName) {
     ) {
         return true;
     }
-    // The real store directory, mangled by pnpm (e.g. onnxruntime-node@1.21.0).
-    return pnpmPrefixes.some((p) => baseName.startsWith(p));
+    // Per-platform host CLI natives (any os/arch).
+    if (isNativeLeaf(relFromNodeModules)) {
+        return true;
+    }
+    // The real store directories, mangled by pnpm.
+    if (pnpmPrefixes.some((p) => baseName.startsWith(p))) {
+        return true;
+    }
+    return isNativeStoreDir(baseName);
 }
 
 let deletedBytes = 0;
@@ -140,7 +193,7 @@ function walk(dir, relPrefix) {
 }
 
 console.log(
-    `prune-shell-deploy: pruning ${nodeModules} (host ${hostOs}/${hostArch}, dropping ${hostOs}/${otherArch} CLIs + local-embedding runtime)`,
+    `prune-shell-deploy: pruning ${nodeModules} (dropping @github/copilot + @anthropic-ai/claude-agent-sdk platform natives and the local-embedding runtime; connect-only shell delegates all model work to the agent-server)`,
 );
 walk(nodeModules, "");
 console.log(

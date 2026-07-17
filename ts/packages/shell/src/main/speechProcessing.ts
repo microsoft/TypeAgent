@@ -11,6 +11,22 @@ import {
 
 const debug = registerDebug("typeagent:shell:speechProcessing");
 
+/**
+ * Continuous-speech classification runs a local chat model. When the
+ * configured chat provider is Copilot, the connect-only (pruned) shell has no
+ * bundled Copilot native to run it, so local processing must be skipped and
+ * the request left to the (future) server-side path. Reads the configured
+ * provider from `process.env` (`TYPEAGENT_MODEL_PROVIDER`, populated from YAML
+ * config by keys.ts) rather than the active aiclient provider, because the
+ * connect-only shell never initializes the aiclient runtime config.
+ */
+export function isLocalSpeechProcessingSupported(): boolean {
+    const provider = process.env["TYPEAGENT_MODEL_PROVIDER"]
+        ?.trim()
+        .toLowerCase();
+    return provider !== "copilot";
+}
+
 export class SpeechProcessing {
     // Singleton
     private static instance: SpeechProcessing;
