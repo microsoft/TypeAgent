@@ -157,7 +157,7 @@ describe("loadConstructionCacheLayer", () => {
             actionName: "pause",
         });
         // The schemaName is re-stamped onto the action regardless of the cache.
-        const play = layer.match("play despacito");
+        const play = layer.match("play nocturne by chopin");
         expect(play?.schemaName).toBe("player");
         expect(typeof play?.actionName).toBe("string");
     });
