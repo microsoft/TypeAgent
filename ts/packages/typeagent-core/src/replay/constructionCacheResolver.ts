@@ -169,7 +169,9 @@ function findSchemaNamespace(
         if (name.includes("|")) {
             continue;
         }
-        const [foundSchemaName, hash, _activityName] = name.split(",", 3);
+        const [foundSchemaName, hash, activityName] = name.split(",", 3);
+        // Activity can be empty; only the schema and hash gate cache validity.
+        void activityName;
         if (foundSchemaName === schemaName) {
             return {
                 namespaceName: name,
