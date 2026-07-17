@@ -249,15 +249,8 @@ class ListAvailableCommandHandler implements CommandHandler {
             displayStatus("Refreshing source metadata...", context);
             await source.refresh(sourceName);
         }
-        const rows = (
-            await source.listAvailableAgents(
-                sourceName !== undefined ? { sourceName } : undefined,
-            )
-        ).sort(
-            (a, b) =>
-                (a.defaultAgentName ?? a.packageName ?? "").localeCompare(
-                    b.defaultAgentName ?? b.packageName ?? "",
-                ) || a.source.localeCompare(b.source),
+        const rows = await source.listAvailableAgents(
+            sourceName !== undefined ? { sourceName } : undefined,
         );
         if (rows.length === 0) {
             displayResult("No installable agents found.", context);
@@ -266,18 +259,55 @@ class ListAvailableCommandHandler implements CommandHandler {
 
         // Show only what can be typed into `@package install`: the default agent
         // name and the package name. The internal catalog key / durable ref is
-        // never displayed.
-        const text: string[][] = [["Name", "Package", "Source"]];
+        // never displayed. Group by source to keep unrelated catalogs and feeds
+        // in separate tables.
+        const groups = new Map<string, typeof rows>();
         for (const row of rows) {
-            text.push([
-                chalk.cyanBright(row.defaultAgentName ?? "—"),
-                row.packageName ? chalk.gray(row.packageName) : chalk.gray("—"),
-                chalk.gray(row.source),
-            ]);
+            const group = groups.get(row.source);
+            if (group === undefined) {
+                groups.set(row.source, [row]);
+            } else {
+                group.push(row);
+            }
         }
-        context.actionIO.appendDisplay({
-            type: "text",
-            content: text,
+
+        [...groups.keys()].forEach((sourceName, index) => {
+            const groupRows = groups.get(sourceName)!;
+            const sourceKind = groupRows[0].sourceKind;
+            const sourceHeading =
+                sourceKind !== undefined
+                    ? `${sourceName} (${sourceKind})`
+                    : sourceName;
+            context.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    content: chalk.yellow(
+                        `${index === 0 ? "" : "\n"}${sourceHeading}\n`,
+                    ),
+                },
+                "block",
+            );
+            const text: string[][] = [["Name", "Package"]];
+            groupRows.sort((a, b) =>
+                (a.defaultAgentName ?? a.packageName ?? "").localeCompare(
+                    b.defaultAgentName ?? b.packageName ?? "",
+                ),
+            );
+            for (const row of groupRows) {
+                text.push([
+                    chalk.cyanBright(row.defaultAgentName ?? "—"),
+                    row.packageName
+                        ? chalk.gray(row.packageName)
+                        : chalk.gray("—"),
+                ]);
+            }
+            context.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    content: text,
+                },
+                "block",
+            );
         });
     }
 

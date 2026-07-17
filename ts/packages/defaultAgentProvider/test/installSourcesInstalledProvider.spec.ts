@@ -492,8 +492,18 @@ describe("getDefaultAppAgentSource", () => {
         );
 
         await expect(built.testApi.listAvailableAgents()).resolves.toEqual([
-            { source: "healthy", ref: "foo", packageName: "foo" },
-            { source: "healthy", ref: "bar", packageName: "bar" },
+            {
+                source: "healthy",
+                sourceKind: "feed",
+                ref: "foo",
+                packageName: "foo",
+            },
+            {
+                source: "healthy",
+                sourceKind: "feed",
+                ref: "bar",
+                packageName: "bar",
+            },
         ]);
     });
 

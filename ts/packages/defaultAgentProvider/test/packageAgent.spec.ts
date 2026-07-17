@@ -131,12 +131,14 @@ function capturingActionContext(agentContext: PackageAgentContext) {
 
 function tightlyCapturingActionContext(agentContext: PackageAgentContext) {
     const captured: string[] = [];
+    const modes: Array<string | undefined> = [];
     const stripAnsi = (text: string) =>
         text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
     const context = {
         sessionContext: { agentContext },
         actionIO: {
-            appendDisplay: (content: any) => {
+            appendDisplay: (content: any, mode?: string) => {
+                modes.push(mode);
                 const text =
                     typeof content === "string"
                         ? content
@@ -153,7 +155,7 @@ function tightlyCapturingActionContext(agentContext: PackageAgentContext) {
             takeAction: () => {},
         },
     } as any;
-    return { context, output: () => captured.join("") };
+    return { context, output: () => captured.join(""), modes };
 }
 
 function getHandler(
@@ -593,23 +595,26 @@ describe("@package handler completions", () => {
 });
 
 describe("@package available", () => {
-    it("renders available agents (name, package, source) in sorted order", async () => {
+    it("renders one sorted table per source in source order", async () => {
         const { api } = makeSource({
             listAvailableAgents: async () => [
                 {
                     source: "feed",
+                    sourceKind: "feed",
                     ref: "@x/zeta",
                     defaultAgentName: "zeta",
                     packageName: "@x/zeta",
                 },
                 {
                     source: "catalog",
+                    sourceKind: "catalog",
                     ref: "k-alpha",
                     defaultAgentName: "alpha",
                     packageName: "alpha-pkg",
                 },
                 {
                     source: "feed",
+                    sourceKind: "feed",
                     ref: "@x/beta",
                     defaultAgentName: "beta",
                     packageName: "@x/beta",
@@ -617,18 +622,21 @@ describe("@package available", () => {
             ],
         });
         const handler = getHandler(api, "available");
-        const { context, output } = capturingActionContext({
+        const { context, output, modes } = tightlyCapturingActionContext({
             appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, { args: {}, flags: {} } as any);
         const text = output();
-        expect(text).toContain("Name Package Source");
-        expect(text).toContain("alpha alpha-pkg catalog");
-        expect(text).toContain("beta @x/beta feed");
-        expect(text).toContain("zeta @x/zeta feed");
-        expect(text.indexOf("alpha")).toBeLessThan(text.indexOf("beta"));
+        expect(text).toContain(
+            "feed (feed)\nName Package\nbeta @x/beta\nzeta @x/zeta",
+        );
+        expect(text).toContain(
+            "\ncatalog (catalog)\nName Package\nalpha alpha-pkg",
+        );
+        expect(text.indexOf("feed")).toBeLessThan(text.indexOf("catalog"));
         expect(text.indexOf("beta")).toBeLessThan(text.indexOf("zeta"));
+        expect(modes).toEqual(["block", "block", "block", "block"]);
     });
 
     it("reports empty state when no agents are available", async () => {
@@ -683,8 +691,10 @@ describe("@package available", () => {
             flags: { source: "catalog" },
         } as any);
         const text = output();
-        expect(text).toContain("alpha alpha-pkg catalog");
-        expect(text).not.toContain("beta @x/beta feed");
+        expect(text).toContain("catalog");
+        expect(text).toContain("alpha alpha-pkg");
+        expect(text).not.toContain("feed");
+        expect(text).not.toContain("beta @x/beta");
     });
 
     it("completes --source from listSources", async () => {

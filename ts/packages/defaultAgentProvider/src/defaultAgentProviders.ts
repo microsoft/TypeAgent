@@ -1298,7 +1298,12 @@ export function createDefaultInstalledAgentSource(
                     continue;
                 }
                 try {
-                    rows.push(...(await src.listAgents()));
+                    rows.push(
+                        ...(await src.listAgents()).map((row) => ({
+                            ...row,
+                            sourceKind: info.kind,
+                        })),
+                    );
                 } catch (e) {
                     debug(`listAgents failed for source '${info.name}': ${e}`);
                 }
