@@ -19,3 +19,14 @@ export { uint8ArrayToBase64, base64ToUint8Array } from "./base64Node.js";
 export { createPromiseWithResolvers } from "./promiseWithResolvers.js";
 
 export { resolveCliOnPath, claudeExecutableOption } from "./cliPath.js";
+
+export {
+    filterSecrets,
+    createSecretFilter,
+    SECRET_PATTERNS,
+    DEFAULT_SECRET_REPLACEMENT,
+    type SecretPattern,
+    type SecretFilter,
+    type FilterSecretsOptions,
+    type CreateSecretFilterOptions,
+} from "./secretFilter.js";
