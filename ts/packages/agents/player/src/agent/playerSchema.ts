@@ -2,15 +2,12 @@
 // Licensed under the MIT License.
 
 export type PlayerActions =
-    | PlayRandomAction
-    | PlayTrackAction
+    | PlayMusicAction
+    | FindMusicAction
     | PlayFromCurrentTrackListAction
-    | PlayAlbumAction
-    | PlayArtistAction
-    | PlayGenreAction
     | StatusAction
     | PauseAction
-    | ResumeAction
+    | ResumePlaybackAction
     | NextAction
     | PreviousAction
     | ShuffleAction
@@ -21,8 +18,6 @@ export type PlayerActions =
     | SetVolumeAction
     | SetMaxVolumeAction
     | ChangeVolumeAction
-    | SearchTracksAction
-    | SearchForPlaylistsAction
     | ListPlaylistsAction
     | GetPlaylistAction
     | GetFromCurrentPlaylistListAction
@@ -46,32 +41,99 @@ export interface SongSpecification {
     albumName?: string;
 }
 
-// Use playRandom when the user asks for some music to play
-export interface PlayRandomAction {
-    actionName: "playRandom";
-    parameters?: {
+// Start playing music now. Use this when the user wants to play / put on /
+// start / listen to music — a specific song, artist, album, genre, a free-form
+// description (e.g. "chill music for studying"), or just "some music". To
+// search for or browse music WITHOUT starting playback, use FindMusicAction.
+export interface PlayMusicAction {
+    actionName: "playMusic";
+    parameters: {
+        // What music to select. Pick the ONE variant that best matches what the
+        // user named. If it isn't clearly one artist / album / genre, use
+        // { kind: "description" } with the user's own words as the query.
+        target: MusicTarget;
+        // number of tracks when the user asks for a specific amount
         quantity?: number;
     };
 }
 
-// Play a specific track
-export interface PlayTrackAction {
-    actionName: "playTrack";
+// Find / search for / look up music and show it as the current track list
+// WITHOUT starting playback. Use this for "find", "look for", "search for",
+// "show me" music — a specific song, artist, album, genre, a free-form
+// description (e.g. "the best guitar solos"), or playlists. To start playing
+// immediately instead, use PlayMusicAction.
+export interface FindMusicAction {
+    actionName: "findMusic";
     parameters: {
-        trackName: string;
-        albumName?: string;
-        artists?: string[];
+        // What music to look for. Same choices as PlayMusicAction's target.
+        target: MusicTarget;
+        // Set true ONLY when the user asks to find something AND play it in the
+        // same breath (e.g. "find some Bach and play it"). Leave unset for a
+        // plain search / "show me".
+        play?: boolean;
+        // number of tracks when the user asks for a specific amount
+        quantity?: number;
     };
 }
 
-// Play a specific album
-export interface PlayAlbumAction {
-    actionName: "playAlbum";
-    parameters: {
-        albumName: string;
-        artists?: string[];
-        trackNumber?: number[];
-    };
+// The selection criteria for PlayMusicAction / FindMusicAction. Exactly one kind.
+export type MusicTarget =
+    | PlayByTrack
+    | PlayByArtist
+    | PlayByAlbum
+    | PlayByGenre
+    | PlayByPlaylist
+    | PlayByDescription
+    | PlayAnyMusic;
+
+// a specific named song, optionally by a given artist and/or on a given album
+export interface PlayByTrack {
+    kind: "track";
+    trackName: string;
+    artists?: string[];
+    albumName?: string;
+}
+
+// all / top tracks of a specific artist, optionally narrowed to a genre
+export interface PlayByArtist {
+    kind: "artist";
+    artist: string;
+    genre?: string;
+}
+
+// a specific album, optionally by given artist(s)
+export interface PlayByAlbum {
+    kind: "album";
+    albumName: string;
+    artists?: string[];
+}
+
+// a musical genre or style, e.g. "jazz", "lo-fi hip hop", "chillout"
+export interface PlayByGenre {
+    kind: "genre";
+    genre: string;
+}
+
+// search for playlists that match a phrase, e.g. "workout", "jazz for dinner",
+// "party anthems". Usually reached via FindMusicAction to browse matching
+// playlists rather than individual tracks. To play a playlist the user has
+// already named, use PlayPlaylistAction instead.
+export interface PlayByPlaylist {
+    kind: "playlist";
+    query: string;
+}
+
+// a free-form description that is not a single clean artist / album / genre,
+// e.g. "music to sing in the shower", "party anthems for a night out", "the
+// most iconic guitar solos". Put the user's descriptive words in `query`.
+export interface PlayByDescription {
+    kind: "description";
+    query: string;
+}
+
+// the user just wants some music / anything, with no particular criteria
+export interface PlayAnyMusic {
+    kind: "any";
 }
 
 // play the track single track at index 'trackNumber' in the current track list
@@ -80,23 +142,6 @@ export interface PlayFromCurrentTrackListAction {
     actionName: "playFromCurrentTrackList";
     parameters: {
         trackNumber: number;
-    };
-}
-
-export interface PlayArtistAction {
-    actionName: "playArtist";
-    parameters: {
-        artist: string;
-        genre?: string; // option genre if specified.
-        quantity?: number;
-    };
-}
-
-export interface PlayGenreAction {
-    actionName: "playGenre";
-    parameters: {
-        genre: string;
-        quantity?: number;
     };
 }
 
@@ -110,9 +155,11 @@ export interface PauseAction {
     actionName: "pause";
 }
 
-// resume playback
-export interface ResumeAction {
-    actionName: "resume";
+// Resume or continue playback of the current track after it was paused or
+// stopped. This simply un-pauses and keeps the current music going; it does not
+// select a new song, so no specific song needs to be identified.
+export interface ResumePlaybackAction {
+    actionName: "resumePlayback";
 }
 
 // next track
@@ -121,6 +168,7 @@ export interface NextAction {
 }
 
 // previous track
+// User: play the last song again
 export interface PreviousAction {
     actionName: "previous";
 }
@@ -182,29 +230,6 @@ export interface ChangeVolumeAction {
     parameters: {
         // volume change percentage
         volumeChangePercentage: number;
-    };
-}
-
-// this action is only used when the user asks for a search as in 'search', 'find', 'look for'
-// query is a Spotify search expression such as 'Rock Lobster' or 'te kanawa queen of night'
-// set the current track list to the result of the search
-export interface SearchTracksAction {
-    actionName: "searchTracks";
-    parameters: {
-        // the part of the request specifying the the search keywords
-        // examples: song name, album name, artist name
-        query: string;
-    };
-}
-
-// this action is used when the user asks to search for public playlists that match a query string like 'search playlist bach hilary hahn'; it is not used to get a specific playlist by name (use GetPlaylistAction for that); it is not used to search for tracks (use SearchTracksAction for that)
-// result of this action is a list of playlists that match the query
-export interface SearchForPlaylistsAction {
-    actionName: "searchForPlaylists";
-    parameters: {
-        // the part of the request specifying the the search keywords
-        // examples: 'bach hilary hahn', 'rock classics', 'workout', 'jazz for dinner'
-        query: string;
     };
 }
 
