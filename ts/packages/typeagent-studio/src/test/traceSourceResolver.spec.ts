@@ -109,6 +109,59 @@ test("returns undefined when the grammar node recorded no source span", () => {
     assert.equal(sourceTargetFor(trace(a, a), "a", "grammar-match"), undefined);
 });
 
+test("prefers the node's recorded sourceFilePath over the span file table", () => {
+    const a = side([
+        {
+            kind: "grammar-match",
+            execution: "ran",
+            outcome: "hit",
+            input: "play despacito",
+            chosenRule: "PlayTrack",
+            rankingParity: "matched",
+            sourceFilePath: "/repo/agents/player/player.agr",
+            source: {
+                fileId: "player.agr",
+                displayPath: "player.agr",
+                range: range(10, 10),
+            },
+            debugInfo: {
+                grammarHash: "h",
+                rules: [],
+                parts: [],
+                partRules: [],
+                partLabels: [],
+                filePaths: [["player.agr", "/stale/other.agr"]],
+            },
+        },
+    ]);
+    const target = sourceTargetFor(trace(a, a), "a", "grammar-match");
+    assert.deepEqual(target, {
+        absPath: "/repo/agents/player/player.agr",
+        range: {
+            start: { line: 10, character: 2 },
+            end: { line: 10, character: 8 },
+        },
+    });
+});
+
+test("yields the grammar file path without a range when the side matched no rule", () => {
+    // The regressed side matched nothing, so there's no winning-rule span — but
+    // the recorded absolute path still lets the host diff the file across A/B.
+    const a = side([
+        {
+            kind: "grammar-match",
+            execution: "ran",
+            outcome: "miss",
+            input: "resume",
+            rankingParity: "unavailable",
+            sourceFilePath: "/repo/agents/player/player.agr",
+        },
+    ]);
+    assert.deepEqual(sourceTargetFor(trace(a, a), "a", "grammar-match"), {
+        absPath: "/repo/agents/player/player.agr",
+    });
+});
+
 test("resolves an action schema file with no range", () => {
     const a = side([
         {

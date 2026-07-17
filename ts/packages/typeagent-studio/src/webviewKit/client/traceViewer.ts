@@ -2,37 +2,33 @@
 // Licensed under the MIT License.
 
 /**
- * The Trace Viewer webview client. Renders one row's side-by-side resolution
- * trace: a divergence conclusion callout, then a row-centric grid aligning the
- * four fidelity layers (construction cache → grammar → wildcard validation →
- * action) across the A and B versions. A "Replay" recompute contrasts the
- * recorded resolution with what the same pinned versions produce now, revealing
- * working-tree drift; a Recorded/Fresh toggle switches between the two.
+ * The Trace Viewer webview client. Renders one row's resolution as a top-to-
+ * bottom **pipeline** a developer reads to answer "where did version A and
+ * version B diverge on this utterance, and what changed there?" The stages run
+ * in resolution order (construction cache → grammar match → wildcard validation
+ * → Result). Stages the two versions agree on are compact one-liners; the stage
+ * where they diverged expands into a side-by-side A vs B card accented as the
+ * cause, and carries its own dig-in — including a native A↔B diff of the grammar
+ * or schema file behind the divergence, driven from that stage rather than a
+ * disconnected top button.
  *
  * Everything divergence-related is derived by the shared, browser-neutral
  * {@link toTraceDivergenceViewModel}; this file only turns that view model into
  * DOM. No inline styles (the CSP forbids them) — every visual is a CSS class.
  */
 
-import type {
-    ReplayResolutionTrace,
-    ReplayTraceNode,
-} from "@typeagent/core/replay";
+import type { ReplayResolutionTrace } from "@typeagent/core/replay";
 import {
     toTraceDivergenceViewModel,
-    TRACE_LAYER_ORDER,
     TRACE_LAYER_NAME,
     type TraceDivergenceViewModel,
-    type SideDivergenceView,
     type TraceNodeSummary,
+    type TraceStageView,
 } from "../traceDivergenceViewModel.js";
-import { stableStringify } from "../replayViewModel.js";
+import type { ActionDiff } from "../replayViewModel.js";
 import type {
     HostToTraceMessage,
     TraceToHostMessage,
-    TraceProvenanceSummary,
-    TraceVersionSummary,
-    TraceConnectionState,
     TraceUnavailableState,
     TraceSide,
     TraceSourceNode,
@@ -45,37 +41,23 @@ declare function acquireVsCodeApi(): VsCodeApi;
 
 const vscode = acquireVsCodeApi();
 
-/** Which trace the grid is showing. `fresh` is only selectable once a replay
- *  has produced one. */
-type Variant = "recorded" | "fresh";
-
-/** Whether a fresh replay reproduced the recorded resolution or drifted. */
-type Drift = "matches" | "drifted";
-
-// The recorded trace is the source of truth and is preserved across a replay so
-// a failed or drifted recompute never erases it.
+// The recorded trace is the single source of truth for what the row resolved.
 let recorded: ReplayResolutionTrace | undefined;
-let fresh: ReplayResolutionTrace | undefined;
-let provenance: TraceProvenanceSummary | undefined;
-let variant: Variant = "recorded";
 let unavailable: TraceUnavailableState | undefined = "loading";
-let connection: TraceConnectionState = "connecting";
 let traceError: string | undefined;
-let replayPending = false;
-let replayNote: string | undefined;
 
-// Monotonic replay id so a slow earlier recompute can't overwrite a newer one.
-let replayRequestId = 0;
-let latestReplayId = 0;
+// Transient feedback from the last source open/compare (e.g. a file that can't
+// be located); cleared when the row changes or a jump succeeds.
+let sourceNote: string | undefined;
 
-// Monotonic id for source-jump requests, mirroring the replay counter.
+// Monotonic id for source open/compare requests so a stale reply is ignored.
 let sourceRequestId = 0;
 
-// Post a source-jump request for one node on one side; the host resolves the
-// location and opens it, replying with a source-result.
+// Post a source-jump request for one node on one side; the host opens that
+// side's version of the backing file, scrolled to the recorded span.
 function requestSource(side: TraceSide, node: TraceSourceNode): void {
     sourceRequestId += 1;
-    replayNote = undefined;
+    sourceNote = undefined;
     render();
     vscode.postMessage({
         type: "open-source",
@@ -85,20 +67,30 @@ function requestSource(side: TraceSide, node: TraceSourceNode): void {
     });
 }
 
+// Post a compare request: the host opens a native A↔B diff of the node's file.
+function requestCompare(node: TraceSourceNode): void {
+    sourceRequestId += 1;
+    sourceNote = undefined;
+    render();
+    vscode.postMessage({
+        type: "compare-source",
+        requestId: sourceRequestId,
+        node,
+    });
+}
+
 const root = document.getElementById("root") as HTMLElement;
 
 window.addEventListener("message", (event: MessageEvent) => {
     const msg = event.data as HostToTraceMessage;
     switch (msg.type) {
-        case "connection":
-            connection = msg.state;
-            render();
-            break;
         case "trace":
             recorded = msg.recorded;
-            provenance = msg.provenance;
             unavailable = undefined;
             traceError = undefined;
+            // Reset transient per-row state so a previous row's source-open
+            // error doesn't bleed into the new row.
+            sourceNote = undefined;
             render();
             break;
         case "trace-state":
@@ -110,34 +102,17 @@ window.addEventListener("message", (event: MessageEvent) => {
             unavailable = undefined;
             render();
             break;
-        case "replay-result":
-            // Ignore a stale recompute superseded by a newer request.
-            if (msg.requestId !== latestReplayId) {
+        case "source-result":
+            // Ignore a stale reply superseded by a newer request.
+            if (msg.requestId !== sourceRequestId) {
                 break;
             }
-            replayPending = false;
-            if (msg.status === "recomputed" && msg.fresh) {
-                fresh = msg.fresh;
-                variant = "fresh";
-                replayNote = driftNote(recorded, fresh);
-            } else {
-                // Keep the recorded trace on screen; explain why no fresh one
-                // could be produced.
-                replayNote =
-                    msg.message ??
-                    (msg.status === "entry-missing"
-                        ? "This utterance is no longer in the corpus, so it can't be replayed."
-                        : "A fresh trace couldn't be produced from the recorded run.");
-            }
-            render();
-            break;
-        case "source-result":
-            // A successful jump opened an editor; clear any stale note. An
-            // unavailable/stale jump surfaces the host's explanation.
+            // A successful open/compare cleared the view; drop any stale note.
+            // A failure surfaces the host's explanation.
             if (msg.status === "opened") {
-                replayNote = undefined;
+                sourceNote = undefined;
             } else if (msg.message !== undefined) {
-                replayNote = msg.message;
+                sourceNote = msg.message;
             }
             render();
             break;
@@ -150,7 +125,6 @@ vscode.postMessage({ type: "ready" });
 
 function render(): void {
     clear(root);
-    root.appendChild(connectionBar());
 
     if (unavailable === "loading") {
         root.appendChild(centeredState("Loading trace…", "loading"));
@@ -176,15 +150,14 @@ function render(): void {
         return;
     }
 
-    const active = variant === "fresh" && fresh ? fresh : recorded;
-    if (!active) {
+    if (!recorded) {
         root.appendChild(centeredState("No trace to show.", "missing"));
         return;
     }
 
     let vm: TraceDivergenceViewModel;
     try {
-        vm = toTraceDivergenceViewModel(active);
+        vm = toTraceDivergenceViewModel(recorded);
     } catch {
         root.appendChild(
             centeredState(
@@ -196,391 +169,673 @@ function render(): void {
     }
 
     root.appendChild(header(vm));
-    root.appendChild(callout(vm));
-    if (replayNote !== undefined) {
-        root.appendChild(noteBanner(replayNote));
+    if (sourceNote !== undefined) {
+        root.appendChild(noteBanner(sourceNote));
     }
-    root.appendChild(grid(vm));
+    const sub = subtitle(vm);
+    if (sub !== undefined) {
+        root.appendChild(sub);
+    }
+    root.appendChild(pipeline(vm));
 }
 
-/** The connection indicator; only intrudes when the service isn't connected. */
-function connectionBar(): HTMLElement {
-    const bar = el("div", "conn-bar");
-    if (connection === "connected") {
-        bar.classList.add("is-connected");
-        return bar;
-    }
-    const pill = el("span", "conn-pill");
-    pill.classList.add(
-        connection === "connecting" ? "is-connecting" : "is-disconnected",
-    );
-    pill.textContent =
-        connection === "connecting"
-            ? "Connecting to the studio service…"
-            : "Studio service disconnected — replay is unavailable.";
-    bar.appendChild(pill);
-    return bar;
-}
-
-/** Utterance + A/B provenance line + the Replay control and variant toggle. */
+/** Utterance on the left, the divergence verdict on the right. The A/B version
+ *  provenance is deliberately not repeated here — it lives in the Impact Report
+ *  toolbar this panel is opened from. */
 function header(vm: TraceDivergenceViewModel): HTMLElement {
     const head = el("div", "trace-header");
-
-    const top = el("div", "trace-header-top");
+    const top = el("div", "header-top");
     const utter = el("div", "utterance");
     utter.textContent = vm.utterance;
     utter.title = vm.utterance;
     top.appendChild(utter);
-    top.appendChild(replayControls());
+    top.appendChild(verdictBadge(vm));
     head.appendChild(top);
-
-    if (provenance !== undefined) {
-        head.appendChild(provenanceLine(provenance));
-    }
     return head;
 }
 
-function provenanceLine(p: TraceProvenanceSummary): HTMLElement {
-    const line = el("div", "provenance");
-    const agent = el("span", "prov-agent");
-    agent.textContent = p.agent;
-    line.appendChild(agent);
-    line.appendChild(sep());
-    line.appendChild(versionChip("A", p.a));
-    line.appendChild(arrow());
-    line.appendChild(versionChip("B", p.b));
+const LOW_CONFIDENCE_NOTE =
+    "Low confidence: the captured trace can't pin the difference to a single layer.";
+
+/** The headline badge on the top row: whether the two versions ended at the same
+ *  action and — when they diverged — the stage the split is attributed to. */
+function verdictBadge(vm: TraceDivergenceViewModel): HTMLElement {
+    const { conclusion } = vm;
+    const badge = el("span", "verdict");
+    if (conclusion.parity === "match") {
+        badge.classList.add(
+            conclusion.bothNoAction ? "is-neutral" : "is-match",
+        );
+        badge.textContent = conclusion.bothNoAction
+            ? "No action"
+            : "Same result";
+    } else {
+        badge.classList.add("is-differ");
+        badge.textContent =
+            vm.divergingLayer !== undefined
+                ? `Diverged · ${TRACE_LAYER_NAME[vm.divergingLayer]}`
+                : "Diverged";
+    }
+    if (conclusion.confidence === "low") {
+        badge.classList.add("is-low-confidence");
+        badge.title = LOW_CONFIDENCE_NOTE;
+    }
+    return badge;
+}
+
+/** An optional line under the header, shown only when it adds something the
+ *  verdict badge and the cause stage don't already say: the "same action" reading
+ *  when the versions agree, a fidelity-path caveat, a low-confidence note, or —
+ *  when no single stage could be blamed — the cause sentence itself (there's no
+ *  cause card to carry it). For a normal single-stage divergence this returns
+ *  nothing, so the pipeline speaks for itself. */
+function subtitle(vm: TraceDivergenceViewModel): HTMLElement | undefined {
+    const { conclusion } = vm;
+    const notes: string[] = [];
+    if (conclusion.parity === "match") {
+        notes.push(conclusion.headline);
+    } else if (
+        vm.divergingLayer === undefined &&
+        conclusion.cause !== undefined
+    ) {
+        notes.push(conclusion.cause.detail);
+    }
+    if (conclusion.pathNote !== undefined) {
+        notes.push(conclusion.pathNote);
+    }
+    if (conclusion.confidenceNote !== undefined) {
+        notes.push(conclusion.confidenceNote);
+    } else if (conclusion.confidence === "low") {
+        notes.push(LOW_CONFIDENCE_NOTE);
+    }
+    if (notes.length === 0) {
+        return undefined;
+    }
+    const line = el("div", "subtitle");
+    if (conclusion.confidence === "low") {
+        line.classList.add("is-low-confidence");
+    }
+    notes.forEach((noteText, i) => {
+        const span = el("span", i === 0 ? "subtitle-text" : "subtitle-note");
+        span.textContent = noteText;
+        line.appendChild(span);
+    });
     return line;
 }
 
-function versionChip(side: "A" | "B", v: TraceVersionSummary): HTMLElement {
-    const chip = el("span", "version-chip");
-    chip.classList.add(side === "A" ? "side-a" : "side-b");
-    const tag = el("span", "version-side");
-    tag.textContent = side;
-    chip.appendChild(tag);
-    const label = el("span", "version-label");
-    label.textContent = v.label;
-    chip.appendChild(label);
-    if (v.workingTree) {
-        const badge = el("span", "version-badge working-tree");
-        badge.textContent = "working tree";
-        badge.title = "The live working tree, including uncommitted edits.";
-        chip.appendChild(badge);
-    } else if (v.sha !== undefined) {
-        const badge = el("span", "version-badge sha");
-        badge.textContent = v.sha.slice(0, 7);
-        badge.title = v.sha;
-        chip.appendChild(badge);
-    }
-    return chip;
-}
+// --- Pipeline -------------------------------------------------------------
 
-function replayControls(): HTMLElement {
-    const wrap = el("div", "replay-controls");
+const STAGE_STATUS_LABEL: Record<TraceStageView["status"], string> = {
+    agree: "same",
+    diverge: "diverges",
+    "one-sided": "one side",
+    inapplicable: "n/a",
+};
 
-    if (fresh !== undefined) {
-        wrap.appendChild(
-            toggleButton("Recorded", variant === "recorded", () => {
-                variant = "recorded";
-                render();
-            }),
-        );
-        wrap.appendChild(
-            toggleButton("Fresh", variant === "fresh", () => {
-                variant = "fresh";
-                render();
-            }),
-        );
-    }
+const STAGE_STATUS_HELP: Record<TraceStageView["status"], string> = {
+    agree: "Both versions ran this stage the same way.",
+    diverge: "This is where the two versions parted ways.",
+    "one-sided":
+        "Only one version engaged this stage — typically a live-only step a git-ref side can't run.",
+    inapplicable: "Neither version actively ran this stage here.",
+};
 
-    const replay = el("button", "replay-button") as HTMLButtonElement;
-    replay.type = "button";
-    const canReplay =
-        connection === "connected" && !replayPending && !!recorded;
-    replay.disabled = !canReplay;
-    replay.textContent = replayPending ? "Replaying…" : "Replay";
-    replay.title = replayPending
-        ? "Recomputing a fresh trace from the pinned versions…"
-        : "Recompute this row from the same pinned versions to reveal working-tree drift.";
-    replay.addEventListener("click", () => {
-        if (!canReplay) {
-            return;
+/** The resolution pipeline: the pre-action stages (cache → grammar → wildcard)
+ *  as a top-to-bottom flow, each compact unless it's the divergence (which
+ *  expands side-by-side), capped by the terminal Result so the produced action
+ *  is always shown for both versions. */
+function pipeline(vm: TraceDivergenceViewModel): HTMLElement {
+    const wrap = el("div", "pipeline");
+    for (const stage of vm.stages) {
+        if (stage.kind === "action") {
+            continue;
         }
-        replayPending = true;
-        replayNote = undefined;
-        replayRequestId += 1;
-        latestReplayId = replayRequestId;
-        vscode.postMessage({ type: "replay", requestId: replayRequestId });
-        render();
-    });
-    wrap.appendChild(replay);
+        wrap.appendChild(stageRow(vm, stage));
+    }
+    wrap.appendChild(resultBlock(vm));
     return wrap;
 }
 
-function toggleButton(
-    label: string,
-    active: boolean,
-    onClick: () => void,
-): HTMLButtonElement {
-    const b = el("button", "variant-toggle") as HTMLButtonElement;
-    b.type = "button";
-    b.textContent = label;
-    if (active) {
-        b.classList.add("is-active");
-        b.setAttribute("aria-pressed", "true");
-    } else {
-        b.setAttribute("aria-pressed", "false");
+/** One pipeline stage: a header (name + status) then its body — a compact
+ *  one-liner when the two sides agree, or an expanded side-by-side card when
+ *  this is the divergence. */
+function stageRow(
+    vm: TraceDivergenceViewModel,
+    stage: TraceStageView,
+): HTMLElement {
+    const row = el("div", "stage");
+    row.classList.add(`status-${stage.status}`);
+    if (stage.isCause) {
+        row.classList.add("is-cause");
     }
-    b.addEventListener("click", onClick);
-    return b;
+    row.appendChild(stageHead(stage.layerName, stageStatusChip(stage)));
+    row.appendChild(stage.isCause ? causeBody(vm, stage) : compactBody(stage));
+    return row;
 }
 
-/** The divergence conclusion the viewer leads with. */
-function callout(vm: TraceDivergenceViewModel): HTMLElement {
-    const { conclusion } = vm;
-    const box = el("div", "callout");
-    box.classList.add(conclusion.parity === "match" ? "is-match" : "is-differ");
-    if (conclusion.confidence === "low") {
-        box.classList.add("is-low-confidence");
-    }
-
-    const headline = el("div", "callout-headline");
-    headline.textContent = conclusion.headline;
-    box.appendChild(headline);
-
-    if (conclusion.cause !== undefined) {
-        const detail = el("div", "callout-detail");
-        detail.textContent = conclusion.cause.detail;
-        box.appendChild(detail);
-    }
-    if (conclusion.pathNote !== undefined) {
-        box.appendChild(subNote(conclusion.pathNote));
-    }
-    if (conclusion.confidenceNote !== undefined) {
-        box.appendChild(subNote(conclusion.confidenceNote));
-    }
-    return box;
+/** The text, tone, and hover for a stage's status chip. */
+interface StatusChip {
+    label: string;
+    tone?: OutcomeTone;
+    help: string;
 }
 
-/** The aligned fidelity grid: one row per layer, A and B cells sharing height. */
-function grid(vm: TraceDivergenceViewModel): HTMLElement {
-    const table = el("div", "fidelity-grid");
-
-    const headerRow = el("div", "grid-row is-head");
-    headerRow.appendChild(el("div", "grid-gutter"));
-    headerRow.appendChild(sideHead("A", vm.a));
-    headerRow.appendChild(sideHead("B", vm.b));
-    table.appendChild(headerRow);
-
-    const aByKind = byKind(vm.a);
-    const bByKind = byKind(vm.b);
-
-    for (const kind of TRACE_LAYER_ORDER) {
-        const row = el("div", "grid-row");
-        if (vm.divergingLayer === kind) {
-            row.classList.add("is-diverging");
+/** The status chip for a pre-action stage. A grammar divergence that gained or
+ *  lost a rule match in B is stated directionally — "new in B" (green) for a
+ *  match B introduced, "lost in B" (orange) for one it dropped — the same
+ *  vocabulary and tone the Result chip uses; every other status keeps its plain
+ *  convergence label. */
+function stageStatusChip(stage: TraceStageView): StatusChip {
+    if (stage.status === "diverge" && stage.kind === "grammar-match") {
+        const aMatched = stage.a?.grammar?.chosenRule !== undefined;
+        const bMatched = stage.b?.grammar?.chosenRule !== undefined;
+        if (!aMatched && bMatched) {
+            return {
+                label: "new in B",
+                tone: "positive",
+                help: "Only B matched a rule — a new match B introduced.",
+            };
         }
-
-        const gutter = el("div", "grid-gutter");
-        const name = el("span", "layer-name");
-        name.textContent = TRACE_LAYER_NAME[kind];
-        gutter.appendChild(name);
-        if (vm.divergingLayer === kind) {
-            const flag = el("span", "diverge-flag");
-            flag.textContent = "divergence";
-            flag.title = "The first layer that explains the different actions.";
-            gutter.appendChild(flag);
+        if (aMatched && !bMatched) {
+            return {
+                label: "lost in B",
+                tone: "negative",
+                help: "Only A matched a rule — a match B lost.",
+            };
         }
-        row.appendChild(gutter);
-
-        row.appendChild(nodeCell("a", aByKind.get(kind)));
-        row.appendChild(nodeCell("b", bByKind.get(kind)));
-        table.appendChild(row);
     }
-    return table;
+    return {
+        label: STAGE_STATUS_LABEL[stage.status],
+        help: STAGE_STATUS_HELP[stage.status],
+    };
 }
 
-function sideHead(side: "A" | "B", view: SideDivergenceView): HTMLElement {
-    const head = el("div", "grid-side-head");
-    head.classList.add(side === "A" ? "side-a" : "side-b");
-    const tag = el("span", "side-tag");
-    tag.textContent = side;
-    head.appendChild(tag);
-    const realization = el("span", "realization");
-    realization.textContent =
-        view.realization === "source" ? "grammar source" : "built live";
-    realization.title =
-        view.realization === "source"
-            ? "Resolved from grammar source only (a git-ref side): no construction cache or wildcard validation."
-            : "Resolved through the full live path, including the construction cache.";
-    head.appendChild(realization);
+function stageHead(name: string, chip: StatusChip): HTMLElement {
+    const head = el("div", "stage-head");
+    head.appendChild(el("span", "stage-marker"));
+    const label = el("span", "stage-name");
+    label.textContent = name;
+    head.appendChild(label);
+    head.appendChild(statusChip(chip));
     return head;
 }
 
-function byKind(
-    view: SideDivergenceView,
-): Map<ReplayTraceNode["kind"], TraceNodeSummary> {
-    return new Map(view.nodes.map((n) => [n.kind, n] as const));
+/** A stage-status chip element, tinted green/orange when the status carries an
+ *  improvement/regression direction. */
+function statusChip(chip: StatusChip): HTMLElement {
+    const node = el("span", "stage-status");
+    if (chip.tone !== undefined) {
+        node.classList.add(`is-${chip.tone}`);
+    }
+    node.textContent = chip.label;
+    node.title = chip.help;
+    return node;
 }
 
-/** One fidelity node, or a placeholder when the side never ran that layer. */
-function nodeCell(
+/** The representative node for a compact stage: the side that actually ran,
+ *  preferring the live B side, so the one-liner describes what happened. */
+function representative(
+    stage: TraceStageView,
+): { node: TraceNodeSummary; side: TraceSide } | undefined {
+    if (stage.b?.executionLabel === "ran") {
+        return { node: stage.b, side: "b" };
+    }
+    if (stage.a?.executionLabel === "ran") {
+        return { node: stage.a, side: "a" };
+    }
+    if (stage.b !== undefined) {
+        return { node: stage.b, side: "b" };
+    }
+    if (stage.a !== undefined) {
+        return { node: stage.a, side: "a" };
+    }
+    return undefined;
+}
+
+/** A converged / one-sided / inapplicable stage as a single line: what happened,
+ *  with the winning rule still a source jump where recorded. One-sided stages
+ *  name the side that ran. */
+function compactBody(stage: TraceStageView): HTMLElement {
+    const body = el("div", "stage-compact");
+    const rep = representative(stage);
+    const summary = el("div", "stage-summary");
+    if (rep === undefined) {
+        summary.classList.add("is-muted");
+        summary.textContent = "not applicable to either version";
+        body.appendChild(summary);
+        return body;
+    }
+    summary.appendChild(compactContent(stage, rep.node));
+    if (stage.status === "one-sided") {
+        const only = el("span", "only-side");
+        only.textContent = `${rep.side.toUpperCase()} only`;
+        only.title =
+            "Only this version engaged the stage; the other ran a different fidelity path.";
+        summary.appendChild(only);
+    }
+    body.appendChild(summary);
+    return body;
+}
+
+/** The single outcome phrase for one stage on one side, plus the tone used to
+ *  color it. A side that didn't actively run the stage reads as its muted
+ *  execution state ("Not applicable", "Not reached"). */
+type OutcomeTone = "positive" | "negative" | "neutral" | "muted";
+
+function stageOutcome(
+    kind: TraceStageView["kind"],
+    node: TraceNodeSummary,
+): { text: string; tone: OutcomeTone } {
+    if (node.executionLabel !== "ran") {
+        return { text: capitalize(node.executionLabel), tone: "muted" };
+    }
+    switch (kind) {
+        case "cache-consult":
+            return node.outcomeLabel === "hit"
+                ? { text: "Cache hit", tone: "positive" }
+                : { text: "Cache miss", tone: "neutral" };
+        case "grammar-match":
+            return node.grammar?.chosenRule !== undefined
+                ? { text: "Matched", tone: "positive" }
+                : { text: "No match", tone: "negative" };
+        case "wildcard-validation":
+            return node.outcomeLabel === "rejected"
+                ? { text: "Rejected", tone: "negative" }
+                : { text: "Accepted", tone: "positive" };
+        default:
+            return node.action?.actionName !== undefined
+                ? { text: "Produced action", tone: "positive" }
+                : { text: "No action", tone: "negative" };
+    }
+}
+
+/** The outcome phrase as a tone-colored span, with the node's raw detail on
+ *  hover. The single consistent primary line every side card and compact row
+ *  leads with. */
+function outcomeSpan(
+    kind: TraceStageView["kind"],
+    node: TraceNodeSummary,
+): HTMLElement {
+    const { text, tone } = stageOutcome(kind, node);
+    const span = el("span", "outcome");
+    span.classList.add(`is-${tone}`);
+    span.textContent = text;
+    if (node.detail !== undefined) {
+        span.title = node.detail;
+    }
+    return span;
+}
+
+/** The one mono value identifying what a stage produced on a side: the matched
+ *  rule, the produced action, or the construction id. A read-only value paired at
+ *  the call site with {@link artifactLabel} so its meaning is explicit; the file
+ *  behind a divergence is reached through the diverging stage's diff chip, not
+ *  from here. Absent for stages with no such artifact or when the side produced
+ *  none. */
+function stageArtifact(
+    kind: TraceStageView["kind"],
+    node: TraceNodeSummary,
+): HTMLElement | undefined {
+    switch (kind) {
+        case "grammar-match":
+            return node.grammar?.chosenRule !== undefined
+                ? ruleChip(node.grammar)
+                : undefined;
+        case "action":
+            return node.action?.actionName !== undefined
+                ? actionChip(node.action)
+                : undefined;
+        case "cache-consult":
+            return node.cache?.constructionId !== undefined
+                ? cacheChip(node.cache)
+                : undefined;
+        default:
+            return undefined;
+    }
+}
+
+/** The dim micro-label naming what a side card's artifact value is, so a bare
+ *  token (a rule name) can't be mistaken for a file or an action. */
+function artifactLabel(kind: TraceStageView["kind"]): string | undefined {
+    switch (kind) {
+        case "grammar-match":
+            return "rule";
+        case "action":
+            return "action";
+        case "cache-consult":
+            return "construction";
+        default:
+            return undefined;
+    }
+}
+
+/** A side card's artifact as a labeled value: the dim micro-label, the mono
+ *  value, and — when the trace recorded a location — a small go-to-file icon that
+ *  opens that side's version of the backing file. Nothing when the side produced
+ *  no such artifact. */
+function labeledArtifact(
+    kind: TraceStageView["kind"],
+    side: TraceSide,
+    node: TraceNodeSummary,
+): HTMLElement | undefined {
+    const value = stageArtifact(kind, node);
+    if (value === undefined) {
+        return undefined;
+    }
+    const line = el("div", "side-artifact");
+    const label = artifactLabel(kind);
+    if (label !== undefined) {
+        const tag = el("span", "artifact-label");
+        tag.textContent = label;
+        line.appendChild(tag);
+    }
+    line.appendChild(value);
+    const open = openSourceButton(kind, side, node);
+    if (open !== undefined) {
+        line.appendChild(open);
+    }
+    return line;
+}
+
+/** The source node a stage's artifact can open, when the trace recorded its
+ *  location: the matched rule's `.agr` for a grammar stage, the produced action's
+ *  schema for an action stage. Undefined when nothing is openable. */
+function sourceNodeFor(
+    kind: TraceStageView["kind"],
+    node: TraceNodeSummary,
+): TraceSourceNode | undefined {
+    if (kind === "grammar-match" && node.grammar?.hasSource === true) {
+        return "grammar-match";
+    }
+    if (kind === "action" && node.action?.hasSchema === true) {
+        return "action";
+    }
+    return undefined;
+}
+
+/** A small go-to-file icon beside a rule/action value that opens that side's
+ *  version of the backing file, scrolled to the rule or schema span. A distinct
+ *  affordance from the value itself, so the token stays a plain identifier. */
+function openSourceButton(
+    kind: TraceStageView["kind"],
+    side: TraceSide,
+    node: TraceNodeSummary,
+): HTMLElement | undefined {
+    const source = sourceNodeFor(kind, node);
+    if (source === undefined) {
+        return undefined;
+    }
+    const what =
+        source === "grammar-match" ? "grammar source" : "action schema";
+    const title = `Open ${side.toUpperCase()}'s ${what}`;
+    const btn = el("button", "open-source") as HTMLButtonElement;
+    btn.type = "button";
+    btn.title = title;
+    btn.setAttribute("aria-label", title);
+    btn.appendChild(el("span", "codicon codicon-go-to-file"));
+    btn.addEventListener("click", () => requestSource(side, source));
+    return btn;
+}
+
+/** A converged / one-sided / inapplicable stage as one inline line: the
+ *  representative side's outcome phrase and its artifact value. */
+function compactContent(
+    stage: TraceStageView,
+    node: TraceNodeSummary,
+): HTMLElement {
+    const wrap = el("span", "summary-content");
+    wrap.appendChild(outcomeSpan(stage.kind, node));
+    const artifact = stageArtifact(stage.kind, node);
+    if (artifact !== undefined) {
+        wrap.appendChild(artifact);
+    }
+    return wrap;
+}
+
+// --- Diverging (expanded) stage & terminal Result -------------------------
+
+/** The expanded body for the stage the divergence is attributed to: the two
+ *  sides side-by-side, then — for a file-backed cause — the ⇄ diff chip of the
+ *  grammar or schema file the split traces to. */
+function causeBody(
+    vm: TraceDivergenceViewModel,
+    stage: TraceStageView,
+): HTMLElement {
+    const body = el("div", "stage-body");
+    body.appendChild(sideBySide(stage.a, stage.b, stage.kind));
+    const bar = causeBar(vm, stage);
+    if (bar !== undefined) {
+        body.appendChild(bar);
+    }
+    return body;
+}
+
+/** The A and B nodes for one stage laid out side-by-side. */
+function sideBySide(
+    a: TraceNodeSummary | undefined,
+    b: TraceNodeSummary | undefined,
+    kind: TraceStageView["kind"],
+): HTMLElement {
+    const sides = el("div", "stage-sides");
+    sides.appendChild(sideColumn("a", a, kind));
+    sides.appendChild(sideColumn("b", b, kind));
+    return sides;
+}
+
+/** One version's column within an expanded stage, in the shared anatomy every
+ *  side card uses: the A/B badge, one tone-colored outcome phrase, and — when the
+ *  side produced one — the labeled read-only value (matched rule, produced
+ *  action, or construction id) that names what it settled on. A side that didn't
+ *  run the stage reads as a muted "did not run this stage". */
+function sideColumn(
     side: TraceSide,
     node: TraceNodeSummary | undefined,
+    kind: TraceStageView["kind"],
 ): HTMLElement {
-    const cell = el("div", "grid-cell");
+    const col = el("div", "side-col");
+    col.classList.add(side === "a" ? "side-a" : "side-b");
+
+    const head = el("div", "side-col-head");
+    const tag = el("span", "side-tag");
+    tag.textContent = side.toUpperCase();
+    head.appendChild(tag);
+    col.appendChild(head);
+
     if (node === undefined) {
-        cell.classList.add("is-empty");
-        const dash = el("span", "empty-mark");
-        dash.textContent = "—";
-        dash.title = "This layer didn't run on this side.";
-        cell.appendChild(dash);
-        return cell;
+        const none = el("div", "side-empty");
+        none.textContent = "did not run this stage";
+        col.appendChild(none);
+        return col;
     }
 
-    const pills = el("div", "node-pills");
-    pills.appendChild(executionPill(node.executionLabel));
-    if (node.outcomeLabel !== undefined) {
-        pills.appendChild(outcomePill(node.outcomeLabel));
+    col.appendChild(outcomeSpan(kind, node));
+    const artifact = labeledArtifact(kind, side, node);
+    if (artifact !== undefined) {
+        col.appendChild(artifact);
     }
-    cell.appendChild(pills);
-
-    if (node.detail !== undefined) {
-        const detail = el("div", "node-detail");
-        detail.textContent = node.detail;
-        cell.appendChild(detail);
-    }
-
-    if (node.grammar !== undefined) {
-        cell.appendChild(grammarExtra(side, node.grammar));
-    }
-    if (node.cache !== undefined) {
-        cell.appendChild(cacheExtra(node.cache));
-    }
-    if (node.action !== undefined) {
-        cell.appendChild(actionExtra(side, node.action));
-    }
-    return cell;
+    return col;
 }
 
-/** A button that jumps to a recorded source location on click. Rendered as an
- *  inline link so it reads as an affordance without the chrome of a button. */
-function jumpLink(
-    label: string,
-    title: string,
-    side: TraceSide,
-    node: TraceSourceNode,
-): HTMLButtonElement {
-    const link = el("button", "jump-link") as HTMLButtonElement;
+/** The single visual attribution under a diverging stage: a short accented label
+ *  naming it as the likely (or, at low confidence, possible) cause, then a ⇄ diff
+ *  chip for the grammar/schema file the split traces to, opening its A↔B diff.
+ *  Rendered only for a file-backed cause with a diffable path recorded — cache
+ *  and wildcard divergences (no file changed) and older captures without a path
+ *  show none, since the accented side cards and the output diff carry those. */
+function causeBar(
+    vm: TraceDivergenceViewModel,
+    stage: TraceStageView,
+): HTMLElement | undefined {
+    if (stage.compare === undefined) {
+        return undefined;
+    }
+    const fileName = vm.conclusion.cause?.fileName;
+    const noun = stage.compare === "grammar-match" ? "grammar" : "schema";
+    const bar = el("div", "cause-bar");
+    const label = el("span", "cause-label");
+    label.textContent =
+        vm.conclusion.confidence === "low" ? "Possible cause" : "Likely cause";
+    bar.appendChild(label);
+    bar.appendChild(compareLink(fileName ?? noun, stage.compare));
+    return bar;
+}
+
+/** The two produced actions as a unified JSON diff (the Impact Report's action
+ *  diff, reused): the ground-truth "what differs in the output". Only rendered
+ *  when the actions actually differ. */
+function actionDiffBlock(diff: ActionDiff): HTMLElement {
+    const wrap = el("div", "output-diff");
+    const label = el("span", "output-diff-label");
+    label.textContent = "Output difference";
+    wrap.appendChild(label);
+    const pre = el("pre", "action-diff");
+    for (const line of diff.lines) {
+        const span = document.createElement("span");
+        span.className = `diff-line diff-${line.kind}`;
+        const sign =
+            line.kind === "added" ? "+" : line.kind === "removed" ? "-" : " ";
+        span.textContent = `${sign} ${line.text}\n`;
+        pre.appendChild(span);
+    }
+    wrap.appendChild(pre);
+    return wrap;
+}
+
+/** The ⇄ compare affordance: an inline link (not a chrome button) that asks the
+ *  host to open the two versions of the backing file side-by-side. */
+function compareLink(label: string, node: TraceSourceNode): HTMLButtonElement {
+    const link = el("button", "compare-link") as HTMLButtonElement;
     link.type = "button";
-    link.textContent = label;
-    link.title = title;
-    link.addEventListener("click", () => requestSource(side, node));
+    const glyph = el("span", "compare-glyph");
+    glyph.textContent = "⇄";
+    link.appendChild(glyph);
+    const text = el("span", "compare-label");
+    text.textContent = label;
+    link.appendChild(text);
+    link.addEventListener("click", () => requestCompare(node));
     return link;
 }
 
-function grammarExtra(
-    side: TraceSide,
+/** The terminal Result: the two versions' produced actions side-by-side plus,
+ *  whenever they differ, the unified JSON diff of the output — the ground-truth
+ *  "what came out". Its status reads from the actions themselves (same / differs
+ *  / a new or lost match), not from whether both sides merely ran, so a real
+ *  output divergence never mislabels as "same". When the action payload is the
+ * attributed cause, this block is the accented cause and carries the schema diff
+ * chip. */
+function resultBlock(vm: TraceDivergenceViewModel): HTMLElement {
+    const stage = vm.stages.find((s) => s.kind === "action");
+    const diff = vm.resultDiff;
+    const block = el("div", "stage is-result");
+    block.classList.add(diff.identical ? "status-agree" : "status-diverge");
+    if (stage?.isCause === true) {
+        block.classList.add("is-cause");
+    }
+
+    const head = el("div", "stage-head");
+    head.appendChild(el("span", "stage-marker"));
+    const name = el("span", "stage-name");
+    name.textContent = "Result";
+    head.appendChild(name);
+    head.appendChild(
+        statusChip({
+            label: resultStatusLabel(diff),
+            tone: resultStatusTone(diff),
+            help: resultStatusHelp(diff),
+        }),
+    );
+    block.appendChild(head);
+
+    const body = el("div", "stage-body");
+    body.appendChild(sideBySide(stage?.a, stage?.b, "action"));
+    if (!diff.identical) {
+        body.appendChild(actionDiffBlock(diff));
+    }
+    if (stage?.isCause === true) {
+        const bar = causeBar(vm, stage);
+        if (bar !== undefined) {
+            body.appendChild(bar);
+        }
+    }
+    block.appendChild(body);
+    return block;
+}
+
+/** The Result status chip text, from the action comparison: identical actions,
+ *  a new match (only B produced one), a lost match (only A), or a plain diff. */
+function resultStatusLabel(diff: ActionDiff): string {
+    if (diff.identical) {
+        return "same";
+    }
+    if (diff.onlyB) {
+        return "new in B";
+    }
+    if (diff.onlyA) {
+        return "lost in B";
+    }
+    return "differs";
+}
+
+/** The Result chip tone: green when B introduced an action A lacked, orange when
+ *  B lost one A had; a plain differing or identical result stays untinted. */
+function resultStatusTone(diff: ActionDiff): OutcomeTone | undefined {
+    if (diff.onlyB) {
+        return "positive";
+    }
+    if (diff.onlyA) {
+        return "negative";
+    }
+    return undefined;
+}
+
+function resultStatusHelp(diff: ActionDiff): string {
+    if (diff.identical) {
+        return "Both versions produced the same action.";
+    }
+    if (diff.onlyB) {
+        return "Only B produced an action — a new match B introduced.";
+    }
+    if (diff.onlyA) {
+        return "Only A produced an action — a match B lost.";
+    }
+    return "The two versions produced different actions.";
+}
+
+/** The matched rule as a read-only mono value. Labeled `rule` by its side card so
+ *  the bare token can't be read as a file or an action; the file behind a
+ *  divergence is reached through the diverging stage's diff chip, not here. */
+function ruleChip(
     grammar: NonNullable<TraceNodeSummary["grammar"]>,
 ): HTMLElement {
-    const box = el("div", "node-extra grammar-extra");
-    if (grammar.chosenRule !== undefined) {
-        // The rule name jumps to its grammar span when the trace recorded one;
-        // otherwise it's plain text.
-        if (grammar.hasSource) {
-            const rule = jumpLink(
-                grammar.chosenRule,
-                `Open the grammar source for rule ${grammar.chosenRule}`,
-                side,
-                "grammar-match",
-            );
-            rule.classList.add("mono", "rule");
-            box.appendChild(rule);
-        } else {
-            const rule = el("code", "mono rule");
-            rule.textContent = grammar.chosenRule;
-            rule.title = `Matched rule: ${grammar.chosenRule}`;
-            box.appendChild(rule);
-        }
-    } else if (grammar.hasSource) {
-        const jump = jumpLink(
-            "grammar source",
-            "Open the matched grammar source",
-            side,
-            "grammar-match",
-        );
-        box.appendChild(jump);
-    }
-    const parity = el("span", "parity-chip");
-    parity.classList.add(`parity-${grammar.rankingParity}`);
-    parity.textContent = grammar.rankingParityLabel;
-    if (grammar.diagnosticOnly) {
-        parity.title =
-            "The captured parse diverges from the resolver's ranked pick, so it's diagnostic only.";
-    }
-    box.appendChild(parity);
-    return box;
+    const code = el("code", "mono rule");
+    code.textContent = grammar.chosenRule ?? "grammar";
+    return code;
 }
 
-function cacheExtra(
-    cache: NonNullable<TraceNodeSummary["cache"]>,
-): HTMLElement {
-    const box = el("div", "node-extra cache-extra");
-    if (cache.constructionId !== undefined) {
-        const id = el("code", "mono");
-        id.textContent = `#${cache.constructionId}`;
-        box.appendChild(id);
-    }
-    if (cache.namespace !== undefined) {
-        const ns = el("span", "cache-ns");
-        ns.textContent = cache.namespace;
-        ns.title = `Namespace: ${cache.namespace}`;
-        box.appendChild(ns);
-    }
-    return box;
-}
-
-function actionExtra(
-    side: TraceSide,
+/** The produced action as a read-only mono value, labeled `action` by its side
+ *  card. */
+function actionChip(
     action: NonNullable<TraceNodeSummary["action"]>,
 ): HTMLElement {
-    const box = el("div", "node-extra action-extra");
-    if (action.actionName !== undefined) {
-        // The action name jumps to its schema file when the trace recorded one.
-        if (action.hasSchema) {
-            const name = jumpLink(
-                action.actionName,
-                `Open the schema for ${action.actionName}`,
-                side,
-                "action",
-            );
-            name.classList.add("mono", "action-name");
-            box.appendChild(name);
-        } else {
-            const name = el("code", "mono action-name");
-            name.textContent = action.actionName;
-            box.appendChild(name);
-        }
-    } else {
-        const none = el("span", "action-none");
-        none.textContent = "no action";
-        box.appendChild(none);
+    const code = el("code", "mono action-name");
+    code.textContent = action.actionName ?? "action";
+    return code;
+}
+
+/** The matched construction id as a mono chip, with its namespace and pattern on
+ *  hover so a cache stage stays inspectable without a second panel. */
+function cacheChip(cache: NonNullable<TraceNodeSummary["cache"]>): HTMLElement {
+    const id = el("code", "mono cache-id");
+    id.textContent = `#${cache.constructionId}`;
+    const tip: string[] = [];
+    if (cache.namespace !== undefined) {
+        tip.push(`Namespace: ${cache.namespace}`);
     }
-    return box;
-}
-
-function executionPill(label: string): HTMLElement {
-    const pill = el("span", "pill exec-pill");
-    pill.classList.add(`exec-${slug(label)}`);
-    pill.textContent = label;
-    return pill;
-}
-
-function outcomePill(label: string): HTMLElement {
-    const pill = el("span", "pill outcome-pill");
-    pill.classList.add(`outcome-${slug(label)}`);
-    pill.textContent = label;
-    return pill;
+    if (cache.parts !== undefined && cache.parts.length > 0) {
+        tip.push(`Pattern: ${cache.parts.join(" ")}`);
+    }
+    id.title = tip.length > 0 ? tip.join("\n") : "Matched construction id.";
+    return id;
 }
 
 // --- State screens & bits -------------------------------------------------
@@ -605,44 +860,6 @@ function noteBanner(message: string): HTMLElement {
     return banner;
 }
 
-function subNote(message: string): HTMLElement {
-    const note = el("div", "callout-subnote");
-    note.textContent = message;
-    return note;
-}
-
-function sep(): HTMLElement {
-    const s = el("span", "sep");
-    s.textContent = "·";
-    return s;
-}
-
-function arrow(): HTMLElement {
-    const a = el("span", "arrow");
-    a.textContent = "→";
-    return a;
-}
-
-/** Whether a fresh recompute reproduced the recorded resolution. Compares both
- *  sides' final actions; any difference is drift. */
-function driftNote(
-    rec: ReplayResolutionTrace | undefined,
-    fr: ReplayResolutionTrace | undefined,
-): string {
-    if (rec === undefined || fr === undefined) {
-        return "Fresh replay captured.";
-    }
-    const drift: Drift =
-        stableStringify(rec.a.finalAction) ===
-            stableStringify(fr.a.finalAction) &&
-        stableStringify(rec.b.finalAction) === stableStringify(fr.b.finalAction)
-            ? "matches"
-            : "drifted";
-    return drift === "matches"
-        ? "Fresh replay reproduced the recorded resolution."
-        : "Fresh replay drifted from the recorded run — the working tree has changed since it was captured.";
-}
-
 // --- DOM helpers ----------------------------------------------------------
 
 function el(tag: string, className: string): HTMLElement {
@@ -657,6 +874,6 @@ function clear(node: HTMLElement): void {
     }
 }
 
-function slug(value: string): string {
-    return value.replace(/\s+/g, "-").toLowerCase();
+function capitalize(value: string): string {
+    return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1);
 }

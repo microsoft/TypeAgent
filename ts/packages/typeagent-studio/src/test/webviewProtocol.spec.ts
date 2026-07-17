@@ -158,6 +158,28 @@ test("parseWebviewMessage rejects an openTrace missing ids", () => {
     );
 });
 
+test("parseWebviewMessage accepts a focusTrace request", () => {
+    assert.deepEqual(
+        parseWebviewMessage({
+            type: "focusTrace",
+            runId: "run-1",
+            utteranceId: "u-7",
+        }),
+        { type: "focusTrace", runId: "run-1", utteranceId: "u-7" },
+    );
+});
+
+test("parseWebviewMessage rejects a focusTrace missing ids", () => {
+    assert.equal(
+        parseWebviewMessage({ type: "focusTrace", runId: "run-1" }),
+        undefined,
+    );
+    assert.equal(
+        parseWebviewMessage({ type: "focusTrace", runId: 1, utteranceId: "u" }),
+        undefined,
+    );
+});
+
 test("parseWebviewMessage rejects malformed / hostile input", () => {
     assert.equal(parseWebviewMessage(undefined), undefined);
     assert.equal(parseWebviewMessage(null), undefined);

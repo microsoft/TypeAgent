@@ -122,8 +122,8 @@ body {
 .codicon-settings-gear::before {
   content: "\eb51";
 }
-.codicon-list-tree::before {
-  content: "\eb86";
+.codicon-telescope::before {
+  content: "\eb68";
 }
 
 /* --- Action bar (the native editor toolbar) ------------------------------ */
@@ -273,9 +273,26 @@ body {
   color: var(--vscode-descriptionForeground);
 }
 
+/* The A/B selector badges: small filled tokens sharing the Trace Viewer's
+   blue(A)/purple(B) side language, so "A" and "B" mean the same thing and read
+   the same way across both panels. */
 .picker-side {
-  font-weight: 600;
-  color: var(--vscode-descriptionForeground);
+  font-weight: 700;
+  font-size: 0.82em;
+  min-width: 1.3em;
+  height: 1.3em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  color: #fff;
+  flex: none;
+}
+.picker-side-a {
+  background: var(--vscode-charts-blue, #4ea1ff);
+}
+.picker-side-b {
+  background: var(--vscode-charts-purple, #b48ead);
 }
 
 /* Toolbar icon buttons (run, swap, reconnect, close). */
@@ -614,6 +631,12 @@ body {
   text-transform: uppercase;
   font-size: 10px;
   letter-spacing: 0.04em;
+}
+.fidelity-head-a {
+  color: var(--vscode-charts-blue, #4ea1ff);
+}
+.fidelity-head-b {
+  color: var(--vscode-charts-purple, #b48ead);
 }
 
 .fidelity-grid .fidelity-head:not(:first-child),
@@ -1061,6 +1084,55 @@ tr.row-open td.latency {
   color: var(--vscode-list-activeSelectionForeground);
 }
 
+/* --- Row context menu ---------------------------------------------------- */
+/* A small floating menu shown on right-click of a row; positioned at the cursor
+   from script. Mirrors a native menu so "Open in Trace Viewer" reads as the
+   row's action. */
+.context-menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border));
+  border-radius: 5px;
+  background: var(
+    --vscode-menu-background,
+    var(--vscode-editorWidget-background)
+  );
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+}
+
+.context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  text-align: left;
+  font: inherit;
+  color: var(--vscode-menu-foreground, var(--vscode-foreground));
+  cursor: pointer;
+}
+
+.context-menu-item:hover:not(:disabled),
+.context-menu-item:focus-visible {
+  outline: none;
+  background: var(
+    --vscode-menu-selectionBackground,
+    var(--vscode-list-activeSelectionBackground)
+  );
+  color: var(
+    --vscode-menu-selectionForeground,
+    var(--vscode-list-activeSelectionForeground)
+  );
+}
+
+.context-menu-item.is-disabled {
+  color: var(--vscode-disabledForeground);
+  cursor: default;
+}
+
 /* --- Detail pane (docked action diff) ------------------------------------ */
 /* Docked at the bottom of the content column so the selected row stays visible
    above it; the pane scrolls internally when the diff is tall. */
@@ -1090,51 +1162,17 @@ tr.row-open td.latency {
   );
 }
 
-.detail-title {
+.detail-utterance {
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.detail-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--vscode-descriptionForeground);
-  font-size: 12px;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.detail-meta .added {
-  color: var(
-    --vscode-charts-green,
-    var(--vscode-gitDecoration-addedResourceForeground)
-  );
-}
-
-.detail-meta .removed {
-  color: var(--vscode-errorForeground);
-}
-
-.detail-close {
-  margin-left: auto;
-}
-/* Sits with the close control on the right; the auto margin claims the free
-   space so the two group together, leaving title + meta on the left. */
-.detail-open-trace {
-  margin-left: auto;
-}
-
-.detail-legend {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px 0;
-  color: var(--vscode-descriptionForeground);
-  font-size: 11px;
-}
+/* The utterance's flex-grow claims the free space, so the close control sits at
+   the right edge. */
 
 .detail-diff {
   margin: 0;

@@ -33,23 +33,27 @@ export interface TraceSourceTarget {
     range?: TraceSourceRange;
 }
 
-/** Resolve the grammar node's file id to its absolute path via the node's own
- *  serialized debug info (fileId → resolved path), falling back to the span's
- *  display path when the table doesn't carry it. */
-function grammarAbsolutePath(
-    node: GrammarMatchTraceNode,
-    fileId: string,
-    displayPath: string,
-): string {
+/** Resolve the grammar node's `.agr` to an absolute path: the node's recorded
+ *  `sourceFilePath` (the real repo file, captured on both sides) when present,
+ *  else — for older captures — the winning-rule span's file table (fileId →
+ *  resolved path), falling back to the span's display path. */
+function grammarAbsolutePath(node: GrammarMatchTraceNode): string | undefined {
+    if (node.sourceFilePath !== undefined) {
+        return node.sourceFilePath;
+    }
+    const source = node.source;
+    if (source === undefined) {
+        return undefined;
+    }
     const filePaths = node.debugInfo?.filePaths;
     if (filePaths !== undefined) {
         for (const [id, resolved] of filePaths) {
-            if (id === fileId) {
+            if (id === source.fileId) {
                 return resolved;
             }
         }
     }
-    return displayPath;
+    return source.displayPath;
 }
 
 /**
@@ -68,26 +72,33 @@ export function sourceTargetFor(
         const grammar = sideTrace.nodes.find(
             (n) => n.kind === "grammar-match",
         ) as GrammarMatchTraceNode | undefined;
-        const source = grammar?.source;
-        if (grammar === undefined || source === undefined) {
+        if (grammar === undefined) {
             return undefined;
         }
+        const absPath = grammarAbsolutePath(grammar);
+        if (absPath === undefined) {
+            return undefined;
+        }
+        // The winning-rule span drives the jump-to-line selection; a side that
+        // matched no rule (or an older capture) still yields the file path for a
+        // cross-version diff, just without a range to select.
+        const source = grammar.source;
         return {
-            absPath: grammarAbsolutePath(
-                grammar,
-                source.fileId,
-                source.displayPath,
-            ),
-            range: {
-                start: {
-                    line: source.range.start.line,
-                    character: source.range.start.character,
-                },
-                end: {
-                    line: source.range.end.line,
-                    character: source.range.end.character,
-                },
-            },
+            absPath,
+            ...(source !== undefined
+                ? {
+                      range: {
+                          start: {
+                              line: source.range.start.line,
+                              character: source.range.start.character,
+                          },
+                          end: {
+                              line: source.range.end.line,
+                              character: source.range.end.character,
+                          },
+                      },
+                  }
+                : {}),
         };
     }
     const action = sideTrace.nodes.find((n) => n.kind === "action") as

@@ -15,11 +15,9 @@ import type { ReplayResolutionTrace } from "@typeagent/core/replay";
 /** Which replayed version a webview interaction refers to. */
 export type TraceSide = "a" | "b";
 
-/** The node whose source a jump targets. Only these two carry a source span. */
+/** The node whose source a jump/diff targets. Only these two carry a source
+ *  span. */
 export type TraceSourceNode = "grammar-match" | "action";
-
-/** The live service reachability, mirrored so the viewer shows one indicator. */
-export type TraceConnectionState = "disconnected" | "connecting" | "connected";
 
 /** A compact, display-only summary of one pinned version, derived host-side from
  *  the run descriptor for the header's provenance line. */
@@ -45,14 +43,10 @@ export interface TraceProvenanceSummary {
  *  (`missing`). `loading` is the transient state before the lookup resolves. */
 export type TraceUnavailableState = "loading" | "evicted" | "missing";
 
-/** Outcome of a fresh recompute, mirroring the runtime's replay result. */
-export type TraceReplayStatus = "recomputed" | "entry-missing" | "unavailable";
-
-/** Outcome of a source jump the host attempted on the webview's behalf. */
+/** Outcome of a source jump/diff the host attempted on the webview's behalf. */
 export type TraceSourceStatus = "opened" | "unavailable" | "stale";
 
 export type HostToTraceMessage =
-    | { type: "connection"; state: TraceConnectionState }
     | {
           type: "trace";
           recorded: ReplayResolutionTrace;
@@ -60,13 +54,6 @@ export type HostToTraceMessage =
       }
     | { type: "trace-state"; state: TraceUnavailableState }
     | { type: "trace-error"; message: string }
-    | {
-          type: "replay-result";
-          requestId: number;
-          status: TraceReplayStatus;
-          fresh?: ReplayResolutionTrace;
-          message?: string;
-      }
     | {
           type: "source-result";
           requestId: number;
@@ -76,11 +63,17 @@ export type HostToTraceMessage =
 
 export type TraceToHostMessage =
     | { type: "ready" }
-    | { type: "replay"; requestId: number }
     | {
           type: "open-source";
           requestId: number;
           side: TraceSide;
+          node: TraceSourceNode;
+      }
+    | {
+          // Open a side-by-side diff of one node's source file across the A and
+          // B versions, so a divergence shows as a concrete source change.
+          type: "compare-source";
+          requestId: number;
           node: TraceSourceNode;
       };
 
@@ -111,10 +104,6 @@ export function parseTraceMessage(
     switch (value.type) {
         case "ready":
             return { type: "ready" };
-        case "replay":
-            return typeof value.requestId === "number"
-                ? { type: "replay", requestId: value.requestId }
-                : undefined;
         case "open-source":
             return typeof value.requestId === "number" &&
                 isSide(value.side) &&
@@ -123,6 +112,15 @@ export function parseTraceMessage(
                       type: "open-source",
                       requestId: value.requestId,
                       side: value.side,
+                      node: value.node,
+                  }
+                : undefined;
+        case "compare-source":
+            return typeof value.requestId === "number" &&
+                isSourceNode(value.node)
+                ? {
+                      type: "compare-source",
+                      requestId: value.requestId,
                       node: value.node,
                   }
                 : undefined;

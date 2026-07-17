@@ -391,11 +391,12 @@ export interface StudioReplayResult {
      */
     sideFidelity: SideFidelity;
     /**
-     * Per-red-row resolution traces captured right after the run, while the live
+     * Per-row resolution traces captured right after the run, while the live
      * resolver still matches what produced each row. Present only for a grammar
      * run (the identity baseline has nothing to trace) and bounded so a large
-     * changed set doesn't inflate the result; the viewer reads these back through
-     * the trace store. Omitted when nothing was captured.
+     * corpus doesn't inflate the result — changed rows are captured first, then
+     * unchanged ones fill the remaining capacity; the viewer reads these back
+     * through the trace store. Omitted when nothing was captured.
      */
     resolutionTraces?: ReplayResolutionTrace[];
     /**
@@ -1050,18 +1051,20 @@ interface ReplayResolution {
     aborted?: StudioReplayResult;
 }
 
-/** Cap how many red-row traces one run captures so a large changed set doesn't
- *  inflate the result or the persisted payload; the report still lists every
- *  row, and the viewer drills into the captured ones first. */
+/** Cap how many traces one run captures so a large corpus doesn't inflate the
+ *  result or the persisted payload; the report still lists every row, and the
+ *  viewer drills into the captured ones first. */
 const MAX_CAPTURED_TRACES = 100;
 
-/** Capture a {@link ReplayResolutionTrace} for each changed (red) row, up to the
- *  cap, by re-resolving with tracing on the live resolver. Entries are listed
- *  only when there is at least one red row to trace and mapped by id to the
- *  row's `utteranceId`; a row whose entry can't be found is skipped rather than
- *  failing the run. Call while the resolver is still live so the trace reflects
- *  exactly what produced the row. */
-export async function captureRedRowTraces(
+/** Capture a {@link ReplayResolutionTrace} for each row, up to the cap, by
+ *  re-resolving with tracing on the live resolver. Changed (red) rows are traced
+ *  first so a corpus larger than the cap never drops a divergence in favour of an
+ *  unchanged row; remaining capacity captures equal rows so the viewer can open
+ *  any row, changed or not. Entries are listed only when there is at least one
+ *  row to trace and mapped by id to the row's `utteranceId`; a row whose entry
+ *  can't be found is skipped rather than failing the run. Call while the resolver
+ *  is still live so the trace reflects exactly what produced the row. */
+export async function captureRowTraces(
     resolver: GrammarReplayResolver,
     listEntries: () => Promise<CorpusEntry[]>,
     rows: readonly ActionDelta[],
@@ -1069,17 +1072,20 @@ export async function captureRedRowTraces(
     versionA: VersionSpec,
     versionB: VersionSpec,
 ): Promise<ReplayResolutionTrace[]> {
-    const redRows = rows
-        .filter((row) => !row.equal)
-        .slice(0, MAX_CAPTURED_TRACES);
-    if (redRows.length === 0) {
+    // Changed rows first, then unchanged, so the cap never crowds out a
+    // divergence — the row a developer is most likely to inspect.
+    const ordered = [
+        ...rows.filter((row) => !row.equal),
+        ...rows.filter((row) => row.equal),
+    ].slice(0, MAX_CAPTURED_TRACES);
+    if (ordered.length === 0) {
         return [];
     }
     const entriesById = new Map(
         (await listEntries()).map((entry) => [entry.id, entry] as const),
     );
     const traces: ReplayResolutionTrace[] = [];
-    for (const row of redRows) {
+    for (const row of ordered) {
         const entry = entriesById.get(row.utteranceId);
         if (entry === undefined) {
             continue;
@@ -1636,11 +1642,11 @@ export function createStudioRuntimeCore(
                 for await (const row of handle.rows) {
                     rows.push(row);
                 }
-                // Capture per-red-row traces while the resolver (and any wildcard
+                // Capture per-row traces while the resolver (and any wildcard
                 // validator) is still live and the working tree still matches what
                 // produced the rows — the dispose below tears the validator down.
                 if (resolution.activeGrammarResolver !== undefined) {
-                    resolutionTraces = await captureRedRowTraces(
+                    resolutionTraces = await captureRowTraces(
                         resolution.activeGrammarResolver,
                         () => corpus.list(request.agent, replayOptions.corpus),
                         rows,

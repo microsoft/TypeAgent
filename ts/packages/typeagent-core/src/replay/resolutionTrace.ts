@@ -136,6 +136,15 @@ export interface GrammarMatchTraceNode extends TraceNodeBase {
     /** Source span of the winning rule/alternative for the jump-to-line action. */
     source?: SourceLocation;
     /**
+     * Absolute path of the `.agr` grammar file this side matched against, the
+     * same real repo file on both sides (the git-ref side's content is read via
+     * `git show`). Recorded independently of {@link source} — whose `displayPath`
+     * is only the grammar's basename — so the viewer can open the exact file and
+     * diff it across the two versions. Absent when no grammar file backs the
+     * match (e.g. a cache short-circuit or a build failure).
+     */
+    sourceFilePath?: string;
+    /**
      * Whether the traced parse (recursive matcher) agreed with the resolver's
      * ranked pick (NFA `sortMatches`). `diverged` flags that the captured trace
      * explains a different action than the row recorded; `unavailable` means no

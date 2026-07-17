@@ -100,4 +100,44 @@ describe("captureGrammarMatchTrace", () => {
         expect(debugInfo.parts.size).toBeGreaterThan(0);
         expect(debugInfo.rules.size).toBeGreaterThan(0);
     });
+
+    test("records the absolute grammar file path when one is supplied", () => {
+        const node = captureGrammarMatchTrace(
+            "demo",
+            "demo.agr",
+            GRAMMAR,
+            "pause",
+            pauseAction,
+            undefined,
+            "/repo/agents/demo/demo.agr",
+        );
+        expect(node.sourceFilePath).toBe("/repo/agents/demo/demo.agr");
+    });
+
+    test("records the grammar file path even when nothing matched", () => {
+        // The regressed side matches nothing, but must still record the file
+        // path so the viewer can diff it against the side that did match.
+        const node = captureGrammarMatchTrace(
+            "demo",
+            "demo.agr",
+            GRAMMAR,
+            "fizzbuzz",
+            undefined,
+            undefined,
+            "/repo/agents/demo/demo.agr",
+        );
+        expect(node.outcome).toBe("miss");
+        expect(node.sourceFilePath).toBe("/repo/agents/demo/demo.agr");
+    });
+
+    test("omits the file path when none is supplied", () => {
+        const node = captureGrammarMatchTrace(
+            "demo",
+            "demo.agr",
+            GRAMMAR,
+            "pause",
+            pauseAction,
+        );
+        expect(node.sourceFilePath).toBeUndefined();
+    });
 });

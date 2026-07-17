@@ -44,6 +44,9 @@ import {
  *                     grammar text. Supply one that reads sibling grammars at the
  *                     same version so imported spans resolve; omit for a
  *                     self-contained grammar.
+ * @param grammarFilePath Absolute path of the `.agr` file the text was read from,
+ *                     recorded on the node so the viewer can open and diff the
+ *                     exact file across versions. Omit when no file backs the text.
  */
 export function captureGrammarMatchTrace(
     schemaName: string,
@@ -52,6 +55,7 @@ export function captureGrammarMatchTrace(
     utterance: string,
     chosenAction: unknown,
     fileLoader?: FileLoader,
+    grammarFilePath?: string,
 ): GrammarMatchTraceNode {
     const outcome = chosenAction !== undefined ? "hit" : "miss";
     const base: GrammarMatchTraceNode = {
@@ -60,6 +64,9 @@ export function captureGrammarMatchTrace(
         outcome,
         input: utterance,
         rankingParity: "unavailable",
+        ...(grammarFilePath !== undefined
+            ? { sourceFilePath: grammarFilePath }
+            : {}),
     };
 
     let loaded;

@@ -8,10 +8,14 @@ import { parseTraceMessage } from "../webviewKit/traceProtocol.js";
 test("parseTraceMessage accepts well-formed messages", () => {
     assert.deepEqual(parseTraceMessage({ type: "ready" }), { type: "ready" });
 
-    assert.deepEqual(parseTraceMessage({ type: "replay", requestId: 7 }), {
-        type: "replay",
-        requestId: 7,
-    });
+    assert.deepEqual(
+        parseTraceMessage({
+            type: "compare-source",
+            requestId: 7,
+            node: "grammar-match",
+        }),
+        { type: "compare-source", requestId: 7, node: "grammar-match" },
+    );
 
     assert.deepEqual(
         parseTraceMessage({
@@ -41,10 +45,22 @@ test("parseTraceMessage rejects malformed or unknown messages", () => {
     assert.equal(parseTraceMessage({}), undefined);
     assert.equal(parseTraceMessage({ type: "nope" }), undefined);
 
-    // replay needs a numeric requestId.
-    assert.equal(parseTraceMessage({ type: "replay" }), undefined);
+    // compare-source needs a numeric requestId and a valid node.
+    assert.equal(parseTraceMessage({ type: "compare-source" }), undefined);
     assert.equal(
-        parseTraceMessage({ type: "replay", requestId: "1" }),
+        parseTraceMessage({
+            type: "compare-source",
+            requestId: "1",
+            node: "action",
+        }),
+        undefined,
+    );
+    assert.equal(
+        parseTraceMessage({
+            type: "compare-source",
+            requestId: 1,
+            node: "cache-consult",
+        }),
         undefined,
     );
 

@@ -1275,6 +1275,11 @@ function spyCacheResolver(record: { consulted: boolean }) {
                     ? { schemaName: "demo", actionName: "pause" }
                     : undefined;
             },
+            matchEntry(utterance: string) {
+                return utterance === "pause"
+                    ? { action: { schemaName: "demo", actionName: "pause" } }
+                    : undefined;
+            },
         };
     };
 }

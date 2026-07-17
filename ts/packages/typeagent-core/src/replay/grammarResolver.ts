@@ -817,6 +817,8 @@ function grammarMatchNode(
         artifacts.grammar.grammarText,
         artifacts.utterance,
         artifacts.grammarAction,
+        undefined,
+        target.grammarFilePath,
     );
 }
 

@@ -3,6 +3,7 @@
 
 import * as vscode from "vscode";
 import * as path from "node:path";
+import { realpath } from "node:fs/promises";
 import { WebviewKitPanel } from "./webviewKit/host.js";
 import {
     parseTraceMessage,
@@ -12,9 +13,6 @@ import {
     type TraceSide,
     type TraceSourceNode,
 } from "./webviewKit/traceProtocol.js";
-import type { ImpactReportConnection } from "./impactReportView.js";
-import { StudioServiceClient } from "./studioServiceClient.js";
-import type { StudioConnectionState } from "./studioServiceConnection.js";
 import { loadResolutionTrace, loadTraceRun } from "./traceStore.js";
 import {
     sourceTargetFor,
@@ -32,8 +30,9 @@ const VIEW_TYPE = "typeagentStudio.traceViewer";
  *  file at a pinned git ref (the exact content the ref side resolved against). */
 const TRACE_SOURCE_SCHEME = "typeagent-trace-src";
 
-/** The panel title truncates the utterance to keep the tab readable. */
-const TITLE_UTTERANCE_MAX = 40;
+/** The tab title is static: one viewer follows the selected row, and the
+ *  utterance it currently shows is in the panel header. */
+const PANEL_TITLE = "Trace Viewer";
 
 function toVersionSummary(pin: TraceVersionPin): TraceVersionSummary {
     return {
@@ -50,15 +49,6 @@ function toProvenance(descriptor: ReplayRunDescriptor): TraceProvenanceSummary {
         b: toVersionSummary(descriptor.b),
         runAt: descriptor.runAt,
     };
-}
-
-function panelTitle(utterance: string): string {
-    const trimmed = utterance.trim();
-    const clipped =
-        trimmed.length > TITLE_UTTERANCE_MAX
-            ? `${trimmed.slice(0, TITLE_UTTERANCE_MAX - 1)}…`
-            : trimmed;
-    return `Trace — ${clipped}`;
 }
 
 /** Encode a git-pinned file into a virtual-document URI the content provider can
@@ -80,7 +70,8 @@ function traceSourceUri(
 
 /** Read-only view of a grammar/schema file at a pinned ref, so the ref side of a
  *  trace jumps to the exact bytes it resolved against rather than the (possibly
- *  drifted) working tree. */
+ *  drifted) working tree. A file absent at the ref reads as empty so a compare
+ *  shows it as a clean addition/removal rather than an error line. */
 class TraceSourceContentProvider implements vscode.TextDocumentContentProvider {
     async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
         const query = new URLSearchParams(uri.query);
@@ -92,11 +83,50 @@ class TraceSourceContentProvider implements vscode.TextDocumentContentProvider {
         }
         try {
             const git = defaultGitExec(repoRoot);
-            return await git(["show", `${sha}:${relPath}`]);
+            return await git(["show", "--end-of-options", `${sha}:${relPath}`]);
         } catch {
-            return `// Unable to read ${relPath} at ${sha}.`;
+            // The URI is only minted after the repo is validated, so the sole
+            // realistic failure here is "this path didn't exist at that ref".
+            // Return empty so a one-sided file reads as an add/remove in a diff.
+            return "";
         }
     }
+}
+
+/** Resolve a captured absolute source path to its git top-level and the path
+ *  relative to that top-level, so `git show <sha>:<relPath>` reads it from the
+ *  right tree even when the workspace root is a subdirectory of the repo. The
+ *  path is canonicalized (best-effort realpath) the same way the resolver
+ *  recorded refs, so symlinked temp/working dirs resolve consistently. */
+async function gitRefRelPath(
+    absPath: string,
+): Promise<{ gitRoot: string; relPath: string } | undefined> {
+    let real = absPath;
+    try {
+        real = await realpath(absPath);
+    } catch {
+        // The file may not exist in the working tree (only at the ref); the raw
+        // path's directory still locates the repository.
+    }
+    let gitRoot: string;
+    try {
+        gitRoot = (
+            await defaultGitExec(path.dirname(real))([
+                "rev-parse",
+                "--show-toplevel",
+            ])
+        ).trim();
+    } catch {
+        return undefined;
+    }
+    if (gitRoot.length === 0) {
+        return undefined;
+    }
+    const relPath = path.relative(gitRoot, real).split(path.sep).join("/");
+    if (relPath.startsWith("..") || path.isAbsolute(relPath)) {
+        return undefined;
+    }
+    return { gitRoot, relPath };
 }
 
 let sourceProviderRegistered = false;
@@ -115,12 +145,13 @@ function ensureSourceProvider(context: vscode.ExtensionContext): void {
     );
 }
 
-/** Open a document beside the viewer and, when a span is known, select and
- *  reveal it. The selection is best-effort: a document shorter than the recorded
- *  span (e.g. drifted working-tree content) still opens without throwing. */
+/** Open a document in `viewColumn` and, when a span is known, select and reveal
+ *  it. The selection is best-effort: a document shorter than the recorded span
+ *  (e.g. drifted working-tree content) still opens without throwing. */
 async function revealSource(
     uri: vscode.Uri,
     range: TraceSourceRange | undefined,
+    viewColumn: vscode.ViewColumn,
 ): Promise<void> {
     const doc = await vscode.workspace.openTextDocument(uri);
     const selection =
@@ -131,95 +162,102 @@ async function revealSource(
               )
             : undefined;
     await vscode.window.showTextDocument(doc, {
-        viewColumn: vscode.ViewColumn.Beside,
+        viewColumn,
         preview: true,
         ...(selection !== undefined ? { selection } : {}),
     });
 }
 
+/** The editor column to open a source file or diff in: the group immediately
+ *  past the Trace Viewer's own, so opened sources land in a stable side panel
+ *  beside the viewer — reused across opens — rather than ever replacing the
+ *  webview in its own column. Falls back to `Beside` when the viewer's column
+ *  isn't currently known (e.g. while it's hidden). */
+function sourceColumnBeside(panel: WebviewKitPanel): vscode.ViewColumn {
+    const col = panel.panel.viewColumn;
+    return col === undefined
+        ? vscode.ViewColumn.Beside
+        : (Math.min(col + 1, 9) as vscode.ViewColumn);
+}
+
+/** Handle to the one live Trace Viewer: bring it forward, or point it at a
+ *  different row. */
+interface TraceViewerHandle {
+    reveal(): void;
+    retarget(runId: string, utteranceId: string): void;
+}
+
+/** The single live Trace Viewer, or undefined when none is open. One viewer
+ *  follows the selected row rather than opening a tab per row. */
+let liveViewer: TraceViewerHandle | undefined;
+
 /**
  * Open (or reveal) the Trace Viewer for one red row of a run, side-by-side with
- * the Impact Report it drills in from. The panel is keyed by
- * `${runId}::${utteranceId}` so each row opens its own tab, and it sits beside
- * the report rather than stealing its column.
+ * the Impact Report it drills in from. A single viewer follows the selection:
+ * opening it for another row re-targets the existing panel instead of stacking
+ * up a tab per row.
  *
  * The stored trace and its run descriptor are the source of truth: the viewer
- * shows the exact resolution the row was produced from, and a "Replay" recompute
- * runs the same pinned inputs through the live service to reveal working-tree
- * drift. When the run's traces have been rotated out of the durable store, the
- * viewer shows an explicit evicted/missing state instead of a blank panel.
+ * shows the exact resolution the row was produced from, and can diff a node's
+ * source across the two versions. When the run's traces have been rotated out of
+ * the durable store, the viewer shows an explicit evicted/missing state instead
+ * of a blank panel.
  */
 export function openTraceViewer(
     context: vscode.ExtensionContext,
     repoRoot: string | undefined,
-    connection: ImpactReportConnection,
     runId: string,
     utteranceId: string,
 ): void {
-    let client: StudioServiceClient | undefined;
-    let connecting: Promise<StudioServiceClient | undefined> | undefined;
+    if (liveViewer) {
+        liveViewer.retarget(runId, utteranceId);
+        liveViewer.reveal();
+        return;
+    }
+    liveViewer = createTraceViewer(context, repoRoot, runId, utteranceId);
+}
+
+/**
+ * Point an already-open Trace Viewer at a different row. A no-op when no viewer
+ * is open, so switching the selected row in the report follows into an existing
+ * viewer without ever opening a new one.
+ */
+export function focusTraceViewer(runId: string, utteranceId: string): void {
+    liveViewer?.retarget(runId, utteranceId);
+}
+
+function createTraceViewer(
+    context: vscode.ExtensionContext,
+    repoRoot: string | undefined,
+    runId: string,
+    utteranceId: string,
+): TraceViewerHandle {
+    // The row the viewer currently shows; retargeting swaps these so the reused
+    // panel re-pushes a different row's trace.
+    let currentRunId = runId;
+    let currentUtteranceId = utteranceId;
+
     let webviewReady = false;
-    let stateSub: { dispose(): void } | undefined;
 
     ensureSourceProvider(context);
 
-    // Seed the title from the stored trace when it's still present; a lookup
-    // miss (evicted/missing) still opens the panel, which then explains itself.
-    const seeded = loadResolutionTrace(
-        context.workspaceState,
-        runId,
-        utteranceId,
-    );
-    const title = seeded ? panelTitle(seeded.trace.utterance) : "Trace";
-
     const panel = WebviewKitPanel.createOrReveal(context, {
         viewType: VIEW_TYPE,
-        instanceKey: `${runId}::${utteranceId}`,
-        title,
+        title: PANEL_TITLE,
         // Sit next to the originating Impact Report instead of taking its column.
         viewColumn: vscode.ViewColumn.Beside,
         scriptPath: ["dist", "webview", "traceViewer.js"],
         stylePath: ["media", "traceViewer.css"],
-        // The panel holds a live service connection (for Replay) and a rendered
-        // trace re-pushed only via the reveal `ready` handshake; retain context
-        // so navigating away and back keeps that state.
+        // The rendered trace is re-pushed only via the reveal `ready` handshake;
+        // retain context so navigating away and back keeps that state.
         retainContextWhenHidden: true,
         onMessage: (raw) => void handleMessage(raw),
         onDispose: () => {
-            stateSub?.dispose();
-            stateSub = undefined;
-            client?.close();
-            client = undefined;
-            connecting = undefined;
+            liveViewer = undefined;
         },
     });
 
     const post = (message: HostToTraceMessage) => panel.post(message);
-
-    // Single-flight connect so a concurrent ready/replay doesn't open multiple
-    // sockets; failures aren't cached (a later reconnect/replay retries).
-    const ensureClient = (): Promise<StudioServiceClient | undefined> => {
-        if (client) {
-            return Promise.resolve(client);
-        }
-        if (!connecting) {
-            const target = connection.getTarget();
-            connecting = StudioServiceClient.connect({
-                ...(repoRoot !== undefined ? { repoRoot } : {}),
-                ...(target !== undefined
-                    ? { endpoint: target.endpoint, token: target.token }
-                    : {}),
-            })
-                .then((c) => {
-                    client = c;
-                    return c;
-                })
-                .finally(() => {
-                    connecting = undefined;
-                });
-        }
-        return connecting;
-    };
 
     // Read the stored trace and push it, or explain why it can't be shown. The
     // per-row lookup answers "present"; a miss is disambiguated at the run level
@@ -227,8 +265,8 @@ export function openTraceViewer(
     const pushTrace = (): void => {
         const found = loadResolutionTrace(
             context.workspaceState,
-            runId,
-            utteranceId,
+            currentRunId,
+            currentUtteranceId,
         );
         if (found) {
             post({
@@ -238,69 +276,28 @@ export function openTraceViewer(
             });
             return;
         }
-        const run = loadTraceRun(context.workspaceState, runId);
+        const run = loadTraceRun(context.workspaceState, currentRunId);
         post({
             type: "trace-state",
             state: run.status === "evicted" ? "evicted" : "missing",
         });
     };
 
-    // Recompute a fresh trace for this row from the run's pinned inputs, so the
-    // viewer can contrast the recorded resolution with what the same versions
-    // produce now (revealing working-tree drift). Needs the descriptor, which
-    // rides with the stored trace; if that's gone, report unavailable.
-    const runReplay = async (requestId: number): Promise<void> => {
-        const found = loadResolutionTrace(
-            context.workspaceState,
-            runId,
-            utteranceId,
-        );
-        if (!found) {
-            post({
-                type: "replay-result",
-                requestId,
-                status: "unavailable",
-                message: "The recorded run is no longer available to replay.",
-            });
-            return;
+    // Build the URI that shows one node's source at a given side's version: the
+    // live working-tree file, or a read-only virtual document at the pinned git
+    // ref. Returns undefined when the side has no openable version.
+    const uriForSide = (
+        pin: TraceVersionPin,
+        gitRoot: string,
+        relPath: string,
+    ): vscode.Uri | undefined => {
+        if (pin.workingTree) {
+            return vscode.Uri.file(path.join(gitRoot, relPath));
         }
-        const c = await ensureClient();
-        if (!c) {
-            post({
-                type: "replay-result",
-                requestId,
-                status: "unavailable",
-                message: "Couldn't reach the studio service.",
-            });
-            return;
+        if (pin.sha !== undefined) {
+            return traceSourceUri(gitRoot, pin.sha, relPath);
         }
-        try {
-            const result = await c.replayResolutionTrace({
-                descriptor: found.descriptor,
-                utteranceId,
-            });
-            if (result.status === "recomputed") {
-                post({
-                    type: "replay-result",
-                    requestId,
-                    status: "recomputed",
-                    fresh: result.trace,
-                });
-            } else {
-                post({
-                    type: "replay-result",
-                    requestId,
-                    status: result.status,
-                });
-            }
-        } catch {
-            post({
-                type: "replay-result",
-                requestId,
-                status: "unavailable",
-                message: "Replay failed. The recorded trace is still shown.",
-            });
-        }
+        return undefined;
     };
 
     // Jump to the source the row resolved against: the winning grammar rule's
@@ -323,8 +320,8 @@ export function openTraceViewer(
 
         const found = loadResolutionTrace(
             context.workspaceState,
-            runId,
-            utteranceId,
+            currentRunId,
+            currentUtteranceId,
         );
         if (!found) {
             unavailable("The recorded trace is no longer available.");
@@ -335,29 +332,32 @@ export function openTraceViewer(
             unavailable("This step didn't record a source location.");
             return;
         }
+        if (!path.isAbsolute(target.absPath)) {
+            // A relative or synthetic path (e.g. built-in entity grammar) can't
+            // be located on disk; the webview normally hides such links, but a
+            // stale one still lands here.
+            unavailable("This step's source file isn't available to open.");
+            return;
+        }
         const pin = side === "a" ? found.descriptor.a : found.descriptor.b;
+        const column = sourceColumnBeside(panel);
         try {
             if (pin.workingTree) {
                 await revealSource(
                     vscode.Uri.file(target.absPath),
                     target.range,
+                    column,
                 );
             } else if (pin.sha !== undefined) {
-                if (repoRoot === undefined) {
-                    unavailable("The workspace root is unknown.");
-                    return;
-                }
-                const relPath = path
-                    .relative(repoRoot, target.absPath)
-                    .split(path.sep)
-                    .join("/");
-                if (relPath.startsWith("..") || path.isAbsolute(relPath)) {
-                    unavailable("The source file is outside the workspace.");
+                const resolved = await gitRefRelPath(target.absPath);
+                if (resolved === undefined) {
+                    unavailable("The source file is outside the repository.");
                     return;
                 }
                 await revealSource(
-                    traceSourceUri(repoRoot, pin.sha, relPath),
+                    traceSourceUri(resolved.gitRoot, pin.sha, resolved.relPath),
                     target.range,
+                    column,
                 );
             } else {
                 unavailable("This version has no source to open.");
@@ -369,6 +369,78 @@ export function openTraceViewer(
         }
     };
 
+    // Open a native side-by-side diff of one node's source file across the A and
+    // B versions. The same repo-relative path is diffed on both sides (each side
+    // resolved against its own pinned version), so a grammar/schema change shows
+    // as a concrete source delta rather than two separate file jumps.
+    const compareSource = async (
+        requestId: number,
+        node: TraceSourceNode,
+    ): Promise<void> => {
+        const unavailable = (message: string): void =>
+            post({
+                type: "source-result",
+                requestId,
+                status: "unavailable",
+                message,
+            });
+
+        const found = loadResolutionTrace(
+            context.workspaceState,
+            currentRunId,
+            currentUtteranceId,
+        );
+        if (!found) {
+            unavailable("The recorded trace is no longer available.");
+            return;
+        }
+        // Either side may have recorded the span; use whichever resolves to a
+        // real file to name the path to diff across both versions.
+        const target =
+            sourceTargetFor(found.trace, "b", node) ??
+            sourceTargetFor(found.trace, "a", node);
+        if (!target || !path.isAbsolute(target.absPath)) {
+            unavailable("This step's source file isn't available to compare.");
+            return;
+        }
+        const resolved = await gitRefRelPath(target.absPath);
+        if (resolved === undefined) {
+            unavailable("The source file is outside the repository.");
+            return;
+        }
+        const { gitRoot, relPath } = resolved;
+        const left = uriForSide(found.descriptor.a, gitRoot, relPath);
+        const right = uriForSide(found.descriptor.b, gitRoot, relPath);
+        if (!left || !right) {
+            unavailable("One version has no source to compare.");
+            return;
+        }
+        // When both versions pin the same working-tree file, the two sides of the
+        // diff would be byte-identical — VS Code renders that as a single pane,
+        // which reads as "the compare is broken". Say plainly that this file is
+        // shared, so the divergence lives in another stage.
+        if (left.toString() === right.toString()) {
+            unavailable(
+                "Both versions resolve to the same working-tree file, so there's no cross-version diff to show here.",
+            );
+            return;
+        }
+        const name = relPath.split("/").pop() ?? relPath;
+        const title = `${name} — ${found.descriptor.a.label} ↔ ${found.descriptor.b.label}`;
+        try {
+            await vscode.commands.executeCommand(
+                "vscode.diff",
+                left,
+                right,
+                title,
+                { viewColumn: sourceColumnBeside(panel), preview: true },
+            );
+            post({ type: "source-result", requestId, status: "opened" });
+        } catch {
+            unavailable("Couldn't open the source comparison.");
+        }
+    };
+
     const handleMessage = async (raw: unknown): Promise<void> => {
         const message = parseTraceMessage(raw);
         if (!message) {
@@ -377,34 +449,37 @@ export function openTraceViewer(
         switch (message.type) {
             case "ready":
                 webviewReady = true;
-                post({
-                    type: "connection",
-                    state: connection.currentState,
-                });
                 pushTrace();
-                break;
-            case "replay":
-                await runReplay(message.requestId);
                 break;
             case "open-source":
                 await openSource(message.requestId, message.side, message.node);
                 break;
+            case "compare-source":
+                await compareSource(message.requestId, message.node);
+                break;
         }
     };
 
-    // Mirror the shared connection so the viewer shows one indicator and the
-    // next replay dials a fresh socket after a reconnect. The immediate fire on
-    // subscribe can land before the webview is ready (guarded); the `ready` pull
-    // seeds the first state.
-    stateSub = connection.onStateChanged((state: StudioConnectionState) => {
-        if (!webviewReady) {
+    // Swap the viewer to a different row and re-push its trace. Skips redundant
+    // work when the row is already showing (e.g. re-clicking the open row, or the
+    // button for the shown row). The tab title is static, so only the content
+    // changes.
+    const retarget = (nextRunId: string, nextUtteranceId: string): void => {
+        if (
+            nextRunId === currentRunId &&
+            nextUtteranceId === currentUtteranceId
+        ) {
             return;
         }
-        post({ type: "connection", state });
-        if (state === "connected") {
-            client?.close();
-            client = undefined;
-            connecting = undefined;
+        currentRunId = nextRunId;
+        currentUtteranceId = nextUtteranceId;
+        if (webviewReady) {
+            pushTrace();
         }
-    });
+    };
+
+    return {
+        reveal: () => panel.panel.reveal(),
+        retarget,
+    };
 }

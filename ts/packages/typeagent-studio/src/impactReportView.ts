@@ -24,7 +24,7 @@ import { StudioServiceClient } from "./studioServiceClient.js";
 import type { StudioConnectionState } from "./studioServiceConnection.js";
 import { loadPersistedRun, savePersistedRun } from "./impactReportStore.js";
 import { saveTraceRun } from "./traceStore.js";
-import { openTraceViewer } from "./traceViewerView.js";
+import { openTraceViewer, focusTraceViewer } from "./traceViewerView.js";
 import {
     buildReplayRunDescriptor,
     buildTraceVersionPin,
@@ -516,13 +516,13 @@ export function openImpactReport(
             // Drill into the full resolution trace behind one red row, side-by-
             // side with this report. The viewer reads the exact trace this run
             // persisted, so it always reflects what produced the row.
-            openTraceViewer(
-                context,
-                repoRoot,
-                connection,
-                msg.runId,
-                msg.utteranceId,
-            );
+            openTraceViewer(context, repoRoot, msg.runId, msg.utteranceId);
+            return;
+        }
+        if (msg.type === "focusTrace") {
+            // The selected row changed: follow it into an already-open Trace
+            // Viewer, but don't open one if none is showing.
+            focusTraceViewer(msg.runId, msg.utteranceId);
             return;
         }
         if (msg.type === "searchUtterances") {

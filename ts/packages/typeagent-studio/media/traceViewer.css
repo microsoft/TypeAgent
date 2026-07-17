@@ -1,6 +1,28 @@
 /* Copyright (c) Microsoft Corporation.
    Licensed under the MIT License. */
 
+/* The codicon icon font ships next to this stylesheet (copied from
+   @vscode/codicons at build time) so the viewer can use VS Code's native icon
+   set under the webview's font-src policy. */
+@font-face {
+  font-family: "codicon";
+  font-display: block;
+  src: url("codicon.ttf") format("truetype");
+}
+.codicon {
+  font: normal normal normal 16px/1 codicon;
+  display: inline-block;
+  text-decoration: none;
+  text-rendering: auto;
+  text-align: center;
+  vertical-align: middle;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+.codicon-go-to-file::before {
+  content: "\ea94";
+}
+
 :root {
   --tv-gap: 10px;
   --tv-radius: 6px;
@@ -42,42 +64,11 @@ code.mono,
   font-size: 0.92em;
 }
 
-/* --- Connection bar ------------------------------------------------------- */
-.conn-bar {
-  min-height: 0;
-}
-.conn-bar.is-connected {
-  display: none;
-}
-.conn-pill {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 0.85em;
-}
-.conn-pill.is-connecting {
-  background: var(--vscode-editorWarning-background, rgba(200, 160, 0, 0.12));
-  color: var(--vscode-editorWarning-foreground, #b58900);
-}
-.conn-pill.is-disconnected {
-  background: var(
-    --vscode-inputValidation-errorBackground,
-    rgba(200, 60, 60, 0.14)
-  );
-  color: var(--vscode-errorForeground, #d16969);
-}
-
 /* --- Header --------------------------------------------------------------- */
 .trace-header {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-.trace-header-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
 }
 .utterance {
   font-family: var(--tv-mono);
@@ -87,140 +78,65 @@ code.mono,
   overflow-wrap: anywhere;
 }
 
-.provenance {
+/* --- Verdict + subtitle -------------------------------------------------- */
+.header-top {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  color: var(--tv-muted);
-  font-size: 0.9em;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
-.prov-agent {
-  font-weight: 600;
-  color: var(--vscode-foreground);
+.header-top .utterance {
+  flex: 1;
+  min-width: 0;
 }
-.sep {
-  opacity: 0.5;
-}
-.arrow {
-  opacity: 0.7;
-  padding: 0 2px;
-}
-.version-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 8px;
-  border-radius: var(--tv-radius);
-  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.1));
-  border: 1px solid var(--tv-border);
-}
-.version-side {
-  font-weight: 700;
-  font-size: 0.82em;
-  width: 1.1em;
-  text-align: center;
-  border-radius: 3px;
-}
-.version-chip.side-a .version-side {
-  color: var(--vscode-charts-blue, #4ea1ff);
-}
-.version-chip.side-b .version-side {
-  color: var(--vscode-charts-purple, #b48ead);
-}
-.version-label {
-  color: var(--vscode-foreground);
-}
-.version-badge {
-  font-family: var(--tv-mono);
+/* The one-word answer to "did A and B agree?", parked top-right of the header. */
+.verdict {
+  flex: none;
   font-size: 0.8em;
-  padding: 1px 6px;
-  border-radius: 3px;
-  background: var(--vscode-badge-background, rgba(128, 128, 128, 0.25));
-  color: var(--vscode-badge-foreground, inherit);
-}
-.version-badge.working-tree {
-  background: var(--vscode-editorWarning-background, rgba(200, 160, 0, 0.16));
-  color: var(--vscode-editorWarning-foreground, #b58900);
-}
-
-/* --- Replay controls ------------------------------------------------------ */
-.replay-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.variant-toggle {
-  font-family: inherit;
-  font-size: 0.85em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   padding: 4px 10px;
-  border: 1px solid var(--tv-border);
-  border-radius: var(--tv-radius);
-  background: transparent;
+  border-radius: 999px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.verdict.is-match {
+  background: rgba(70, 160, 90, 0.16);
+  color: var(--vscode-charts-green, #6bbf78);
+  border-color: rgba(70, 160, 90, 0.4);
+}
+.verdict.is-differ {
+  background: rgba(200, 150, 0, 0.16);
+  color: var(--vscode-charts-orange, #c8961e);
+  border-color: rgba(200, 150, 0, 0.45);
+}
+.verdict.is-neutral {
+  background: rgba(128, 128, 128, 0.16);
   color: var(--tv-muted);
-  cursor: pointer;
+  border-color: var(--tv-border);
 }
-.variant-toggle.is-active {
-  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.14));
-  color: var(--vscode-foreground);
-  border-color: var(--vscode-focusBorder, #4ea1ff);
-}
-.replay-button {
-  font-family: inherit;
-  font-size: 0.9em;
-  padding: 5px 14px;
-  border: none;
-  border-radius: var(--tv-radius);
-  background: var(--vscode-button-background, #0e639c);
-  color: var(--vscode-button-foreground, #fff);
-  cursor: pointer;
-}
-.replay-button:hover:not(:disabled) {
-  background: var(--vscode-button-hoverBackground, #1177bb);
-}
-.replay-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-/* --- Divergence callout --------------------------------------------------- */
-.callout {
-  border: 1px solid var(--tv-border);
-  border-radius: var(--tv-radius);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.callout.is-match {
-  background: var(
-    --vscode-editorGutter-addedBackground,
-    rgba(70, 160, 90, 0.1)
-  );
-  border-color: var(--vscode-charts-green, rgba(70, 160, 90, 0.5));
-}
-.callout.is-differ {
-  background: var(
-    --vscode-inputValidation-warningBackground,
-    rgba(200, 150, 0, 0.12)
-  );
-  border-color: var(--vscode-charts-orange, rgba(200, 150, 0, 0.5));
-}
-.callout.is-low-confidence {
+.verdict.is-low-confidence {
   border-style: dashed;
 }
-.callout-headline {
-  font-weight: 600;
+
+/* The optional one-line reading under the header: only shown when it adds
+   something the verdict badge and cause stage don't already say. */
+.subtitle {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.subtitle-text {
   font-size: 1.02em;
-}
-.callout-detail {
-  line-height: 1.45;
-}
-.callout-subnote {
-  font-size: 0.88em;
-  color: var(--tv-muted);
   line-height: 1.4;
+}
+.subtitle-note {
+  font-size: 0.85em;
+  color: var(--tv-muted);
+}
+.subtitle.is-low-confidence .subtitle-text {
+  font-style: italic;
 }
 
 .note-banner {
@@ -231,61 +147,207 @@ code.mono,
   background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.1));
 }
 
-/* --- Fidelity grid -------------------------------------------------------- */
-.fidelity-grid {
+/* --- Pipeline ------------------------------------------------------------- */
+/* Stages stack vertically in runtime order and hang off a single left rail so
+   the panel reads as one flow the utterance traveled down. */
+.pipeline {
+  position: relative;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--tv-border);
+  gap: 4px;
+  padding-left: 26px;
+}
+.pipeline::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 10px;
+  bottom: 14px;
+  width: 2px;
+  background: var(--tv-border);
+}
+
+.stage {
+  position: relative;
+  border: 1px solid transparent;
   border-radius: var(--tv-radius);
-  overflow: hidden;
+  padding: 8px 12px;
 }
-.grid-row {
-  display: grid;
-  grid-template-columns: minmax(120px, 0.6fr) 1fr 1fr;
-  border-top: 1px solid var(--tv-border);
+/* Marker dot sitting on the rail; its fill encodes the stage's parity status. */
+.stage-marker {
+  position: absolute;
+  left: -26px;
+  top: 11px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--tv-border);
+  background: var(--vscode-editor-background);
+  box-sizing: border-box;
 }
-.grid-row:first-child {
-  border-top: none;
+.stage.status-agree .stage-marker {
+  border-color: var(--vscode-charts-green, #6bbf78);
+  background: var(--vscode-charts-green, #6bbf78);
 }
-.grid-row.is-head {
-  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.08));
+.stage.status-diverge .stage-marker,
+.stage.is-cause .stage-marker {
+  border-color: var(--vscode-charts-orange, #c8961e);
+  background: var(--vscode-charts-orange, #c8961e);
 }
-.grid-row.is-diverging {
+.stage.status-one-sided .stage-marker {
+  border-color: var(--vscode-charts-blue, #4ea1ff);
+  background: var(--vscode-editor-background);
+}
+.stage.status-inapplicable .stage-marker {
+  border-style: dashed;
+}
+
+.stage-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.stage-name {
+  font-weight: 600;
+  font-size: 0.96em;
+}
+.stage-status {
+  font-size: 0.76em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--tv-muted);
+}
+.stage.is-cause .stage-status {
+  color: var(--vscode-charts-orange, #c8961e);
+  font-weight: 600;
+}
+/* Directional status wording ("new in B" / "lost in B") reuses the outcome
+   palette: green for a match B gained, orange for one it lost. The green wins
+   over the cause card's orange so an improvement still reads as a win. */
+.stage-status.is-positive {
+  color: var(--vscode-charts-green, #6bbf78);
+  font-weight: 600;
+}
+.stage-status.is-negative {
+  color: var(--vscode-charts-orange, #c8961e);
+  font-weight: 600;
+}
+.stage.is-cause .stage-status.is-positive {
+  color: var(--vscode-charts-green, #6bbf78);
+}
+
+/* The accented "this is where they split" card. */
+.stage.is-cause {
+  border-color: var(--vscode-charts-orange, rgba(200, 150, 0, 0.5));
   background: var(
     --vscode-inputValidation-warningBackground,
     rgba(200, 150, 0, 0.08)
   );
 }
+.stage.is-result {
+  border-color: var(--tv-border);
+  margin-top: 6px;
+}
+.stage.is-result.is-cause {
+  border-color: var(--vscode-charts-orange, rgba(200, 150, 0, 0.5));
+}
 
-.grid-gutter {
-  padding: 10px 12px;
-  border-right: 1px solid var(--tv-border);
+/* Compact (converged / one-sided / n/a) stage: a single summary line. */
+.stage-compact .stage-summary {
+  margin-top: 4px;
+  font-size: 0.88em;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.stage-compact .stage-summary.is-muted {
+  color: var(--tv-muted);
+}
+.summary-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* The single tone-colored outcome phrase every side card and compact row leads
+   with, so status reads the same way at a glance across all stages. */
+.outcome {
+  overflow-wrap: anywhere;
+}
+.outcome.is-positive {
+  color: var(--vscode-charts-green, #6bbf78);
+}
+.outcome.is-negative {
+  color: var(--vscode-charts-orange, #c8961e);
+}
+.outcome.is-neutral {
+  color: var(--vscode-foreground);
+}
+.outcome.is-muted {
+  color: var(--tv-muted);
+  font-style: italic;
+}
+.only-side {
+  font-weight: 700;
+  font-size: 0.82em;
+  color: var(--vscode-charts-blue, #4ea1ff);
+}
+.cache-id {
+  font-size: 0.82em;
+  color: var(--tv-muted);
+}
+
+/* Expanded cause body: A/B columns + the "What changed" callout. */
+.stage-body {
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  justify-content: center;
+  gap: 10px;
 }
-.layer-name {
-  font-weight: 600;
-  font-size: 0.9em;
+/* The cause bar: the single ⇄ diff chip naming the grammar/schema file a
+   divergence traces to, set on an accent rail so it reads as the answer inside
+   the tinted cause card. */
+.cause-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border: 1px solid var(--tv-border);
+  border-left: 3px solid var(--vscode-charts-orange, #d9822b);
+  border-radius: var(--tv-radius);
+  background: var(--vscode-editor-background);
 }
-.diverge-flag {
-  font-size: 0.72em;
+/* Names the cause bar's meaning in a word, tinted to the accent rail so the
+   file chip beside it reads as the divergence's attributed change. */
+.cause-label {
+  font-size: 0.7em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--vscode-charts-orange, #c8961e);
-  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--vscode-charts-orange, #d9822b);
 }
-
-.grid-side-head {
-  padding: 8px 12px;
-  border-right: 1px solid var(--tv-border);
+.stage-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.side-col {
+  border: 1px solid var(--tv-border);
+  border-radius: var(--tv-radius);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  background: var(--vscode-editor-background);
+}
+.side-col-head {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.grid-side-head:last-child {
-  border-right: none;
 }
 .side-tag {
   font-weight: 700;
@@ -297,160 +359,154 @@ code.mono,
   justify-content: center;
   border-radius: 3px;
   color: #fff;
+  flex: none;
 }
-.grid-side-head.side-a .side-tag {
+.side-col.side-a .side-tag {
   background: var(--vscode-charts-blue, #4ea1ff);
 }
-.grid-side-head.side-b .side-tag {
+.side-col.side-b .side-tag {
   background: var(--vscode-charts-purple, #b48ead);
 }
-.realization {
-  font-size: 0.82em;
-  color: var(--tv-muted);
+/* The side card's primary outcome phrase, a step up in weight from the compact
+   rows so a diverging stage's two verdicts read first. */
+.side-col .outcome {
+  font-size: 0.95em;
+  font-weight: 600;
 }
-
-.grid-cell {
-  padding: 10px 12px;
-  border-right: 1px solid var(--tv-border);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-.grid-cell:last-child {
-  border-right: none;
-}
-.grid-cell.is-empty {
-  align-items: flex-start;
-  justify-content: center;
-  color: var(--tv-muted);
-}
-.empty-mark {
-  opacity: 0.5;
-}
-
-.node-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.pill {
-  font-size: 0.78em;
-  padding: 1px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-
-/* Execution states */
-.exec-pill {
-  background: var(--vscode-badge-background, rgba(128, 128, 128, 0.25));
-  color: var(--vscode-badge-foreground, inherit);
-}
-.exec-ran {
-  background: rgba(90, 150, 255, 0.2);
-  color: var(--vscode-charts-blue, #6cb0ff);
-}
-.exec-skipped,
-.exec-not-applicable,
-.exec-not-reached,
-.exec-unavailable {
-  background: rgba(128, 128, 128, 0.18);
-  color: var(--tv-muted);
-}
-
-/* Outcomes */
-.outcome-hit,
-.outcome-accepted {
-  background: rgba(70, 160, 90, 0.2);
-  color: var(--vscode-charts-green, #6bbf78);
-}
-.outcome-miss,
-.outcome-rejected,
-.outcome-errored {
-  background: rgba(200, 90, 70, 0.2);
-  color: var(--vscode-errorForeground, #e08a7a);
-}
-
-.node-detail {
-  font-size: 0.88em;
-  line-height: 1.4;
-  color: var(--tv-muted);
-  overflow-wrap: anywhere;
-}
-.node-extra {
+/* A side card's artifact on its own line under the outcome: the dim micro-label
+   and the mono value (matched rule / produced action / construction id). */
+.side-artifact {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
-.rule,
-.action-name {
-  background: var(--vscode-textCodeBlock-background, rgba(128, 128, 128, 0.14));
-  padding: 1px 6px;
-  border-radius: 3px;
-  overflow-wrap: anywhere;
+.artifact-label {
+  font-size: 0.68em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--tv-muted);
 }
-/* Inline affordance that jumps to a recorded source span. Reads as a link, not
-   a chromed button; a code-styled variant keeps the rule/action glyphs mono. */
-.jump-link {
+/* A small, secondary go-to-file icon beside a rule/action value; a distinct
+   affordance from the value token, brightening to a link tone on hover. */
+.open-source {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: var(--tv-muted);
+  cursor: pointer;
+}
+.open-source .codicon {
+  font-size: 13px;
+}
+.open-source:hover {
+  color: var(--vscode-textLink-foreground);
+}
+.open-source:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.side-empty {
+  font-size: 0.85em;
+  color: var(--tv-muted);
+  font-style: italic;
+}
+
+.compare-link {
   font: inherit;
+  font-size: 0.9em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: none;
   background: none;
   padding: 0;
   margin: 0;
   color: var(--vscode-textLink-foreground);
   cursor: pointer;
-  text-align: left;
 }
-.jump-link:hover {
+.compare-link:hover {
   color: var(
     --vscode-textLink-activeForeground,
     var(--vscode-textLink-foreground)
   );
+}
+.compare-link:hover .compare-label {
   text-decoration: underline;
 }
-.jump-link:focus-visible {
+.compare-link:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: 2px;
   border-radius: 2px;
 }
-.jump-link.rule,
-.jump-link.action-name {
-  color: var(--vscode-textLink-foreground);
-}
-.jump-link.rule:hover,
-.jump-link.action-name:hover {
-  color: var(
-    --vscode-textLink-activeForeground,
-    var(--vscode-textLink-foreground)
-  );
-}
-.action-none {
-  font-size: 0.85em;
-  color: var(--tv-muted);
-  font-style: italic;
-}
-.cache-ns {
-  font-size: 0.82em;
-  color: var(--tv-muted);
+.compare-glyph {
+  font-size: 1.1em;
+  line-height: 1;
 }
 
-.parity-chip {
-  font-size: 0.76em;
-  padding: 1px 7px;
-  border-radius: 999px;
+/* Output difference: the unified JSON diff of the two produced actions, shown at
+   the Result whenever the actions differ. Mirrors the Impact Report's diff
+   colors so the two surfaces read the same. */
+.output-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.parity-matched {
-  background: rgba(70, 160, 90, 0.16);
-  color: var(--vscode-charts-green, #6bbf78);
-}
-.parity-diverged {
-  background: rgba(200, 150, 0, 0.18);
-  color: var(--vscode-charts-orange, #c8961e);
-}
-.parity-unavailable {
-  background: rgba(128, 128, 128, 0.16);
+.output-diff-label {
+  font-size: 0.72em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
   color: var(--tv-muted);
+}
+.action-diff {
+  margin: 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  border: 1px solid var(--tv-border);
+  border-radius: var(--tv-radius);
+  background: var(--vscode-editor-background);
+  font-family: var(--tv-mono);
+  font-size: 0.86em;
+  line-height: 1.4;
+}
+.action-diff .diff-line {
+  display: block;
+  white-space: pre;
+  padding: 0 4px;
+  border-radius: 2px;
+}
+.action-diff .diff-added {
+  color: var(
+    --vscode-charts-green,
+    var(--vscode-gitDecoration-addedResourceForeground)
+  );
+  background: var(--vscode-diffEditor-insertedTextBackground, transparent);
+}
+.action-diff .diff-removed {
+  color: var(
+    --vscode-errorForeground,
+    var(--vscode-gitDecoration-deletedResourceForeground)
+  );
+  background: var(--vscode-diffEditor-removedTextBackground, transparent);
+}
+.action-diff .diff-context {
+  color: var(--vscode-descriptionForeground);
+}
+
+.rule,
+.action-name {
+  background: var(--vscode-textCodeBlock-background, rgba(128, 128, 128, 0.14));
+  padding: 1px 6px;
+  border-radius: 3px;
+  overflow-wrap: anywhere;
 }
 
 /* --- State screens -------------------------------------------------------- */
@@ -492,21 +548,9 @@ code.mono,
 
 /* --- Narrow layout -------------------------------------------------------- */
 @media (max-width: 560px) {
-  .grid-row {
-    grid-template-columns: 1fr 1fr;
-  }
-  /* Fold the layer name into a full-width band above its A/B cells so the two
-     versions stay adjacent on a narrow panel. */
-  .grid-gutter {
-    grid-column: 1 / -1;
-    border-right: none;
-    border-bottom: 1px solid var(--tv-border);
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-  }
-  .grid-row.is-head .grid-gutter {
-    display: none;
+  /* Stack the A/B columns of a diverging stage when the panel gets too narrow
+     to keep them side-by-side and legible. */
+  .stage-sides {
+    grid-template-columns: 1fr;
   }
 }

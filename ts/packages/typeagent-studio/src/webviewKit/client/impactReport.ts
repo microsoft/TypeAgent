@@ -125,6 +125,10 @@ let openDetailId: string | undefined;
 // from openDetailId so equal rows — which have no A/B diff to show — can still
 // read as "selected" while the detail pane stays closed.
 let selectedId: string | undefined;
+// The utterance ids of the currently rendered clickable rows, in display order
+// (after filtering and sorting), so Up/Down arrows can walk row-to-row. Rebuilt
+// on every table render since sorting/filtering reorders the set.
+let clickableOrder: string[] = [];
 // Row-level filter state: the set of hidden utterance ids. Chips over the same
 // rows overlap, so visibility is tracked per row rather than per chip. Empty
 // means nothing is hidden (the "All" pill is lit); toggling a chip hides or
@@ -330,7 +334,31 @@ document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !settingsPopover.hidden) {
         toggleSettingsPopover(false);
         settingsButton.focus();
+        return;
     }
+    // Up/Down walk the open row selection from anywhere in the report, so
+    // navigation survives focus leaving the row (e.g. a click on empty space or
+    // the detail pane). The settings popover, an open context menu, and text
+    // fields keep their own arrow behaviour.
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        if (openDetailId === undefined) return;
+        if (!settingsPopover.hidden || openContextMenu !== undefined) return;
+        const tag = (event.target as HTMLElement | null)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        event.preventDefault();
+        moveRowSelection(event.key === "ArrowDown" ? 1 : -1, openDetailId);
+    }
+});
+// Reclaim keyboard focus when the pointer moves over the report while a row is
+// selected but focus sits in another panel, so hovering back in resumes Up/Down
+// without a click. `hasFocus` gates it to only grab focus when it's elsewhere.
+document.addEventListener("mouseover", () => {
+    if (openDetailId === undefined || document.hasFocus()) {
+        return;
+    }
+    tableWrap
+        .querySelector<HTMLElement>(".row-open")
+        ?.focus({ preventScroll: true });
 });
 
 // --- Messaging ------------------------------------------------------------
@@ -455,6 +483,12 @@ function runReplay(): void {
     filterChipsEl.textContent = "";
     filtersEl.hidden = true;
     emptyStateEl.hidden = true;
+    // Drop the prior run's verdict headline and fidelity matrix so a stale
+    // judgment isn't left standing while the new replay is in flight.
+    verdictBannerEl.textContent = "";
+    verdictBannerEl.hidden = true;
+    fidelityEl.textContent = "";
+    fidelityEl.hidden = true;
     currentRows = [];
     hiddenRowIds = new Set();
     resetSearchAndSort();
@@ -749,8 +783,8 @@ function renderFidelity(
     const grid = el("div", "fidelity-grid");
     grid.append(
         fidelityHeadCell("Layer"),
-        fidelityHeadCell("A"),
-        fidelityHeadCell("B"),
+        fidelityHeadCell("A", "a"),
+        fidelityHeadCell("B", "b"),
     );
     for (const row of view.rows) {
         grid.append(
@@ -765,8 +799,11 @@ function renderFidelity(
     fidelityEl.hidden = false;
 }
 
-function fidelityHeadCell(label: string): HTMLElement {
+function fidelityHeadCell(label: string, side?: "a" | "b"): HTMLElement {
     const cell = el("span", "fidelity-head");
+    if (side !== undefined) {
+        cell.classList.add(`fidelity-head-${side}`);
+    }
     cell.textContent = label;
     return cell;
 }
@@ -1023,7 +1060,28 @@ function renderTable(): void {
     table.appendChild(tbody);
     tableWrap.appendChild(table);
 
+    // Record the clickable rows in display order so arrow-key navigation walks
+    // exactly the rows a click could open, in the order they're shown.
+    clickableOrder = rows
+        .filter((r) => currentRawById.has(r.utteranceId))
+        .map((r) => r.utteranceId);
+
     appendTableNotes(rows);
+}
+
+/** Move the selection to the clickable row `delta` steps from `fromId` (a no-op
+ *  at either end). `openDetail` re-homes focus to the newly-rendered row, so a
+ *  run of Up/Down walks the table and carries an open Trace Viewer along. */
+function moveRowSelection(delta: 1 | -1, fromId: string): void {
+    const idx = clickableOrder.indexOf(fromId);
+    if (idx === -1) {
+        return;
+    }
+    const nextIdx = idx + delta;
+    if (nextIdx < 0 || nextIdx >= clickableOrder.length) {
+        return;
+    }
+    openDetail(clickableOrder[nextIdx]);
 }
 
 interface HeaderSpec {
@@ -1148,9 +1206,9 @@ function buildTableRow(row: ImpactRow): HTMLTableRowElement {
         cell(row.resolutionB, "resolution", resolutionTooltip(row.resolutionB)),
     );
     tr.appendChild(latencyCell(row));
-    // Every row is clickable. Difference rows drill into an action A/B diff;
-    // equal rows have nothing to compare, so a click just clears any open
-    // detail pane.
+    // Every row with a backing delta is clickable: difference rows drill into an
+    // action A/B diff, equal rows show the resolved action JSON. Right-clicking a
+    // row offers to open its resolution in the Trace Viewer.
     if (!currentRawById.has(row.utteranceId)) {
         return tr;
     }
@@ -1163,9 +1221,8 @@ function buildTableRow(row: ImpactRow): HTMLTableRowElement {
     tr.setAttribute("role", "button");
     tr.title = isDiff
         ? "Show the action A/B diff for this utterance."
-        : "Equal row — click to close the detail diff.";
-    const activate = () =>
-        isDiff ? openDetail(row.utteranceId) : selectEqualRow(row.utteranceId);
+        : "Show the resolved action for this utterance.";
+    const activate = () => openDetail(row.utteranceId);
     tr.addEventListener("click", activate);
     tr.addEventListener("keydown", (e: KeyboardEvent) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -1173,7 +1230,96 @@ function buildTableRow(row: ImpactRow): HTMLTableRowElement {
             activate();
         }
     });
+    tr.addEventListener("contextmenu", (e: MouseEvent) =>
+        openRowContextMenu(e, row.utteranceId),
+    );
     return tr;
+}
+
+/** The floating row context menu, when open. Only one shows at a time. */
+let openContextMenu: HTMLElement | undefined;
+
+/** Tear down the row context menu and the listeners that dismiss it. */
+function closeRowContextMenu(): void {
+    if (openContextMenu === undefined) {
+        return;
+    }
+    openContextMenu.remove();
+    openContextMenu = undefined;
+    document.removeEventListener("pointerdown", onContextMenuPointerDown, true);
+    document.removeEventListener("keydown", onContextMenuKeydown, true);
+    window.removeEventListener("blur", closeRowContextMenu);
+    window.removeEventListener("resize", closeRowContextMenu);
+}
+
+function onContextMenuPointerDown(e: PointerEvent): void {
+    if (openContextMenu && !openContextMenu.contains(e.target as Node)) {
+        closeRowContextMenu();
+    }
+}
+
+function onContextMenuKeydown(e: KeyboardEvent): void {
+    if (e.key === "Escape") {
+        e.preventDefault();
+        closeRowContextMenu();
+    }
+}
+
+/** Right-click menu on a drillable row: a single "Open in Trace Viewer" action.
+ *  It is disabled when the run captured no resolution trace for the row, so the
+ *  affordance is consistent across every row even when a trace isn't available
+ *  (e.g. a row beyond the per-run capture cap, or a run predating the trace). */
+function openRowContextMenu(event: MouseEvent, utteranceId: string): void {
+    event.preventDefault();
+    closeRowContextMenu();
+    if (!lastRenderedResult) {
+        return;
+    }
+    const runId = lastRenderedResult.runId;
+    const menu = el("div", "context-menu");
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "context-menu-item";
+    item.textContent = "Open in Trace Viewer";
+    if (tracedIds.has(utteranceId)) {
+        item.addEventListener("click", () => {
+            closeRowContextMenu();
+            openDetail(utteranceId);
+            vscode.postMessage({ type: "openTrace", runId, utteranceId });
+        });
+    } else {
+        item.disabled = true;
+        item.classList.add("is-disabled");
+        item.title = "No resolution trace was captured for this row.";
+    }
+    menu.appendChild(item);
+    document.body.appendChild(menu);
+    openContextMenu = menu;
+
+    // Keep the menu inside the viewport, nudging it back from the right/bottom
+    // edges when the cursor is near them.
+    const rect = menu.getBoundingClientRect();
+    const x = Math.max(
+        4,
+        Math.min(event.clientX, window.innerWidth - rect.width - 4),
+    );
+    const y = Math.max(
+        4,
+        Math.min(event.clientY, window.innerHeight - rect.height - 4),
+    );
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+
+    document.addEventListener("pointerdown", onContextMenuPointerDown, true);
+    document.addEventListener("keydown", onContextMenuKeydown, true);
+    window.addEventListener("blur", closeRowContextMenu);
+    window.addEventListener("resize", closeRowContextMenu);
+    if (item.disabled) {
+        menu.tabIndex = -1;
+        menu.focus();
+    } else {
+        item.focus();
+    }
 }
 
 /** Append the empty-state message and any truncation notes below the table. */
@@ -1222,20 +1368,15 @@ function openDetail(utteranceId: string): void {
     renderDetail(delta);
     // Re-render the table so the open row gets its highlight.
     renderTable();
-    // Keep the selected row visible above the docked detail pane (scrolling the
-    // pane itself would push the row out of view on a long table).
-    const openRow = tableWrap.querySelector(".row-open");
+    // Focus the selected row so a run of Up/Down keeps walking the table: the
+    // re-render above replaces the row node, so without re-homing focus here the
+    // arrow keydown would land on the document and just scroll. Keep the row
+    // visible above the docked detail pane (scrolling the pane itself would push
+    // the row out of view on a long table); `preventScroll` leaves that to
+    // `scrollIntoView` so focus doesn't fight the controlled scroll.
+    const openRow = tableWrap.querySelector<HTMLElement>(".row-open");
+    openRow?.focus({ preventScroll: true });
     openRow?.scrollIntoView({ block: "nearest" });
-}
-
-/** Select an equal row: it has no A/B diff, so just highlight it and close any
- *  open detail pane. */
-function selectEqualRow(utteranceId: string): void {
-    selectedId = utteranceId;
-    openDetailId = undefined;
-    detailEl.hidden = true;
-    detailEl.textContent = "";
-    renderTable();
 }
 
 /** Hide the drill-in detail pane and clear the row selection. */
@@ -1246,60 +1387,54 @@ function closeDetail(): void {
     detailEl.textContent = "";
 }
 
-/** Paint the detail pane: a header (utterance + close) and the unified A/B diff
- *  of the two resolved actions. */
+/** Paint the detail pane: a header (utterance + optional trace drill-in +
+ *  close) and the unified A/B diff of the two resolved actions. */
+/** Paint the detail pane: a header (utterance + close) and, below it, the two
+ *  resolved actions as a unified A/B diff — which for an equal row is the
+ *  resolved action JSON shown as all-context lines. */
 function renderDetail(delta: ActionDelta): void {
     detailEl.textContent = "";
     const diff = toActionDiff(delta);
 
     const header = el("div", "detail-header");
-    const title = el("span", "detail-title");
-    title.textContent = collapseWhitespace(delta.utterance);
-    title.title = delta.utterance;
-    const meta = el("span", "detail-meta");
-    if (diff.onlyB) {
-        meta.append(codicon("diff-added"), text("new match (no action on A)"));
-    } else if (diff.onlyA) {
-        meta.append(
-            codicon("diff-removed"),
-            text("lost match (no action on B)"),
-        );
-    } else if (diff.identical) {
-        meta.append(codicon("pass"), text("actions identical"));
-    } else {
-        const added = el("span", "added");
-        added.textContent = `+${diff.addedCount}`;
-        const removed = el("span", "removed");
-        removed.textContent = `\u2212${diff.removedCount}`;
-        meta.append(added, removed);
-    }
+    const utterance = el("span", "detail-utterance");
+    utterance.textContent = collapseWhitespace(delta.utterance);
+    utterance.title = delta.utterance;
     const close = toolButton("close", "Close detail", () => {
         closeDetail();
         renderTable();
     });
     close.classList.add("detail-close");
-    // Offer the full resolution-trace drill-in only for rows that captured one
-    // (red rows). The Trace Viewer opens beside this report.
+    // A trace shortcut sits beside the close control when this row captured a
+    // resolution trace, putting the pipeline breakdown one click from the diff.
     if (tracedIds.has(delta.utteranceId) && lastRenderedResult) {
         const runId = lastRenderedResult.runId;
-        const utteranceId = delta.utteranceId;
         const openTrace = toolButton(
-            "list-tree",
-            "Open the resolution trace for this row",
-            () => vscode.postMessage({ type: "openTrace", runId, utteranceId }),
+            "telescope",
+            "Open in Trace Viewer",
+            () => {
+                vscode.postMessage({
+                    type: "openTrace",
+                    runId,
+                    utteranceId: delta.utteranceId,
+                });
+            },
         );
-        openTrace.classList.add("detail-open-trace");
-        header.append(title, meta, openTrace, close);
+        header.append(utterance, openTrace, close);
     } else {
-        header.append(title, meta, close);
+        header.append(utterance, close);
     }
-
-    const legend = el("div", "detail-legend");
-    legend.append(
-        text("Base (A)"),
-        codicon("arrow-right"),
-        text("Compare (B)"),
-    );
+    // Follow the selection into an already-open Trace Viewer (a no-op when none
+    // is showing, so selecting a row never opens one on its own). Only rows that
+    // captured a trace can be shown; the viewer itself is opened from a row's
+    // right-click menu.
+    if (tracedIds.has(delta.utteranceId) && lastRenderedResult) {
+        vscode.postMessage({
+            type: "focusTrace",
+            runId: lastRenderedResult.runId,
+            utteranceId: delta.utteranceId,
+        });
+    }
 
     const body = el("pre", "detail-diff");
     for (const line of diff.lines) {
@@ -1311,7 +1446,7 @@ function renderDetail(delta: ActionDelta): void {
         body.appendChild(span);
     }
 
-    detailEl.append(header, legend, body);
+    detailEl.append(header, body);
     detailEl.hidden = false;
 }
 
@@ -1569,7 +1704,8 @@ interface ToolButtonOptions {
 }
 
 /** A toolbar button carrying a codicon (and optional label). `icon` matches a
- *  `.codicon-<icon>` rule; `label` is the accessible name and hover title. */
+ *  `.codicon-<icon>` rule, or pass an empty string for a text-only button;
+ *  `label` is the accessible name and hover title. */
 function toolButton(
     icon: string,
     label: string,
@@ -1579,7 +1715,9 @@ function toolButton(
     const b = document.createElement("button");
     b.type = "button";
     b.className = opts.primary ? "tool-button is-primary" : "tool-button";
-    b.append(codicon(icon));
+    if (icon) {
+        b.append(codicon(icon));
+    }
     if (opts.text) {
         b.append(text(opts.text));
     }
@@ -1638,6 +1776,9 @@ function picker(
     button.setAttribute("aria-label", description);
     if (sideTag) {
         const tag = el("span", "picker-side");
+        tag.classList.add(
+            sideTag.toLowerCase() === "a" ? "picker-side-a" : "picker-side-b",
+        );
         tag.textContent = sideTag;
         button.appendChild(tag);
     }
