@@ -473,55 +473,76 @@ function formatThinkingDisplay(thinking: string): string {
     ].join("");
 }
 
+type ToolInput = Record<string, unknown>;
+
+function asToolInput(value: unknown): ToolInput | undefined {
+    return typeof value === "object" && value !== null
+        ? (value as ToolInput)
+        : undefined;
+}
+
+function getStringProp(
+    input: ToolInput | undefined,
+    key: string,
+): string | undefined {
+    const value = input?.[key];
+    return typeof value === "string" ? value : undefined;
+}
+
 /**
  * Format a tool call as a persistent display line.
  */
-function parseActionInput(action: unknown): any {
+function parseActionInput(action: unknown): ToolInput | undefined {
     if (typeof action !== "string") {
-        return action;
+        return asToolInput(action);
     }
 
     try {
-        return JSON.parse(action);
+        return asToolInput(JSON.parse(action));
     } catch {
         const match = action.match(/"actionName"\s*:\s*"([^"]+)"/);
         return match ? { actionName: match[1] } : undefined;
     }
 }
 
-function formatExecuteActionDisplay(input: any): string {
-    const schema = input?.schemaName ?? "?";
+function formatExecuteActionDisplay(input: unknown): string {
+    const toolInput = asToolInput(input);
+    const schema = getStringProp(toolInput, "schemaName") ?? "?";
     // The model sometimes supplies `action` as a JSON string rather than an
     // object, and at tool.execution_start that string can still be
     // mid-stream (truncated). Parse it when possible, otherwise pull the
     // actionName out directly so the label shows the real action, not "?".
-    const action = parseActionInput(input?.action);
-    const actionName = action?.actionName ?? "?";
+    const action = parseActionInput(toolInput?.action);
+    const actionName = getStringProp(action, "actionName") ?? "?";
     return `**Tool:** execute_action — \`${schema}.${actionName}\``;
 }
 
-function getPrimaryToolArg(input: any): string | undefined {
+function getPrimaryToolArg(input: unknown): string | undefined {
+    const toolInput = asToolInput(input);
     const primaryArg =
-        input?.command ??
-        input?.path ??
-        input?.filePath ??
-        input?.query ??
-        input?.pattern;
+        getStringProp(toolInput, "command") ??
+        getStringProp(toolInput, "path") ??
+        getStringProp(toolInput, "filePath") ??
+        getStringProp(toolInput, "query") ??
+        getStringProp(toolInput, "pattern");
     return typeof primaryArg === "string" && primaryArg.length > 0
         ? primaryArg
         : undefined;
 }
 
-function formatToolCallDisplay(toolName: string, input: any): string {
+function formatToolCallDisplay(toolName: string, input: unknown): string {
+    const toolInput = asToolInput(input);
     switch (toolName) {
         case "discover_actions": {
-            const schema = input?.schemaName ?? JSON.stringify(input);
+            const schema =
+                getStringProp(toolInput, "schemaName") ?? JSON.stringify(input);
             return `**Tool:** discover_actions — schema: \`${schema}\``;
         }
         case "execute_action":
             return formatExecuteActionDisplay(input);
         case "search_memory": {
-            const question = input?.question ?? JSON.stringify(input);
+            const question =
+                getStringProp(toolInput, "question") ?? JSON.stringify(input);
             return `**Tool:** search_memory — \`${question}\``;
         }
         case "remember":

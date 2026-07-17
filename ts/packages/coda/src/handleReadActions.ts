@@ -16,13 +16,53 @@ const READ_ACTIONS = new Set([
     "getWorkspaceChanges",
 ]);
 
+type ReadActionParameters = {
+    fileName?: string;
+    startLine?: number;
+    endLine?: number;
+};
+
+type ReadAction = {
+    actionName?: string;
+    fullActionName?: string;
+    parameters?: ReadActionParameters;
+};
+
+type GitChange = {
+    uri: vscode.Uri;
+    status: number;
+};
+
+type GitRepository = {
+    rootUri: vscode.Uri;
+    state: {
+        HEAD?: {
+            name?: string;
+            ahead?: number;
+            behind?: number;
+        };
+        workingTreeChanges: GitChange[];
+        indexChanges: GitChange[];
+    };
+};
+
+type GitApi = {
+    repositories: GitRepository[];
+};
+
+type GitExtensionExports = {
+    getAPI(version: number): GitApi;
+};
+
 /**
  * Handle the code agent's read/introspection actions. Each returns the current
  * VS Code editor state as JSON in the ActionResult message (which the code
  * agent relays back and the reasoning agent captures). Returns handled:false
  * for any other action so the parallel-dispatch in handleVSCodeActions moves on.
  */
-export async function handleReadActions(action: any): Promise<ActionResult> {
+export async function handleReadActions(
+    action: ReadAction,
+): Promise<ActionResult> {
     const actionName: string | undefined =
         action.actionName ?? action.fullActionName?.split(".").at(-1);
     if (!actionName || !READ_ACTIONS.has(actionName)) {
@@ -244,7 +284,8 @@ async function getFileContent(params: {
 }
 
 async function getWorkspaceChanges() {
-    const gitExtension = vscode.extensions.getExtension<any>("vscode.git");
+    const gitExtension =
+        vscode.extensions.getExtension<GitExtensionExports>("vscode.git");
     if (!gitExtension) {
         return { error: "The built-in git extension is not available." };
     }
@@ -252,16 +293,16 @@ async function getWorkspaceChanges() {
         ? gitExtension.exports
         : await gitExtension.activate();
     const api = exports.getAPI(1);
-    const repositories = api.repositories.map((repo: any) => ({
+    const repositories = api.repositories.map((repo) => ({
         root: vscode.workspace.asRelativePath(repo.rootUri, false),
         branch: repo.state.HEAD?.name,
         ahead: repo.state.HEAD?.ahead,
         behind: repo.state.HEAD?.behind,
-        workingTreeChanges: repo.state.workingTreeChanges.map((c: any) => ({
+        workingTreeChanges: repo.state.workingTreeChanges.map((c) => ({
             path: vscode.workspace.asRelativePath(c.uri, false),
             status: gitStatusName(c.status),
         })),
-        indexChanges: repo.state.indexChanges.map((c: any) => ({
+        indexChanges: repo.state.indexChanges.map((c) => ({
             path: vscode.workspace.asRelativePath(c.uri, false),
             status: gitStatusName(c.status),
         })),
