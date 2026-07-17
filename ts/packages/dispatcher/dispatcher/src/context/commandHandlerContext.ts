@@ -188,6 +188,17 @@ export type CopilotImporter = (
     onProgress?: (progress: CopilotImportProgress) => void,
 ) => Promise<CopilotImportSummary>;
 
+// A request-scoped route chosen by the registry-first contextSelector tier
+// (§11.4) when the topical winner is a neighborhood sibling with no cache
+// MatchResult. Unlike `collisionOneShotPicks` (durable, cross-turn, explicit
+// picks), this is set in `matchRequest` and consumed within the SAME request by
+// `pickInitialSchema`, which pins the schema and shows the note only then — so
+// the affordance can't claim an untaken route and a stale hint can't leak.
+export type PendingTopicalRoute = {
+    schemaName: string;
+    note: string;
+};
+
 // Command Handler Context definition.
 export type CommandHandlerContext = {
     readonly agents: AppAgentManager;
@@ -313,6 +324,9 @@ export type CommandHandlerContext = {
     // chosen candidate; consumed on first read. Covers the "don't remember"
     // case (no durable preference written).
     collisionOneShotPicks: Set<string>;
+
+    // Request-scoped topical route (§11.4); see `PendingTopicalRoute`.
+    pendingTopicalRoute: PendingTopicalRoute | undefined;
 
     // contextSelector (§11). The conversation signal source (produces the
     // per-turn context vector), the effective-keyword index (derived floor +
@@ -1152,6 +1166,7 @@ export async function initializeCommandHandlerContext(
                 session.getConfig().collision.preference.registryPath,
             collisionChoiceManager: new ChoiceManager(),
             collisionOneShotPicks: new Set(),
+            pendingTopicalRoute: undefined,
             conversationSignal: new RingBufferSignalSource(
                 () => session.getConfig().collision.contextSelector,
             ),
