@@ -28,6 +28,18 @@ import {
     AppAgentProviderSetMutation,
 } from "agent-dispatcher";
 import { createLimiter } from "@typeagent/common-utils";
+import type {
+    AgentSourceGroup,
+    InstalledAgentInfo,
+} from "../src/installSources/packageAgent.js";
+
+function installedNames(source: {
+    listInstalled(): AgentSourceGroup<InstalledAgentInfo>[];
+}): string[] {
+    return source
+        .listInstalled()
+        .flatMap((group) => group.agents.map((agent) => agent.name));
+}
 
 type TestMutationFns = {
     addProvider(provider: AppAgentProvider, notify?: boolean): Promise<void>;
@@ -495,14 +507,10 @@ describe("getDefaultAppAgentSource", () => {
             {
                 source: "healthy",
                 sourceKind: "feed",
-                ref: "foo",
-                packageName: "foo",
-            },
-            {
-                source: "healthy",
-                sourceKind: "feed",
-                ref: "bar",
-                packageName: "bar",
+                agents: [
+                    { ref: "foo", packageName: "foo" },
+                    { ref: "bar", packageName: "bar" },
+                ],
             },
         ]);
     });
@@ -1172,7 +1180,8 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
             () =>
                 !built.testApi
                     .listInstalled()
-                    .map((i) => i.name)
+                    .flatMap((group) => group.agents)
+                    .map((agent) => agent.name)
                     .includes("foo"),
             "foo to enter the draining (removing) state",
         );
@@ -1252,8 +1261,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         );
         await flush();
 
-        const listed = () =>
-            new Set(built.testApi.listInstalled().map((a) => a.name));
+        const listed = () => new Set(installedNames(built.testApi));
 
         // Start foo's drain; the sibling holds it `removing`.
         const updatingFoo = built.testApi.update("foo", undefined, issuing);
@@ -1309,7 +1317,8 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
             () =>
                 !built.testApi
                     .listInstalled()
-                    .map((i) => i.name)
+                    .flatMap((group) => group.agents)
+                    .map((agent) => agent.name)
                     .includes("foo"),
             "foo to enter the draining (removing) state",
         );
@@ -1398,21 +1407,18 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
             () =>
                 !built.testApi
                     .listInstalled()
-                    .map((i) => i.name)
+                    .flatMap((group) => group.agents)
+                    .map((agent) => agent.name)
                     .includes("foo"),
             "foo to enter the draining (removing) state",
         );
-        expect(built.testApi.listInstalled().map((i) => i.name)).not.toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).not.toContain("foo");
 
         gated.release();
         await updating;
         await flush();
         // After the drain + re-add, it is listed again.
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
     });
 
     it("update adds the new version only after the old drains everywhere (no coexistence)", async () => {
@@ -1478,9 +1484,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         // exactly one remove followed by exactly one add on the issuing session.
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
         // The name is free + active again (listed, and reusable).
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
     });
 
     it("update re-adds exactly once even when a sibling throws in its ADD leg (post-quiesce)", async () => {
@@ -1514,9 +1518,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         // The post-quiesce add failure did not corrupt the barrier: the issuing
         // session swapped exactly once and the name is active + listed.
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
     });
 
     it("update adds v2 on every session only after the LAST session quiesces (staggered)", async () => {
@@ -1761,9 +1763,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
             v1Root,
         );
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
         // The issuing session removed v1 then re-added v1 (rolled back, no v2).
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
 
@@ -1917,9 +1917,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
             v1Root,
         );
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
     });
 
     it("a rolled-back update leaves v1 durable for an immediately-following op (record never overwritten)", async () => {
@@ -1951,9 +1949,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
             v1Root,
         );
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
         // The rollback GC prunes the v2 root, NEVER v1's: v1's version-scoped
         // install-root directory must survive so v1 stays loadable (a regression
         // that pruned `oldRoot` on rollback would delete the restored version).
@@ -2007,9 +2003,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
 
         expect(outcomes).toEqual(["updated"]);
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
     });
 
     it("an uninstall straggler that won't idle rolls back (record + agent restored, name reusable)", async () => {
@@ -2040,9 +2034,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
                 path.join(instanceDir, "installedAgents", "agents", v1Root),
             ),
         ).toBe(true);
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
 
         // The name was freed from `removing`: it is mutable again (a re-install
@@ -2585,7 +2577,7 @@ describe("structural manifest check on install/update (5.3)", () => {
         ).rejects.toThrow();
         // Nothing persisted: a broken agent is never recorded.
         expect(readAgentsJson(instanceDir)?.agents.x).toBeUndefined();
-        expect(built.listInstalled().map((i) => i.name)).not.toContain("x");
+        expect(installedNames(built)).not.toContain("x");
     });
 
     it("install of a catalog source succeeds when the manifest reads", async () => {
@@ -2630,7 +2622,7 @@ describe("structural manifest check on install/update (5.3)", () => {
         expect(readAgentsJson(instanceDir)!.agents.x.path).toBe(
             path.join(instanceDir, "catalog-package"),
         );
-        expect(built.listInstalled().map((i) => i.name)).toContain("x");
+        expect(installedNames(built)).toContain("x");
     });
 
     it("a `path` install is validated too — a manifest-less directory fails and records nothing", async () => {
@@ -2645,6 +2637,6 @@ describe("structural manifest check on install/update (5.3)", () => {
             built.install("p", bareDir, undefined, noopHost),
         ).rejects.toThrow();
         expect(readAgentsJson(instanceDir)?.agents.p).toBeUndefined();
-        expect(built.listInstalled().map((i) => i.name)).not.toContain("p");
+        expect(installedNames(built)).not.toContain("p");
     });
 });

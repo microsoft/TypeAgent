@@ -74,7 +74,6 @@ export interface ResolvedCandidate {
  */
 export interface AvailableInstallRow {
     readonly source: string;
-    readonly sourceKind?: string | undefined; // shown with the source heading
     readonly ref: string; // internal durable/identity handle; dedup key only
     readonly defaultAgentName?: string | undefined; // shown as the install name
     readonly packageName?: string | undefined; // shown as the package; absent for path-only

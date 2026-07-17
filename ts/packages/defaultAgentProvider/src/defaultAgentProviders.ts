@@ -17,7 +17,6 @@ import {
     UpdateOutcomeStatus,
     UninstallOutcomeStatus,
     AGENT_INSTALL_ROOTS_SUBDIR,
-    AvailableInstallRow,
     InstallPreview,
     InstallPreviewMatch,
     InstallResult,
@@ -26,6 +25,8 @@ import {
 } from "./installSources/config.js";
 import {
     createPackageAppAgentProvider,
+    AgentSourceGroup,
+    AvailableAgentInfo,
     InstalledAgentInfo,
     InstalledAgentSourceApi,
 } from "./installSources/packageAgent.js";
@@ -1254,7 +1255,7 @@ export function createDefaultInstalledAgentSource(
                 },
             });
         },
-        listInstalled(): InstalledAgentInfo[] {
+        listInstalled(): AgentSourceGroup<InstalledAgentInfo>[] {
             // The source owns only mutable install records (`agents.json`).
             // Bundled agents are provided separately by the bundled provider and
             // are intentionally excluded from these install summaries. A record
@@ -1262,18 +1263,43 @@ export function createDefaultInstalledAgentSource(
             // name that is currently `removing` (draining) is hidden — it is not
             // an installed agent anymore.
             const agents = readAgentsJson(instanceDir)?.agents ?? {};
-            return Object.values(agents)
-                .filter(
-                    (record) => entries.get(record.name)?.status !== "removing",
-                )
-                .map((record) => {
-                    const ref = record.ref ?? record.module ?? record.path;
-                    return {
-                        name: record.name,
-                        source: record.source,
-                        ...(ref !== undefined ? { ref } : {}),
-                    };
+            const agentsBySource = new Map<string, InstalledAgentInfo[]>();
+            for (const record of Object.values(agents)) {
+                if (entries.get(record.name)?.status === "removing") {
+                    continue;
+                }
+                const ref = record.ref ?? record.module ?? record.path;
+                const info = {
+                    name: record.name,
+                    ...(ref !== undefined ? { ref } : {}),
+                };
+                const group = agentsBySource.get(record.source);
+                if (group === undefined) {
+                    agentsBySource.set(record.source, [info]);
+                } else {
+                    group.push(info);
+                }
+            }
+
+            const groups: AgentSourceGroup<InstalledAgentInfo>[] = [];
+            for (const info of registry.list()) {
+                const sourceAgents = agentsBySource.get(info.name);
+                if (sourceAgents === undefined) {
+                    continue;
+                }
+                groups.push({
+                    source: info.name,
+                    sourceKind: info.kind,
+                    agents: sourceAgents,
                 });
+                agentsBySource.delete(info.name);
+            }
+            // Keep records from removed source configurations visible after all
+            // currently configured sources.
+            for (const [sourceName, sourceAgents] of agentsBySource) {
+                groups.push({ source: sourceName, agents: sourceAgents });
+            }
+            return groups;
         },
         listSources(): string[] {
             // Source names in resolution order, for `@package install --source`
@@ -1282,10 +1308,10 @@ export function createDefaultInstalledAgentSource(
         },
         async listAvailableAgents(opts?: {
             sourceName?: string;
-        }): Promise<AvailableInstallRow[]> {
-            // Source-aware install rows for `@package available` and filtered
-            // completion in `@package install`.
-            const rows: AvailableInstallRow[] = [];
+        }): Promise<AgentSourceGroup<AvailableAgentInfo>[]> {
+            // Source groups for `@package available` and filtered completion in
+            // `@package install`.
+            const groups: AgentSourceGroup<AvailableAgentInfo>[] = [];
             for (const info of registry.list()) {
                 if (
                     opts?.sourceName !== undefined &&
@@ -1298,17 +1324,29 @@ export function createDefaultInstalledAgentSource(
                     continue;
                 }
                 try {
-                    rows.push(
-                        ...(await src.listAgents()).map((row) => ({
-                            ...row,
-                            sourceKind: info.kind,
-                        })),
+                    const sourceAgents = (await src.listAgents()).map(
+                        ({ ref, defaultAgentName, packageName }) => ({
+                            ref,
+                            ...(defaultAgentName !== undefined
+                                ? { defaultAgentName }
+                                : {}),
+                            ...(packageName !== undefined
+                                ? { packageName }
+                                : {}),
+                        }),
                     );
+                    if (sourceAgents.length > 0) {
+                        groups.push({
+                            source: info.name,
+                            sourceKind: info.kind,
+                            agents: sourceAgents,
+                        });
+                    }
                 } catch (e) {
                     debug(`listAgents failed for source '${info.name}': ${e}`);
                 }
             }
-            return rows;
+            return groups;
         },
         async preview(
             nameOrTarget: string,

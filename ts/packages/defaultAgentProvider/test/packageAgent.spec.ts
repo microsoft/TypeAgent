@@ -487,15 +487,23 @@ describe("@package handler completions", () => {
             listAvailableAgents: async () => [
                 {
                     source: "catalog",
-                    ref: "k1",
-                    defaultAgentName: "catalog-agent",
-                    packageName: "@x/catalog-agent",
+                    agents: [
+                        {
+                            ref: "k1",
+                            defaultAgentName: "catalog-agent",
+                            packageName: "@x/catalog-agent",
+                        },
+                    ],
                 },
                 {
                     source: "feed",
-                    ref: "@x/feed-agent",
-                    defaultAgentName: "feed-agent",
-                    packageName: "@x/feed-agent",
+                    agents: [
+                        {
+                            ref: "@x/feed-agent",
+                            defaultAgentName: "feed-agent",
+                            packageName: "@x/feed-agent",
+                        },
+                    ],
                 },
             ],
             listSources: () => ["catalog", "feed"],
@@ -528,24 +536,36 @@ describe("@package handler completions", () => {
                     return [
                         {
                             source: "catalog",
-                            ref: "k1",
-                            defaultAgentName: "catalog-agent",
-                            packageName: "@x/catalog-agent",
+                            agents: [
+                                {
+                                    ref: "k1",
+                                    defaultAgentName: "catalog-agent",
+                                    packageName: "@x/catalog-agent",
+                                },
+                            ],
                         },
                     ];
                 }
                 return [
                     {
                         source: "catalog",
-                        ref: "k1",
-                        defaultAgentName: "catalog-agent",
-                        packageName: "@x/catalog-agent",
+                        agents: [
+                            {
+                                ref: "k1",
+                                defaultAgentName: "catalog-agent",
+                                packageName: "@x/catalog-agent",
+                            },
+                        ],
                     },
                     {
                         source: "feed",
-                        ref: "@x/feed-agent",
-                        defaultAgentName: "feed-agent",
-                        packageName: "@x/feed-agent",
+                        agents: [
+                            {
+                                ref: "@x/feed-agent",
+                                defaultAgentName: "feed-agent",
+                                packageName: "@x/feed-agent",
+                            },
+                        ],
                     },
                 ];
             },
@@ -572,8 +592,8 @@ describe("@package handler completions", () => {
     it("uninstall/update complete the managed agent names", async () => {
         const { api } = makeSource({
             listInstalled: () => [
-                { name: "a", source: "path" },
-                { name: "b", source: "feed" },
+                { source: "path", agents: [{ name: "a" }] },
+                { source: "feed", agents: [{ name: "b" }] },
             ],
         });
         for (const which of ["uninstall", "update"] as const) {
@@ -601,23 +621,29 @@ describe("@package available", () => {
                 {
                     source: "feed",
                     sourceKind: "feed",
-                    ref: "@x/zeta",
-                    defaultAgentName: "zeta",
-                    packageName: "@x/zeta",
+                    agents: [
+                        {
+                            ref: "@x/zeta",
+                            defaultAgentName: "zeta",
+                            packageName: "@x/zeta",
+                        },
+                        {
+                            ref: "@x/beta",
+                            defaultAgentName: "beta",
+                            packageName: "@x/beta",
+                        },
+                    ],
                 },
                 {
                     source: "catalog",
                     sourceKind: "catalog",
-                    ref: "k-alpha",
-                    defaultAgentName: "alpha",
-                    packageName: "alpha-pkg",
-                },
-                {
-                    source: "feed",
-                    sourceKind: "feed",
-                    ref: "@x/beta",
-                    defaultAgentName: "beta",
-                    packageName: "@x/beta",
+                    agents: [
+                        {
+                            ref: "k-alpha",
+                            defaultAgentName: "alpha",
+                            packageName: "alpha-pkg",
+                        },
+                    ],
                 },
             ],
         });
@@ -659,24 +685,36 @@ describe("@package available", () => {
                     return [
                         {
                             source: "catalog",
-                            ref: "k-alpha",
-                            defaultAgentName: "alpha",
-                            packageName: "alpha-pkg",
+                            agents: [
+                                {
+                                    ref: "k-alpha",
+                                    defaultAgentName: "alpha",
+                                    packageName: "alpha-pkg",
+                                },
+                            ],
                         },
                     ];
                 }
                 return [
                     {
                         source: "catalog",
-                        ref: "k-alpha",
-                        defaultAgentName: "alpha",
-                        packageName: "alpha-pkg",
+                        agents: [
+                            {
+                                ref: "k-alpha",
+                                defaultAgentName: "alpha",
+                                packageName: "alpha-pkg",
+                            },
+                        ],
                     },
                     {
                         source: "feed",
-                        ref: "@x/beta",
-                        defaultAgentName: "beta",
-                        packageName: "@x/beta",
+                        agents: [
+                            {
+                                ref: "@x/beta",
+                                defaultAgentName: "beta",
+                                packageName: "@x/beta",
+                            },
+                        ],
                     },
                 ];
             },
@@ -718,15 +756,23 @@ describe("@package available", () => {
 });
 
 describe("@package list", () => {
-    it("renders headings, tables, and footer with explicit line breaks", async () => {
+    it("renders source headings, tables, and footer in block mode", async () => {
         const { api } = makeSource({
             listInstalled: () => [
-                { name: "beta", source: "feed", ref: "pkg-beta" },
-                { name: "alpha", source: "catalog", ref: "pkg-alpha" },
+                {
+                    source: "feed-source",
+                    sourceKind: "feed",
+                    agents: [{ name: "beta", ref: "pkg-beta" }],
+                },
+                {
+                    source: "catalog-source",
+                    sourceKind: "catalog",
+                    agents: [{ name: "alpha", ref: "pkg-alpha" }],
+                },
             ],
         });
         const handler = getHandler(api, "list");
-        const { context, output } = tightlyCapturingActionContext({
+        const { context, output, modes } = tightlyCapturingActionContext({
             appAgentProviderSetController: noopHost,
             source: api,
         });
@@ -734,8 +780,9 @@ describe("@package list", () => {
         await handler.run(context, { args: {} } as any);
 
         expect(output()).toContain(
-            "catalog\nAgent Reference\nalpha pkg-alpha\nfeed\nAgent Reference\nbeta pkg-beta\nShowing installable installed agents only.",
+            "feed-source (feed)\nName Reference\nbeta pkg-beta\ncatalog-source (catalog)\nName Reference\nalpha pkg-alpha\nShowing installable installed agents only.",
         );
+        expect(modes).toEqual(["block", "block", "block", "block", "block"]);
     });
 });
 

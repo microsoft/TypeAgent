@@ -27,7 +27,6 @@ import {
 } from "agent-dispatcher";
 import chalk from "chalk";
 import {
-    AvailableInstallRow,
     InstallMatchKind,
     InstallPreview,
     InstallResult,
@@ -45,9 +44,22 @@ const AGENT_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
 /** A host-rendered summary of one installed agent for `@package list`. */
 export interface InstalledAgentInfo {
     name: string;
-    source: string;
     // Feed specifier, package name, or path. Omitted when none is recorded.
     ref?: string;
+}
+
+/** One install target advertised by a source. */
+export interface AvailableAgentInfo {
+    readonly ref: string;
+    readonly defaultAgentName?: string | undefined;
+    readonly packageName?: string | undefined;
+}
+
+/** Agent information grouped under one configured install source. */
+export interface AgentSourceGroup<T> {
+    readonly source: string;
+    readonly sourceKind?: string | undefined;
+    readonly agents: T[];
 }
 
 /**
@@ -126,15 +138,15 @@ export interface InstalledAgentSourceApi {
         issuingController: AppAgentProviderSetController,
         onOutcome?: (status: UpdateOutcomeStatus) => void,
     ): Promise<UpdateResult>;
-    // Host-rendered summaries of installed agents, backing `@package list`.
-    listInstalled(): InstalledAgentInfo[];
+    // Host-rendered summaries of installed agents, grouped in source order.
+    listInstalled(): AgentSourceGroup<InstalledAgentInfo>[];
     // Source names in resolution order (for `@package install --source`).
     listSources(): string[];
-    // Enumerable install rows (default agent name + package name) with source
-    // names. Optional source filter narrows results to one source.
+    // Enumerable install targets grouped in source order. Optional source
+    // filter narrows results to one source.
     listAvailableAgents(opts?: {
         sourceName?: string;
-    }): Promise<AvailableInstallRow[]>;
+    }): Promise<AgentSourceGroup<AvailableAgentInfo>[]>;
     // The host-owned source command table, nested under `@package source`.
     sourceCommands(): CommandHandlerTable;
 }
@@ -156,7 +168,46 @@ type PackageSessionContext = SessionContext<PackageAgentContext>;
 
 // Names of agents that can be uninstalled/updated.
 function managedAgentNames(context: PackageSessionContext): string[] {
-    return context.agentContext.source.listInstalled().map((info) => info.name);
+    return context.agentContext.source
+        .listInstalled()
+        .flatMap((group) => group.agents.map((info) => info.name));
+}
+
+function displaySourceTables<T>(
+    context: PackageActionContext,
+    groups: AgentSourceGroup<T>[],
+    columns: string[],
+    compareRows: (a: T, b: T) => number,
+    formatRow: (row: T) => string[],
+): void {
+    groups.forEach((group, index) => {
+        const sourceKind = group.sourceKind;
+        const sourceHeading =
+            sourceKind !== undefined
+                ? `${group.source} (${sourceKind})`
+                : group.source;
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: chalk.yellow(
+                    `${index === 0 ? "" : "\n"}${sourceHeading}\n`,
+                ),
+            },
+            "block",
+        );
+        const text: string[][] = [columns];
+        group.agents.sort(compareRows);
+        for (const row of group.agents) {
+            text.push(formatRow(row));
+        }
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: text,
+            },
+            "block",
+        );
+    });
 }
 
 class ListInstalledCommandHandler implements CommandHandler {
@@ -168,54 +219,36 @@ class ListInstalledCommandHandler implements CommandHandler {
     ) {
         const { source } = context.sessionContext.agentContext;
         // `@package list` shows mutable installed records only.
-        const records = source.listInstalled();
-        if (records.length === 0) {
+        const groups = source.listInstalled();
+        if (groups.length === 0) {
             displayResult("No installed agents found.", context);
             return;
         }
 
-        // Group records by source so each source renders as its own table.
-        const groups = new Map<string, typeof records>();
-        for (const record of records) {
-            const group = groups.get(record.source);
-            if (group === undefined) {
-                groups.set(record.source, [record]);
-            } else {
-                group.push(record);
-            }
-        }
+        // Preserve source order, matching `@package available`. Sort agents
+        // within each source and render each heading and table as a block.
+        displaySourceTables(
+            context,
+            groups,
+            ["Name", "Reference"],
+            (a, b) => a.name.localeCompare(b.name),
+            (record) => [
+                chalk.cyanBright(record.name),
+                record.ref !== undefined
+                    ? chalk.gray(record.ref)
+                    : chalk.gray("—"),
+            ],
+        );
 
-        // Sources listed alphabetically; one table per source, with a heading.
-        const sortedSources = [...groups.keys()].sort();
-        sortedSources.forEach((source, index) => {
-            const groupRecords = groups
-                .get(source)!
-                .sort((a, b) => a.name.localeCompare(b.name));
-            context.actionIO.appendDisplay({
+        context.actionIO.appendDisplay(
+            {
                 type: "text",
-                content: chalk.yellow(`${index === 0 ? "" : "\n"}${source}\n`),
-            });
-            const text: string[][] = [["Agent", "Reference"]];
-            for (const record of groupRecords) {
-                text.push([
-                    chalk.cyanBright(record.name),
-                    record.ref !== undefined
-                        ? chalk.gray(record.ref)
-                        : chalk.gray("—"),
-                ]);
-            }
-            context.actionIO.appendDisplay({
-                type: "text",
-                content: text,
-            });
-        });
-
-        context.actionIO.appendDisplay({
-            type: "text",
-            content: chalk.gray(
-                "\nShowing installable installed agents only. Use '@config agent' to see all available agents and their status.",
-            ),
-        });
+                content: chalk.gray(
+                    "\nShowing installable installed agents only. Use '@config agent' to see all available agents and their status.",
+                ),
+            },
+            "block",
+        );
     }
 }
 
@@ -249,66 +282,30 @@ class ListAvailableCommandHandler implements CommandHandler {
             displayStatus("Refreshing source metadata...", context);
             await source.refresh(sourceName);
         }
-        const rows = await source.listAvailableAgents(
+        const groups = await source.listAvailableAgents(
             sourceName !== undefined ? { sourceName } : undefined,
         );
-        if (rows.length === 0) {
+        if (groups.length === 0) {
             displayResult("No installable agents found.", context);
             return;
         }
 
         // Show only what can be typed into `@package install`: the default agent
         // name and the package name. The internal catalog key / durable ref is
-        // never displayed. Group by source to keep unrelated catalogs and feeds
-        // in separate tables.
-        const groups = new Map<string, typeof rows>();
-        for (const row of rows) {
-            const group = groups.get(row.source);
-            if (group === undefined) {
-                groups.set(row.source, [row]);
-            } else {
-                group.push(row);
-            }
-        }
-
-        [...groups.keys()].forEach((sourceName, index) => {
-            const groupRows = groups.get(sourceName)!;
-            const sourceKind = groupRows[0].sourceKind;
-            const sourceHeading =
-                sourceKind !== undefined
-                    ? `${sourceName} (${sourceKind})`
-                    : sourceName;
-            context.actionIO.appendDisplay(
-                {
-                    type: "text",
-                    content: chalk.yellow(
-                        `${index === 0 ? "" : "\n"}${sourceHeading}\n`,
-                    ),
-                },
-                "block",
-            );
-            const text: string[][] = [["Name", "Package"]];
-            groupRows.sort((a, b) =>
+        // never displayed. Keep unrelated catalogs and feeds in separate tables.
+        displaySourceTables(
+            context,
+            groups,
+            ["Name", "Package"],
+            (a, b) =>
                 (a.defaultAgentName ?? a.packageName ?? "").localeCompare(
                     b.defaultAgentName ?? b.packageName ?? "",
                 ),
-            );
-            for (const row of groupRows) {
-                text.push([
-                    chalk.cyanBright(row.defaultAgentName ?? "—"),
-                    row.packageName
-                        ? chalk.gray(row.packageName)
-                        : chalk.gray("—"),
-                ]);
-            }
-            context.actionIO.appendDisplay(
-                {
-                    type: "text",
-                    content: text,
-                },
-                "block",
-            );
-        });
+            (row) => [
+                chalk.cyanBright(row.defaultAgentName ?? "—"),
+                row.packageName ? chalk.gray(row.packageName) : chalk.gray("—"),
+            ],
+        );
     }
 
     public async getCompletion(
@@ -526,16 +523,18 @@ class InstallCommandHandler implements CommandHandler {
                 // Complete default agent names and package names. The second
                 // argument (explicit installed name) is not completed.
                 const sourceName = params.flags?.source as string | undefined;
-                const rows = await source.listAvailableAgents(
+                const groups = await source.listAvailableAgents(
                     sourceName !== undefined ? { sourceName } : undefined,
                 );
                 const values = new Set<string>();
-                for (const row of rows) {
-                    if (row.defaultAgentName !== undefined) {
-                        values.add(row.defaultAgentName);
-                    }
-                    if (row.packageName !== undefined) {
-                        values.add(row.packageName);
+                for (const group of groups) {
+                    for (const agent of group.agents) {
+                        if (agent.defaultAgentName !== undefined) {
+                            values.add(agent.defaultAgentName);
+                        }
+                        if (agent.packageName !== undefined) {
+                            values.add(agent.packageName);
+                        }
                     }
                 }
                 completions.push({ name, completions: [...values] });
