@@ -20,6 +20,8 @@ log.txt
 /agents/*
 !/agents/index.md
 
-# --- Generated interactive Action Browser (built by tools/actionBrowser) ---
-/overview/action-browser.html
-/overview/action-browser.json
+# --- Interactive Action Browser (built by tools/actionBrowser) ---
+# Intentionally NOT ignored: docs-pr-amend.yml regenerates the generated HTML
+# + JSON and commits them onto the PR branch so the catalog is reviewable in
+# the same PR that changed the agents. The docs-site deploy builds its own
+# copy separately.
