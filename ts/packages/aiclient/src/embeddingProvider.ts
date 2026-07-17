@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import { TextEmbeddingModel } from "./models.js";
-import { createEmbeddingModel, EnvVars } from "./openai.js";
+import { createEmbeddingModel } from "./openai.js";
+import { EnvVars } from "./apiTypes.js";
 import { createLocalEmbeddingModel } from "./localEmbedding.js";
 
 /**

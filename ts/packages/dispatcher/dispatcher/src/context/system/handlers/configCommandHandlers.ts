@@ -2407,6 +2407,7 @@ function renderCollisionShowHTML(cfg: {
         minUniqueTokens: number;
         minMass: number;
         margin: number;
+        negationGuard: boolean;
         abstainFallback: string;
     };
 }): string {
@@ -2512,6 +2513,7 @@ function renderCollisionShowHTML(cfg: {
                 minTokens <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.minUniqueTokens}</code>
                 minMass <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.minMass}</code>
                 margin <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${cfg.contextSelector.margin}</code>
+                negation ${statusPill(cfg.contextSelector.negationGuard)}
                 abstain <code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">${escapeHtml(cfg.contextSelector.abstainFallback)}</code>
             </div>
         </div>`;
@@ -2584,6 +2586,7 @@ function renderCollisionShowText(cfg: {
         minUniqueTokens: number;
         minMass: number;
         margin: number;
+        negationGuard: boolean;
         abstainFallback: string;
     };
 }): string[] {
@@ -2601,7 +2604,7 @@ function renderCollisionShowText(cfg: {
         `  multipleActionBehavior: ${cfg.multipleActionBehavior}`,
         `  telemetry: emit=${onOff(cfg.telemetry.emit)} debugLog=${onOff(cfg.telemetry.debugLog)}${expId}`,
         `  preference: enabled=${onOff(cfg.preference.enabled)} source=${cfg.preference.ambiguitySource} registryFirst=${onOff(cfg.preference.registryFirst)} remember=${cfg.preference.remember} registry=${cfg.preference.registryPath ? `"${cfg.preference.registryPath}"` : "(empty)"}`,
-        `  contextSelector: detect=${onOff(cfg.contextSelector.detect)} window=${cfg.contextSelector.windowTurns} decay=${cfg.contextSelector.decay} minTokens=${cfg.contextSelector.minUniqueTokens} minMass=${cfg.contextSelector.minMass} margin=${cfg.contextSelector.margin} abstain=${cfg.contextSelector.abstainFallback}`,
+        `  contextSelector: detect=${onOff(cfg.contextSelector.detect)} window=${cfg.contextSelector.windowTurns} decay=${cfg.contextSelector.decay} minTokens=${cfg.contextSelector.minUniqueTokens} minMass=${cfg.contextSelector.minMass} margin=${cfg.contextSelector.margin} negation=${onOff(cfg.contextSelector.negationGuard)} abstain=${cfg.contextSelector.abstainFallback}`,
     ];
 }
 

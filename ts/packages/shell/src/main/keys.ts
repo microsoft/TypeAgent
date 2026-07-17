@@ -13,7 +13,10 @@ import {
     loadConfigSync,
     type ConfigTree,
 } from "@typeagent/config";
-import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
+import {
+    initRuntimeConfigFromProcessEnv,
+    warmupCopilotFromConfig,
+} from "@typeagent/aiclient";
 import yaml from "js-yaml";
 
 import { debugShell, debugShellError } from "./debug.js";
@@ -110,6 +113,11 @@ function populateKeys(parsed: ParsedKeys) {
     // Legacy callers still see the same values via process.env.
     initRuntimeConfigFromProcessEnv();
     debugShell("Runtime Config initialized from process.env");
+    // Pre-warm the Copilot CLI/session/endpoint when it's the active provider
+    // (no-op otherwise) so the first request avoids the cold-start cost. This
+    // lives with the hosts rather than in runtimeConfig to avoid an aiclient
+    // import cycle. Fire-and-forget so startup is never blocked.
+    void warmupCopilotFromConfig();
 }
 
 function parsedKeysEqual(a: ParsedKeys, b: ParsedKeys) {
@@ -279,6 +287,7 @@ export function tryLoadYamlConfig(envFile?: string): boolean {
         if (keyCount > 0) {
             debugShell("Loaded " + keyCount + " config keys from YAML");
             initRuntimeConfigFromProcessEnv();
+            void warmupCopilotFromConfig();
             return true;
         }
     } catch (err) {

@@ -7,7 +7,8 @@ import {
     createAzureTokenProvider,
 } from "./auth.js";
 import { getEnvSetting, getIntFromEnv } from "./common.js";
-import { CommonApiSettings, EnvVars, ModelType } from "./openai.js";
+import { EnvVars, ModelType } from "./apiTypes.js";
+import type { CommonApiSettings } from "./openai.js";
 import { azureApiSettingsFromConfig } from "./apiSettingsFromConfig.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
 import registerDebug from "debug";

@@ -99,7 +99,14 @@ class MockSession implements MinimalCopilotSession {
     ) {
         this.sessionId = `mock-${Math.random().toString(36).slice(2, 8)}`;
     }
-    async sendAndWait(opts: MessageOptions, timeout?: number) {
+    async sendAndWait(
+        promptOrOptions: string | MessageOptions,
+        timeout?: number,
+    ) {
+        const opts: MessageOptions =
+            typeof promptOrOptions === "string"
+                ? { prompt: promptOrOptions }
+                : promptOrOptions;
         this.sentPrompts.push(opts.prompt);
         this.sentTimeouts.push(timeout);
         const script = this.nextScript();

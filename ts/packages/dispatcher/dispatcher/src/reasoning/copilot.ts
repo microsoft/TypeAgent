@@ -11,6 +11,7 @@ import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import {
     CopilotClient,
+    RuntimeConnection,
     defineTool,
     approveAll,
     type SessionConfig,
@@ -320,19 +321,21 @@ async function createCopilotClient(
     );
 
     const client = new CopilotClient({
-        ...(cliPath ? { cliPath } : {}),
+        connection: RuntimeConnection.forStdio({
+            ...(cliPath ? { path: cliPath } : {}),
+            args: [
+                "--add-dir",
+                repoRoot,
+                "--add-dir",
+                path.resolve(repoRoot, ".."),
+                "--allow-all-urls",
+                "--allow-all-tools",
+            ],
+        }),
         env: {
             ...process.env,
             CLAUDE_CONFIG_DIR: isolatedConfigDir,
         },
-        cliArgs: [
-            "--add-dir",
-            repoRoot,
-            "--add-dir",
-            path.resolve(repoRoot, ".."),
-            "--allow-all-urls",
-            "--allow-all-tools",
-        ],
     });
 
     try {
