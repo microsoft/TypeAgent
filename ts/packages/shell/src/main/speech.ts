@@ -10,7 +10,10 @@ import {
     getShellWindow,
     getShellWindowForChatViewIpcEvent,
 } from "./instance.js";
-import { SpeechProcessing, isLocalSpeechProcessingSupported } from "./speechProcessing.js";
+import {
+    SpeechProcessing,
+    isLocalSpeechProcessingSupported,
+} from "./speechProcessing.js";
 const debugShell = registerDebug("typeagent:shell:speech");
 const debugShellError = registerDebug("typeagent:shell:speech:error");
 

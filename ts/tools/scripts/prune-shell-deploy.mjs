@@ -55,10 +55,7 @@ const leafTargets = [
 // `@github/copilot-win32-x64`, `@anthropic-ai/claude-agent-sdk-linux-arm64`)
 // is a per-platform native and is dropped for EVERY os/arch. The exact base
 // names in `keepExact` (the JS wrappers) are preserved.
-const nativePrefixes = [
-    "@github/copilot-",
-    "@anthropic-ai/claude-agent-sdk-",
-];
+const nativePrefixes = ["@github/copilot-", "@anthropic-ai/claude-agent-sdk-"];
 const keepExact = new Set([
     "@github/copilot-sdk", // JS SDK wrapper (small)
 ]);

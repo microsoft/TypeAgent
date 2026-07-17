@@ -36,7 +36,12 @@ import {
     debugShellError,
     debugShellInit,
 } from "./debug.js";
-import { loadKeys, loadKeysFromEnvFile, tryLoadYamlConfig, warmupRuntimeConfig } from "./keys.js";
+import {
+    loadKeys,
+    loadKeysFromEnvFile,
+    tryLoadYamlConfig,
+    warmupRuntimeConfig,
+} from "./keys.js";
 import { parseShellCommandLine } from "./args.js";
 import {
     setUpdateConfigPath,
