@@ -1,4 +1,7 @@
-<!DOCTYPE html>
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
 <!-- Copyright (c) Microsoft Corporation. Licensed under the MIT License. -->
 <!--
   Standalone design prototype for the vscode-shell chat webview.
@@ -556,7 +559,10 @@
                   <div class="user-icon">R</div>
                   <div class="chat-message-body-hide-metrics chat-message-user">
                     <div class="chat-message-content">
-                      <span class="chat-message-user-text">run the powershell flow test and fix whatever is failing</span>
+                      <span class="chat-message-user-text"
+                        >run the powershell flow test and fix whatever is
+                        failing</span
+                      >
                     </div>
                   </div>
                 </div>
@@ -569,11 +575,15 @@
                     ><span class="timestring">- 4:53:51 PM</span>
                   </div>
                   <div class="agent-icon">✨</div>
-                  <div class="chat-message-body-hide-metrics chat-message-agent">
+                  <div
+                    class="chat-message-body-hide-metrics chat-message-agent"
+                  >
                     <div class="chat-message-content">
                       <details class="reasoning-thinking" open>
                         <summary>Thinking</summary>
-                        <pre>The testPowerShellFlow is failing because the sandbox doesn't allow external executables to spawn child processes without an explicit allowlist entry, so the conditional branch never runs and the here-string is parsed as a literal.</pre>
+                        <pre>
+The testPowerShellFlow is failing because the sandbox doesn't allow external executables to spawn child processes without an explicit allowlist entry, so the conditional branch never runs and the here-string is parsed as a literal.</pre
+                        >
                       </details>
                     </div>
                   </div>
@@ -587,9 +597,14 @@
                     ><span class="timestring">- 4:53:51 PM</span>
                   </div>
                   <div class="agent-icon">✨</div>
-                  <div class="chat-message-body-hide-metrics chat-message-agent">
+                  <div
+                    class="chat-message-body-hide-metrics chat-message-agent"
+                  >
                     <div class="chat-message-content">
-                      <p><strong>Tool:</strong> execute_action — <code>powershell.?</code></p>
+                      <p>
+                        <strong>Tool:</strong> execute_action —
+                        <code>powershell.?</code>
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -602,11 +617,15 @@
                     ><span class="timestring">- 4:53:55 PM</span>
                   </div>
                   <div class="agent-icon">✨</div>
-                  <div class="chat-message-body-hide-metrics chat-message-agent">
+                  <div
+                    class="chat-message-body-hide-metrics chat-message-agent"
+                  >
                     <div class="chat-message-content">
                       <details class="reasoning-thinking" open>
                         <summary>Thinking</summary>
-                        <pre>The PowerShell test keeps breaking—maybe the sandbox doesn't support conditional statements in the way the harness expects, or the mocked Invoke-Expression shim swallows the exit code before assertion.</pre>
+                        <pre>
+The PowerShell test keeps breaking—maybe the sandbox doesn't support conditional statements in the way the harness expects, or the mocked Invoke-Expression shim swallows the exit code before assertion.</pre
+                        >
                       </details>
                     </div>
                   </div>
@@ -619,11 +638,13 @@
                     ><span class="timestring">- 4:54:03 PM</span>
                   </div>
                   <div class="agent-icon">🤖</div>
-                  <div class="chat-message-body-hide-metrics chat-message-agent">
+                  <div
+                    class="chat-message-body-hide-metrics chat-message-agent"
+                  >
                     <div class="chat-message-content">
                       <div>
-                        Here is the failing assertion and a suggested fix for the
-                        allowlist entry:
+                        Here is the failing assertion and a suggested fix for
+                        the allowlist entry:
                       </div>
                       <pre><code class="language-powershell">Describe "testPowerShellFlow" {
     It "runs the conditional branch when the allowlist entry is present" {
@@ -633,10 +654,12 @@
 }</code></pre>
                     </div>
                     <div class="chat-message-details">
-                      <pre>{
+                      <pre>
+{
   "actionName": "executePowerShell",
   "parameters": { "script": "if ($ok) { Write-Output 'done' } else { throw 'sandbox blocked external executable spawn without allowlist entry' }", "timeoutMs": 60000 }
-}</pre>
+}</pre
+                      >
                     </div>
                   </div>
                 </div>
@@ -648,7 +671,9 @@
                     ><span class="timestring">- 4:54:03 PM</span>
                   </div>
                   <div class="agent-icon">🤖</div>
-                  <div class="chat-message-body-hide-metrics chat-message-agent">
+                  <div
+                    class="chat-message-body-hide-metrics chat-message-agent"
+                  >
                     <div class="chat-message-content chat-message-kind-error">
                       Error: Timeout after 60000ms waiting for session.idle
                     </div>
@@ -682,9 +707,7 @@
         desc.innerHTML = descriptions[opt];
         document
           .querySelectorAll(".toolbar button[data-opt]")
-          .forEach((b) =>
-            b.classList.toggle("active", b.dataset.opt === opt),
-          );
+          .forEach((b) => b.classList.toggle("active", b.dataset.opt === opt));
       }
       function setWidth(w) {
         viewport.style.width = w + "px";

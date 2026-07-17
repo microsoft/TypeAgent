@@ -41,7 +41,9 @@ export class CameraView {
      *   image's base64 data URL on accept, or `undefined` on cancel. The
      *   overlay hides itself before invoking the callback.
      */
-    constructor(private readonly onResult: (dataUrl: string | undefined) => void) {
+    constructor(
+        private readonly onResult: (dataUrl: string | undefined) => void,
+    ) {
         this.videoContainer = document.createElement("div");
         this.pictureDiv = document.createElement("div");
         this.canvas = document.createElement("canvas");
