@@ -66,6 +66,13 @@ export interface ClientIO {
     clear(requestId: RequestId): void;
     exit(requestId: RequestId): void;
     shutdown(requestId: RequestId): void;
+    /**
+     * Relaunch the host process (agent-server) so it loads rebuilt code.
+     * Optional: only the standalone agent-server implements it. Hosts that
+     * can't self-restart (embedded/in-process) leave it undefined, and
+     * `@server restart` reports that restart isn't available.
+     */
+    restart?(requestId: RequestId): void;
 
     // Display
     setUserRequest(requestId: RequestId, command: string, seq?: number): void;

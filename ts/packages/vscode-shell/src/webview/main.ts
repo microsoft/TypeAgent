@@ -12,6 +12,8 @@ import {
     ConversationBar,
     HistoryEntry,
     formatHistorySeparatorLabel,
+    STATUS_NOTICE_EVENT,
+    parseStatusNotice,
     type ConnectionStatus,
 } from "chat-ui";
 import type { TemplateEditServices, DynamicDisplayResult } from "chat-ui";
@@ -899,6 +901,11 @@ window.addEventListener("message", (event) => {
                 chatPanel.showInline(msg.data, msg.source);
             } else if (msg.event === "toast") {
                 chatPanel.showToast(msg.data, msg.source);
+            } else if (msg.event === STATUS_NOTICE_EVENT) {
+                const notice = parseStatusNotice(msg.data);
+                if (notice) {
+                    chatPanel.showStatusNotice(notice);
+                }
             } else {
                 chatPanel.addSystemMessage(`[${msg.source}] ${msg.event}`);
             }

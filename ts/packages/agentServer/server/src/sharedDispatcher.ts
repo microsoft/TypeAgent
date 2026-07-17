@@ -130,6 +130,15 @@ export async function createSharedDispatcher(
             callback(requestId, (clientIO) =>
                 clientIO.shutdown(requestId, ...args),
             ),
+        restart: (requestId, ...args) =>
+            callback(requestId, (clientIO) => {
+                if (clientIO.restart === undefined) {
+                    throw new Error(
+                        "The connected host does not support restart.",
+                    );
+                }
+                return clientIO.restart(requestId, ...args);
+            }),
         setUserRequest: (requestId, ...args) => {
             broadcast("setUserRequest", requestId, (clientIO) =>
                 clientIO.setUserRequest(requestId, ...args),

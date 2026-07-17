@@ -42,6 +42,20 @@ export type ConnectionHandlerDeps = {
      * embedded in-process server this typically quits the host app.
      */
     shutdown: () => void | Promise<void>;
+    /**
+     * Optional: relaunch the server process so it loads rebuilt code. Only the
+     * standalone agent-server supplies this - the in-process (embedded) server
+     * leaves it undefined, so `@server restart` and the restart RPC report that
+     * restart isn't supported there.
+     */
+    restart?: () => void | Promise<void>;
+    /**
+     * Optional: returns true when this server is running an out-of-date build
+     * (its code was rebuilt on disk after it started). When set, each joining
+     * client is warned once so the user knows to restart the server. Only the
+     * standalone agent-server supplies this.
+     */
+    isStale?: () => boolean;
     /** Returns the current resolved user identity. */
     getUserIdentity: () => UserIdentity;
     /**
@@ -71,6 +85,8 @@ export function createAgentServerConnectionHandler(
     const {
         conversationManager,
         shutdown,
+        restart,
+        isStale,
         getUserIdentity,
         portRegistrar,
         onConnect,
@@ -86,6 +102,10 @@ export function createAgentServerConnectionHandler(
             string,
             { dispatcher: Dispatcher; connectionId: string }
         >();
+
+        // Warn this connection about a stale server build at most once, even
+        // if it joins several conversations.
+        let notifiedStale = false;
 
         const invokeFunctions: AgentServerInvokeFunctions = {
             joinConversation: async (options?: DispatcherConnectOptions) => {
@@ -117,6 +137,16 @@ export function createAgentServerConnectionHandler(
                         shutdown: () => {
                             void shutdown();
                         },
+                        // Only expose restart when the host supports it (the
+                        // standalone server). Left off for the in-process
+                        // server so `@server restart` reports "not supported".
+                        ...(restart !== undefined
+                            ? {
+                                  restart: () => {
+                                      void restart();
+                                  },
+                              }
+                            : {}),
                     };
 
                     const result = await conversationManager.joinConversation(
@@ -153,6 +183,36 @@ export function createAgentServerConnectionHandler(
                         dispatcher: result.dispatcher,
                         connectionId: result.connectionId,
                     });
+
+                    // If this server is serving out-of-date code, warn the
+                    // freshly-joined client once so the user knows to restart
+                    // it. Sent as chat-ui's STATUS_NOTICE_EVENT ("statusNotice")
+                    // with a structured payload: the shells render a persistent
+                    // toast/pill (with a Restart button) and the CLI prints a
+                    // yellow line. Kept as a literal so the server needn't
+                    // depend on the chat-ui (DOM) package.
+                    if (isStale?.() === true && !notifiedStale) {
+                        notifiedStale = true;
+                        try {
+                            clientIORpcClient.notify(
+                                undefined,
+                                "statusNotice",
+                                {
+                                    id: "stale-build",
+                                    level: "warning",
+                                    title: "Server out of date",
+                                    message:
+                                        "This agent server was rebuilt on disk after it started, so it's running the old code.",
+                                    actionLabel: "Restart server",
+                                    actionCommand: "@server restart",
+                                },
+                                "agent-server",
+                            );
+                        } catch {
+                            // Best effort - never fail a join because the
+                            // stale-build warning couldn't be delivered.
+                        }
+                    }
 
                     const joinResult: JoinConversationResult = {
                         connectionId: result.connectionId,
@@ -217,6 +277,14 @@ export function createAgentServerConnectionHandler(
             },
             shutdown: async () => {
                 await shutdown();
+            },
+            restart: async () => {
+                if (restart === undefined) {
+                    throw new Error(
+                        "Restart is not supported for the in-process agent server.",
+                    );
+                }
+                await restart();
             },
             getUserIdentity: async () => getUserIdentity(),
             getSpeechToken: async () => getSpeechToken(),

@@ -133,6 +133,31 @@ export const systemHandlers: CommandHandlerTable = {
                 systemContext.clientIO.shutdown(getRequestId(systemContext));
             },
         },
+        server: {
+            description: "Manage the agent server",
+            commands: {
+                restart: {
+                    description:
+                        "Restart the agent server so it loads rebuilt code",
+                    async run(context: ActionContext<CommandHandlerContext>) {
+                        const systemContext =
+                            context.sessionContext.agentContext;
+                        // The routing clientIO always defines restart but
+                        // throws when the connected host can't self-restart
+                        // (e.g. the in-process shell). A host whose clientIO
+                        // omits restart entirely lands here as undefined.
+                        if (systemContext.clientIO.restart === undefined) {
+                            throw new Error(
+                                "Restart is only available when connected to a standalone agent server.",
+                            );
+                        }
+                        systemContext.clientIO.restart(
+                            getRequestId(systemContext),
+                        );
+                    },
+                },
+            },
+        },
         random: getRandomCommandHandlers(),
         notify: getNotifyCommandHandlers(),
         token: getTokenCommandHandlers(),

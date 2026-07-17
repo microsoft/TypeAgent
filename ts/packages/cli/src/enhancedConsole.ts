@@ -1096,6 +1096,30 @@ export function createEnhancedClientIO(
                     displayToastNotification(data, source, timestamp);
                     break;
 
+                case "statusNotice": {
+                    // Persistent status notice (chat-ui STATUS_NOTICE_EVENT).
+                    // The shells render a toast/pill; the console prints one
+                    // yellow line, preserving the pre-existing behavior.
+                    const notice = (data ?? {}) as {
+                        title?: string;
+                        message?: string;
+                        actionCommand?: string;
+                    };
+                    const text = [notice.title, notice.message]
+                        .filter(Boolean)
+                        .join(" \u2014 ");
+                    const hint = notice.actionCommand
+                        ? `  (${notice.actionCommand})`
+                        : "";
+                    const line = `\u26a0 ${text}${hint}`;
+                    if (currentSpinner?.isActive()) {
+                        currentSpinner.writeAbove(chalk.yellow(line));
+                    } else {
+                        console.warn(chalk.yellow(line));
+                    }
+                    break;
+                }
+
                 case "grammarRule":
                     // Grammar rule notifications - log to file to avoid disrupting prompt
                     // View with: cat ~/.typeagent/grammar.log

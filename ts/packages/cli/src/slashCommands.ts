@@ -54,7 +54,9 @@ export function getConversationCommandContext():
 // Late-binding server port for shutdown command.
 // Set from connect.ts after the connection is established.
 let serverPort: number | undefined;
-let serverConnection: { shutdown(): Promise<void> } | undefined;
+let serverConnection:
+    | { shutdown(): Promise<void>; restart(): Promise<void> }
+    | undefined;
 
 export function setServerPort(port: number): void {
     serverPort = port;
@@ -65,13 +67,13 @@ export function getServerPort(): number | undefined {
 }
 
 export function setServerConnection(
-    conn: { shutdown(): Promise<void> } | undefined,
+    conn: { shutdown(): Promise<void>; restart(): Promise<void> } | undefined,
 ): void {
     serverConnection = conn;
 }
 
 export function getServerConnection():
-    | { shutdown(): Promise<void> }
+    | { shutdown(): Promise<void>; restart(): Promise<void> }
     | undefined {
     return serverConnection;
 }
@@ -367,6 +369,34 @@ const slashCommands: SlashCommand[] = [
                 console.log(
                     chalk.red(`Failed to shut down agent server: ${e.message}`),
                 );
+            }
+            return { exit: true };
+        },
+    },
+    {
+        name: "restart",
+        description:
+            "Restart the agent server (reload rebuilt code); this CLI disconnects",
+        handler: async () => {
+            const port = serverPort ?? AGENT_SERVER_DEFAULT_PORT;
+            if (!serverConnection) {
+                console.log(
+                    chalk.red(
+                        "Not connected to an agent server; cannot restart.",
+                    ),
+                );
+                return;
+            }
+            console.log(
+                chalk.dim(
+                    `Requesting restart of server on port ${port}; it will relaunch and this CLI will disconnect. Reconnect with 'agent-cli connect'.`,
+                ),
+            );
+            try {
+                await serverConnection.restart();
+            } catch {
+                // Expected: the connection drops as the server exits to
+                // relaunch, so the restart RPC never returns cleanly.
             }
             return { exit: true };
         },
