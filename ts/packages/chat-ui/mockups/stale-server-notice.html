@@ -3,25 +3,26 @@
  Licensed under the MIT License. -->
 
 <!--
-  MOCKUP / SCRATCH FILE - not shipped.
+  DESIGN REFERENCE (kept) - not shipped code, retained to document the design.
 
-  Design options for the "agent server is running out-of-date code" notice that
-  the server pushes to each client on connect (see
+  Design exploration for the "agent server is running out-of-date code" notice
+  that the server pushes to each client on connect (see
   packages/agentServer/server/src/connectionHandler.ts -> clientIO.notify).
 
-  Today that notice is an ephemeral AppAgentEvent.Warning:
-    - CLI  -> a one-off yellow line in scrollback.
-    - Shell -> an unread item in the notifications bell (chatPanelBridge.ts).
-  It is NOT persisted to the DisplayLog, so it does not replay on rejoin; a
-  fresh connect re-sends it (once per connection) while the server stays stale.
+  DECISION: Option D (a persistent toast that collapses to a pinned pill).
+  Now implemented as a reusable chat-ui affordance:
+    - Model + event:  packages/chat-ui/src/statusNotice.ts (STATUS_NOTICE_EVENT)
+    - Renderer:       ChatPanel.showStatusNotice / clearStatusNotice + chat.css
+    - Server payload: packages/agentServer/server/src/connectionHandler.ts
+    - Host hooks:     shell chatPanelBridge.ts + vscode-shell webview/main.ts
+    - CLI:            cli/src/enhancedConsole.ts (prints a yellow line)
+    - Test on demand: @notify status [msg] [--level info|warning|error] [--restart]
+  See stale-server-notice.md for the write-up and stale-server-notice-live.html
+  for a preview rendered with the REAL chat.css.
 
-  Goal being evaluated: make the shell notice a PERSISTENT toast (visible until
-  dismissed), and decide whether it should also be PINNED in the UI.
-
-  Each card below is a mini chat panel with one treatment applied. Toast/banner
-  colors mirror the real .chat-toast surface in
-  packages/chat-ui/src/chatPanel.ts (rgba(40,42,54,.96) / #f8f8f2). Buttons are
-  interactive so you can feel dismiss / restart / minimize behavior.
+  Each card below is a mini chat panel showing one of the treatments that were
+  compared (0 bell, A toast, B banner, C strip, D toast->pill). Buttons are
+  interactive so you can feel the dismiss / restart / minimize behavior.
 -->
 <html lang="en" data-theme="dark">
   <head>
