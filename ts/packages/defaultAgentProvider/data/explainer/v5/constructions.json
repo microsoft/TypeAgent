@@ -227,6 +227,7 @@
             },
             {
               "matchSet": "M:artist name_7",
+              "optional": true,
               "wildcardMode": 2,
               "transformInfos": [
                 {
