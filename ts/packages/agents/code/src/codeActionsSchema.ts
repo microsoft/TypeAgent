@@ -7,7 +7,13 @@ export type CodeActions =
     | ChangeEditorLayoutAction
     | NewCodeFileAction
     | NewMarkdownFileAction
-    | NewTextFileAction;
+    | NewTextFileAction
+    | GetActiveEditorAction
+    | GetSelectionAction
+    | GetDiagnosticsAction
+    | ListOpenEditorsAction
+    | GetFileContentAction
+    | GetWorkspaceChangesAction;
 
 export type CodeActivity = LaunchVSCodeAction;
 
@@ -137,4 +143,63 @@ export type NewTextFileAction = {
         // Initial text content; empty string for an empty scratch file.
         content: string;
     };
+};
+
+// ── Read / introspection actions ────────────────────────────────────────────
+// These return the current VS Code editor state to the caller and modify
+// nothing. They are meant to be invoked by the reasoning agent (via
+// discover_actions/execute_action) to inspect what the user is looking at.
+// Results are returned as JSON in the action's display output.
+
+// Get a coarse snapshot of the active editor: file path, language, dirty state,
+// cursor position, selection range, visible range, workspace folders, open
+// editor count, and diagnostic counts. Does NOT include file or selection text.
+export type GetActiveEditorAction = {
+    actionName: "getActiveEditor";
+    parameters: {};
+};
+
+// Get the text currently selected in the active editor, along with its range.
+// Returns an empty selection marker when nothing is selected.
+export type GetSelectionAction = {
+    actionName: "getSelection";
+    parameters: {};
+};
+
+// Get the diagnostics (errors, warnings, info, hints) for a file. Defaults to
+// the active file when fileName is omitted.
+export type GetDiagnosticsAction = {
+    actionName: "getDiagnostics";
+    parameters: {
+        // Workspace-relative path or file name. Omit to use the active file.
+        fileName?: string;
+    };
+};
+
+// List the open editor tabs across all editor groups (path, label, active,
+// dirty). Does not include file contents.
+export type ListOpenEditorsAction = {
+    actionName: "listOpenEditors";
+    parameters: {};
+};
+
+// Read the contents of a workspace file. Optionally restrict to a line range
+// (0-based, inclusive). The file must be inside an open workspace folder.
+export type GetFileContentAction = {
+    actionName: "getFileContent";
+    parameters: {
+        // Workspace-relative path or file name to read.
+        fileName: string;
+        // Optional 0-based start line (inclusive).
+        startLine?: number;
+        // Optional 0-based end line (inclusive).
+        endLine?: number;
+    };
+};
+
+// Get a summary of pending source-control (git) changes in the workspace:
+// per-repository branch, working-tree changes, and staged changes.
+export type GetWorkspaceChangesAction = {
+    actionName: "getWorkspaceChanges";
+    parameters: {};
 };

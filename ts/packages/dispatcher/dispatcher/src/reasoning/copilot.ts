@@ -38,6 +38,7 @@ import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action
 import { createLimiter } from "@typeagent/common-utils";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
+import { formatUserContextForPrompt } from "./userContextPrompt.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -426,18 +427,29 @@ function getRecentChatContext(
 }
 
 /**
- * Build the full prompt with chat history context prepended.
+ * Build the full prompt with chat history and editor context prepended.
  * (Same implementation as Claude)
  */
 function buildPromptWithContext(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
 ): string {
+    const parts: string[] = [];
     const chatContext = getRecentChatContext(context);
     if (chatContext) {
-        return `${chatContext}\n\n[Current request]\n${originalRequest}`;
+        parts.push(chatContext);
     }
-    return originalRequest;
+    const editorContext = formatUserContextForPrompt(
+        context.sessionContext.agentContext.currentOptions?.userContext,
+    );
+    if (editorContext) {
+        parts.push(editorContext);
+    }
+    if (parts.length === 0) {
+        return originalRequest;
+    }
+    parts.push(`[Current request]\n${originalRequest}`);
+    return parts.join("\n\n");
 }
 
 /**
@@ -518,6 +530,15 @@ function getCopilotSessionConfig(
     context: ActionContext<CommandHandlerContext>,
 ): SessionConfig {
     const systemContext = context.sessionContext.agentContext;
+    // Capture the request's clientIO now, before execute_action transiently
+    // swaps systemContext.clientIO for display capture. get_user_context reads
+    // through this stable reference so a parallel execute_action can't strand
+    // it on the capturing clientIO.
+    const baseClientIO = systemContext.clientIO;
+    // The originating request id (carries connectionId) so the agent-server
+    // routing can prefer THIS client's editor context over other clients on
+    // the same conversation.
+    const originatorRequestId = systemContext.currentRequestId;
     const activeSchemas = systemContext.agents.getActiveSchemas();
 
     // Build validators for action schemas (same as Claude)
@@ -864,6 +885,37 @@ function getCopilotSessionConfig(
         },
     });
 
+    const getUserContextTool = defineTool("get_user_context", {
+        description: [
+            "Get a fresh, coarse snapshot of the user's current editor context:",
+            "active file path, language, cursor and selection ranges, workspace",
+            "folders, open editor count, and diagnostic counts.",
+            "Contains NO file or selection text. To read actual contents, use the",
+            "code agent's read actions (getActiveEditor, getSelection,",
+            "getFileContent, getDiagnostics) via discover_actions/execute_action.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {},
+            required: [],
+        },
+        handler: async () => {
+            const userContext =
+                await baseClientIO.getUserContext?.(originatorRequestId);
+            if (!userContext) {
+                return {
+                    textResultForLlm:
+                        "No editor context is available (the client is not an editor, or there is no active editor).",
+                    resultType: "success" as const,
+                };
+            }
+            return {
+                textResultForLlm: JSON.stringify(userContext, null, 2),
+                resultType: "success" as const,
+            };
+        },
+    });
+
     const model = resolveModel(context);
     const reasoningEffort = resolveReasoningEffort(context);
 
@@ -879,6 +931,7 @@ function getCopilotSessionConfig(
             rememberTool,
             getConversationInfoTool,
             readConversationTool,
+            getUserContextTool,
         ],
         availableTools: [
             "discover_actions",
@@ -887,6 +940,7 @@ function getCopilotSessionConfig(
             "remember",
             "get_conversation_info",
             "read_conversation",
+            "get_user_context",
             "github/fs/*",
             "github/search/*",
             "shell",
@@ -917,6 +971,10 @@ function getCopilotSessionConfig(
                 "- `remember`: Durably save a new memory so it can be recalled later",
                 "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
                 "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
+                "",
+                "## Editor Context Tools",
+                "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file path, language, cursor/selection ranges, workspace, diagnostic counts). Contains NO file or selection text.",
+                "- For actual file/selection **text**, use the code agent's read actions (getActiveEditor, getSelection, getFileContent, getDiagnostics) via discover_actions/execute_action.",
                 "",
                 "## Guidelines",
                 '- **For follow-up questions** that refer to earlier turns (e.g. "those", "it", "mine"), consult the [Recent conversation context] block first; use `search_memory` only for older history not shown there',

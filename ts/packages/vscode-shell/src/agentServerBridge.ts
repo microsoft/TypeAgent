@@ -36,6 +36,7 @@ import type {
 import { createBridgeClientIO } from "./bridge/clientIO.js";
 import { clientIdOf } from "./bridge/requestIds.js";
 import { toHistoryReplayMessage } from "./bridge/historyReplay.js";
+import { gatherUserContext } from "./bridge/userContext.js";
 
 import {
     createCompletionController,
@@ -43,7 +44,6 @@ import {
 } from "agent-dispatcher/helpers/completion";
 import type { CompletionDirection } from "@typeagent/agent-sdk";
 import type {
-    UserContext,
     ProcessCommandOptions,
     QueueSnapshot,
 } from "@typeagent/dispatcher-types";
@@ -1935,31 +1935,6 @@ export class AgentServerBridge {
         }
     }
 
-    /**
-     * Gather user context from VS Code (active editor, workspace, etc.)
-     */
-    private gatherUserContext(): UserContext {
-        const activeEditor = vscode.window.activeTextEditor;
-        const activeWorkspaceFolder =
-            vscode.workspace.workspaceFolders?.[0]?.name ?? undefined;
-
-        // Build description from active document/language
-        let activeAppDescription: string | undefined;
-        if (activeEditor) {
-            const languageId = activeEditor.document.languageId;
-            const fileName =
-                activeEditor.document.fileName.split(/[\\/]/).pop() ?? "file";
-            activeAppDescription = `${fileName} (${languageId})`;
-        } else if (activeWorkspaceFolder) {
-            activeAppDescription = `Project: ${activeWorkspaceFolder}`;
-        }
-
-        return {
-            activeApp: "vscode",
-            activeAppDescription,
-        };
-    }
-
     private async sendCommand(
         command: string,
         requestId?: string,
@@ -1997,7 +1972,7 @@ export class AgentServerBridge {
         }
 
         try {
-            const userContext = this.gatherUserContext();
+            const userContext = gatherUserContext();
             const options: ProcessCommandOptions = {
                 userContext,
             };
