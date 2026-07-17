@@ -48,7 +48,8 @@ Their _shape_ steers the model.
   { "name": "grocery", "type": ["list"] },
   { "name": "eggs", "type": ["item"] },
 ]
- // nothing says eggs is IN grocery
+
+// nothing says eggs is IN grocery
 ```
 
 On the follow-up "add cheese", the model saw a loose "eggs" entity and
