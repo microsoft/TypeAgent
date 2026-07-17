@@ -3,6 +3,8 @@
 
 import {
     filterSecrets,
+    filterSecretsFromObject,
+    filterSecretsFromJsonString,
     createSecretFilter,
     SECRET_PATTERNS,
     DEFAULT_SECRET_REPLACEMENT,
@@ -184,5 +186,116 @@ describe("createSecretFilter", () => {
         const gh = "ghp_" + "a".repeat(36);
         const out = filter.filter(`npm_${"e".repeat(36)} ${gh}`);
         expect(out).toBe(`XX ${gh}`);
+    });
+});
+
+describe("filterSecretsFromObject", () => {
+    test("redacts strings in nested objects and arrays, keeps other types", () => {
+        const token = "ghp_" + "a".repeat(36);
+        const input = {
+            model: "gpt",
+            count: 7,
+            ok: true,
+            nothing: null,
+            messages: [
+                { role: "user", content: `here is ${token}` },
+                { role: "system", content: "no secrets" },
+            ],
+        };
+        const out = filterSecretsFromObject(input);
+        expect(out.messages[0].content).toBe(`here is ${R}`);
+        expect(out.messages[1].content).toBe("no secrets");
+        expect(out.count).toBe(7);
+        expect(out.ok).toBe(true);
+        expect(out.nothing).toBeNull();
+    });
+
+    test("returns a new object and does not mutate the input", () => {
+        const token = "npm_" + "b".repeat(36);
+        const input = { secret: token };
+        const out = filterSecretsFromObject(input);
+        expect(out).not.toBe(input);
+        expect(input.secret).toBe(token); // original untouched
+        expect(out.secret).toBe(R);
+    });
+
+    test("leaves non-plain objects (Date) untouched", () => {
+        const d = new Date(0);
+        const out = filterSecretsFromObject({ when: d });
+        expect(out.when).toBe(d);
+    });
+
+    test("passes through non-object primitives", () => {
+        expect(filterSecretsFromObject(42 as unknown)).toBe(42);
+        expect(filterSecretsFromObject(null as unknown)).toBeNull();
+        expect(filterSecretsFromObject("Bearer abcdef0123456789")).toBe(
+            `Bearer ${R}`,
+        );
+    });
+});
+
+describe("filterSecretsFromJsonString", () => {
+    test("keeps JSON valid and redacts string values", () => {
+        const token = "ghp_" + "c".repeat(36);
+        const json = JSON.stringify({
+            model: "gpt",
+            messages: [{ role: "user", content: `key ${token}` }],
+        });
+        const out = filterSecretsFromJsonString(json);
+        const parsed = JSON.parse(out); // must still parse
+        expect(parsed.messages[0].content).toBe(`key ${R}`);
+        expect(parsed.model).toBe("gpt");
+    });
+
+    test("does not corrupt a JSON value that itself looks like an assignment", () => {
+        // Raw-string redaction would strip the surrounding quotes here; the
+        // JSON-aware path must keep the document parseable.
+        const json = JSON.stringify({ password: "hunter2secret" });
+        const out = filterSecretsFromJsonString(json);
+        expect(() => JSON.parse(out)).not.toThrow();
+    });
+
+    test("falls back to raw-text redaction for non-JSON input", () => {
+        const out = filterSecretsFromJsonString("password=hunter2secret");
+        expect(out).toBe(`password=${R}`);
+    });
+
+    test("returns empty string unchanged", () => {
+        expect(filterSecretsFromJsonString("")).toBe("");
+    });
+});
+
+describe("skipValue option", () => {
+    const skipDataUrl = (s: string) => /^data:[^,]*;base64,/.test(s);
+
+    test("filterSecrets leaves a skipped string untouched", () => {
+        const dataUrl = "data:image/png;base64,AKIAIOSFODNN7EXAMPLE+abc/def==";
+        expect(filterSecrets(dataUrl, { skipValue: skipDataUrl })).toBe(
+            dataUrl,
+        );
+        // Without the predicate the coincidental AKIA match would be redacted.
+        expect(filterSecrets(dataUrl)).not.toBe(dataUrl);
+    });
+
+    test("walk skips base64 image data URLs but still redacts siblings", () => {
+        const token = "ghp_" + "a".repeat(36);
+        const dataUrl = "data:image/png;base64,AKIAIOSFODNN7EXAMPLE+abc/def==";
+        const body = JSON.stringify({
+            messages: [
+                {
+                    content: [
+                        { type: "text", text: `key ${token}` },
+                        { type: "image_url", image_url: { url: dataUrl } },
+                    ],
+                },
+            ],
+        });
+        const out = filterSecretsFromJsonString(body, {
+            skipValue: skipDataUrl,
+        });
+        const parsed = JSON.parse(out);
+        // Image left intact, text secret still redacted.
+        expect(parsed.messages[0].content[1].image_url.url).toBe(dataUrl);
+        expect(parsed.messages[0].content[0].text).toBe(`key ${R}`);
     });
 });

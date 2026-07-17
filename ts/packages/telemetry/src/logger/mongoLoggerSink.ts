@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { LoggerSink, LogEvent } from "./logger.js";
+import { filterSecretsFromObject } from "@typeagent/common-utils";
 import { MongoClient } from "mongodb";
 import registerDebug from "debug";
 
@@ -84,7 +85,10 @@ class MongoDBLoggerSink implements LoggerSink {
                 this.pendingEvents = [];
 
                 try {
-                    await collection.insertMany(events);
+                    const docs = events.map((event) =>
+                        filterSecretsFromObject(event),
+                    );
+                    await collection.insertMany(docs);
                     debugMongo(`${events.length} events uploaded`);
                 } catch (e: any) {
                     if (this.pendingEvents.length !== 0) {

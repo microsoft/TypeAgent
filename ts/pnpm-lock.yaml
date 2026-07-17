@@ -3587,6 +3587,9 @@ importers:
       '@huggingface/transformers':
         specifier: ^3.8.1
         version: 3.8.1
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
@@ -5706,6 +5709,9 @@ importers:
 
   packages/telemetry:
     dependencies:
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       chalk:
         specifier: ^5.4.1
         version: 5.6.2

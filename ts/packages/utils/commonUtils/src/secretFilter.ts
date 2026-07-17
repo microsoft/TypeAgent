@@ -116,6 +116,13 @@ export interface FilterSecretsOptions {
     readonly patterns?: readonly SecretPattern[] | undefined;
     /** Replacement sentinel. Defaults to {@link DEFAULT_SECRET_REPLACEMENT}. */
     readonly replacement?: string | undefined;
+    /**
+     * Predicate to skip a string entirely (returned unchanged when it returns
+     * true). Use it to leave opaque blobs alone - e.g. base64 `data:` image
+     * URLs, which are large (hot-path cost) and whose random base64 can
+     * coincidentally match a key pattern and be corrupted by redaction.
+     */
+    readonly skipValue?: ((value: string) => boolean) | undefined;
 }
 
 function applyPattern(
@@ -157,6 +164,9 @@ export function filterSecrets(
     if (typeof text !== "string" || text.length === 0) {
         return text;
     }
+    if (options?.skipValue?.(text)) {
+        return text;
+    }
     const replacement = options?.replacement ?? DEFAULT_SECRET_REPLACEMENT;
     const patterns = options?.patterns ?? SECRET_PATTERNS;
 
@@ -179,6 +189,67 @@ export function filterSecrets(
     }
 
     return out;
+}
+
+function walkValue(value: unknown, options?: FilterSecretsOptions): unknown {
+    if (typeof value === "string") {
+        return filterSecrets(value, options);
+    }
+    if (value === null || typeof value !== "object") {
+        return value;
+    }
+    if (Array.isArray(value)) {
+        return value.map((item) => walkValue(item, options));
+    }
+    // Only recurse into plain objects. Class instances, Date, RegExp, Map,
+    // etc. pass through untouched - rebuilding them from entries would drop
+    // their prototype, and structured telemetry / request payloads are plain
+    // JSON-shaped objects anyway.
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) {
+        return value;
+    }
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(
+        value as Record<string, unknown>,
+    )) {
+        out[key] = walkValue(item, options);
+    }
+    return out;
+}
+
+/**
+ * Recursively redact secrets from every string in `value`, returning a new
+ * value of the same shape. Arrays and plain objects are copied; numbers,
+ * booleans, null, and non-plain objects (Date, RegExp, class instances) pass
+ * through unchanged. Use this to scrub a structured payload (a log event, a
+ * request body) without disturbing its structure or non-string fields.
+ */
+export function filterSecretsFromObject<T>(
+    value: T,
+    options?: FilterSecretsOptions,
+): T {
+    return walkValue(value, options) as T;
+}
+
+/**
+ * Redact secrets from a JSON string while keeping it valid JSON: parse it,
+ * scrub every string value, and re-serialize. If `json` is not valid JSON it
+ * is scrubbed as raw text instead. Always returns a string.
+ */
+export function filterSecretsFromJsonString(
+    json: string,
+    options?: FilterSecretsOptions,
+): string {
+    if (typeof json !== "string" || json.length === 0) {
+        return json;
+    }
+    try {
+        const parsed: unknown = JSON.parse(json);
+        return JSON.stringify(filterSecretsFromObject(parsed, options));
+    } catch {
+        return filterSecrets(json, options);
+    }
 }
 
 /**

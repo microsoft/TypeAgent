@@ -22,6 +22,8 @@ export { resolveCliOnPath, claudeExecutableOption } from "./cliPath.js";
 
 export {
     filterSecrets,
+    filterSecretsFromObject,
+    filterSecretsFromJsonString,
     createSecretFilter,
     SECRET_PATTERNS,
     DEFAULT_SECRET_REPLACEMENT,

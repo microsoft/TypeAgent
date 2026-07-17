@@ -14,6 +14,8 @@ export { createPromiseWithResolvers } from "./promiseWithResolvers.js";
 
 export {
     filterSecrets,
+    filterSecretsFromObject,
+    filterSecretsFromJsonString,
     createSecretFilter,
     SECRET_PATTERNS,
     DEFAULT_SECRET_REPLACEMENT,
