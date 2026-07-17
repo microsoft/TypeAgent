@@ -55,11 +55,14 @@ describe("buildListResult", () => {
         expect(raw).toMatchObject({ name: "shopping", items });
     });
 
-    test("entities include the list and each item", () => {
+    test("entities include the list and carry items in facets", () => {
         const result = buildListResult("shopping", ["milk", "eggs"]);
-        const names = result.entities.map((e) => e.name);
-        expect(names).toEqual(
-            expect.arrayContaining(["shopping", "milk", "eggs"]),
-        );
+        expect(result.entities).toEqual([
+            {
+                name: "shopping",
+                type: ["list"],
+                facets: [{ name: "items", value: ["milk", "eggs"] }],
+            },
+        ]);
     });
 });
