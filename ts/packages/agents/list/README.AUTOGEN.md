@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=3b85260e2b269ce9bc55c9ca40fdd24fb1cc2fd1bec208c8282d3ed5426035ec -->
+<!-- AUTOGEN:DOCS:HASH:sha256=440c0126aafbeb674befdfa9923b66df46cb74a65152be4322a213c52f388bc9 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # list-agent — AI-generated documentation
@@ -12,17 +12,17 @@
 
 ## Overview
 
-The `list-agent` package is a TypeAgent application agent designed to manage lists. It provides a set of actions for creating, modifying, and retrieving lists, making it suitable for use cases such as to-do lists, shopping lists, or other item collections. This agent is part of the TypeAgent monorepo and integrates with other components in the system to handle user requests related to list management.
+The `list-agent` package is a TypeAgent application agent designed to manage lists. It provides a set of actions for creating, modifying, and retrieving lists, making it suitable for use cases such as to-do lists, shopping lists, or other item collections. This agent is part of the TypeAgent monorepo and works in conjunction with other components to handle user requests related to list management.
 
 ## What it does
 
-The `list-agent` provides six key actions to manage lists effectively:
+The `list-agent` supports six primary actions for managing lists:
 
-- **`addItems`**: Adds one or more items to a specified list. If the list does not exist, it is created. This action requires the `items` (array of strings) and `listName` (string) parameters.
+- **`addItems`**: Adds one or more items to a specified list. If the list does not exist, it will be created. This action requires the `items` (array of strings) and `listName` (string) parameters.
 - **`removeItems`**: Removes one or more items from a specified list. This action requires the `items` (array of strings) and `listName` (string) parameters.
-- **`createList`**: Creates a new list with the given name. This action requires the `listName` (string) parameter.
+- **`createList`**: Creates a new list with the specified name. This action requires the `listName` (string) parameter.
 - **`getList`**: Retrieves the contents of a specified list. This action is useful for queries like "What's on my grocery list?" or "What are the contents of my to-do list?" It requires the `listName` (string) parameter.
-- **`clearList`**: Clears all items from a specified list. This action requires the `listName` (string) parameter.
+- **`clearList`**: Removes all items from a specified list. This action requires the `listName` (string) parameter.
 - **`startEditList`**: Initiates the editing of a specified list. This action requires the `listName` (string) parameter.
 
 These actions are defined in the [listSchema.ts](./src/listSchema.ts) file and implemented in the [listActionHandler.ts](./src/listActionHandler.ts) file. The agent uses schema definitions and grammar rules to interpret user input and map it to the appropriate actions.
@@ -35,16 +35,16 @@ The `list-agent` package does not require any special setup beyond installing it
 pnpm install
 ```
 
-For further details, refer to the hand-written README.
+For additional details, refer to the hand-written README.
 
 ## Key Files
 
-The `list-agent` package is structured around several key files that define its behavior and functionality:
+The `list-agent` package is organized into several key files that define its behavior and functionality:
 
-- **[listManifest.json](./src/listManifest.json)**: Contains metadata about the agent, such as its description, emoji representation, and references to the schema and grammar files.
-- **[listSchema.ts](./src/listSchema.ts)**: Defines the action types and their parameters. This file is the core of the agent's functionality, specifying the actions the agent can perform and the data they require.
-- **[listSchema.agr](./src/listSchema.agr)**: Contains grammar rules that map user utterances to actions. These rules help the agent interpret natural language input and determine the appropriate action to execute.
-- **[listActionHandler.ts](./src/listActionHandler.ts)**: Implements the logic for handling the actions defined in the schema. This file is where the actual behavior of each action is coded.
+- **[listManifest.json](./src/listManifest.json)**: This file contains metadata about the agent, including its description, emoji representation, and references to the schema and grammar files.
+- **[listSchema.ts](./src/listSchema.ts)**: This file defines the action types and their parameters. It serves as the core of the agent's functionality, specifying the actions the agent can perform and the data they require.
+- **[listSchema.agr](./src/listSchema.agr)**: This file contains grammar rules that map user utterances to actions. These rules help the agent interpret natural language input and determine the appropriate action to execute.
+- **[listActionHandler.ts](./src/listActionHandler.ts)**: This file implements the logic for handling the actions defined in the schema. It contains the code that executes the behavior of each action.
 
 ### File Responsibilities
 
@@ -82,7 +82,7 @@ By following these steps, you can customize the `list-agent` package to support 
 ### Entry points
 
 - `./agent/manifest` → [./src/listManifest.json](./src/listManifest.json)
-- `./agent/handlers` → `./dist/listActionHandler.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/listActionHandler.js](./dist/listActionHandler.js)
 
 ### Dependencies
 
@@ -124,6 +124,6 @@ _6 actions implemented by this agent, parsed deterministically from `./src/listS
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `ee4eba45bcb87911335cb938a0ced6a001aa3882` on `2026-07-17T22:05:48.260Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
