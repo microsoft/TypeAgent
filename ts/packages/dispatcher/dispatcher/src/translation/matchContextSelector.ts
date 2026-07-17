@@ -1,13 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// The contextSelector orchestrator (§11): adapts the grammar path's validated
-// MatchResults into scorer candidates, runs the deterministic pipeline
-// (signal -> strategy: score + decide), emits telemetry, and returns a 3-way
-// outcome — resolve (with the winning match + a UX affordance note), abstain, or
-// skip (not a topical collision). Pure engine logic lives under
-// ../context/contextSelector/; this file is the thin MatchResult-aware seam plus
-// telemetry.
+// The contextSelector orchestrator (§11): adapts colliding candidates into
+// scorer candidates, runs the deterministic TF-IDF pipeline, emits telemetry,
+// and returns resolve / abstain / skip. Engine logic lives under
+// ../context/contextSelector/; this file is the MatchResult-aware seam.
+//
+// Two entry points funnel into `scoreAndDecide`: `resolveContextSelector` (a
+// genuine ≥2-way cache collision) and `resolveContextSelectorMembers` (a
+// registry-expanded neighborhood for a cache-masked collision, §13.3 — its
+// siblings have no MatchResult).
 
 import { MatchResult } from "agent-cache";
 import type { CommandHandlerContext } from "../context/commandHandlerContext.js";
@@ -15,6 +17,7 @@ import {
     CollisionCandidate,
     emitCollisionEvent,
 } from "../context/collisionTelemetry.js";
+import { PreferenceMember } from "../context/collisionPreferences.js";
 import { getAppAgentName } from "./agentTranslators.js";
 import { getPrimary } from "./matchResultUtils.js";
 import {
@@ -26,24 +29,31 @@ import {
     TfIdfStrategy,
 } from "../context/contextSelector/strategy.js";
 
-// v1 strategy selection (§9): TF-IDF scoring + count-based decision, bundled so
-// a future knowPro-entity / embedding strategy swaps as one unit. Stateless —
-// a single instance is reused.
+// v1 strategy (§9): TF-IDF scoring + count-based decision, swappable as one unit
+// for a future embedding scorer. Stateless — a single instance is reused.
 const strategy: ContextResolutionStrategy = new TfIdfStrategy();
 
 export type ContextSelectorOutcome =
-    // Confident topical pick — resolve to `match` (avoids the LLM); `note` is the
-    // U-2 affordance (§11.2).
-    | { kind: "resolve"; match: MatchResult; note: string }
-    // Scored >= 2 distinct candidates but the signal was weak/ambiguous. The
-    // caller applies the configured abstain fallback.
+    // Confident topical pick. `match` is the winner's cache MatchResult (route
+    // with no LLM), or undefined for a registry sibling the cache never matched
+    // (caller routes it via translation). `note` is the U-2 affordance (§11.2).
+    | {
+          kind: "resolve";
+          schemaName: string;
+          actionName: string;
+          match: MatchResult | undefined;
+          note: string;
+      }
+    // Scored ≥2 candidates but the signal was weak/ambiguous — caller applies the
+    // configured abstain fallback.
     | { kind: "abstain" }
-    // Fewer than 2 distinct (schema, action) candidates — not a topical collision
-    // (e.g. a tiedHeuristics tie between two constructions of the SAME action).
-    // The caller must fall through to today's behavior, never escalate.
+    // Fewer than 2 distinct (schema, action) candidates — not a topical collision;
+    // caller keeps today's behavior, never escalates.
     | { kind: "skip" };
 
-type Candidate = ScorerCandidate & { match: MatchResult };
+// A scorer candidate that may carry the cache MatchResult it came from (undefined
+// for a registry sibling with no cache construction, §13.3).
+type Candidate = ScorerCandidate & { match: MatchResult | undefined };
 
 // Prefer the heuristically-stronger MatchResult when the same (schema, action)
 // appears twice (matchedCount desc, nonOptionalCount desc, wildcardCharCount
@@ -58,6 +68,44 @@ function isBetterMatch(next: MatchResult, current: MatchResult): boolean {
     return next.wildcardCharCount < current.wildcardCharCount;
 }
 
+// Merge two candidates with the same (schema, action) id into one representative.
+// Prefer one that carries a MatchResult (so a resolve can route without the LLM);
+// between two matches, keep the heuristically stronger one.
+function preferRepresentative(existing: Candidate, next: Candidate): Candidate {
+    if (next.match === undefined) {
+        return existing;
+    }
+    if (existing.match === undefined) {
+        return next;
+    }
+    return isBetterMatch(next.match, existing.match) ? next : existing;
+}
+
+// Build a scorer candidate. Effective keywords resolve for any action (§5–6),
+// including a registry sibling with no cache match.
+function makeCandidate(
+    schemaName: string,
+    actionName: string,
+    ctx: CommandHandlerContext,
+    match: MatchResult | undefined,
+): Candidate {
+    return {
+        schemaName,
+        actionName,
+        keywords: ctx.contextSelectorKeywords.effective(schemaName, actionName),
+        match,
+    };
+}
+
+// Adapt a cache MatchResult (via its primary action) into a scorer candidate.
+function candidateFromMatch(
+    match: MatchResult,
+    ctx: CommandHandlerContext,
+): Candidate {
+    const { schemaName, actionName } = getPrimary(match);
+    return makeCandidate(schemaName, actionName, ctx, match);
+}
+
 function toTelemetryCandidates(scores: CandidateScore[]): CollisionCandidate[] {
     return scores.map((s) => ({
         schemaName: s.schemaName,
@@ -70,13 +118,12 @@ function toTelemetryCandidates(scores: CandidateScore[]): CollisionCandidate[] {
     }));
 }
 
-// Resolve a grammar-path collision by topical proximity, abstain, or skip.
-// Assumes the caller confirmed `isCollision` and that `contextSelector.detect`
-// is on. `firstMatchCandidate` (what first-match would have picked, i.e.
-// validated[0]) is supplied by the caller — it owns `toCandidate`, keeping this
-// orchestrator off the command-context dependency cycle.
-export function resolveContextSelector(
-    validated: MatchResult[],
+// Shared scoring core: de-dup candidates, run the strategy, emit telemetry, and
+// map to resolve/abstain/skip. `firstMatchCandidate` (validated[0], what
+// first-match would pick) is passed in so this stays off the command-context
+// cycle and telemetry can compare treatment vs control.
+function scoreAndDecide(
+    rawCandidates: Candidate[],
     ctx: CommandHandlerContext,
     request: string,
     firstMatchCandidate: CollisionCandidate,
@@ -84,33 +131,24 @@ export function resolveContextSelector(
     const cfg = ctx.session.getConfig().collision;
     const startedAt = performance.now();
 
-    // Distinct (schema, action) candidates, keeping the best MatchResult per
-    // action. Effective keywords = derived floor + sidecar overrides.
+    // Distinct (schema, action), keeping the best representative per action.
     const byId = new Map<string, Candidate>();
-    for (const match of validated) {
-        const { schemaName, actionName } = getPrimary(match);
-        if (schemaName === "" || actionName === "") {
+    for (const candidate of rawCandidates) {
+        if (candidate.schemaName === "" || candidate.actionName === "") {
             continue;
         }
-        const id = `${schemaName}.${actionName}`;
+        const id = `${candidate.schemaName}.${candidate.actionName}`;
         const existing = byId.get(id);
-        if (existing === undefined) {
-            byId.set(id, {
-                schemaName,
-                actionName,
-                keywords: ctx.contextSelectorKeywords.effective(
-                    schemaName,
-                    actionName,
-                ),
-                match,
-            });
-        } else if (isBetterMatch(match, existing.match)) {
-            existing.match = match;
-        }
+        byId.set(
+            id,
+            existing === undefined
+                ? candidate
+                : preferRepresentative(existing, candidate),
+        );
     }
     const candidates = [...byId.values()];
     if (candidates.length < 2) {
-        // Not a topical collision — nothing for contextSelector to weigh in on.
+        // Not a topical collision.
         return { kind: "skip" };
     }
 
@@ -126,9 +164,6 @@ export function resolveContextSelector(
     );
 
     const telemetryCandidates = toTelemetryCandidates(decision.ranked);
-    // `firstMatchCandidate` (what first-match would have picked) is passed in by
-    // the caller — preserved so the rollout can compare treatment vs control even
-    // when contextSelector short-circuits the strategy (§13).
     const elapsedMs = performance.now() - startedAt;
 
     if (decision.kind === "abstain") {
@@ -177,7 +212,44 @@ export function resolveContextSelector(
     const agentName = getAppAgentName(winner.schemaName);
     return {
         kind: "resolve",
+        schemaName: winner.schemaName,
+        actionName: winner.actionName,
+        // undefined for a registry sibling (caller routes it via translation).
         match: winning.match,
         note: `↪ routed to ${agentName} — recent topic`,
     };
+}
+
+// Resolve a grammar/cache-path collision (≥2 validated matches) by topical
+// proximity. Every validated match carries its MatchResult, so a resolve here
+// always routes without the LLM.
+export function resolveContextSelector(
+    validated: MatchResult[],
+    ctx: CommandHandlerContext,
+    request: string,
+    firstMatchCandidate: CollisionCandidate,
+): ContextSelectorOutcome {
+    const candidates = validated.map((match) => candidateFromMatch(match, ctx));
+    return scoreAndDecide(candidates, ctx, request, firstMatchCandidate);
+}
+
+// Resolve a *cache-masked* collision (§13.3): the registry flagged a single
+// cache match as known-ambiguous and re-expanded it into `members` (matched
+// member + siblings). Scores the union of `members` and every `validated` match,
+// so a genuine multi-match never drops a real cache candidate; dedup keeps the
+// match-carrying representative, so a matched member still routes without the LLM.
+export function resolveContextSelectorMembers(
+    members: PreferenceMember[],
+    validated: MatchResult[],
+    ctx: CommandHandlerContext,
+    request: string,
+    firstMatchCandidate: CollisionCandidate,
+): ContextSelectorOutcome {
+    const candidates: Candidate[] = members.map((member) =>
+        makeCandidate(member.schemaName, member.actionName, ctx, undefined),
+    );
+    for (const match of validated) {
+        candidates.push(candidateFromMatch(match, ctx));
+    }
+    return scoreAndDecide(candidates, ctx, request, firstMatchCandidate);
 }

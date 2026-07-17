@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=8fd79ccd4ba21e73185039837e55d293b0a1ced68b1a6a953be581aeee24ffc6 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=47f4fb7c7ca5e4b1950c4995b1ff6d63b86b5271cc503c03c1fb183c0241803c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a TypeScript library that serves as the central hub for processing user requests in the TypeAgent ecosystem. It translates natural language inputs into structured actions using large language models (LLMs) and coordinates interactions across various application agents. The Dispatcher is designed to integrate with multiple front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for adding new agents and capabilities.
+The TypeAgent Dispatcher is a TypeScript library that serves as the central hub for processing user requests in the TypeAgent ecosystem. It translates natural language inputs into structured actions using large language models (LLMs) and coordinates interactions between various application agents. The Dispatcher is designed to be extensible, scalable, and capable of integrating with multiple front ends, such as the TypeAgent Shell and CLI.
 
 ## What it does
 
-The Dispatcher enables natural language interaction with application agents by translating user inputs into structured actions based on predefined schemas. It also provides system commands for managing agents, configurations, and sessions.
+The Dispatcher provides a framework for interpreting user inputs and orchestrating actions across different agents. It supports both natural language requests and system commands, enabling a wide range of interactions.
 
 ### Natural Language Requests
 
-The Dispatcher processes natural language inputs and translates them into structured actions. For example:
+The Dispatcher leverages LLMs to process natural language inputs and translate them into structured actions defined by application agent schemas. For example:
 
 ```bash
 [calendar]🤖> can you setup a meeting between 2-3PM
@@ -37,7 +37,7 @@ Other examples include:
 
 ### System Commands
 
-System commands prefixed with `@` allow users to interact with and configure the Dispatcher directly. Key commands include:
+System commands prefixed with `@` allow users to configure and interact with the Dispatcher directly. Key commands include:
 
 - **Agent Management**: Enable or disable specific agents or groups of agents.
 
@@ -236,6 +236,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `b1b5bcafdde8ba2387d669eec198eb70e8fa5986` on `2026-07-17T23:52:55.795Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `ee4eba45bcb87911335cb938a0ced6a001aa3882` on `2026-07-17T22:05:48.260Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

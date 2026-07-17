@@ -241,11 +241,15 @@ contextSelector covers the first and defers the second. `static` is a build-time
 
 ### Existing infrastructure we reuse
 
-- **Registry-first tiers** (`matchRequest.ts`, `collisionResolution.ts`) run _ahead of_ any
-  strategy, always, independent of `detect`: they short-circuit on **Tier-0** (a pending one-shot
-  pick from a resolved clarify card) or **Tier-1** (a learned/explicit preference), else raise a
-  **Tier-2** registry clarify. `contextSelector` slots in only _after_ registry-first returns
-  nothing — so it never overrides an explicit user choice.
+- **Registry-first tiers** (`matchRequest.ts`, `matchCollision.ts`,
+  `collisionResolution.ts`) run _ahead of_ any strategy, always, independent of `detect`, when
+  `preference.registryFirst` is on and a neighborhood registry is loaded. On a registry-flagged
+  ambiguity they walk a resolution ladder: **Tier-0** (a pending one-shot pick from a resolved
+  clarify card), **Tier-1** (a learned/explicit preference), **Tier-1.5** (`contextSelector` over
+  the registry-expanded neighborhood — the cache-masking fix, §13.3), then **Tier-2** (a registry
+  clarify). Tiers 0 and 1 run _ahead of_ `contextSelector`, so it never overrides an explicit user
+  choice; on the ordinary grammar path (no registry hit) `contextSelector` still runs directly on
+  the ≥2 validated matches.
 - **`resolvePreferenceClarify`** (`collisionResolution.ts`) is the shared resolution
   policy both stages already call for `preference-clarify` — the natural host if we
   later want both-stage coverage from a single change.
@@ -931,6 +935,106 @@ contextSelector: {
 idf vs candidate-local toggle, `softMatch` embeddings, `warmCarryover`,
 `useEntities`, `useAgentOfRecord`, sub-schema granularity switches.
 
+### 11.4 Cache-masked collisions — the registry-first `contextSelector` tier
+
+> **✅ IMPLEMENTED (opt-in).** Closes the §13.3 cache-masking gap when a neighborhood registry
+> is loaded and `preference.registryFirst` is on.
+
+**The problem.** The construction cache short-circuits the grammar store on any hit, and a
+learned/built-in construction lives in a **single** agent's namespace. So once the cache has
+committed an ambiguous phrase, `AgentCache.match` returns exactly **one** validated `MatchResult`.
+`isCollision` needs ≥2 distinct `(schema, action)` tuples, so the ordinary grammar-path
+`contextSelector` sees no collision and the cached answer wins outright — topic never weighs in.
+This is why live demos have to run `@const builtin off`.
+
+**The fix — reuse registry-first as the detector, `contextSelector` as the resolver.** The
+neighborhood registry (`neighborhoods.json`) already records which actions are empirically
+confusable. `resolveGrammarRegistryFirst` (`matchCollision.ts`) uses it as a standalone ambiguity
+detector: `detectRegistryAmbiguity` flags even a single cache match as known-ambiguous and
+re-expands it into the matched action **plus its registry siblings**. Those siblings are just
+`(schema, action)` tuples — they have **no** cache `MatchResult` — but the keyword index
+(`ctx.contextSelectorKeywords.effective`) derives a vector for **any** action from its schema, so
+the match-agnostic TF-IDF scorer can weigh the whole neighborhood regardless of what the cache
+matched. The registry-first resolution ladder becomes:
+
+```
+registry flags the (single) cache match as known-ambiguous
+   │
+   ├─ Tier 0  one-shot pick (a resolved clarify card)        → honor (explicit choice)
+   ├─ Tier 1  learned / explicit preference                  → honor (explicit choice)
+   ├─ Tier 1.5  contextSelector over {match + siblings}      → resolve on a clear recent topic:
+   │              winner has a cache MatchResult  → return it            (no LLM)
+   │              winner is a registry sibling    → request-scoped topical route + fallthrough
+   │                                                (translation pins the schema + note; §pickInitialSchema)
+   │              abstain / skip                  → fall through to Tier 2
+   └─ Tier 2  registry clarify (sibling-enriched options)    → ask the user
+```
+
+Tiers 0 and 1 run **ahead of** `contextSelector`, so it never overrides an explicit user choice
+(the §4 guarantee still holds); Tier 1.5 only pre-empts the Tier-2 clarify, replacing a prompt with
+an automatic topical route when the conversation makes the intent obvious. On abstain the honest
+fallback is the registry's own clarify (the registry asserted genuine ambiguity and there's no
+recent-topic evidence), so `abstainFallback` (a grammar-path concern) is intentionally **not**
+consulted here.
+
+**Routing a sibling winner (and keeping the affordance honest).** When the topical winner is a
+sibling the cache never produced, there is no `MatchResult` to return. The tier records a
+**request-scoped** `pendingTopicalRoute` (`{ schemaName, note }` on the command context) and returns
+`{ kind: "fallthrough" }`, so `matchRequest` bails out of the grammar path. The _same request's_ LLM
+translation (`pickInitialSchema`) reads-and-clears that route, pins the schema **before** embedding
+selection (so it holds even when embedding-based selection is off), and surfaces the U-2 note only
+**then** — at the point the route is actually committed. A cache-match winner instead returns
+`{ kind: "match", … }` and its note is shown in `matchRequest` (also a committed point, resolved with
+no LLM). Two properties fall out of this: the affordance never claims a route that isn't taken (the
+note is emitted at the commit site, not preemptively), and the hint can't leak into a later turn (it
+is request-scoped and read-and-cleared, unlike the durable cross-turn `collisionOneShotPicks` used
+for explicit clarify-card / preference picks).
+
+**Scoring the right set (two correctness bounds).** Because the tier _routes_ automatically
+(no clarify card to reject a bad option), the scored candidate set is bounded on both sides:
+
+- **Only executable routes.** Registry siblings are filtered to the turn's **active-schema set**
+  (the same set the cache matched against, passed from `matchRequest`) before scoring — a sibling
+  for a disabled or out-of-activity agent is dropped, so it can never win a route and then be
+  rejected downstream. The validated cache matches are always active by construction.
+- **No dropped cache match.** The scored set is the **union** of the flagged neighborhood members
+  and _every_ validated cache match. `detectRegistryAmbiguity` only re-expands one neighborhood, so
+  on a genuine multi-match collision (validated has ≥2 tuples, one registry-flagged) a validated
+  candidate outside that neighborhood would otherwise be dropped; unioning keeps it in contention,
+  and the de-dup keeps the match-carrying representative so a matched member still routes with no
+  LLM.
+
+**Accepted behavior — registry-first can steer a genuine multi-match toward a sibling.** The union
+above is deliberately _permissive_: on a genuine multi-match collision, it also puts the flagged
+member's registry siblings (which the cache did **not** match for this phrase) into contention beside
+the real cache candidates. Two consequences are **accepted by design**, not treated as bugs:
+
+- A speculative sibling can **win** the topical score and be routed (via the request-scoped route +
+  LLM translation), even though the cache/grammar didn't match it.
+- Because TF-IDF is candidate-local, adding those siblings perturbs the IDF/gate math, so enabling
+  `registryFirst` can change a multi-match decision relative to validated-only scoring — even on a
+  collision that was never cache-masked.
+
+The rationale: **the construction cache is not authoritative.** It is a learned/compiled artifact
+that can commit to the wrong neighbor, so the design intentionally lets a strong conversational
+signal _override_ it and push toward the topically-correct sibling — that override is the whole point
+of the feature. This is safe because the correction is bounded by the same guards that make the
+tier trustworthy elsewhere: the evidence gates (`minUniqueTokens` / `minMass` / `margin`) are
+absolute and abstain-biased, so **adding contenders makes a confident resolve _harder_, not looser**
+— extra candidates split the field and bias toward abstain → the Tier-2 clarify (the safe "ask"
+direction), never toward a looser trigger; the active-schema filter guarantees any winner is
+actually executable; and the decision stays deterministic (§12). The residual risk — a speculative
+sibling out-scoring two real matches on a strong, focused topic — is the accepted cost of allowing
+context to correct a mis-committed cache entry. An operator who wants the stricter "only ever route
+to what the cache matched" behavior can leave `registryFirst` off (the default), which confines
+`contextSelector` to validated-only scoring.
+
+**Gating.** Wholly opt-in and layered on existing switches — it activates only when
+`preference.registryFirst` is on, a registry is loaded (`preference.registryPath`), the registry
+actually flags the phrase, and `contextSelector.detect` is on. In the stock config
+(`registryFirst: false`, empty `registryPath`) the tier is inert and behavior is byte-for-byte
+today's. See §13.3 for the residual default-config gap and the cheaper cache-side root fix.
+
 ---
 
 ## 12. Part G — Determinism hardening
@@ -1018,24 +1122,33 @@ learned-preference bootstrap** (confirm-then-learn).
   already selects a schema LLM-free (§4); contextSelector would save no LLM there anyway.
 - **Same-agent / multi-domain collisions** (two schemas of one agent) rely on the
   schema/action granularity (§5); rare today.
-- **Cache-masked collisions bypass `contextSelector`** — the open TODO. The construction
-  cache short-circuits the grammar store on any hit (completion-based `AgentCache.match`), and
-  a learned/built-in construction lives in a single agent's namespace, so an ambiguous phrase
-  the cache has committed returns a **single** validated match. `contextSelector` needs ≥2
-  candidates (`resolveContextSelector` → `skip` below 2), so the cached answer wins and topic
-  never weighs in — the reason live demos need `@const builtin off`. It pre-empts _every_
-  resolver, since the cache sits upstream of all collision detection in `matchRequest`.
-  **TODO — integrate registry-first with `contextSelector`:** use
-  `resolveGrammarRegistryFirst`'s neighborhood registry as the _detector_ (it can flag a single
-  cache match as known-ambiguous via `detectRegistryAmbiguity`), re-expand the candidate set
-  from the neighborhood siblings, and feed it to the (match-agnostic) TF-IDF scorer so the
-  topical winner resolves automatically — pinning + re-translating a winning sibling that has no
-  `MatchResult` via the existing one-shot/`fallthrough` path, and falling back to
-  preference→clarify on abstain. Prereqs: a populated neighborhood registry
-  (`preference.registryPath`) and `preference.registryFirst: on` (both empty/off by default).
-  Cheaper root-fix alternative: mark neighborhood-member actions "never cache as a single-answer
-  construction," keeping those phrases on the live grammar-collision path where `contextSelector`
-  already works.
+- **Cache-masked collisions** — **resolved behind the registry-first opt-in (§11.4).** The
+  construction cache short-circuits the grammar store on any hit (completion-based
+  `AgentCache.match`), and a learned/built-in construction lives in a single agent's namespace, so
+  an ambiguous phrase the cache has committed returns a **single** validated match. On the ordinary
+  grammar path `contextSelector` needs ≥2 candidates (`resolveContextSelector` → `skip` below 2),
+  so the cached answer would win and topic never weigh in — the reason live demos need
+  `@const builtin off`. This is now handled by a **Tier-1.5 `contextSelector` step inside
+  registry-first** (`resolveGrammarRegistryFirst`, §11.4): the neighborhood registry flags the
+  single cache match as known-ambiguous (`detectRegistryAmbiguity`), re-expands it into its
+  neighborhood siblings, and feeds the whole set to the match-agnostic TF-IDF scorer, which
+  resolves the topical winner automatically (a cache-match winner routes with no LLM; a sibling
+  winner records a request-scoped topical route and falls through to translation), falling back to
+  the registry clarify on abstain. **Residual gap:** this only activates with a populated
+  neighborhood registry (`preference.registryPath`) and `preference.registryFirst: on` (both
+  empty/off by default), so in the stock config a cache-committed phrase still masks the collision. A
+  cheaper root-fix that would cover the default config — mark neighborhood-member actions "never
+  cache as a single-answer construction," keeping those phrases on the live grammar-collision path
+  where `contextSelector` already works — remains open.
+- **Registry-first can override the cache on a genuine multi-match** (accepted, §11.4). When
+  `registryFirst` is on, a real multi-candidate cache collision is scored as the union of the
+  validated matches and the flagged member's registry siblings, so a topically-strong sibling the
+  cache didn't match can win the route, and enabling `registryFirst` can shift a multi-match decision
+  vs validated-only scoring. This is intentional — the construction cache is not authoritative, and a
+  strong recent-topic signal is allowed to correct a mis-committed cache entry. It is bounded by the
+  abstain-biased evidence gates (extra contenders push toward the Tier-2 clarify, not a looser
+  trigger) and the active-schema filter; `registryFirst: off` (default) keeps `contextSelector` on
+  validated-only scoring for operators who want the stricter behavior.
 
 ### 13.4 Rollout & validation
 
