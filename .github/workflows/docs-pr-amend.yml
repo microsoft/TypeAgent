@@ -112,15 +112,31 @@ jobs:
           since: ${{ steps.base.outputs.since }}
           github-token: ${{ github.token }}
 
-      # Commit only the regenerated companions back onto the PR branch. The
-      # action no-ops when nothing changed (e.g. every changed package was
-      # skipped by the content-hash gate), which is what makes a re-triggered
-      # run terminate instead of looping. README.md is never touched.
+      # Regenerate the global command reference. Unlike the per-package
+      # READMEs above, this is a deterministic transform of the dispatcher +
+      # agent command descriptors (no LLM, no API keys), so it reuses the
+      # docs-autogen CLI the composite already built and needs no GitHub
+      # Models token. writeCommandReference only writes when the content
+      # changed, so a re-triggered run regenerates nothing and the amend loop
+      # still terminates. Advisory like the README step: a docs failure here
+      # must never block the code PR.
+      - name: Regenerate command reference
+        continue-on-error: true
+        working-directory: ts
+        run: node tools/docsAutogen/bin/docs-autogen.cjs --command-reference
+
+      # Commit the regenerated companions and command reference back onto the
+      # PR branch. The commit no-ops when nothing changed (e.g. every changed
+      # package was skipped by the content-hash gate and the command
+      # reference was already current), which is what makes a re-triggered run
+      # terminate instead of looping. README.md is never touched.
       - name: Commit regenerated docs
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "docs: regenerate README.AUTOGEN.md for changed packages"
+          commit_message: "docs: regenerate README.AUTOGEN.md and command reference"
           commit_user_name: typeagent-bot
           commit_user_email: typeagent-bot[bot]@users.noreply.github.com
           commit_author: "typeagent-bot <typeagent-bot[bot]@users.noreply.github.com>"
-          file_pattern: "ts/packages/**/README.AUTOGEN.md"
+          file_pattern: |
+            ts/packages/**/README.AUTOGEN.md
+            ts/docs/overview/command-reference.md
