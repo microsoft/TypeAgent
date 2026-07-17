@@ -393,23 +393,66 @@ function grammarChangeDetail(
     return `${subject} changed${tail}`;
 }
 
-/**
- * The ordered causal walk, run only when the two sides' final actions differ.
- * Returns the first layer that explains the difference plus a confidence, hono-
- * ring the ranking-parity guard: a diverged grammar parse cannot be trusted to
- * name the cause, so attribution falls back to the action level (low confidence).
- */
-function attributeCause(trace: ReplayResolutionTrace): {
+type CauseAttribution = {
     cause: DivergenceCause;
     confidence: "high" | "low";
     confidenceNote?: string;
-} {
+};
+
+/** Shared inputs for the per-layer attribution steps, computed once from the
+ *  trace so the individual steps stay simple. */
+interface AttributionContext {
+    a: ReplaySideTrace;
+    b: ReplaySideTrace;
+    aGrammar: GrammarMatchTraceNode | undefined;
+    bGrammar: GrammarMatchTraceNode | undefined;
+    /** True when a grammar node's captured parse diverged from the resolver's
+     *  ranked pick, so the grammar level cannot be trusted to name the cause. */
+    parityDiverged: boolean;
+    diagnosticNote: string;
+}
+
+/**
+ * The ordered causal walk, run only when the two sides' final actions differ.
+ * Consults each layer in runtime order and returns the first that explains the
+ * difference plus a confidence, honoring the ranking-parity guard: a diverged
+ * grammar parse cannot be trusted to name the cause, so attribution falls back
+ * to the action level (low confidence).
+ */
+function attributeCause(trace: ReplayResolutionTrace): CauseAttribution {
     const { a, b } = trace;
+    const fromCache = cacheCause(a, b);
+    if (fromCache !== undefined) {
+        return fromCache;
+    }
+
+    const aGrammar = nodeOf(a, "grammar-match");
+    const bGrammar = nodeOf(b, "grammar-match");
+    const ctx: AttributionContext = {
+        a,
+        b,
+        aGrammar,
+        bGrammar,
+        parityDiverged: grammarDiverged(aGrammar) || grammarDiverged(bGrammar),
+        diagnosticNote:
+            "The captured grammar trace is a diagnostic parse that may differ from the resolver-selected one, so the cause is attributed at the action level.",
+    };
+    return (
+        grammarCause(ctx) ??
+        wildcardCause(ctx) ??
+        actionPayloadCause(ctx) ??
+        unattributedCause(ctx)
+    );
+}
+
+/** Step 1: a cache short-circuit on one side means its action came from a
+ *  different source than the other side's grammar match. */
+function cacheCause(
+    a: ReplaySideTrace,
+    b: ReplaySideTrace,
+): CauseAttribution | undefined {
     const aCacheDecided = cacheDecided(a);
     const bCacheDecided = cacheDecided(b);
-
-    // 1. Cache decided it. A cache short-circuit on one side means its action
-    //    came from a different source than the other side's grammar match.
     if (aCacheDecided && bCacheDecided) {
         return {
             cause: {
@@ -430,96 +473,102 @@ function attributeCause(trace: ReplayResolutionTrace): {
             confidence: "high",
         };
     }
+    return undefined;
+}
 
-    const aGrammar = nodeOf(a, "grammar-match");
-    const bGrammar = nodeOf(b, "grammar-match");
-    const parityDiverged =
-        grammarDiverged(aGrammar) || grammarDiverged(bGrammar);
-    const diagnosticNote =
-        "The captured grammar trace is a diagnostic parse that may differ from the resolver-selected one, so the cause is attributed at the action level.";
-
-    // 2. Grammar match differs. The compiled-grammar hash is resolver-indepen-
-    //    dent, so a differing hash names the grammar as the cause even when a
-    //    side's captured parse diverged from the resolver's ranked pick — the
-    //    same source change then reads the same way whichever diagnostic path a
-    //    given utterance happened to take. The rule-name comparison, by contrast,
-    //    reads off that diagnostic parse, so it is only consulted when neither
-    //    side diverged (a rule swap, or a body edit that flips the hash under an
-    //    unchanged winning rule name).
+/** Step 2: the grammars matched differently. The compiled-grammar hash is
+ *  resolver-independent, so a differing hash names the grammar as the cause even
+ *  when a side's captured parse diverged from the resolver's ranked pick, so the
+ *  same source change reads the same way whichever diagnostic path an utterance
+ *  took. The rule-name comparison reads off that diagnostic parse, so it is only
+ *  consulted when neither side diverged (a rule swap, or a body edit that flips
+ *  the hash under an unchanged winning rule name). */
+function grammarCause(ctx: AttributionContext): CauseAttribution | undefined {
+    const { aGrammar, bGrammar, parityDiverged } = ctx;
     const aRule = aGrammar?.chosenRule;
     const bRule = bGrammar?.chosenRule;
     const bothRan =
         aGrammar?.execution === "ran" && bGrammar?.execution === "ran";
     const rulesDiffer = !parityDiverged && bothRan && aRule !== bRule;
     const hashDiffers = grammarHashDiffers(aGrammar, bGrammar);
-    if (rulesDiffer || (bothRan && hashDiffers === true)) {
-        const fileName = grammarCulpritFile(aGrammar, bGrammar);
-        return {
-            cause: {
-                kind: "grammar-differs",
-                ...(fileName !== undefined ? { fileName } : {}),
-                detail: grammarChangeDetail(
-                    fileName,
-                    aRule,
-                    bRule,
-                    rulesDiffer,
-                ),
-            },
-            confidence: "high",
-        };
+    if (!rulesDiffer && !(bothRan && hashDiffers === true)) {
+        return undefined;
     }
+    const fileName = grammarCulpritFile(aGrammar, bGrammar);
+    return {
+        cause: {
+            kind: "grammar-differs",
+            ...(fileName !== undefined ? { fileName } : {}),
+            detail: grammarChangeDetail(fileName, aRule, bRule, rulesDiffer),
+        },
+        confidence: "high",
+    };
+}
 
-    // 3. Wildcard validation — grammars agree on the rule, but one side's
-    //    validation rejected the otherwise-selected value. Read off the parse, so
-    //    only consulted when neither side's parse diverged.
-    if (!parityDiverged) {
-        const aWild = nodeOf(a, "wildcard-validation");
-        const bWild = nodeOf(b, "wildcard-validation");
-        const aRejected =
-            aWild?.execution === "ran" && aWild.outcome === "rejected";
-        const bRejected =
-            bWild?.execution === "ran" && bWild.outcome === "rejected";
-        if (aRejected !== bRejected) {
-            const side = aRejected ? "A" : "B";
-            return {
-                cause: {
-                    kind: "wildcard-validation",
-                    side,
-                    detail: `${sideLabel(side)}'s wildcard validation rejected the value the other side accepted.`,
-                },
-                confidence: "high",
-            };
-        }
+/** Step 3: the grammars agree on the rule, but one side's wildcard validation
+ *  rejected the otherwise-selected value. Read off the parse, so only consulted
+ *  when neither side's parse diverged. */
+function wildcardCause(ctx: AttributionContext): CauseAttribution | undefined {
+    const { a, b, parityDiverged } = ctx;
+    if (parityDiverged) {
+        return undefined;
     }
+    const aWild = nodeOf(a, "wildcard-validation");
+    const bWild = nodeOf(b, "wildcard-validation");
+    const aRejected =
+        aWild?.execution === "ran" && aWild.outcome === "rejected";
+    const bRejected =
+        bWild?.execution === "ran" && bWild.outcome === "rejected";
+    if (aRejected === bRejected) {
+        return undefined;
+    }
+    const side = aRejected ? "A" : "B";
+    return {
+        cause: {
+            kind: "wildcard-validation",
+            side,
+            detail: `${sideLabel(side)}'s wildcard validation rejected the value the other side accepted.`,
+        },
+        confidence: "high",
+    };
+}
 
-    // 4. Action-payload fallback — same rule/path, differing parameters. Also
-    //    where a diverged parity lands: the actions differ but the grammar
-    //    level can't be trusted to say why. The action's schema is the file to
-    //    diff, since the grammar matched the same and the payload still changed.
+/** Step 4: same rule and path, differing parameters. Also where a diverged
+ *  parity lands: the actions differ but the grammar level cannot be trusted to
+ *  say why. The action's schema is the file to diff, since the grammar matched
+ *  the same and the payload still changed. */
+function actionPayloadCause(
+    ctx: AttributionContext,
+): CauseAttribution | undefined {
+    const { a, b, parityDiverged, diagnosticNote } = ctx;
     const aName = actionName(a.finalAction);
     const bName = actionName(b.finalAction);
     if (
-        aName !== undefined &&
-        bName !== undefined &&
-        aName === bName &&
-        !sameAction(a.finalAction, b.finalAction)
+        aName === undefined ||
+        bName === undefined ||
+        aName !== bName ||
+        sameAction(a.finalAction, b.finalAction)
     ) {
-        const schemaFile =
-            actionSchemaFileName(nodeOf(a, "action")) ??
-            actionSchemaFileName(nodeOf(b, "action"));
-        return {
-            cause: {
-                kind: "action-payload",
-                ...(schemaFile !== undefined ? { fileName: schemaFile } : {}),
-                detail: `Both versions produced a ${aName} action, but its parameters differ.`,
-            },
-            confidence: parityDiverged ? "low" : "high",
-            ...(parityDiverged ? { confidenceNote: diagnosticNote } : {}),
-        };
+        return undefined;
     }
+    const schemaFile =
+        actionSchemaFileName(nodeOf(a, "action")) ??
+        actionSchemaFileName(nodeOf(b, "action"));
+    return {
+        cause: {
+            kind: "action-payload",
+            ...(schemaFile !== undefined ? { fileName: schemaFile } : {}),
+            detail: `Both versions produced a ${aName} action, but its parameters differ.`,
+        },
+        confidence: parityDiverged ? "low" : "high",
+        ...(parityDiverged ? { confidenceNote: diagnosticNote } : {}),
+    };
+}
 
-    // 5. Unattributed — the actions differ but the captured trace names no
-    //    single explaining layer.
+/** Step 5: the actions differ but the captured trace names no single explaining
+ *  layer. */
+function unattributedCause(ctx: AttributionContext): CauseAttribution {
+    const { parityDiverged, diagnosticNote } = ctx;
     return {
         cause: {
             kind: "unattributed",
