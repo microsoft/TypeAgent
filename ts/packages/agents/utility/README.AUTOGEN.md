@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c058561d7cf2ec1ee5e7a42a8a052b09189ece680d5c98ab2977bdd4b2069d4f -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6a74bc37c60f775e8d9787ef1425702c6d1e6d243023bb1ae2bd0cc8d195febc -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # utility-typeagent — AI-generated documentation
@@ -12,47 +12,47 @@
 
 ## Overview
 
-The `utility-typeagent` package is a TypeAgent application agent designed to provide utility operations for use in compiled task flows. It enables automated workflows to perform web searches, fetch web content, handle file input/output operations, and interact with language models for text transformations. This package integrates with external libraries and services such as `puppeteer`, `html-to-text`, and `@anthropic-ai/claude-agent-sdk` to deliver its functionality.
+The `utility-typeagent` package is a TypeAgent application agent that provides utility operations for compiled task flows. It enables workflows to perform web searches, fetch web content, handle file input/output operations, and interact with language models for text transformations. This package integrates with tools like `puppeteer`, `html-to-text`, and `@anthropic-ai/claude-agent-sdk` to deliver its functionality.
 
 ## What it does
 
-The `utility-typeagent` package supports a variety of actions that can be grouped into three main categories:
+The `utility-typeagent` package supports a range of actions grouped into three primary categories:
 
 ### Web Operations
 
-- **`webSearch`**: Executes a web search based on a query string and returns the results. This action is useful for retrieving information from the internet.
-- **`webFetch`**: Fetches the content of a specified URL, such as a webpage or other online resource. This action is often used to retrieve raw HTML or other data from web pages.
+- **`webSearch`**: Executes a web search based on a query string and returns results. This is useful for retrieving information from the internet.
+- **`webFetch`**: Fetches the content of a specified URL, such as a webpage or other online resource. This action retrieves raw HTML or other data from web pages.
 
 ### File Input/Output
 
-- **`readFile`**: Reads the contents of a file from the filesystem. This action is useful for accessing local data or configuration files.
-- **`writeFile`**: Writes specified content to a file at a given path. This action is commonly used to save data or logs to the local filesystem.
+- **`readFile`**: Reads the contents of a file from the filesystem. This is useful for accessing local data or configuration files.
+- **`writeFile`**: Writes specified content to a file at a given path. This is commonly used to save data or logs to the local filesystem.
 
 ### Language Model Interactions
 
 - **`llmTransform`**: Uses a language model to transform text or HTML based on a given prompt. It supports options for JSON parsing and HTML output, making it versatile for tasks like summarization, rewriting, or data extraction.
 - **`claudeTask`**: Executes tasks or answers questions using the Claude language model. This action is tailored for more complex or conversational AI tasks.
 
-These actions enable the agent to interact with web content, perform file operations, and utilize advanced language model capabilities, making it a versatile tool for a wide range of utility tasks.
+These actions allow the agent to interact with web content, perform file operations, and utilize advanced language model capabilities, making it a versatile tool for utility tasks.
 
 ## Setup
 
-To use the `utility-typeagent` package, you need to configure the following:
+To use the `utility-typeagent` package, ensure the following setup steps are completed:
 
 1. **Environment Variables**:
 
-   - `CLAUDE_API_KEY`: Required to access the Claude language model. You can obtain this key from the provider's developer portal.
+   - `CLAUDE_API_KEY`: Required to access the Claude language model. Obtain this key from the provider's developer portal.
 
 2. **Dependencies**:
-   - Ensure that all required dependencies are installed. These include:
+   - Install the required dependencies:
      - Workspace dependencies: `@typeagent/agent-sdk`, `@typeagent/action-grammar-compiler`, `@typeagent/action-schema-compiler`, and `browser-typeagent`.
      - External libraries: `puppeteer`, `html-to-text`, and `@anthropic-ai/claude-agent-sdk`.
 
-For additional setup details, refer to the hand-written README.
+Refer to the hand-written README for additional setup details if needed.
 
 ## Key Files
 
-The `utility-typeagent` package is structured around several key files, each serving a specific purpose:
+The `utility-typeagent` package is organized into several key files, each with a specific role:
 
 - **[utilitySchema.agr](./src/utilitySchema.agr)**:
 
@@ -143,7 +143,7 @@ By following these steps, you can extend the `utility-typeagent` package to supp
 ### Entry points
 
 - `./agent/manifest` → [./manifest.json](./manifest.json)
-- `./agent/handlers` → `./dist/actionHandler.mjs` _(not found on disk)_
+- `./agent/handlers` → [./dist/actionHandler.mjs](./dist/actionHandler.mjs)
 
 ### Dependencies
 
@@ -170,6 +170,6 @@ External: `@anthropic-ai/claude-agent-sdk`, `@types/html-to-text`, `html-to-text
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter utility-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter utility-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

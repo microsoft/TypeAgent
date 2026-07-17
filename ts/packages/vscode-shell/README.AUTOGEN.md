@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=91f7e5035ca24e381e9d4a30374f96df9691549c579c364109850826c8928898 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=bf35ec5679ba5d1f6ff1c6025fad8d84175b5c0e42dc126bb612812e43472182 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-shell — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, providing a way to interact with TypeAgent conversations directly within the editor. It offers a side panel and editor tabs for managing conversations hosted by a running TypeAgent agent server.
+The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, allowing users to interact with TypeAgent conversations directly within the editor. It provides a dedicated side panel and editor tabs for managing conversations hosted by a running TypeAgent agent server.
 
 ## What it does
 
-The `vscode-shell` package enables a feature-rich chat experience within Visual Studio Code, tightly integrated with the TypeAgent ecosystem. Its main capabilities include:
+The `vscode-shell` package provides a comprehensive chat interface within Visual Studio Code, enabling users to interact with the TypeAgent ecosystem. Key features include:
 
 - **Chat Interface**:
 
@@ -170,10 +170,10 @@ External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `micr
 
 ### Files of interest
 
-`./src/webview/main.ts`, `./src/agentServerBridge.ts`, `./src/bridge/clientIO.ts`, …and 9 more under `./src/`.
+`./src/webview/main.ts`, `./src/agentServerBridge.ts`, `./src/bridge/clientIO.ts`, …and 11 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

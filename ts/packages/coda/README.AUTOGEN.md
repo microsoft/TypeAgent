@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=0924ac6bee0218efaab1241cde8d1872f762a55c13b3f6f88b304e937d8ee864 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b5ff80638829b6cead7cdffa0028be3876235ffe809617f7a8f1e3c07008c917 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-coda — AI-generated documentation
@@ -12,19 +12,19 @@
 
 ## Overview
 
-The `agent-coda` package is a TypeScript library that powers the Coda Operated Assistance (CODA) system, enabling voice-controlled coding assistance within Visual Studio Code (VSCode). By integrating with the TypeAgent shell or CLI, this package allows users to perform a wide range of coding and workspace management tasks using natural language commands. It is designed to enhance productivity and accessibility for developers.
+The `agent-coda` package is a TypeScript library that powers the Coda Operated Assistance (CODA) system, enabling voice-controlled coding assistance within Visual Studio Code (VSCode). It integrates with the TypeAgent shell or CLI to allow developers to perform various coding and workspace management tasks using natural language commands. This package is designed to enhance developer productivity and accessibility by enabling hands-free interaction with the VSCode environment.
 
 ## What it does
 
-The `agent-coda` package provides a set of actions that enable users to interact with VSCode through voice commands. These actions are executed via the TypeAgent shell or CLI and cover a variety of use cases:
+The `agent-coda` package provides a range of actions that allow users to interact with VSCode through voice commands. These actions are grouped into several categories:
 
-- **File Management**: Actions like `createFile` and `openFile` allow users to create, open, and manage files directly from voice commands.
-- **Editor Layout Management**: The `changeEditorColumns` action enables users to adjust the editor layout to single, double, or triple columns.
-- **Extension Management**: Actions such as `checkExtensionAvailable` allow users to search for, install, and manage VSCode extensions.
+- **File and Code Management**: Actions like `createFile`, `openFile`, and `getFileContent` enable users to create, open, and manage files, as well as retrieve file content. Additional actions like `getSelection` and `getDiagnostics` provide insights into the current editor state.
+- **Editor Layout and Navigation**: The `changeEditorColumns` action allows users to adjust the editor layout (e.g., single, double, or triple columns). Other actions enable navigation and management of open editors and workspace folders.
+- **Extension Management**: Actions such as `checkExtensionAvailable` and `fetchTopExtensions` help users search for, install, and manage VSCode extensions.
 - **Debugging**: The `startDebugging` action facilitates the initiation of debugging sessions with specific configurations.
-- **Workbench Operations**: Actions like managing workspace folders and opening files are handled by `handleWorkBenchActions`.
+- **Workbench Operations**: Actions like `handleWorkBenchActions` manage workspace folders, open files, and perform other workbench-related tasks.
 
-These features make it possible to perform common development tasks hands-free, improving accessibility and streamlining workflows.
+These capabilities make it possible to perform common development tasks hands-free, streamlining workflows and improving accessibility.
 
 ## Setup
 
@@ -125,7 +125,7 @@ External: `body-parser`, `chalk`, `cors`, `debug`, `dotenv`, `ws`
 
 ### Files of interest
 
-`./src/codeUtils.ts`, `./src/commandAliasMgr.ts`, `./src/extension.ts`, …and 10 more under `./src/`.
+`./src/codeUtils.ts`, `./src/commandAliasMgr.ts`, `./src/extension.ts`, …and 11 more under `./src/`.
 
 ### Environment variables
 
@@ -136,6 +136,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-coda docs:verify-links` to spot-check._
+_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-coda docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
