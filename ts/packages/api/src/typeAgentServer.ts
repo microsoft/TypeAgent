@@ -3,7 +3,10 @@
 
 import { getUserDataDir } from "agent-dispatcher/helpers/data";
 import { readFileSync } from "node:fs";
-import { initRuntimeConfigFromProcessEnv } from "@typeagent/aiclient";
+import {
+    initRuntimeConfigFromProcessEnv,
+    warmupCopilotFromConfig,
+} from "@typeagent/aiclient";
 import {
     TypeAgentAPIServerConfig,
     TypeAgentAPIWebServer,
@@ -43,6 +46,10 @@ export class TypeAgentServer {
         // use the typed accessor; legacy callers still see the same
         // values through process.env directly.
         initRuntimeConfigFromProcessEnv();
+        // Pre-warm the Copilot CLI/session/endpoint when it's the active
+        // provider (no-op otherwise). Kept in the host to avoid an aiclient
+        // import cycle; fire-and-forget so startup is never blocked.
+        void warmupCopilotFromConfig();
 
         // web server config
         this.config = JSON.parse(readFileSync("data/config.json").toString());

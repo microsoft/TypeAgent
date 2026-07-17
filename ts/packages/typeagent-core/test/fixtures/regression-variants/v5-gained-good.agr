@@ -17,9 +17,9 @@ import { PlayerActions } from "./playerSchema.ts";
 <Pause> = pause   ->  { actionName: "pause" }
           | pause music   ->  { actionName: "pause" }
           | pause the music   ->  { actionName: "pause" };
-<Resume> = resume   ->  { actionName: "resume" }
-           | resume music   ->  { actionName: "resume" }
-           | resume the music   ->  { actionName: "resume" };
+<Resume> = resume   ->  { actionName: "resumePlayback" }
+           | resume music   ->  { actionName: "resumePlayback" }
+           | resume the music   ->  { actionName: "resumePlayback" };
 <Next> = next   ->  { actionName: "next" }
          | skip   ->  { actionName: "next" }
          | skip <TrackTerm>   ->  { actionName: "next" };
@@ -57,9 +57,9 @@ import { PlayerActions } from "./playerSchema.ts";
                 | the <TrackTerm> $(trackName:<TrackName>)  -> trackName
                 | <TrackTerm> $(trackName:<TrackName>)  -> trackName
                 | $(trackName:<TrackName>) <TrackTerm>  -> trackName;
-<PlaySpecificTrack> = play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) -> { actionName: "playTrack", parameters: { trackName, artists: [artist] } }
-                      | play $(trackName:<TrackPhrase>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName, albumName } }
-                      | play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName, artists: [artist], albumName } }                      ;
+<PlaySpecificTrack> = play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) -> { actionName: "playMusic", parameters: { target: { kind: "track", trackName, artists: [artist] } } }
+                      | play $(trackName:<TrackPhrase>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playMusic", parameters: { target: { kind: "track", trackName, albumName } } }
+                      | play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playMusic", parameters: { target: { kind: "track", trackName, artists: [artist], albumName } } }                      ;
 
 <SelectDevice> = select $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName } }
                  | select (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName } }

@@ -1018,6 +1018,24 @@ learned-preference bootstrap** (confirm-then-learn).
   already selects a schema LLM-free (§4); contextSelector would save no LLM there anyway.
 - **Same-agent / multi-domain collisions** (two schemas of one agent) rely on the
   schema/action granularity (§5); rare today.
+- **Cache-masked collisions bypass `contextSelector`** — the open TODO. The construction
+  cache short-circuits the grammar store on any hit (completion-based `AgentCache.match`), and
+  a learned/built-in construction lives in a single agent's namespace, so an ambiguous phrase
+  the cache has committed returns a **single** validated match. `contextSelector` needs ≥2
+  candidates (`resolveContextSelector` → `skip` below 2), so the cached answer wins and topic
+  never weighs in — the reason live demos need `@const builtin off`. It pre-empts _every_
+  resolver, since the cache sits upstream of all collision detection in `matchRequest`.
+  **TODO — integrate registry-first with `contextSelector`:** use
+  `resolveGrammarRegistryFirst`'s neighborhood registry as the _detector_ (it can flag a single
+  cache match as known-ambiguous via `detectRegistryAmbiguity`), re-expand the candidate set
+  from the neighborhood siblings, and feed it to the (match-agnostic) TF-IDF scorer so the
+  topical winner resolves automatically — pinning + re-translating a winning sibling that has no
+  `MatchResult` via the existing one-shot/`fallthrough` path, and falling back to
+  preference→clarify on abstain. Prereqs: a populated neighborhood registry
+  (`preference.registryPath`) and `preference.registryFirst: on` (both empty/off by default).
+  Cheaper root-fix alternative: mark neighborhood-member actions "never cache as a single-answer
+  construction," keeping those phrases on the live grammar-collision path where `contextSelector`
+  already works.
 
 ### 13.4 Rollout & validation
 

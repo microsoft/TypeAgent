@@ -125,3 +125,95 @@ describe("contextSelector/tokenize", () => {
         expect(stem("addresses")).toBe("address");
     });
 });
+
+describe("contextSelector/tokenize — negation-scope guard (dropNegatedSpans)", () => {
+    it("is off by default — negated words survive unchanged", () => {
+        expect(tokenize("check the calendar not the spreadsheet")).toEqual([
+            "check",
+            "calendar",
+            "spreadsheet",
+        ]);
+    });
+
+    it("suppresses content tokens after a cue to the end of the turn", () => {
+        expect(
+            tokenize("check the calendar not the spreadsheet", {
+                dropNegatedSpans: true,
+            }),
+        ).toEqual(["check", "calendar"]); // spreadsheet negated away
+        expect(
+            tokenize("do not open the spreadsheet", { dropNegatedSpans: true }),
+        ).toEqual([]);
+    });
+
+    it("closes the scope at a clause boundary (comma) — keeps the idiom's tail", () => {
+        // "no problem, open the spreadsheet": the comma ends the negation so the
+        // real request ("spreadsheet") still lands.
+        expect(
+            tokenize("no problem, open the spreadsheet", {
+                dropNegatedSpans: true,
+            }),
+        ).toEqual(["spreadsheet"]);
+    });
+
+    it("closes the scope at period / semicolon / dash boundaries too", () => {
+        const opts = { dropNegatedSpans: true };
+        expect(tokenize("not the spreadsheet. the grocery list", opts)).toEqual(
+            ["grocery", "list"],
+        );
+        expect(tokenize("not the spreadsheet; the grocery list", opts)).toEqual(
+            ["grocery", "list"],
+        );
+        expect(
+            tokenize("not the spreadsheet — the grocery list", opts),
+        ).toEqual(["grocery", "list"]);
+    });
+
+    it("does NOT treat intra-token punctuation (decimals/times/versions) as a boundary", () => {
+        // The "."/":" inside a number sits in the inter-token gap but must not
+        // reopen the negated span — else the negated topic leaks (regression test).
+        const opts = { dropNegatedSpans: true };
+        expect(tokenize("not the 2.5 spreadsheet", opts)).toEqual([]);
+        expect(tokenize("not the 3:30 meeting", opts)).toEqual([]);
+        expect(tokenize("not the v3.2 report", opts)).toEqual([]);
+    });
+
+    it("closes the scope at a reset connector (but / instead)", () => {
+        const opts = { dropNegatedSpans: true };
+        expect(
+            tokenize("not the spreadsheet but the grocery list", opts),
+        ).toEqual(["grocery", "list"]);
+        expect(
+            tokenize("not the spreadsheet instead the grocery list", opts),
+        ).toEqual(["grocery", "list"]);
+    });
+
+    it("scopes negation to its own clause in a multi-clause turn", () => {
+        // Real request first, negation in a later clause: keep the request,
+        // drop the negated tail.
+        expect(
+            tokenize("add the grocery list, not the spreadsheet", {
+                dropNegatedSpans: true,
+            }),
+        ).toEqual(["grocery", "list"]);
+    });
+
+    it("suppresses a whole negated list with no clause break", () => {
+        expect(
+            tokenize("not the cache the package the dependency", {
+                dropNegatedSpans: true,
+            }),
+        ).toEqual([]);
+    });
+
+    it("recognizes the cue set (no / never / without) and is deterministic", () => {
+        const opts = { dropNegatedSpans: true };
+        expect(tokenize("no pivot chart", opts)).toEqual([]);
+        expect(tokenize("never touch the formula", opts)).toEqual([]);
+        expect(tokenize("without the spreadsheet", opts)).toEqual([]);
+        const a = tokenize("not the spreadsheet but the grocery", opts);
+        expect(tokenize("not the spreadsheet but the grocery", opts)).toEqual(
+            a,
+        );
+    });
+});

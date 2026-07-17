@@ -191,7 +191,60 @@ export type TokenizeOptions = {
     // Apply the conservative plural stemmer (default true). Off only for tests
     // that inspect raw tokenization.
     stem?: boolean;
+    // Suppress content tokens inside a negation scope (default false). Opt-in so
+    // keyword extraction (§6) stays byte-identical; the conversation signal (§7)
+    // enables it. See NEGATION_CUES below.
+    dropNegatedSpans?: boolean;
 };
+
+// Negation-scope handling for the conversation signal (§7). English negation
+// ("not the spreadsheet", "no pivot chart") makes the words that follow
+// *anti-signal* — the user is rejecting that topic, not requesting it. But the
+// cue words are stopwords, dropped before scoring, so the v1 extractor never saw
+// the negation and the negated words fired at full weight — the root cause of the
+// adversarial loaded-negation misroutes. When `dropNegatedSpans` is on, a scope
+// opens at a cue and content tokens inside it are suppressed. The scope closes at
+// the next clause boundary (punctuation), a reset connector ("but the config"),
+// or the end of the turn — so an idiom like "no problem, open the sheet" keeps
+// "sheet" (the comma closes the scope). Purely lexical and deterministic (§12);
+// contractions ("don't") are not handled in v1 — a parked lever. Off by default
+// so it never touches keyword vectors.
+//
+// LOCALIZATION (English-only in v1, by design): the cue/reset lexicons below —
+// like the plural stemmer above — are ENGLISH. On non-English input the negation
+// guard effectively no-ops: negated topics are not suppressed, so loaded-negation
+// misroutes can resurface. Localizing this needs per-language cue/reset lexicons
+// and locale-aware clause-boundary handling/stemming, keyed off the request or
+// session locale.
+// TODO(localization): add non-English negation lexicons + locale-aware scoping.
+const NEGATION_CUES: ReadonlySet<string> = new Set([
+    "not",
+    "no",
+    "never",
+    "without",
+    "cannot",
+    "nor",
+    "none",
+    "neither",
+]);
+const NEGATION_RESETS: ReadonlySet<string> = new Set([
+    "but",
+    "however",
+    "instead",
+    "though",
+    "although",
+    "yet",
+    "except",
+    "rather",
+]);
+// Clause punctuation that closes a negation scope, matched in the gap between two
+// consecutive tokens (the tokenizer discards punctuation, so it is inspected
+// here). The comma/period/etc. must abut whitespace to count — this excludes
+// intra-token punctuation that lands in the gap, e.g. a decimal ("2.5"), a time
+// ("3:30"), or a version ("v3.2"), whose "." / ":" would otherwise be mistaken
+// for a clause break and wrongly reopen the negated span. An em/double dash is a
+// clause separator regardless of surrounding spaces.
+const CLAUSE_BOUNDARY = /[,.;:!?]\s|\s[,.;:!?]|--|—/;
 
 // Conservative, deterministic plural stemmer (part of the §12 determinism
 // contract — pinned, snapshot-tested). It maps common English plurals to their
@@ -255,42 +308,107 @@ export function deCamelCase(identifier: string): string {
     return splitCamelCase(identifier).replace(/[_\-]+/g, " ");
 }
 
+type ResolvedTokenizeOptions = {
+    dropStopwords: boolean;
+    dropGenericVerbs: boolean;
+    minLength: number;
+    applyStem: boolean;
+    dropNegatedSpans: boolean;
+};
+
+function resolveTokenizeOptions(
+    options?: TokenizeOptions,
+): ResolvedTokenizeOptions {
+    return {
+        dropStopwords: options?.dropStopwords ?? true,
+        dropGenericVerbs: options?.dropGenericVerbs ?? true,
+        minLength: options?.minLength ?? 2,
+        applyStem: options?.stem ?? true,
+        dropNegatedSpans: options?.dropNegatedSpans ?? false,
+    };
+}
+
+// True when a stemmed word token should be dropped by the length/vocabulary
+// filters (order matches the original inline checks).
+function isDroppedWord(token: string, opts: ResolvedTokenizeOptions): boolean {
+    if (token.length < opts.minLength) {
+        return true;
+    }
+    if (opts.dropStopwords && STOPWORDS.has(token)) {
+        return true;
+    }
+    if (opts.dropGenericVerbs && GENERIC_VERBS.has(token)) {
+        return true;
+    }
+    return false;
+}
+
+// Classify one raw regex match into the token to emit, or undefined to skip it.
+// Protected (non-[a-z0-9]) tokens bypass stemming and the vocabulary filters.
+// Negation cues/resets mutate `neg` and are themselves dropped; `neg.active` is
+// only consulted when negation-span suppression is enabled.
+function classifyToken(
+    raw: string,
+    opts: ResolvedTokenizeOptions,
+    neg: { active: boolean },
+): string | undefined {
+    const isProtected = raw.length > 0 && !/^[a-z0-9]+$/.test(raw);
+    if (isProtected) {
+        return opts.dropNegatedSpans && neg.active ? undefined : raw;
+    }
+    const token = opts.applyStem ? stem(raw) : raw;
+    // Negation cues/resets are inspected before the vocabulary drops because the
+    // cues ("not", "no") are themselves stopwords.
+    if (opts.dropNegatedSpans) {
+        if (NEGATION_CUES.has(token)) {
+            neg.active = true;
+            return undefined;
+        }
+        if (neg.active && NEGATION_RESETS.has(token)) {
+            neg.active = false;
+            return undefined;
+        }
+    }
+    if (isDroppedWord(token, opts)) {
+        return undefined;
+    }
+    if (opts.dropNegatedSpans && neg.active) {
+        return undefined;
+    }
+    return token;
+}
+
 // Canonicalize + tokenize. NFKC-normalize, lowercase, extract protected/word
 // tokens, stem plurals, then drop stopwords, generic verbs, and sub-minimum-
 // length tokens. Deterministic and order-preserving (a caller that needs
 // multiplicity gets it). Stemming runs before the vocabulary checks so that
 // inflected generic verbs ("removes" -> "remove") are still dropped.
 export function tokenize(text: string, options?: TokenizeOptions): string[] {
-    const dropStopwords = options?.dropStopwords ?? true;
-    const dropGenericVerbs = options?.dropGenericVerbs ?? true;
-    const minLength = options?.minLength ?? 2;
-    const applyStem = options?.stem ?? true;
-
     if (!text) {
         return [];
     }
+    const opts = resolveTokenizeOptions(options);
     const normalized = text.normalize("NFKC").toLowerCase();
     const re = tokenRegExp();
     const out: string[] = [];
+    const neg = { active: false };
+    let prevEnd = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(normalized)) !== null) {
-        const raw = m[0];
-        const isProtected = raw.length > 0 && !/^[a-z0-9]+$/.test(raw);
-        if (isProtected) {
-            out.push(raw);
-            continue;
+        // A negation scope closes at the first clause boundary (punctuation) in
+        // the untokenized gap before this token.
+        if (
+            opts.dropNegatedSpans &&
+            neg.active &&
+            CLAUSE_BOUNDARY.test(normalized.slice(prevEnd, m.index))
+        ) {
+            neg.active = false;
         }
-        const token = applyStem ? stem(raw) : raw;
-        if (token.length < minLength) {
-            continue;
+        prevEnd = re.lastIndex;
+        const emitted = classifyToken(m[0], opts, neg);
+        if (emitted !== undefined) {
+            out.push(emitted);
         }
-        if (dropStopwords && STOPWORDS.has(token)) {
-            continue;
-        }
-        if (dropGenericVerbs && GENERIC_VERBS.has(token)) {
-            continue;
-        }
-        out.push(token);
     }
     return out;
 }

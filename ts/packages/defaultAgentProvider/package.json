@@ -22,6 +22,7 @@
     "data"
   ],
   "scripts": {
+    "bench:cs": "npx tsx src/contextSelectorBench/reproduce.mts",
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
