@@ -172,6 +172,12 @@ export default class TestTranslateCommand extends Command {
             description: "Enable caching",
             default: false,
         }),
+        grammar: Flags.boolean({
+            description:
+                "Enable authored-grammar matching. Use --no-grammar to force every request through the LLM (e.g. to measure pure model translation stability).",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
+        }),
         concurrency: Flags.integer({
             char: "c",
             description: "Number of concurrent requests (default to 4)",
@@ -385,7 +391,7 @@ export default class TestTranslateCommand extends Command {
                     },
                 },
                 explainer: { enabled: false },
-                cache: { enabled: flags.cache },
+                cache: { enabled: flags.cache, grammar: flags.grammar },
                 collectCommandResult: true,
                 constructionProvider: defaultConstructionProvider,
                 indexingServiceRegistry:
@@ -593,5 +599,15 @@ export default class TestTranslateCommand extends Command {
         console.log(
             `Token Usage: ${getTokenUsageStr(totalTokenUsage)}, Avg per call: ${getTokenUsageStr(totalTokenUsage, processed * repeat)}`,
         );
+
+        // The dispatcher/agent stack can leave async handles open (the MCP
+        // filesystem child process, aiclient keep-alive sockets) that keep Node
+        // alive long after this one-shot benchmark has finished and printed its
+        // results. Flush stdout, then exit explicitly so the command returns
+        // promptly instead of hanging on those handles.
+        await new Promise<void>((resolve) =>
+            process.stdout.write("", () => resolve()),
+        );
+        process.exit(0);
     }
 }

@@ -35,7 +35,7 @@ describe("Schema", () => {
 
         const result = validator.validate({
             assistant: "player",
-            action: "playTrack",
+            action: "playMusic",
         });
 
         if (!result.success) {

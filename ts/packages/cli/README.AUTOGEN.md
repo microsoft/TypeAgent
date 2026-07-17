@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=dc46815195a0847d417c9138be18f82ced8524cfdb8d2666c95f57fccb854cf4 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c64305fed661fa43ff14753c200236de96337c9aa4300fb28f48d077edaa2bfd -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-cli — AI-generated documentation
@@ -12,28 +12,25 @@
 
 ## Overview
 
-The `agent-cli` package is a command-line interface (CLI) for interacting with the TypeAgent system. It serves as a front-end to the TypeAgent Dispatcher, enabling users to send requests, manage conversations, and perform various operations with agents. The CLI supports multiple subcommands, including interactive and non-interactive modes, as well as tools for testing and managing data.
+The `agent-cli` package is a command-line interface (CLI) for interacting with the TypeAgent system. It provides tools for connecting to the TypeAgent Dispatcher, managing conversations, running commands, and testing agent interactions. The CLI is designed to facilitate both interactive and non-interactive workflows, making it a versatile tool for developers working with the TypeAgent framework.
 
 ## What it does
 
-The `agent-cli` package provides several subcommands to interact with the TypeAgent system:
+The `agent-cli` package supports several subcommands, each tailored to specific use cases:
 
-- **`connect`**: The default subcommand, used for real-time interaction with the TypeAgent Dispatcher. Users can send requests, receive responses, and manage conversations interactively.
-- **`run`**: Executes dispatcher commands non-interactively. This includes:
-  - `request`: Sends a request to the dispatcher without confirmation.
-  - `translate`: Translates a user request into an action.
-  - `explain`: Generates an explanation for a specific request-to-action mapping.
-- **`replay`**: Replays chat histories for regression testing or generating test files. Supports options for translation-only mode and test file generation.
-- **`conversations`**: Manages conversations on the agent server. Subcommands include:
-  - `create`: Creates a new conversation.
-  - `delete`: Deletes an existing conversation.
-  - `list`: Lists all conversations.
-  - `rename`: Renames a conversation.
+- **`connect`**: The default subcommand, used for real-time interaction with the TypeAgent Dispatcher. It allows users to send requests, receive responses, and manage conversations interactively.
+- **`run`**: Executes dispatcher commands non-interactively. This includes sending requests, translating them, or generating explanations without user confirmation.
+- **`replay`**: Replays chat histories for regression testing or generating test files. This is useful for validating agent behavior over time.
+- **`conversations`**: Provides tools for managing conversations on the agent server. Subcommands include:
+  - `create`: Create a new conversation.
+  - `delete`: Delete an existing conversation.
+  - `list`: List all conversations.
+  - `rename`: Rename a conversation.
 - **`data`**: Manages explanation test data. Subcommands include:
-  - `add`: Adds new data to the explanation test dataset.
-  - `diff`: Compares differences between datasets.
+  - `add`: Add new data to the explanation test dataset.
+  - `diff`: Compare differences between datasets.
 
-These commands provide a comprehensive interface for interacting with the TypeAgent system, enabling users to perform actions, manage conversations, and test functionalities effectively.
+These commands enable developers to interact with the TypeAgent system in various ways, from testing and debugging to managing agent conversations and datasets.
 
 ## Setup
 
@@ -42,7 +39,7 @@ To set up and use the `agent-cli` package, follow these steps:
 1. **Build the workspace**:
 
    - Navigate to the workspace root (repo `ts` directory) and run `pnpm setup` to initialize the environment.
-   - Build the project using the appropriate commands in the workspace root.
+   - Build the project using the appropriate `pnpm` commands.
 
 2. **Run the CLI**:
 
@@ -56,18 +53,18 @@ To set up and use the `agent-cli` package, follow these steps:
    - Use `agent-cli` (or `agent-cli-dev` for the development version) to invoke the CLI globally.
    - To unlink, run `pnpm uninstall --global agent-cli`.
 
-For additional details, refer to the hand-written README.
+For additional details on setup and usage, refer to the hand-written README.
 
 ## Key Files
 
-The `agent-cli` package is organized into several key files and directories:
+The `agent-cli` package is organized into several key files and directories, each responsible for specific functionalities:
 
-- **`src/commands/`**: Contains the implementation of all CLI subcommands.
+- **`src/commands/`**: Contains the implementation of CLI subcommands.
 
   - **`connect.ts`**: Implements the `connect` subcommand for real-time interaction with the TypeAgent Dispatcher.
-  - **`run/index.ts`**: Handles the `run` subcommand for non-interactive dispatcher commands.
-  - **`replay.ts`**: Implements the `replay` subcommand for replaying chat histories.
-  - **`conversations/`**: Contains commands for managing conversations:
+  - **`run/index.ts`**: Handles the `run` subcommand for executing dispatcher commands non-interactively.
+  - **`replay.ts`**: Manages the `replay` subcommand for replaying chat histories.
+  - **`conversations/`**: Includes commands for managing conversations:
     - `create.ts`: Create a new conversation.
     - `delete.ts`: Delete an existing conversation.
     - `list.ts`: List all conversations.
@@ -76,9 +73,9 @@ The `agent-cli` package is organized into several key files and directories:
     - `add.ts`: Add new data to the explanation test dataset.
     - `diff.ts`: Compare differences between datasets.
 
-- **Dependencies**:
-  - Internal dependencies include `@typeagent/action-schema`, `@typeagent/agent-sdk`, `@typeagent/agent-server-client`, and others for core functionality.
-  - External dependencies include `@oclif/core` for CLI scaffolding, `chalk` for terminal output formatting, and `dotenv` for environment variable management.
+- **Dependencies**: The package relies on several internal dependencies from the TypeAgent monorepo, such as:
+  - `@typeagent/action-schema`, `@typeagent/agent-sdk`, `@typeagent/agent-server-client`, and others for core functionality.
+  - External libraries like `@oclif/core` for CLI scaffolding and `chalk` for terminal output formatting.
 
 ## How to extend
 
@@ -87,7 +84,7 @@ To extend the `agent-cli` package, follow these steps:
 1. **Identify the command to extend or create**:
 
    - Explore the `src/commands/` directory to locate existing commands.
-   - If creating a new command, determine its purpose and structure.
+   - If creating a new command, decide on its purpose and structure.
 
 2. **Create a new command**:
 
@@ -109,6 +106,8 @@ To extend the `agent-cli` package, follow these steps:
    - Document the new command in the hand-written README, including usage examples and available flags.
 
 For example, to add a command for exporting conversation logs, you might create a file `src/commands/conversations/export.ts` and implement logic to fetch and save logs from the agent server.
+
+By following these steps, you can extend the `agent-cli` package to support additional functionalities and improve its utility.
 
 ## Reference
 
@@ -145,6 +144,6 @@ External: `@oclif/core`, `@oclif/plugin-help`, `chalk`, `debug`, `dotenv`, `html
 
 ---
 
-_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
+_Auto-generated against commit `2a8c6e65a1638c435219fd5b8688faeeec78d4c7` on `2026-07-16T01:20:16.260Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
