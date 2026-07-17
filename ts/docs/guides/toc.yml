@@ -12,5 +12,7 @@
       href: build-an-agent/user-interaction.md
     - name: "Tutorial: Echo agent (standalone package)"
       href: build-an-agent/tutorial-echo.md
+    - name: Schema tuning
+      href: build-an-agent/schema-tuning.md
 - name: Embedding the dispatcher
   href: embedding-dispatcher.md

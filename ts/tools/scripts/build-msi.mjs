@@ -378,6 +378,10 @@ runCommand(lightExe, [
     // Per-user install under LocalAppData intentionally triggers ICE38 on
     // file-keypath components harvested by heat; suppress that specific ICE.
     `-sice:ICE38`,
+    // ICE64 flags every harvested directory under the user profile that lacks
+    // a RemoveFile entry.  For per-user installs with hundreds of auto-
+    // harvested subdirectories this is expected and safe to suppress.
+    `-sice:ICE64`,
     `-cultures:en-us`,
     `-o`,
     msiOutputPath,

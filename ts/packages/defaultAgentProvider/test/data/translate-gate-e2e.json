@@ -86,12 +86,15 @@
       "expected": [
         {
           "schemaName": "player",
-          "actionName": "playTrack",
+          "actionName": "playMusic",
           "parameters": {
-            "trackName": "Cruel Summer",
-            "artists": [
-              "Taylor Swift"
-            ]
+            "target": {
+              "kind": "track",
+              "trackName": "Cruel Summer",
+              "artists": [
+                "Taylor Swift"
+              ]
+            }
           }
         }
       ],
@@ -190,12 +193,15 @@
       "expected": [
         {
           "schemaName": "player",
-          "actionName": "playTrack",
+          "actionName": "playMusic",
           "parameters": {
-            "trackName": "Symphony No 5",
-            "artists": [
-              "Beethoven"
-            ]
+            "target": {
+              "kind": "track",
+              "trackName": "Symphony No 5",
+              "artists": [
+                "Beethoven"
+              ]
+            }
           }
         }
       ],
@@ -364,17 +370,20 @@
           {
             "action": {
               "schemaName": "player",
-              "actionName": "playTrack",
+              "actionName": "playMusic",
               "parameters": {
-                "trackName": "Toccata and Fugue",
-                "artists": [
-                  "Bach"
-                ]
+                "target": {
+                  "kind": "track",
+                  "trackName": "Toccata and Fugue",
+                  "artists": [
+                    "Bach"
+                  ]
+                }
               }
             },
             "alternates": {
-              "trackName": "toccata and fugue",
-              "artists.0": "johann sebastian bach"
+              "target.trackName": "toccata and fugue",
+              "target.artists.0": "johann sebastian bach"
             }
           }
         ]
