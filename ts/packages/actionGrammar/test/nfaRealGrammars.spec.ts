@@ -136,10 +136,10 @@ describe("NFA with Real Grammars", () => {
                 "Swift",
             ]);
             expect(result1.matched).toBe(true);
-            expect(result1.actionValue?.parameters?.trackName).toBe(
+            expect(result1.actionValue?.parameters?.target?.trackName).toBe(
                 "Shake It Off",
             );
-            expect(result1.actionValue?.parameters?.artists?.[0]).toBe(
+            expect(result1.actionValue?.parameters?.target?.artists?.[0]).toBe(
                 "Taylor Swift",
             );
 
@@ -154,18 +154,22 @@ describe("NFA with Real Grammars", () => {
                 "williams",
             ]);
             expect(result2.matched).toBe(true);
-            expect(result2.actionValue?.parameters?.trackName).toBe(
+            expect(result2.actionValue?.parameters?.target?.trackName).toBe(
                 "big red sun",
             );
-            expect(result2.actionValue?.parameters?.artists?.[0]).toBe(
+            expect(result2.actionValue?.parameters?.target?.artists?.[0]).toBe(
                 "lucinda williams",
             );
 
             // Test: single word track and artist
             const result3 = matchNFA(nfa, ["play", "Hello", "by", "Adele"]);
             expect(result3.matched).toBe(true);
-            expect(result3.actionValue?.parameters?.trackName).toBe("Hello");
-            expect(result3.actionValue?.parameters?.artists?.[0]).toBe("Adele");
+            expect(result3.actionValue?.parameters?.target?.trackName).toBe(
+                "Hello",
+            );
+            expect(result3.actionValue?.parameters?.target?.artists?.[0]).toBe(
+                "Adele",
+            );
         });
 
         it("should match 'play track from album' patterns", () => {
@@ -188,10 +192,12 @@ describe("NFA with Real Grammars", () => {
                 "1989",
             ]);
             expect(result1.matched).toBe(true);
-            expect(result1.actionValue?.parameters?.trackName).toBe(
+            expect(result1.actionValue?.parameters?.target?.trackName).toBe(
                 "Shake It Off",
             );
-            expect(result1.actionValue?.parameters?.albumName).toBe("1989");
+            expect(result1.actionValue?.parameters?.target?.albumName).toBe(
+                "1989",
+            );
 
             // Test: with "the" article
             const result2 = matchNFA(nfa, [
@@ -208,10 +214,10 @@ describe("NFA with Real Grammars", () => {
                 "Opera",
             ]);
             expect(result2.matched).toBe(true);
-            expect(result2.actionValue?.parameters?.trackName).toBe(
+            expect(result2.actionValue?.parameters?.target?.trackName).toBe(
                 "Bohemian Rhapsody",
             );
-            expect(result2.actionValue?.parameters?.albumName).toBe(
+            expect(result2.actionValue?.parameters?.target?.albumName).toBe(
                 "A Night at the Opera",
             );
         });
@@ -242,13 +248,15 @@ describe("NFA with Real Grammars", () => {
                 "1989",
             ]);
             expect(result1.matched).toBe(true);
-            expect(result1.actionValue?.parameters?.trackName).toBe(
+            expect(result1.actionValue?.parameters?.target?.trackName).toBe(
                 "Shake It Off",
             );
-            expect(result1.actionValue?.parameters?.artists?.[0]).toBe(
+            expect(result1.actionValue?.parameters?.target?.artists?.[0]).toBe(
                 "Taylor Swift",
             );
-            expect(result1.actionValue?.parameters?.albumName).toBe("1989");
+            expect(result1.actionValue?.parameters?.target?.albumName).toBe(
+                "1989",
+            );
 
             // Test: with "the" article
             const result2 = matchNFA(nfa, [
@@ -263,13 +271,15 @@ describe("NFA with Real Grammars", () => {
                 "Help",
             ]);
             expect(result2.matched).toBe(true);
-            expect(result2.actionValue?.parameters?.trackName).toBe(
+            expect(result2.actionValue?.parameters?.target?.trackName).toBe(
                 "Yesterday",
             );
-            expect(result2.actionValue?.parameters?.artists?.[0]).toBe(
+            expect(result2.actionValue?.parameters?.target?.artists?.[0]).toBe(
                 "The Beatles",
             );
-            expect(result2.actionValue?.parameters?.albumName).toBe("Help");
+            expect(result2.actionValue?.parameters?.target?.albumName).toBe(
+                "Help",
+            );
         });
     });
 

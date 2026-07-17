@@ -59,7 +59,9 @@ describe("Base Grammar Pattern Tests", () => {
         it("should match resume commands", () => {
             const result1 = matchGrammarWithNFA(grammar, nfa, "resume");
             expect(result1.length).toBeGreaterThan(0);
-            expect(result1[0].match).toMatchObject({ actionName: "resume" });
+            expect(result1[0].match).toMatchObject({
+                actionName: "resumePlayback",
+            });
 
             const result2 = matchGrammarWithNFA(
                 grammar,
@@ -67,7 +69,9 @@ describe("Base Grammar Pattern Tests", () => {
                 "resume the music",
             );
             expect(result2.length).toBeGreaterThan(0);
-            expect(result2[0].match).toMatchObject({ actionName: "resume" });
+            expect(result2[0].match).toMatchObject({
+                actionName: "resumePlayback",
+            });
         });
     });
 
@@ -93,9 +97,11 @@ describe("Base Grammar Pattern Tests", () => {
             );
             expect(result.length).toBeGreaterThan(0);
             const action = result[0].match as any;
-            expect(action.actionName).toBe("playTrack");
-            expect(action.parameters.trackName).toBe("Big Red Sun");
-            expect(action.parameters.artists).toEqual(["Lucinda Williams"]);
+            expect(action.actionName).toBe("playMusic");
+            expect(action.parameters.target.trackName).toBe("Big Red Sun");
+            expect(action.parameters.target.artists).toEqual([
+                "Lucinda Williams",
+            ]);
         });
 
         it("should match 'play X by Y' with capitalized names", () => {
@@ -106,9 +112,9 @@ describe("Base Grammar Pattern Tests", () => {
             );
             expect(result.length).toBeGreaterThan(0);
             const action = result[0].match as any;
-            expect(action.actionName).toBe("playTrack");
-            expect(action.parameters.trackName).toBe("Shake It Off");
-            expect(action.parameters.artists).toEqual(["Taylor Swift"]);
+            expect(action.actionName).toBe("playMusic");
+            expect(action.parameters.target.trackName).toBe("Shake It Off");
+            expect(action.parameters.target.artists).toEqual(["Taylor Swift"]);
         });
 
         it("should match 'play X by Y' with lowercase names", () => {
@@ -119,9 +125,9 @@ describe("Base Grammar Pattern Tests", () => {
             );
             expect(result.length).toBeGreaterThan(0);
             const action = result[0].match as any;
-            expect(action.actionName).toBe("playTrack");
-            expect(action.parameters.trackName).toBe("shake it off");
-            expect(action.parameters.artists).toEqual(["taylor swift"]);
+            expect(action.actionName).toBe("playMusic");
+            expect(action.parameters.target.trackName).toBe("shake it off");
+            expect(action.parameters.target.artists).toEqual(["taylor swift"]);
         });
 
         it("should match 'play X by Y' with single word names", () => {
@@ -132,9 +138,9 @@ describe("Base Grammar Pattern Tests", () => {
             );
             expect(result.length).toBeGreaterThan(0);
             const action = result[0].match as any;
-            expect(action.actionName).toBe("playTrack");
-            expect(action.parameters.trackName).toBe("Hello");
-            expect(action.parameters.artists).toEqual(["Adele"]);
+            expect(action.actionName).toBe("playMusic");
+            expect(action.parameters.target.trackName).toBe("Hello");
+            expect(action.parameters.target.artists).toEqual(["Adele"]);
         });
 
         it("should match 'play X by Y' with artist having article", () => {
@@ -145,9 +151,9 @@ describe("Base Grammar Pattern Tests", () => {
             );
             expect(result.length).toBeGreaterThan(0);
             const action = result[0].match as any;
-            expect(action.actionName).toBe("playTrack");
-            expect(action.parameters.trackName).toBe("Yesterday");
-            expect(action.parameters.artists).toEqual(["The Beatles"]);
+            expect(action.actionName).toBe("playMusic");
+            expect(action.parameters.target.trackName).toBe("Yesterday");
+            expect(action.parameters.target.artists).toEqual(["The Beatles"]);
         });
     });
 
@@ -173,9 +179,9 @@ describe("Base Grammar Pattern Tests", () => {
             );
             expect(result.length).toBeGreaterThan(0);
             const action = result[0].match as any;
-            expect(action.actionName).toBe("playTrack");
-            expect(action.parameters.trackName).toBe("Shake It Off");
-            expect(action.parameters.albumName).toBe("1989");
+            expect(action.actionName).toBe("playMusic");
+            expect(action.parameters.target.trackName).toBe("Shake It Off");
+            expect(action.parameters.target.albumName).toBe("1989");
         });
 
         it("should match 'play X from the album Y'", () => {
@@ -186,9 +192,13 @@ describe("Base Grammar Pattern Tests", () => {
             );
             expect(result.length).toBeGreaterThan(0);
             const action = result[0].match as any;
-            expect(action.actionName).toBe("playTrack");
-            expect(action.parameters.trackName).toBe("Bohemian Rhapsody");
-            expect(action.parameters.albumName).toBe("A Night at the Opera");
+            expect(action.actionName).toBe("playMusic");
+            expect(action.parameters.target.trackName).toBe(
+                "Bohemian Rhapsody",
+            );
+            expect(action.parameters.target.albumName).toBe(
+                "A Night at the Opera",
+            );
         });
     });
 
@@ -214,10 +224,10 @@ describe("Base Grammar Pattern Tests", () => {
             );
             expect(result.length).toBeGreaterThan(0);
             const action = result[0].match as any;
-            expect(action.actionName).toBe("playTrack");
-            expect(action.parameters.trackName).toBe("Shake It Off");
-            expect(action.parameters.artists).toEqual(["Taylor Swift"]);
-            expect(action.parameters.albumName).toBe("1989");
+            expect(action.actionName).toBe("playMusic");
+            expect(action.parameters.target.trackName).toBe("Shake It Off");
+            expect(action.parameters.target.artists).toEqual(["Taylor Swift"]);
+            expect(action.parameters.target.albumName).toBe("1989");
         });
 
         it("should match with 'the album' variant", () => {
@@ -228,10 +238,10 @@ describe("Base Grammar Pattern Tests", () => {
             );
             expect(result.length).toBeGreaterThan(0);
             const action = result[0].match as any;
-            expect(action.actionName).toBe("playTrack");
-            expect(action.parameters.trackName).toBe("Yesterday");
-            expect(action.parameters.artists).toEqual(["The Beatles"]);
-            expect(action.parameters.albumName).toBe("Help");
+            expect(action.actionName).toBe("playMusic");
+            expect(action.parameters.target.trackName).toBe("Yesterday");
+            expect(action.parameters.target.artists).toEqual(["The Beatles"]);
+            expect(action.parameters.target.albumName).toBe("Help");
         });
     });
 
