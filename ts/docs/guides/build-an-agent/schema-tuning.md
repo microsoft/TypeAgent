@@ -44,8 +44,11 @@ Their _shape_ steers the model.
 **Anti-pattern** — the list agent emitted a list and its items as flat peers:
 
 ```jsonc
-[ { "name": "grocery", "type": ["list"] },
-  { "name": "eggs",    "type": ["item"] } ]   // nothing says eggs is IN grocery
+[
+  { "name": "grocery", "type": ["list"] },
+  { "name": "eggs", "type": ["item"] },
+]
+ // nothing says eggs is IN grocery
 ```
 
 On the follow-up "add cheese", the model saw a loose "eggs" entity and
@@ -56,8 +59,13 @@ On the follow-up "add cheese", the model saw a loose "eggs" entity and
 (`packages/agents/list/src/listActionHandler.ts`, `getEntities`):
 
 ```jsonc
-[ { "name": "grocery", "type": ["list"],
-    "facets": [{ "name": "items", "value": ["eggs"] }] } ]
+[
+  {
+    "name": "grocery",
+    "type": ["list"],
+    "facets": [{ "name": "items", "value": ["eggs"] }],
+  },
+]
 ```
 
 Measured effect (n=10, "add cheese"): doubling **2/10 → 0/10**. Reference
@@ -119,13 +127,13 @@ So:
 - Phrasing sensitivity is real. Measured "add \<item\>" follow-ups after
   "add eggs to the grocery list" (facet-only entities, LLM path, n=10):
 
-  | Phrasing                  | clean  | montage misroute | doubling |
-  | ------------------------- | ------ | ---------------- | -------- |
-  | "put cheese on the list"  | 10/10  | 0                | 0        |
-  | "include cheese"          | 9/10   | 0                | 0        |
-  | "add cheese"              | 7/10   | 3                | 0        |
-  | "put cheese as well"      | 7/10   | 2                | 1        |
-  | "add cheese too"          | 6/10   | 0                | 4        |
+  | Phrasing                 | clean | montage misroute | doubling |
+  | ------------------------ | ----- | ---------------- | -------- |
+  | "put cheese on the list" | 10/10 | 0                | 0        |
+  | "include cheese"         | 9/10  | 0                | 0        |
+  | "add cheese"             | 7/10  | 3                | 0        |
+  | "put cheese as well"     | 7/10  | 2                | 1        |
+  | "add cheese too"         | 6/10  | 0                | 4        |
 
   Takeaways: bare "add cheese" is pulled toward montage; continuation cues fix
   routing but cause doubling; the cleanest phrasings need neither crutch.
