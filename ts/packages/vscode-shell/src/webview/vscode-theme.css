@@ -398,3 +398,77 @@
 .chat-message-details pre::-webkit-scrollbar-track {
   background-color: transparent;
 }
+
+/* ── In-webview camera capture overlay (vscode-shell only) ──────────
+   Mirrors the Electron shell's CameraView. Built by webview/cameraView.ts and
+   toggled by the ChatPanel camera button (chat-ui imageCaptureProvider.
+   openCamera). A full-screen scrim holds a live <video> preview (or the frozen
+   capture) and a row of codicon buttons. */
+.camera-container {
+  position: absolute;
+  inset: 0;
+  z-index: 2500;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  /* Neutral dark scrim reads well over any VS Code theme. */
+  background: rgba(0, 0, 0, 0.6);
+}
+.camera-hidden {
+  display: none !important;
+}
+.camera-container #video,
+.camera-container .picture img {
+  width: 320px;
+  height: 240px;
+  border-radius: 4px;
+  background: #000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+.camera-container #canvas {
+  display: none;
+}
+.camera-container .picture {
+  display: inline-block;
+  vertical-align: top;
+}
+.camera-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 320px;
+  height: 240px;
+  font-size: 18px;
+  color: #fff;
+}
+.camera-buttons {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+.camera-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  cursor: pointer;
+  color: #fff;
+  background-color: rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+}
+.camera-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+.camera-button-grouped {
+  margin: 0 6px;
+}
+.camera-button .codicon {
+  font-size: 20px;
+  line-height: 1;
+}
+.single-camera {
+  display: none !important;
+}
