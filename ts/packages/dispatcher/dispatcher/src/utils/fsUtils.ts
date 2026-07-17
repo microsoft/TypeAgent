@@ -69,9 +69,13 @@ export async function lockInstanceDir(instanceDir: string) {
     const ownerMarkerName = `pid-${process.pid}`;
 
     let isExiting = false;
-    process.on("exit", () => {
+    // Named so the returned unlock can remove it: lockInstanceDir may run once
+    // per conversation over a long-running server, and an anonymous per-call
+    // listener would accumulate toward Node's max-listeners warning.
+    const onProcessExit = () => {
         isExiting = true;
-    });
+    };
+    process.on("exit", onProcessExit);
 
     let release!: () => Promise<void>;
 
@@ -123,7 +127,7 @@ export async function lockInstanceDir(instanceDir: string) {
             release = await acquire();
             writeOwnerMarker();
             console.error(
-                `\nWARN: Instance directory lock ${lockFolder} was missing — recreated by pid ${process.pid}.\n`,
+                `\nWARN: Instance directory lock ${lockFolder} was missing; recreated by pid ${process.pid}.\n`,
             );
         } catch (e) {
             console.error(
@@ -146,7 +150,7 @@ export async function lockInstanceDir(instanceDir: string) {
             // reclaimed our stale lock. Either way don't recreate it (that would
             // thrash or steal); log and continue, matching prior tolerant behavior.
             console.error(
-                `\nWARN: User instance directory lock ${lockFolder} reported as compromised — continuing.\n  ${err}`,
+                `\nWARN: User instance directory lock ${lockFolder} reported as compromised; continuing.\n  ${err}`,
             );
             return;
         }
@@ -168,7 +172,7 @@ export async function lockInstanceDir(instanceDir: string) {
             throw err;
         }
         throw new Error(
-            `Unable to lock instance directory ${instanceDir}. Only one client per instance directory can be active at a time. Cause: ${e?.code ?? "unknown"} — ${e?.message ?? e}`,
+            `Unable to lock instance directory ${instanceDir}. Only one client per instance directory can be active at a time. Cause: ${e?.code ?? "unknown"} (${e?.message ?? e})`,
         );
     }
 
@@ -178,6 +182,7 @@ export async function lockInstanceDir(instanceDir: string) {
     // folder we created. All best effort.
     return async () => {
         isExiting = true;
+        process.removeListener("exit", onProcessExit);
         let released = false;
         try {
             await release();
