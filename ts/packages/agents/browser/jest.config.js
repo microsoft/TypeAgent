@@ -23,10 +23,6 @@ export default {
     },
     transformIgnorePatterns: [],
     collectCoverage: false,
-    collectCoverageFrom: [
-        "<rootDir>/src/extension/serviceWorker/**/*.ts",
-        "!<rootDir>/src/extension/serviceWorker/**/*.d.ts",
-    ],
     verbose: true,
     testPathIgnorePatterns: ["/node_modules/", "/dist/"],
     modulePathIgnorePatterns: ["<rootDir>/dist/"],

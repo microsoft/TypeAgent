@@ -28,30 +28,22 @@
   "main": "index.js",
   "scripts": {
     "agc": "agc -i ./src/agent/browserSchema.agr -o ./dist/agent/browserSchema.ag.json",
-    "agc:crossword": "agc -i ./src/extension/webagent/crossword/crosswordSchema.agr -o ./dist/extension/webagent/crossword/crosswordSchema.ag.json",
     "asc": "asc -i ./src/agent/browserActionSchema.mts -o ./dist/agent/browserSchema.pas.json -t BrowserActions -e BrowserEntities",
     "build": "fluid-build . -t build",
     "build:dev": "fluid-build . -t build:dev",
-    "build:extension": "fluid-build . -t build:extension",
     "build:views": "fluid-build . -t build:views",
     "clean": "rimraf dist deploy && rimraf -g **/*.tsbuildinfo *.done.build.log",
     "dev:client": "vite serve",
-    "package": "node scripts/packExtension.mjs",
-    "prepare": "node ./scripts/prepare.mjs .",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "test": "npm run test:local",
     "test:local": "jest",
     "tsc:agent": "tsc -p src/agent/tsconfig.json",
     "tsc:common": "tsc -p src/common/tsconfig.json",
-    "tsc:extension:chrome:typecheck": "tsc -p src/extension/tsconfig.json",
-    "tsc:extension:electron:typecheck": "tsc -p src/electron/tsconfig.json",
     "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
     "tsc:views:client:typecheck": "tsc -p src/views/client/pdf/tsconfig.json",
     "tsc:views:server": "tsc -p src/views/server/tsconfig.json",
     "tsc:views:shared": "tsc -p src/views/shared/tsconfig.json",
-    "vite:extension": "build-extension",
-    "vite:extension:dev": "build-extension --dev",
     "vite:views:client": "vite build"
   },
   "dependencies": {
@@ -65,6 +57,7 @@
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/browser-control-rpc": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
@@ -184,7 +177,6 @@
           "^build",
           "asc",
           "agc",
-          "build:extension",
           "build:views",
           "tsc:agent",
           "tsc:puppeteer"
@@ -194,36 +186,13 @@
       "build:dev": {
         "dependsOn": [
           "^build",
-          "build:extension:dev",
           "build:views",
           "tsc:agent",
           "tsc:puppeteer"
         ],
         "script": false
       },
-      "build:extension": {
-        "dependsOn": [
-          "tsc:extension:electron:typecheck",
-          "tsc:extension:chrome:typecheck",
-          "vite:extension"
-        ],
-        "script": false
-      },
-      "build:extension:dev": {
-        "dependsOn": [
-          "tsc:extension:electron:typecheck",
-          "tsc:extension:chrome:typecheck",
-          "vite:extension:dev"
-        ],
-        "script": false
-      },
       "tsc:agent": [
-        "tsc:common"
-      ],
-      "vite:extension": [
-        "tsc:common"
-      ],
-      "vite:extension:dev": [
         "tsc:common"
       ],
       "build:views": {
@@ -252,18 +221,6 @@
             "dist/views/public/**/*"
           ]
         }
-      }
-    },
-    "declarativeTasks": {
-      "build-extension": {
-        "inputGlobs": [
-          "src/extension/**",
-          "src/electron/**"
-        ],
-        "outputGlobs": [
-          "dist/extension/**",
-          "dist/electron/**"
-        ]
       }
     }
   },

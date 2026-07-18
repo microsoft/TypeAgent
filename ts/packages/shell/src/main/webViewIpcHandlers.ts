@@ -85,7 +85,7 @@ export async function initializeBrowserExtension(_appPath: string) {
         ? path.join(process.resourcesPath, "browser-typeagent-extension")
         : path.join(
               app.getAppPath(),
-              "node_modules/browser-typeagent/dist/electron",
+              "node_modules/@typeagent/browser-extension/dist/electron",
           );
 
     const extension = await session.defaultSession.extensions.loadExtension(

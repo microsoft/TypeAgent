@@ -1,0 +1,142 @@
+{
+  "name": "@typeagent/browser-extension",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeAgent browser extension (Chrome + Electron) build package",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/browserExtension"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "sideEffects": false,
+  "type": "module",
+  "scripts": {
+    "agc:crossword": "agc -i ./src/extension/webagent/crossword/crosswordSchema.agr -o ./dist/extension/webagent/crossword/crosswordSchema.ag.json",
+    "build": "fluid-build . -t build",
+    "build:dev": "fluid-build . -t build:dev",
+    "build:extension": "fluid-build . -t build:extension",
+    "clean": "rimraf dist deploy && rimraf -g **/*.tsbuildinfo *.done.build.log",
+    "package": "node scripts/packExtension.mjs",
+    "prepare": "node ./scripts/prepare.mjs .",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "test": "npm run test:local",
+    "test:local": "jest",
+    "tsc:extension:chrome:typecheck": "tsc -p src/extension/tsconfig.json",
+    "tsc:extension:electron:typecheck": "tsc -p src/electron/tsconfig.json",
+    "vite:extension": "build-extension",
+    "vite:extension:dev": "build-extension --dev"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "@popperjs/core": "^2.11.8",
+    "@typeagent/agent-rpc": "workspace:*",
+    "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/agent-server-client": "workspace:*",
+    "@typeagent/agent-server-protocol": "workspace:*",
+    "@typeagent/browser-control-rpc": "workspace:*",
+    "@typeagent/dispatcher-rpc": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
+    "bootstrap": "^5.3.3",
+    "chat-ui": "workspace:*",
+    "cytoscape": "^3.32.0",
+    "cytoscape-dagre": "^2.5.0",
+    "dagre": "^0.8.5",
+    "debug": "^4.4.0",
+    "dompurify": "^3.4.11",
+    "html-to-text": "^9.0.5",
+    "markdown-it": "^14.2.0",
+    "prismjs": "^1.30.0"
+  },
+  "devDependencies": {
+    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
+    "@fluidframework/build-tools": "^0.57.0",
+    "@typeagent/action-grammar-compiler": "workspace:*",
+    "@types/chrome": "^0.0.256",
+    "@types/cytoscape": "^3.21.9",
+    "@types/cytoscape-dagre": "^2.3.3",
+    "@types/dagre": "^0.7.52",
+    "@types/debug": "^4.1.12",
+    "@types/html-to-text": "^9.0.4",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.0.0",
+    "@types/prismjs": "^1.26.3",
+    "archiver": "^7.0.1",
+    "chalk": "^5.4.1",
+    "crx": "^5.0.1",
+    "dotenv": "^16.5.0",
+    "find-up": "^7.0.0",
+    "jest": "^29.7.0",
+    "jest-chrome": "^0.8.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "jsdom": "^28.1.0",
+    "@types/jest": "^29.5.7",
+    "@types/jsdom": "^28.0.0",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "ts-jest": "^29.3.2",
+    "typescript": "~5.4.5",
+    "vite": "^6.4.3"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "build": {
+        "dependsOn": [
+          "^build",
+          "build:extension"
+        ],
+        "script": false
+      },
+      "build:dev": {
+        "dependsOn": [
+          "^build",
+          "build:extension:dev"
+        ],
+        "script": false
+      },
+      "build:extension": {
+        "dependsOn": [
+          "^build",
+          "tsc:extension:electron:typecheck",
+          "tsc:extension:chrome:typecheck",
+          "vite:extension"
+        ],
+        "script": false
+      },
+      "build:extension:dev": {
+        "dependsOn": [
+          "^build",
+          "tsc:extension:electron:typecheck",
+          "tsc:extension:chrome:typecheck",
+          "vite:extension:dev"
+        ],
+        "script": false
+      },
+      "vite:extension": {
+        "dependsOn": [
+          "^build"
+        ]
+      },
+      "vite:extension:dev": {
+        "dependsOn": [
+          "^build"
+        ]
+      }
+    },
+    "declarativeTasks": {
+      "build-extension": {
+        "inputGlobs": [
+          "src/extension/**",
+          "src/electron/**"
+        ],
+        "outputGlobs": [
+          "dist/extension/**",
+          "dist/electron/**"
+        ]
+      }
+    }
+  }
+}
