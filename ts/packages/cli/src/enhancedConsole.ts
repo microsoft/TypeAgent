@@ -936,6 +936,22 @@ export function createEnhancedClientIO(
         }
     }
 
+    function displayStatusNotice(data: unknown): void {
+        const notice = (data ?? {}) as {
+            title?: string;
+            message?: string;
+            actionCommand?: string;
+        };
+        const text = [notice.title, notice.message].filter(Boolean).join(" — ");
+        const hint = notice.actionCommand ? `  (${notice.actionCommand})` : "";
+        const line = `⚠ ${text}${hint}`;
+        if (currentSpinner?.isActive()) {
+            currentSpinner.writeAbove(chalk.yellow(line));
+        } else {
+            console.warn(chalk.yellow(line));
+        }
+    }
+
     return {
         clear(): void {
             console.clear();
@@ -1105,6 +1121,14 @@ export function createEnhancedClientIO(
                 case AppAgentEvent.Toast:
                     displayToastNotification(data, source, timestamp);
                     break;
+
+                case "statusNotice": {
+                    // Persistent status notice (chat-ui STATUS_NOTICE_EVENT).
+                    // The shells render a toast/pill; the console prints one
+                    // yellow line, preserving the pre-existing behavior.
+                    displayStatusNotice(data);
+                    break;
+                }
 
                 case "grammarRule":
                     // Grammar rule notifications - log to file to avoid disrupting prompt

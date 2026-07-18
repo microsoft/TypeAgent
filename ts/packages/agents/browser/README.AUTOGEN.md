@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=5073526d5bc020c126de42fe1202a25ce60e0b8bf43c77a6cc8d2b5a178b21eb -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d948df2288b364044ea46d8a1fd6ffc3ccfdaa878c5f3816c0f6ce21d087675c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # browser-typeagent — AI-generated documentation
@@ -12,17 +12,17 @@
 
 ## Overview
 
-The `browser-typeagent` package is a TypeAgent application agent designed for browser automation and control. It enables programmatic interaction with browser windows, tabs, and web pages through a defined set of actions. This package integrates with the TypeAgent shell and CLI, allowing users to perform browser-related tasks using commands or natural language. It also includes a browser extension for enhanced functionality.
+The `browser-typeagent` package is a TypeAgent application agent designed for browser automation and control. It enables programmatic interaction with browser windows, tabs, and web pages through a defined set of actions. This package integrates with the TypeAgent shell and CLI, allowing users to perform browser-related tasks using commands or natural language. It also includes a browser extension for enhanced functionality and interaction.
 
 ## What it does
 
 The `browser-typeagent` package provides a wide range of browser automation capabilities, including:
 
-- **Navigation**: Actions such as `openWebPage`, `goBack`, `goForward`, and `reloadPage` allow users to navigate between web pages and control browser tabs.
-- **Interaction**: Users can interact with web content using actions like `clickOn`, `followLinkByText`, `scrollDown`, and `scrollUp`.
-- **Content Capture and Extraction**: Actions such as `captureScreenshot`, `getHtmlFragments`, and `indexPage` enable users to extract and analyze web content.
+- **Web Navigation**: Actions such as `openWebPage`, `goBack`, `goForward`, and `reloadPage` allow users to navigate between web pages and control browser tabs.
+- **User Interaction**: Users can interact with web content using actions like `clickOn`, `followLinkByText`, `scrollDown`, and `scrollUp`.
+- **Content Capture and Analysis**: Actions such as `captureScreenshot`, `getHtmlFragments`, and `indexPage` enable users to extract and analyze web content.
 - **Tab Management**: Actions like `changeTabs`, `closeWebPage`, and `closeAllWebPages` provide control over browser tabs.
-- **Advanced Features**: The package supports executing custom scripts (`executeAdHocScript`) and managing search providers (`changeSearchProvider`).
+- **Custom Scripts and Search**: Execute custom scripts with `executeAdHocScript` and manage search providers with `changeSearchProvider`.
 
 The package operates through a WebSocket server (`AgentWebSocketServer`) that facilitates communication between the browser agent and its clients. Supported clients include a Chrome extension and the Electron-based TypeAgent shell. These clients can send commands to the browser agent, which executes the requested actions and returns results.
 
@@ -190,6 +190,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `b1b5bcafdde8ba2387d669eec198eb70e8fa5986` on `2026-07-17T23:52:55.795Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

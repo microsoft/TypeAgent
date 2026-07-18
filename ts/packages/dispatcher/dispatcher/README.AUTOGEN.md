@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7b720d2560635514b6970a5fc42d2c8477e4f7786c262ce7d483d6d5ec7badb9 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2040272b10ef9408d0abe4ccce2c2868414ca0d279210b90e13c54ceb57f1223 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a TypeScript library that serves as the core component of the TypeAgent ecosystem. It is responsible for processing user requests, translating natural language inputs into structured actions using large language models (LLMs), and coordinating interactions between various application agents. The Dispatcher is designed to work with multiple front ends, such as the TypeAgent Shell and CLI, and provides an extensible architecture for building personal agents with natural language interfaces.
+The TypeAgent Dispatcher is a TypeScript library that serves as the central component for processing user requests in the TypeAgent ecosystem. It translates natural language inputs into structured actions using large language models (LLMs) and coordinates interactions between various application agents. The Dispatcher is designed to work with multiple front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for building personal agents with natural language interfaces.
 
 ## What it does
 
-The Dispatcher acts as the central hub for managing and executing user requests. It supports both natural language inputs and system commands, enabling users to interact with the system in a flexible and intuitive manner.
+The Dispatcher provides a framework for interpreting user inputs and orchestrating actions across different agents. It supports both natural language requests and system commands, enabling a wide range of interactions.
 
 ### Natural Language Requests
 
-The Dispatcher leverages LLMs to interpret natural language inputs and convert them into structured actions based on schemas defined by application agents. For example:
+The Dispatcher uses LLMs to process natural language inputs and translate them into structured actions defined by application agent schemas. For example:
 
 ```bash
 [calendar]🤖> can you setup a meeting between 2-3PM
@@ -29,7 +29,7 @@ Generating translation using GPT for 'can you setup a meeting between 2-3PM'
 Accept? (y/n)
 ```
 
-Other examples of natural language requests include:
+Other examples include:
 
 - `play some music by Bach for me please`
 - `create a grocery list`
@@ -37,7 +37,7 @@ Other examples of natural language requests include:
 
 ### System Commands
 
-The Dispatcher also supports system commands, which are prefixed with `@`. These commands allow users to configure and interact with the Dispatcher directly. Examples include:
+System commands prefixed with `@` allow users to configure and interact with the Dispatcher directly. Key commands include:
 
 - **Agent Management**: Enable or disable specific agents or groups of agents.
 
@@ -58,7 +58,7 @@ The Dispatcher also supports system commands, which are prefixed with `@`. These
 
 ### Conversation Management
 
-The Dispatcher also supports managing conversations through natural language or system commands. Examples include:
+The Dispatcher supports managing conversations through natural language or system commands. Examples include:
 
 - "Create a new conversation called research."
 - "Switch to my work conversation."
@@ -236,6 +236,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `2c26e6d289e04ac54b08f8483b292693a8d4bb64` on `2026-07-18T00:58:44.432Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `66ead8985b850f2775c9b1a96cb7de1d08e2aee1` on `2026-07-18T01:38:20.033Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

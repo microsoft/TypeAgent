@@ -109,6 +109,13 @@ export type AgentServerInvokeFunctions = {
     ) => Promise<void>;
     deleteConversation: (conversationId: string) => Promise<void>;
     shutdown: () => Promise<void>;
+    /**
+     * Relaunch the server process so it loads freshly-rebuilt code. Supported
+     * only by the standalone agent-server; the in-process (embedded) server
+     * rejects this call. Like shutdown, the current process exits - callers
+     * lose their connection and must reconnect to the successor.
+     */
+    restart: () => Promise<void>;
     getUserIdentity: () => Promise<UserIdentity>;
     /**
      * Vend a short-lived Azure Speech authorization token from the server's

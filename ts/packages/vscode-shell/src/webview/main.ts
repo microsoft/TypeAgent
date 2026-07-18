@@ -12,6 +12,8 @@ import {
     ConversationBar,
     HistoryEntry,
     formatHistorySeparatorLabel,
+    STATUS_NOTICE_EVENT,
+    parseStatusNotice,
     type ConnectionStatus,
 } from "chat-ui";
 import type {
@@ -971,6 +973,11 @@ window.addEventListener("message", (event) => {
                 // notificationId used on the corresponding "added" event.
                 if (msg.data && typeof msg.data.id === "string") {
                     chatPanel.removeNotification(msg.data.id);
+                }
+            } else if (msg.event === STATUS_NOTICE_EVENT) {
+                const notice = parseStatusNotice(msg.data);
+                if (notice) {
+                    chatPanel.showStatusNotice(notice);
                 }
             } else {
                 chatPanel.addSystemMessage(`[${msg.source}] ${msg.event}`);
