@@ -42,7 +42,7 @@ function printStaleBanner(): void {
 
     if (process.stdout.isTTY !== true) {
         // No colors/box for non-interactive logs - just make it greppable.
-        process.stdout.write(
+        process.stderr.write(
             "\n" + lines.map((line) => `[stale-build] ${line}`).join("\n") + "\n\n",
         );
         return;
