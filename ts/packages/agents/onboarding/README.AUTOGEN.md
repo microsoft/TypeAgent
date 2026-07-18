@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=60f174f16aa21f40b499c8a449ff4c108eb0439902de42411ab79f363897349f -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7c4e6ad34c5147f429539978bbc54753b1344fede45208b9bb8b28686bf44a5e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # onboarding-agent — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `onboarding-agent` is a TypeAgent application agent designed to automate the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each managed by a sub-agent. This agent is particularly effective when used with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
+The `onboarding-agent` is a TypeAgent application agent that automates the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each managed by a sub-agent. This agent is designed to streamline the onboarding process by generating the necessary artifacts and configurations for new integrations. It is particularly effective when used with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
 
 ## What it does
 
@@ -33,13 +33,13 @@ The onboarding process is divided into seven phases, each producing specific art
 6. **Testing**: Creates test cases and validates the generated artifacts through a phrase-to-action testing loop.
 7. **Packaging**: Packages the completed agent for distribution and registration within the TypeAgent ecosystem.
 
-The agent is designed to be driven by AI clients that can iteratively call TypeAgent actions, inspect artifacts, and guide each phase to completion.
+Each phase is designed to produce specific outputs that are stored in a dedicated workspace directory, allowing the process to be paused and resumed as needed.
 
 ## Setup
 
 To use the `onboarding-agent`, you need to configure the following environment variables:
 
-- **`TYPEAGENT_UIA_HELPER`**: Required for the experimental UI Automation crawling feature, which is used to discover actions in Windows desktop applications. Refer to the hand-written README for more details on how to set this up.
+- **`TYPEAGENT_UIA_HELPER`**: This variable is required for the experimental UI Automation crawling feature, which is used to discover actions in Windows desktop applications. Refer to the hand-written README for more details on how to set this up.
 - **`__PORT_ENV__`**: Specifies the port environment for the agent. Ensure this is set to the appropriate value for your environment.
 
 Additionally, for optimal usage, it is recommended to set up TypeAgent as an MCP server. This allows AI clients like Claude Code or GitHub Copilot to communicate directly with the TypeAgent dispatcher. The hand-written README provides detailed instructions for this setup.
@@ -135,7 +135,7 @@ External: `debug`, `typechat`
 - [./src/discovery/discoverySchema.ts](./src/discovery/discoverySchema.ts)
 - [./src/grammarGen/grammarGenHandler.ts](./src/grammarGen/grammarGenHandler.ts)
 - [./src/grammarGen/grammarGenSchema.agr](./src/grammarGen/grammarGenSchema.agr)
-- _…and 84 more under `./src/`._
+- _…and 85 more under `./src/`._
 
 ### Agent surface
 
@@ -164,6 +164,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/onboa
 
 ---
 
-_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `c97eb42726a9196c7ac72138faa0777c5cbc1aab` on `2026-07-18T09:48:36.613Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

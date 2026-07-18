@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=f5fd2d2abb7f28846acf237767baaa631747485a099cf7665b47dd207d1fb327 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=aa76f672a8bdc8c6d4809b4689989b4852919ea06795a53708972959a32ddbc1 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-sdk — AI-generated documentation
@@ -12,46 +12,44 @@
 
 ## Overview
 
-The `@typeagent/agent-sdk` package provides the core interfaces, types, and utilities required to build and manage Dispatcher Agents in the TypeAgent ecosystem. It serves as the foundational library for creating agents that interact with the TypeAgent Dispatcher, enabling them to handle user commands, execute actions, and manage their lifecycle and context.
-
-This package is widely used across the TypeAgent ecosystem, including in the Shell, CLI, and other agents, making it a critical component for agent development and integration.
+The `@typeagent/agent-sdk` package provides the foundational interfaces, types, and utilities for building Dispatcher Agents within the TypeAgent ecosystem. It is a core library that enables developers to create agents capable of handling user commands, executing actions, and managing their lifecycle and context. This package is widely used across the TypeAgent ecosystem, serving as a critical dependency for various tools and agents.
 
 ## What it does
 
-The `@typeagent/agent-sdk` package offers a comprehensive set of tools and interfaces to facilitate the development of Dispatcher Agents. Its key features include:
+The `@typeagent/agent-sdk` package facilitates the development of Dispatcher Agents by providing a comprehensive set of features and utilities:
 
 ### Manifest and Instantiation
 
-- **Manifest**: The `AppAgentManifest` defines metadata about the agent, such as its emoji, description, and translator configuration. This manifest is loaded by the Dispatcher when the agent is initialized.
+- **Manifest**: The `AppAgentManifest` defines metadata about the agent, such as its emoji, description, and translator configuration. This manifest is the first point of interaction between the Dispatcher and the agent.
 - **Instantiation Entry Point**: The `AppAgent` interface is the core contract that agents implement. The Dispatcher uses the `instantiate` function exported from the `./agent/handlers` module to create an instance of the agent.
 
 ### Lifecycle Management
 
-- **initializeAgentContext**: Sets up the agent's runtime context, which is passed back in subsequent API calls.
-- **updateAgentContext**: Updates the agent's context, such as enabling or disabling specific actions or sub-schemas.
-- **closeAgentContext**: Cleans up resources when the agent is no longer needed.
+The package provides lifecycle APIs to manage the initialization, update, and cleanup of an agent's context:
 
-### Command Handling
+- `initializeAgentContext`: Sets up the agent's runtime context, which is passed back in subsequent API calls.
+- `updateAgentContext`: Updates the agent's context, such as enabling or disabling specific actions or sub-schemas.
+- `closeAgentContext`: Cleans up resources when the agent is no longer needed.
 
-- **getCommands**: Returns a list of commands (`CommandDescriptors`) that the agent supports.
-- **executeCommand**: Executes commands based on parsed parameters provided by the Dispatcher.
+### Command and Action Handling
 
-### Action Execution
+- **Command APIs**:
 
-- **executeAction**: Handles user-triggered actions routed by the Dispatcher. The agent is responsible for further routing to specific handlers.
-- **streamPartialAction**: Supports streaming partial results for actions, such as generating responses incrementally.
+  - `getCommands`: Returns a list of commands (`CommandDescriptors`) that the agent supports.
+  - `executeCommand`: Executes commands based on parsed parameters provided by the Dispatcher.
+
+- **Action APIs**:
+  - `executeAction`: Handles user-triggered actions routed by the Dispatcher. The agent is responsible for further routing to specific handlers.
+  - `streamPartialAction`: Supports streaming partial results for actions, such as generating responses incrementally.
 
 ### Readiness and Setup
 
 - **checkReadiness**: Reports the agent's readiness state, indicating whether it is ready, requires setup, or is unsupported.
 - **setup**: Provides an optional in-chat configuration flow to guide users through the setup process and transition the agent to a ready state.
 
-### Display Management
+### Display and Choice Management
 
 - **Dynamic and Periodic Updates**: Utilities for managing how information is displayed to users, including support for dynamic and periodic updates.
-
-### Choice Management
-
 - **handleChoice**: Routes user responses to the agent's `ChoiceManager`, enabling interactive workflows.
 
 ## Setup
@@ -69,8 +67,8 @@ To create a Dispatcher Agent using the `@typeagent/agent-sdk`, follow these step
    - Export an `instantiate` function from this file, which returns an instance of the `AppAgent`.
    - Specify the path to this file in your `package.json` under the `./agent/handlers` export path.
 
-3. **Follow Examples**:
-   - Refer to the [List agent](../agents/list/) as a practical example of building a Dispatcher Agent.
+3. **Refer to Examples**:
+   - Use the [List agent](../agents/list/) as a practical example of building a Dispatcher Agent.
    - Consult the Dispatcher README for instructions on registering your agent with the TypeAgent Dispatcher.
 
 ## Key Files
@@ -158,15 +156,15 @@ External: `debug`, `type-fest`
 
 - [@typeagent/action-browser](../../tools/actionBrowser/README.md)
 - [@typeagent/agent-rpc](../../packages/agentRpc/README.md)
+- [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
+- [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
 - [@typeagent/copilot-plugin](../../packages/copilot-plugin/README.md)
 - [@typeagent/dispatcher-rpc](../../packages/dispatcher/rpc/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
 - [@typeagent/echo](../../examples/agentExamples/echo/README.md)
 - [agent-api](../../packages/api/README.md)
 - [agent-cache](../../packages/cache/README.md)
-- [agent-cli](../../packages/cli/README.md)
-- [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
-- _…and 48 more workspace consumers._
+- _…and 51 more workspace consumers._
 
 ### Files of interest
 
@@ -184,6 +182,6 @@ External: `debug`, `type-fest`
 
 ---
 
-_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
+_Auto-generated against commit `c97eb42726a9196c7ac72138faa0777c5cbc1aab` on `2026-07-18T09:48:36.613Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
