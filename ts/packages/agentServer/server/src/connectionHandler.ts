@@ -85,6 +85,11 @@ const STALE_BUILD_NOTICE = {
         "This agent server was rebuilt on disk after it started, so it's running the old code.",
     actionLabel: "Restart server",
     actionCommand: "@server restart",
+    // Once clicked, the button disables and shows this while the restart runs;
+    // the notice itself clears on reconnect (clear() during replay).
+    actionBusyLabel: "Restarting...",
+    actionBusyMessage:
+        "Restarting the agent server. This notice will clear once it reconnects.",
 } as const;
 
 /**

@@ -257,8 +257,10 @@ async function main() {
     // us. Releasing the port/lock *before* spawning keeps the successor's bind
     // and lock acquisition from racing this process.
     async function restartServer() {
+        // True 24-bit black on yellow: indexed ANSI black (30) is remapped to a
+        // dark gray by most terminal themes, which reads as gray-on-yellow.
         process.stderr.write(
-            "\x1b[1;30;43m Restart requested - relaunching agent server... \x1b[0m\n",
+            "\x1b[38;2;0;0;0;43m Restart requested - relaunching agent server... \x1b[0m\n",
         );
         await teardownServer();
         const child = spawn(
@@ -299,7 +301,7 @@ async function main() {
     // agent server used by the Electron shell — both go through the same
     // ConversationManager via createAgentServerConnectionHandler so there is
     // a single connection code path regardless of transport.
-    const { handler: connectionHandler, broadcastStaleNotice }  =
+    const { handler: connectionHandler, broadcastStaleNotice } =
         createAgentServerConnectionHandler({
             conversationManager,
             shutdown: shutdownServer,

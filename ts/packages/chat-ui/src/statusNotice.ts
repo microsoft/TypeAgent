@@ -41,6 +41,18 @@ export interface StatusNotice {
     actionLabel?: string;
     /** Command run (via the chat input) when the action button is clicked. */
     actionCommand?: string;
+    /**
+     * When set, the action button is relabeled to this after it is clicked. The
+     * button is always disabled on click to block a second trigger; supplying
+     * this gives that disabled state a "working" label (e.g. "Restarting...").
+     */
+    actionBusyLabel?: string;
+    /**
+     * When set, the notice body text is replaced with this after the action
+     * button is clicked - e.g. to explain that the notice clears itself once
+     * the action completes. Only applies when the notice has a {@link message}.
+     */
+    actionBusyMessage?: string;
 }
 
 /**
@@ -68,6 +80,12 @@ export function parseStatusNotice(data: unknown): StatusNotice | undefined {
     }
     if (typeof d.actionCommand === "string") {
         notice.actionCommand = d.actionCommand;
+    }
+    if (typeof d.actionBusyLabel === "string") {
+        notice.actionBusyLabel = d.actionBusyLabel;
+    }
+    if (typeof d.actionBusyMessage === "string") {
+        notice.actionBusyMessage = d.actionBusyMessage;
     }
     return notice;
 }

@@ -2691,8 +2691,9 @@ export class ChatPanel {
         head.appendChild(minBtn);
         toast.appendChild(head);
 
+        let body: HTMLDivElement | undefined;
         if (notice.message) {
-            const body = document.createElement("div");
+            body = document.createElement("div");
             body.className = "csn-body";
             body.textContent = notice.message;
             toast.appendChild(body);
@@ -2706,8 +2707,24 @@ export class ChatPanel {
             actionBtn.className = "csn-action";
             actionBtn.textContent = notice.actionLabel;
             const command = notice.actionCommand;
+            const busyLabel = notice.actionBusyLabel;
+            const busyMessage = notice.actionBusyMessage;
             actionBtn.addEventListener("click", () => {
+                if (actionBtn.disabled) {
+                    return;
+                }
                 this.injectCommand(command);
+                // Acknowledge the click and block a second trigger while the
+                // action is in flight (e.g. a duplicate "@server restart"
+                // racing the teardown). The notice removes itself on reconnect,
+                // when clear() runs during replay.
+                actionBtn.disabled = true;
+                if (busyLabel) {
+                    actionBtn.textContent = busyLabel;
+                }
+                if (busyMessage && body) {
+                    body.textContent = busyMessage;
+                }
             });
             actions.appendChild(actionBtn);
             toast.appendChild(actions);
