@@ -286,8 +286,8 @@ async function initializeDispatcher(
             // brief server hiccups (server restart, transient network
             // blip when running with --connect to a remote host).
             // Backoff schedule mirrors the vscode-shell extension's
-            // AgentServerBridge.scheduleReconnect (4/6/8/...30s cap).
-            const MAX_RECONNECT_ATTEMPTS = 12; // ~5 minutes total at the 30s cap
+            // AgentServerBridge.scheduleReconnect (5/10/20/40/60s cap).
+            const MAX_RECONNECT_ATTEMPTS = 5; // ~135s total (5/10/20/40/60s backoff)
             let reconnectAttempt = 0;
             let reconnecting = false;
             // Set once auto-reconnect has exhausted MAX_RECONNECT_ATTEMPTS. The
@@ -336,9 +336,11 @@ async function initializeDispatcher(
                         reconnectAttempt < MAX_RECONNECT_ATTEMPTS
                     ) {
                         reconnectAttempt++;
+                        // Exponential backoff (5/10/20/40/60s, capped at 60s),
+                        // matching the vscode-shell AgentServerBridge schedule.
                         const backoffSec = Math.min(
-                            30,
-                            2 + reconnectAttempt * 2,
+                            60,
+                            5 * 2 ** (reconnectAttempt - 1),
                         );
                         debugShellInit(
                             `Reconnect attempt ${reconnectAttempt} in ${backoffSec}s`,

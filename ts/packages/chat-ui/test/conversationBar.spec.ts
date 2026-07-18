@@ -260,6 +260,47 @@ describe("ConversationBar", () => {
         ).toBe(0);
     });
 
+    it("refreshes the reconnect countdown in place without rebuilding the plug", () => {
+        const { root, bar } = makeBar();
+        const status = root.querySelector<HTMLElement>(
+            ".conversation-status-summary",
+        )!;
+
+        bar.setStatus({
+            connected: false,
+            connection: { phase: "waiting", attempt: 2, secondsRemaining: 5 },
+        });
+        const iconBefore = status.querySelector(".conversation-status-icon");
+        const titleBefore = status.getAttribute("title");
+
+        // Next one-second tick: same attempt, one fewer second remaining.
+        bar.setStatus({
+            connected: false,
+            connection: { phase: "waiting", attempt: 2, secondsRemaining: 4 },
+        });
+
+        // The pulsing icon node is reused (not torn down), so its animation and
+        // the hovered native tooltip don't restart on every countdown tick.
+        expect(status.querySelector(".conversation-status-icon")).toBe(
+            iconBefore,
+        );
+        // The tooltip text is the stable, countdown-free variant, so it never
+        // carries the ticking seconds that made it flicker.
+        expect(titleBefore).toBe("Disconnected — retrying (attempt 2)…");
+        expect(status.getAttribute("title")).toBe(titleBefore);
+        // ...while the visually-hidden live text still reflects the latest count.
+        expect(status.textContent).toContain("retrying in 4s");
+
+        // A structural change (new attempt) still rebuilds the node.
+        bar.setStatus({
+            connected: false,
+            connection: { phase: "waiting", attempt: 3, secondsRemaining: 8 },
+        });
+        expect(status.querySelector(".conversation-status-icon")).not.toBe(
+            iconBefore,
+        );
+    });
+
     it("makes the plug a reconnect button once auto-retry has stopped and routes clicks", () => {
         const { root, bar, controller } = makeBar();
         const status = root.querySelector<HTMLElement>(

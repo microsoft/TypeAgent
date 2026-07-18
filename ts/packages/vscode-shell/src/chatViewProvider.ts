@@ -134,6 +134,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                    style-src ${webview.cspSource} 'unsafe-inline';
                    script-src 'nonce-${nonce}';
                    img-src ${webview.cspSource} data:;
+                   media-src blob: mediastream: data:;
                    font-src ${webview.cspSource};">
     <link href="${codiconUri}" rel="stylesheet">
     <link href="${styleUri}" rel="stylesheet">

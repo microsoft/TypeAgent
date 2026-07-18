@@ -16,6 +16,7 @@ import type { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 
 import type { BridgeToWebviewMessage } from "./messages.js";
 import { clientIdOf } from "./requestIds.js";
+import { gatherUserContext } from "./userContext.js";
 
 /**
  * Narrow callback surface needed by the bridge ClientIO. Keeping this
@@ -112,6 +113,7 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
         },
         openLocalView: async () => {},
         closeLocalView: async () => {},
+        getUserContext: async () => gatherUserContext(),
 
         // ClientIO call functions (fire-and-forget notifications)
         clear: (requestId: RequestId) => {

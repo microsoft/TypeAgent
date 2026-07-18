@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ae001ec2f98aef1f1f76dfbab5aaef76882fcedcca652e48fc8abaca2d8d3426 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=568ef3ec7687aa53aed3c928bb6d97782f3056afa486bd3990ec219bfa442753 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # code-agent — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `code-agent` package is a TypeAgent application agent designed to automate tasks within Visual Studio Code (VSCode). It serves as a dispatcher for code-related actions, enabling users to interact with VSCode through natural language commands. This agent is tightly integrated with the [coda](../../coda/README.md) VSCode extension, which must be deployed for the `code-agent` to function. The agent is not enabled by default and requires explicit configuration to activate.
+The `code-agent` package is a TypeAgent application agent designed to automate tasks within Visual Studio Code (VSCode). It acts as a dispatcher for code-related actions, enabling users to interact with VSCode through natural language commands. This agent is integrated with the [coda](../../coda/README.md) VSCode extension, which must be deployed for the `code-agent` to function. The agent is not enabled by default and requires explicit configuration to activate.
 
 ## What it does
 
-The `code-agent` currently implements the `launchVSCode` action, which allows users to launch or start VSCode in various modes:
+The `code-agent` currently implements the `launchVSCode` action, which allows users to launch or start VSCode in different modes:
 
 - **last**: Opens the last session.
 - **folder**: Opens a specific folder (requires a `path` parameter).
@@ -56,12 +56,12 @@ For more details on the setup process, refer to the hand-written README.
 
 The `code-agent` package is organized into several key files, each serving a specific purpose:
 
-- **[codeManifest.json](./src/codeManifest.json)**: This file defines the agent's manifest, including its description, schema, and sub-agents. It is the starting point for understanding the agent's structure and its capabilities.
-- **[codeActionsSchema.ts](./src/codeActionsSchema.ts)**: This file specifies the schema for all actions supported by the agent, including their names and parameters. For example, the `launchVSCode` action is defined here.
-- **[codeSchema.agr](./src/codeSchema.agr)**: This file contains the natural language grammar for mapping user commands to actions. It enables the agent to interpret user input and match it to the appropriate action.
-- **[codeActionHandler.ts](./src/codeActionHandler.ts)**: This file implements the logic for handling actions. For instance, the `launchVSCode` action is processed here.
-- **[codeAgentWebSocketServer.ts](./src/codeAgentWebSocketServer.ts)**: This file implements the WebSocket server that facilitates communication between the `code-agent` and the [coda](../../coda/README.md) VSCode extension.
-- **[originAllowlist.ts](./src/originAllowlist.ts)**: This file defines the origin allowlist for the WebSocket server, ensuring secure communication by restricting connections to trusted origins.
+- **[codeManifest.json](./src/codeManifest.json)**: Defines the agent's manifest, including its description, schema, and sub-agents. It is the starting point for understanding the agent's structure and capabilities.
+- **[codeActionsSchema.ts](./src/codeActionsSchema.ts)**: Specifies the schema for all actions supported by the agent, including their names and parameters. For example, the `launchVSCode` action is defined here.
+- **[codeSchema.agr](./src/codeSchema.agr)**: Contains the natural language grammar for mapping user commands to actions. This enables the agent to interpret user input and match it to the appropriate action.
+- **[codeActionHandler.ts](./src/codeActionHandler.ts)**: Implements the logic for handling actions. For instance, the `launchVSCode` action is processed here.
+- **[codeAgentWebSocketServer.ts](./src/codeAgentWebSocketServer.ts)**: Implements the WebSocket server that facilitates communication between the `code-agent` and the [coda](../../coda/README.md) VSCode extension.
+- **[originAllowlist.ts](./src/originAllowlist.ts)**: Defines the origin allowlist for the WebSocket server, ensuring secure communication by restricting connections to trusted origins.
 
 ## How to extend
 
@@ -150,7 +150,7 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ### Actions
 
-_1 action implemented by this agent, parsed deterministically from `./src/codeActionsSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature. 6 additional actions are declared in the schema but not yet implemented; not shown._
+_1 action implemented by this agent, parsed deterministically from `./src/codeActionsSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature. 12 additional actions are declared in the schema but not yet implemented; not shown._
 
 | User says                | Action                                |
 | ------------------------ | ------------------------------------- |
@@ -158,6 +158,6 @@ _1 action implemented by this agent, parsed deterministically from `./src/codeAc
 
 ---
 
-_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
