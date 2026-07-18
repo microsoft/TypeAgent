@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommonApiSettings, ModelType } from "./openai.js";
+import { ModelType } from "./apiTypes.js";
+import type { CommonApiSettings } from "./openai.js";
 import { getRuntimeConfig } from "./runtimeConfig.js";
 
 export type CopilotReasoningEffort = "low" | "medium" | "high" | "xhigh";
@@ -28,12 +29,22 @@ const DEFAULT_MODEL = "claude-haiku-4.5";
 // always present and lets the CLI pick an available model.
 export const COPILOT_FALLBACK_MODEL = "auto";
 
+// Environment gate the SDK requires before `provider.getEndpoint` will return a
+// direct-CAPI endpoint. It must be set before the Copilot CLI child process is
+// spawned (the child inherits it and enforces the gate). We set it here — the
+// earliest shared resolution point — so it's on before any client is created.
+// The Copilot provider uses the direct-CAPI transport exclusively.
+const ENDPOINT_GATE_ENV = "COPILOT_ALLOW_GET_PROVIDER_ENDPOINT";
+
 export function copilotApiSettingsFromConfig(
     modelName?: string,
 ): CopilotApiSettings {
     const config = getRuntimeConfig();
     const copilot = config.copilot;
     const resolvedModel = modelName ?? copilot?.defaultModel ?? DEFAULT_MODEL;
+    if (!process.env[ENDPOINT_GATE_ENV]) {
+        process.env[ENDPOINT_GATE_ENV] = "true";
+    }
     return {
         provider: "copilot",
         modelType: ModelType.Chat,

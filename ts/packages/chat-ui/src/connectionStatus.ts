@@ -38,8 +38,18 @@ export const DEFAULT_ACTION_LABELS: Record<ConnectionActionId, string> = {
     start: "Start server",
 };
 
-/** Human-readable status line (without any action links). */
-export function formatConnectionStatusText(status: ConnectionStatus): string {
+/**
+ * Human-readable status line (without any action links).
+ *
+ * Pass `omitCountdown` for the `waiting` phase to drop the volatile "in Ns"
+ * countdown, yielding a stable string suitable for a hover tooltip / accessible
+ * label that would otherwise flicker (native tooltips dismiss themselves when
+ * their text changes) on every one-second tick.
+ */
+export function formatConnectionStatusText(
+    status: ConnectionStatus,
+    options?: { omitCountdown?: boolean },
+): string {
     const attemptSuffix =
         status.attempt && status.attempt > 0
             ? ` (attempt ${status.attempt})`
@@ -49,6 +59,9 @@ export function formatConnectionStatusText(status: ConnectionStatus): string {
         case "connecting":
             return `Disconnected — connecting${attemptSuffix}…`;
         case "waiting": {
+            if (options?.omitCountdown) {
+                return `Disconnected — retrying${attemptSuffix}${errorSuffix}…`;
+            }
             const sec = status.secondsRemaining ?? 0;
             return `Disconnected — retrying in ${sec}s${attemptSuffix}${errorSuffix}`;
         }

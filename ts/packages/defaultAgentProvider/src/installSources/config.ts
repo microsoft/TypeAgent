@@ -5,7 +5,7 @@
 // `InstallSourceInfo`, and the install-record shapes (`ResolvedCandidate` /
 // `InstalledAgentRecord`). These live in the host (default-agent-provider), not
 // the dispatcher core: the core knows nothing about how sources are configured,
-// listed, resolved, or recorded - it only exposes the per-session `AppAgentHost`
+// listed, resolved, or recorded - it only exposes the per-session controller
 // the host uses to register and tear down agents. The host contributes the whole
 // `@package` command table (`@package install`/`uninstall`/`update`/`list`, with
 // the source table nested as `@package source`) via
@@ -149,6 +149,21 @@ export interface InstallResult {
 }
 
 /**
+ * The immediate disposition of an `@package update` request. `unchanged`
+ * means the resolved package version is already serving. `started` means the
+ * cross-session swap was armed and will settle asynchronously; package version
+ * details are present when the source can determine them.
+ */
+export type UpdateResult =
+    | { status: "unchanged" }
+    | {
+          status: "started";
+          packageName?: string;
+          oldVersion?: string;
+          newVersion?: string;
+      };
+
+/**
  * The subdirectory under `installDir` that holds the per-agent, version-scoped
  * install roots. Each feed install materializes into its own
  * `installDir/<AGENT_INSTALL_ROOTS_SUBDIR>/<installRoot>/node_modules/...` so a
@@ -214,7 +229,13 @@ export interface ResolveResult {
  * concrete version).
  */
 export type InstallSourceUpdateResult =
-    | { status: "updated"; record: MaterializedInstallRecord }
+    | {
+          status: "updated";
+          record: MaterializedInstallRecord;
+          packageName?: string;
+          oldVersion?: string;
+          newVersion?: string;
+      }
     | { status: "no-op"; record: MaterializedInstallRecord };
 
 /**
@@ -238,16 +259,16 @@ export type SourceStatus = (message: string) => void;
 
 /**
  * The terminal outcome the issuing conversation is told about after a coordinated
- * `@package update` settles asynchronously. `updated` = the swap
+ * `@package update` swap settles asynchronously. `updated` = the swap
  * committed to `v2`; `reverted` = a phase timeout (a straggler that would not
- * idle, or a `v2` that would not start) rolled back to `v1`, leaving `v1` serving
- * in every session; `unchanged` = the requested version was already the installed,
- * serving version, so nothing was swapped (a no-op the fan-out cannot express).
- * A committed `updated` is announced by the source's cross-session fan-out (like
- * an install's add); `reverted` and `unchanged` change no live session state, so
- * the fan-out is silent and only the issuing conversation is told.
+ * idle, or a `v2` that would not start) rolled back to `v1`, leaving `v1`
+ * serving in every session. An unchanged request is returned immediately as an
+ * {@link UpdateResult} and never enters the barrier. A committed `updated` is
+ * announced by the source's cross-session fan-out (like an install's add);
+ * `reverted` changes no live session state, so only the issuing conversation is
+ * told.
  */
-export type UpdateOutcomeStatus = "updated" | "reverted" | "unchanged";
+export type UpdateOutcomeStatus = "updated" | "reverted";
 
 /**
  * The terminal outcome the issuing conversation is told about after a coordinated

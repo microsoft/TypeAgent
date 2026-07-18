@@ -11,6 +11,7 @@ import type {
     RequestId,
     TemplateEditConfig,
     PendingInteractionRequest,
+    UserContext,
     UserFeedbackEntry,
     UserMessageHiddenEntry,
 } from "@typeagent/dispatcher-types";
@@ -30,6 +31,7 @@ export type ClientIOInvokeFunctions = {
     ): Promise<unknown>;
     openLocalView(requestId: RequestId, port: number): Promise<void>;
     closeLocalView(requestId: RequestId, port: number): Promise<void>;
+    getUserContext(): Promise<UserContext | undefined>;
 };
 
 export type ClientIOCallFunctions = {
