@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=6af5eceaa49e036168bcecee1ecb18890a4564d7c75fc1d9d230990fb67d0157 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=fdbcafa4a129d9b3dc2d53d6f9d26e7f96b7cec10aba774e0d7917ad06592f47 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # command-executor-mcp — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `command-executor-mcp` package is an MCP (Model Context Protocol) server designed to execute user commands such as playing music, managing lists, and working with calendars. It serves as a bridge between MCP clients (e.g., Claude Code) and the TypeAgent system, translating natural language commands into structured actions that the TypeAgent dispatcher can process.
+The `command-executor-mcp` package is an MCP (Model Context Protocol) server designed to execute user commands such as playing music, managing lists, and working with calendars. It acts as an intermediary between MCP clients (e.g., Claude Code) and the TypeAgent system, translating natural language commands into structured actions that the TypeAgent dispatcher can process.
 
 ## What it does
 
@@ -20,11 +20,11 @@ The `command-executor-mcp` package provides the following key functionalities:
 
 1. **Natural Language Command Execution**: The `execute_command` action processes user commands like "play Bohemian Rhapsody by Queen" or "add milk to my shopping list" and forwards them to the TypeAgent dispatcher for execution.
 2. **Schema Discovery**: The `discover_schemas` action allows clients to query the available capabilities of the TypeAgent system, such as weather information, email handling, or calendar management.
-3. **Dynamic Schema Loading**: The `load_schema` action enables dynamic loading of new schemas at runtime, allowing the server to register and expose new agent actions without requiring a restart.
+3. **Dynamic Schema Loading**: Using the `load_schema` action, new schemas can be dynamically loaded at runtime, enabling the server to register and expose new agent actions without requiring a restart.
 4. **Direct Action Invocation**: The `typeagent_action` action provides a fallback mechanism for invoking structured actions that are not exposed as individual tools.
 5. **Debugging and Connectivity**: The `ping` action is available for testing server connectivity and debugging purposes.
 
-The server connects to the TypeAgent dispatcher via WebSocket and includes automatic reconnection capabilities to handle temporary unavailability of the dispatcher.
+The server connects to the TypeAgent dispatcher via WebSocket and includes automatic reconnection capabilities, ensuring it remains operational even if the dispatcher becomes temporarily unavailable.
 
 ## Setup
 
@@ -142,6 +142,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter command-executor-mcp docs:verify-links` to spot-check._
+_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter command-executor-mcp docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

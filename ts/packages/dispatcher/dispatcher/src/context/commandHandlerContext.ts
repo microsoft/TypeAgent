@@ -69,15 +69,15 @@ import {
 import { IPortRegistrar, PortRegistrar } from "./portRegistrar.js";
 import {
     AppAgentProvider,
-    AppAgentHost,
     AppAgentSource,
     AppAgentConnection,
     ConstructionProvider,
 } from "../agentProvider/agentProvider.js";
 import {
-    AppAgentHostApplicator,
-    AppAgentHostApplyFns,
-} from "./appAgentHost.js";
+    AppAgentProviderSetApplyFns,
+    AppAgentProviderSetControllerImpl,
+    AppAgentProviderSetRemoveResult,
+} from "./appAgentSetController.js";
 import { getSchemaNamePrefix } from "../execute/actionHandlers.js";
 import { RequestMetricsManager } from "../utils/metrics.js";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
@@ -203,11 +203,10 @@ export type PendingTopicalRoute = {
 export type CommandHandlerContext = {
     readonly agents: AppAgentManager;
     readonly portRegistrar: IPortRegistrar;
-    // The per-dispatcher AppAgentHost applicator: an
-    // idle-gated FIFO add/remove surface connected AppAgentSources use to mutate
-    // this session's live agent set. This instance is placed into the
+    // The scoped controller connected AppAgentSources use to mutate this
+    // session's live agent set. This instance is placed into the
     // host-owned `@package` agent's own agentContext.
-    appAgentHost: AppAgentHostApplicator;
+    appAgentProviderSetController: AppAgentProviderSetControllerImpl;
     // Live connections to the injected AppAgentSources. Disposed at context
     // teardown, which deregisters this host from each source's registry without
     // tearing down the shared provider instances.
@@ -883,7 +882,7 @@ export function reconcileKnownAgents(context: CommandHandlerContext): void {
 }
 
 /**
- * The {@link AppAgentHost.addProvider} body: register
+ * Register a provider under an app-agent-provider-set mutation.
  * the provider (deriving its enabled state from session config with the manifest
  * default as fallback, via {@link installAppProvider}), record it in the known
  * set, and — on a sibling fan-out (`notify`) — show a system message naming
@@ -892,45 +891,33 @@ export function reconcileKnownAgents(context: CommandHandlerContext): void {
 async function hostAddProvider(
     context: CommandHandlerContext,
     provider: AppAgentProvider,
-    notify: boolean,
+    recordAsKnown: boolean,
 ) {
     await installAppProvider(context, provider);
 
-    // Record the newly-added agent(s) so a later load reconciles accurately.
-    addKnownAgents(context, provider.getAppAgentNames());
-
-    // Sibling fan-out notification: show a system message naming
-    // the agent and its resulting (config/manifest-derived) state.
-    if (notify) {
-        const name = provider.getAppAgentNames()[0];
-        emitAgentChangeNotification(
-            context.clientIO,
-            "add",
-            provider,
-            isAgentEnabled(context, name),
-        );
+    if (recordAsKnown) {
+        addKnownAgents(context, provider.getAppAgentNames());
     }
 }
 
 /**
- * The {@link AppAgentHost.removeProvider} body: tear down a
+ * Tear down a provider under an app-agent-provider-set mutation.
  * previously-added provider by identity via the {@link AppAgentManager}
  * removeProvider primitive, and forget it from the known set. Runs through the
  * idle-gated applicator. On a sibling fan-out (`notify`), surfaces
  * a system message.
  *
- * `dropConfig`: when true (explicit `@package uninstall`), also
- * clears the agent's persisted enable preference so a fresh reinstall starts
- * from the manifest default. An `@package update` passes `false` so the remove leg of
- * its remove-then-add swap leaves the user's per-session preference intact
- * across a version bump.
+ * `dropConfig`: when true (explicit `@package uninstall`), returns the captured
+ * agent and schema names needed to clear the persisted enable preference. The
+ * controller passes that data to `finalizeRemove` only for a net removal. A
+ * rollback that restores the provider keeps the preference. An `@package update`
+ * passes `false` so its remove-then-add swap preserves the preference.
  */
 async function hostRemoveProvider(
     context: CommandHandlerContext,
     provider: AppAgentProvider,
-    notify: boolean,
     dropConfig: boolean,
-) {
+): Promise<AppAgentProviderSetRemoveResult | undefined> {
     const names = provider.getAppAgentNames();
     // Capture the agent's schema names before removal so we can clear their
     // persisted config entries afterward.
@@ -943,43 +930,24 @@ async function hostRemoveProvider(
         context.agentCache.grammarStore,
     );
 
-    if (dropConfig) {
-        dropAgentConfig(context, names, schemaNames);
-    }
     removeKnownAgents(context, names);
-
-    if (notify) {
-        emitAgentChangeNotification(
-            context.clientIO,
-            "remove",
-            provider,
-            false,
-        );
-    }
+    return dropConfig ? { agentNames: names, schemaNames } : undefined;
 }
 
 /**
- * The consolidated sibling notification for a {@link AppAgentHost.replaceProvider}
- * swap: one message for the swap's net effect instead of the raw remove-then-add
- * pair. `op` is "update" (a new version replaced the old — report "updated"),
- * "remove" (the old version was uninstalled with no replacement — report
- * "removed"), or undefined (a rollback restored the old version — nothing
- * changed, stay silent). The enabled state is read from the session's own config
- * so each session's message reflects its local preference (preserved across a
- * version bump).
+ * Report the net effect after an exclusive mutation completes. A remove/add
+ * pair is one update notification, and restoring the same provider is silent.
  */
-function hostNotifyReplace(
+function hostNotifyChange(
     context: CommandHandlerContext,
-    op: "update" | "remove" | undefined,
-    oldProvider: AppAgentProvider,
+    op: "add" | "update" | "remove",
+    oldProvider: AppAgentProvider | undefined,
     newProvider: AppAgentProvider | undefined,
 ) {
-    if (op === undefined) {
-        // Rollback: the old version was restored, so nothing changed for this
-        // session — no message.
-        return;
-    }
     if (op === "remove") {
+        if (oldProvider === undefined) {
+            return;
+        }
         emitAgentChangeNotification(
             context.clientIO,
             "remove",
@@ -988,15 +956,13 @@ function hostNotifyReplace(
         );
         return;
     }
-    // Update: report the agent as updated, carrying this session's own
-    // enabled state (the preference is preserved across the version bump).
     if (newProvider === undefined) {
         return;
     }
     const name = newProvider.getAppAgentNames()[0];
     emitAgentChangeNotification(
         context.clientIO,
-        "update",
+        op,
         newProvider,
         isAgentEnabled(context, name),
     );
@@ -1091,7 +1057,8 @@ export async function initializeCommandHandlerContext(
             portRegistrar,
             // Assigned just below once `context` exists (the apply closures need
             // it); mirrors how `requestQueue` is wired.
-            appAgentHost: undefined as unknown as AppAgentHostApplicator,
+            appAgentProviderSetController:
+                undefined as unknown as AppAgentProviderSetControllerImpl,
             appAgentConnections: [],
             session,
             persistDir,
@@ -1248,30 +1215,35 @@ export async function initializeCommandHandlerContext(
 
         await initializeMemory(context, sessionDirPath);
 
-        // Build the per-dispatcher AppAgentHost applicator.
+        // Build the per-dispatcher app-agent-provider-set controller.
         // Its apply closures reach the fully-built `context`.
-        const hostApplyFns: AppAgentHostApplyFns = {
-            applyAdd: (provider, notify) =>
-                hostAddProvider(context, provider, notify),
-            applyRemove: (provider, notify, dropConfig) =>
-                hostRemoveProvider(context, provider, notify, dropConfig),
-            notifyReplace: (op, oldProvider, newProvider) =>
-                hostNotifyReplace(context, op, oldProvider, newProvider),
+        const applyFns: AppAgentProviderSetApplyFns = {
+            applyAdd: (provider, recordAsKnown) =>
+                hostAddProvider(context, provider, recordAsKnown),
+            applyRemove: (provider, dropConfig) =>
+                hostRemoveProvider(context, provider, dropConfig),
+            finalizeRemove: ({ agentNames, schemaNames }) =>
+                dropAgentConfig(context, agentNames, schemaNames),
+            notifyChange: (op, oldProvider, newProvider) =>
+                hostNotifyChange(context, op, oldProvider, newProvider),
         };
-        context.appAgentHost = new AppAgentHostApplicator(
-            context.commandLock,
-            hostApplyFns,
-        );
+        context.appAgentProviderSetController =
+            new AppAgentProviderSetControllerImpl(
+                context.commandLock,
+                applyFns,
+            );
 
         await addAppAgentProviders(context, options?.appAgentProviders);
 
         // Connect the injected dynamic agent sources. The
         // initial set comes from the vended `connection.providers` registered
         // through the normal path; subsequent add/remove deltas arrive via the
-        // `AppAgentHost` fan-out.
+        // scoped controller fan-out.
         if (options?.appAgentSources) {
             for (const source of options.appAgentSources) {
-                const connection = source.connect(context.appAgentHost);
+                const connection = source.connect(
+                    context.appAgentProviderSetController,
+                );
                 context.appAgentConnections.push(connection);
                 // Register the vended providers under a SINGLE held command
                 // lock, acquired synchronously in the same tick as the
@@ -1301,12 +1273,21 @@ export async function initializeCommandHandlerContext(
                 // Uses `installAppProvider` directly (not the add-known-agents
                 // path) so `reconcileKnownAgents` below still sees the true
                 // persisted-vs-available diff.
-                const { providers } = connection;
-                await context.commandLock(async () => {
-                    for (const provider of await providers) {
-                        await installAppProvider(context, provider);
-                    }
-                });
+                const result =
+                    await context.appAgentProviderSetController.runExclusive(
+                        async (mutation) => {
+                            for (const provider of await connection.providers) {
+                                await mutation.addProvider(provider, {
+                                    recordAsKnown: false,
+                                });
+                            }
+                        },
+                    );
+                if (result.status === "closed") {
+                    throw new Error(
+                        "App-agent-provider-set controller closed during initialization.",
+                    );
+                }
             }
         }
 
@@ -1335,7 +1316,7 @@ export async function initializeCommandHandlerContext(
         return context;
     } catch (e) {
         if (contextForCleanup !== undefined) {
-            contextForCleanup.appAgentHost?.dispose();
+            contextForCleanup.appAgentProviderSetController?.dispose();
             try {
                 await contextForCleanup.requestQueue?.drainAndStop();
             } catch {
@@ -1720,9 +1701,8 @@ function processSetAppAgentStateResult(
 export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
-    // Stop accepting fan-out ops into this (closing) session: abandon queued
-    // add/remove and make any later fan-out a no-op.
-    context.appAgentHost.dispose();
+    // Stop accepting exclusive mutations in this closing session.
+    context.appAgentProviderSetController.dispose();
     // Drain in-flight/queued entries before tearing down agents.
     try {
         await context.requestQueue.drainAndStop();
@@ -1737,7 +1717,7 @@ export async function closeCommandHandlerContext(
     // down — other sessions still hold them.
     await context.agents.close();
     // Only after this session's agent instances are unloaded do we disconnect
-    // from the dynamic sources: deregister this host from each source's client
+    // from the dynamic sources: deregister this controller from each source's client
     // registry so any in-flight barrier stops waiting on it.
     for (const connection of context.appAgentConnections) {
         try {

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=2de31c78623cb18ac24e0653af2069ee753e0483efef2ce67e09e930219df1f8 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=970a06a8ce3153174d604c8d817bdfc619436a392e1b733e218d3213467b5758 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/dispatcher-rpc — AI-generated documentation
@@ -12,63 +12,69 @@
 
 ## Overview
 
-The `@typeagent/dispatcher-rpc` package provides Remote Procedure Call (RPC) functionality for the TypeAgent dispatcher. It enables communication between different components of the TypeAgent system, allowing them to invoke methods and exchange data over RPC channels.
+The `@typeagent/dispatcher-rpc` package provides Remote Procedure Call (RPC) functionality for the TypeAgent dispatcher. It serves as a bridge for communication between different components of the TypeAgent system, enabling them to invoke methods and exchange data over RPC channels. This package is a core part of the TypeAgent architecture, facilitating both user-facing interactions and backend command processing.
 
 ## What it does
 
-This package implements RPC clients and servers for two primary components: `ClientIO` and `Dispatcher`. These components facilitate communication and coordination within the TypeAgent system.
+This package implements RPC clients and servers for two primary components: `ClientIO` and `Dispatcher`. These components are responsible for distinct but complementary roles within the TypeAgent system.
 
 ### ClientIO
 
-The `ClientIO` component is responsible for managing user interactions and display updates. It supports actions such as:
+The `ClientIO` component handles user interactions and display updates. It supports a range of actions, including:
 
-- `clear`, `exit`, and `shutdown` for managing session state.
-- `setUserRequest` for handling user input.
-- `setDisplayInfo`, `setDisplay`, and `appendDisplay` for updating display content.
-- `appendDiagnosticData` and `setDynamicDisplay` for managing diagnostic and dynamic display data.
+- **Session Management**: Actions like `clear`, `exit`, and `shutdown` manage the session state.
+- **User Input**: The `setUserRequest` action processes user commands or inputs.
+- **Display Updates**: Actions such as `setDisplayInfo`, `setDisplay`, and `appendDisplay` update the user interface with new information.
+- **Diagnostics and Dynamic Displays**: Actions like `appendDiagnosticData` and `setDynamicDisplay` manage diagnostic information and dynamic display elements.
 
-These actions allow the `ClientIO` component to handle user-facing operations and maintain the display state.
+These actions enable `ClientIO` to act as the interface between the user and the system, ensuring a responsive and interactive experience.
 
 ### Dispatcher
 
-The `Dispatcher` component focuses on processing commands and managing dynamic displays. It includes actions such as:
+The `Dispatcher` component is focused on command processing and dynamic display management. Key actions include:
 
-- `submitCommand` for submitting commands to the dispatcher.
-- `getDynamicDisplay`, `getTemplateSchema`, and `getTemplateCompletion` for retrieving display and template-related data.
-- `getCommandCompletion` and `checkCache` for managing command execution and caching.
-- `close` and `getStatus` for managing the dispatcher lifecycle and retrieving its status.
+- **Command Submission**: The `submitCommand` action allows clients to send commands to the dispatcher for processing.
+- **Display and Template Management**: Actions like `getDynamicDisplay`, `getTemplateSchema`, and `getTemplateCompletion` provide access to display and template-related data.
+- **Command Execution and Caching**: The `getCommandCompletion` and `checkCache` actions manage the execution of commands and their caching.
+- **Lifecycle Management**: Actions such as `close` and `getStatus` handle the lifecycle and status of the dispatcher.
 
-The `Dispatcher` component is central to coordinating command execution and managing templates within the system.
+The `Dispatcher` is a central component for coordinating command execution and managing templates, ensuring that the system operates efficiently and effectively.
 
 ## Setup
 
-To use the `@typeagent/dispatcher-rpc` package, ensure the following dependencies are installed:
+To use the `@typeagent/dispatcher-rpc` package, ensure the following dependencies are installed in your project:
 
 - `@typeagent/agent-rpc`
 - `@typeagent/agent-sdk`
 - `@typeagent/dispatcher-types`
 
-You can install these dependencies using `pnpm install`. No additional environment variables or external accounts are required. For more details, refer to the hand-written README.
+You can install these dependencies using the following command:
+
+```bash
+pnpm install
+```
+
+No additional environment variables or external accounts are required for setup. For more details, refer to the hand-written README.
 
 ## Key Files
 
-The package is organized into several key files, each serving a specific purpose:
+The package is organized into several key files, each with a specific role in implementing the RPC functionality:
 
-- [clientIOClient.ts](./src/clientIOClient.ts): Implements the RPC client for the `ClientIO` component, enabling it to send requests and receive responses.
-- [clientIOServer.ts](./src/clientIOServer.ts): Implements the RPC server for the `ClientIO` component, handling incoming requests and invoking the appropriate actions.
-- [dispatcherClient.ts](./src/dispatcherClient.ts): Implements the RPC client for the `Dispatcher` component, providing methods to interact with the dispatcher remotely.
-- [dispatcherServer.ts](./src/dispatcherServer.ts): Implements the RPC server for the `Dispatcher` component, processing incoming commands and managing dispatcher state.
-- [clientIOTypes.ts](./src/clientIOTypes.ts): Defines type information for `ClientIO` RPC functions, including both callable and invokable actions.
-- [dispatcherTypes.ts](./src/dispatcherTypes.ts): Defines type information for `Dispatcher` RPC functions, including wire-side variants of certain types.
-- [types.ts](./src/types.ts): Re-exports types from `@typeagent/dispatcher-types` and `@typeagent/agent-sdk` for convenience.
+- **[clientIOClient.ts](./src/clientIOClient.ts)**: Implements the RPC client for the `ClientIO` component, enabling it to send requests and receive responses.
+- **[clientIOServer.ts](./src/clientIOServer.ts)**: Implements the RPC server for the `ClientIO` component, handling incoming requests and invoking the appropriate actions.
+- **[dispatcherClient.ts](./src/dispatcherClient.ts)**: Implements the RPC client for the `Dispatcher` component, providing methods to interact with the dispatcher remotely.
+- **[dispatcherServer.ts](./src/dispatcherServer.ts)**: Implements the RPC server for the `Dispatcher` component, processing incoming commands and managing dispatcher state.
+- **[clientIOTypes.ts](./src/clientIOTypes.ts)**: Defines type information for `ClientIO` RPC functions, including callable and invokable actions.
+- **[dispatcherTypes.ts](./src/dispatcherTypes.ts)**: Defines type information for `Dispatcher` RPC functions, including wire-side variants of certain types.
+- **[types.ts](./src/types.ts)**: Re-exports types from `@typeagent/dispatcher-types` and `@typeagent/agent-sdk` for convenience.
 
-The package uses the `createRpc` function from `@typeagent/agent-rpc` to establish RPC communication between clients and servers. This function is central to the implementation of the RPC layer.
+The package relies on the `createRpc` function from `@typeagent/agent-rpc` to establish and manage RPC communication between clients and servers. This function is a cornerstone of the package's architecture.
 
 ## How to extend
 
-To extend the functionality of the `@typeagent/dispatcher-rpc` package, follow these steps:
+To extend the `@typeagent/dispatcher-rpc` package, follow these steps:
 
-1. **Determine the target component**: Decide whether you need to extend the `ClientIO` or `Dispatcher` component based on your requirements.
+1. **Identify the target component**: Determine whether your extension applies to the `ClientIO` or `Dispatcher` component.
 
 2. **Define new actions**: Add the new actions to the appropriate type definition file:
 
@@ -86,7 +92,7 @@ To extend the functionality of the `@typeagent/dispatcher-rpc` package, follow t
 
 6. **Run tests**: Execute the test suite to confirm that your changes work as expected and do not introduce regressions.
 
-By following these steps, you can extend the `@typeagent/dispatcher-rpc` package to support additional functionality or integrate new features into the TypeAgent system.
+By following these steps, you can effectively extend the `@typeagent/dispatcher-rpc` package to meet new requirements or integrate additional features into the TypeAgent system.
 
 ## Reference
 
@@ -94,11 +100,11 @@ By following these steps, you can extend the `@typeagent/dispatcher-rpc` package
 
 ### Entry points
 
-- `./types` → `./dist/types.js` _(not found on disk)_
-- `./clientio/client` → `./dist/clientIOClient.js` _(not found on disk)_
-- `./clientio/server` → `./dist/clientIOServer.js` _(not found on disk)_
-- `./dispatcher/client` → `./dist/dispatcherClient.js` _(not found on disk)_
-- `./dispatcher/server` → `./dist/dispatcherServer.js` _(not found on disk)_
+- `./types` → [./dist/types.js](./dist/types.js)
+- `./clientio/client` → [./dist/clientIOClient.js](./dist/clientIOClient.js)
+- `./clientio/server` → [./dist/clientIOServer.js](./dist/clientIOServer.js)
+- `./dispatcher/client` → [./dist/dispatcherClient.js](./dist/dispatcherClient.js)
+- `./dispatcher/server` → [./dist/dispatcherServer.js](./dist/dispatcherServer.js)
 
 ### Dependencies
 
@@ -134,6 +140,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `ff379b098decfab4eb45f78b6fa318358d7fbd75` on `2026-07-01T09:05:58.471Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-rpc docs:verify-links` to spot-check._
+_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-rpc docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

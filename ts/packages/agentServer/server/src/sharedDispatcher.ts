@@ -277,6 +277,56 @@ export async function createSharedDispatcher(
             callback(requestId, (clientIO) =>
                 clientIO.closeLocalView(requestId, ...args),
             ),
+        // Editor context (the get_user_context reasoning tool). Prefer the
+        // client that ISSUED the request (requestId.connectionId) so a user
+        // with two windows on one conversation gets *their* editor, not
+        // whichever answers first. Then fall back to any other connected
+        // editor client - a headless originator (CLI, MCP command-executor)
+        // relies on a co-joined shell. Clients that don't host an editor omit
+        // getUserContext and are skipped.
+        getUserContext: async (requestId) => {
+            const tryClient = async (
+                connectionId: string,
+                record: ClientRecord,
+            ) => {
+                const provider = record.clientIO.getUserContext;
+                if (provider === undefined) {
+                    return undefined;
+                }
+                try {
+                    return await provider.call(record.clientIO);
+                } catch (error) {
+                    debugClientIOError(
+                        `getUserContext failed for client ${connectionId}: ${error}`,
+                    );
+                    return undefined;
+                }
+            };
+
+            const originatorId = requestId?.connectionId;
+            if (originatorId !== undefined) {
+                const originator = clients.get(originatorId);
+                if (originator !== undefined) {
+                    const fromOriginator = await tryClient(
+                        originatorId,
+                        originator,
+                    );
+                    if (fromOriginator !== undefined) {
+                        return fromOriginator;
+                    }
+                }
+            }
+            for (const [connectionId, record] of clients) {
+                if (connectionId === originatorId) {
+                    continue;
+                }
+                const userContext = await tryClient(connectionId, record);
+                if (userContext !== undefined) {
+                    return userContext;
+                }
+            }
+            return undefined;
+        },
         requestChoice: (requestId, ...args) =>
             callback(requestId, (clientIO) =>
                 clientIO.requestChoice(requestId, ...args),

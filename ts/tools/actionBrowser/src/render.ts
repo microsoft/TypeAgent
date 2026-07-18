@@ -712,6 +712,11 @@ export function renderHtml(catalog: Catalog): string {
 
     return [
         "<!doctype html>",
+        // The repo policy check requires a copyright header on every .html
+        // file (tools/scripts/policyChecks/copyrightHeaders.mjs). Emit it right
+        // after the doctype so the committed docs/overview/action-browser.html
+        // and the deployed site copy both satisfy the gate.
+        "<!-- Copyright (c) Microsoft Corporation.\n Licensed under the MIT License. -->",
         '<html lang="en">',
         "<head>",
         '<meta charset="utf-8" />',

@@ -22,41 +22,59 @@ import {
     InstallSourceConfig,
     InstalledAgentRecord,
 } from "../src/installSources/config.js";
-import { AppAgentProvider, AppAgentHost } from "agent-dispatcher";
+import {
+    AppAgentProvider,
+    AppAgentProviderSetController,
+    AppAgentProviderSetMutation,
+} from "agent-dispatcher";
 import { createLimiter } from "@typeagent/common-utils";
+import type {
+    AgentSourceGroup,
+    InstalledAgentInfo,
+} from "../src/installSources/packageAgent.js";
 
-// Compose a faithful `replaceProvider` for a test host from its own add/remove,
-// modelling the applicator's single-lock section (5.7): remove the old version,
-// then call the async thunk that quiesces, awaits the shared barrier, and
-// decides what to add. This preserves both the recorded remove-then-add op order
-// AND the barrier gating (a host that blocks its removeProvider keeps the
-// barrier pending until released).
-function withReplace(
-    host: Pick<AppAgentHost, "addProvider" | "removeProvider">,
-): AppAgentHost {
+function installedNames(source: {
+    listInstalled(): AgentSourceGroup<InstalledAgentInfo>[];
+}): string[] {
+    return source
+        .listInstalled()
+        .flatMap((group) => group.agents.map((agent) => agent.name));
+}
+
+type TestMutationFns = {
+    addProvider(provider: AppAgentProvider, notify?: boolean): Promise<void>;
+    removeProvider(
+        provider: AppAgentProvider,
+        notify?: boolean,
+        dropConfig?: boolean,
+    ): Promise<void>;
+};
+
+// Adapt test add/remove recorders to the callback-scoped controller contract.
+// The callback itself models the one command-lock-held section.
+function withReplace(host: TestMutationFns): AppAgentProviderSetController {
     return {
-        addProvider: host.addProvider,
-        removeProvider: host.removeProvider,
-        replaceProvider: async (
-            oldProvider,
-            resolveReplacement,
-            notify = false,
-            dropConfig = false,
-        ) => {
-            await host.removeProvider(oldProvider, notify, dropConfig);
-            // The source decides post-barrier what to add: v2 (commit update),
-            // v1 (rollback), or nothing (commit uninstall).
-            const newProvider = await resolveReplacement();
-            if (newProvider !== undefined) {
-                await host.addProvider(newProvider, notify);
-            }
+        async runExclusive<T>(
+            callback: (mutation: AppAgentProviderSetMutation) => Promise<T> | T,
+        ) {
+            const value = await callback({
+                addProvider: (provider, options) =>
+                    host.addProvider(provider, options?.notify),
+                removeProvider: (provider, options) =>
+                    host.removeProvider(
+                        provider,
+                        options?.notify,
+                        options?.dropConfig,
+                    ),
+            });
+            return { status: "completed", value };
         },
     };
 }
 
 // A no-op issuing host used by tests that only exercise the record store or the
 // vended provider set (fan-out behavior is covered by its own describe).
-const noopHost: AppAgentHost = withReplace({
+const noopHost: AppAgentProviderSetController = withReplace({
     addProvider: async () => {},
     removeProvider: async () => {},
 });
@@ -188,11 +206,13 @@ function createTestUpdateableSource(
 function createTestUpdateableInstalledAgentSource(
     instanceDir: string,
     options?: Parameters<typeof createDefaultInstalledAgentSource>[1],
+    storeWriter?: Parameters<typeof createDefaultInstalledAgentSource>[3],
 ) {
     return createDefaultInstalledAgentSource(
         instanceDir,
         options,
         createTestUpdateableSource,
+        storeWriter,
     );
 }
 
@@ -486,8 +506,14 @@ describe("getDefaultAppAgentSource", () => {
         );
 
         await expect(built.testApi.listAvailableAgents()).resolves.toEqual([
-            { source: "healthy", ref: "foo", packageName: "foo" },
-            { source: "healthy", ref: "bar", packageName: "bar" },
+            {
+                source: "healthy",
+                sourceKind: "feed",
+                agents: [
+                    { ref: "foo", packageName: "foo" },
+                    { ref: "bar", packageName: "bar" },
+                ],
+            },
         ]);
     });
 
@@ -616,7 +642,7 @@ describe("AppAgentSource fan-out (4, )", () => {
         | { op: "remove"; name: string; notify: boolean };
 
     function recordingHost(onAdd?: () => void): {
-        host: AppAgentHost;
+        host: AppAgentProviderSetController;
         calls: HostCall[];
     } {
         const calls: HostCall[] = [];
@@ -761,6 +787,31 @@ describe("AppAgentSource fan-out (4, )", () => {
         ).rejects.toThrow(/not active in this source/i);
 
         // Nothing was torn down and the record is left intact (not dropped).
+        expect(issuing.calls).toEqual([]);
+        expect(sibling.calls).toEqual([]);
+        expect(readAgentsJson(instanceDir)?.agents.foo).toBeDefined();
+    });
+
+    it("update of a name recorded but not active in this source errors (out-of-band inconsistency)", async () => {
+        const instanceDir = updateableTestInstanceDir();
+        const stale = createTestUpdateableInstalledAgentSource(instanceDir);
+        const installer = createTestUpdateableInstalledAgentSource(instanceDir);
+        await installer.testApi.install(
+            "foo",
+            makePathAgentDir(),
+            undefined,
+            noopHost,
+        );
+
+        const issuing = recordingHost();
+        const sibling = recordingHost();
+        stale.connect(issuing.host);
+        stale.connect(sibling.host);
+
+        await expect(
+            stale.testApi.update("foo", undefined, issuing.host),
+        ).rejects.toThrow(/not active in this source/i);
+
         expect(issuing.calls).toEqual([]);
         expect(sibling.calls).toEqual([]);
         expect(readAgentsJson(instanceDir)?.agents.foo).toBeDefined();
@@ -913,7 +964,7 @@ describe("AppAgentSource fan-out (4, )", () => {
         // apply lands only once the command releases it.
         const commandLock = createLimiter(1);
         const applied: HostCall[] = [];
-        const issuing: AppAgentHost = withReplace({
+        const issuing: AppAgentProviderSetController = withReplace({
             addProvider: (p, notify) =>
                 commandLock(async () => {
                     applied.push({
@@ -989,7 +1040,7 @@ describe("AppAgentSource fan-out (4, )", () => {
 
 describe("AppAgentSource lifecycle tracker (7)", () => {
     // An issuing host whose ops resolve immediately.
-    function fastHost(): AppAgentHost {
+    function fastHost(): AppAgentProviderSetController {
         return withReplace({
             addProvider: async () => {},
             removeProvider: async () => {},
@@ -1037,7 +1088,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
 
     async function installFoo(
         built: ReturnType<typeof createDefaultInstalledAgentSource>,
-        issuing: AppAgentHost,
+        issuing: AppAgentProviderSetController,
     ) {
         await built.testApi.install(
             "foo",
@@ -1131,7 +1182,8 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
             () =>
                 !built.testApi
                     .listInstalled()
-                    .map((i) => i.name)
+                    .flatMap((group) => group.agents)
+                    .map((agent) => agent.name)
                     .includes("foo"),
             "foo to enter the draining (removing) state",
         );
@@ -1211,8 +1263,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         );
         await flush();
 
-        const listed = () =>
-            new Set(built.testApi.listInstalled().map((a) => a.name));
+        const listed = () => new Set(installedNames(built.testApi));
 
         // Start foo's drain; the sibling holds it `removing`.
         const updatingFoo = built.testApi.update("foo", undefined, issuing);
@@ -1268,7 +1319,8 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
             () =>
                 !built.testApi
                     .listInstalled()
-                    .map((i) => i.name)
+                    .flatMap((group) => group.agents)
+                    .map((agent) => agent.name)
                     .includes("foo"),
             "foo to enter the draining (removing) state",
         );
@@ -1357,21 +1409,18 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
             () =>
                 !built.testApi
                     .listInstalled()
-                    .map((i) => i.name)
+                    .flatMap((group) => group.agents)
+                    .map((agent) => agent.name)
                     .includes("foo"),
             "foo to enter the draining (removing) state",
         );
-        expect(built.testApi.listInstalled().map((i) => i.name)).not.toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).not.toContain("foo");
 
         gated.release();
         await updating;
         await flush();
         // After the drain + re-add, it is listed again.
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
     });
 
     it("update adds the new version only after the old drains everywhere (no coexistence)", async () => {
@@ -1413,7 +1462,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         // A sibling whose removeProvider always rejects: its barrier slot must
         // still be filled (the per-host catch → quiesce, 5.7) so the
         // barrier completes and the re-add fires — exactly once, never twice.
-        const throwingSibling: AppAgentHost = withReplace({
+        const throwingSibling: AppAgentProviderSetController = withReplace({
             addProvider: async () => {},
             removeProvider: async () => {
                 throw new Error("sibling remove boom");
@@ -1437,9 +1486,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         // exactly one remove followed by exactly one add on the issuing session.
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
         // The name is free + active again (listed, and reusable).
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
     });
 
     it("update re-adds exactly once even when a sibling throws in its ADD leg (post-quiesce)", async () => {
@@ -1450,7 +1497,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         // but whose ADD leg then throws. The source's per-host catch calls
         // `quiesce` a SECOND time; the barrier is already settled, so the double
         // quiesce must be a harmless no-op (no double onComplete / re-add).
-        const throwingAddSibling: AppAgentHost = withReplace({
+        const throwingAddSibling: AppAgentProviderSetController = withReplace({
             addProvider: async () => {
                 throw new Error("sibling add boom");
             },
@@ -1473,9 +1520,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         // The post-quiesce add failure did not corrupt the barrier: the issuing
         // session swapped exactly once and the name is active + listed.
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
     });
 
     it("update adds v2 on every session only after the LAST session quiesces (staggered)", async () => {
@@ -1585,7 +1630,7 @@ describe("AppAgentSource lifecycle tracker (7)", () => {
         const instanceDir = pathOnlyInstanceDir();
         const built = createDefaultInstalledAgentSource(instanceDir);
         const issuing = fastHost();
-        const throwingSibling: AppAgentHost = withReplace({
+        const throwingSibling: AppAgentProviderSetController = withReplace({
             addProvider: async () => {},
             removeProvider: async () => {
                 throw new Error("sibling remove boom");
@@ -1664,7 +1709,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
     async function installFooV1(
         built: ReturnType<typeof createDefaultInstalledAgentSource>,
         instanceDir: string,
-        issuing: AppAgentHost,
+        issuing: AppAgentProviderSetController,
     ): Promise<string> {
         await built.testApi.install(
             "foo",
@@ -1705,9 +1750,13 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         straggler.calls.length = 0;
 
         const outcomes: string[] = [];
-        await built.testApi.update("foo", undefined, issuing.host, (o) =>
-            outcomes.push(o),
+        const result = await built.testApi.update(
+            "foo",
+            undefined,
+            issuing.host,
+            (o) => outcomes.push(o),
         );
+        expect(result).toEqual({ status: "started" });
         // The straggler never quiesces → the phase-1 backstop fires → rollback.
         await settle();
 
@@ -1716,9 +1765,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
             v1Root,
         );
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
         // The issuing session removed v1 then re-added v1 (rolled back, no v2).
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
 
@@ -1777,14 +1824,12 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
             },
         });
         const issuing = recordingHost();
-        // A session whose `replaceProvider` auto-acks WITHOUT running its thunk
+        // A session whose controller reports closed without running its callback
         // (models its barrier op queued-not-started at close): it fills its
         // phase-1 slot from the success continuation, which can empty `pending`
         // BEFORE its teardown has dropped the shared v1 ref.
-        const closingHost: AppAgentHost = {
-            addProvider: async () => {},
-            removeProvider: async () => {},
-            replaceProvider: async () => {},
+        const closingHost: AppAgentProviderSetController = {
+            runExclusive: async () => ({ status: "closed" }),
         };
         built.connect(issuing.host);
         const closingConn = built.connect(closingHost);
@@ -1842,6 +1887,78 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
     });
 
+    it("rolls an update back when the commit record write fails", async () => {
+        const instanceDir = updateableTestInstanceDir();
+        let failNextWrite = false;
+        const built = createTestUpdateableInstalledAgentSource(
+            instanceDir,
+            undefined,
+            (dir, data) => {
+                if (failNextWrite) {
+                    failNextWrite = false;
+                    throw new Error("commit write failed");
+                }
+                writeAgentsJson(dir, data);
+            },
+        );
+        const issuing = recordingHost();
+        built.connect(issuing.host);
+        await installFooV1(built, instanceDir, issuing.host);
+        const oldRecord = readAgentsJson(instanceDir)!.agents.foo;
+        issuing.calls.length = 0;
+        failNextWrite = true;
+
+        const outcomes: string[] = [];
+        await built.testApi.update("foo", undefined, issuing.host, (outcome) =>
+            outcomes.push(outcome),
+        );
+        await settle();
+
+        expect(outcomes).toEqual(["reverted"]);
+        expect(readAgentsJson(instanceDir)!.agents.foo).toEqual(oldRecord);
+        expect(installedNames(built.testApi)).toContain("foo");
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+    });
+
+    it("rolls an uninstall back when the commit record write fails", async () => {
+        const instanceDir = pathOnlyInstanceDir();
+        let failNextWrite = false;
+        const built = createDefaultInstalledAgentSource(
+            instanceDir,
+            undefined,
+            undefined,
+            (dir, data) => {
+                if (failNextWrite) {
+                    failNextWrite = false;
+                    throw new Error("commit write failed");
+                }
+                writeAgentsJson(dir, data);
+            },
+        );
+        const issuing = recordingHost();
+        built.connect(issuing.host);
+        await built.testApi.install(
+            "foo",
+            makePathAgentDir(),
+            undefined,
+            issuing.host,
+        );
+        const oldRecord = readAgentsJson(instanceDir)!.agents.foo;
+        issuing.calls.length = 0;
+        failNextWrite = true;
+
+        const outcomes: string[] = [];
+        await built.testApi.uninstall("foo", issuing.host, (outcome) =>
+            outcomes.push(outcome),
+        );
+        await settle();
+
+        expect(outcomes).toEqual(["reverted"]);
+        expect(readAgentsJson(instanceDir)!.agents.foo).toEqual(oldRecord);
+        expect(installedNames(built.testApi)).toContain("foo");
+        expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
+    });
+
     it("a disconnect during a rollback is safe (name stays active on v1) ()", async () => {
         const instanceDir = updateableTestInstanceDir();
         const built = createTestUpdateableInstalledAgentSource(instanceDir, {
@@ -1874,9 +1991,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
             v1Root,
         );
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
     });
 
     it("a rolled-back update leaves v1 durable for an immediately-following op (record never overwritten)", async () => {
@@ -1908,9 +2023,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         expect(readAgentsJson(instanceDir)!.agents.foo.installRoot).toBe(
             v1Root,
         );
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
         // The rollback GC prunes the v2 root, NEVER v1's: v1's version-scoped
         // install-root directory must survive so v1 stays loadable (a regression
         // that pruned `oldRoot` on rollback would delete the restored version).
@@ -1943,14 +2056,11 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
             },
         });
         const issuing = recordingHost();
-        // A closed/disposed host: its `replaceProvider` auto-acks immediately
-        // WITHOUT ever running its thunk or awaiting `whenDecided` (models an
-        // applicator closed at enqueue time). The barrier must still fill its
+        // A closed/disposed controller reports closed without running its callback
+        // or awaiting `whenDecided`. The barrier must still fill its
         // phase-1 slot for it via the success continuation.
-        const closedHost: AppAgentHost = {
-            addProvider: async () => {},
-            removeProvider: async () => {},
-            replaceProvider: async () => {},
+        const closedHost: AppAgentProviderSetController = {
+            runExclusive: async () => ({ status: "closed" }),
         };
         built.connect(issuing.host);
         built.connect(closedHost);
@@ -1967,9 +2077,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
 
         expect(outcomes).toEqual(["updated"]);
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
     });
 
     it("an uninstall straggler that won't idle rolls back (record + agent restored, name reusable)", async () => {
@@ -2000,9 +2108,7 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
                 path.join(instanceDir, "installedAgents", "agents", v1Root),
             ),
         ).toBe(true);
-        expect(built.testApi.listInstalled().map((i) => i.name)).toContain(
-            "foo",
-        );
+        expect(installedNames(built.testApi)).toContain("foo");
         expect(issuing.calls).toEqual([{ op: "remove" }, { op: "add" }]);
 
         // The name was freed from `removing`: it is mutable again (a re-install
@@ -2032,10 +2138,8 @@ describe("Update Coordination — timeout & rollback (5.3)", () => {
         const gate = new Promise<void>((r) => (releaseLive = r));
         const liveStraggler = recordingHost(gate);
         // Closed host: auto-acks + fills its slot from the success path.
-        const closedHost: AppAgentHost = {
-            addProvider: async () => {},
-            removeProvider: async () => {},
-            replaceProvider: async () => {},
+        const closedHost: AppAgentProviderSetController = {
+            runExclusive: async () => ({ status: "closed" }),
         };
         built.connect(issuing.host);
         built.connect(liveStraggler.host);
@@ -2074,7 +2178,7 @@ describe("installed agent source api (install/uninstall/update)", () => {
     // A no-op issuing host: the record-store logic is independent of the
     // fan-out, so these tests pass a host whose add/remove do nothing. Fan-out /
     // enable / notification behavior is covered by the "fan-out" describe below.
-    const host: AppAgentHost = withReplace({
+    const host: AppAgentProviderSetController = withReplace({
         addProvider: async () => {},
         removeProvider: async () => {},
     });
@@ -2547,7 +2651,7 @@ describe("structural manifest check on install/update (5.3)", () => {
         ).rejects.toThrow();
         // Nothing persisted: a broken agent is never recorded.
         expect(readAgentsJson(instanceDir)?.agents.x).toBeUndefined();
-        expect(built.listInstalled().map((i) => i.name)).not.toContain("x");
+        expect(installedNames(built)).not.toContain("x");
     });
 
     it("install of a catalog source succeeds when the manifest reads", async () => {
@@ -2592,7 +2696,7 @@ describe("structural manifest check on install/update (5.3)", () => {
         expect(readAgentsJson(instanceDir)!.agents.x.path).toBe(
             path.join(instanceDir, "catalog-package"),
         );
-        expect(built.listInstalled().map((i) => i.name)).toContain("x");
+        expect(installedNames(built)).toContain("x");
     });
 
     it("a `path` install is validated too — a manifest-less directory fails and records nothing", async () => {
@@ -2607,6 +2711,6 @@ describe("structural manifest check on install/update (5.3)", () => {
             built.install("p", bareDir, undefined, noopHost),
         ).rejects.toThrow();
         expect(readAgentsJson(instanceDir)?.agents.p).toBeUndefined();
-        expect(built.listInstalled().map((i) => i.name)).not.toContain("p");
+        expect(installedNames(built)).not.toContain("p");
     });
 });

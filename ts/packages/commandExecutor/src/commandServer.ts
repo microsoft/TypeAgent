@@ -549,6 +549,22 @@ export class CommandServer {
             async (request: ExecuteActionRequest) =>
                 this.executeAction(request),
         );
+
+        // 4. User/editor context - delegates to the code agent (VS Code CODA
+        //    extension). This headless MCP server has no editor of its own, so
+        //    it returns data only when a VS Code `code` agent is connected to
+        //    the same agent server; otherwise it reports none available.
+        this.server.registerTool(
+            "get_user_context",
+            {
+                inputSchema: {},
+                description:
+                    "Get a coarse snapshot of the user's current VS Code editor context (active file, language, cursor/selection ranges, workspace, diagnostic counts). Contains NO file or selection text.\n\n" +
+                    "Served by the TypeAgent `code` agent (VS Code CODA extension); returns data only when VS Code with the code agent is connected to this agent server, otherwise reports no editor context.\n\n" +
+                    "For actual file/selection text, use execute_action with the code agent's read actions (getSelection, getFileContent, getDiagnostics).",
+            },
+            async () => this.getUserContext(),
+        );
     }
 
     private addDiagnosticTools() {
@@ -840,6 +856,18 @@ export class CommandServer {
                 `To get TypeScript for an action: discover_agents({ agentName: '${agent.name}', actionName: '<name>' })\n` +
                 `To execute: execute_action({ schemaName: '<schemaName from 📂 above>', actionName: '<name>', parameters: {...} })`,
         );
+    }
+
+    private async getUserContext(): Promise<CallToolResult> {
+        // The command-executor is headless; the live editor state lives in the
+        // VS Code CODA extension, reachable through the code agent's read
+        // action. executeAction returns a clear error when the code agent is
+        // not enabled / VS Code is not connected.
+        return this.executeAction({
+            schemaName: "code",
+            actionName: "getActiveEditor",
+            parameters: {},
+        });
     }
 
     private async executeAction(

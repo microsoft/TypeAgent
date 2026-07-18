@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c82d8234be9cbc440a5388cef1d2b96f4f2e92245f6c37676b696f3db017962e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=f7a44f69478c85fabf94c89b3d349eb097f153a63386970451470041c153c873 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/common-utils — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `@typeagent/common-utils` package provides a set of utility functions and types that are shared across the TypeAgent project. These utilities are designed to simplify common tasks such as object property manipulation, base64 encoding/decoding, promise handling, and rate limiting. The package is used extensively across the TypeAgent monorepo, serving as a foundational library for other packages and tools.
+The `@typeagent/common-utils` package provides a collection of utility functions and types that are shared across the TypeAgent project. These utilities address common programming needs such as object property manipulation, base64 encoding/decoding, promise handling, and rate limiting. The package is a foundational library used by many other packages within the TypeAgent monorepo.
 
 ## What it does
 
-The `@typeagent/common-utils` package includes a variety of utility functions and types that can be categorized as follows:
+The `@typeagent/common-utils` package offers a variety of utilities grouped into the following categories:
 
 1. **Object Property Utilities**:
 
@@ -31,7 +31,7 @@ The `@typeagent/common-utils` package includes a variety of utility functions an
 
 3. **Promise Handling**:
 
-   - `createPromiseWithResolvers`: Creates a promise along with its associated `resolve` and `reject` functions, enabling more flexible promise handling.
+   - `createPromiseWithResolvers`: Creates a promise along with its associated `resolve` and `reject` functions, enabling more flexible promise management.
 
 4. **Rate Limiting**:
 
@@ -50,17 +50,17 @@ The `@typeagent/common-utils` package includes a variety of utility functions an
    - `resolveCliOnPath`: Resolves the absolute path of a CLI executable on the system's PATH.
    - `claudeExecutableOption`: Provides options for resolving the path to the Claude CLI executable.
 
-These utilities are designed to work in both Node.js and browser environments, with separate implementations for platform-specific functionality, such as base64 encoding/decoding.
+These utilities are designed to work in both Node.js and browser environments. Platform-specific functionality, such as base64 encoding/decoding, is implemented separately for each environment.
 
 ## Setup
 
-This package does not require any special setup beyond installing its dependencies. To install the package, use the following command:
+This package does not require any special setup beyond installing its dependencies. To install the package, run:
 
 ```sh
 pnpm install
 ```
 
-For more details on the installation process or prerequisites, refer to the hand-written README.
+For additional details, refer to the hand-written README.
 
 ## Key Files
 
@@ -68,7 +68,7 @@ The `@typeagent/common-utils` package is organized into several key files, each 
 
 - **Entry Points**:
 
-  - [indexNode.ts](./src/indexNode.ts): The main entry point for Node.js environments. It exports utilities specific to Node.js, such as `resolveCliOnPath` and `claudeExecutableOption`.
+  - [indexNode.ts](./src/indexNode.ts): The main entry point for Node.js environments. It exports Node.js-specific utilities, such as `resolveCliOnPath` and `claudeExecutableOption`.
   - [indexBrowser.ts](./src/indexBrowser.ts): The main entry point for browser environments. It exports browser-compatible utilities, such as base64 encoding/decoding functions.
 
 - **Source Files**:
@@ -121,8 +121,8 @@ By following these steps, you can contribute effectively to the `@typeagent/comm
 
 ### Entry points
 
-- default → `./dist/indexNode.js` _(not found on disk)_
-- default → `./dist/indexBrowser.js` _(not found on disk)_
+- default → [./dist/indexNode.js](./dist/indexNode.js)
+- default → [./dist/indexBrowser.js](./dist/indexBrowser.js)
 
 ### Dependencies
 
@@ -135,21 +135,21 @@ External: `chalk`, `debug`
 - [@typeagent/action-grammar](../../../packages/actionGrammar/README.md)
 - [@typeagent/agent-rpc](../../../packages/agentRpc/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
+- [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [agent-cache](../../../packages/cache/README.md)
 - [agent-cli](../../../packages/cli/README.md)
 - [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
 - [agent-server](../../../packages/agentServer/server/README.md)
 - [agent-shell](../../../packages/shell/README.md)
 - [browser-typeagent](../../../packages/agents/browser/README.md)
-- [cache-rest-endpoint](../../../examples/cacheRESTEndpoint/README.md)
-- _…and 14 more workspace consumers._
+- _…and 16 more workspace consumers._
 
 ### Files of interest
 
-`./src/base64Browser.ts`, `./src/base64Node.ts`, `./src/cliPath.ts`, …and 9 more under `./src/`.
+`./src/base64Browser.ts`, `./src/base64Node.ts`, `./src/cliPath.ts`, …and 10 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/common-utils docs:verify-links` to spot-check._
+_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/common-utils docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

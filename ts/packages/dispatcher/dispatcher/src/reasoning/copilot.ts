@@ -36,8 +36,10 @@ import {
 import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { createLimiter } from "@typeagent/common-utils";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
+import { formatUserContextForPrompt } from "./userContextPrompt.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -69,6 +71,35 @@ const FALLBACK_MODEL = "claude-opus-4.8";
 // "high" makes the model more likely to actually run verification tool calls
 // instead of narrating an intent ("Let me confirm…") and stopping.
 const FALLBACK_REASONING_EFFORT = "high" as const;
+
+// Largest delay Node's setTimeout accepts without overflowing (~24.8 days). The
+// Copilot SDK feeds sendAndWait's timeout straight into setTimeout, so a larger
+// value (or Infinity) would wrap around to a near-zero delay and fire immediately.
+const MAX_SETTIMEOUT_MS = 2_147_483_647;
+
+// Client-side cap on how long session.sendAndWait blocks waiting for the Copilot
+// session to go idle (finish one full agentic turn). The SDK default is only 60s,
+// which spuriously fails legitimate multi-tool reasoning turns that run longer:
+// the wait does not abort the agent's in-flight work, so a too-short cap just
+// rejects a turn that is still making progress. Genuine cancellation stays with
+// context.abortSignal. Matches the Claude path's DEFAULT_REASONING_TIMEOUT_MS and
+// honors the same TYPEAGENT_REASONING_TIMEOUT_MS override.
+const DEFAULT_REASONING_TIMEOUT_MS = 20 * 60 * 1000;
+
+// Resolve the sendAndWait idle-wait timeout (ms) from TYPEAGENT_REASONING_TIMEOUT_MS,
+// falling back to DEFAULT_REASONING_TIMEOUT_MS. 0 means "disabled"; since the SDK
+// cannot take 0/Infinity (setTimeout would fire immediately), disabled and any
+// too-large value are clamped to the largest delay setTimeout accepts.
+export function resolveReasoningTimeoutMs(): number {
+    const raw = process.env.TYPEAGENT_REASONING_TIMEOUT_MS;
+    const parsed = raw !== undefined ? Number(raw) : NaN;
+    if (!Number.isFinite(parsed) || parsed < 0) {
+        return DEFAULT_REASONING_TIMEOUT_MS;
+    }
+    return parsed === 0
+        ? MAX_SETTIMEOUT_MS
+        : Math.min(parsed, MAX_SETTIMEOUT_MS);
+}
 
 function resolveModel(context: ActionContext<CommandHandlerContext>): string {
     // Live @config override wins, then the COPILOT_REASONING_MODEL env var
@@ -399,18 +430,29 @@ function getRecentChatContext(
 }
 
 /**
- * Build the full prompt with chat history context prepended.
+ * Build the full prompt with chat history and editor context prepended.
  * (Same implementation as Claude)
  */
 function buildPromptWithContext(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
 ): string {
+    const parts: string[] = [];
     const chatContext = getRecentChatContext(context);
     if (chatContext) {
-        return `${chatContext}\n\n[Current request]\n${originalRequest}`;
+        parts.push(chatContext);
     }
-    return originalRequest;
+    const editorContext = formatUserContextForPrompt(
+        context.sessionContext.agentContext.currentOptions?.userContext,
+    );
+    if (editorContext) {
+        parts.push(editorContext);
+    }
+    if (parts.length === 0) {
+        return originalRequest;
+    }
+    parts.push(`[Current request]\n${originalRequest}`);
+    return parts.join("\n\n");
 }
 
 /**
@@ -431,33 +473,87 @@ function formatThinkingDisplay(thinking: string): string {
     ].join("");
 }
 
+type ToolInput = Record<string, unknown>;
+
+function asToolInput(value: unknown): ToolInput | undefined {
+    return typeof value === "object" && value !== null
+        ? (value as ToolInput)
+        : undefined;
+}
+
+function getStringProp(
+    input: ToolInput | undefined,
+    key: string,
+): string | undefined {
+    const value = input?.[key];
+    return typeof value === "string" ? value : undefined;
+}
+
 /**
  * Format a tool call as a persistent display line.
  */
-function formatToolCallDisplay(toolName: string, input: any): string {
-    if (toolName === "discover_actions") {
-        const schema = input?.schemaName ?? JSON.stringify(input);
-        return `**Tool:** discover_actions — schema: \`${schema}\``;
-    } else if (toolName === "execute_action") {
-        const schema = input?.schemaName ?? "?";
-        const actionName = input?.action?.actionName ?? "?";
-        return `**Tool:** execute_action — \`${schema}.${actionName}\``;
-    } else if (toolName === "search_memory") {
-        const question = input?.question ?? JSON.stringify(input);
-        return `**Tool:** search_memory — \`${question}\``;
-    } else if (toolName === "remember") {
-        return `**Tool:** remember`;
+function parseActionInput(action: unknown): ToolInput | undefined {
+    if (typeof action !== "string") {
+        return asToolInput(action);
     }
+
+    try {
+        return asToolInput(JSON.parse(action));
+    } catch {
+        const match = action.match(/"actionName"\s*:\s*"([^"]+)"/);
+        return match ? { actionName: match[1] } : undefined;
+    }
+}
+
+function formatExecuteActionDisplay(input: unknown): string {
+    const toolInput = asToolInput(input);
+    const schema = getStringProp(toolInput, "schemaName") ?? "?";
+    // The model sometimes supplies `action` as a JSON string rather than an
+    // object, and at tool.execution_start that string can still be
+    // mid-stream (truncated). Parse it when possible, otherwise pull the
+    // actionName out directly so the label shows the real action, not "?".
+    const action = parseActionInput(toolInput?.action);
+    const actionName = getStringProp(action, "actionName") ?? "?";
+    return `**Tool:** execute_action — \`${schema}.${actionName}\``;
+}
+
+function getPrimaryToolArg(input: unknown): string | undefined {
+    const toolInput = asToolInput(input);
+    const primaryArg =
+        getStringProp(toolInput, "command") ??
+        getStringProp(toolInput, "path") ??
+        getStringProp(toolInput, "filePath") ??
+        getStringProp(toolInput, "query") ??
+        getStringProp(toolInput, "pattern");
+    return typeof primaryArg === "string" && primaryArg.length > 0
+        ? primaryArg
+        : undefined;
+}
+
+function formatToolCallDisplay(toolName: string, input: unknown): string {
+    const toolInput = asToolInput(input);
+    switch (toolName) {
+        case "discover_actions": {
+            const schema =
+                getStringProp(toolInput, "schemaName") ?? JSON.stringify(input);
+            return `**Tool:** discover_actions — schema: \`${schema}\``;
+        }
+        case "execute_action":
+            return formatExecuteActionDisplay(input);
+        case "search_memory": {
+            const question =
+                getStringProp(toolInput, "question") ?? JSON.stringify(input);
+            return `**Tool:** search_memory — \`${question}\``;
+        }
+        case "remember":
+            return `**Tool:** remember`;
+    }
+
     // Built-in tools (shell, github/fs/*, github/search/*, ...): show the
     // primary argument so parallel or similar calls are distinguishable
     // instead of rendering as identical "Tool: <name>" bubbles.
-    const primaryArg =
-        input?.command ??
-        input?.path ??
-        input?.filePath ??
-        input?.query ??
-        input?.pattern;
-    if (typeof primaryArg === "string" && primaryArg.length > 0) {
+    const primaryArg = getPrimaryToolArg(input);
+    if (primaryArg) {
         return `**Tool:** ${toolName} — \`${primaryArg}\``;
     }
     return `**Tool:** ${toolName}`;
@@ -478,6 +574,15 @@ function getCopilotSessionConfig(
     context: ActionContext<CommandHandlerContext>,
 ): SessionConfig {
     const systemContext = context.sessionContext.agentContext;
+    // Capture the request's clientIO now, before execute_action transiently
+    // swaps systemContext.clientIO for display capture. get_user_context reads
+    // through this stable reference so a parallel execute_action can't strand
+    // it on the capturing clientIO.
+    const baseClientIO = systemContext.clientIO;
+    // The originating request id (carries connectionId) so the agent-server
+    // routing can prefer THIS client's editor context over other clients on
+    // the same conversation.
+    const originatorRequestId = systemContext.currentRequestId;
     const activeSchemas = systemContext.agents.getActiveSchemas();
 
     // Build validators for action schemas (same as Claude)
@@ -502,6 +607,24 @@ function getCopilotSessionConfig(
 
     // Define custom tools using Copilot SDK (mirrors Claude's MCP tools)
     let actionIndex = 1;
+
+    // Serialize execute_action invocations (see its handler below): the display
+    // capture there swaps the shared systemContext.clientIO around an await, and
+    // the Copilot SDK dispatches parallel tool calls concurrently. Overlapping
+    // handlers would clobber that slot and strand clientIO on an abandoned
+    // capture buffer, dropping the final answer and hanging the UI spinner.
+    //
+    // TODO: Revisit parallel action execution in the dispatcher. This mutex
+    // makes concurrent execute_action calls safe by running them one at a time,
+    // which is fine for fast actions but loses real overlap when a turn fires
+    // multiple slow I/O actions (e.g. two webFetch or claudeTask calls). Doing
+    // it properly means capturing per call instead of swapping the shared
+    // clientIO (thread a clientIO sink through executeAction/getActionContext),
+    // AND isolating the other per-session state executeAction mutates
+    // (lastActionSchemaName, streamingActionContext, commandResult accumulation,
+    // activityContext, actionIndex). The dispatcher is serial by design today
+    // (commandLock = createLimiter(1)), so this is a broader change.
+    const executeActionLock = createLimiter(1);
 
     const discoverTool = defineTool("discover_actions", {
         description: [
@@ -570,67 +693,70 @@ function getCopilotSessionConfig(
             },
             required: ["schemaName", "action"],
         },
-        handler: async (args: any) => {
-            const { schemaName, action: actionJson } = args;
-            debug(`Executing action: ${schemaName}.${actionJson.actionName}`);
-            const validator = validators.get(schemaName);
-            if (!validator) {
-                throw new Error(`Invalid schema name '${schemaName}'`);
-            }
-
-            const validationResult = validator.validate(actionJson);
-            if (!validationResult.success) {
-                throw new Error(validationResult.message);
-            }
-
-            // Capture action execution results (same as Claude)
-            const result: IAgentMessage[] = [];
-            const capturingClientIO: ClientIO = {
-                ...nullClientIO,
-                setDisplay: (message) => {
-                    result.push(message);
-                },
-                appendDisplay: (message, mode) => {
-                    if (mode !== "temporary") {
-                        result.push(message);
-                    }
-                },
-            };
-
-            const savedClientIO = systemContext.clientIO;
-            try {
-                systemContext.clientIO = capturingClientIO;
-                await executeAction(
-                    {
-                        action: {
-                            schemaName,
-                            ...actionJson,
-                        },
-                    },
-                    context,
-                    actionIndex++,
+        handler: async (args: any) =>
+            executeActionLock(async () => {
+                const { schemaName, action: actionJson } = args;
+                debug(
+                    `Executing action: ${schemaName}.${actionJson.actionName}`,
                 );
-                systemContext.clientIO = savedClientIO;
+                const validator = validators.get(schemaName);
+                if (!validator) {
+                    throw new Error(`Invalid schema name '${schemaName}'`);
+                }
 
-                // Return result in Copilot SDK format
-                return {
-                    textResultForLlm: JSON.stringify(result),
-                    resultType: "success" as const,
-                };
-            } catch (error) {
-                systemContext.clientIO = savedClientIO;
-                const errorMessage =
-                    error instanceof Error ? error.message : String(error);
-                debug(`Error executing action: ${errorMessage}`);
+                const validationResult = validator.validate(actionJson);
+                if (!validationResult.success) {
+                    throw new Error(validationResult.message);
+                }
 
-                // Return error in Copilot SDK format
-                return {
-                    textResultForLlm: `Error executing ${schemaName}.${actionJson.actionName}: ${errorMessage}`,
-                    resultType: "failure" as const,
-                    error: errorMessage,
+                // Capture action execution results (same as Claude)
+                const result: IAgentMessage[] = [];
+                const capturingClientIO: ClientIO = {
+                    ...nullClientIO,
+                    setDisplay: (message) => {
+                        result.push(message);
+                    },
+                    appendDisplay: (message, mode) => {
+                        if (mode !== "temporary") {
+                            result.push(message);
+                        }
+                    },
                 };
-            }
-        },
+
+                const savedClientIO = systemContext.clientIO;
+                try {
+                    systemContext.clientIO = capturingClientIO;
+                    await executeAction(
+                        {
+                            action: {
+                                schemaName,
+                                ...actionJson,
+                            },
+                        },
+                        context,
+                        actionIndex++,
+                    );
+                    systemContext.clientIO = savedClientIO;
+
+                    // Return result in Copilot SDK format
+                    return {
+                        textResultForLlm: JSON.stringify(result),
+                        resultType: "success" as const,
+                    };
+                } catch (error) {
+                    systemContext.clientIO = savedClientIO;
+                    const errorMessage =
+                        error instanceof Error ? error.message : String(error);
+                    debug(`Error executing action: ${errorMessage}`);
+
+                    // Return error in Copilot SDK format
+                    return {
+                        textResultForLlm: `Error executing ${schemaName}.${actionJson.actionName}: ${errorMessage}`,
+                        resultType: "failure" as const,
+                        error: errorMessage,
+                    };
+                }
+            }),
     });
 
     const searchMemoryTool = defineTool("search_memory", {
@@ -803,6 +929,37 @@ function getCopilotSessionConfig(
         },
     });
 
+    const getUserContextTool = defineTool("get_user_context", {
+        description: [
+            "Get a fresh, coarse snapshot of the user's current editor context:",
+            "active file path, language, cursor and selection ranges, workspace",
+            "folders, open editor count, and diagnostic counts.",
+            "Contains NO file or selection text. To read actual contents, use the",
+            "code agent's read actions (getActiveEditor, getSelection,",
+            "getFileContent, getDiagnostics) via discover_actions/execute_action.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {},
+            required: [],
+        },
+        handler: async () => {
+            const userContext =
+                await baseClientIO.getUserContext?.(originatorRequestId);
+            if (!userContext) {
+                return {
+                    textResultForLlm:
+                        "No editor context is available (the client is not an editor, or there is no active editor).",
+                    resultType: "success" as const,
+                };
+            }
+            return {
+                textResultForLlm: JSON.stringify(userContext, null, 2),
+                resultType: "success" as const,
+            };
+        },
+    });
+
     const model = resolveModel(context);
     const reasoningEffort = resolveReasoningEffort(context);
 
@@ -818,6 +975,7 @@ function getCopilotSessionConfig(
             rememberTool,
             getConversationInfoTool,
             readConversationTool,
+            getUserContextTool,
         ],
         availableTools: [
             "discover_actions",
@@ -826,6 +984,7 @@ function getCopilotSessionConfig(
             "remember",
             "get_conversation_info",
             "read_conversation",
+            "get_user_context",
             "github/fs/*",
             "github/search/*",
             "shell",
@@ -856,6 +1015,10 @@ function getCopilotSessionConfig(
                 "- `remember`: Durably save a new memory so it can be recalled later",
                 "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
                 "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
+                "",
+                "## Editor Context Tools",
+                "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file path, language, cursor/selection ranges, workspace, diagnostic counts). Contains NO file or selection text.",
+                "- For actual file/selection **text**, use the code agent's read actions (getActiveEditor, getSelection, getFileContent, getDiagnostics) via discover_actions/execute_action.",
                 "",
                 "## Guidelines",
                 '- **For follow-up questions** that refer to earlier turns (e.g. "those", "it", "mine"), consult the [Recent conversation context] block first; use `search_memory` only for older history not shown there',
@@ -1114,7 +1277,7 @@ async function executeReasoningWithoutPlanning(
         }
 
         const response: any = await withAbortSignal(
-            session.sendAndWait({ prompt }),
+            session.sendAndWait({ prompt }, resolveReasoningTimeoutMs()),
             context.abortSignal,
         );
         debug("Received response from Copilot");
@@ -1393,7 +1556,7 @@ async function executeReasoningWithTracing(
             debug(`Sending prompt: ${prompt.substring(0, 100)}...`);
 
             const response: any = await withAbortSignal(
-                session.sendAndWait({ prompt }),
+                session.sendAndWait({ prompt }, resolveReasoningTimeoutMs()),
                 context.abortSignal,
             );
             debug("Received response from Copilot");

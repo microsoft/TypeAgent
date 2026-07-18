@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=44122fe38d940b33340723afe63f6fe9ab68b596f2dbc1364c2158d771391b1a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=932ab325e5be7f17ba37a1de3ae3b7fd209b76a643b1a6a7b42d7bc951f17850 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-server — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The `agent-server` package is a TypeScript library that provides a long-running WebSocket server for hosting TypeAgent dispatchers. It manages client connections, facilitates communication between clients and agents, and handles conversation management. The server is designed to support multiple clients and conversations simultaneously, with features such as conversation persistence, idle timeouts, and graceful shutdown.
+The `agent-server` package is a TypeScript library that provides a long-running WebSocket server for hosting TypeAgent dispatchers. It manages client connections, facilitates communication between clients and agents, and handles conversation management. The server supports multiple clients and conversations simultaneously, with features such as conversation persistence, idle timeouts, and graceful shutdown.
 
 ## What it does
 
-The `agent-server` package serves as the backbone for managing conversations and facilitating communication between clients and agents. It provides the following key functionalities:
+The `agent-server` package is a core component of the TypeAgent ecosystem, enabling communication between clients and agents through a WebSocket server. Its primary responsibilities include:
 
-- **Conversation Management**: The server supports actions like `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation`. These actions allow clients to manage and interact with conversations effectively.
-- **Server Control**: The `shutdown` action enables a controlled shutdown of the server, ensuring that resources are released properly.
-- **Idle Timeout**: The server can be configured to automatically shut down after a specified period of inactivity using the `--idle-timeout` flag.
+- **Conversation Management**: The server supports actions such as `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation`. These actions allow clients to manage and interact with conversations.
+- **Server Control**: The `shutdown` action provides a mechanism for controlled server termination.
+- **Idle Timeout**: The server can be configured to shut down automatically after a specified period of inactivity using the `--idle-timeout` flag.
 - **Ephemeral Conversation Cleanup**: On startup, the server removes temporary conversations (e.g., those created by CLI processes) to free up resources.
 
 The server listens on a WebSocket endpoint and processes these actions by interacting with its core components, such as the `ConversationManager` and `SharedDispatcher`. It integrates with other TypeAgent packages, including `@typeagent/agent-server-client` and `@typeagent/agent-server-protocol`, to provide a consistent framework for agent-based communication.
@@ -165,6 +165,6 @@ _7 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
+_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

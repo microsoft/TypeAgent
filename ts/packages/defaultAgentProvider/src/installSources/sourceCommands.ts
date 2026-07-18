@@ -22,7 +22,7 @@ import { getAddSourceCommandHandlers } from "./addSource.js";
 
 // The host owns the entire `@package source` command surface. The dispatcher
 // core has no install-source registry interface: it exposes only the
-// per-session `AppAgentHost` mutation surface, and merges this whole table in
+// per-session app-agent-provider-set controller, and merges this whole table in
 // under `@package` as `source` (via `InstalledAgentSourceApi.sourceCommands()`).
 // All knowledge of the kind taxonomy, listing/ordering, resolution preview, and
 // the add grammar lives here.

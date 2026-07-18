@@ -160,6 +160,94 @@ export type AgentSchemaInfo = {
 };
 
 /**
+ * A line/character position. Uses the host editor's native 0-based indexing
+ * (VS Code), so ranges line up with the CODA read actions that return text.
+ */
+export type EditorPosition = {
+    line: number;
+    character: number;
+};
+
+/** A single diagnostic (compiler/linter message) on the active file. */
+export type DiagnosticItem = {
+    severity: "error" | "warning" | "info" | "hint";
+    /** 0-based line of the diagnostic's start position. */
+    line: number;
+    message: string;
+    /** Producer of the diagnostic (e.g. "ts", "eslint"), when known. */
+    source?: string;
+};
+
+/** One open file editor (tab) in the host. */
+export type OpenEditorInfo = {
+    /** Workspace-relative path of the open file. */
+    path: string;
+    /** Whether this is the active tab. */
+    active: boolean;
+    /** Whether the tab has unsaved changes. */
+    dirty: boolean;
+};
+
+/**
+ * Coarse snapshot of the host editor state. Carries lightweight metadata
+ * (paths, ranges, counts) plus bounded samples of what the user is likely
+ * pointing at - the active selection's text, the active file's diagnostic
+ * messages, and the open-editor list. Heavier text (full file contents, git
+ * diff, on-screen range) is still pulled on demand through the CODA read
+ * actions so nothing large is attached by default.
+ */
+export type EditorContext = {
+    /** Workspace-relative path of the active file, if any. */
+    activeFilePath?: string;
+    /** Language id of the active file (e.g. "typescript"). */
+    languageId?: string;
+    /** Whether the active file has unsaved changes. */
+    isDirty?: boolean;
+    /** Cursor position (0-based). */
+    cursor?: EditorPosition;
+    /** Selection range (0-based). `isEmpty` true means it is just the caret. */
+    selection?: {
+        isEmpty: boolean;
+        start: EditorPosition;
+        end: EditorPosition;
+        /**
+         * The selected text, present only when the selection is non-empty.
+         * Bounded to a cap by the host (large highlights are truncated with
+         * `truncated: true`) so a big selection can't bloat the prompt. Full
+         * file contents are still pulled on demand via the CODA read actions.
+         */
+        text?: string;
+        /** True when `text` was truncated to the host's cap. */
+        truncated?: boolean;
+    };
+    /** Names of the open workspace folders. */
+    workspaceFolders?: string[];
+    /**
+     * Diagnostics for the active file: severity counts plus a bounded,
+     * severity-ordered sample of the actual messages so the model can act on
+     * "fix the error" without a separate pull.
+     */
+    diagnostics?: {
+        errors: number;
+        warnings: number;
+        infos: number;
+        hints: number;
+        /** Bounded sample of the actual diagnostics (errors first). */
+        items?: DiagnosticItem[];
+        /** Count of diagnostics beyond the sampled `items`. */
+        omitted?: number;
+    };
+    /** Number of open editor tabs across all groups. */
+    openEditorCount?: number;
+    /**
+     * Bounded list of open file editors so the model can resolve references
+     * like "the other file". `openEditorsOmitted` counts any beyond the cap.
+     */
+    openEditors?: OpenEditorInfo[];
+    openEditorsOmitted?: number;
+};
+
+/**
  * User-environment context for translation prompts.
  * Provides information about the host application context to improve translation accuracy.
  */
@@ -168,6 +256,18 @@ export type UserContext = {
     activeApp: string;
     /** Free-text description of the app, typically copied from the agent manifest. Optional. */
     activeAppDescription?: string;
+    /**
+     * Coarse editor state: lightweight metadata plus a bounded copy of the
+     * active selection's text (no full file contents). Present when the host is
+     * an editor (e.g. the VS Code shell). Pull heavier text via CODA.
+     */
+    editor?: EditorContext;
+    // TODO (client-capability context): UserContext models only the
+    // editor/environment state today. A separate "client capability" context -
+    // what the originating client can do (render images, apply diffs, voice,
+    // whether it hosts an editor) - is not modeled yet. Add it here (or as a
+    // sibling type) when reasoning needs capability-aware responses. See
+    // docs/plans/vscode-devx.
 };
 
 export type ProcessCommandOptions = {
