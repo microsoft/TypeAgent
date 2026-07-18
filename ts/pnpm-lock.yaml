@@ -1580,6 +1580,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
       '@typeagent/agent-server-protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -1626,6 +1629,12 @@ importers:
 
   packages/agentServer/protocol:
     dependencies:
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../../agentRpc
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
@@ -1651,6 +1660,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
       '@typeagent/agent-server-client':
         specifier: workspace:*
         version: link:../client

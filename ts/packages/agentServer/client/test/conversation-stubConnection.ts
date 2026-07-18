@@ -205,6 +205,8 @@ export function makeStubConnection(
         async getSpeechToken() {
             return undefined;
         },
+        async registerClientAgent() {},
+        async unregisterClientAgent() {},
         async reconnect() {
             return true;
         },
