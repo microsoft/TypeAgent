@@ -569,6 +569,7 @@ function makeConnectionAdapter(): AgentServerConnection {
             return rpc.invoke("deleteConversation", id) as Promise<void>;
         },
         shutdown: () => notSupported("shutdown"),
+        restart: () => notSupported("restart"),
         getSpeechToken: () => {
             const { rpc } = requireFresh();
             return rpc.invoke("getSpeechToken");

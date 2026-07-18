@@ -123,6 +123,12 @@ export type AgentServerConnection = {
     deleteConversation(conversationId: string): Promise<void>;
     shutdown(): Promise<void>;
     /**
+     * Relaunch the agent-server process so it loads rebuilt code. The server
+     * exits and a successor takes its place - this connection drops, so the
+     * caller must reconnect (the port is reused). Standalone server only.
+     */
+    restart(): Promise<void>;
+    /**
      * Request a short-lived Azure Speech authorization token from the server
      * (which owns the `speech:` config). Resolves to `undefined` when speech
      * isn't configured, so callers can hide/disable the mic affordance.
@@ -345,6 +351,11 @@ export function createAgentServerConnection(
         async shutdown(): Promise<void> {
             debug("Requesting server shutdown via existing connection");
             await rpc.invoke("shutdown");
+        },
+
+        async restart(): Promise<void> {
+            debug("Requesting server restart via existing connection");
+            await rpc.invoke("restart");
         },
 
         async getSpeechToken(): Promise<SpeechToken | undefined> {

@@ -109,6 +109,26 @@ async function getPIMClient() {
     return getClient();
 }
 
+// Self-activate a PIM role for a short window so the following data-plane
+// operation can succeed. Throws if PIM is unavailable or activation fails, so
+// callers can fall back to another role or an unelevated retry.
+async function elevate(roleName) {
+    console.warn(chalk.yellowBright(`Elevating to '${roleName}'...`));
+    const pimClient = await getPIMClient();
+    await pimClient.elevate({
+        requestType: "SelfActivate",
+        roleName,
+        expirationType: "AfterDuration",
+        expirationDuration: "PT5M", // activate for 5 minutes
+        continueOnFailure: true,
+    });
+
+    // Wait for the role to be activated
+    console.log(chalk.green("Elevation successful."));
+    console.warn(chalk.yellowBright("Waiting 5 seconds..."));
+    await new Promise((res) => setTimeout(res, 5000));
+}
+
 async function getSecretListWithElevation(keyVaultClient, vaultName) {
     try {
         return await keyVaultClient.getSecrets(vaultName);
@@ -118,23 +138,9 @@ async function getSecretListWithElevation(keyVaultClient, vaultName) {
         }
 
         try {
-            console.warn(chalk.yellowBright("Elevating to get secrets..."));
-            const pimClient = await getPIMClient();
-            await pimClient.elevate({
-                requestType: "SelfActivate",
-                roleName: "Key Vault Administrator",
-                expirationType: "AfterDuration",
-                expirationDuration: "PT5M", // activate for 5 minutes
-                continueOnFailure: true,
-            });
-
-            // Wait for the role to be activated
-            console.log(chalk.green("Elevation successful."));
-            console.warn(chalk.yellowBright("Waiting 5 seconds..."));
-            await new Promise((res) => setTimeout(res, 5000));
-
+            await elevate("Key Vault Administrator");
             return await keyVaultClient.getSecrets(vaultName);
-        } catch (e) {
+        } catch {
             console.warn(
                 chalk.yellow(
                     "Elevation to key vault admin failed...attempting to get secrets as key vault reader.",
@@ -143,21 +149,8 @@ async function getSecretListWithElevation(keyVaultClient, vaultName) {
         }
 
         try {
-            console.warn(chalk.yellowBright("Elevating to get secrets..."));
-            const pimClient = await getPIMClient();
-            await pimClient.elevate({
-                requestType: "SelfActivate",
-                roleName: "Key Vault Secrets User",
-                expirationType: "AfterDuration",
-                expirationDuration: "PT5M", // activate for 5 minutes
-                continueOnFailure: true,
-            });
-
-            // Wait for the role to be activated
-            console.log(chalk.green("Elevation successful."));
-            console.warn(chalk.yellowBright("Waiting 5 seconds..."));
-            await new Promise((res) => setTimeout(res, 5000));
-        } catch (e) {
+            await elevate("Key Vault Secrets User");
+        } catch {
             console.warn(
                 chalk.yellow(
                     "Elevation failed...attempting to get secrets without elevation.",
@@ -166,6 +159,61 @@ async function getSecretListWithElevation(keyVaultClient, vaultName) {
         }
 
         return await keyVaultClient.getSecrets(vaultName);
+    }
+}
+
+// Write a secret, self-elevating via PIM if the vault rejects the write with a
+// 403 (the signed-in user lacks STANDING write access). Mirrors
+// getSecretListWithElevation, but targets roles that grant write (set)
+// permission: "Key Vault Secrets User" is read-only and useless here, so we try
+// "Key Vault Administrator" then "Key Vault Secrets Officer".
+async function writeSecretWithElevation(
+    keyVaultClient,
+    vaultName,
+    secretName,
+    secretValue,
+) {
+    try {
+        return await keyVaultClient.writeSecret(
+            vaultName,
+            secretName,
+            secretValue,
+        );
+    } catch (e) {
+        if (!isForbiddenByRbac(e)) {
+            throw e;
+        }
+
+        try {
+            await elevate("Key Vault Administrator");
+            return await keyVaultClient.writeSecret(
+                vaultName,
+                secretName,
+                secretValue,
+            );
+        } catch {
+            console.warn(
+                chalk.yellow(
+                    "Elevation to key vault admin failed...trying key vault secrets officer.",
+                ),
+            );
+        }
+
+        try {
+            await elevate("Key Vault Secrets Officer");
+        } catch {
+            console.warn(
+                chalk.yellow(
+                    "Elevation failed...attempting to write without elevation.",
+                ),
+            );
+        }
+
+        return await keyVaultClient.writeSecret(
+            vaultName,
+            secretName,
+            secretValue,
+        );
     }
 }
 
@@ -576,7 +624,12 @@ async function pushYamlConfig() {
     }
 
     try {
-        await keyVaultClient.writeSecret(vaultName, secretName, yamlContent);
+        await writeSecretWithElevation(
+            keyVaultClient,
+            vaultName,
+            secretName,
+            yamlContent,
+        );
         console.log(
             chalk.green(
                 `\nSecret '${secretName}' updated in vault '${vaultName}'.`,

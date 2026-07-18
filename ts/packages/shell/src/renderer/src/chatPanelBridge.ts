@@ -22,6 +22,8 @@ import {
     SettingsPanelSchema,
     HelpPanelContent,
     formatHistorySeparatorLabel,
+    STATUS_NOTICE_EVENT,
+    parseStatusNotice,
     type TemplateEditServices,
     type ConnectionStatus,
 } from "chat-ui";
@@ -908,6 +910,16 @@ export function createChatPanelClient(
                 case "showNotifications":
                     handleShowNotifications(data);
                     break;
+                case STATUS_NOTICE_EVENT: {
+                    // Persistent, dismissible server/status notice rendered as
+                    // a toast that collapses to a pinned pill (chat-ui owns the
+                    // behavior). Used e.g. for the stale-build warning.
+                    const notice = parseStatusNotice(data);
+                    if (notice) {
+                        chatPanel.showStatusNotice(notice);
+                    }
+                    break;
+                }
                 case AppAgentEvent.Error:
                 case AppAgentEvent.Warning:
                 case AppAgentEvent.Info:
