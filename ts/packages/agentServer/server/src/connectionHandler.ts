@@ -4,6 +4,7 @@
 import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
+import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
 import type { ChannelProvider } from "@typeagent/agent-rpc/channel";
 import {
     AgentServerInvokeFunctions,
@@ -102,6 +103,39 @@ export function createAgentServerConnectionHandler(
             string,
             { dispatcher: Dispatcher; connectionId: string }
         >();
+
+        // Client-hosted agents this connection registered, per conversation.
+        // conversationId → set of agent names. Used to tear them down when the
+        // connection drops so they don't linger on the (longer-lived) shared
+        // dispatcher.
+        const clientAgents = new Map<string, Set<string>>();
+
+        // Resolve the conversation a client-agent operation targets. When no id
+        // is given, use the single joined conversation; error if there are zero
+        // or many so the caller must disambiguate.
+        const resolveClientAgentConversation = (
+            conversationId?: string,
+        ): string => {
+            if (conversationId !== undefined) {
+                if (!joinedConversations.has(conversationId)) {
+                    throw new Error(
+                        `Not joined to conversation: ${conversationId}`,
+                    );
+                }
+                return conversationId;
+            }
+            if (joinedConversations.size === 1) {
+                return joinedConversations.keys().next().value as string;
+            }
+            if (joinedConversations.size === 0) {
+                throw new Error(
+                    "Cannot register client agent: no conversation joined",
+                );
+            }
+            throw new Error(
+                "Cannot register client agent: multiple conversations joined; specify conversationId",
+            );
+        };
 
         // Warn this connection about a stale server build at most once, even
         // if it joins several conversations.
@@ -288,11 +322,71 @@ export function createAgentServerConnectionHandler(
             },
             getUserIdentity: async () => getUserIdentity(),
             getSpeechToken: async () => getSpeechToken(),
+            registerClientAgent: async (param) => {
+                const conversationId = resolveClientAgentConversation(
+                    param.conversationId,
+                );
+                const { name, manifest, agentInterface } = param;
+                if (clientAgents.get(conversationId)?.has(name)) {
+                    throw new Error(
+                        `Client agent '${name}' is already registered on conversation '${conversationId}'`,
+                    );
+                }
+                // Build the rpc proxy on the connection's own channel provider
+                // (the client hosts the real agent via createAgentRpcServer on
+                // the matching agent:<name> channel).
+                const appAgent = await createAgentRpcClient(
+                    name,
+                    channelProvider,
+                    agentInterface,
+                );
+                try {
+                    await conversationManager.addClientAgent(
+                        conversationId,
+                        name,
+                        manifest,
+                        appAgent,
+                    );
+                } catch (e) {
+                    channelProvider.deleteChannel(`agent:${name}`);
+                    throw e;
+                }
+                let set = clientAgents.get(conversationId);
+                if (set === undefined) {
+                    set = new Set();
+                    clientAgents.set(conversationId, set);
+                }
+                set.add(name);
+            },
+            unregisterClientAgent: async (param) => {
+                const conversationId = resolveClientAgentConversation(
+                    param.conversationId,
+                );
+                const { name } = param;
+                await conversationManager.removeClientAgent(
+                    conversationId,
+                    name,
+                );
+                channelProvider.deleteChannel(`agent:${name}`);
+                clientAgents.get(conversationId)?.delete(name);
+            },
         };
 
         // Clean up all conversations on disconnect
         channelProvider.on("disconnect", () => {
             onDisconnect?.();
+            // Remove client-hosted agents first so they don't linger on the
+            // shared dispatcher after this connection's socket is gone.
+            for (const [conversationId, names] of clientAgents.entries()) {
+                for (const name of names) {
+                    conversationManager
+                        .removeClientAgent(conversationId, name)
+                        .catch(() => {
+                            // Best effort on disconnect
+                        });
+                }
+            }
+            clientAgents.clear();
             for (const [
                 conversationId,
                 { connectionId },

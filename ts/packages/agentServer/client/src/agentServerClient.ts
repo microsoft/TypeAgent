@@ -4,6 +4,8 @@
 import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import type { ChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
+import { createAgentRpcServer } from "@typeagent/agent-rpc/server";
+import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
 import {
     createDispatcherRpcClient,
@@ -133,6 +135,23 @@ export type AgentServerConnection = {
      */
     getSpeechToken(): Promise<SpeechToken | undefined>;
     /**
+     * Register a client-hosted app agent with a joined conversation on the
+     * server. The agent's handlers run in this process; the server installs an
+     * rpc proxy that forwards calls back over the connection. Pass
+     * `conversationId` to target a specific joined conversation, or omit it when
+     * exactly one conversation is joined. Re-registering the same `name` (e.g.
+     * after {@link reconnect}) replaces the previous registration. Rejects if
+     * another client already registered `name` on the target conversation.
+     */
+    registerClientAgent(
+        name: string,
+        manifest: AppAgentManifest,
+        agent: AppAgent,
+        conversationId?: string,
+    ): Promise<void>;
+    /** Unregister an agent previously registered via registerClientAgent. */
+    unregisterClientAgent(name: string, conversationId?: string): Promise<void>;
+    /**
      * Reopen the underlying transport and rebind the control rpc onto it,
      * reusing this connection object instead of building a new one. Returns
      * false when the transport can't be reopened (caller retries). Per-
@@ -202,6 +221,11 @@ export function createAgentServerConnection(
         string,
         { dispatcher: Dispatcher; connectionId: string }
     >();
+
+    // Client-hosted agents registered on the server, name → agent-rpc server
+    // closeFn. Used to tear down the local rpc server when unregistering,
+    // re-registering, or closing the connection.
+    const clientAgentServers = new Map<string, () => void>();
 
     let closed = false;
 
@@ -338,6 +362,51 @@ export function createAgentServerConnection(
             return rpc.invoke("getSpeechToken");
         },
 
+        async registerClientAgent(
+            name: string,
+            manifest: AppAgentManifest,
+            agent: AppAgent,
+            conversationId?: string,
+        ): Promise<void> {
+            // Drop any previous rpc server for this name (e.g. re-registering
+            // after a reconnect, where the old server sat on a stale channel).
+            clientAgentServers.get(name)?.();
+            clientAgentServers.delete(name);
+
+            const { closeFn, agentInterface } = createAgentRpcServer(
+                name,
+                agent,
+                currentChannel,
+            );
+            try {
+                await rpc.invoke("registerClientAgent", {
+                    name,
+                    manifest,
+                    agentInterface,
+                    ...(conversationId !== undefined ? { conversationId } : {}),
+                });
+            } catch (e) {
+                closeFn();
+                throw e;
+            }
+            clientAgentServers.set(name, closeFn);
+        },
+
+        async unregisterClientAgent(
+            name: string,
+            conversationId?: string,
+        ): Promise<void> {
+            try {
+                await rpc.invoke("unregisterClientAgent", {
+                    name,
+                    ...(conversationId !== undefined ? { conversationId } : {}),
+                });
+            } finally {
+                clientAgentServers.get(name)?.();
+                clientAgentServers.delete(name);
+            }
+        },
+
         async reconnect(): Promise<boolean> {
             if (closed || reopenTransport === undefined) {
                 return false;
@@ -351,6 +420,12 @@ export function createAgentServerConnection(
             // The prior transport's per-conversation channels are gone; drop
             // our local bookkeeping so the caller re-joins cleanly.
             joinedConversations.clear();
+            // Client-agent rpc servers were bound to the old channel; drop them
+            // so the caller re-registers them on the new channel after re-join.
+            for (const closeFn of clientAgentServers.values()) {
+                closeFn();
+            }
+            clientAgentServers.clear();
             return true;
         },
 
@@ -360,6 +435,10 @@ export function createAgentServerConnection(
             }
             closed = true;
             debug("Closing agent server connection");
+            for (const closeFn of clientAgentServers.values()) {
+                closeFn();
+            }
+            clientAgentServers.clear();
             closeTransport();
         },
     };
