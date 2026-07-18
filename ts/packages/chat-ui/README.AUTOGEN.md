@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=bad4a0f1594bc0bb69b4dd1c0ad9485fd36fd9c384f4aeddb3ff2f2665354d93 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=328df719c999fe914ea5c95905186f95c08600dec7987088f73f549abd3cfea1 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-ui — AI-generated documentation
@@ -12,16 +12,16 @@
 
 ## Overview
 
-The `chat-ui` package provides a shared, framework-free chat user interface for TypeAgent applications. It is designed to work across multiple platforms, including the VS Code shell extension, the browser extension chat panel, and the Visual Studio extension webview. The package supports user and agent interactions, streaming updates, chat history management, command completions, feedback collection, and connection status indicators. Its platform-agnostic design ensures consistent functionality and appearance across different environments.
+The `chat-ui` package provides a shared, framework-free chat user interface for TypeAgent applications. It is designed to be used across multiple platforms, including the VS Code shell extension, the browser extension chat panel, and the Visual Studio extension webview. The package enables interactive chat experiences with features such as user and agent message rendering, streaming updates, chat history replay, command completions, feedback collection, and connection status indicators. Its platform-agnostic design ensures consistent functionality and appearance across different environments.
 
 ## What it does
 
-The `chat-ui` package offers a range of features to support interactive chat experiences:
+The `chat-ui` package offers the following key features:
 
-- **ChatPanel**: The primary component for rendering the chat interface. It supports:
+- **ChatPanel**: The core component for rendering the chat interface. It supports:
 
-  - Adding user and agent messages using `addAgentMessage`.
-  - Updating display metadata with `setDisplayInfo`.
+  - Adding user and agent messages with `addAgentMessage`.
+  - Updating display metadata using `setDisplayInfo`.
   - Replaying historical chat entries via `replayHistory`.
   - Streaming updates for dynamic content display.
 
@@ -115,10 +115,10 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/chatPanel.ts`, `./src/connectionStatus.ts`, …and 12 more under `./src/`.
+`./src/index.ts`, `./src/chatPanel.ts`, `./src/connectionStatus.ts`, …and 13 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `66ead8985b850f2775c9b1a96cb7de1d08e2aee1` on `2026-07-18T01:38:20.033Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
