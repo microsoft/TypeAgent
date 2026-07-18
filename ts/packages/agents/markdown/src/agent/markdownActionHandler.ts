@@ -304,32 +304,55 @@ async function updateMarkdownContext(
             const fullPath = await getFullMarkdownFilePath(fileName, storage!);
             if (fullPath) {
                 process.env.MARKDOWN_FILE = fullPath;
-                const result = await createViewServiceHost(
+                // Fork the express view service in the background instead of
+                // blocking agent enable (and therefore agent-server startup)
+                // on it. The view is only needed once the user actually opens
+                // the markdown view; every action handler guards on
+                // `viewProcess` presence, so early actions simply skip the
+                // view until it's ready. This keeps a slow/cold view-service
+                // fork (up to the 10s timeout) off the launch critical path.
+                void createViewServiceHost(
                     fullPath,
                     context.agentContext.localHostPort,
-                );
-                if (result) {
-                    const viewProcess = result.process;
-                    context.agentContext.viewProcess = viewProcess;
-                    context.agentContext.localHostPort = result.port;
-                    context.agentContext.viewPortRegistration?.release();
-                    context.agentContext.viewPortRegistration =
-                        context.registerPort("view", result.port);
-                    // Defensive cleanup if the child crashes mid-session.
-                    // The identity guard prevents a late-firing `exit`
-                    // event on a previously-replaced process from
-                    // clobbering a newer registration; the explicit
-                    // disable path (which also releases) is naturally
-                    // idempotent under `?.release()`.
-                    viewProcess.once("exit", () => {
-                        if (context.agentContext.viewProcess !== viewProcess) {
+                )
+                    .then((result) => {
+                        if (!result) {
                             return;
                         }
+                        const viewProcess = result.process;
+                        context.agentContext.viewProcess = viewProcess;
+                        context.agentContext.localHostPort = result.port;
                         context.agentContext.viewPortRegistration?.release();
-                        context.agentContext.viewPortRegistration = undefined;
-                        context.agentContext.viewProcess = undefined;
+                        context.agentContext.viewPortRegistration =
+                            context.registerPort("view", result.port);
+                        // Defensive cleanup if the child crashes mid-session.
+                        // The identity guard prevents a late-firing `exit`
+                        // event on a previously-replaced process from
+                        // clobbering a newer registration; the explicit
+                        // disable path (which also releases) is naturally
+                        // idempotent under `?.release()`.
+                        viewProcess.once("exit", () => {
+                            if (
+                                context.agentContext.viewProcess !== viewProcess
+                            ) {
+                                return;
+                            }
+                            context.agentContext.viewPortRegistration?.release();
+                            context.agentContext.viewPortRegistration =
+                                undefined;
+                            context.agentContext.viewProcess = undefined;
+                        });
+                        // Re-wire the UI-command message handler now that the
+                        // view process exists (the earlier call below ran
+                        // before it was forked).
+                        setCurrentAgentContext(context.agentContext);
+                    })
+                    .catch((e: any) => {
+                        console.warn(
+                            "[AGENT] Markdown view service background start failed:",
+                            e?.message ?? e,
+                        );
                     });
-                }
             }
         }
 
