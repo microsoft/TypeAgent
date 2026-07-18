@@ -42,7 +42,7 @@ jobs:
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Full history so the changed-files lint can diff against the base.
           fetch-depth: 0
@@ -59,7 +59,7 @@ jobs:
         name: Install pnpm
         with:
           package_json_file: ts/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         with:
           node-version: ${{ matrix.version }}
