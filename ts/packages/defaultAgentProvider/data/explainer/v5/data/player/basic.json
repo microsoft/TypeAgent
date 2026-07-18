@@ -274,7 +274,8 @@
             "category": "artist name",
             "propertyNames": [
               "parameters.target.artists.0"
-            ]
+            ],
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [

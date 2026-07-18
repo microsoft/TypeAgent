@@ -5,8 +5,7 @@ import {
     AppAgentProvider,
     AppAgentSource,
     AppAgentConnection,
-    AppAgentHost,
-    InstalledAgentInfo,
+    AppAgentProviderSetController,
     IndexingServiceRegistry,
     DefaultIndexingServiceRegistry,
     DispatcherOptions,
@@ -18,15 +17,17 @@ import {
     UpdateOutcomeStatus,
     UninstallOutcomeStatus,
     AGENT_INSTALL_ROOTS_SUBDIR,
-    AvailableInstallRow,
-    InstallMatchKind,
     InstallPreview,
     InstallPreviewMatch,
     InstallResult,
+    UpdateResult,
     deriveMatchKind,
 } from "./installSources/config.js";
 import {
     createPackageAppAgentProvider,
+    AgentSourceGroup,
+    AvailableAgentInfo,
+    InstalledAgentInfo,
     InstalledAgentSourceApi,
 } from "./installSources/packageAgent.js";
 
@@ -288,7 +289,7 @@ type DynamicAgentEntry =
 
 /**
  * A source-coordinated teardown/swap barrier that either commits or, on a
- * timeout or abort, rolls back. Every target host runs `replaceProvider`, tears
+ * timeout or abort, rolls back. Every target controller runs `runExclusive`, tears
  * down the shared old
  * (`v1`) version, and fills its slot via `quiesce`. Once every slot is filled and
  * verify-0 confirms the shared `v1` refcount is 0, the source commits — each
@@ -314,7 +315,7 @@ type ReplaceBarrier = {
     readonly newProvider: AppAgentProvider | undefined;
     // Phase 1: hosts that have not yet quiesced (torn `v1` down). Empty ⇒ every
     // host removed `v1`.
-    readonly pending: Set<AppAgentHost>;
+    readonly pending: Set<AppAgentProviderSetController>;
     // Resolves (exactly once) when the barrier's outcome is decided (commit or
     // rollback), as a pure signal. A session that connects mid-`removing` is NOT
     // a participant (it never held `v1`, so it neither quiesces nor counts toward
@@ -370,6 +371,8 @@ export function createDefaultInstalledAgentSource(
     options?: DefaultAppAgentSourceOptions,
     /** Host extension point for supplying alternate install sources. */
     sourceFactory?: InstallSourceFactory,
+    /** @internal Test-only store writer for exercising commit failures. */
+    storeWriter: typeof writeAgentsJson = writeAgentsJson,
 ): InstalledAgentSourceForTest {
     const instanceConfigs = getInstanceConfigProvider(instanceDir);
     const installDir = getInstallDir(instanceConfigs);
@@ -382,6 +385,7 @@ export function createDefaultInstalledAgentSource(
             "Internal error: install directory could not be resolved (no instance directory).",
         );
     }
+    const resolvedInstallDir = installDir;
     const sources = getResolvedInstallSources(instanceConfigs);
     // One shared limiter serializes the whole install op (resolve + materialize +
     // record write) and uninstall.
@@ -443,7 +447,7 @@ export function createDefaultInstalledAgentSource(
     //
     // A draining name is never loaded on the normal path: throughout the
     // `removing` window every participant session holds its command lock (parked
-    // in `replaceProvider` awaiting `whenDecided`), and a session that connects
+    // in `runExclusive` awaiting `whenDecided`), and a session that connects
     // mid-`removing` parks on `whenDecided` before joining fan-out — so no
     // command, and therefore no `loadAppAgent`, runs against a draining name.
     function buildAgentProvider(
@@ -451,9 +455,11 @@ export function createDefaultInstalledAgentSource(
         record: InstalledAgentRecord,
     ): AppAgentProvider {
         const loadRecord = registry.load(record);
-        // installDir is guaranteed resolved above (the source throws otherwise);
-        // the `!` bridges TS's lack of narrowing across this nested closure.
-        return createInstalledAppAgentProvider(name, loadRecord, installDir!);
+        return createInstalledAppAgentProvider(
+            name,
+            loadRecord,
+            resolvedInstallDir,
+        );
     }
 
     // Build the shared provider for a freshly-resolved install/update record AND
@@ -515,9 +521,9 @@ export function createDefaultInstalledAgentSource(
         return providers;
     }
 
-    // The client registry of connected AppAgentHosts, used for
+    // The client registry of connected app-agent-provider-set controllers, used for
     // cross-session fan-out. connect() adds; dispose() removes.
-    const clients = new Set<AppAgentHost>();
+    const clients = new Set<AppAgentProviderSetController>();
 
     // Per-name in-flight guard: per-name serialization lives
     // in the entry, not only in the global write limiter). A name is `busy` for
@@ -528,19 +534,13 @@ export function createDefaultInstalledAgentSource(
     // drain of the same name.
     const busy = new Set<string>();
 
-    // Reject a mutating op on a name that is still draining
-    // name-reuse-during-removing): the name is off-limits until fully torn down.
-    function assertNotRemoving(name: string): void {
+    // Reject if the name is draining OR another op on it is in flight.
+    function assertNameFree(name: string): void {
         if (entries.get(name)?.status === "removing") {
             throw new Error(
                 `Agent '${name}' is still being removed; retry shortly.`,
             );
         }
-    }
-
-    // Reject if the name is draining OR another op on it is in flight.
-    function assertNameFree(name: string): void {
-        assertNotRemoving(name);
         if (busy.has(name)) {
             throw new Error(
                 `Agent '${name}' has an operation in progress; retry shortly.`,
@@ -556,24 +556,6 @@ export function createDefaultInstalledAgentSource(
         return isLoadedProbe(barrier.oldProvider, barrier.name) !== true;
     }
 
-    // Cancel the live quiesce backstop timer. Idempotent.
-    function clearBarrierTimers(barrier: ReplaceBarrier): void {
-        if (barrier.quiesceTimer !== undefined) {
-            clearTimeout(barrier.quiesceTimer);
-            barrier.quiesceTimer = undefined;
-        }
-    }
-
-    // The provider each host adds AFTER the barrier is decided. The
-    // source decides post-barrier: `v1` (the old provider) on a rollback so every
-    // session restores the exact version it had, `v2` (the new provider) on a
-    // committed update, or nothing (undefined) on a committed uninstall.
-    function decideAdd(barrier: ReplaceBarrier): AppAgentProvider | undefined {
-        return barrier.outcome === "rolledback"
-            ? barrier.oldProvider
-            : barrier.newProvider;
-    }
-
     // Decide the barrier's outcome and unblock parked hosts / late joiners.
     // Runs exactly once (guarded by `outcome`): flips the entry (+ restores the
     // record on rollback), unblocks parked hosts / late joiners, then GCs the
@@ -583,23 +565,32 @@ export function createDefaultInstalledAgentSource(
         if (barrier.outcome !== undefined) {
             return;
         }
-        barrier.outcome = outcome;
-        clearBarrierTimers(barrier);
-        // Flip source state BEFORE unblocking hosts (name active(v2)/absent on
-        // commit; active(v1) + record restored on rollback). A throw here (e.g. a
-        // synchronous agents.json write error during a rollback restore) must NOT
-        // skip `resolveDecided()` — the parked hosts would deadlock. They add the
-        // decided provider off `barrier.outcome` (via `decideAdd`), independent
-        // of the entry flip, so unblocking after a partial `onDecided` still
-        // restores the right version everywhere.
+        if (barrier.quiesceTimer !== undefined) {
+            clearTimeout(barrier.quiesceTimer);
+            barrier.quiesceTimer = undefined;
+        }
+        // Apply the source state and durable record before publishing the
+        // outcome. A commit write failure selects rollback, so hosts restore v1
+        // instead of reporting success with runtime and agents.json disagreeing.
         try {
             barrier.onDecided(outcome);
         } catch (e) {
             debug(
                 `barrier '${barrier.name}': onDecided(${outcome}) threw: ${e}`,
             );
+            if (outcome === "committed") {
+                outcome = "rolledback";
+                try {
+                    barrier.onDecided(outcome);
+                } catch (rollbackError) {
+                    debug(
+                        `barrier '${barrier.name}': onDecided(${outcome}) threw: ${rollbackError}`,
+                    );
+                }
+            }
         }
-        // Unblock participant hosts parked in `replaceProvider` and late joiners
+        barrier.outcome = outcome;
+        // Unblock participant controllers parked in `runExclusive` and late joiners
         // parked in `connect()`. `onDecided` already flipped the entry, so late
         // joiners re-snapshot the decided version (`v2` commit / `v1` rollback /
         // absent on committed uninstall).
@@ -632,10 +623,6 @@ export function createDefaultInstalledAgentSource(
                 `barrier '${barrier.name}': finalizeGc(${outcome}) threw: ${e}`,
             );
         }
-    }
-
-    function commit(barrier: ReplaceBarrier): void {
-        decide(barrier, "committed");
     }
 
     // Roll back the swap: keep `v1`, discard `v2`. Triggered by the
@@ -678,19 +665,22 @@ export function createDefaultInstalledAgentSource(
         // update / free the name on an uninstall). `v2`'s materialized manifest
         // was already structurally validated before the barrier was armed
         //, so there is nothing left to probe here.
-        commit(barrier);
+        decide(barrier, "committed");
     }
 
     // Drop a host from a draining name's phase-1 barrier — a quiesce ACK, a
     // per-host teardown failure, or a disconnect. A disconnected
     // session has torn everything down, so it is treated exactly like a quiesce.
     // When the last slot fills, the barrier advances (verify-0 permitting).
-    function quiesce(name: string, host: AppAgentHost): void {
+    function quiesce(
+        name: string,
+        controller: AppAgentProviderSetController,
+    ): void {
         const entry = entries.get(name);
         if (entry?.status !== "removing") {
             return;
         }
-        if (!entry.barrier.pending.delete(host)) {
+        if (!entry.barrier.pending.delete(controller)) {
             return;
         }
         maybeAdvance(entry.barrier);
@@ -699,9 +689,11 @@ export function createDefaultInstalledAgentSource(
     // The fan-out target set for a mutation: every connected session PLUS the
     // issuing one (which may not have formally connected). A fresh copy so a
     // concurrent connect/disconnect can't mutate it mid-iteration.
-    function fanOutTargets(issuingHost: AppAgentHost): Set<AppAgentHost> {
-        const targets = new Set<AppAgentHost>(clients);
-        targets.add(issuingHost);
+    function fanOutTargets(
+        issuingController: AppAgentProviderSetController,
+    ): Set<AppAgentProviderSetController> {
+        const targets = new Set<AppAgentProviderSetController>(clients);
+        targets.add(issuingController);
         return targets;
     }
 
@@ -713,10 +705,7 @@ export function createDefaultInstalledAgentSource(
         excludeName: string,
     ): void {
         if (!isRootReferenced(instanceDir, root, excludeName)) {
-            // installDir is guaranteed resolved above (the source throws
-            // otherwise); the `!` bridges TS's lack of narrowing across this
-            // nested closure.
-            pruneAgentRoot(installDir!, root);
+            pruneAgentRoot(resolvedInstallDir, root);
         }
     }
 
@@ -728,13 +717,13 @@ export function createDefaultInstalledAgentSource(
     ): void {
         const current = readAgentsJson(instanceDir) ?? { agents: {} };
         mutate(current.agents);
-        writeAgentsJson(instanceDir, current);
+        storeWriter(instanceDir, current);
     }
 
     // Begin a coordinated teardown/swap across every connected session,
-    // time-bounded so a stall rolls it back. Every host
-    // — INCLUDING the issuing one — runs `replaceProvider` on its own idle-gated
-    // applicator: under a SINGLE held command lock it removes the old version,
+    // time-bounded so a stall rolls it back. Every controller, including the
+    // issuing one, runs one exclusive callback: under a SINGLE held command lock
+    // it removes the old version,
     // quiesces (fills its barrier slot), then awaits the shared `whenDecided`
     // before adding whatever the barrier decides — so no request interleaves the
     // swap on any session and no two versions coexist. Returns immediately once
@@ -750,7 +739,7 @@ export function createDefaultInstalledAgentSource(
     function startReplace(params: {
         name: string;
         oldProvider: AppAgentProvider;
-        issuingHost: AppAgentHost;
+        issuingController: AppAgentProviderSetController;
         dropConfig: boolean;
         // The new version to add on commit; undefined for an uninstall.
         newProvider: AppAgentProvider | undefined;
@@ -764,16 +753,16 @@ export function createDefaultInstalledAgentSource(
         const {
             name,
             oldProvider,
-            issuingHost,
+            issuingController,
             dropConfig,
             newProvider,
             onDecided,
             finalizeGc,
             onOutcome,
         } = params;
-        // The issuing host is always part of the barrier even if it never
+        // The issuing controller is always part of the barrier even if it never
         // formally connected (defensive); it is otherwise treated as a sibling.
-        const targets = fanOutTargets(issuingHost);
+        const targets = fanOutTargets(issuingController);
         let resolveDecided!: () => void;
         const whenDecided = new Promise<void>((resolve) => {
             resolveDecided = resolve;
@@ -803,51 +792,66 @@ export function createDefaultInstalledAgentSource(
             quiesceTimeoutMs,
         );
 
-        for (const host of targets) {
-            host.replaceProvider(
-                oldProvider,
-                async () => {
-                    quiesce(name, host);
+        async function replaceForController(
+            controller: AppAgentProviderSetController,
+        ): Promise<void> {
+            try {
+                await controller.runExclusive(async (mutation) => {
+                    await mutation.removeProvider(oldProvider, {
+                        notify: true,
+                        dropConfig,
+                    });
+                    quiesce(name, controller);
                     await whenDecided;
-                    return decideAdd(barrier);
-                },
-                true,
-                dropConfig,
-            ).then(
-                () => {
-                    // A host that was already closed at enqueue time auto-acks
-                    // without running the replacement resolver. Quiesce here too
-                    // (idempotent — `pending.delete` guards it) so such a host
-                    // fills its phase-1 slot from the success path and never
-                    // wedges the barrier until the quiesce timeout.
-                    quiesce(name, host);
-                },
-                (e: unknown) => {
-                    // A per-host teardown/add failure must not wedge the barrier:
-                    // unblock phase 1 (if the remove leg threw).
-                    debug(`replaceProvider failed for '${name}': ${e}`);
-                    quiesce(name, host);
-                },
-            );
+                    // Restore `v1` on rollback. On commit, add `v2` for an
+                    // update or nothing for an uninstall.
+                    const replacement =
+                        barrier.outcome === "rolledback"
+                            ? barrier.oldProvider
+                            : barrier.newProvider;
+                    if (replacement !== undefined) {
+                        await mutation.addProvider(replacement, {
+                            notify: true,
+                        });
+                    }
+                });
+            } catch (e) {
+                // A per-controller teardown/add failure must not wedge the
+                // barrier. The finally block fills phase 1 if remove failed.
+                debug(`exclusive replacement failed for '${name}': ${e}`);
+            } finally {
+                // A closed controller returns without running the callback.
+                // Quiesce here too. This is idempotent when the callback
+                // already quiesced after removing the old provider.
+                quiesce(name, controller);
+            }
+        }
+
+        for (const controller of targets) {
+            void replaceForController(controller);
         }
     }
 
     // Fan out an add to every connected session: every
-    // host — INCLUDING the issuing one — enqueues the add on its own idle-gated
-    // applicator and is notified with a system message; none is applied inline
+    // controller - INCLUDING the issuing one - runs the add under its command
+    // lock and is notified with a system message; none is applied inline
     // under a held command lock. Each session derives the agent's enabled
     // state from its own config with the manifest default as fallback.
-    // A per-host throw is caught and logged, never failing the committed op.
+    // A per-controller throw is caught and logged, never failing the committed op.
     // Returns immediately; each add lands at that session's next idle.
     function fanOutAdd(
         provider: AppAgentProvider,
-        issuingHost: AppAgentHost,
+        issuingController: AppAgentProviderSetController,
     ): void {
-        const targets = fanOutTargets(issuingHost);
-        for (const host of targets) {
-            host.addProvider(provider, true).catch((e) => {
-                debug(`addProvider failed: ${e}`);
-            });
+        const targets = fanOutTargets(issuingController);
+        for (const controller of targets) {
+            controller
+                .runExclusive((mutation) =>
+                    mutation.addProvider(provider, { notify: true }),
+                )
+                .catch((e) => {
+                    debug(`addProvider failed: ${e}`);
+                });
         }
     }
 
@@ -856,11 +860,12 @@ export function createDefaultInstalledAgentSource(
             nameOrTarget: string,
             ref: string | undefined,
             sourceName: string | undefined,
-            issuingHost: AppAgentHost,
+            issuingController: AppAgentProviderSetController,
             onStatus?: SourceStatus,
             abortSignal?: AbortSignal,
         ): Promise<InstallResult> {
             const explicit = ref !== undefined;
+            let busyName: string | undefined;
             // Explicit (two-argument) mode knows the installed name up front, so
             // fail fast on a built-in / busy / draining name before resolving.
             if (explicit) {
@@ -871,8 +876,8 @@ export function createDefaultInstalledAgentSource(
                 }
                 assertNameFree(nameOrTarget);
                 busy.add(nameOrTarget);
+                busyName = nameOrTarget;
             }
-            let inferredBusy: string | undefined;
             try {
                 // resolve + materialize is serialized by the registry's limiter.
                 // In infer mode this derives the installed name from the resolved
@@ -901,7 +906,7 @@ export function createDefaultInstalledAgentSource(
                     }
                     assertNameFree(name);
                     busy.add(name);
-                    inferredBusy = name;
+                    busyName = name;
                 }
                 // Build the shared per-agent provider AND structurally validate
                 // its freshly-materialized manifest BEFORE persisting: a
@@ -929,7 +934,7 @@ export function createDefaultInstalledAgentSource(
                 entries.set(name, { status: "active", provider });
                 // Fan out the add to every connected session — including the
                 // issuing one — through each session's idle-gated applicator.
-                fanOutAdd(provider, issuingHost);
+                fanOutAdd(provider, issuingController);
                 const result: InstallResult = {
                     name,
                     source: record.source,
@@ -958,17 +963,14 @@ export function createDefaultInstalledAgentSource(
                 }
                 return result;
             } finally {
-                if (inferredBusy !== undefined) {
-                    busy.delete(inferredBusy);
-                }
-                if (explicit) {
-                    busy.delete(nameOrTarget);
+                if (busyName !== undefined) {
+                    busy.delete(busyName);
                 }
             }
         },
         async uninstall(
             name: string,
-            issuingHost: AppAgentHost,
+            issuingController: AppAgentProviderSetController,
             onOutcome?: (status: UninstallOutcomeStatus) => void,
         ): Promise<void> {
             if (isBuiltin(name)) {
@@ -1006,16 +1008,15 @@ export function createDefaultInstalledAgentSource(
                     );
                 }
                 const oldProvider = entry.provider;
-                // The barrier decision is the commit point. Now tear
-                // the live agent down across every connected session through the
+                // Tear the live agent down across every connected session through the
                 // coordinated barrier (active → removing → absent): each
-                // session's `replaceProvider` (no new-version
+                // session's `runExclusive` callback (no new-version
                 // thunk) unloads under one held command lock, then the name is
                 // freed only once verify-0 confirms the shared process is down
                 // everywhere. The name stays off-limits until the barrier
-                // completes. Uninstall drops each session's persisted enable
-                // preference (dropConfig=true) so a fresh reinstall starts from
-                // the manifest default. Once confirmed down,
+                // completes. A committed uninstall drops each session's
+                // persisted enable preference so a fresh reinstall starts from
+                // the manifest default; rollback preserves it. Once confirmed down,
                 // the agent's version-scoped install root is pruned; the startup
                 // orphan sweep is the backstop. If a straggler
                 // never idles the barrier times out and ROLLS BACK:
@@ -1024,7 +1025,7 @@ export function createDefaultInstalledAgentSource(
                 startReplace({
                     name,
                     oldProvider,
-                    issuingHost,
+                    issuingController,
                     dropConfig: true,
                     newProvider: undefined,
                     onDecided: (outcome) => {
@@ -1035,18 +1036,22 @@ export function createDefaultInstalledAgentSource(
                             // dropped ONLY here (not before the barrier): while
                             // the teardown is in flight the agent stays the
                             // recorded-current install, so a crash mid-uninstall
-                            // recovers to the still-installed agent and a rollback
-                            // needs nothing restored.
+                            // recovers to the still-installed agent.
                             entries.delete(name);
                             mutateAgentsJson((agents) => {
                                 delete agents[name];
                             });
                         } else {
-                            // Rollback: the record was never dropped, so there
-                            // is nothing to restore — just keep v1 live.
+                            // Restore both source state and the durable v1 record.
+                            // The write is normally idempotent, and also repairs a
+                            // commit write that failed after partially replacing
+                            // agents.json.
                             entries.set(name, {
                                 status: "active",
                                 provider: oldProvider,
+                            });
+                            mutateAgentsJson((agents) => {
+                                agents[name] = deletedRecord;
                             });
                         }
                     },
@@ -1084,9 +1089,9 @@ export function createDefaultInstalledAgentSource(
         async update(
             name: string,
             range: string | undefined,
-            issuingHost: AppAgentHost,
+            issuingController: AppAgentProviderSetController,
             onOutcome?: (status: UpdateOutcomeStatus) => void,
-        ): Promise<void> {
+        ): Promise<UpdateResult> {
             if (isBuiltin(name)) {
                 throw new Error(
                     `Agent '${name}' is built-in and cannot be updated`,
@@ -1103,6 +1108,12 @@ export function createDefaultInstalledAgentSource(
                 const existing = readAgentsJson(instanceDir)?.agents[name];
                 if (existing === undefined) {
                     throw new Error(`Agent '${name}' not found`);
+                }
+                const oldEntry = entries.get(name);
+                if (oldEntry?.status !== "active") {
+                    throw new Error(
+                        `Agent '${name}' is recorded but not active in this source; the install store may have been modified out of band.`,
+                    );
                 }
                 const updateResult = await registry.update(existing, {
                     range,
@@ -1133,16 +1144,11 @@ export function createDefaultInstalledAgentSource(
                 // pick up an in-place manifest edit.
                 if (updateResult.status === "no-op") {
                     writeInstalledRecord();
-                    // Nothing swapped in any session, so the cross-session
-                    // fan-out has nothing to announce; report the no-op to the
-                    // issuing conversation directly so `@package update` on an
-                    // already-current agent is not silent.
-                    onOutcome?.("unchanged");
-                    return;
+                    return { status: "unchanged" };
                 }
                 // Coordinated update: tear the OLD
                 // version down across every session and add the NEW one as ONE
-                // coordinated barrier — each session's `replaceProvider` removes
+                // coordinated barrier - each session's `runExclusive` callback removes
                 // v1 then (after verify-0 confirms v1 is down everywhere) adds v2,
                 // all under one held command lock, so no two versions of the name
                 // ever coexist and no session observes it absent. No-coexistence
@@ -1154,7 +1160,6 @@ export function createDefaultInstalledAgentSource(
                 // is time-bounded: a straggler that won't idle or a v1 that won't
                 // die ROLLS BACK to v1 — v2 is discarded and v1 stays
                 // the recorded-current version, as if it never happened.
-                const oldEntry = entries.get(name);
                 // Build v2's provider AND structurally validate its
                 // freshly-materialized manifest while v1 is still live: a
                 // corrupt/unresolvable v2 — from ANY source (feed,
@@ -1177,76 +1182,74 @@ export function createDefaultInstalledAgentSource(
                 // a no-op handled above and never reaches the barrier.
                 const oldRoot = existing.installRoot;
                 const newRoot = record.installRoot;
-                if (oldEntry?.status === "active") {
-                    startReplace({
-                        name,
-                        oldProvider: oldEntry.provider,
-                        issuingHost,
-                        dropConfig: false,
-                        newProvider,
-                        onDecided: (outcome) => {
-                            if (outcome === "committed") {
-                                // Flip in-memory FIRST (never throws) so the name
-                                // is never stranded in `removing` (the tombstone
-                                // would otherwise brick it), then persist v2 — the
-                                // durable commit point. If that write
-                                // throws, v1 stays the recorded-current version and
-                                // the finalizeGc guard below keeps v1's root.
-                                entries.set(name, {
-                                    status: "active",
-                                    provider: newProvider,
-                                });
-                                writeInstalledRecord();
-                            } else {
-                                // Rollback: v1 was never overwritten in the store,
-                                // so there is nothing to restore — just keep v1
-                                // live and discard v2, as if the update never
-                                // happened.
-                                entries.set(name, {
-                                    status: "active",
-                                    provider: oldEntry.provider,
-                                });
+                startReplace({
+                    name,
+                    oldProvider: oldEntry.provider,
+                    issuingController,
+                    dropConfig: false,
+                    newProvider,
+                    onDecided: (outcome) => {
+                        if (outcome === "committed") {
+                            // Flip in-memory FIRST (never throws) so the name
+                            // is never stranded in `removing` (the tombstone
+                            // would otherwise brick it), then persist v2 — the
+                            // durable commit point. If that write
+                            // throws, v1 stays the recorded-current version and
+                            // the finalizeGc guard below keeps v1's root.
+                            entries.set(name, {
+                                status: "active",
+                                provider: newProvider,
+                            });
+                            writeInstalledRecord();
+                        } else {
+                            // Restore both source state and the durable v1 record.
+                            // The write is normally idempotent, and also repairs a
+                            // commit write that failed after partially replacing
+                            // agents.json.
+                            entries.set(name, {
+                                status: "active",
+                                provider: oldEntry.provider,
+                            });
+                            mutateAgentsJson((agents) => {
+                                agents[name] = existing;
+                            });
+                        }
+                    },
+                    finalizeGc: (outcome) => {
+                        // Prune the superseded root only after every host has
+                        // swapped: v1 is never pruned before v2 is
+                        // serving). Commit discards v1 — but only once v2 is
+                        // actually the persisted record, so a commit-write that
+                        // failed (leaving v1 recorded) keeps v1's root and
+                        // orphans v2 for the startup sweep. Rollback discards
+                        // v2 (v1 stays recorded + serving).
+                        if (outcome === "committed") {
+                            const committed =
+                                readAgentsJson(instanceDir)?.agents[name];
+                            if (
+                                committed?.installRoot === newRoot &&
+                                oldRoot !== newRoot
+                            ) {
+                                pruneRootIfUnreferenced(oldRoot, name);
                             }
-                        },
-                        finalizeGc: (outcome) => {
-                            // Prune the superseded root only after every host has
-                            // swapped: v1 is never pruned before v2 is
-                            // serving). Commit discards v1 — but only once v2 is
-                            // actually the persisted record, so a commit-write that
-                            // failed (leaving v1 recorded) keeps v1's root and
-                            // orphans v2 for the startup sweep. Rollback discards
-                            // v2 (v1 stays recorded + serving).
-                            if (outcome === "committed") {
-                                const committed =
-                                    readAgentsJson(instanceDir)?.agents[name];
-                                if (
-                                    committed?.installRoot === newRoot &&
-                                    oldRoot !== newRoot
-                                ) {
-                                    pruneRootIfUnreferenced(oldRoot, name);
-                                }
-                            } else if (oldRoot !== newRoot) {
-                                pruneRootIfUnreferenced(newRoot, name);
-                            }
-                        },
-                        onOutcome,
-                    });
-                } else {
-                    // No live old version to tear down: commit v2 directly (write
-                    // the record + add to every session); there is no barrier
-                    // (nothing to coordinate), so report the final status
-                    // directly.
-                    writeInstalledRecord();
-                    entries.set(name, {
-                        status: "active",
-                        provider: newProvider,
-                    });
-                    if (oldRoot !== record.installRoot) {
-                        pruneRootIfUnreferenced(oldRoot, name);
-                    }
-                    fanOutAdd(newProvider, issuingHost);
-                    onOutcome?.("updated");
-                }
+                        } else if (oldRoot !== newRoot) {
+                            pruneRootIfUnreferenced(newRoot, name);
+                        }
+                    },
+                    onOutcome,
+                });
+                return {
+                    status: "started",
+                    ...(updateResult.packageName !== undefined
+                        ? { packageName: updateResult.packageName }
+                        : {}),
+                    ...(updateResult.oldVersion !== undefined
+                        ? { oldVersion: updateResult.oldVersion }
+                        : {}),
+                    ...(updateResult.newVersion !== undefined
+                        ? { newVersion: updateResult.newVersion }
+                        : {}),
+                };
             } finally {
                 busy.delete(name);
             }
@@ -1266,7 +1269,7 @@ export function createDefaultInstalledAgentSource(
                 },
             });
         },
-        listInstalled(): InstalledAgentInfo[] {
+        listInstalled(): AgentSourceGroup<InstalledAgentInfo>[] {
             // The source owns only mutable install records (`agents.json`).
             // Bundled agents are provided separately by the bundled provider and
             // are intentionally excluded from these install summaries. A record
@@ -1274,18 +1277,43 @@ export function createDefaultInstalledAgentSource(
             // name that is currently `removing` (draining) is hidden — it is not
             // an installed agent anymore.
             const agents = readAgentsJson(instanceDir)?.agents ?? {};
-            return Object.values(agents)
-                .filter(
-                    (record) => entries.get(record.name)?.status !== "removing",
-                )
-                .map((record) => {
-                    const ref = record.ref ?? record.module ?? record.path;
-                    return {
-                        name: record.name,
-                        source: record.source,
-                        ...(ref !== undefined ? { ref } : {}),
-                    };
+            const agentsBySource = new Map<string, InstalledAgentInfo[]>();
+            for (const record of Object.values(agents)) {
+                if (entries.get(record.name)?.status === "removing") {
+                    continue;
+                }
+                const ref = record.ref ?? record.module ?? record.path;
+                const info = {
+                    name: record.name,
+                    ...(ref !== undefined ? { ref } : {}),
+                };
+                const group = agentsBySource.get(record.source);
+                if (group === undefined) {
+                    agentsBySource.set(record.source, [info]);
+                } else {
+                    group.push(info);
+                }
+            }
+
+            const groups: AgentSourceGroup<InstalledAgentInfo>[] = [];
+            for (const info of registry.list()) {
+                const sourceAgents = agentsBySource.get(info.name);
+                if (sourceAgents === undefined) {
+                    continue;
+                }
+                groups.push({
+                    source: info.name,
+                    sourceKind: info.kind,
+                    agents: sourceAgents,
                 });
+                agentsBySource.delete(info.name);
+            }
+            // Keep records from removed source configurations visible after all
+            // currently configured sources.
+            for (const [sourceName, sourceAgents] of agentsBySource) {
+                groups.push({ source: sourceName, agents: sourceAgents });
+            }
+            return groups;
         },
         listSources(): string[] {
             // Source names in resolution order, for `@package install --source`
@@ -1294,10 +1322,10 @@ export function createDefaultInstalledAgentSource(
         },
         async listAvailableAgents(opts?: {
             sourceName?: string;
-        }): Promise<AvailableInstallRow[]> {
-            // Source-aware install rows for `@package available` and filtered
-            // completion in `@package install`.
-            const rows: AvailableInstallRow[] = [];
+        }): Promise<AgentSourceGroup<AvailableAgentInfo>[]> {
+            // Source groups for `@package available` and filtered completion in
+            // `@package install`.
+            const groups: AgentSourceGroup<AvailableAgentInfo>[] = [];
             for (const info of registry.list()) {
                 if (
                     opts?.sourceName !== undefined &&
@@ -1310,12 +1338,29 @@ export function createDefaultInstalledAgentSource(
                     continue;
                 }
                 try {
-                    rows.push(...(await src.listAgents()));
+                    const sourceAgents = (await src.listAgents()).map(
+                        ({ ref, defaultAgentName, packageName }) => ({
+                            ref,
+                            ...(defaultAgentName !== undefined
+                                ? { defaultAgentName }
+                                : {}),
+                            ...(packageName !== undefined
+                                ? { packageName }
+                                : {}),
+                        }),
+                    );
+                    if (sourceAgents.length > 0) {
+                        groups.push({
+                            source: info.name,
+                            sourceKind: info.kind,
+                            agents: sourceAgents,
+                        });
+                    }
                 } catch (e) {
                     debug(`listAgents failed for source '${info.name}': ${e}`);
                 }
             }
-            return rows;
+            return groups;
         },
         async preview(
             nameOrTarget: string,
@@ -1338,36 +1383,34 @@ export function createDefaultInstalledAgentSource(
             const toMatch = (m: PreviewMatch): InstallPreviewMatch => {
                 // The registry only commits to name-vs-ref; the finer label is
                 // derived here from the resolved candidate's own fields.
-                const matchKind: InstallMatchKind = deriveMatchKind({
+                const matchKind = deriveMatchKind({
                     matchedByName: m.matchedByName,
                     path: m.candidate.path,
                 });
-                const im: {
-                    source: string;
-                    sourceKind?: string;
-                    matchKind: InstallMatchKind;
-                    name: string;
-                    packageName?: string;
-                    path?: string;
-                    ref?: string;
-                } = { source: m.source, matchKind, name: m.name };
+                const match: {
+                    -readonly [K in keyof InstallPreviewMatch]: InstallPreviewMatch[K];
+                } = {
+                    source: m.source,
+                    matchKind,
+                    name: m.name,
+                };
                 const sourceKind = registry.get(m.source)?.kind;
                 if (sourceKind !== undefined) {
-                    im.sourceKind = sourceKind;
+                    match.sourceKind = sourceKind;
                 }
                 if (m.candidate.packageName !== undefined) {
-                    im.packageName = m.candidate.packageName;
+                    match.packageName = m.candidate.packageName;
                 }
                 if (m.candidate.path !== undefined) {
-                    im.path = m.candidate.path;
+                    match.path = m.candidate.path;
                 }
                 if (
                     m.candidate.module !== undefined &&
                     m.candidate.ref !== undefined
                 ) {
-                    im.ref = m.candidate.ref;
+                    match.ref = m.candidate.ref;
                 }
-                return im;
+                return match;
             };
             return {
                 winner: toMatch(result.winner),
@@ -1382,16 +1425,15 @@ export function createDefaultInstalledAgentSource(
     };
 
     // The dispatcher-facing AppAgentSource API is connect(); the write API is
-    // captured by the per-session `@package` agent below. The
-    // concrete object keeps an unadvertised test handle for focused unit tests,
-    // but the exported constructor returns only AppAgentSource.
+    // captured by the per-session `@package` agent below. The concrete object
+    // also exposes a handle for focused unit tests.
     const appAgentSource: InstalledAgentSourceForTest = {
         testApi: source,
-        connect(host: AppAgentHost): AppAgentConnection {
+        connect(controller: AppAgentProviderSetController): AppAgentConnection {
             // The package agent is per-connection (its agentContext carries this
-            // session's AppAgentHost); the installed providers are shared.
+            // session's app-agent-provider-set controller); the installed providers are shared.
             const packageProvider = createPackageAppAgentProvider({
-                appAgentHost: host,
+                appAgentProviderSetController: controller,
                 source,
             });
             // Torn down before the initial set resolved: a connection disposed
@@ -1432,7 +1474,7 @@ export function createDefaultInstalledAgentSource(
                         // that installs an agent while we parked lands it in this
                         // snapshot; one that installs after we join gets it via
                         // fan-out — exactly once either way.
-                        clients.add(host);
+                        clients.add(controller);
                         return [packageProvider, ...activeProviders()];
                     }
                     await Promise.all(
@@ -1451,7 +1493,7 @@ export function createDefaultInstalledAgentSource(
                     // it never finished joining). Does NOT tear down the shared
                     // providers — other sessions still hold them; the dispatcher
                     // unregisters them from its own manager at teardown.
-                    clients.delete(host);
+                    clients.delete(controller);
                     // Disconnect while a teardown/swap is in flight: a gone
                     // session has removed everything, so drop it
                     // from every barrier's pending set (which may complete one).
@@ -1460,7 +1502,7 @@ export function createDefaultInstalledAgentSource(
                     // started); a barrier it merely parked on never listed it in
                     // `pending`, so the `quiesce` there is a no-op.
                     for (const name of [...entries.keys()]) {
-                        quiesce(name, host);
+                        quiesce(name, controller);
                         // Re-poll verify-0 even when this host had already left
                         // `pending`. The dispatcher tears this session's agents
                         // down — dropping the shared `v1` refcount — BEFORE it

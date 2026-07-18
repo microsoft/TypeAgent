@@ -150,8 +150,9 @@ whatever table you return:
 import { createDispatcher, type AppAgentSource } from "agent-dispatcher";
 
 const mySource: AppAgentSource = {
-  connect(host) {
+  connect(controller) {
     // return { providers: Promise.resolve([...]), dispose } — see AppAgentConnection
+    // Later changes use controller.runExclusive(mutation => ...).
   },
 };
 
