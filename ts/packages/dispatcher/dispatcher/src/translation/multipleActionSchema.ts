@@ -90,9 +90,8 @@ export function createMultipleActionSchema(
     };
     if (result) {
         actionRequestEntryFields.resultEntityId = sc.optional(sc.string(), [
-            "If the action produces a result that will be used in later actions, set this to a unique identifier within this multiple action (e.g., '0', '1', 'listId', etc.).",
-            "To reference this result in a later action's parameters, use the format '${result-<resultEntityId>}' where <resultEntityId> is the value you set here.",
-            "Example: If you set resultEntityId to '0', then reference it in later actions as '${result-0}'.",
+            "If the action produces a result that a later action needs, set this to a unique identifier within this multiple action (e.g., '0', 'favoritesList').",
+            'To use this result inside a later action\'s parameter, set that parameter to an object { "$result": "<id>" } where <id> is the value you set here. It is replaced with the actual result value at execution time, so it works for ANY parameter type (including arrays).',
         ]);
     }
     if (pending) {

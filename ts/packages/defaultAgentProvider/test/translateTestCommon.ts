@@ -108,14 +108,13 @@ const repeat = 5;
 const concurrency = 1;
 const embeddingCacheDir = path.join(os.tmpdir(), ".typeagent", "cache");
 
-// Schemas turned off in these translation-stability tests via
-// `@config schema --off` (product manifests are left untouched):
-// - "utility": a flow-only agent whose generic actions (webSearch / readFile)
-//   out-compete the agents under test (browser.lookupAndAnswer, mcpfilesystem).
-// - "dispatcher.reasoning": the execution-time reasoning escape hatch; with
-//   execution.reasoning set to "none" it must not be a translation option, or
-//   the model can divert requests to reasoningAction.
-const disabledSchemas = ["utility", "dispatcher.reasoning"];
+// Flow-only agent schemas turned off in these translation-stability tests via
+// `@config schema --off` (product manifests are left untouched): "utility"'s
+// generic actions (webSearch / readFile) otherwise out-compete the agents under
+// test (browser.lookupAndAnswer, mcpfilesystem). The reasoning escape hatch is
+// handled by execution.reasoning:"none" (below), NOT by disabling its schema —
+// disabling dispatcher.reasoning regressed unrelated player/mcpfs routing.
+const disabledSchemas = ["utility"];
 
 // Per-attempt Jest timeout budget for a single request translation.
 const perAttemptTimeoutMs = 30000;
@@ -258,8 +257,8 @@ export async function defineTranslateTest(
                         collectCommandResult: true,
                     },
                 );
-                // Take the flow-only and reasoning schemas out of the
-                // translation candidate set (see disabledSchemas above).
+                // Take the flow-only schemas out of the translation candidate
+                // set (see disabledSchemas above).
                 for (const schema of disabledSchemas) {
                     checkResultError(
                         await awaitCommand(
