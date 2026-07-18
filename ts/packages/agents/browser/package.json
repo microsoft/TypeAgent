@@ -38,6 +38,7 @@
     "dev:client": "vite serve",
     "package": "node scripts/packExtension.mjs",
     "prepare": "node ./scripts/prepare.mjs .",
+    "setup:aisearch": "node dist/agent/lookup/aiSearchSetup.mjs",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "test": "npm run test:local",
@@ -56,6 +57,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.150",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@mozilla/readability": "^0.6.0",
     "@popperjs/core": "^2.11.8",
     "@typeagent/action-schema": "workspace:*",
