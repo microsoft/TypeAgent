@@ -225,6 +225,49 @@ azureFoundry:
   httpEndpointLogicAppConnectionId: /subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account>/projects/<project>/connections/<connection>
 
 # ╔═══════════════════════════════════════════════════════════════════╗
+# ║  Azure AI Search — browser-less internet lookup (prototype)      ║
+# ╚═══════════════════════════════════════════════════════════════════╝
+#
+# Powers the browser-less `lookupAndAnswerInternet` path (browser agent)
+# via an Azure AI Search "web" knowledge source + knowledge base (Foundry
+# IQ), which does the web search + fetch + summarization server-side.
+# Optional — when `mode` is unset or "off", the browser-driven lookup is
+# used instead.
+#
+# First-class typed section. The legacy AZURE_AI_SEARCH_* env vars still
+# work from a .env file (the lowest-precedence layer), so .env stays
+# backwards compatible.
+
+azureAISearch:
+  # Backend: "off" (browser), "api" (REST retrieve), or "mcp" (MCP endpoint).
+  mode: api
+  # https://<service>.search.windows.net
+  endpoint: https://my-search.search.windows.net
+  # Knowledge base name (create it with:
+  #   pnpm --filter browser-typeagent setup:aisearch)
+  knowledgeBase: web-lookup-kb
+  # Auth defaults to identity (DefaultAzureCredential) - assign your
+  # principal the "Search Index Data Reader" role on the service. To
+  # override with a key or a static Entra token instead, uncomment one:
+  # apiKey: <search-admin-or-query-key>
+  # bearerToken: <entra-access-token>
+  # Preview API version enables answer synthesis (and MCP synthesized answers).
+  apiVersion: 2026-05-01-preview
+  # "answerSynthesis" (one answer) or "extractedData" (raw grounding chunks).
+  outputMode: answerSynthesis
+  # LLM planning effort: "minimal" | "low" | "medium".
+  reasoningEffort: low
+
+  # --- Used only by `setup:aisearch` to provision the web KS + KB ---
+  # Azure OpenAI model the knowledge base uses to summarize web results.
+  aoaiEndpoint: https://my-openai.openai.azure.com
+  aoaiDeployment: gpt-4.1-mini
+  aoaiModel: gpt-4.1-mini
+  # aoaiApiKey: <aoai-key>   # omit to use managed identity
+  # webKnowledgeSource: web-lookup-web-ks
+  # webKnowledgeSourceDomains: learn.microsoft.com,wikipedia.org
+
+# ╔═══════════════════════════════════════════════════════════════════╗
 # ║  Storage                                                         ║
 # ╚═══════════════════════════════════════════════════════════════════╝
 #

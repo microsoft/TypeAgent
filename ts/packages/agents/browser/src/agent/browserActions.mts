@@ -3,6 +3,7 @@
 
 import { BrowserControl, SearchProvider } from "../common/browserControl.mjs";
 import { ExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
+import type { AiSearchLookupMode } from "./lookup/aiSearchLookup.mjs";
 import { ChildProcess } from "child_process";
 import { TabTitleIndex } from "./tabTitleIndex.mjs";
 import { TextEmbeddingModel } from "@typeagent/aiclient";
@@ -24,6 +25,10 @@ export type BrowserActionContext = {
     externalBrowserControl?: ExternalBrowserClient | undefined;
     useExternalBrowserControl: boolean;
     preferredClientType?: "extension" | "electron" | undefined;
+    // Runtime override for the internet-lookup backend (@browser lookup ...);
+    // takes precedence over azureAISearch.mode / AZURE_AI_SEARCH_LOOKUP_MODE.
+    // Not persisted - reverts to config on restart.
+    lookupMode?: AiSearchLookupMode | undefined;
     agentWebSocketServer?: AgentWebSocketServer | undefined;
     browserControl?: BrowserControl;
     currentClient?: BrowserClient;
