@@ -108,12 +108,14 @@ const repeat = 5;
 const concurrency = 1;
 const embeddingCacheDir = path.join(os.tmpdir(), ".typeagent", "cache");
 
-// Agents that exist for compiled task flows (invoked explicitly by a flow),
-// not for direct request routing. Disable their schemas in the translate tests
-// so their generic actions (e.g. utility.webSearch / readFile) don't
-// out-compete the agents under test (browser.lookupAndAnswer, mcpfilesystem,
-// etc.). The product manifests are intentionally left untouched.
-const flowOnlySchemas = ["utility"];
+// Schemas turned off in these translation-stability tests via
+// `@config schema --off` (product manifests are left untouched):
+// - "utility": a flow-only agent whose generic actions (webSearch / readFile)
+//   out-compete the agents under test (browser.lookupAndAnswer, mcpfilesystem).
+// - "dispatcher.reasoning": the execution-time reasoning escape hatch; with
+//   execution.reasoning set to "none" it must not be a translation option, or
+//   the model can divert requests to reasoningAction.
+const disabledSchemas = ["utility", "dispatcher.reasoning"];
 
 // Per-attempt Jest timeout budget for a single request translation.
 const perAttemptTimeoutMs = 30000;
@@ -256,9 +258,9 @@ export async function defineTranslateTest(
                         collectCommandResult: true,
                     },
                 );
-                // Take flow-only agents out of the translation candidate set
-                // so they don't out-compete the agents under test.
-                for (const schema of flowOnlySchemas) {
+                // Take the flow-only and reasoning schemas out of the
+                // translation candidate set (see disabledSchemas above).
+                for (const schema of disabledSchemas) {
                     checkResultError(
                         await awaitCommand(
                             dispatcher,
