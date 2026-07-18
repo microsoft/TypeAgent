@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { BrowserControl } from "../../common/browserControl.mjs";
+import type { BrowserControl } from "@typeagent/browser-control-rpc/types";
 import { AgentWebSocketServer } from "../agentWebSocketServer.mjs";
 
 export interface ExternalBrowserClient {

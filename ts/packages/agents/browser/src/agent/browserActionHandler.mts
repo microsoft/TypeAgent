@@ -94,7 +94,7 @@ import {
     isBuiltInWebAgentRpcRequest,
     BuiltInWebAgentRpcResponse,
     WebFlowRefreshMessage,
-} from "../common/webAgentMessageTypes.mjs";
+} from "@typeagent/browser-control-rpc/webAgentMessageTypes";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 import { handleWebFlowAction } from "./webFlows/actionHandler.mjs";
 import { WebFlowActions } from "./webFlows/schema/webFlowActions.mjs";
@@ -118,7 +118,7 @@ import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import {
     BrowserControl,
     defaultSearchProviders,
-} from "../common/browserControl.mjs";
+} from "@typeagent/browser-control-rpc/types";
 import { openai } from "@typeagent/aiclient";
 import { urlResolver } from "azure-ai-foundry";
 import {

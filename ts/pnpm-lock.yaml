@@ -1831,12 +1831,6 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
         version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
-      '@mozilla/readability':
-        specifier: ^0.6.0
-        version: 0.6.0
-      '@popperjs/core':
-        specifier: ^2.11.8
-        version: 2.11.8
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../actionSchema
@@ -1879,9 +1873,6 @@ importers:
       azure-ai-foundry:
         specifier: workspace:*
         version: link:../../azure-ai-foundry
-      bootstrap:
-        specifier: ^5.3.3
-        version: 5.3.6(@popperjs/core@2.11.8)
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -1894,15 +1885,6 @@ importers:
       conversation-memory:
         specifier: workspace:*
         version: link:../../memory/conversation
-      cytoscape:
-        specifier: ^3.32.0
-        version: 3.32.0
-      cytoscape-dagre:
-        specifier: ^2.5.0
-        version: 2.5.0(cytoscape@3.32.0)
-      dagre:
-        specifier: ^0.8.5
-        version: 0.8.5
       debug:
         specifier: ^4.4.0
         version: 4.4.1
@@ -1948,15 +1930,9 @@ importers:
       knowpro:
         specifier: workspace:*
         version: link:../../knowPro
-      markdown-it:
-        specifier: ^14.2.0
-        version: 14.2.0
       pdfjs-dist:
         specifier: ^5.3.31
         version: 5.3.31
-      prismjs:
-        specifier: ^1.30.0
-        version: 1.30.0
       puppeteer:
         specifier: ^24.15.0
         version: 24.37.5(typescript@5.4.5)
@@ -2009,9 +1985,6 @@ importers:
         specifier: ^4.1.13
         version: 4.3.6
     devDependencies:
-      '@esbuild-plugins/node-globals-polyfill':
-        specifier: ^0.2.3
-        version: 0.2.3(esbuild@0.28.1)
       '@fluidframework/build-tools':
         specifier: ^0.57.0
         version: 0.57.0(@types/node@22.15.18)
@@ -2024,15 +1997,6 @@ importers:
       '@types/chrome':
         specifier: ^0.0.256
         version: 0.0.256
-      '@types/cytoscape':
-        specifier: ^3.21.9
-        version: 3.21.9
-      '@types/cytoscape-dagre':
-        specifier: ^2.3.3
-        version: 2.3.3
-      '@types/dagre':
-        specifier: ^0.7.52
-        version: 0.7.52
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -2054,36 +2018,12 @@ importers:
       '@types/jsonpath':
         specifier: 0.2.4
         version: 0.2.4
-      '@types/markdown-it':
-        specifier: ^14.1.2
-        version: 14.1.2
       '@types/node':
         specifier: ^22.0.0
         version: 22.15.18
-      '@types/prismjs':
-        specifier: ^1.26.3
-        version: 1.26.5
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
-      archiver:
-        specifier: ^7.0.1
-        version: 7.0.1
-      concurrently:
-        specifier: ^9.1.2
-        version: 9.1.2
-      crx:
-        specifier: ^5.0.1
-        version: 5.0.1
-      dotenv:
-        specifier: ^16.5.0
-        version: 16.5.0
-      find-up:
-        specifier: ^7.0.0
-        version: 7.0.0
-      fs-extra:
-        specifier: ^11.2.0
-        version: 11.3.0
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
@@ -2096,15 +2036,9 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
-      rollup-plugin-copy:
-        specifier: ^3.5.0
-        version: 3.5.0
       ts-jest:
         specifier: ^29.3.2
-        version: 29.3.3(@babel/core@7.29.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(esbuild@0.28.1)(jest@29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5)))(typescript@5.4.5)
-      ts-loader:
-        specifier: ^9.5.1
-        version: 9.5.2(typescript@5.4.5)(webpack@5.105.0(esbuild@0.28.1)(postcss@8.5.16))
+        version: 29.3.3(@babel/core@7.29.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(jest@29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5)))(typescript@5.4.5)
       vite:
         specifier: ^6.4.3
         version: 6.4.3(@types/node@22.15.18)(jiti@2.7.0)(less@4.3.0)(terser@5.49.0)(tsx@4.21.0)(yaml@2.8.3)
@@ -3525,12 +3459,12 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/browser-control-rpc':
+        specifier: workspace:*
+        version: link:../browserControlRpc
       '@types/html-to-text':
         specifier: ^9.0.4
         version: 9.0.4
-      browser-typeagent:
-        specifier: workspace:*
-        version: link:../browser
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
@@ -10350,9 +10284,6 @@ packages:
   '@types/fs-extra@11.0.4':
     resolution: {integrity: sha512-yTbItCNreRooED33qjunPthRcSjERP1r4MqCZc7wv0u2sUkzTFp45tgUfS5+r7FrZPdmCCNflLhVSP/o+SemsQ==}
 
-  '@types/fs-extra@8.1.5':
-    resolution: {integrity: sha512-0dzKcwO+S8s2kuF5Z9oUWatQJj5Uq/iqphEtE3GQJVRRYm/tD1LglU2UnXi2A8jLq5umkGouOXOR9y0n613ZwQ==}
-
   '@types/fs-extra@9.0.13':
     resolution: {integrity: sha512-nEnwB++1u5lVDM2UI4c1+5R+FYaKfaAzS4OococimjVm3nQw3TuzH5UNsocrcTBbhnerblyHj4A49qXbIiZdpA==}
 
@@ -11824,9 +11755,6 @@ packages:
     resolution: {integrity: sha512-1rXeuUUiGGrykh+CeBdu5Ie7OJwinCgQY0bc7GCRxy5xVHy+moaqkpL/jqQq0MtQOeYcrqEz4abc5f0KtU7W4A==}
     engines: {node: '>=12.5.0'}
 
-  colorette@1.4.0:
-    resolution: {integrity: sha512-Y2oEozpomLn7Q3HFP7dpww7AtMJplbM9lGZP6RDfHqmbeRjiwRg4n6VM6j4KLmRke85uWEI7JqF17f3pqdRA0g==}
-
   colorette@2.0.20:
     resolution: {integrity: sha512-IfEDxwoWIjkeXL1eXcDiow4UbKjhLdq6/EuSVR9GMN7KVH3r9gQ83e73hsz1Nd1T3ijd5xv1wcWRYO+D6kCI2w==}
 
@@ -12101,10 +12029,6 @@ packages:
     resolution: {integrity: sha512-ki1/VuRIHFCzxWNrsshHYPs6L7TvLu3DL+TyIGEsRcvVERmxokbf5Gdk7mFxZnTdiGtnA4cfSmjZJMviqSuZrQ==}
     peerDependencies:
       cytoscape: ^3.2.0
-
-  cytoscape@3.32.0:
-    resolution: {integrity: sha512-5JHBC9n75kz5851jeklCPmZWcg3hUe6sjqJvyk3+hVqFaKcHwHgxsjeN1yLmggoUc6STbtm9/NQyabQehfjvWQ==}
-    engines: {node: '>=0.10'}
 
   cytoscape@3.33.3:
     resolution: {integrity: sha1-bIhYI8sIjrjDEIfDXZeGYdzeXq4=}
@@ -13442,10 +13366,6 @@ packages:
     resolution: {integrity: sha512-3LifW9M4joGZasyYPz2A1U74zbC/45fvpXUvO/9KbSa+VV0aGZarWkfdgKyR9sExNP0t0x0ss/UMJpNpcaTspw==}
     engines: {node: '>=8'}
 
-  globby@10.0.1:
-    resolution: {integrity: sha512-sSs4inE1FB2YQiymcmTv6NWENryABjUNPeWhOvmn4SjtKybglsyPZxFB3U1/+L1bYi0rNZDqCLlHyLYDl1Pq5A==}
-    engines: {node: '>=8'}
-
   globby@11.1.0:
     resolution: {integrity: sha512-jhIXaOzy1sb8IyocaruWSn1TjmnBVs8Ayhcy83rmxNJ8q2uWKCAj3CnJY+KpGSXCueAPc0i05kVvVKtP1t9S3g==}
     engines: {node: '>=10'}
@@ -14051,10 +13971,6 @@ packages:
 
   is-plain-object@2.0.4:
     resolution: {integrity: sha512-h5PpgXkWitc38BBMYawTYMWJHFZJVnBquFE57xFpjB8pJFiF6gZ+bU+WyI/yqXiFR5mdLsgYNaPe8uao6Uv9Og==}
-    engines: {node: '>=0.10.0'}
-
-  is-plain-object@3.0.1:
-    resolution: {integrity: sha512-Xnpx182SBMrr/aBik8y+GuR4U1L9FqMSojwDQwPMmxyC6bvEqly9UBCxhauBF5vNh2gwWJNX6oDV7O+OM4z34g==}
     engines: {node: '>=0.10.0'}
 
   is-potential-custom-element-name@1.0.1:
@@ -16498,10 +16414,6 @@ packages:
 
   robust-predicates@3.0.2:
     resolution: {integrity: sha512-IXgzBWvWQwE6PrDI05OvmXUIruQTcoMDzRsOd5CDvHCVLcLHMTSYvOK5Cm46kWqlV3yAbuSpBZdJ5oP5OUoStg==}
-
-  rollup-plugin-copy@3.5.0:
-    resolution: {integrity: sha512-wI8D5dvYovRMx/YYKtUNt3Yxaw4ORC9xo6Gt9t22kveWz1enG9QrhVlagzwrxSC455xD1dHMKhIJkbsQ7d48BA==}
-    engines: {node: '>=8.3'}
 
   rollup@4.59.0:
     resolution: {integrity: sha512-2oMpl67a3zCH9H79LeMcbDhXW/UmWG/y2zuqnF2jQq5uq9TbM9TVyXvA4+t+ne2IIkBdrLpAaRQAvo7YI/Yyeg==}
@@ -23530,10 +23442,6 @@ snapshots:
       '@types/jsonfile': 6.1.4
       '@types/node': 22.19.21
 
-  '@types/fs-extra@8.1.5':
-    dependencies:
-      '@types/node': 22.20.1
-
   '@types/fs-extra@9.0.13':
     dependencies:
       '@types/node': 22.20.1
@@ -25438,8 +25346,6 @@ snapshots:
       color-convert: 2.0.1
       color-string: 1.9.1
 
-  colorette@1.4.0: {}
-
   colorette@2.0.20: {}
 
   colors@1.4.0: {}
@@ -25777,11 +25683,6 @@ snapshots:
       cose-base: 1.0.3
       cytoscape: 3.33.3
 
-  cytoscape-dagre@2.5.0(cytoscape@3.32.0):
-    dependencies:
-      cytoscape: 3.32.0
-      dagre: 0.8.5
-
   cytoscape-dagre@2.5.0(cytoscape@3.33.3):
     dependencies:
       cytoscape: 3.33.3
@@ -25791,8 +25692,6 @@ snapshots:
     dependencies:
       cose-base: 2.2.0
       cytoscape: 3.33.3
-
-  cytoscape@3.32.0: {}
 
   cytoscape@3.33.3: {}
 
@@ -27523,17 +27422,6 @@ snapshots:
       merge2: 1.4.1
       slash: 3.0.0
 
-  globby@10.0.1:
-    dependencies:
-      '@types/glob': 7.2.0
-      array-union: 2.1.0
-      dir-glob: 3.0.1
-      fast-glob: 3.3.3
-      glob: 7.2.3
-      ignore: 5.3.2
-      merge2: 1.4.1
-      slash: 3.0.0
-
   globby@11.1.0:
     dependencies:
       array-union: 2.1.0
@@ -28190,8 +28078,6 @@ snapshots:
   is-plain-object@2.0.4:
     dependencies:
       isobject: 3.0.1
-
-  is-plain-object@3.0.1: {}
 
   is-potential-custom-element-name@1.0.1: {}
 
@@ -31664,14 +31550,6 @@ snapshots:
 
   robust-predicates@3.0.2: {}
 
-  rollup-plugin-copy@3.5.0:
-    dependencies:
-      '@types/fs-extra': 8.1.5
-      colorette: 1.4.0
-      fs-extra: 8.1.0
-      globby: 10.0.1
-      is-plain-object: 3.0.1
-
   rollup@4.59.0:
     dependencies:
       '@types/estree': 1.0.8
@@ -32561,17 +32439,6 @@ snapshots:
       ansi-escapes: 4.3.2
       supports-hyperlinks: 2.3.0
 
-  terser-webpack-plugin@5.6.1(esbuild@0.28.1)(postcss@8.5.16)(webpack@5.105.0(esbuild@0.28.1)(postcss@8.5.16)):
-    dependencies:
-      '@jridgewell/trace-mapping': 0.3.31
-      jest-worker: 27.5.1
-      schema-utils: 4.3.3
-      terser: 5.49.0
-      webpack: 5.105.0(esbuild@0.28.1)(postcss@8.5.16)
-    optionalDependencies:
-      esbuild: 0.28.1
-      postcss: 8.5.16
-
   terser-webpack-plugin@5.6.1(postcss@8.5.16)(webpack@5.105.0(postcss@8.5.16)):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
@@ -32771,7 +32638,7 @@ snapshots:
       '@ts-graphviz/common': 2.1.5
       '@ts-graphviz/core': 2.0.7
 
-  ts-jest@29.3.3(@babel/core@7.29.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(esbuild@0.28.1)(jest@29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5)))(typescript@5.4.5):
+  ts-jest@29.3.3(@babel/core@7.29.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(jest@29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5)))(typescript@5.4.5):
     dependencies:
       bs-logger: 0.2.6
       ejs: 3.1.10
@@ -32790,7 +32657,6 @@ snapshots:
       '@jest/transform': 29.7.0
       '@jest/types': 29.6.3
       babel-jest: 29.7.0(@babel/core@7.29.7)
-      esbuild: 0.28.1
 
   ts-jest@29.3.3(@babel/core@7.29.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(jest@29.7.0(@types/node@26.1.1)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.4.5)))(typescript@5.4.5):
     dependencies:
@@ -32852,16 +32718,6 @@ snapshots:
       '@jest/types': 29.6.3
       babel-jest: 29.7.0(@babel/core@7.29.7)
       jest-util: 29.7.0
-
-  ts-loader@9.5.2(typescript@5.4.5)(webpack@5.105.0(esbuild@0.28.1)(postcss@8.5.16)):
-    dependencies:
-      chalk: 4.1.2
-      enhanced-resolve: 5.15.0
-      micromatch: 4.0.8
-      semver: 7.5.4
-      source-map: 0.7.4
-      typescript: 5.4.5
-      webpack: 5.105.0(esbuild@0.28.1)(postcss@8.5.16)
 
   ts-loader@9.5.2(typescript@5.4.5)(webpack@5.105.0(postcss@8.5.16)):
     dependencies:
@@ -33484,47 +33340,6 @@ snapshots:
       wildcard: 2.0.1
 
   webpack-sources@3.5.1: {}
-
-  webpack@5.105.0(esbuild@0.28.1)(postcss@8.5.16):
-    dependencies:
-      '@types/eslint-scope': 3.7.7
-      '@types/estree': 1.0.9
-      '@types/json-schema': 7.0.15
-      '@webassemblyjs/ast': 1.14.1
-      '@webassemblyjs/wasm-edit': 1.14.1
-      '@webassemblyjs/wasm-parser': 1.14.1
-      acorn: 8.17.0
-      acorn-import-phases: 1.0.4(acorn@8.17.0)
-      browserslist: 4.28.5
-      chrome-trace-event: 1.0.4
-      enhanced-resolve: 5.24.2
-      es-module-lexer: 2.3.0
-      eslint-scope: 5.1.1
-      events: 3.3.0
-      glob-to-regexp: 0.4.1
-      graceful-fs: 4.2.11
-      json-parse-even-better-errors: 2.3.1
-      loader-runner: 4.3.2
-      mime-types: 2.1.35
-      neo-async: 2.6.2
-      schema-utils: 4.3.3
-      tapable: 2.3.3
-      terser-webpack-plugin: 5.6.1(esbuild@0.28.1)(postcss@8.5.16)(webpack@5.105.0(esbuild@0.28.1)(postcss@8.5.16))
-      watchpack: 2.5.2
-      webpack-sources: 3.5.1
-    transitivePeerDependencies:
-      - '@minify-html/node'
-      - '@swc/core'
-      - '@swc/css'
-      - '@swc/html'
-      - clean-css
-      - cssnano
-      - csso
-      - esbuild
-      - html-minifier-terser
-      - lightningcss
-      - postcss
-      - uglify-js
 
   webpack@5.105.0(postcss@8.5.16):
     dependencies:

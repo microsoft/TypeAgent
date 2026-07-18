@@ -19,11 +19,7 @@
   "exports": {
     "./agent/manifest": "./src/agent/manifest.json",
     "./agent/handlers": "./dist/agent/browserActionHandler.mjs",
-    "./agent/types": "./dist/common/browserControl.mjs",
-    "./agent/indexing": "./dist/agent/indexing/browserIndexingService.js",
-    "./contentScriptRpc/types": "./dist/common/contentScriptRpc/types.mjs",
-    "./contentScriptRpc/client": "./dist/common/contentScriptRpc/client.mjs",
-    "./htmlReducer": "./dist/common/crossContextHtmlReducer.js"
+    "./agent/indexing": "./dist/agent/indexing/browserIndexingService.js"
   },
   "main": "index.js",
   "scripts": {
@@ -39,7 +35,6 @@
     "test": "npm run test:local",
     "test:local": "jest",
     "tsc:agent": "tsc -p src/agent/tsconfig.json",
-    "tsc:common": "tsc -p src/common/tsconfig.json",
     "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
     "tsc:views:client:typecheck": "tsc -p src/views/client/pdf/tsconfig.json",
     "tsc:views:server": "tsc -p src/views/server/tsconfig.json",
@@ -48,8 +43,6 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.150",
-    "@mozilla/readability": "^0.6.0",
-    "@popperjs/core": "^2.11.8",
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-flows": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
@@ -64,14 +57,10 @@
     "@typeagent/dispatcher-types": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
     "azure-ai-foundry": "workspace:*",
-    "bootstrap": "^5.3.3",
     "chalk": "^5.4.1",
     "chat-ui": "workspace:*",
     "cheerio": "^1.1.0",
     "conversation-memory": "workspace:*",
-    "cytoscape": "^3.32.0",
-    "cytoscape-dagre": "^2.5.0",
-    "dagre": "^0.8.5",
     "debug": "^4.4.0",
     "dompurify": "^3.4.11",
     "express": "^4.22.0",
@@ -87,9 +76,7 @@
     "jsonpath": "^1.2.0",
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
-    "markdown-it": "^14.2.0",
     "pdfjs-dist": "^5.3.31",
-    "prismjs": "^1.30.0",
     "puppeteer": "^24.15.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-adblocker": "^2.13.6",
@@ -109,14 +96,10 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@fluidframework/build-tools": "^0.57.0",
     "@typeagent/action-grammar-compiler": "workspace:*",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/chrome": "^0.0.256",
-    "@types/cytoscape": "^3.21.9",
-    "@types/cytoscape-dagre": "^2.3.3",
-    "@types/dagre": "^0.7.52",
     "@types/debug": "^4.1.12",
     "@types/express": "^4.17.21",
     "@types/html-to-text": "^9.0.4",
@@ -124,24 +107,14 @@
     "@types/jquery": "^3.5.14",
     "@types/jsdom": "^28.0.0",
     "@types/jsonpath": "0.2.4",
-    "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.0.0",
-    "@types/prismjs": "^1.26.3",
     "@types/ws": "^8.5.10",
-    "archiver": "^7.0.1",
-    "concurrently": "^9.1.2",
-    "crx": "^5.0.1",
-    "dotenv": "^16.5.0",
-    "find-up": "^7.0.0",
-    "fs-extra": "^11.2.0",
     "jest": "^29.7.0",
     "jest-chrome": "^0.8.0",
     "jest-environment-jsdom": "^29.7.0",
     "jsdom": "^28.1.0",
     "rimraf": "^6.0.1",
-    "rollup-plugin-copy": "^3.5.0",
     "ts-jest": "^29.3.2",
-    "ts-loader": "^9.5.1",
     "vite": "^6.4.3"
   },
   "fluidBuild": {
@@ -192,9 +165,11 @@
         ],
         "script": false
       },
-      "tsc:agent": [
-        "tsc:common"
-      ],
+      "tsc:agent": {
+        "dependsOn": [
+          "^build"
+        ]
+      },
       "build:views": {
         "dependsOn": [
           "tsc:views:server",

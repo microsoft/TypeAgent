@@ -7,7 +7,6 @@
     "outDir": "../../dist/agent",
     "types": ["node"]
   },
-  "include": ["./**/*", "../common/searchProvider.mts"],
-  "exclude": ["./backup/**/*", "./webFlows/webFlowSandbox.d.ts"],
-  "references": [{ "path": "../common" }]
+  "include": ["./**/*"],
+  "exclude": ["./backup/**/*", "./webFlows/webFlowSandbox.d.ts"]
 }

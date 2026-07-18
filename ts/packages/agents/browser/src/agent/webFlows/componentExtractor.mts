@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { BrowserControl } from "../../common/browserControl.mjs";
+import { BrowserControl } from "@typeagent/browser-control-rpc/types";
 import {
     ComponentDefinition,
     ExtractComponentFn,
