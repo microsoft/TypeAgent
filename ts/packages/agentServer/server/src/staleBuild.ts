@@ -56,7 +56,7 @@ function printStaleBanner(): void {
         return "| " + text + " ".repeat(inner - text.length) + " |";
     };
     const box = ["+" + bar + "+", ...lines.map(pad), "+" + bar + "+"];
-    process.stdout.write(
+    process.stderr.write(
         "\n" + box.map((l) => `${YELLOW_BG}${l}${RESET}`).join("\n") + "\n\n",
     );
 }

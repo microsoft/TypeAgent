@@ -253,7 +253,7 @@ async function main() {
     // us. Releasing the port/lock *before* spawning keeps the successor's bind
     // and lock acquisition from racing this process.
     async function restartServer() {
-        process.stdout.write(
+        process.stderr.write(
             "\x1b[1;30;43m Restart requested - relaunching agent server... \x1b[0m\n",
         );
         await teardownServer();
