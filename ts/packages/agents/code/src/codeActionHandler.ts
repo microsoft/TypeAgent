@@ -225,6 +225,15 @@ function attachSharedOnMessage(server: CodeAgentWebSocketServer): void {
                 "default",
                 sc === primary ? count : 0,
             );
+            // Refresh the dispatcher's cached readiness as the Coda
+            // extension connects/disconnects. Readiness is cached when a
+            // schema is enabled (before the extension has connected), so it
+            // stays `setup-required` until something re-probes it. Without
+            // this, the first code action after enabling (e.g. `@copilot
+            // fix`) trips the setupOnFirstUse gate, which runs `setup`
+            // ("VS Code is already connected.") in place of the action and
+            // drops it. Best-effort; swallows errors internally.
+            void sc.notifyReadinessChanged();
         }
     };
 }

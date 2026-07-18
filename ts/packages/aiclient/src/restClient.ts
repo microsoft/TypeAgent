@@ -3,6 +3,7 @@
 
 import { success, error, Result } from "typechat";
 import registerDebug from "debug";
+import { filterSecretsFromJsonString } from "@typeagent/common-utils";
 import type { EndpointPool, EndpointPoolMember } from "./endpointPool.js";
 import {
     markSuccess,
@@ -233,15 +234,57 @@ export async function* readResponseStream(
     }
 }
 
+// In-memory, non-persisted switch for scrubbing secrets out of outbound request
+// bodies. Defaults ON at every process start and is never read from or written
+// to disk; the `@config scrub` command flips it for the current session only.
+let egressSecretRedactionEnabled = true;
+
+/** Enable or disable outbound request-body secret scrubbing for this process. */
+export function setEgressSecretRedactionEnabled(enabled: boolean): void {
+    egressSecretRedactionEnabled = enabled;
+}
+
+/** Whether outbound request-body secret scrubbing is currently enabled. */
+export function isEgressSecretRedactionEnabled(): boolean {
+    return egressSecretRedactionEnabled;
+}
+
+// Base64 `data:` URLs (e.g. inline images in chat payloads) are opaque blobs:
+// scanning a multi-MB base64 string is pure hot-path cost, and its random
+// base64 can coincidentally match a key pattern - redacting that would corrupt
+// the image. Leave them untouched.
+const isBase64DataUrl = (value: string): boolean =>
+    /^data:[^,]*;base64,/.test(value);
+
+// Scrub secrets out of an outbound request body before it leaves the process.
+// Only string bodies are touched (the JSON payloads for chat / embeddings); the
+// JSON-aware pass keeps the document valid. Non-string bodies (FormData,
+// streams, undefined) and the request headers - which carry the API key - are
+// left untouched. Returns the original options unless the body actually changed.
+function redactRequestBody(options?: RequestInit): RequestInit | undefined {
+    if (
+        !egressSecretRedactionEnabled ||
+        options === undefined ||
+        typeof options.body !== "string"
+    ) {
+        return options;
+    }
+    const redacted = filterSecretsFromJsonString(options.body, {
+        skipValue: isBase64DataUrl,
+    });
+    return redacted === options.body ? options : { ...options, body: redacted };
+}
+
 async function callFetch(
     url: string,
     options?: RequestInit,
     timeout?: number,
     throttler?: FetchThrottler,
 ) {
+    const safeOptions = redactRequestBody(options);
     return throttler
-        ? throttler(() => fetchWithTimeout(url, options, timeout))
-        : fetchWithTimeout(url, options, timeout);
+        ? throttler(() => fetchWithTimeout(url, safeOptions, timeout))
+        : fetchWithTimeout(url, safeOptions, timeout);
 }
 
 export type FetchThrottler = (fn: () => Promise<Response>) => Promise<Response>;

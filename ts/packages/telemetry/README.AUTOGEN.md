@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=67b81a07c4cd8f7e7e4bbde48f0d4364e9e5162aac7b2f347f8ca3764b130b98 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=02523b371926f453474515dbaa3064af29cb1eb79239c49c1fd42a6e194f5ad1 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # telemetry — AI-generated documentation
@@ -12,19 +12,17 @@
 
 ## Overview
 
-The `telemetry` package is a TypeScript library designed to provide logging and monitoring capabilities for the TypeAgent project. It enables the collection and storage of telemetry data, such as events, logs, and performance metrics, by offering a variety of logger sinks that integrate with different storage backends, including MongoDB and Azure Cosmos DB.
-
-This package is a core dependency for many other packages and examples within the TypeAgent monorepo, making it a critical component for tracking and analyzing system behavior.
+The `telemetry` package is a TypeScript library that provides logging and monitoring capabilities for the TypeAgent project. It enables the collection, storage, and analysis of telemetry data, such as events, logs, and performance metrics. By offering a variety of logger sinks and utilities, the package supports both development and production use cases, making it a core dependency for many other packages and examples in the TypeAgent monorepo.
 
 ## What it does
 
-The `telemetry` package provides a flexible and extensible logging framework. Its primary functionality revolves around logger sinks, which are responsible for handling and storing log events. The package includes the following key features:
+The `telemetry` package is designed to handle diverse logging and monitoring needs through a modular and extensible architecture. Its primary features include:
 
 - **Database Logging**:
 
   - `createMongoDBLoggerSink`: Logs events to a MongoDB collection.
   - `createCosmosDBLoggerSink`: Logs events to an Azure Cosmos DB container.
-  - `createDatabaseLoggerSink`: Dynamically selects between MongoDB and Cosmos DB based on the availability of environment variables.
+  - `createDatabaseLoggerSink`: Dynamically selects between MongoDB and Cosmos DB based on the configured environment variables.
 
 - **Console Logging**:
 
@@ -32,13 +30,13 @@ The `telemetry` package provides a flexible and extensible logging framework. It
 
 - **Specialized Loggers**:
 
-  - `createPromptLogger`: Logs LLM (Large Language Model) prompts and related data.
+  - `createPromptLogger`: Captures and logs prompts and related data for Large Language Models (LLMs).
   - `createProfileLogger`: Captures and logs profiling data for performance analysis.
 
 - **Multi-Sink Logging**:
   - `MultiSinkLogger`: Combines multiple logger sinks, enabling simultaneous logging to different destinations.
 
-These features allow the `telemetry` package to support a wide range of use cases, from debugging during development to monitoring production systems.
+These features allow the `telemetry` package to support a wide range of use cases, from debugging during development to monitoring and analyzing production systems. The package is used extensively across the TypeAgent monorepo, including in components like `agent-api`, `agent-cache`, and `chat-agent`.
 
 ## Setup
 
@@ -47,13 +45,13 @@ To use the `telemetry` package, you need to configure the following environment 
 - `COSMOSDB_CONNECTION_STRING`: The connection string for Azure Cosmos DB. This is required if you plan to use the `createCosmosDBLoggerSink` or `createDatabaseLoggerSink` with Cosmos DB as the backend.
 - `MONGODB_CONNECTION_STRING`: The connection string for MongoDB. This is required if you plan to use the `createMongoDBLoggerSink` or `createDatabaseLoggerSink` with MongoDB as the backend.
 
-Ensure these environment variables are set in your environment or in a `.env` file at the root of the project. For more details on obtaining these values, refer to the hand-written README.
+These environment variables can be set in your shell or in a `.env` file located at the root of the project. For detailed instructions on obtaining these values, refer to the hand-written README.
 
 ## Key Files
 
 The `telemetry` package is organized into several key files, each responsible for specific functionality:
 
-- [indexNode.ts](./src/indexNode.ts): The main entry point of the package. It exports all the logger sinks, utilities, and core components.
+- [indexNode.ts](./src/indexNode.ts): The main entry point of the package, exporting all logger sinks, utilities, and core components.
 - [logger/logger.ts](./src/logger/logger.ts): Defines the core logging interfaces and classes, such as `Logger`, `LoggerSink`, `ChildLogger`, and `MultiSinkLogger`.
 - [logger/cosmosDBLoggerSink.ts](./src/logger/cosmosDBLoggerSink.ts): Implements the `CosmosDBLoggerSink`, which logs events to an Azure Cosmos DB container.
 - [logger/mongoLoggerSink.ts](./src/logger/mongoLoggerSink.ts): Implements the `MongoDBLoggerSink`, which logs events to a MongoDB collection.
@@ -64,7 +62,7 @@ The `telemetry` package is organized into several key files, each responsible fo
 
 ## How to extend
 
-The `telemetry` package is designed to be extensible, allowing contributors to add new functionality or modify existing components. Here are some guidelines for extending the package:
+The `telemetry` package is designed to be extensible, allowing contributors to add new functionality or modify existing components. Below are some guidelines for extending the package:
 
 ### Adding a New Logger Sink
 
@@ -128,11 +126,13 @@ By following these guidelines, you can extend the `telemetry` package to meet ne
 
 ### Entry points
 
-- default → `./dist/indexNode.js` _(not found on disk)_
+- default → [./dist/indexNode.js](./dist/indexNode.js)
 
 ### Dependencies
 
-Workspace: _None._
+Workspace:
+
+- [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 
 External: `chalk`, `debug`, `dotenv`, `find-config`, `mongodb`
 
@@ -163,6 +163,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter telemetry docs:verify-links` to spot-check._
+_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter telemetry docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -37,6 +37,12 @@ packages/shell/playwright-report/*
 # Generated cache files
 examples/websiteAliases/cache
 
+# Generated Action Browser (committed HTML + JSON catalog, regenerated and
+# committed per-PR by docs-pr-amend.yml; not hand-edited, so exclude from
+# formatting to avoid churn with the generator's own output).
+docs/overview/action-browser.html
+docs/overview/action-browser.json
+
 # VS Studio Files
 .vs/**
 

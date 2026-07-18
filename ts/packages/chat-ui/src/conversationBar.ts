@@ -158,6 +158,15 @@ export class ConversationBar {
     private isRenamingCurrent = false;
     private inlineRenameConversationId: string | undefined;
 
+    // Structural signature of the last-rendered status indicator. A reconnect
+    // countdown ticks once a second but only changes the hidden status text, so
+    // a matching key takes the in-place refresh path in renderStatusIndicator()
+    // instead of rebuilding the node - which would restart the pulse animation
+    // and dismiss the native tooltip the user is hovering.
+    private lastStatusKey: string | undefined;
+    // The visually-hidden status-text node, refreshed in place on those ticks.
+    private statusSrEl: HTMLElement | undefined;
+
     private readonly rootEl: HTMLDivElement;
     private readonly nameBtn: HTMLButtonElement;
     private readonly renameEditorEl: HTMLDivElement;
@@ -540,12 +549,19 @@ export class ConversationBar {
      */
     private renderConnectionIndicator(connection: ConnectionStatus): void {
         const fullText = formatConnectionStatusText(connection);
+        // Stable tooltip / accessible-label text: the same status WITHOUT the
+        // per-second countdown, so hovering the reconnecting plug doesn't
+        // flicker as the "retrying in Ns" line ticks down.
+        const titleText = formatConnectionStatusText(connection, {
+            omitCountdown: true,
+        });
         if (connection.phase === "stopped") {
             const actions = connection.actions ?? [];
             if (actions.length === 0) {
                 this.renderStatusIndicator({
                     stateClass: "disconnected",
                     fullText,
+                    titleText,
                 });
                 return;
             }
@@ -556,6 +572,7 @@ export class ConversationBar {
             this.renderStatusIndicator({
                 stateClass: "disconnected",
                 fullText,
+                titleText,
                 primaryAction: primary,
                 secondaryActions,
             });
@@ -567,6 +584,7 @@ export class ConversationBar {
                 stateClass: "connecting",
                 pulsing: true,
                 fullText,
+                titleText,
                 badge:
                     attempt && attempt > 0
                         ? { text: `-${attempt}`, attempt: true }
@@ -587,6 +605,14 @@ export class ConversationBar {
     private renderStatusIndicator(opts: {
         stateClass: string;
         fullText: string;
+        /**
+         * Stable tooltip / accessible-label text. Defaults to {@link fullText}.
+         * The reconnect countdown passes a version WITHOUT the per-second
+         * "retrying in Ns", so the native `title` stays put (native tooltips
+         * dismiss themselves when the attribute changes) while only the hidden
+         * live-status text is refreshed each tick.
+         */
+        titleText?: string;
         pulsing?: boolean;
         badge?: { text: string; attempt?: boolean };
         primaryAction?: ConnectionActionId;
@@ -594,6 +620,32 @@ export class ConversationBar {
     }): void {
         const secondaryActions = opts.secondaryActions ?? [];
         const hasActions = secondaryActions.length > 0;
+        const titleText = opts.titleText ?? opts.fullText;
+
+        // Everything that shapes the DOM (tint, pulse, badge, actions, tooltip)
+        // except the volatile full-status text. A reconnect countdown only
+        // changes that text, so successive ticks share this key and refresh in
+        // place below instead of rebuilding the node (which restarts the pulse
+        // and dismisses the tooltip the user is hovering).
+        const key = [
+            opts.stateClass,
+            opts.pulsing ? "1" : "0",
+            opts.badge
+                ? `${opts.badge.text}/${opts.badge.attempt ? 1 : 0}`
+                : "-",
+            opts.primaryAction ?? "-",
+            secondaryActions.join(","),
+            titleText,
+        ].join("|");
+        if (key === this.lastStatusKey) {
+            // Structure unchanged - refresh only the hidden live-status text.
+            if (this.statusSrEl) {
+                this.statusSrEl.textContent = opts.fullText;
+            }
+            return;
+        }
+        this.lastStatusKey = key;
+        this.statusSrEl = undefined;
 
         this.statusEl.className =
             `conversation-status-summary ${opts.stateClass} as-indicator` +
@@ -607,7 +659,7 @@ export class ConversationBar {
                 action === "start"
                     ? "click to start the server"
                     : "click to reconnect";
-            const label = `${opts.fullText} — ${hint}`;
+            const label = `${titleText} — ${hint}`;
             const plugBtn = document.createElement("button");
             plugBtn.type = "button";
             plugBtn.className = "conversation-status-plug";
@@ -625,7 +677,7 @@ export class ConversationBar {
             });
             this.statusEl.appendChild(plugBtn);
         } else {
-            this.statusEl.title = opts.fullText;
+            this.statusEl.title = titleText;
             const iconEl = document.createElement("span");
             iconEl.className =
                 "conversation-status-icon" + (opts.pulsing ? " pulsing" : "");
@@ -647,6 +699,7 @@ export class ConversationBar {
             srEl.className = "conversation-status-sr";
             srEl.textContent = opts.fullText;
             this.statusEl.appendChild(srEl);
+            this.statusSrEl = srEl;
         }
 
         for (const id of secondaryActions) {
