@@ -515,8 +515,15 @@ async function initializeBrowserContext(
         sessionId: "default",
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
+        // With no in-process control (connect mode, or extension-only), leave
+        // the preferred client type unset so selectActiveClientForSession uses
+        // its default priority (electron > extension > any). This lets the
+        // shell's inline browser (an "electron" client, clientId
+        // "inlineBrowser") drive control in connect mode while still selecting
+        // the extension when it's the only client. Standalone keeps "electron"
+        // because it provides the control in-process.
         preferredClientType:
-            clientBrowserControl === undefined ? "extension" : "electron",
+            clientBrowserControl === undefined ? undefined : "electron",
         index: undefined,
         localHostPort,
         // Shared WebSocket server is created lazily on the first

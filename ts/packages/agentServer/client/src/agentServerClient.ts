@@ -830,7 +830,7 @@ function spawnAgentServer(
 
 async function waitForServer(
     url: string,
-    timeoutMs: number = 60000,
+    timeoutMs: number = 120000,
     pollIntervalMs: number = 500,
 ): Promise<void> {
     const start = Date.now();
