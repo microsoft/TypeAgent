@@ -926,6 +926,22 @@ export function createEnhancedClientIO(
         }
     }
 
+    function displayStatusNotice(data: unknown): void {
+        const notice = (data ?? {}) as {
+            title?: string;
+            message?: string;
+            actionCommand?: string;
+        };
+        const text = [notice.title, notice.message].filter(Boolean).join(" — ");
+        const hint = notice.actionCommand ? `  (${notice.actionCommand})` : "";
+        const line = `⚠ ${text}${hint}`;
+        if (currentSpinner?.isActive()) {
+            currentSpinner.writeAbove(chalk.yellow(line));
+        } else {
+            console.warn(chalk.yellow(line));
+        }
+    }
+
     return {
         clear(): void {
             console.clear();
@@ -1100,23 +1116,7 @@ export function createEnhancedClientIO(
                     // Persistent status notice (chat-ui STATUS_NOTICE_EVENT).
                     // The shells render a toast/pill; the console prints one
                     // yellow line, preserving the pre-existing behavior.
-                    const notice = (data ?? {}) as {
-                        title?: string;
-                        message?: string;
-                        actionCommand?: string;
-                    };
-                    const text = [notice.title, notice.message]
-                        .filter(Boolean)
-                        .join(" \u2014 ");
-                    const hint = notice.actionCommand
-                        ? `  (${notice.actionCommand})`
-                        : "";
-                    const line = `\u26a0 ${text}${hint}`;
-                    if (currentSpinner?.isActive()) {
-                        currentSpinner.writeAbove(chalk.yellow(line));
-                    } else {
-                        console.warn(chalk.yellow(line));
-                    }
+                    displayStatusNotice(data);
                     break;
                 }
 
