@@ -198,6 +198,10 @@ async function main() {
                 },
                 collectCommandResult: true,
                 portRegistrar,
+                // Grant the browser agent permission to read other agents'
+                // local-view ports so inline-browser embedding works in
+                // connect mode, matching the standalone (in-process) shell.
+                allowSharedLocalView: ["browser"],
             },
             instanceDir,
         );

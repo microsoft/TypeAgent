@@ -18,7 +18,10 @@ import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import { getTraceId } from "agent-dispatcher/helpers/data";
 import { createShellAgentProvider } from "./agent.js";
-import { createInlineBrowserControl } from "./inlineBrowserControl.js";
+import {
+    createInlineBrowserControl,
+    createInlineBrowserControlRpcHandlers,
+} from "./inlineBrowserControl.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import {
     createLocalConversationBackend,
@@ -269,6 +272,18 @@ async function initializeDispatcher(
                 effectiveIdleTimeout,
             );
             const url = `ws://localhost:${connect}`;
+
+            // Connect mode: the browser agent runs out-of-process in the
+            // agent-server and cannot receive the shell's BrowserControl via
+            // agentInitOptions.browser (as standalone does). Instead, serve the
+            // inline control over the inlineBrowser socket's browserControl RPC
+            // channel and point browser-agent discovery at the connected
+            // server so the shell's own tabs remain drivable.
+            const browserIpc = BrowserAgentIpc.getinstance();
+            browserIpc.setAgentServerUrl(url);
+            browserIpc.enableInlineBrowserControl(
+                createInlineBrowserControlRpcHandlers(browserControl.control),
+            );
 
             // Reconnect state. When the WebSocket drops we attempt a few
             // backoff retries before giving up and surfacing the modal

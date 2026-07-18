@@ -5,6 +5,8 @@ import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { ShellWindow } from "./shellWindow.js";
 import type {
     BrowserControl,
+    BrowserControlCallFunctions,
+    BrowserControlInvokeFunctions,
     SearchProvider,
 } from "browser-typeagent/agent/types";
 import { createContentScriptRpcClient } from "browser-typeagent/contentScriptRpc/client";
@@ -592,4 +594,70 @@ export function createInlineBrowserControl(
             ipcMain.removeListener("inline-browser-rpc-reply", onReply);
         },
     };
+}
+
+/**
+ * Adapt a {@link BrowserControl} into the `{ invokeFunctions, callFunctions }`
+ * split that `createRpc` expects, so the shell can *serve* browser control over
+ * the browser agent's `browserControl` RPC channel (connect mode). This is the
+ * out-of-process equivalent of passing the control in-process via
+ * `agentInitOptions.browser` in standalone mode.
+ *
+ * `createRpc` dispatches handlers as `const f = handlers[name]; f(...args)` —
+ * i.e. the function is detached from the object, so `this` is lost. Some inline
+ * control methods (`zoomIn`/`zoomOut`) call `this.getPageUrl()`, so every method
+ * is wrapped to delegate back through the `control` object, preserving binding.
+ */
+export function createInlineBrowserControlRpcHandlers(control: BrowserControl): {
+    invokeFunctions: BrowserControlInvokeFunctions;
+    callFunctions: BrowserControlCallFunctions;
+} {
+    const invokeFunctions: BrowserControlInvokeFunctions = {
+        openWebPage: (url, options) => control.openWebPage(url, options),
+        closeWebPage: () => control.closeWebPage(),
+        closeAllWebPages: () => control.closeAllWebPages(),
+        goForward: () => control.goForward(),
+        goBack: () => control.goBack(),
+        reload: () => control.reload(),
+        getPageUrl: () => control.getPageUrl(),
+        scrollUp: () => control.scrollUp(),
+        scrollDown: () => control.scrollDown(),
+        zoomIn: () => control.zoomIn(),
+        zoomOut: () => control.zoomOut(),
+        zoomReset: () => control.zoomReset(),
+        followLinkByText: (keywords, openInNewTab) =>
+            control.followLinkByText(keywords, openInNewTab),
+        followLinkByPosition: (position, openInNewTab) =>
+            control.followLinkByPosition(position, openInNewTab),
+        closeWindow: () => control.closeWindow(),
+        search: (query, sites, searchProvider, options) =>
+            control.search(query, sites, searchProvider, options),
+        switchTabs: (tabDescription, tabIndex) =>
+            control.switchTabs(tabDescription, tabIndex),
+        readPageContent: () => control.readPageContent(),
+        stopReadPageContent: () => control.stopReadPageContent(),
+        captureScreenshot: () => control.captureScreenshot(),
+        getPageTextContent: () => control.getPageTextContent(),
+        getAutoIndexSetting: () => control.getAutoIndexSetting(),
+        getBrowserSettings: () => control.getBrowserSettings(),
+        getHtmlFragments: (useTimestampIds, compressionMode) =>
+            control.getHtmlFragments(useTimestampIds, compressionMode),
+        clickOn: (cssSelector) => control.clickOn(cssSelector),
+        setDropdown: (cssSelector, optionLabel) =>
+            control.setDropdown(cssSelector, optionLabel),
+        enterTextIn: (textValue, cssSelector, submitForm) =>
+            control.enterTextIn(textValue, cssSelector, submitForm),
+        awaitPageLoad: (timeout) => control.awaitPageLoad(timeout),
+        awaitPageInteraction: (timeout) =>
+            control.awaitPageInteraction(timeout),
+        downloadImage: (cssSelector, imageDescription, filename) =>
+            control.downloadImage(cssSelector, imageDescription, filename),
+        runBrowserAction: (actionName, parameters, schemaName) =>
+            control.runBrowserAction(actionName, parameters, schemaName),
+    };
+    const callFunctions: BrowserControlCallFunctions = {
+        setAgentStatus: (isBusy, message) =>
+            control.setAgentStatus(isBusy, message),
+    };
+    return { invokeFunctions, callFunctions };
 }
