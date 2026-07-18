@@ -116,6 +116,20 @@ Full pattern reference (file layouts, manifest flags, example code) is in
 - `view-ui` — above + `openLocalView` / `closeLocalView` lifecycle; `localView: true` in manifest
 - `command-handler` — replaces `executeAction` dispatch with a named `handlers` map
 
+**Keyword vectors (context-weighted collision resolution)**
+
+After writing the schema sources, the scaffolder generates a committed
+`<schema>.keywords.json` beside each one — the "onboarding moment" of the
+contextSelector keyword-vector lifecycle (see
+[docs/architecture/collision/onboarding-keyword-generation-design.md](../../../../docs/architecture/collision/onboarding-keyword-generation-design.md)).
+These vectors let the dispatcher route ambiguous requests to the new agent by
+what the conversation is about, without waiting for a
+`@collision keywords backfill` pass. Generation is best-effort: LLM distillation
+is preferred (folded into the phase's token accounting), the deterministic
+lexical floor is the fallback, and any failure is reported in the scaffold
+summary without blocking the phase. The scaffold result lists each generated
+keyword file with its distilled-vs-lexical counts.
+
 ## Testing
 
 Run phrase→action tests with the `runTests` action after completing the testing phase setup. Results are saved to `~/.typeagent/onboarding/<name>/testing/results.json`. The `proposeRepair` action uses an LLM to suggest schema/grammar fixes for failing tests.
