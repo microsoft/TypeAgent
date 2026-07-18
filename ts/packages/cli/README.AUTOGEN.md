@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=1327fce2c23f39a872f8c6fca8ab59549708e4256767d28b0b0aea7931ced119 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=8dea29981314fbb7c04f122afa775f97fd932d1710dd5866a5f431b832b58c1b -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-cli — AI-generated documentation
@@ -12,13 +12,13 @@
 
 ## Overview
 
-The `agent-cli` package is a command-line interface (CLI) for interacting with the TypeAgent system. It provides tools for developers to connect to the TypeAgent Dispatcher, manage conversations, execute commands, and test agent interactions. The CLI supports both interactive and non-interactive workflows, making it a versatile tool for development, debugging, and testing.
+The `agent-cli` package provides a command-line interface (CLI) for interacting with the TypeAgent system. It serves as a developer tool for managing conversations, testing agent interactions, and executing commands against the TypeAgent Dispatcher. The CLI supports both interactive and non-interactive workflows, making it a versatile utility for debugging, development, and testing.
 
 ## What it does
 
-The `agent-cli` package offers several subcommands, each tailored to specific tasks:
+The `agent-cli` package offers several subcommands, each designed for specific tasks:
 
-- **`connect`**: The default subcommand, enabling real-time interaction with the TypeAgent Dispatcher. Users can send requests, receive responses, and manage conversations interactively. This mode is ideal for testing and debugging agent behavior.
+- **`connect`**: The default subcommand, enabling interactive communication with the TypeAgent Dispatcher. Users can send requests, receive responses, and manage conversations in real time. This mode is particularly useful for testing and debugging agent behavior.
 - **`run`**: Executes dispatcher commands non-interactively. This includes sending requests, translating them, or generating explanations without requiring user confirmation.
 - **`replay`**: Replays chat histories for regression testing or generating test files. This is useful for validating agent behavior over time and ensuring consistency.
 - **`conversations`**: Provides tools for managing conversations on the agent server. Subcommands include:
@@ -57,9 +57,9 @@ For additional details on setup and usage, refer to the hand-written README.
 
 ## Key Files
 
-The `agent-cli` package is organized into several key files and directories, each responsible for specific functionalities:
+The `agent-cli` package is structured to support its various subcommands and functionalities. Key files and their responsibilities include:
 
-- **`src/commands/`**: Contains the implementation of CLI subcommands.
+- **`src/commands/`**: This directory contains the implementation of all CLI subcommands.
 
   - **`connect.ts`**: Implements the `connect` subcommand for real-time interaction with the TypeAgent Dispatcher.
   - **`run/index.ts`**: Handles the `run` subcommand for executing dispatcher commands non-interactively.
@@ -144,6 +144,6 @@ External: `@oclif/core`, `@oclif/plugin-help`, `chalk`, `debug`, `dotenv`, `html
 
 ---
 
-_Auto-generated against commit `66ead8985b850f2775c9b1a96cb7de1d08e2aee1` on `2026-07-18T01:38:20.033Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
+_Auto-generated against commit `296dbc72b659a615918e97949f106f0fee2bb9db` on `2026-07-18T05:37:16.532Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -534,6 +534,14 @@ export class ChatPanel {
      */
     private threadContainers = new Map<string, AgentMessageContainer>();
     /**
+     * Persistent, dismissable notification bubbles keyed by a caller-supplied
+     * notification id (e.g. the osNotifications agent's "os:<id>" dismiss
+     * key). Separate from `threadContainers` so notifications never collide
+     * with request-driven agent bubbles and can be removed independently when
+     * the underlying OS notification leaves the action center (osDismiss).
+     */
+    private notificationContainers = new Map<string, AgentMessageContainer>();
+    /**
      * For reasoning "step" bubbles: the div of the most recently committed
      * step bubble per thread. New step/temporary bubbles anchor on it so
      * successive phases render top-to-bottom in chronological order under the
@@ -2811,6 +2819,44 @@ export class ChatPanel {
     }
 
     /**
+     * Render a persistent, dismissable agent notification bubble (e.g. an OS
+     * notification forwarded by the osNotifications agent). Unlike
+     * {@link showToast}, the bubble stays in the chat scroll until
+     * {@link removeNotification} is called with the same `notificationId`.
+     * Calling again with an existing id updates that bubble in place.
+     */
+    public addNotification(
+        content: DisplayContent,
+        source: string,
+        notificationId: string,
+    ): void {
+        let container = this.notificationContainers.get(notificationId);
+        if (container === undefined) {
+            container = this.createAgentContainer(
+                source,
+                this.iconForSource(source),
+            );
+            this.notificationContainers.set(notificationId, container);
+        }
+        container.setMessage(content, source, undefined);
+        this.scrollToBottom();
+    }
+
+    /**
+     * Remove a notification bubble previously added via
+     * {@link addNotification}. Used by OS-notification dismiss handling — the
+     * OS reports a notification has left the action center and we drop the
+     * corresponding chat bubble. No-op (returns false) if the id is unknown.
+     */
+    public removeNotification(notificationId: string): boolean {
+        const container = this.notificationContainers.get(notificationId);
+        if (container === undefined) return false;
+        container.remove();
+        this.notificationContainers.delete(notificationId);
+        return true;
+    }
+
+    /**
      * Add a non-conversational system message styled distinctly from agent
      * messages (no avatar, no source label, no timestamp). Use for `@`-config
      * confirmations, session lifecycle events, and similar host notices.
@@ -3196,6 +3242,7 @@ export class ChatPanel {
         sentinel.className = "chat-sentinel";
         this.messageDiv.appendChild(sentinel);
         this.threadContainers.clear();
+        this.notificationContainers.clear();
         this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
@@ -5352,11 +5399,13 @@ class AgentMessageContainer {
             text = content;
         } else if (
             !Array.isArray(content) &&
+            content.type !== "structured" &&
             typeof content.content === "string"
         ) {
             text = content.content;
         } else if (
             !Array.isArray(content) &&
+            content.type !== "structured" &&
             Array.isArray(content.content) &&
             content.content.length > 0 &&
             typeof content.content[0] === "string"
@@ -5392,7 +5441,11 @@ class AgentMessageContainer {
         const summaryText = originalLines.slice(0, jsonStart).join("\n");
         const detailsText = originalLines.slice(jsonStart).join("\n");
 
-        if (typeof content === "object" && !Array.isArray(content)) {
+        if (
+            typeof content === "object" &&
+            !Array.isArray(content) &&
+            content.type !== "structured"
+        ) {
             return {
                 summary: { ...content, content: summaryText },
                 details: { ...content, content: detailsText, kind: undefined },

@@ -40,9 +40,10 @@ import {
     createActionResultFromError,
     createActionResultFromHtmlDisplay,
     createActionResultFromTextDisplay,
+    createStructuredResult,
     createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
-import { ActionResultSuccess } from "@typeagent/agent-sdk";
+import { ActionResultSuccess, BadgeTone } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
     CommandHandlerNoParams,
@@ -881,45 +882,6 @@ async function trySilentEmailSignIn(
     }
 }
 
-function formatEmailListHtml(
-    messages: EmailMessage[],
-    heading: string,
-): string {
-    const rows = messages.map((msg) => {
-        const from = msg.from
-            ? escapeHtml(msg.from.name || msg.from.address)
-            : "Unknown";
-        const subject = escapeHtml(msg.subject);
-        const date = msg.receivedDateTime
-            ? new Date(msg.receivedDateTime).toLocaleDateString()
-            : "";
-        const preview = msg.bodyPreview
-            ? escapeHtml(
-                  msg.bodyPreview.replace(/\s+/g, " ").trim().slice(0, 120),
-              )
-            : "";
-        const unread = msg.isRead === false;
-        const borderColor = unread ? "#4a9eda" : "#ccc";
-        const subjectWeight = unread ? "font-weight:bold;" : "";
-
-        // Wrap subject in a link if webLink is available
-        const subjectHtml = msg.webLink
-            ? `<a href="${escapeHtml(msg.webLink)}" target="_blank" style="${subjectWeight}color:#1a1a1a;text-decoration:none;" title="Open in browser">${subject}</a>`
-            : `<span style="${subjectWeight}">${subject}</span>`;
-
-        return `<div style="border-left:3px solid ${borderColor};padding:6px 10px;margin-bottom:6px;background:#f8f9fa;">
-  <div>${subjectHtml} <span style="color:#888;font-size:11px;">&middot; ${date}</span></div>
-  <div style="color:#555;font-size:12px;">From: ${from}</div>
-  ${preview ? `<div style="color:#777;font-size:12px;margin-top:2px;">${preview}</div>` : ""}
-</div>`;
-    });
-
-    return `<div style="font-family:-apple-system,sans-serif;font-size:13px;">
-<div style="color:#666;margin-bottom:8px;">${escapeHtml(heading)}</div>
-${rows.join("\n")}
-</div>`;
-}
-
 function formatEmailListPlain(
     messages: EmailMessage[],
     heading: string,
@@ -929,6 +891,57 @@ function formatEmailListPlain(
         lines.push(formatMessageSummary(msg));
     }
     return lines.join("\n");
+}
+
+// Build a structured email-list result: a heading + a list block (one item
+// per message, with the subject as a link, a "From · date" subtitle, and an
+// unread badge) plus a machine-readable rawData payload. The SDK derives the
+// markdown/text fallback for clients that can't render blocks.
+function buildStructuredEmailList(
+    messages: EmailMessage[],
+    heading: string,
+): ActionResultSuccess {
+    const items = messages.map((msg) => {
+        const from = msg.from ? msg.from.name || msg.from.address : "Unknown";
+        const date = msg.receivedDateTime
+            ? new Date(msg.receivedDateTime).toLocaleDateString()
+            : "";
+        const preview = msg.bodyPreview
+            ? msg.bodyPreview.replace(/\s+/g, " ").trim().slice(0, 120)
+            : "";
+        const subtitleParts = [`From ${from}`];
+        if (date) subtitleParts.push(date);
+        if (preview) subtitleParts.push(preview);
+        const unread = msg.isRead === false;
+        return {
+            text: msg.subject || "(no subject)",
+            ...(msg.webLink ? { href: msg.webLink } : {}),
+            subtitle: subtitleParts.join(" · "),
+            badges: unread ? (["info"] as BadgeTone[]) : [],
+        };
+    });
+
+    const rawData = messages.map((msg) => ({
+        subject: msg.subject,
+        from: msg.from
+            ? { name: msg.from.name, address: msg.from.address }
+            : undefined,
+        receivedDateTime: msg.receivedDateTime,
+        isRead: msg.isRead,
+        webLink: msg.webLink,
+        bodyPreview: msg.bodyPreview,
+    }));
+
+    return createStructuredResult(
+        [
+            { kind: "heading", level: 3, text: heading },
+            { kind: "list", items },
+        ],
+        {
+            rawData,
+            historyText: formatEmailListPlain(messages, heading),
+        },
+    );
 }
 
 const SELF_TERMS = new Set(["myself", "me", "my email", "i", "my", "s"]);
@@ -1116,10 +1129,7 @@ async function handleFindEmailAction(
             return "No emails found in inbox.";
         }
         const heading = `Inbox (${messages.length} messages):`;
-        return createActionResultFromHtmlDisplay(
-            formatEmailListHtml(messages, heading),
-            formatEmailListPlain(messages, heading),
-        );
+        return buildStructuredEmailList(messages, heading);
     }
 
     // Provider search — primary path for all queries
@@ -1207,10 +1217,7 @@ ${sourceLinksHtml}
 
     // Metadata-only query or RAG fallback: show email list
     const heading = `Found ${messages.length} email(s):`;
-    return createActionResultFromHtmlDisplay(
-        formatEmailListHtml(messages, heading),
-        formatEmailListPlain(messages, heading),
-    );
+    return buildStructuredEmailList(messages, heading);
 }
 
 /**

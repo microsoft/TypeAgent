@@ -953,9 +953,27 @@ window.addEventListener("message", (event) => {
                 clearQueueChip(rid);
                 if (msg.aliasRequestId) clearQueueChip(msg.aliasRequestId);
             } else if (msg.event === "inline") {
-                chatPanel.showInline(msg.data, msg.source);
+                if (msg.source === "osNotifications" && rid) {
+                    // OS notifications render as persistent, dismissable
+                    // bubbles (removed on osDismiss), not ephemeral rows.
+                    // The notificationId ("os:<id>") arrives as requestId.
+                    chatPanel.addNotification(msg.data, msg.source, rid);
+                } else {
+                    chatPanel.showInline(msg.data, msg.source);
+                }
             } else if (msg.event === "toast") {
-                chatPanel.showToast(msg.data, msg.source);
+                if (msg.source === "osNotifications" && rid) {
+                    chatPanel.addNotification(msg.data, msg.source, rid);
+                } else {
+                    chatPanel.showToast(msg.data, msg.source);
+                }
+            } else if (msg.event === "osDismiss") {
+                // The OS notification left the action center — drop the
+                // matching persistent bubble. data.id is the "os:<id>"
+                // notificationId used on the corresponding "added" event.
+                if (msg.data && typeof msg.data.id === "string") {
+                    chatPanel.removeNotification(msg.data.id);
+                }
             } else if (msg.event === STATUS_NOTICE_EVENT) {
                 const notice = parseStatusNotice(msg.data);
                 if (notice) {

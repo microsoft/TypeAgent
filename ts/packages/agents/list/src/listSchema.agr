@@ -150,10 +150,23 @@
     }
 };
 
+// listLists - show which lists exist
+// The literal word "lists" anchors these rules so they beat wildcard-heavy
+// patterns and the system.conversation listConversation rule.
+<ListLists> = (can you)? (list | show | display) (me)? (all | my | the)? lists -> {
+    actionName: "listLists",
+    parameters: {}
+}
+  | (what | which) lists (do | are)? (i | we | there)? (have)? -> {
+    actionName: "listLists",
+    parameters: {}
+};
+
 import { ListAction } from "./listSchema.ts";
 
 <Start> : ListAction = <AddItems>
   | <RemoveItems>
   | <CreateList>
   | <GetList>
-  | <ClearList>;
+  | <ClearList>
+  | <ListLists>;

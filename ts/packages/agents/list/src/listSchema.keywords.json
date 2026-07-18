@@ -150,6 +150,19 @@
       "bulletin",
       "manifest",
       "summary"
+    ],
+    "listLists": [
+      "list",
+      "lists",
+      "collection",
+      "catalog",
+      "inventory",
+      "directory",
+      "index",
+      "roster",
+      "registry",
+      "overview",
+      "all"
     ]
   }
 }

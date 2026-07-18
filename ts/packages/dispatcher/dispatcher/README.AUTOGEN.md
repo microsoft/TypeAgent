@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=2040272b10ef9408d0abe4ccce2c2868414ca0d279210b90e13c54ceb57f1223 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6f9388013ab4fb7521fd48d811b2b318df29161aa81985f820c760178ebba58f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a TypeScript library that serves as the central component for processing user requests in the TypeAgent ecosystem. It translates natural language inputs into structured actions using large language models (LLMs) and coordinates interactions between various application agents. The Dispatcher is designed to work with multiple front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for building personal agents with natural language interfaces.
+The TypeAgent Dispatcher is a TypeScript library that serves as the core component of the TypeAgent ecosystem. It processes user requests, translates natural language inputs into structured actions using large language models (LLMs), and coordinates interactions between various application agents. The Dispatcher is designed to integrate with multiple front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for building personal agents with natural language interfaces.
 
 ## What it does
 
@@ -218,7 +218,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-r
 - [./src/context/dispatcher/schema/clarifyActionSchema.ts](./src/context/dispatcher/schema/clarifyActionSchema.ts)
 - [./src/context/dispatcher/schema/dispatcherActionSchema.ts](./src/context/dispatcher/schema/dispatcherActionSchema.ts)
 - [./src/context/dispatcher/schema/lookupActionSchema.ts](./src/context/dispatcher/schema/lookupActionSchema.ts)
-- _…and 211 more under `./src/`._
+- _…and 212 more under `./src/`._
 
 ### Environment variables
 
@@ -236,6 +236,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `66ead8985b850f2775c9b1a96cb7de1d08e2aee1` on `2026-07-18T01:38:20.033Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `c97eb42726a9196c7ac72138faa0777c5cbc1aab` on `2026-07-18T09:48:36.613Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

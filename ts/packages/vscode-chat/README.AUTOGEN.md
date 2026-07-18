@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=fcc17dd068ab8fd02eab7cca07c646c712452b0290eb712a36e2a4dd04c2dc51 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=9c17c82ecbf933d7ef131ca06ff0b70964c66221b00cf6812cdc21ea69758f38 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-chat — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `vscode-chat` package integrates TypeAgent as a third-party agent within Visual Studio Code's native Chat view. This extension uses the proposed `chatSessionsProvider` API to enable users to interact with TypeAgent sessions directly in VS Code. Conversations initiated through this extension, the Electron shell, the CLI, or `vscode-shell` are synchronized and appear as session items in the Chat sidebar. Prompts sent in these sessions are routed through a running TypeAgent agent server.
+The `vscode-chat` package integrates TypeAgent as a third-party agent within Visual Studio Code's native Chat view. It leverages the proposed `chatSessionsProvider` API to allow users to interact with TypeAgent sessions directly in VS Code. Conversations initiated through this extension, the Electron shell, the CLI, or `vscode-shell` are synchronized and appear as session items in the Chat sidebar. Prompts sent in these sessions are routed through a running TypeAgent agent server.
 
 ## What it does
 
@@ -123,6 +123,6 @@ External: `ansi_up`, `debug`
 
 ---
 
-_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-chat docs:verify-links` to spot-check._
+_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-chat docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

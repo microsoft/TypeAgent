@@ -1105,6 +1105,275 @@ table.table-message td {
 }
 
 /* =========================================================================
+   Structured-content blocks (sc-*) — Phase 3a
+   Used by chat-ui/setContent.ts renderStructuredContent().
+   ========================================================================= */
+
+/* --- Headings ------------------------------------------------------------ */
+
+.sc-heading {
+  font-weight: 600;
+  margin: 0.5em 0 0.25em;
+}
+
+.sc-heading-1 {
+  font-size: 1.4em;
+}
+.sc-heading-2 {
+  font-size: 1.2em;
+}
+.sc-heading-3 {
+  font-size: 1.05em;
+}
+
+/* --- Text / prose -------------------------------------------------------- */
+
+.sc-text {
+  margin: 0.25em 0;
+}
+
+/* --- Tables -------------------------------------------------------------- */
+
+.sc-table-wrap {
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+table.sc-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9em;
+}
+
+table.sc-table th,
+table.sc-table td {
+  border: 1px solid var(--vscode-editorWidget-border, #ccc);
+  padding: 4px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+table.sc-table thead th {
+  background: var(
+    --chat-conversation-list-hover-background,
+    rgba(0, 0, 0, 0.06)
+  );
+  color: var(--chat-conversation-foreground, #1f1f1f);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+table.sc-table tbody tr:nth-child(even) {
+  background: var(--vscode-list-hoverBackground, rgba(0, 0, 0, 0.04));
+}
+
+.sc-cell-number {
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-cell-date {
+  white-space: nowrap;
+}
+
+/* Sort button (Phase 4 wires up the click handler; button is always rendered
+   so column widths don't shift when interactivity is enabled later). */
+.sc-sort-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75em;
+  opacity: 0.5;
+  padding: 0 2px;
+  vertical-align: middle;
+}
+
+.sc-sort-btn:hover {
+  opacity: 1;
+}
+
+/* Filter input (Phase 4a) */
+.sc-filter-input {
+  background: var(--vscode-input-background, #fff);
+  border: 1px solid var(--vscode-input-border, #ccc);
+  border-radius: 3px;
+  color: var(--vscode-input-foreground, inherit);
+  display: block;
+  font-size: 0.85em;
+  margin-bottom: 4px;
+  padding: 3px 7px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sc-filter-input::placeholder {
+  color: var(--vscode-input-placeholderForeground, #999);
+}
+
+/* Pagination (Phase 4b) — rows hidden by the page cap or filter. */
+.sc-row-hidden,
+.sc-row-filtered {
+  display: none;
+}
+
+.sc-show-more {
+  background: none;
+  border: none;
+  color: var(--vscode-textLink-foreground, #1a73e8);
+  cursor: pointer;
+  display: block;
+  font-size: 0.85em;
+  margin: 4px 0 0;
+  padding: 2px 0;
+  text-align: left;
+}
+
+.sc-show-more:hover {
+  text-decoration: underline;
+}
+
+/* --- Badges -------------------------------------------------------------- */
+
+.sc-badge {
+  border-radius: 3px;
+  display: inline-block;
+  font-size: 0.8em;
+  font-weight: 600;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.sc-badge-neutral {
+  background: var(--vscode-badge-background, #999);
+  color: var(--vscode-badge-foreground, #fff);
+}
+
+.sc-badge-info {
+  background: var(--vscode-statusBarItem-activeBackground, #007acc);
+  color: #fff;
+}
+
+.sc-badge-success {
+  background: var(--vscode-testing-iconPassed, #388a34);
+  color: #fff;
+}
+
+.sc-badge-warning {
+  background: var(--vscode-editorWarning-foreground, #bf8803);
+  color: #fff;
+}
+
+.sc-badge-error {
+  background: var(--vscode-errorForeground, #cc3333);
+  color: #fff;
+}
+
+/* --- Lists --------------------------------------------------------------- */
+
+.sc-list {
+  border: 1px solid var(--vscode-editorWidget-border, #ccc);
+  border-radius: 6px;
+  margin: 0.5em 0;
+  padding: 8px 14px 8px 30px;
+  background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.06));
+}
+
+.sc-list li {
+  margin: 0.2em 0;
+}
+
+.sc-list-subtitle {
+  color: var(--vscode-descriptionForeground, #717171);
+  font-size: 0.9em;
+}
+
+/* --- Key-value table ----------------------------------------------------- */
+
+table.sc-kv-table {
+  border-collapse: collapse;
+  margin: 0.25em 0;
+}
+
+table.sc-kv-table th.sc-kv-label {
+  color: var(--vscode-descriptionForeground, #717171);
+  font-weight: 600;
+  padding-right: 12px;
+  text-align: right;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+table.sc-kv-table td.sc-kv-value {
+  text-align: left;
+  vertical-align: top;
+}
+
+/* --- Cards --------------------------------------------------------------- */
+
+.sc-card {
+  border: 1px solid var(--vscode-editorWidget-border, #ccc);
+  border-radius: 6px;
+  margin: 0.5em 0;
+  padding: 10px 14px;
+}
+
+.sc-card-title {
+  font-size: 1.05em;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.sc-card-subtitle {
+  color: var(--vscode-descriptionForeground, #717171);
+  font-size: 0.9em;
+  margin-bottom: 6px;
+}
+
+table.sc-kv-table.sc-card-fields {
+  margin-top: 6px;
+}
+
+/* --- Images -------------------------------------------------------------- */
+
+.sc-figure {
+  display: inline-block;
+  margin: 0.5em 0;
+  max-width: 100%;
+}
+
+.sc-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.sc-caption {
+  color: var(--vscode-descriptionForeground, #717171);
+  font-size: 0.85em;
+  margin-top: 4px;
+  text-align: center;
+}
+
+/* --- Code blocks --------------------------------------------------------- */
+
+.sc-code {
+  background: var(--vscode-textCodeBlock-background, #f0f0f0);
+  border-radius: 4px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.88em;
+  margin: 0.25em 0;
+  overflow-x: auto;
+  padding: 8px 12px;
+}
+
+/* --- Divider ------------------------------------------------------------- */
+
+.sc-divider {
+  border: none;
+  border-top: 1px solid var(--vscode-editorWidget-border, #ccc);
+  margin: 0.75em 0;
+}
+
+/* =========================================================================
    Metrics (hover-reveal)
    ========================================================================= */
 
