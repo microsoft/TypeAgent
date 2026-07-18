@@ -454,9 +454,15 @@ never mentions, which is exactly why distillation is preferred when available.
 
 | Moment                 | Applies to                                             | What runs                                                                                           |
 | ---------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| **Onboarding flow**    | a newly-onboarded agent                                | LLM distillation (preferred), lexical fallback — as a step in the onboarding flow                   |
+| **Onboarding flow**    | a newly-onboarded agent                                | LLM distillation (preferred), lexical fallback — as a step in the onboarding flow **(implemented)** |
 | **Initial backfill**   | agents that shipped before this feature                | a one-time LLM-distillation pass over the existing roster (lexical fallback)                        |
 | **Dynamic generation** | agents/actions created at runtime (e.g. flow creation) | lexical extraction at load — optionally LLM-distilled if a model is available; no build step (§6.3) |
+
+The **onboarding moment** is implemented: the Onboarding Agent's scaffolder phase
+generates a committed `<schema>.keywords.json` beside each schema source it writes.
+See [onboarding-keyword-generation-design.md](./onboarding-keyword-generation-design.md)
+for the design and the shared `agent-dispatcher/contextSelector`
+`generateKeywordFileForSchemaSource` helper it (and future moments) reuse.
 
 The extractor is classic IR, no model call:
 

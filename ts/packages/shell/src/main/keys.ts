@@ -13,10 +13,6 @@ import {
     loadConfigSync,
     type ConfigTree,
 } from "@typeagent/config";
-import {
-    initRuntimeConfigFromProcessEnv,
-    warmupCopilotFromConfig,
-} from "@typeagent/aiclient";
 import yaml from "js-yaml";
 
 import { debugShell, debugShellError } from "./debug.js";
@@ -108,16 +104,31 @@ async function saveKeysToPersistence(dir: string | undefined, keys: string) {
 
 function populateKeys(parsed: ParsedKeys) {
     dotenv.populate(process.env as any, parsed, { override: true });
-    // After process.env is populated, build the typed runtime Config
-    // once so all aiclient consumers can read it via getRuntimeConfig().
-    // Legacy callers still see the same values via process.env.
-    initRuntimeConfigFromProcessEnv();
-    debugShell("Runtime Config initialized from process.env");
-    // Pre-warm the Copilot CLI/session/endpoint when it's the active provider
-    // (no-op otherwise) so the first request avoids the cold-start cost. This
-    // lives with the hosts rather than in runtimeConfig to avoid an aiclient
-    // import cycle. Fire-and-forget so startup is never blocked.
-    void warmupCopilotFromConfig();
+    debugShell("Service keys populated into process.env");
+}
+
+/**
+ * Initialize the aiclient runtime Config from `process.env` and pre-warm the
+ * Copilot provider. Only meaningful for the standalone (in-process
+ * agent-server) shell; the connect-only shell delegates all model work to the
+ * remote agent-server, so this is skipped and `@typeagent/aiclient` stays out
+ * of its dependency closure (loaded here via dynamic import). Fire-and-forget.
+ */
+export async function warmupRuntimeConfig(): Promise<void> {
+    try {
+        const { initRuntimeConfigFromProcessEnv, warmupCopilotFromConfig } =
+            await import("@typeagent/aiclient");
+        // Build the typed runtime Config once so all aiclient consumers can
+        // read it via getRuntimeConfig(); legacy callers still see process.env.
+        initRuntimeConfigFromProcessEnv();
+        debugShell("Runtime Config initialized from process.env");
+        // Pre-warm the Copilot CLI/session/endpoint when it's the active
+        // provider (no-op otherwise) so the first request avoids the cold-start
+        // cost. Fire-and-forget so startup is never blocked.
+        void warmupCopilotFromConfig();
+    } catch (e) {
+        debugShellError("Failed to initialize aiclient runtime config", e);
+    }
 }
 
 function parsedKeysEqual(a: ParsedKeys, b: ParsedKeys) {
@@ -286,8 +297,6 @@ export function tryLoadYamlConfig(envFile?: string): boolean {
         const keyCount = Object.keys(result.env).length;
         if (keyCount > 0) {
             debugShell("Loaded " + keyCount + " config keys from YAML");
-            initRuntimeConfigFromProcessEnv();
-            void warmupCopilotFromConfig();
             return true;
         }
     } catch (err) {

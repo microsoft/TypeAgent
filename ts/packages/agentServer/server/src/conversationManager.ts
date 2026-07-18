@@ -13,6 +13,7 @@ import {
     RenameConversationOptions,
 } from "@typeagent/agent-server-protocol";
 import { ClientIO, Dispatcher, DispatcherOptions } from "agent-dispatcher";
+import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import type {
     DisplayLogEntry,
     PendingInteractionRequest,
@@ -166,6 +167,19 @@ export type ConversationManager = {
     importCopilotMirror(
         params: ImportCopilotMirrorParams,
     ): Promise<ImportCopilotMirrorResult>;
+    /**
+     * Install a client-hosted agent (typically an agent-rpc proxy) as a dynamic
+     * agent on a conversation's dispatcher. The conversation must already have a
+     * dispatcher (i.e. a client has joined). Rejects if `name` already exists.
+     */
+    addClientAgent(
+        conversationId: string,
+        name: string,
+        manifest: AppAgentManifest,
+        appAgent: AppAgent,
+    ): Promise<void>;
+    /** Remove a client-hosted agent added via {@link addClientAgent}. */
+    removeClientAgent(conversationId: string, name: string): Promise<void>;
     close(): Promise<void>;
 };
 
@@ -844,6 +858,39 @@ export async function createConversationManager(
             if (record.sharedDispatcher.clientCount === 0) {
                 startIdleTimer(record);
             }
+        },
+
+        async addClientAgent(
+            conversationId: string,
+            name: string,
+            manifest: AppAgentManifest,
+            appAgent: AppAgent,
+        ): Promise<void> {
+            const record = conversations.get(conversationId);
+            if (record === undefined) {
+                throw new Error(`Conversation not found: ${conversationId}`);
+            }
+            const sharedDispatcher = await ensureDispatcher(record);
+            await sharedDispatcher.addDynamicAgent(name, manifest, appAgent);
+            debugConversation(
+                `Registered client agent "${name}" on conversation "${record.name}" (${conversationId})`,
+            );
+        },
+
+        async removeClientAgent(
+            conversationId: string,
+            name: string,
+        ): Promise<void> {
+            const record = conversations.get(conversationId);
+            // If the conversation or its dispatcher is already gone, there is
+            // nothing to remove.
+            if (record?.sharedDispatcher === undefined) {
+                return;
+            }
+            await record.sharedDispatcher.removeDynamicAgent(name);
+            debugConversation(
+                `Removed client agent "${name}" from conversation "${record.name}" (${conversationId})`,
+            );
         },
 
         listConversations(name?: string): ConversationInfo[] {

@@ -13,6 +13,7 @@ import {
     ClientIO,
     RequestId,
 } from "agent-dispatcher";
+import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import type {
     PendingInteractionRequest,
     PendingInteractionResponse,
@@ -716,6 +717,30 @@ export async function createSharedDispatcher(
         cancelQueued(requestId: string, reason: QueueCancelReason): boolean {
             return context.requestQueue.cancelQueued(requestId, reason);
         },
+        async addDynamicAgent(
+            name: string,
+            manifest: AppAgentManifest,
+            appAgent: AppAgent,
+        ): Promise<void> {
+            // Serialize with command processing and other agent mutations.
+            // Mirrors SessionContext.addDynamicAgent: install the agent, then
+            // recompute enable state so it becomes usable.
+            await context.commandLock(async () => {
+                await context.agents.addDynamicAgent(name, manifest, appAgent);
+                await context.agents.setState(
+                    context,
+                    context.session.getConfig(),
+                );
+            });
+        },
+        async removeDynamicAgent(name: string): Promise<void> {
+            await context.commandLock(async () => {
+                await context.agents.removeAgent(
+                    name,
+                    context.agentCache.grammarStore,
+                );
+            });
+        },
         __testSetNoClientsGraceMs(ms: number): void {
             noClientsGraceMs = ms;
         },
@@ -754,6 +779,18 @@ export type SharedDispatcher = {
     isQueueIdle(): boolean;
     /** Cancel a queued (not running) entry by requestId. */
     cancelQueued(requestId: string, reason: QueueCancelReason): boolean;
+    /**
+     * Install a client-hosted agent as a dynamic agent on this conversation's
+     * dispatcher. `appAgent` is typically an agent-rpc proxy that forwards
+     * calls back to the client. Rejects if an agent with `name` already exists.
+     */
+    addDynamicAgent(
+        name: string,
+        manifest: AppAgentManifest,
+        appAgent: AppAgent,
+    ): Promise<void>;
+    /** Remove a previously added dynamic agent. No-op if it doesn't exist. */
+    removeDynamicAgent(name: string): Promise<void>;
     /** @internal Test-only: tighten the no-clients grace window. */
     __testSetNoClientsGraceMs(ms: number): void;
 };
