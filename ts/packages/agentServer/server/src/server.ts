@@ -299,25 +299,26 @@ async function main() {
     // agent server used by the Electron shell — both go through the same
     // ConversationManager via createAgentServerConnectionHandler so there is
     // a single connection code path regardless of transport.
-    const connectionHandler = createAgentServerConnectionHandler({
-        conversationManager,
-        shutdown: shutdownServer,
-        restart: restartServer,
-        isStale: isStaleBuild,
-        getUserIdentity: () => userIdentity,
-        portRegistrar,
-        onConnect: () => {
-            connectionCount++;
-            if (idleShutdownTimer !== undefined) {
-                clearTimeout(idleShutdownTimer);
-                idleShutdownTimer = undefined;
-            }
-        },
-        onDisconnect: () => {
-            connectionCount--;
-            scheduleIdleShutdown();
-        },
-    });
+    const { handler: connectionHandler, broadcastStaleNotice }  =
+        createAgentServerConnectionHandler({
+            conversationManager,
+            shutdown: shutdownServer,
+            restart: restartServer,
+            isStale: isStaleBuild,
+            getUserIdentity: () => userIdentity,
+            portRegistrar,
+            onConnect: () => {
+                connectionCount++;
+                if (idleShutdownTimer !== undefined) {
+                    clearTimeout(idleShutdownTimer);
+                    idleShutdownTimer = undefined;
+                }
+            },
+            onDisconnect: () => {
+                connectionCount--;
+                scheduleIdleShutdown();
+            },
+        });
 
     wss = await createWebSocketChannelServer({ port }, connectionHandler);
 
@@ -340,8 +341,9 @@ async function main() {
     console.log(`Agent server started at ws://localhost:${port}`);
     writeServerPid(port, process.pid);
     // Warn (once) in this console if the server's own build changes on disk
-    // while this process keeps running the old code.
-    startStaleBuildWatcher(import.meta.url);
+    // while this process keeps running the old code, and push the notice to
+    // any already-connected clients the moment it's detected.
+    startStaleBuildWatcher(import.meta.url, broadcastStaleNotice);
     scheduleIdleShutdown();
 }
 

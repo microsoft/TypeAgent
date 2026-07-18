@@ -72,6 +72,21 @@ export type ConnectionHandlerDeps = {
     onDisconnect?: () => void;
 };
 
+// Payload for the "server is running out-of-date code" notice. Sent as
+// chat-ui's STATUS_NOTICE_EVENT ("statusNotice"): the shells render a
+// persistent toast that collapses to a pinned pill (with a Restart button),
+// the CLI prints a yellow line. Kept as a plain literal so the server needn't
+// depend on the chat-ui (DOM) package.
+const STALE_BUILD_NOTICE = {
+    id: "stale-build",
+    level: "warning",
+    title: "Server out of date",
+    message:
+        "This agent server was rebuilt on disk after it started, so it's running the old code.",
+    actionLabel: "Restart server",
+    actionCommand: "@server restart",
+} as const;
+
 /**
  * Build the per-connection handler shared by every agent-server transport.
  * This is the single place that wires a client connection's RPC channels to
@@ -82,7 +97,15 @@ export type ConnectionHandlerDeps = {
  */
 export function createAgentServerConnectionHandler(
     deps: ConnectionHandlerDeps,
-): ConnectionHandler {
+): {
+    handler: ConnectionHandler;
+    /**
+     * Push the stale-build notice to every currently-connected client. Called
+     * by the stale-build watcher the moment a rebuild is detected, so live
+     * clients see the toast immediately instead of only on their next join.
+     */
+    broadcastStaleNotice: () => void;
+} {
     const {
         conversationManager,
         shutdown,
@@ -94,7 +117,20 @@ export function createAgentServerConnectionHandler(
         onDisconnect,
     } = deps;
 
-    return (channelProvider: ChannelProvider, _closeFn: () => void) => {
+    // Each live connection registers a fn here that pushes the stale-build
+    // notice to its client (via that client's clientIO). Lets a mid-run stale
+    // detection reach already-connected clients, not just ones that join later.
+    const staleNotifiers = new Set<() => void>();
+    const broadcastStaleNotice = () => {
+        for (const notify of staleNotifiers) {
+            notify();
+        }
+    };
+
+    const handler: ConnectionHandler = (
+        channelProvider: ChannelProvider,
+        _closeFn: () => void,
+    ) => {
         onConnect?.();
 
         // Track which conversations this connection has joined.
@@ -138,8 +174,13 @@ export function createAgentServerConnectionHandler(
         };
 
         // Warn this connection about a stale server build at most once, even
-        // if it joins several conversations.
+        // if it joins several conversations - whether the trigger is a join or
+        // a mid-run broadcast.
         let notifiedStale = false;
+        // Sends the stale notice to this connection's client. Kept pointed at
+        // the latest joined conversation's clientIO and registered in
+        // staleNotifiers while the connection is live.
+        let staleNotifier: (() => void) | undefined;
 
         const invokeFunctions: AgentServerInvokeFunctions = {
             joinConversation: async (options?: DispatcherConnectOptions) => {
@@ -218,34 +259,35 @@ export function createAgentServerConnectionHandler(
                         connectionId: result.connectionId,
                     });
 
-                    // If this server is serving out-of-date code, warn the
-                    // freshly-joined client once so the user knows to restart
-                    // it. Sent as chat-ui's STATUS_NOTICE_EVENT ("statusNotice")
-                    // with a structured payload: the shells render a persistent
-                    // toast/pill (with a Restart button) and the CLI prints a
-                    // yellow line. Kept as a literal so the server needn't
-                    // depend on the chat-ui (DOM) package.
-                    if (isStale?.() === true && !notifiedStale) {
+                    // Point this connection's stale-notice sender at the
+                    // current conversation's clientIO and register it so a
+                    // mid-run stale detection can push to this client too. The
+                    // shared notifiedStale flag keeps it to once per connection
+                    // (whether triggered here on join or by a broadcast).
+                    if (staleNotifier !== undefined) {
+                        staleNotifiers.delete(staleNotifier);
+                    }
+                    staleNotifier = () => {
+                        if (notifiedStale) {
+                            return;
+                        }
                         notifiedStale = true;
                         try {
                             clientIORpcClient.notify(
                                 undefined,
                                 "statusNotice",
-                                {
-                                    id: "stale-build",
-                                    level: "warning",
-                                    title: "Server out of date",
-                                    message:
-                                        "This agent server was rebuilt on disk after it started, so it's running the old code.",
-                                    actionLabel: "Restart server",
-                                    actionCommand: "@server restart",
-                                },
+                                STALE_BUILD_NOTICE,
                                 "agent-server",
                             );
                         } catch {
-                            // Best effort - never fail a join because the
-                            // stale-build warning couldn't be delivered.
+                            // Best effort - never fail on a delivery error.
                         }
+                    };
+                    staleNotifiers.add(staleNotifier);
+
+                    // Already stale at join time? Warn this client now.
+                    if (isStale?.() === true) {
+                        staleNotifier();
                     }
 
                     const joinResult: JoinConversationResult = {
@@ -375,6 +417,10 @@ export function createAgentServerConnectionHandler(
         // Clean up all conversations on disconnect
         channelProvider.on("disconnect", () => {
             onDisconnect?.();
+            if (staleNotifier !== undefined) {
+                staleNotifiers.delete(staleNotifier);
+                staleNotifier = undefined;
+            }
             // Remove client-hosted agents first so they don't linger on the
             // shared dispatcher after this connection's socket is gone.
             for (const [conversationId, names] of clientAgents.entries()) {
@@ -424,4 +470,6 @@ export function createAgentServerConnectionHandler(
             );
         }
     };
+
+    return { handler, broadcastStaleNotice };
 }

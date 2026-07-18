@@ -22,9 +22,12 @@ export function isStaleBuild(): boolean {
     return staleDetected;
 }
 
-// Black text on a yellow background, bold - only emitted to a TTY so
-// redirected logs (files, pipes) stay readable.
-const YELLOW_BG = "\x1b[1;30;43m";
+// True black text (24-bit) on a yellow background - only emitted to a TTY so
+// redirected logs (files, pipes) stay readable. Uses an explicit RGB(0,0,0)
+// foreground instead of the ANSI "black" (30): most terminal themes remap
+// indexed black to a dark gray (so it shows on a dark background), which then
+// renders gray-on-yellow here and is hard to read. Truecolor can't be remapped.
+const YELLOW_BG = "\x1b[38;2;0;0;0;43m";
 const RESET = "\x1b[0m";
 
 /**
@@ -92,8 +95,13 @@ function tryWatch(
  * server down.
  *
  * @param entryUrl `import.meta.url` of the running entry module.
+ * @param onStale  Optional callback invoked once, when staleness is first
+ *   detected - used to push the notice to already-connected clients.
  */
-export function startStaleBuildWatcher(entryUrl: string): void {
+export function startStaleBuildWatcher(
+    entryUrl: string,
+    onStale?: () => void,
+): void {
     let distDir: string;
     try {
         distDir = path.dirname(fileURLToPath(entryUrl));
@@ -136,6 +144,15 @@ export function startStaleBuildWatcher(entryUrl: string): void {
         );
         printStaleBanner();
         watcher?.close();
+        // Push the notice to already-connected clients (not just ones that
+        // join after this point).
+        if (onStale !== undefined) {
+            try {
+                onStale();
+            } catch (e) {
+                debug(`onStale callback threw: ${e}`);
+            }
+        }
     };
 
     // Recursive first (covers dist subfolders); fall back to a flat watch on
