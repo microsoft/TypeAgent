@@ -380,17 +380,13 @@ const slashCommands: SlashCommand[] = [
         handler: async () => {
             const port = serverPort ?? AGENT_SERVER_DEFAULT_PORT;
             if (!serverConnection) {
-                console.log(
-                    chalk.red(
-                        "Not connected to an agent server; cannot restart.",
-                    ),
+                process.stdout.write(
+                    `${chalk.red("Not connected to an agent server; cannot restart.")}\n`,
                 );
                 return;
             }
-            console.log(
-                chalk.dim(
-                    `Requesting restart of server on port ${port}; it will relaunch and this CLI will disconnect. Reconnect with 'agent-cli connect'.`,
-                ),
+            process.stdout.write(
+                `${chalk.dim(`Requesting restart of server on port ${port}; it will relaunch and this CLI will disconnect. Reconnect with 'agent-cli connect'.`)}\n`,
             );
             try {
                 await serverConnection.restart();
