@@ -30,16 +30,42 @@ export function isStaleBuild(): boolean {
 const YELLOW_BG = "\x1b[38;2;0;0;0;43m";
 const RESET = "\x1b[0m";
 
+type StaleDetail = {
+    // The rebuilt .js file that tripped detection.
+    filename: string;
+    // Watch baseline: when this running worker started watching (its "current"
+    // build reference).
+    baselineMs: number;
+    // mtime of the newer file found on disk (the "detected" build).
+    mtimeMs: number;
+};
+
+// Wall-clock HH:MM:SS.mmm. Both stamps are from the same run, so the date is
+// redundant; millis matter for spotting sub-second build races.
+function formatClock(ms: number): string {
+    const d = new Date(ms);
+    const pad = (n: number, w = 2) => String(n).padStart(w, "0");
+    return (
+        `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
+        `.${pad(d.getMilliseconds(), 3)}`
+    );
+}
+
 /**
  * Print a hard-to-miss yellow banner announcing that the code on disk was
  * rebuilt while this process kept running the old build. One-shot: called
- * once, when staleness is first detected.
+ * once, when staleness is first detected. Includes the baseline-vs-detected
+ * timestamps (and which file) so a spurious trip - e.g. a build still writing
+ * dist just after this worker relaunched - is easy to spot.
  */
-function printStaleBanner(): void {
+function printStaleBanner(detail: StaleDetail): void {
+    const deltaS = ((detail.mtimeMs - detail.baselineMs) / 1000).toFixed(1);
     const lines = [
         "STALE BUILD",
         "agent-server code on disk was rebuilt after this process started;",
         "this window is still running the OLD build.",
+        `  rebuilt +${deltaS}s after start:  ${detail.filename}`,
+        `    baseline ${formatClock(detail.baselineMs)}  ->  file mtime ${formatClock(detail.mtimeMs)}`,
         "Restart to load the new code:  @server restart   (CLI: /restart)",
     ];
 
@@ -142,7 +168,7 @@ export function startStaleBuildWatcher(
         debug(
             `stale build detected via ${name} (mtime ${mtimeMs} > ${startMs})`,
         );
-        printStaleBanner();
+        printStaleBanner({ filename: name, baselineMs: startMs, mtimeMs });
         watcher?.close();
         // Push the notice to already-connected clients (not just ones that
         // join after this point).

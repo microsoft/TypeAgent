@@ -2654,7 +2654,15 @@ export class ChatPanel {
      * host with no extra wiring.
      */
     public showStatusNotice(notice: StatusNotice): void {
-        if (!notice || !notice.id || !notice.title) {
+        if (!notice || !notice.id) {
+            return;
+        }
+        // A retract request removes an existing notice instead of showing one.
+        if (notice.dismiss) {
+            this.clearStatusNotice(notice.id);
+            return;
+        }
+        if (!notice.title) {
             return;
         }
         // Replace any existing notice with this id.
@@ -2716,8 +2724,9 @@ export class ChatPanel {
                 this.injectCommand(command);
                 // Acknowledge the click and block a second trigger while the
                 // action is in flight (e.g. a duplicate "@server restart"
-                // racing the teardown). The notice removes itself on reconnect,
-                // when clear() runs during replay.
+                // racing the teardown). The emitter retracts this notice once
+                // the action completes (the agent-server dismisses it when the
+                // client rejoins the restarted server), so it clears itself.
                 actionBtn.disabled = true;
                 if (busyLabel) {
                     actionBtn.textContent = busyLabel;

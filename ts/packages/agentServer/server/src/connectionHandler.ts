@@ -85,11 +85,21 @@ const STALE_BUILD_NOTICE = {
         "This agent server was rebuilt on disk after it started, so it's running the old code.",
     actionLabel: "Restart server",
     actionCommand: "@server restart",
-    // Once clicked, the button disables and shows this while the restart runs;
-    // the notice itself clears on reconnect (clear() during replay).
+    // Once clicked, the button disables and shows this while the restart runs.
+    // The notice is retracted by STALE_BUILD_DISMISS when the client rejoins
+    // the fresh (non-stale) successor.
     actionBusyLabel: "Restarting...",
     actionBusyMessage:
         "Restarting the agent server. This notice will clear once it reconnects.",
+} as const;
+
+// Retracts STALE_BUILD_NOTICE on a client. Sent when a client joins a server
+// that is NOT stale, so a pill left over from a previous (pre-restart)
+// connection is cleared - the fresh successor never re-pushes the notice (it
+// isn't stale), so without this the old pill would linger forever.
+const STALE_BUILD_DISMISS = {
+    id: "stale-build",
+    dismiss: true,
 } as const;
 
 /**
@@ -290,10 +300,38 @@ export function createAgentServerConnectionHandler(
                     };
                     staleNotifiers.add(staleNotifier);
 
-                    // Already stale at join time? Warn this client now.
-                    if (isStale?.() === true) {
-                        staleNotifier();
-                    }
+                    // Deliver the on-join stale notice (or its retract) AFTER
+                    // this join RPC's response is sent. The client creates its
+                    // per-conversation clientIO channel only once
+                    // joinConversation resolves, and the shared channel router
+                    // DROPS messages addressed to a not-yet-created channel (no
+                    // buffering) - so a push from inside this handler is
+                    // silently lost. setImmediate runs in the check phase, after
+                    // the microtask that sends the response; the WebSocket
+                    // preserves order, so the client has created the channel by
+                    // the time this notify arrives.
+                    const joinStaleNotifier = staleNotifier;
+                    setImmediate(() => {
+                        if (isStale?.() === true) {
+                            // Already stale at join time - warn this client now.
+                            joinStaleNotifier();
+                        } else {
+                            // Not stale - retract any stale-build pill this
+                            // client still shows from a previous connection to a
+                            // since-restarted server (the fresh successor won't
+                            // re-push it).
+                            try {
+                                clientIORpcClient.notify(
+                                    undefined,
+                                    "statusNotice",
+                                    STALE_BUILD_DISMISS,
+                                    "agent-server",
+                                );
+                            } catch {
+                                // Best effort - never fail on a delivery error.
+                            }
+                        }
+                    });
 
                     const joinResult: JoinConversationResult = {
                         connectionId: result.connectionId,

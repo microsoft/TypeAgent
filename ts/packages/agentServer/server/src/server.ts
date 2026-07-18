@@ -32,8 +32,54 @@ import {
 } from "@typeagent/agent-server-client";
 import registerDebug from "debug";
 import os from "node:os";
-import { spawn } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { DefaultAzureCredential } from "@azure/identity";
+
+// Exit code the worker uses to ask the supervisor to relaunch it in place.
+const RESTART_EXIT_CODE = 42;  
+
+// A dead stdout/stderr pipe (e.g. the launching wrapper exited) must never
+// crash or busy-loop the server: swallow write errors so an EPIPE can't become
+// an uncaughtException that the handler then re-logs into an infinite loop.
+// Applies to both the supervisor and the worker (each evaluates this module).
+for (const stream of [process.stdout, process.stderr]) {
+    stream.on("error", () => {
+        // Intentionally ignored - keep serving even if our output goes nowhere.
+    });
+}
+
+// Supervisor bootstrap. The first invocation (no TYPEAGENT_SUPERVISED marker)
+// stays alive as a thin supervisor and spawn-loops a worker copy of itself,
+// sharing this process's stdio. Because the supervisor never exits, the
+// launching console/pipe (e.g. `pnpm start`) stays alive under the worker - so
+// a restart reuses the exact console instead of orphaning a dead-pipe zombie.
+// Restart = the worker exits RESTART_EXIT_CODE and we relaunch it in place; any
+// other exit ends the supervisor with that same code.
+if (process.env.TYPEAGENT_SUPERVISED !== "1") {
+    let code: number | null = RESTART_EXIT_CODE;
+    while (code === RESTART_EXIT_CODE) {
+        const result = spawnSync(
+            process.execPath,
+            [...process.execArgv, ...process.argv.slice(1)],
+            {
+                stdio: "inherit",
+                windowsHide: true,
+                env: { ...process.env, TYPEAGENT_SUPERVISED: "1" },
+            },
+        );
+        if (result.error) {
+            console.error(
+                "[agent-server] supervisor could not launch the worker:",
+                result.error,
+            );
+            process.exit(1);
+        }
+        code = result.status;
+    }
+    process.exit(code ?? 0);
+}
+
+// ===== From here down we are the worker: the real agent server. =====
 
 // Load config from YAML layers + Key Vault (replacing legacy dotenv).
 // vault.shared is auto-discovered from config.local.yaml / config.defaults.yaml.
@@ -251,11 +297,11 @@ async function main() {
         process.exit(0);
     }
 
-    // Restart in place: tear this process down, then relaunch an identical
-    // successor (same node flags + argv) that loads freshly-rebuilt code. The
-    // successor inherits this console, and `detached` + `unref` let it outlive
-    // us. Releasing the port/lock *before* spawning keeps the successor's bind
-    // and lock acquisition from racing this process.
+    // Restart in place: tear this process down, then exit with
+    // RESTART_EXIT_CODE so the supervisor at the top of this file relaunches a
+    // fresh worker in the SAME console/stdio (picking up rebuilt code).
+    // Releasing the port/lock here, before we exit, lets the relaunched worker
+    // bind and acquire the lock cleanly.
     async function restartServer() {
         // True 24-bit black on yellow: indexed ANSI black (30) is remapped to a
         // dark gray by most terminal themes, which reads as gray-on-yellow.
@@ -263,13 +309,7 @@ async function main() {
             "\x1b[38;2;0;0;0;43m Restart requested - relaunching agent server... \x1b[0m\n",
         );
         await teardownServer();
-        const child = spawn(
-            process.execPath,
-            [...process.execArgv, ...process.argv.slice(1)],
-            { detached: true, stdio: "inherit", windowsHide: false },
-        );
-        child.unref();
-        process.exit(0);
+        process.exit(RESTART_EXIT_CODE);
     }
 
     function scheduleIdleShutdown() {

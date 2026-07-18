@@ -53,6 +53,14 @@ export interface StatusNotice {
      * the action completes. Only applies when the notice has a {@link message}.
      */
     actionBusyMessage?: string;
+    /**
+     * When true this is a *retract* request rather than a notice to show: the
+     * host removes any existing notice with {@link id} and renders nothing.
+     * Lets an emitter take back a notice it previously pushed (e.g. the
+     * agent-server dropping the stale-build warning once a fresh build
+     * reconnects). Only {@link id} is required; other fields are ignored.
+     */
+    dismiss?: boolean;
 }
 
 /**
@@ -65,7 +73,14 @@ export function parseStatusNotice(data: unknown): StatusNotice | undefined {
         return undefined;
     }
     const d = data as Record<string, unknown>;
-    if (typeof d.id !== "string" || typeof d.title !== "string") {
+    if (typeof d.id !== "string") {
+        return undefined;
+    }
+    // A retract only needs an id; there is nothing to render.
+    if (d.dismiss === true) {
+        return { id: d.id, title: "", dismiss: true };
+    }
+    if (typeof d.title !== "string") {
         return undefined;
     }
     const notice: StatusNotice = { id: d.id, title: d.title };
