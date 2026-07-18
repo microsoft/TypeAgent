@@ -112,6 +112,18 @@ jobs:
           since: ${{ steps.base.outputs.since }}
           github-token: ${{ github.token }}
 
+      # keytar - a transitive native dependency pulled in when the read-only
+      # dispatcher and action-browser boot in the two steps below - dlopens
+      # libsecret at load time, but the GitHub-hosted runner image doesn't ship
+      # it. Without this, both steps fail with "libsecret-1.so.0: cannot open
+      # shared object file" and, being advisory (continue-on-error), silently
+      # leave the command reference and action browser stale. The repo
+      # Dockerfile installs the same package for the same reason.
+      - name: Install libsecret (keytar native runtime dep)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsecret-1-0
+
       # Regenerate the global command reference. Unlike the per-package
       # READMEs above, this is a deterministic transform of the dispatcher +
       # agent command descriptors (no LLM, no API keys), so it reuses the
