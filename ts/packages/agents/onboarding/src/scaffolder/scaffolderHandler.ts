@@ -22,11 +22,8 @@ import {
 import type { ApiSurface } from "../discovery/discoveryHandler.js";
 import { buildCliHandler } from "./cliHandlerTemplate.js";
 import { loadTemplate } from "./templateLoader.js";
-import {
-    generateAgentKeywordFiles,
-    KeywordSchemaTarget,
-    KeywordGenOutcome,
-} from "./agentKeywordFiles.js";
+import { generateAgentKeywordFiles } from "./agentKeywordFiles.js";
+import type { KeywordSchemaTarget } from "./agentKeywordFiles.js";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -119,7 +116,9 @@ async function handleScaffoldAgent(
     // original camelCase form.
     const packageName = `${integrationName.toLowerCase()}-agent`;
     const pascalName = toPascalCase(integrationName);
-    const targetDir = outputDir ?? path.join(AGENTS_DIR, integrationName);
+    const targetDir = path.resolve(
+        outputDir ?? path.join(AGENTS_DIR, integrationName),
+    );
     const srcDir = path.join(targetDir, "src");
 
     await fs.mkdir(srcDir, { recursive: true });
@@ -138,6 +137,11 @@ async function handleScaffoldAgent(
 
     // Track all files created for the output summary
     const files: string[] = [];
+
+    // Keyword-vector targets, captured as each schema source is written so the
+    // onboarding-moment keyword generation reuses the exact paths and type names
+    // the write phase produced instead of re-deriving them.
+    const keywordTargets: KeywordSchemaTarget[] = [];
 
     // Whether the main schema ended up as the placeholder-only union (every
     // action moved to a sub-group). Keyword generation skips it - it has no real
@@ -173,6 +177,15 @@ async function handleScaffoldAgent(
                 groupSchemaContent,
             );
             files.push(`src/actions/${group.name}ActionsSchema.ts`);
+            keywordTargets.push({
+                schemaName: `${integrationName}.${group.name}`,
+                schemaSourcePath: path.join(
+                    actionsDir,
+                    `${group.name}ActionsSchema.ts`,
+                ),
+                entryTypeName: `${groupPascal}Actions`,
+                schemaDescription: group.description,
+            });
 
             // Generate a filtered grammar file for this group
             const groupGrammarContent = buildSubSchemaAgr(
@@ -191,16 +204,15 @@ async function handleScaffoldAgent(
         // Emit the main schema with only un-grouped action types, so types are
         // disjoint between main and sub-schemas. If every action is grouped,
         // the main schema will contain no action types and a placeholder union.
-        const mainSchemaContent = buildMainSchemaWithSubGroups(
+        const mainSchema = buildMainSchemaWithSubGroups(
             pascalName,
             schemaTs,
             groupedActions,
         );
-        mainSchemaIsPlaceholder =
-            mainSchemaContent.includes('"__placeholder__"');
+        mainSchemaIsPlaceholder = mainSchema.isPlaceholder;
         await writeFile(
             path.join(srcDir, `${integrationName}Schema.ts`),
-            mainSchemaContent,
+            mainSchema.content,
         );
         await writeFile(
             path.join(srcDir, `${integrationName}Schema.agr`),
@@ -227,6 +239,14 @@ async function handleScaffoldAgent(
         `src/${integrationName}Schema.ts`,
         `src/${integrationName}Schema.agr`,
     );
+    if (!mainSchemaIsPlaceholder) {
+        keywordTargets.push({
+            schemaName: integrationName,
+            schemaSourcePath: path.join(srcDir, `${integrationName}Schema.ts`),
+            entryTypeName: `${pascalName}Actions`,
+            schemaDescription: state.config.description,
+        });
+    }
 
     // Stamp out manifest (with sub-action manifests if groups exist)
     await writeFile(
@@ -295,50 +315,14 @@ async function handleScaffoldAgent(
 
     // Onboarding moment: generate committed keyword vectors beside each schema
     // source so the agent ships ready for context-weighted collision resolution.
-    // Best-effort - it must never break scaffolding, so it is wrapped and its
-    // orchestrator catches per schema.
-    let keywordOutcome: KeywordGenOutcome | undefined;
-    try {
-        const targets: KeywordSchemaTarget[] = [];
-        if (!mainSchemaIsPlaceholder) {
-            targets.push({
-                schemaName: integrationName,
-                schemaSourcePath: path.join(
-                    srcDir,
-                    `${integrationName}Schema.ts`,
-                ),
-                entryTypeName: `${pascalName}Actions`,
-                schemaDescription: state.config.description ?? "",
-            });
-        }
-        if (subGroups) {
-            for (const group of subGroups) {
-                targets.push({
-                    schemaName: `${integrationName}.${group.name}`,
-                    schemaSourcePath: path.join(
-                        srcDir,
-                        "actions",
-                        `${group.name}ActionsSchema.ts`,
-                    ),
-                    entryTypeName: `${toPascalCase(group.name)}Actions`,
-                    schemaDescription: group.description,
-                });
-            }
-        }
-        keywordOutcome = await generateAgentKeywordFiles(targets, targetDir);
-        for (const g of keywordOutcome.generated) {
-            files.push(g.relPath);
-        }
-    } catch (e) {
-        keywordOutcome = {
-            generated: [],
-            errors: [
-                {
-                    schemaName: integrationName,
-                    error: e instanceof Error ? e.message : String(e),
-                },
-            ],
-        };
+    // `generateAgentKeywordFiles` never throws - each target that fails is
+    // recorded in `outcome.errors` and the rest still generate.
+    const keywordOutcome = await generateAgentKeywordFiles(
+        keywordTargets,
+        targetDir,
+    );
+    for (const g of keywordOutcome.generated) {
+        files.push(g.relPath);
     }
 
     let subSchemaNote = "";
@@ -354,7 +338,7 @@ async function handleScaffoldAgent(
     }
 
     let keywordNote = "";
-    if (keywordOutcome) {
+    {
         const parts: string[] = [];
         if (keywordOutcome.generated.length > 0) {
             parts.push(
@@ -484,7 +468,7 @@ function buildMainSchemaWithSubGroups(
     pascalName: string,
     fullSchemaTs: string,
     groupedActions: Set<string>,
-): string {
+): { content: string; isPlaceholder: boolean } {
     let out = fullSchemaTs;
 
     // Remove each grouped action's type block from the main schema.
@@ -527,7 +511,10 @@ function buildMainSchemaWithSubGroups(
         out = `${out.trimEnd()}\n\n${unionDecl}\n`;
     }
 
-    return out.trimEnd() + "\n";
+    return {
+        content: out.trimEnd() + "\n",
+        isPlaceholder: remainingTypeNames.length === 0,
+    };
 }
 
 // Build the main grammar when sub-groups exist by removing any rule whose

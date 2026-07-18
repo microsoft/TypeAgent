@@ -4,7 +4,6 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { computeActionSchemaFileHash } from "agent-cache";
 import { generateKeywordFileForSchemaSource } from "../src/context/contextSelector/keywordGen.js";
 import {
     loadKeywordFile,
@@ -71,7 +70,7 @@ describe("contextSelector/generateKeywordFileForSchemaSource", () => {
         fs.rmSync(dir, { recursive: true, force: true });
     });
 
-    it("lexical-only: writes a sibling file, canonical actions, matching sourceHash", async () => {
+    it("lexical-only: writes a sibling file, canonical actions, no sourceHash", async () => {
         const result = await generateKeywordFileForSchemaSource({
             schemaName: "grocery",
             schemaSourcePath: sourcePath,
@@ -102,11 +101,10 @@ describe("contextSelector/generateKeywordFileForSchemaSource", () => {
         ]);
         // The lexical floor mines the schema text for the domain noun.
         expect(file!.actions.addItems).toContain("grocery");
-        // sourceHash reproduces exactly what the dispatcher stamps at load:
-        // computeActionSchemaFileHash of the schema-TYPE name string + source.
-        expect(file!.sourceHash).toBe(
-            computeActionSchemaFileHash("GroceryActions", GROCERY_SCHEMA),
-        );
+        // No sourceHash is stamped at scaffold time: the runtime drift hash is
+        // over the compiled `.pas.json`, which does not exist yet. Backfill /
+        // refresh stamps the live hash post-build.
+        expect(file!.sourceHash).toBeUndefined();
     });
 
     it("LLM-preferred: distilled keywords flow through, provenance is llm", async () => {

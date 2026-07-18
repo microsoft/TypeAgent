@@ -58,9 +58,6 @@ The keyword machinery already exists in the dispatcher's
 - **`parseActionSchemaSource(source, schemaName, typeName, fileName)`** (from
   `@typeagent/action-schema`) — parses a schema source string into the
   action-name → definition map `produceKeywordFile` reads.
-- **`computeActionSchemaFileHash(schemaType, source)`** (from `agent-cache`) — the
-  drift hash the dispatcher stamps on every loaded schema. Reproduced here so the
-  committed file's `sourceHash` matches what the dispatcher will later compute (§4).
 
 The read path (`KeywordIndex`) resolves a keyword file **by schema-source path +
 action name** — the file's own `schema` field is cosmetic (telemetry /
@@ -78,7 +75,7 @@ Onboarding Agent — scaffolder phase (handleScaffoldAgent)
   │     src/actions/<group>ActionsSchema.ts      (per sub-group; type <GroupPascal>Actions)
   │
   ▼
-scaffolder/keywordGen.ts   (onboarding orchestrator — thin glue)
+scaffolder/agentKeywordFiles.ts   (onboarding orchestrator — thin glue)
   │  builds one target per real schema:
   │     { schemaName, schemaSourcePath, entryTypeName, schemaDescription }
   │  skips the main schema when it is the placeholder-only union
@@ -91,8 +88,7 @@ agent-dispatcher/contextSelector → generateKeywordFileForSchemaSource()
   ├─ read schema source file
   ├─ keywordFilePathFor(sourcePath)            → <schema>.keywords.json sibling
   ├─ parseActionSchemaSource(source, …, entryTypeName)   → action definitions
-  ├─ computeActionSchemaFileHash(entryTypeName, source)  → sourceHash (drift key)
-  ├─ produceKeywordFile({… , sourceHash}, {createModel})  → LLM-distilled (+ lexical floor)
+  ├─ produceKeywordFile({…}, {createModel})    → LLM-distilled (+ lexical floor)
   └─ writeKeywordFile(path, file)              → commit <schema>.keywords.json
   │
   ▼
@@ -111,8 +107,8 @@ resolution — no backfill needed.
 New module `context/contextSelector/keywordGen.ts`, exported from
 `contextSelector/index.ts` (so onboarding can reach it through the public
 `agent-dispatcher/contextSelector` subpath). It is the I/O orchestrator around
-the I/O-free `produceKeywordFile`: read source → resolve path → parse → hash →
-produce → write. The backfill (`collisionKeywordHandlers.ts`) keeps its own
+the I/O-free `produceKeywordFile`: read source → resolve path → parse → produce →
+write. The backfill (`collisionKeywordHandlers.ts`) keeps its own
 "produce from a **loaded ActionConfig**" path; both share `produceKeywordFile`.
 This helper is the "produce from a **schema source file we own**" path — reused by
 the onboarding moment now and available to the dynamic-generation moment later.
@@ -141,14 +137,16 @@ export async function generateKeywordFileForSchemaSource(
 ): Promise<GenerateKeywordFileResult>;
 ```
 
-**`entryTypeName` does double duty.** It is (a) the `typeName` `parseActionSchemaSource`
-uses to find the action union, and (b) the `schemaType` argument to
-`computeActionSchemaFileHash`. The dispatcher hashes the schema-**type name string**
-(`actionConfig.schemaType`, e.g. `"FooActions"`) — not the parsed object — so
-passing `entryTypeName` here reproduces the exact `sourceHash` the dispatcher will
-stamp when the agent later loads, letting a future refresh pipeline detect drift.
-Scaffolded agents carry no `<schema>.json` sidecar, so the hash's optional `config`
-argument is omitted.
+**`entryTypeName` locates the action union.** It is the `typeName`
+`parseActionSchemaSource` uses to find the action set in the source.
+
+**No `sourceHash` is stamped at scaffold time.** The drift hash the dispatcher
+stamps at load (`computeActionSchemaFileHash`) is computed over the schema file the
+manifest points at — the compiled `<name>Schema.pas.json` — which does not exist
+until the agent is built. Reproducing it here is impossible, so the committed file
+carries no `sourceHash`; `sourceHash` is optional in the file schema and the read
+path never validates it. Backfill / refresh stamps the correct live hash after the
+agent is built (§8).
 
 **Errors throw** (bad/relative path, unparseable schema, zero actions, write
 failure) so the caller can record them per target. `produceKeywordFile` itself
@@ -166,7 +164,7 @@ The `instrumentModel` wrapper folds LLM usage into the active
 onboarding action — so keyword-gen tokens are reported on the scaffold result's
 "Action Tokens" like every other phase.
 
-### 5.2 Orchestrator (`scaffolder/keywordGen.ts`)
+### 5.2 Orchestrator (`scaffolder/agentKeywordFiles.ts`)
 
 A thin onboarding-side function that turns the scaffold outputs into helper calls:
 
@@ -216,8 +214,8 @@ a failure here does not change the phase's `approved` status.
 - **Dispatcher unit test** (`test/*.spec.ts`, offline) for
   `generateKeywordFileForSchemaSource`: write a schema source to a temp dir, run
   the helper with (a) no model → assert `generatedBy: "lexical"`, a
-  `<name>.keywords.json` sibling exists with the real action names as keys, a
-  `sourceHash` equal to `computeActionSchemaFileHash(entryTypeName, source)`, and
+  `<name>.keywords.json` sibling exists with the real action names as keys, and
+  `sourceHash` is `undefined` (no hash is stamped at scaffold time), and
   (b) a stub model factory → assert `generatedBy: "llm"` and the stub's keywords
   flow through. Assert it throws on a zero-action / bad-path input.
 - **Manual E2E:** run the onboarding scaffolder for a small agent and confirm the
@@ -226,7 +224,7 @@ a failure here does not change the phase's `approved` status.
 
 ## 8. Out of scope
 
-- The **refresh pipeline** that re-distills drifted files (design §6.1) — the
-  `sourceHash` stamped here is what it will key off.
+- The **refresh pipeline** that re-distills drifted files (design §6.1) — it stamps
+  the live `sourceHash` (over the built `.pas.json`) that onboarding cannot compute.
 - The **dynamic-generation** moment (runtime-created agents) — the same helper is
   reusable there, but wiring it is separate work.
