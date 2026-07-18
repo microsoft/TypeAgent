@@ -22,6 +22,11 @@ import {
 import type { ApiSurface } from "../discovery/discoveryHandler.js";
 import { buildCliHandler } from "./cliHandlerTemplate.js";
 import { loadTemplate } from "./templateLoader.js";
+import {
+    generateAgentKeywordFiles,
+    KeywordSchemaTarget,
+    KeywordGenOutcome,
+} from "./agentKeywordFiles.js";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -134,6 +139,11 @@ async function handleScaffoldAgent(
     // Track all files created for the output summary
     const files: string[] = [];
 
+    // Whether the main schema ended up as the placeholder-only union (every
+    // action moved to a sub-group). Keyword generation skips it - it has no real
+    // action to distill.
+    let mainSchemaIsPlaceholder = false;
+
     // If sub-schema groups exist, partition actions disjointly: each action
     // type is emitted in exactly one schema file. Actions belonging to a group
     // move to that sub-schema; any remaining (un-grouped) actions stay in the
@@ -186,6 +196,8 @@ async function handleScaffoldAgent(
             schemaTs,
             groupedActions,
         );
+        mainSchemaIsPlaceholder =
+            mainSchemaContent.includes('"__placeholder__"');
         await writeFile(
             path.join(srcDir, `${integrationName}Schema.ts`),
             mainSchemaContent,
@@ -281,6 +293,54 @@ async function handleScaffoldAgent(
 
     await updatePhase(integrationName, "scaffolder", { status: "approved" });
 
+    // Onboarding moment: generate committed keyword vectors beside each schema
+    // source so the agent ships ready for context-weighted collision resolution.
+    // Best-effort - it must never break scaffolding, so it is wrapped and its
+    // orchestrator catches per schema.
+    let keywordOutcome: KeywordGenOutcome | undefined;
+    try {
+        const targets: KeywordSchemaTarget[] = [];
+        if (!mainSchemaIsPlaceholder) {
+            targets.push({
+                schemaName: integrationName,
+                schemaSourcePath: path.join(
+                    srcDir,
+                    `${integrationName}Schema.ts`,
+                ),
+                entryTypeName: `${pascalName}Actions`,
+                schemaDescription: state.config.description ?? "",
+            });
+        }
+        if (subGroups) {
+            for (const group of subGroups) {
+                targets.push({
+                    schemaName: `${integrationName}.${group.name}`,
+                    schemaSourcePath: path.join(
+                        srcDir,
+                        "actions",
+                        `${group.name}ActionsSchema.ts`,
+                    ),
+                    entryTypeName: `${toPascalCase(group.name)}Actions`,
+                    schemaDescription: group.description,
+                });
+            }
+        }
+        keywordOutcome = await generateAgentKeywordFiles(targets, targetDir);
+        for (const g of keywordOutcome.generated) {
+            files.push(g.relPath);
+        }
+    } catch (e) {
+        keywordOutcome = {
+            generated: [],
+            errors: [
+                {
+                    schemaName: integrationName,
+                    error: e instanceof Error ? e.message : String(e),
+                },
+            ],
+        };
+    }
+
     let subSchemaNote = "";
     if (subGroups) {
         subSchemaNote =
@@ -293,12 +353,38 @@ async function handleScaffoldAgent(
                 .join("\n");
     }
 
+    let keywordNote = "";
+    if (keywordOutcome) {
+        const parts: string[] = [];
+        if (keywordOutcome.generated.length > 0) {
+            parts.push(
+                `\n\n**Keyword vectors generated:** ${keywordOutcome.generated.length}\n` +
+                    keywordOutcome.generated
+                        .map(
+                            (g) =>
+                                `- \`${g.relPath}\` — ${g.actionCount} actions (${g.generatedBy}: ${g.distilled} distilled, ${g.lexical} lexical)`,
+                        )
+                        .join("\n"),
+            );
+        }
+        if (keywordOutcome.errors.length > 0) {
+            parts.push(
+                `\n\n**Keyword vectors skipped:** ${keywordOutcome.errors.length}\n` +
+                    keywordOutcome.errors
+                        .map((err) => `- **${err.schemaName}**: ${err.error}`)
+                        .join("\n"),
+            );
+        }
+        keywordNote = parts.join("");
+    }
+
     return createActionResultFromMarkdownDisplay(
         `## Agent scaffolded: ${integrationName}\n\n` +
             `**Output directory:** \`${targetDir}\`\n\n` +
             `**Files created:**\n` +
             files.map((f) => `- \`${f}\``).join("\n") +
             subSchemaNote +
+            keywordNote +
             `\n\n**Next step:** Phase 6 — use \`generateTests\` and \`runTests\` to validate.`,
     );
 }
