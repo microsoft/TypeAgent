@@ -321,7 +321,7 @@ export class BrowserAgentIpc {
         this.browserControlProvider?.notifyDisconnected();
         const provider = createChannelProviderAdapter(
             "browser:inline-control",
-            (message: any) => {
+            (message) => {
                 if (
                     this.webSocket &&
                     this.webSocket.readyState === WebSocket.OPEN

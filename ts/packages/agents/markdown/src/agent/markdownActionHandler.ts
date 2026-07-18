@@ -347,7 +347,7 @@ async function updateMarkdownContext(
                         // before it was forked).
                         setCurrentAgentContext(context.agentContext);
                     })
-                    .catch((e: any) => {
+                    .catch((e) => {
                         console.warn(
                             "[AGENT] Markdown view service background start failed:",
                             e?.message ?? e,

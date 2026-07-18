@@ -636,7 +636,7 @@ async function updateBrowserContext(
                         context.agentContext.localHostPort = 0;
                     });
                 })
-                .catch((e: any) => {
+                .catch((e) => {
                     debug(
                         "Browser view service background start failed:",
                         e?.message ?? e,
