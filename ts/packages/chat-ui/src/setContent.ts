@@ -8,8 +8,16 @@ import {
     DisplayType,
     DisplayMessageKind,
     MessageContent,
+    StructuredBlock,
+    StructuredContent,
+    TableBlock,
+    TableCell,
+    BadgeTone,
 } from "@typeagent/agent-sdk";
-import { getContentForType } from "@typeagent/agent-sdk/helpers/display";
+import {
+    getContentForType,
+    isStructuredContent,
+} from "@typeagent/agent-sdk/helpers/display";
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import { PlatformAdapter, ChatSettingsView } from "./platformAdapter.js";
@@ -19,6 +27,442 @@ ansiUpTextToHtml.use_classes = true;
 const ansiUpMarkdownToHtml = new AnsiUp();
 ansiUpMarkdownToHtml.use_classes = true;
 ansiUpMarkdownToHtml.escape_html = false;
+
+// ---------------------------------------------------------------------------
+// Structured-content HTML renderer (Phase 3a)
+// Converts a StructuredContent block document to an HTML string. DOMPurify
+// sanitizes it at the final sink in setContent(), so string concatenation here
+// is safe — we never set innerHTML before sanitization.
+// ---------------------------------------------------------------------------
+
+function esc(text: string): string {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function cellDisplayText(cell: TableCell): string {
+    if (cell === null || cell === undefined) return "";
+    if (typeof cell === "object") return cell.text;
+    return String(cell);
+}
+
+function badgeClass(tone: BadgeTone | undefined): string {
+    return `sc-badge sc-badge-${tone ?? "neutral"}`;
+}
+
+function renderTableCell(cell: TableCell, colType: string | undefined): string {
+    const text = cellDisplayText(cell);
+    const obj = typeof cell === "object" && cell !== null ? cell : null;
+    const href = obj?.href ?? undefined;
+    const badge = obj?.badge ?? undefined;
+    const tooltip = obj?.tooltip ? ` title="${esc(obj.tooltip)}"` : "";
+    const effectiveType = badge ? "badge" : href ? "link" : (colType ?? "text");
+
+    switch (effectiveType) {
+        case "link":
+            if (href) {
+                return `<a href="${esc(href)}" target="_blank"${tooltip}>${esc(text)}</a>`;
+            }
+            return esc(text);
+        case "badge": {
+            const tone = badge ?? "neutral";
+            return `<span class="${esc(badgeClass(tone))}"${tooltip}>${esc(text)}</span>`;
+        }
+        case "code":
+            return `<code${tooltip}>${esc(text)}</code>`;
+        case "number":
+            return `<span class="sc-cell-number"${tooltip}>${esc(text)}</span>`;
+        case "date":
+            return `<span class="sc-cell-date"${tooltip}>${esc(text)}</span>`;
+        default:
+            return tooltip ? `<span${tooltip}>${esc(text)}</span>` : esc(text);
+    }
+}
+
+function renderTableBlock(block: TableBlock): string {
+    const { columns, rows, caption, sortable, filterable, readonly, pageSize } =
+        block;
+    const sortAttr =
+        !readonly && sortable !== false ? ' data-sc-sortable="true"' : "";
+    const filterAttr =
+        !readonly && filterable ? ' data-sc-filterable="true"' : "";
+    const paginate =
+        typeof pageSize === "number" && pageSize > 0 && rows.length > pageSize;
+    const pageAttr = paginate ? ` data-sc-page-size="${pageSize}"` : "";
+    const parts: string[] = [
+        `<div class="sc-table-wrap"><table class="sc-table"${sortAttr}${filterAttr}${pageAttr}>`,
+    ];
+    if (caption) {
+        parts.push(`<caption class="sc-caption">${esc(caption)}</caption>`);
+    }
+    parts.push("<thead><tr>");
+    for (const col of columns) {
+        const align = col.align ? ` style="text-align:${esc(col.align)}"` : "";
+        const colSortable =
+            !readonly && (col.sortable ?? sortable ?? true) !== false;
+        const sortBtn = colSortable
+            ? ` <button class="sc-sort-btn" aria-label="sort by ${esc(col.header)}" data-sc-col="${esc(col.id)}" tabindex="0">↕</button>`
+            : "";
+        parts.push(`<th scope="col"${align}>${esc(col.header)}${sortBtn}</th>`);
+    }
+    parts.push("</tr></thead><tbody>");
+    for (let ri = 0; ri < rows.length; ri++) {
+        const row = rows[ri];
+        // Rows beyond the first page start hidden; the "Show more" control
+        // (wired in attachTableInteractivity) reveals them in batches.
+        const hidden =
+            paginate && ri >= pageSize! ? ' class="sc-row-hidden"' : "";
+        parts.push(`<tr${hidden}>`);
+        for (let ci = 0; ci < columns.length; ci++) {
+            const col = columns[ci];
+            const cell = row[ci] ?? "";
+            const align = col.align
+                ? ` style="text-align:${esc(col.align)}"`
+                : "";
+            parts.push(`<td${align}>${renderTableCell(cell, col.type)}</td>`);
+        }
+        parts.push("</tr>");
+    }
+    parts.push("</tbody></table>");
+    if (paginate) {
+        const remaining = rows.length - pageSize!;
+        parts.push(
+            `<button class="sc-show-more" data-sc-remaining="${remaining}">Show more (${remaining})</button>`,
+        );
+    }
+    parts.push("</div>");
+    return parts.join("");
+}
+
+function renderMarkdownToHtml(text: string): string {
+    const md = new MarkdownIt({ html: true });
+    type LinkOpenRenderRule = NonNullable<typeof md.renderer.rules.link_open>;
+    const defaultRender: LinkOpenRenderRule =
+        md.renderer.rules.link_open ??
+        ((tokens, idx, options, _env, self) =>
+            self.renderToken(tokens, idx, options));
+    md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+        tokens[idx].attrSet("target", "_blank");
+        return defaultRender(tokens, idx, options, env, self);
+    };
+    const rendered = md.render(text);
+    return ansiUpMarkdownToHtml.ansi_to_html(rendered);
+}
+
+function renderTextBlock(
+    block: Extract<StructuredBlock, { kind: "text" }>,
+): string {
+    const raw =
+        typeof block.text === "string"
+            ? block.text
+            : Array.isArray(block.text) && typeof block.text[0] === "string"
+              ? (block.text as string[]).join("\n")
+              : (block.text as string[][])
+                    .map((row) => row.join(" | "))
+                    .join("\n");
+    const fmt = block.format ?? "markdown";
+    if (fmt === "text") {
+        return `<p class="sc-text">${textToHtml(raw)}</p>`;
+    }
+    return `<div class="sc-text">${renderMarkdownToHtml(raw)}</div>`;
+}
+
+function renderListBlock(
+    block: Extract<StructuredBlock, { kind: "list" }>,
+): string {
+    const tag = block.ordered ? "ol" : "ul";
+    const items = block.items
+        .map((item) => {
+            const label = item.href
+                ? `<a href="${esc(item.href)}" target="_blank">${esc(item.text)}</a>`
+                : esc(item.text);
+            const subtitle = item.subtitle
+                ? ` <span class="sc-list-subtitle">${esc(item.subtitle)}</span>`
+                : "";
+            const badges = (item.badges ?? [])
+                .map((tone) => {
+                    const label = tone.charAt(0).toUpperCase() + tone.slice(1);
+                    return `<span class="${esc(badgeClass(tone))}">${esc(label)}</span>`;
+                })
+                .join(" ");
+            return `<li>${label}${subtitle}${badges ? " " + badges : ""}</li>`;
+        })
+        .join("");
+    return `<${tag} class="sc-list">${items}</${tag}>`;
+}
+
+function renderCardBlock(
+    block: Extract<StructuredBlock, { kind: "card" }>,
+): string {
+    const parts: string[] = [`<div class="sc-card">`];
+    if (block.title) {
+        const title = block.href
+            ? `<a href="${esc(block.href)}" target="_blank">${esc(block.title)}</a>`
+            : esc(block.title);
+        parts.push(`<div class="sc-card-title">${title}</div>`);
+    }
+    if (block.subtitle) {
+        parts.push(
+            `<div class="sc-card-subtitle">${esc(block.subtitle)}</div>`,
+        );
+    }
+    if (block.fields && block.fields.length > 0) {
+        const rows = block.fields
+            .map(
+                (pair) =>
+                    `<tr><th scope="row" class="sc-kv-label">${esc(pair.label)}</th>` +
+                    `<td class="sc-kv-value">${renderTableCell(pair.value, undefined)}</td></tr>`,
+            )
+            .join("");
+        parts.push(
+            `<table class="sc-kv-table sc-card-fields"><tbody>${rows}</tbody></table>`,
+        );
+    }
+    parts.push("</div>");
+    return parts.join("");
+}
+
+function renderBlock(block: StructuredBlock): string {
+    switch (block.kind) {
+        case "heading": {
+            const level = block.level ?? 1;
+            return `<h${level} class="sc-heading sc-heading-${level}">${esc(block.text)}</h${level}>`;
+        }
+        case "text":
+            return renderTextBlock(block);
+        case "table":
+            return renderTableBlock(block);
+        case "list":
+            return renderListBlock(block);
+        case "keyValue": {
+            const rows = block.pairs
+                .map(
+                    (pair) =>
+                        `<tr><th scope="row" class="sc-kv-label">${esc(pair.label)}</th>` +
+                        `<td class="sc-kv-value">${renderTableCell(pair.value, undefined)}</td></tr>`,
+                )
+                .join("");
+            return `<table class="sc-kv-table"><tbody>${rows}</tbody></table>`;
+        }
+        case "card":
+            return renderCardBlock(block);
+        case "image": {
+            const widthAttr = block.width ? ` width="${block.width}"` : "";
+            const heightAttr = block.height ? ` height="${block.height}"` : "";
+            const img = `<img src="${esc(block.src)}" alt="${esc(block.alt ?? "")}"${widthAttr}${heightAttr} class="sc-image">`;
+            if (block.caption) {
+                return `<figure class="sc-figure">${img}<figcaption class="sc-caption">${esc(block.caption)}</figcaption></figure>`;
+            }
+            return `<figure class="sc-figure">${img}</figure>`;
+        }
+        case "code":
+            return `<pre class="sc-code"><code${block.language ? ` class="language-${esc(block.language)}"` : ""}>${esc(block.code)}</code></pre>`;
+        case "divider":
+            return `<hr class="sc-divider">`;
+        default:
+            return "";
+    }
+}
+
+/**
+ * Render a StructuredContent block document to an HTML string.
+ * The result is passed through DOMPurify at the sink before being written to
+ * the DOM, so concatenation here is safe.
+ */
+function renderStructuredContent(content: StructuredContent): string {
+    return content.blocks.map(renderBlock).join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4a — client-side sort + filter for sc-table elements
+// ---------------------------------------------------------------------------
+
+/**
+ * Wire up sort buttons and filter inputs for every `.sc-table` found inside
+ * `root`.  Called after innerHTML is written so the elements are live in the
+ * DOM.
+ */
+function attachTableInteractivity(root: HTMLElement): void {
+    root.querySelectorAll<HTMLTableElement>("table.sc-table").forEach(
+        (table) => {
+            const canSort = table.dataset.scSortable === "true";
+            const canFilter = table.dataset.scFilterable === "true";
+            const pageSize = parseInt(table.dataset.scPageSize ?? "", 10);
+            const canPaginate = Number.isFinite(pageSize) && pageSize > 0;
+            if (!canSort && !canFilter && !canPaginate) return;
+
+            const tbody = table.querySelector<HTMLTableSectionElement>("tbody");
+            if (!tbody) return;
+
+            // Snapshot original row order so we can restore it on "none" sort.
+            const originalRows = Array.from(
+                tbody.querySelectorAll<HTMLTableRowElement>("tr"),
+            );
+            originalRows.forEach(
+                (row, idx) => (row.dataset.scIdx = String(idx)),
+            );
+
+            // Per-table sort state.
+            let sortColId: string | null = null;
+            let sortDir: "asc" | "desc" | "none" = "none";
+
+            // Per-table pagination state. `filtering` is shared so sort/filter
+            // can suspend or re-apply the row cap. When a filter query is
+            // active it takes precedence (all matches shown, cap suspended).
+            let filtering = false;
+            let visibleCount = canPaginate ? pageSize : Infinity;
+            const wrapEl = table.closest<HTMLElement>(".sc-table-wrap");
+            const showMoreBtn =
+                wrapEl?.querySelector<HTMLButtonElement>(".sc-show-more") ??
+                null;
+
+            const applyPagination = () => {
+                if (!canPaginate) return;
+                const rows = Array.from(
+                    tbody.querySelectorAll<HTMLTableRowElement>("tr"),
+                );
+                rows.forEach((row, i) => {
+                    row.classList.toggle("sc-row-hidden", i >= visibleCount);
+                });
+                if (showMoreBtn) {
+                    const remaining = Math.max(0, rows.length - visibleCount);
+                    if (remaining > 0) {
+                        showMoreBtn.textContent = `Show more (${remaining})`;
+                        showMoreBtn.style.display = "";
+                    } else {
+                        showMoreBtn.style.display = "none";
+                    }
+                }
+            };
+
+            if (showMoreBtn) {
+                showMoreBtn.addEventListener("click", () => {
+                    visibleCount += pageSize;
+                    applyPagination();
+                });
+            }
+
+            if (canSort) {
+                table
+                    .querySelectorAll<HTMLButtonElement>(".sc-sort-btn")
+                    .forEach((btn) => {
+                        btn.addEventListener("click", () => {
+                            const colId = btn.dataset.scCol ?? "";
+                            // Cycle: none → asc → desc → none
+                            if (sortColId !== colId) {
+                                sortColId = colId;
+                                sortDir = "asc";
+                            } else if (sortDir === "asc") {
+                                sortDir = "desc";
+                            } else {
+                                sortDir = "none";
+                                sortColId = null;
+                            }
+
+                            // Update all sort-button icons in this table.
+                            table
+                                .querySelectorAll<HTMLButtonElement>(
+                                    ".sc-sort-btn",
+                                )
+                                .forEach((b) => {
+                                    if (b !== btn || sortDir === "none") {
+                                        b.textContent = "↕";
+                                        b.dataset.scSortDir = "none";
+                                    } else {
+                                        b.textContent =
+                                            sortDir === "asc" ? "↑" : "↓";
+                                        b.dataset.scSortDir = sortDir;
+                                    }
+                                });
+
+                            const th = btn.closest<HTMLTableCellElement>("th");
+                            if (!th) return;
+                            const colIdx = th.cellIndex;
+
+                            const rows = Array.from(
+                                tbody.querySelectorAll<HTMLTableRowElement>(
+                                    "tr",
+                                ),
+                            );
+                            if (sortDir === "none") {
+                                // Restore original order.
+                                originalRows.forEach((row) =>
+                                    tbody.appendChild(row),
+                                );
+                            } else {
+                                rows.sort((a, b) => {
+                                    const ca =
+                                        a.cells[colIdx]?.textContent?.trim() ??
+                                        "";
+                                    const cb =
+                                        b.cells[colIdx]?.textContent?.trim() ??
+                                        "";
+                                    const cmp = ca.localeCompare(
+                                        cb,
+                                        undefined,
+                                        {
+                                            numeric: true,
+                                            sensitivity: "base",
+                                        },
+                                    );
+                                    return sortDir === "asc" ? cmp : -cmp;
+                                });
+                                rows.forEach((row) => tbody.appendChild(row));
+                            }
+                            // Row order changed — re-apply the page cap so the
+                            // first `visibleCount` rows in the new order show
+                            // (unless a filter query is currently active).
+                            if (!filtering) applyPagination();
+                        });
+                    });
+            }
+
+            if (canFilter) {
+                const wrap = table.closest<HTMLElement>(".sc-table-wrap");
+                const input = document.createElement("input");
+                input.type = "text";
+                input.placeholder = "Filter rows…";
+                input.className = "sc-filter-input";
+                // Insert the filter input before the table (or its wrapper).
+                // `container` is null if neither a wrapper nor a parent exists.
+                const container = wrap ?? table.parentElement;
+                if (container) {
+                    container.insertBefore(input, table);
+                }
+
+                input.addEventListener("input", () => {
+                    const query = input.value.trim().toLowerCase();
+                    filtering = query.length > 0;
+                    tbody
+                        .querySelectorAll<HTMLTableRowElement>("tr")
+                        .forEach((row) => {
+                            const text = row.textContent?.toLowerCase() ?? "";
+                            row.classList.toggle(
+                                "sc-row-filtered",
+                                !!query && !text.includes(query),
+                            );
+                        });
+                    if (filtering) {
+                        // Filter overrides pagination: reveal all matches and
+                        // hide the Show-more control while filtering.
+                        tbody
+                            .querySelectorAll<HTMLTableRowElement>("tr")
+                            .forEach((r) =>
+                                r.classList.remove("sc-row-hidden"),
+                            );
+                        if (showMoreBtn) showMoreBtn.style.display = "none";
+                    } else {
+                        // Query cleared — restore the page cap.
+                        applyPagination();
+                    }
+                });
+            }
+        },
+    );
+}
 
 function textToHtml(text: string): string {
     const value = ansiUpTextToHtml.ansi_to_html(text);
@@ -225,14 +669,20 @@ export function setContent(
         message = content;
         speak = false;
     } else {
-        // Prefer HTML alternates when available
-        const htmlContent = getContentForType(content, "html");
-        if (htmlContent !== undefined && content.type !== "html") {
+        if (isStructuredContent(content)) {
+            // Phase 3a: render blocks natively as HTML.
             type = "html";
-            message = htmlContent;
+            message = renderStructuredContent(content);
         } else {
-            type = content.type;
-            message = content.content;
+            // Prefer HTML alternates when available
+            const htmlContent = getContentForType(content, "html");
+            if (htmlContent !== undefined && content.type !== "html") {
+                type = "html";
+                message = htmlContent;
+            } else {
+                type = content.type;
+                message = content.content;
+            }
         }
         kind = content.kind;
         speak = content.speak ?? false;
@@ -367,6 +817,9 @@ export function setContent(
                 });
             }
         });
+
+        // Phase 4a — wire sort + filter on any sc-table elements just added.
+        attachTableInteractivity(contentElm);
 
         // Status badges (agent-status readiness/load indicators and other
         // tooltip-bearing status glyphs) stash their full message in a

@@ -10,7 +10,10 @@ import {
     getShellWindow,
     getShellWindowForChatViewIpcEvent,
 } from "./instance.js";
-import { SpeechProcessing } from "./speechProcessing.js";
+import {
+    SpeechProcessing,
+    isLocalSpeechProcessingSupported,
+} from "./speechProcessing.js";
 const debugShell = registerDebug("typeagent:shell:speech");
 const debugShellError = registerDebug("typeagent:shell:speech:error");
 
@@ -127,6 +130,13 @@ export function initializeSpeech() {
             }
 
             console.log("Continuous speech processing: " + text);
+
+            if (!isLocalSpeechProcessingSupported()) {
+                debugShell(
+                    "Continuous speech processing skipped: Copilot provider not supported in the connect-only shell",
+                );
+                return undefined;
+            }
 
             const shellWindow = getShellWindow();
             if (shellWindow === undefined) {

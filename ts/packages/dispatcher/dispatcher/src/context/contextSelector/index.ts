@@ -12,6 +12,7 @@
 export * from "./conversationSignal.js";
 export * from "./decision.js";
 export * from "./keywordFile.js";
+export * from "./keywordGen.js";
 export * from "./keywordIndex.js";
 export * from "./keywordSidecar.js";
 export * from "./keywordVector.js";

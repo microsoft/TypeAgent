@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=8432e93ee838fda5599ff48341017c3434cec24f35377e2c6760d744040929b8 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=5f595a13ba8475014b35de745d386e175908ac75c5b6e868d26ad2bfbbc3a757 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # os-notifications-agent — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `os-notifications-agent` package integrates operating system notifications from Windows Action Center and Linux freedesktop into the TypeAgent chat system. These notifications are displayed as ephemeral toasts or inline messages, providing real-time updates to users. Notifications are not persisted and are removed from the chat interface when dismissed at the OS level. Note that macOS is not supported.
+The `os-notifications-agent` package integrates operating system notifications from Windows Action Center and Linux freedesktop into the TypeAgent chat system. These notifications are displayed as ephemeral toasts or inline messages, providing real-time updates to users. Notifications are not persisted and are removed from the chat interface when dismissed at the OS level. macOS is not supported.
 
 ## What it does
 
-The `os-notifications-agent` captures and processes OS-level notifications, forwarding them to connected TypeAgent chat clients. Notifications are ephemeral and are not stored in the `displayLog.json`. The agent supports the following key actions:
+The `os-notifications-agent` captures and processes OS-level notifications and forwards them to connected TypeAgent chat clients. Notifications are ephemeral and are not stored in the `displayLog.json`. The agent supports the following key actions:
 
 - **`syncOsNotifications`**: Re-emits currently-present notifications through the agent pipeline. This action is Windows-only, as Linux's freedesktop specification does not support querying existing notifications. If the required Windows helper executable is not available, the agent will prompt the user to build it.
 - **`testOsNotification`**: Generates a synthetic notification and processes it through the agent pipeline. This is useful for testing the agent's functionality without relying on actual OS notifications.
@@ -104,7 +104,7 @@ By following these steps, you can enhance the `os-notifications-agent` to suppor
 ### Entry points
 
 - `./agent/manifest` → [./src/osNotificationsManifest.json](./src/osNotificationsManifest.json)
-- `./agent/handlers` → `./dist/osNotificationsActionHandler.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/osNotificationsActionHandler.js](./dist/osNotificationsActionHandler.js)
 
 ### Dependencies
 
@@ -133,6 +133,6 @@ External: `dbus-next`, `debug`
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter os-notifications-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter os-notifications-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

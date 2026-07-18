@@ -4,7 +4,7 @@ Working tracker for the plan in [PLAN.md](./PLAN.md). Update whenever a
 phase item is started, completed, or a follow-up surfaces. Keep entries
 terse — one line per item where possible.
 
-_Last updated: 2026-07-11 — plan drafted, not yet started._
+_Last updated: 2026-07-13 — Phase 7 Wave B: `discord`, `taskflow`, `onboarding`, `screencapture` converted; `osNotifications` reclassified out-of-scope (toast-event stream, not list-shaped). Phase 8 (RPC/custom-UI agents) plan added. Agent builder unit tests added for calendar/weather/ipconfig/list (78 structured tests total incl. github-cli)._
 
 ## Progress by phase
 
@@ -12,50 +12,119 @@ _Last updated: 2026-07-11 — plan drafted, not yet started._
 
 | Item | Description                                                                                | Status |
 | ---- | ------------------------------------------------------------------------------------------ | ------ |
-| 1a   | `StructuredContent` + block types in `agentSdk/src/display.ts`                             | todo   |
-| 1b   | Builders: `createStructuredResult`, `createTable`, `fromRecords`                           | todo   |
-| 1c   | Fallback derivation: `structuredToMarkdown` / `structuredToText` / `getStructuredFallback` | todo   |
-| 1d   | Exports from `agentSdk/src/index.ts`                                                       | todo   |
-| 1e   | Unit tests (derivation + builders)                                                         | todo   |
+| 1a   | `StructuredContent` + block types in `agentSdk/src/display.ts`                             | done   |
+| 1b   | Builders: `createStructuredResult`, `createTable`, `fromRecords`                           | done   |
+| 1c   | Fallback derivation: `structuredToMarkdown` / `structuredToText` / `getStructuredFallback` | done   |
+| 1d   | Exports from `agentSdk/src/index.ts`                                                       | done   |
+| 1e   | Unit tests (derivation + builders)                                                         | done   |
 
 ### Phase 2 — Renderer safety net _(after 1)_
 
 | Item | Description                                                              | Status |
 | ---- | ------------------------------------------------------------------------ | ------ |
-| 2a   | `chat-ui/setContent.ts` — detect `"structured"`, use fallback (no throw) | todo   |
-| 2b   | `vscode-chat/displayRender.ts` — fallback                                | todo   |
-| 2c   | `cli/enhancedConsole.ts` — fallback                                      | todo   |
-| 2d   | `commandExecutor/commandServer.ts` — fallback                            | todo   |
-| 2e   | `copilot-plugin/message-formatter.ts` — fallback                         | todo   |
+| 2a   | `chat-ui/setContent.ts` — detect `"structured"`, use fallback (no throw) | done   |
+| 2b   | `vscode-chat/displayRender.ts` — fallback                                | done   |
+| 2c   | `cli/enhancedConsole.ts` — fallback                                      | done   |
+| 2d   | `commandExecutor/commandServer.ts` — fallback                            | done   |
+| 2e   | `copilot-plugin/message-formatter.ts` — fallback                         | done   |
 
 ### Phase 3 — Rich rendering _(after 1)_
 
 | Item | Description                                                                                    | Status |
 | ---- | ---------------------------------------------------------------------------------------------- | ------ |
-| 3a   | `chat-ui/setContent.ts` blocks → HTML (table/badge/link/image/card/list/keyValue) + `chat.css` | todo   |
-| 3b   | `vscode-chat/displayRender.ts` blocks → markdown                                               | todo   |
+| 3a   | `chat-ui/setContent.ts` blocks → HTML (table/badge/link/image/card/list/keyValue) + `chat.css` | done   |
+| 3b   | `vscode-chat/displayRender.ts` blocks → markdown                                               | done   |
 
 ### Phase 4 — Interactivity _(after 3a)_
 
-| Item | Description                                                                         | Status |
-| ---- | ----------------------------------------------------------------------------------- | ------ |
-| 4a   | Client-side sort/filter on `TableBlock` honoring `readonly`/`sortable`/`filterable` | todo   |
+| Item | Description                                                                                          | Status   |
+| ---- | ---------------------------------------------------------------------------------------------------- | -------- |
+| 4a   | Client-side sort/filter on `TableBlock` honoring `readonly`/`sortable`/`filterable`                  | done     |
+| 4b   | Client-side pagination: `TableBlock.pageSize` + "Show more" in `chat-ui` (composes with sort/filter) | done     |
+| 4c   | `TableColumn.pinned` reserved in type (sticky rendering not wired)                                   | reserved |
 
 ### Phase 5 — First adopter: github-cli _(after 1)_
 
-| Item | Description                                                                        | Status |
-| ---- | ---------------------------------------------------------------------------------- | ------ |
-| 5a   | `prList` / `issueList` / `myPullRequests` / `searchRepos` → table blocks + rawData | todo   |
-| 5b   | `dependabotAlerts` + contributors → table blocks                                   | todo   |
-| 5c   | `repoView` → keyValue block                                                        | todo   |
-| 5d   | Update handler unit tests                                                          | todo   |
+| Item | Description                                                                          | Status |
+| ---- | ------------------------------------------------------------------------------------ | ------ |
+| 5a   | `prList` / `issueList` / `myAssignedIssues` / `searchRepos` → table blocks + rawData | done   |
+| 5b   | `dependabotAlerts` + contributors → table blocks                                     | done   |
+| 5c   | `repoView` → keyValue block                                                          | done   |
+| 5d   | Update handler unit tests                                                            | done   |
+| 5e   | `prView` / `issueView` → heading + keyValue + body text block                        | done   |
+| 5f   | Focused field answers → `buildStructuredField` (keyValue + rawData)                  | done   |
 
 ### Phase 6 — Programmatic "or otherwise" _(after 1 + 5)_
 
 | Item | Description                                                         | Status |
 | ---- | ------------------------------------------------------------------- | ------ |
-| 6a   | `commandExecutor` forwards `rawData` as MCP `structuredContent`     | todo   |
-| 6b   | `taskflow` reads `rawData` directly (drop extractText+tryParseJson) | todo   |
+| 6a   | `commandExecutor` forwards `rawData` as MCP `structuredContent`     | done   |
+| 6b   | `taskflow` reads `rawData` directly (drop extractText+tryParseJson) | done   |
+
+### Phase 7 — Broader agent rollout _(after 5; per-agent)_
+
+Wave A — high fit:
+
+| Item | Agent      | Target blocks                           | Status |
+| ---- | ---------- | --------------------------------------- | ------ |
+| 7a   | `list`     | heading + list                          | done   |
+| 7b   | `calendar` | table (agenda) + card/keyValue (detail) | done   |
+| 7c   | `email`    | table (list) + keyValue (message)       | done   |
+| 7d   | `weather`  | keyValue (current) + table (forecast)   | done   |
+| 7e   | `ipconfig` | heading + keyValue (per-adapter)        | done   |
+
+Wave B — medium fit:
+
+| Item | Agent             | Target blocks                     | Status                                                                          |
+| ---- | ----------------- | --------------------------------- | ------------------------------------------------------------------------------- |
+| 7f   | `discord`         | heading + list/table              | done                                                                            |
+| 7g   | `taskflow`        | table (name/description/usage)    | done                                                                            |
+| 7h   | `onboarding`      | heading + keyValue (phase status) | done                                                                            |
+| 7i   | `screencapture`   | image + heading/keyValue          | done                                                                            |
+| 7j   | `osNotifications` | list/card (event stream)          | out of scope — single toast/inline events via `context.notify`, not list-shaped |
+
+Out of scope (v1, custom UI / RPC bridge): `image`, `video`, `settings`,
+`chat`, `code`, `visualStudio`, `browser`, `markdown`, `montage`,
+`turtle`, `player`, `playerLocal`.
+
+Deferred (low value, short text/status): `timer`, `windowsClock`,
+`greeting`, `desktop`, `vampire`, `androidMobile`, `powershell`,
+`utility`, `studio`.
+
+### Phase 8 — RPC / custom-UI agents _(mostly out of scope; see PLAN Phase 8)_
+
+| Item | Agent                                                                                                                  | Plan                                                                                                                                                                            | Status      |
+| ---- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| 8a   | `browser`                                                                                                              | web-search results (`generateWebSearchMarkdown`) → heading + table (`pageSize: 10`) + rawData; **verify markdown fallback in Chrome/Edge extension**                            | not started |
+| 8b   | `code`, `visualStudio`, `player`, `playerLocal`, `markdown`, `montage`, `turtle`, `image`, `video`, `settings`, `chat` | out of scope — display lives in external bridge/webapp/widget, not on the `displayContent` path; blocked on external renderers understanding `StructuredContent` / its fallback | deferred    |
+
+### Agent builder unit tests
+
+Structured-output builders extracted to pure exported functions and
+covered by per-agent specs (in addition to the 16 SDK derivation tests):
+
+| Agent      | Spec                                 | Builder(s)                                                   | Tests |
+| ---------- | ------------------------------------ | ------------------------------------------------------------ | ----- |
+| github-cli | `githubCliStructuredResults.spec.ts` | list / repo / dependabot / contributors / pr / issue / field | 46    |
+| calendar   | `calendarStructured.spec.ts`         | `buildStructuredEventList`                                   | 9     |
+| weather    | `weatherStructured.spec.ts`          | `buildCurrentConditionsResult`, `buildForecastResult`        | 10    |
+| ipconfig   | `ipconfigStructured.spec.ts`         | `buildStructuredOutput`                                      | 7     |
+| list       | `listStructured.spec.ts`             | `buildListResult`                                            | 6     |
+
+Covers all core block shapes: table, keyValue, list, heading, badge,
+link cells, pagination, and rawData. New jest harnesses were scaffolded
+for `weather`, `ipconfig`, and `list` (calendar already had one).
+`email`, `discord`, `taskflow`, `onboarding`, `screencapture` builders
+remain inline (validated by build/typecheck); their block shapes are
+covered transitively by the specs above.
+
+## Future enhancements (backlog)
+
+Not scheduled. Full list in [PLAN.md](./PLAN.md) → "Future enhancements".
+Highest-leverage items: **row actions** (needs a client → agent
+transport; the "v2"), extracting the 5 remaining inline builders into
+tested pure functions, and a `progress` / `chart` block. Pull into a
+phase when a concrete agent needs it.
 
 ## Open questions
 

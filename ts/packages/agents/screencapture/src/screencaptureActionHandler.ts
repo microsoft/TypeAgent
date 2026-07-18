@@ -17,9 +17,9 @@ import {
 import {
     createActionResult,
     createActionResultFromError,
-    createActionResultFromHtmlDisplay,
     createActionResultFromMarkdownDisplay,
     createActionResultFromTextDisplay,
+    createStructuredResult,
     createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { readFile, unlink, mkdir } from "fs/promises";
@@ -496,15 +496,6 @@ const MIME_BY_EXT: Record<string, string> = {
     webp: "image/webp",
 };
 
-function escapeHtml(s: string): string {
-    return s
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-}
-
 async function resolveTarget(
     target: string | undefined,
     backend: PlatformBackend,
@@ -628,15 +619,17 @@ async function handleTakeScreenshot(
         // only the textual summary so retrieval/contextual replay doesn't
         // pull megabytes of base64 forward.
         const dataUri = `data:${mime};base64,${buffer!.toString("base64")}`;
-        const html = [
-            `<div>`,
-            `  <div>${escapeHtml(successMessage)}</div>`,
-            `  <img src="${dataUri}"`,
-            `       alt="screenshot of ${escapeHtml(subject)}"`,
-            `       style="max-width:100%;max-height:400px;margin-top:6px;border-radius:4px;border:1px solid #e5e7eb;display:block" />`,
-            `</div>`,
-        ].join("\n");
-        result = createActionResultFromHtmlDisplay(html, successMessage);
+        result = createStructuredResult(
+            [
+                { kind: "text", text: successMessage },
+                {
+                    kind: "image",
+                    src: dataUri,
+                    alt: `screenshot of ${subject}`,
+                },
+            ],
+            { historyText: successMessage },
+        );
     } else {
         // Buffer missing (read failure) or too large — fall back to text
         // and lean on the saved path. Note buffer-too-large is

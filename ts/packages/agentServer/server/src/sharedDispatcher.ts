@@ -13,6 +13,7 @@ import {
     ClientIO,
     RequestId,
 } from "agent-dispatcher";
+import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import type {
     PendingInteractionRequest,
     PendingInteractionResponse,
@@ -130,6 +131,15 @@ export async function createSharedDispatcher(
             callback(requestId, (clientIO) =>
                 clientIO.shutdown(requestId, ...args),
             ),
+        restart: (requestId, ...args) =>
+            callback(requestId, (clientIO) => {
+                if (clientIO.restart === undefined) {
+                    throw new Error(
+                        "The connected host does not support restart.",
+                    );
+                }
+                return clientIO.restart(requestId, ...args);
+            }),
         setUserRequest: (requestId, ...args) => {
             broadcast("setUserRequest", requestId, (clientIO) =>
                 clientIO.setUserRequest(requestId, ...args),
@@ -277,6 +287,56 @@ export async function createSharedDispatcher(
             callback(requestId, (clientIO) =>
                 clientIO.closeLocalView(requestId, ...args),
             ),
+        // Editor context (the get_user_context reasoning tool). Prefer the
+        // client that ISSUED the request (requestId.connectionId) so a user
+        // with two windows on one conversation gets *their* editor, not
+        // whichever answers first. Then fall back to any other connected
+        // editor client - a headless originator (CLI, MCP command-executor)
+        // relies on a co-joined shell. Clients that don't host an editor omit
+        // getUserContext and are skipped.
+        getUserContext: async (requestId) => {
+            const tryClient = async (
+                connectionId: string,
+                record: ClientRecord,
+            ) => {
+                const provider = record.clientIO.getUserContext;
+                if (provider === undefined) {
+                    return undefined;
+                }
+                try {
+                    return await provider.call(record.clientIO);
+                } catch (error) {
+                    debugClientIOError(
+                        `getUserContext failed for client ${connectionId}: ${error}`,
+                    );
+                    return undefined;
+                }
+            };
+
+            const originatorId = requestId?.connectionId;
+            if (originatorId !== undefined) {
+                const originator = clients.get(originatorId);
+                if (originator !== undefined) {
+                    const fromOriginator = await tryClient(
+                        originatorId,
+                        originator,
+                    );
+                    if (fromOriginator !== undefined) {
+                        return fromOriginator;
+                    }
+                }
+            }
+            for (const [connectionId, record] of clients) {
+                if (connectionId === originatorId) {
+                    continue;
+                }
+                const userContext = await tryClient(connectionId, record);
+                if (userContext !== undefined) {
+                    return userContext;
+                }
+            }
+            return undefined;
+        },
         requestChoice: (requestId, ...args) =>
             callback(requestId, (clientIO) =>
                 clientIO.requestChoice(requestId, ...args),
@@ -657,6 +717,30 @@ export async function createSharedDispatcher(
         cancelQueued(requestId: string, reason: QueueCancelReason): boolean {
             return context.requestQueue.cancelQueued(requestId, reason);
         },
+        async addDynamicAgent(
+            name: string,
+            manifest: AppAgentManifest,
+            appAgent: AppAgent,
+        ): Promise<void> {
+            // Serialize with command processing and other agent mutations.
+            // Mirrors SessionContext.addDynamicAgent: install the agent, then
+            // recompute enable state so it becomes usable.
+            await context.commandLock(async () => {
+                await context.agents.addDynamicAgent(name, manifest, appAgent);
+                await context.agents.setState(
+                    context,
+                    context.session.getConfig(),
+                );
+            });
+        },
+        async removeDynamicAgent(name: string): Promise<void> {
+            await context.commandLock(async () => {
+                await context.agents.removeAgent(
+                    name,
+                    context.agentCache.grammarStore,
+                );
+            });
+        },
         __testSetNoClientsGraceMs(ms: number): void {
             noClientsGraceMs = ms;
         },
@@ -695,6 +779,18 @@ export type SharedDispatcher = {
     isQueueIdle(): boolean;
     /** Cancel a queued (not running) entry by requestId. */
     cancelQueued(requestId: string, reason: QueueCancelReason): boolean;
+    /**
+     * Install a client-hosted agent as a dynamic agent on this conversation's
+     * dispatcher. `appAgent` is typically an agent-rpc proxy that forwards
+     * calls back to the client. Rejects if an agent with `name` already exists.
+     */
+    addDynamicAgent(
+        name: string,
+        manifest: AppAgentManifest,
+        appAgent: AppAgent,
+    ): Promise<void>;
+    /** Remove a previously added dynamic agent. No-op if it doesn't exist. */
+    removeDynamicAgent(name: string): Promise<void>;
     /** @internal Test-only: tighten the no-clients grace window. */
     __testSetNoClientsGraceMs(ms: number): void;
 };

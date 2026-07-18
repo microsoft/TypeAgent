@@ -4,6 +4,8 @@
 import { createChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import type { ChannelProviderAdapter } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
+import { createAgentRpcServer } from "@typeagent/agent-rpc/server";
+import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import { createClientIORpcServer } from "@typeagent/dispatcher-rpc/clientio/server";
 import {
     createDispatcherRpcClient,
@@ -121,11 +123,34 @@ export type AgentServerConnection = {
     deleteConversation(conversationId: string): Promise<void>;
     shutdown(): Promise<void>;
     /**
+     * Relaunch the agent-server process so it loads rebuilt code. The server
+     * exits and a successor takes its place - this connection drops, so the
+     * caller must reconnect (the port is reused). Standalone server only.
+     */
+    restart(): Promise<void>;
+    /**
      * Request a short-lived Azure Speech authorization token from the server
      * (which owns the `speech:` config). Resolves to `undefined` when speech
      * isn't configured, so callers can hide/disable the mic affordance.
      */
     getSpeechToken(): Promise<SpeechToken | undefined>;
+    /**
+     * Register a client-hosted app agent with a joined conversation on the
+     * server. The agent's handlers run in this process; the server installs an
+     * rpc proxy that forwards calls back over the connection. Pass
+     * `conversationId` to target a specific joined conversation, or omit it when
+     * exactly one conversation is joined. Re-registering the same `name` (e.g.
+     * after {@link reconnect}) replaces the previous registration. Rejects if
+     * another client already registered `name` on the target conversation.
+     */
+    registerClientAgent(
+        name: string,
+        manifest: AppAgentManifest,
+        agent: AppAgent,
+        conversationId?: string,
+    ): Promise<void>;
+    /** Unregister an agent previously registered via registerClientAgent. */
+    unregisterClientAgent(name: string, conversationId?: string): Promise<void>;
     /**
      * Reopen the underlying transport and rebind the control rpc onto it,
      * reusing this connection object instead of building a new one. Returns
@@ -196,6 +221,11 @@ export function createAgentServerConnection(
         string,
         { dispatcher: Dispatcher; connectionId: string }
     >();
+
+    // Client-hosted agents registered on the server, name → agent-rpc server
+    // closeFn. Used to tear down the local rpc server when unregistering,
+    // re-registering, or closing the connection.
+    const clientAgentServers = new Map<string, () => void>();
 
     let closed = false;
 
@@ -323,8 +353,58 @@ export function createAgentServerConnection(
             await rpc.invoke("shutdown");
         },
 
+        async restart(): Promise<void> {
+            debug("Requesting server restart via existing connection");
+            await rpc.invoke("restart");
+        },
+
         async getSpeechToken(): Promise<SpeechToken | undefined> {
             return rpc.invoke("getSpeechToken");
+        },
+
+        async registerClientAgent(
+            name: string,
+            manifest: AppAgentManifest,
+            agent: AppAgent,
+            conversationId?: string,
+        ): Promise<void> {
+            // Drop any previous rpc server for this name (e.g. re-registering
+            // after a reconnect, where the old server sat on a stale channel).
+            clientAgentServers.get(name)?.();
+            clientAgentServers.delete(name);
+
+            const { closeFn, agentInterface } = createAgentRpcServer(
+                name,
+                agent,
+                currentChannel,
+            );
+            try {
+                await rpc.invoke("registerClientAgent", {
+                    name,
+                    manifest,
+                    agentInterface,
+                    ...(conversationId !== undefined ? { conversationId } : {}),
+                });
+            } catch (e) {
+                closeFn();
+                throw e;
+            }
+            clientAgentServers.set(name, closeFn);
+        },
+
+        async unregisterClientAgent(
+            name: string,
+            conversationId?: string,
+        ): Promise<void> {
+            try {
+                await rpc.invoke("unregisterClientAgent", {
+                    name,
+                    ...(conversationId !== undefined ? { conversationId } : {}),
+                });
+            } finally {
+                clientAgentServers.get(name)?.();
+                clientAgentServers.delete(name);
+            }
         },
 
         async reconnect(): Promise<boolean> {
@@ -340,6 +420,12 @@ export function createAgentServerConnection(
             // The prior transport's per-conversation channels are gone; drop
             // our local bookkeeping so the caller re-joins cleanly.
             joinedConversations.clear();
+            // Client-agent rpc servers were bound to the old channel; drop them
+            // so the caller re-registers them on the new channel after re-join.
+            for (const closeFn of clientAgentServers.values()) {
+                closeFn();
+            }
+            clientAgentServers.clear();
             return true;
         },
 
@@ -349,6 +435,10 @@ export function createAgentServerConnection(
             }
             closed = true;
             debug("Closing agent server connection");
+            for (const closeFn of clientAgentServers.values()) {
+                closeFn();
+            }
+            clientAgentServers.clear();
             closeTransport();
         },
     };
@@ -467,18 +557,90 @@ export async function connectAgentServer(
     );
 }
 
+// Candidate locations for the production agent-server install, matching the
+// layout install-typeagent.ps1 / install-typeagent.sh lay down (a deployed
+// artifact dir whose root holds the typeagent-serve.mjs launcher). We target
+// the launcher rather than dist/server.js because a deployed artifact can be
+// profile-pruned: the launcher reads the .typeagent-profile marker and starts
+// the daemon with the matching --config, which the pruned artifact needs to
+// load its agents. Kept in sync with those installers' InstallDir.
+function getProductionServerCandidates(): string[] {
+    const candidates: string[] = [];
+    const server = (dir: string) => path.join(dir, "typeagent-serve.mjs");
+    if (process.platform === "win32") {
+        const localAppData =
+            process.env.LOCALAPPDATA ??
+            (process.env.USERPROFILE
+                ? path.join(process.env.USERPROFILE, "AppData", "Local")
+                : undefined);
+        if (localAppData) {
+            candidates.push(
+                server(path.join(localAppData, "TypeAgent", "agent-server")),
+            );
+        }
+    } else if (process.platform === "darwin") {
+        candidates.push(
+            server(
+                path.join(
+                    os.homedir(),
+                    "Library",
+                    "Application Support",
+                    "TypeAgent",
+                    "agent-server",
+                ),
+            ),
+        );
+    } else {
+        const xdg =
+            process.env.XDG_DATA_HOME ??
+            path.join(os.homedir(), ".local", "share");
+        candidates.push(server(path.join(xdg, "typeagent", "agent-server")));
+    }
+    return candidates;
+}
+
+// Locate the agent-server entry point to spawn. Resolution order:
+//   1. TYPEAGENT_SERVER_PATH env override (explicit full path to the entry to
+//      run with node — a deployed typeagent-serve.mjs or a dist/server.js).
+//   2. The production install dir used by the installers (per-platform): the
+//      deployed typeagent-serve.mjs launcher.
+//   3. The local workspace build, relative to this client package
+//      (client/dist -> server/dist/server.js), for repo/dev use.
+// Returns the first that exists. This lets a client (shell, CLI, plugin) that no
+// longer bundles the agent-server still find a separately installed one. The
+// spawn path runs `node <entry> --port <n> [--idle-timeout <m>]`, which both
+// the launcher (defaults to its `start` command) and dist/server.js accept.
 function getAgentServerEntryPoint(): string {
+    const probed: string[] = [];
+
+    const envOverride = process.env.TYPEAGENT_SERVER_PATH;
+    if (envOverride) {
+        probed.push(`${envOverride} (TYPEAGENT_SERVER_PATH)`);
+        if (fs.existsSync(envOverride)) {
+            return envOverride;
+        }
+    }
+
+    for (const candidate of getProductionServerCandidates()) {
+        probed.push(`${candidate} (install dir)`);
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+
     const thisDir = path.dirname(fileURLToPath(import.meta.url));
     // From client/dist/ -> server/dist/server.js
-    const serverPath = path.resolve(thisDir, "../../server/dist/server.js");
-    if (!fs.existsSync(serverPath)) {
-        throw new Error(
-            `Agent server entry point not found at ${serverPath}. ` +
-                `The expected relative path from the client package may have changed. ` +
-                `Ensure the agent-server package is built.`,
-        );
+    const workspacePath = path.resolve(thisDir, "../../server/dist/server.js");
+    probed.push(`${workspacePath} (workspace)`);
+    if (fs.existsSync(workspacePath)) {
+        return workspacePath;
     }
-    return serverPath;
+
+    throw new Error(
+        `Agent server entry point not found. Probed:\n  ${probed.join("\n  ")}\n` +
+            `Install the TypeAgent agent service, set TYPEAGENT_SERVER_PATH to the ` +
+            `agent-server's dist/server.js, or build the agent-server package.`,
+    );
 }
 
 export function isServerRunning(url: string): Promise<boolean> {
@@ -668,7 +830,7 @@ function spawnAgentServer(
 
 async function waitForServer(
     url: string,
-    timeoutMs: number = 60000,
+    timeoutMs: number = 120000,
     pollIntervalMs: number = 500,
 ): Promise<void> {
     const start = Date.now();

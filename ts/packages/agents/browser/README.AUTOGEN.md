@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=e40da81617f01e289d24d38660962071fc13208f297861ac1b40443c861dd85e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=df6d6d34383d262c4ee55858a51f70cef3ed33d8b5d8b89fe045c9dc85c910df -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # browser-typeagent — AI-generated documentation
@@ -12,17 +12,17 @@
 
 ## Overview
 
-The `browser-typeagent` package is a TypeAgent application agent designed for browser automation and control. It enables programmatic interaction with browser windows, tabs, and web pages through a defined set of actions. This package integrates with the TypeAgent shell and CLI, allowing users to perform browser-related tasks using commands or natural language.
+The `browser-typeagent` package is a TypeAgent application agent designed for browser automation and control. It enables programmatic interaction with browser windows, tabs, and web pages through a defined set of actions. This package integrates with the TypeAgent shell and CLI, allowing users to perform browser-related tasks using commands or natural language. It also includes a browser extension for enhanced functionality and interaction.
 
 ## What it does
 
-The `browser-typeagent` package provides a comprehensive set of browser automation capabilities, including:
+The `browser-typeagent` package provides a range of browser automation capabilities, allowing users to interact with web pages and manage browser sessions programmatically. Key features include:
 
-- **Navigation**: Actions such as `openWebPage`, `goBack`, `goForward`, and `reloadPage` allow users to navigate between web pages and control browser tabs.
-- **Interaction**: Users can interact with web content using actions like `clickOn`, `followLinkByText`, `scrollDown`, and `scrollUp`.
-- **Content Capture and Extraction**: Actions such as `captureScreenshot`, `getHtmlFragments`, and `indexPage` enable users to extract and analyze web content.
+- **Web Navigation**: Actions such as `openWebPage`, `goBack`, `goForward`, and `reloadPage` allow users to navigate between web pages and control browser tabs.
+- **User Interaction**: Users can interact with web content using actions like `clickOn`, `followLinkByText`, `scrollDown`, and `scrollUp`.
+- **Content Capture and Analysis**: Actions such as `captureScreenshot`, `getHtmlFragments`, and `indexPage` enable users to extract and analyze web content.
 - **Tab Management**: Actions like `changeTabs`, `closeWebPage`, and `closeAllWebPages` provide control over browser tabs.
-- **Advanced Features**: The package supports executing custom scripts (`executeAdHocScript`) and managing search providers (`changeSearchProvider`).
+- **Custom Scripts and Search**: Execute custom scripts with `executeAdHocScript` and manage search providers with `changeSearchProvider`.
 
 The package operates through a WebSocket server (`AgentWebSocketServer`) that facilitates communication between the browser agent and its clients. Supported clients include a Chrome extension and the Electron-based TypeAgent shell. These clients can send commands to the browser agent, which executes the requested actions and returns results.
 
@@ -121,12 +121,12 @@ By following these steps, you can enhance the `browser-typeagent` package to sup
 ### Entry points
 
 - `./agent/manifest` → [./src/agent/manifest.json](./src/agent/manifest.json)
-- `./agent/handlers` → `./dist/agent/browserActionHandler.mjs` _(not found on disk)_
-- `./agent/types` → `./dist/common/browserControl.mjs` _(not found on disk)_
-- `./agent/indexing` → `./dist/agent/indexing/browserIndexingService.js` _(not found on disk)_
-- `./contentScriptRpc/types` → `./dist/common/contentScriptRpc/types.mjs` _(not found on disk)_
-- `./contentScriptRpc/client` → `./dist/common/contentScriptRpc/client.mjs` _(not found on disk)_
-- `./htmlReducer` → `./dist/common/crossContextHtmlReducer.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/agent/browserActionHandler.mjs](./dist/agent/browserActionHandler.mjs)
+- `./agent/types` → [./dist/common/browserControl.mjs](./dist/common/browserControl.mjs)
+- `./agent/indexing` → [./dist/agent/indexing/browserIndexingService.js](./dist/agent/indexing/browserIndexingService.js)
+- `./contentScriptRpc/types` → [./dist/common/contentScriptRpc/types.mjs](./dist/common/contentScriptRpc/types.mjs)
+- `./contentScriptRpc/client` → [./dist/common/contentScriptRpc/client.mjs](./dist/common/contentScriptRpc/client.mjs)
+- `./htmlReducer` → [./dist/common/crossContextHtmlReducer.js](./dist/common/crossContextHtmlReducer.js)
 
 ### Dependencies
 
@@ -179,7 +179,7 @@ _…and 17 more not shown._
 - [./src/extension/contentScript/recording/index.ts](./src/extension/contentScript/recording/index.ts)
 - [./src/extension/serviceWorker/index.ts](./src/extension/serviceWorker/index.ts)
 - [./src/extension/webagent/crossword/crosswordSchema.agr](./src/extension/webagent/crossword/crosswordSchema.agr)
-- _…and 289 more under `./src/`._
+- _…and 291 more under `./src/`._
 
 ### Environment variables
 
@@ -190,6 +190,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `c97eb42726a9196c7ac72138faa0777c5cbc1aab` on `2026-07-18T09:48:36.613Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

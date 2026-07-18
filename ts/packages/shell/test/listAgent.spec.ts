@@ -24,13 +24,13 @@ test.describe("List Agent Tests", () => {
             ],
             [
                 "Created list: shopping",
-                "List 'shopping' is empty.",
+                "List 'shopping'\n\nThis list is empty.",
                 "Added items: bread,milk,flour to list shopping",
-                "List 'shopping' has items:\n\nbread\nmilk\nflour",
+                "List 'shopping' — 3 items\nbread\nmilk\nflour",
                 "Removed items: milk from list shopping",
-                "List 'shopping' has items:\n\nbread\nflour",
+                "List 'shopping' — 2 items\nbread\nflour",
                 "Cleared list: shopping",
-                "List 'shopping' is empty.",
+                "List 'shopping'\n\nThis list is empty.",
             ],
         );
     });
