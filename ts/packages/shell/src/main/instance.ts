@@ -296,13 +296,13 @@ async function initializeDispatcher(
                 try {
                     await conn.registerClientAgent("shell", manifest, agent);
                     debugShellInit("Registered shell agent with remote server");
-                } catch (e: any) {
+                } catch (e) {
                     // A second shell on the same conversation, or an older
                     // server without support, shouldn't block startup - the
                     // shell still works, just without @shell commands.
                     debugShellError(
                         "Failed to register shell agent with remote server:",
-                        e?.message ?? e,
+                        e instanceof Error ? e.message : e,
                     );
                 }
             };
