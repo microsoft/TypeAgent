@@ -120,7 +120,6 @@ import {
     defaultSearchProviders,
 } from "../common/browserControl.mjs";
 import { openai } from "@typeagent/aiclient";
-import { urlResolver } from "azure-ai-foundry";
 import {
     SearchProviderCommandHandlerTable,
     SetCommandHandler,
@@ -516,8 +515,15 @@ async function initializeBrowserContext(
         sessionId: "default",
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
+        // With no in-process control (connect mode, or extension-only), leave
+        // the preferred client type unset so selectActiveClientForSession uses
+        // its default priority (electron > extension > any). This lets the
+        // shell's inline browser (an "electron" client, clientId
+        // "inlineBrowser") drive control in connect mode while still selecting
+        // the extension when it's the only client. Standalone keeps "electron"
+        // because it provides the control in-process.
         preferredClientType:
-            clientBrowserControl === undefined ? "extension" : "electron",
+            clientBrowserControl === undefined ? undefined : "electron",
         index: undefined,
         localHostPort,
         // Shared WebSocket server is created lazily on the first
@@ -595,31 +601,47 @@ async function updateBrowserContext(
         }
 
         if (!context.agentContext.viewProcess) {
-            const viewProcess = await createViewServiceHost(context);
-            if (viewProcess) {
-                context.agentContext.viewProcess = viewProcess;
-                // Defensive cleanup if the child crashes mid-session.
-                // The dispatcher's PortRegistrar leaves stale entries
-                // bounded to "until respawn or session end", but a
-                // crashed child should release its registration eagerly
-                // so the entry doesn't shadow a fresh bind. The
-                // identity guard prevents a late-firing `exit` event on
-                // a previously-replaced process from clobbering a newer
-                // registration; the explicit disable path (which also
-                // releases) is naturally idempotent under `?.release()`.
-                viewProcess.once("exit", () => {
-                    if (context.agentContext.viewProcess !== viewProcess) {
+            // Fork the express view service (static file host) in the
+            // background rather than blocking agent enable — and therefore
+            // agent-server startup — on it. Nothing on the enable path awaits
+            // the process object; its port is registered independently inside
+            // createViewServiceHost when the child reports ready. This keeps a
+            // slow/cold view-service fork (up to the 10s timeout) off the
+            // launch critical path.
+            void createViewServiceHost(context)
+                .then((viewProcess) => {
+                    if (!viewProcess) {
                         return;
                     }
-                    context.agentContext.viewPortRegistration?.release();
-                    context.agentContext.viewPortRegistration = undefined;
-                    context.agentContext.viewProcess = undefined;
-                    // Reset cached port so respawn forks with arg "0"
-                    // (OS-assigned) instead of trying to re-bind the
-                    // stale port — mirrors the disable/close paths.
-                    context.agentContext.localHostPort = 0;
+                    context.agentContext.viewProcess = viewProcess;
+                    // Defensive cleanup if the child crashes mid-session.
+                    // The dispatcher's PortRegistrar leaves stale entries
+                    // bounded to "until respawn or session end", but a
+                    // crashed child should release its registration eagerly
+                    // so the entry doesn't shadow a fresh bind. The
+                    // identity guard prevents a late-firing `exit` event on
+                    // a previously-replaced process from clobbering a newer
+                    // registration; the explicit disable path (which also
+                    // releases) is naturally idempotent under `?.release()`.
+                    viewProcess.once("exit", () => {
+                        if (context.agentContext.viewProcess !== viewProcess) {
+                            return;
+                        }
+                        context.agentContext.viewPortRegistration?.release();
+                        context.agentContext.viewPortRegistration = undefined;
+                        context.agentContext.viewProcess = undefined;
+                        // Reset cached port so respawn forks with arg "0"
+                        // (OS-assigned) instead of trying to re-bind the
+                        // stale port — mirrors the disable/close paths.
+                        context.agentContext.localHostPort = 0;
+                    });
+                })
+                .catch((e) => {
+                    debug(
+                        "Browser view service background start failed:",
+                        e?.message ?? e,
+                    );
                 });
-            }
         }
 
         if (context.agentContext.browserSchemaEnabled) {
@@ -1376,6 +1398,7 @@ async function resolveWebPage(
                 context.agentContext.resolverSettings.keywordResolver ||
                 fastResolution
             ) {
+                const { urlResolver } = await import("azure-ai-foundry");
                 const cachehitUrls = urlResolver.resolveURLByKeyword(site);
                 if (cachehitUrls && cachehitUrls.length > 0) {
                     debug(`Resolved URLs from cache: ${cachehitUrls}`);
