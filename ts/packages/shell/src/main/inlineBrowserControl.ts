@@ -608,7 +608,9 @@ export function createInlineBrowserControl(
  * control methods (`zoomIn`/`zoomOut`) call `this.getPageUrl()`, so every method
  * is wrapped to delegate back through the `control` object, preserving binding.
  */
-export function createInlineBrowserControlRpcHandlers(control: BrowserControl): {
+export function createInlineBrowserControlRpcHandlers(
+    control: BrowserControl,
+): {
     invokeFunctions: BrowserControlInvokeFunctions;
     callFunctions: BrowserControlCallFunctions;
 } {
