@@ -18,6 +18,7 @@ type ShellCommandLineArgs = {
     hidden?: boolean;
     idleTimeout?: number;
     resume?: boolean;
+    standalone?: boolean;
 };
 
 export function parseShellCommandLine() {
@@ -143,6 +144,11 @@ export function parseShellCommandLine() {
                 continue;
             }
 
+            if (arg === "--standalone") {
+                result.standalone = true;
+                continue;
+            }
+
             if (arg === "--connect") {
                 i++;
                 if (
@@ -174,6 +180,9 @@ export function parseShellCommandLine() {
     }
 
     if (result.connect !== undefined) {
+        if (result.standalone) {
+            debugShell("--standalone ignored with --connect");
+        }
         if (result.data !== undefined) {
             debugShell("--data ignored with --connect");
         }

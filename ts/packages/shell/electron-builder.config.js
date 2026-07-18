@@ -3,6 +3,21 @@
 
 // Configuration used for 'electron-builder build' step, and not 'install-app-deps' step.
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The Electron browser extension ships as a resource. Its source
+// (browser-typeagent/dist/electron) is resolved from the shell package's own
+// node_modules rather than the deploy tree: browser-typeagent is a
+// devDependency (build/package-time only), so it is intentionally excluded
+// from `pnpm deploy --prod` and its (large) runtime closure never lands in the
+// packaged app. Only the prebuilt extension assets are copied.
+const shellDir = path.dirname(fileURLToPath(import.meta.url));
+const browserExtensionDir = path.join(
+    shellDir,
+    "node_modules/browser-typeagent/dist/electron",
+);
+
 const name = "typeagentshell";
 const fullName = "TypeAgent Shell";
 const account = process.env.AZURESTORAGEACCOUNTNAME;
@@ -55,7 +70,7 @@ export default {
     // electron can't load the browser extension from the ASAR
     extraResources: [
         {
-            from: "node_modules/browser-typeagent/dist/electron",
+            from: browserExtensionDir,
             to: "browser-typeagent-extension",
         },
     ],

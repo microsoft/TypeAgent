@@ -557,18 +557,90 @@ export async function connectAgentServer(
     );
 }
 
+// Candidate locations for the production agent-server install, matching the
+// layout install-typeagent.ps1 / install-typeagent.sh lay down (a deployed
+// artifact dir whose root holds the typeagent-serve.mjs launcher). We target
+// the launcher rather than dist/server.js because a deployed artifact can be
+// profile-pruned: the launcher reads the .typeagent-profile marker and starts
+// the daemon with the matching --config, which the pruned artifact needs to
+// load its agents. Kept in sync with those installers' InstallDir.
+function getProductionServerCandidates(): string[] {
+    const candidates: string[] = [];
+    const server = (dir: string) => path.join(dir, "typeagent-serve.mjs");
+    if (process.platform === "win32") {
+        const localAppData =
+            process.env.LOCALAPPDATA ??
+            (process.env.USERPROFILE
+                ? path.join(process.env.USERPROFILE, "AppData", "Local")
+                : undefined);
+        if (localAppData) {
+            candidates.push(
+                server(path.join(localAppData, "TypeAgent", "agent-server")),
+            );
+        }
+    } else if (process.platform === "darwin") {
+        candidates.push(
+            server(
+                path.join(
+                    os.homedir(),
+                    "Library",
+                    "Application Support",
+                    "TypeAgent",
+                    "agent-server",
+                ),
+            ),
+        );
+    } else {
+        const xdg =
+            process.env.XDG_DATA_HOME ??
+            path.join(os.homedir(), ".local", "share");
+        candidates.push(server(path.join(xdg, "typeagent", "agent-server")));
+    }
+    return candidates;
+}
+
+// Locate the agent-server entry point to spawn. Resolution order:
+//   1. TYPEAGENT_SERVER_PATH env override (explicit full path to the entry to
+//      run with node — a deployed typeagent-serve.mjs or a dist/server.js).
+//   2. The production install dir used by the installers (per-platform): the
+//      deployed typeagent-serve.mjs launcher.
+//   3. The local workspace build, relative to this client package
+//      (client/dist -> server/dist/server.js), for repo/dev use.
+// Returns the first that exists. This lets a client (shell, CLI, plugin) that no
+// longer bundles the agent-server still find a separately installed one. The
+// spawn path runs `node <entry> --port <n> [--idle-timeout <m>]`, which both
+// the launcher (defaults to its `start` command) and dist/server.js accept.
 function getAgentServerEntryPoint(): string {
+    const probed: string[] = [];
+
+    const envOverride = process.env.TYPEAGENT_SERVER_PATH;
+    if (envOverride) {
+        probed.push(`${envOverride} (TYPEAGENT_SERVER_PATH)`);
+        if (fs.existsSync(envOverride)) {
+            return envOverride;
+        }
+    }
+
+    for (const candidate of getProductionServerCandidates()) {
+        probed.push(`${candidate} (install dir)`);
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+
     const thisDir = path.dirname(fileURLToPath(import.meta.url));
     // From client/dist/ -> server/dist/server.js
-    const serverPath = path.resolve(thisDir, "../../server/dist/server.js");
-    if (!fs.existsSync(serverPath)) {
-        throw new Error(
-            `Agent server entry point not found at ${serverPath}. ` +
-                `The expected relative path from the client package may have changed. ` +
-                `Ensure the agent-server package is built.`,
-        );
+    const workspacePath = path.resolve(thisDir, "../../server/dist/server.js");
+    probed.push(`${workspacePath} (workspace)`);
+    if (fs.existsSync(workspacePath)) {
+        return workspacePath;
     }
-    return serverPath;
+
+    throw new Error(
+        `Agent server entry point not found. Probed:\n  ${probed.join("\n  ")}\n` +
+            `Install the TypeAgent agent service, set TYPEAGENT_SERVER_PATH to the ` +
+            `agent-server's dist/server.js, or build the agent-server package.`,
+    );
 }
 
 export function isServerRunning(url: string): Promise<boolean> {
@@ -758,7 +830,7 @@ function spawnAgentServer(
 
 async function waitForServer(
     url: string,
-    timeoutMs: number = 60000,
+    timeoutMs: number = 120000,
     pollIntervalMs: number = 500,
 ): Promise<void> {
     const start = Date.now();
