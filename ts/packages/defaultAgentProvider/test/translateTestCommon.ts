@@ -243,7 +243,13 @@ export async function defineTranslateTest(
                             actions: false,
                             commands: ["dispatcher"],
                         },
-                        execution: { history: false }, // don't generate chat history, the test manually imports them
+                        // history: false - the test manually imports history.
+                        // reasoning: "none" - this is a translation-stability
+                        // test; the execution-time reasoning fallback otherwise
+                        // diverts dispatcher.clarify / unknown actions away from
+                        // executeActions, leaving commandResult.actions empty so
+                        // clarify expectations can never match.
+                        execution: { history: false, reasoning: "none" },
                         explainer: { enabled: false },
                         cache: { enabled: false },
                         embeddingCacheDir, // Cache the embedding to avoid recomputation.

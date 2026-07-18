@@ -168,7 +168,6 @@ export interface NextAction {
 }
 
 // previous track
-// User: play the last song again
 export interface PreviousAction {
     actionName: "previous";
 }
