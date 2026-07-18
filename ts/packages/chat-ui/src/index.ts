@@ -54,6 +54,13 @@ export {
     type ConnectionActionHandler,
 } from "./connectionStatus.js";
 
+export {
+    STATUS_NOTICE_EVENT,
+    parseStatusNotice,
+    type StatusNotice,
+    type StatusNoticeLevel,
+} from "./statusNotice.js";
+
 export { ChatContextMenu, ContextMenuTargetOptions } from "./contextMenu.js";
 
 export type {

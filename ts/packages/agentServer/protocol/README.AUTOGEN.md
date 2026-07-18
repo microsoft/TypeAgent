@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=b9c356365536873ec411f5c5e27a1a60482455b3d46ef8a9e96208f5bdef343a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=fef7634b164bd54acb738dccddc0cb5aa490ec25f7e41f918d72ff96613dfe12 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-server-protocol — AI-generated documentation
@@ -12,36 +12,36 @@
 
 ## Overview
 
-The `@typeagent/agent-server-protocol` package defines the WebSocket RPC contract between the agentServer and its clients. It provides the foundational types, channel names, and methods required for managing conversations, client connections, and discovery mechanisms within the Type Agent Server ecosystem.
+The `@typeagent/agent-server-protocol` package defines the WebSocket RPC contract between the agentServer and its clients. It provides the necessary types, channel names, and methods for managing conversations, client connections, and discovery mechanisms within the TypeAgent Server ecosystem.
 
 ## What it does
 
-This package serves as the protocol layer for communication between the agentServer and its clients. It includes:
+This package acts as the communication protocol layer for the agentServer and its clients. It standardizes the interaction between components in the TypeAgent ecosystem by defining:
 
-- **Channel Definitions**: Fixed and session-namespaced channel names for conversation lifecycle and discovery RPC.
-- **Conversation Metadata**: Types and structures for describing conversations, including their lifecycle and participants.
-- **RPC Methods**: A set of methods exposed on the `agent-server` channel for managing conversations, such as creating, joining, renaming, and deleting conversations.
-- **Client-Type Registry**: Utilities for registering and retrieving client types based on connection IDs, enabling client-specific behavior.
-- **Discovery Mechanism**: A read-only RPC channel for external clients to look up the live port of in-process app-agents.
+- **Channel Definitions**: Includes fixed channel names for conversation lifecycle and discovery RPC, as well as session-namespaced channel names for dispatcher and client IO communication.
+- **Conversation Metadata**: Provides types and structures such as `ConversationInfo` and `JoinConversationResult` to describe conversations and their participants.
+- **RPC Methods**: Implements methods for managing conversations, including `joinConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation`.
+- **Client-Type Registry**: Offers utilities to register, retrieve, and manage client types based on connection IDs, enabling client-specific behavior.
+- **Discovery Mechanism**: Exposes a read-only RPC channel for external clients to discover live ports of in-process app-agents.
 
-The package is used by various components in the TypeAgent ecosystem, including the `agent-server` itself, client libraries, and extensions like VS Code and browser-based agents.
+This package is a core dependency for several other components in the TypeAgent ecosystem, such as `agent-server`, `agent-server-client`, and various extensions like VS Code and browser-based agents.
 
 ### Key Features
 
 1. **Channel Names**:
 
-   - `AgentServerChannelName`: Fixed channel for conversation lifecycle RPC.
-   - `DiscoveryChannelName`: Fixed channel for read-only port discovery.
-   - Session-namespaced channels for dispatcher and client IO communication, constructed using helper functions like `getDispatcherChannelName` and `getClientIOChannelName`.
+   - `AgentServerChannelName`: A fixed channel for conversation lifecycle RPC.
+   - `DiscoveryChannelName`: A fixed channel for read-only port discovery.
+   - Helper functions like `getDispatcherChannelName` and `getClientIOChannelName` to construct session-namespaced channels.
 
 2. **Conversation Management**:
 
-   - Types like `ConversationInfo` and `JoinConversationResult` describe conversation metadata and results.
-   - RPC methods such as `joinConversation`, `createConversation`, `listConversations`, and `deleteConversation` enable full lifecycle management of conversations.
+   - Types such as `ConversationInfo` and `JoinConversationResult` provide structured data about conversations and their participants.
+   - RPC methods allow for creating, joining, renaming, and deleting conversations, as well as listing all active conversations.
 
 3. **Discovery Channel**:
 
-   - Provides a `lookupPort` method for external clients to discover live ports of app-agents, facilitating dynamic connection management.
+   - The `lookupPort` method enables external clients to query the live port of app-agents, facilitating dynamic connection management.
 
 4. **Client-Type Registry**:
    - Functions like `registerClientType`, `getClientType`, and `unregisterClient` allow the server to track and manage client types based on their connection IDs.
@@ -54,31 +54,34 @@ This package does not require any special setup beyond installation. To include 
 pnpm install
 ```
 
-For more details on usage, refer to the hand-written README.
+For additional details on usage, refer to the hand-written README.
 
 ## Key Files
 
-The package is organized into several key files, each serving a specific purpose:
+The package is structured into several key files, each with a specific role in defining and implementing the protocol:
 
 - **[index.ts](./src/index.ts)**: The main entry point, re-exporting all types, constants, and functions from other files.
 - **[protocol.ts](./src/protocol.ts)**: Contains the core protocol definitions, including channel names, conversation types, and RPC methods.
-- **[queue.ts](./src/queue.ts)**: Re-exports queue-related types and errors from `@typeagent/dispatcher-types` for convenience.
+- **[queue.ts](./src/queue.ts)**: Re-exports queue-related types and errors from `@typeagent/dispatcher-types` for use by clients.
 - **[tsconfig.json](./src/tsconfig.json)**: TypeScript configuration for the package.
 
 ### File Responsibilities
 
 1. **[protocol.ts](./src/protocol.ts)**:
 
-   - Defines the fixed and session-namespaced channel names.
-   - Provides types like `ConversationInfo`, `JoinConversationResult`, and `DispatcherConnectOptions`.
-   - Implements the `AgentServerInvokeFunctions` interface, which includes methods for conversation management and server control.
+   - Defines fixed channel names like `AgentServerChannelName` and `DiscoveryChannelName`.
+   - Provides helper functions for constructing session-namespaced channel names, such as `getDispatcherChannelName` and `getClientIOChannelName`.
+   - Implements types like `ConversationInfo`, `JoinConversationResult`, and `DispatcherConnectOptions`.
+   - Defines the `AgentServerInvokeFunctions` interface, which includes methods for conversation management and server control.
 
 2. **[queue.ts](./src/queue.ts)**:
 
    - Re-exports queue-related types and errors, such as `QueueRequestState` and `QueueFullError`, from `@typeagent/dispatcher-types`.
+   - This allows clients to access queue-related functionality without requiring a direct dependency on `@typeagent/dispatcher-types`.
 
 3. **[index.ts](./src/index.ts)**:
-   - Serves as the public API surface, re-exporting all relevant types, constants, and functions from `protocol.ts` and `queue.ts`.
+   - Serves as the public API surface for the package.
+   - Re-exports all relevant types, constants, and functions from `protocol.ts` and `queue.ts`.
 
 ## How to extend
 
@@ -86,17 +89,17 @@ To extend the functionality of this package, follow these steps:
 
 1. **Understand the Existing Structure**:
 
-   - Start by reviewing the `protocol.ts` file, which contains the core definitions and RPC methods.
+   - Begin by reviewing the `protocol.ts` file, which contains the core protocol definitions and RPC methods.
    - Familiarize yourself with the exported types and functions in `index.ts`.
 
 2. **Add New Features**:
 
-   - Define new types or methods in `protocol.ts`. For example, you might add a new RPC method for advanced conversation filtering.
+   - Define new types or methods in `protocol.ts`. For example, you might add a new RPC method to support additional server-client interactions.
    - If the new feature involves queue management, consider adding relevant types or errors in `queue.ts`.
 
 3. **Export New Additions**:
 
-   - Update `index.ts` to export any new types or methods added to `protocol.ts` or `queue.ts`.
+   - Update `index.ts` to include any new types or methods added to `protocol.ts` or `queue.ts`.
 
 4. **Test Your Changes**:
 
@@ -104,9 +107,9 @@ To extend the functionality of this package, follow these steps:
 
 5. **Document Your Changes**:
    - Update the hand-written README or other documentation to reflect the new functionality.
-   - Ensure that the new types and methods are well-documented with comments in the source code.
+   - Add comments to the source code to explain the purpose and usage of the new types and methods.
 
-By following these steps, you can effectively extend the capabilities of the `@typeagent/agent-server-protocol` package while maintaining consistency with its existing structure and purpose.
+By following these steps, you can ensure that your contributions align with the existing structure and maintain the quality and consistency of the `@typeagent/agent-server-protocol` package.
 
 ## Reference
 
@@ -114,7 +117,7 @@ By following these steps, you can effectively extend the capabilities of the `@t
 
 ### Entry points
 
-- default → `./dist/index.js` _(not found on disk)_
+- default → [./dist/index.js](./dist/index.js)
 
 ### Dependencies
 
@@ -143,6 +146,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-protocol docs:verify-links` to spot-check._
+_Auto-generated against commit `b1b5bcafdde8ba2387d669eec198eb70e8fa5986` on `2026-07-17T23:52:55.795Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-protocol docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
