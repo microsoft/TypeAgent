@@ -8,7 +8,7 @@ import {
     TemplateSchema,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
-import { RequestId, RequestMetrics } from "./dispatcher.js";
+import { RequestId, RequestMetrics, UserContext } from "./dispatcher.js";
 import type {
     UserFeedbackEntry,
     UserMessageHiddenEntry,
@@ -66,6 +66,13 @@ export interface ClientIO {
     clear(requestId: RequestId): void;
     exit(requestId: RequestId): void;
     shutdown(requestId: RequestId): void;
+    /**
+     * Relaunch the host process (agent-server) so it loads rebuilt code.
+     * Optional: only the standalone agent-server implements it. Hosts that
+     * can't self-restart (embedded/in-process) leave it undefined, and
+     * `@server restart` reports that restart isn't available.
+     */
+    restart?(requestId: RequestId): void;
 
     // Display
     setUserRequest(requestId: RequestId, command: string, seq?: number): void;
@@ -104,6 +111,19 @@ export interface ClientIO {
         actionTemplates: TemplateEditConfig,
         source: string,
     ): Promise<unknown>;
+
+    /**
+     * Return a fresh, coarse snapshot of the host editor state (no file or
+     * selection text). Optional: only editor-hosted clients (e.g. the VS Code
+     * shell) implement it. Others omit it and the reasoning `get_user_context`
+     * tool reports that no editor context is available.
+     *
+     * `requestId` carries the originating client's connectionId so a routing
+     * implementation (the agent-server SharedDispatcher) can prefer the client
+     * that issued the request when several are joined to one conversation. Leaf
+     * clients ignore it and report their own editor state.
+     */
+    getUserContext?(requestId?: RequestId): Promise<UserContext | undefined>;
 
     // Notification (TODO: turn these in to dispatcher events)
     // Default behavior is ephemeral: notifications are broadcast to clients

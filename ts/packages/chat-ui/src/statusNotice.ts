@@ -1,0 +1,73 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+/**
+ * Host-neutral model for a persistent, dismissible status notice.
+ *
+ * Rendered by {@link ChatPanel.showStatusNotice} as a corner toast that the
+ * user can collapse to a small pinned pill (and re-expand) - it stays until
+ * dismissed rather than auto-hiding like {@link ChatPanel.showToast}. Used for
+ * durable, state-y conditions such as "the agent server is running
+ * out-of-date code" (pushed by the server on connect). Shared by every chat
+ * host (Electron shell, VS Code webview) so the UX is identical.
+ *
+ * Delivered over `ClientIO.notify` as `event === STATUS_NOTICE_EVENT` with a
+ * {@link StatusNotice} as `data`. Kept a plain serializable object so it
+ * crosses the IPC / postMessage boundary unchanged; the action button runs
+ * {@link StatusNotice.actionCommand} back through the chat input, so no
+ * host-specific callback wiring is needed.
+ */
+
+/**
+ * `ClientIO.notify` event name that carries a {@link StatusNotice}. The event
+ * string is the wire contract with emitters (e.g. the agent-server), which
+ * send the same literal.
+ */
+export const STATUS_NOTICE_EVENT = "statusNotice";
+
+export type StatusNoticeLevel = "info" | "warning" | "error";
+
+export interface StatusNotice {
+    /**
+     * Stable identity for this notice. Re-showing the same `id` replaces the
+     * existing one (so a reconnect that re-sends it doesn't stack duplicates).
+     */
+    id: string;
+    /** Severity accent; defaults to `info`. */
+    level?: StatusNoticeLevel;
+    title: string;
+    message?: string;
+    /** Label for an optional action button. Requires {@link actionCommand}. */
+    actionLabel?: string;
+    /** Command run (via the chat input) when the action button is clicked. */
+    actionCommand?: string;
+}
+
+/**
+ * Narrow untrusted `notify` `data` into a {@link StatusNotice}. Returns
+ * `undefined` when the payload isn't a well-formed notice, so hosts can guard
+ * at the RPC boundary. Only `id` and `title` are required.
+ */
+export function parseStatusNotice(data: unknown): StatusNotice | undefined {
+    if (typeof data !== "object" || data === null) {
+        return undefined;
+    }
+    const d = data as Record<string, unknown>;
+    if (typeof d.id !== "string" || typeof d.title !== "string") {
+        return undefined;
+    }
+    const notice: StatusNotice = { id: d.id, title: d.title };
+    if (d.level === "info" || d.level === "warning" || d.level === "error") {
+        notice.level = d.level;
+    }
+    if (typeof d.message === "string") {
+        notice.message = d.message;
+    }
+    if (typeof d.actionLabel === "string") {
+        notice.actionLabel = d.actionLabel;
+    }
+    if (typeof d.actionCommand === "string") {
+        notice.actionCommand = d.actionCommand;
+    }
+    return notice;
+}

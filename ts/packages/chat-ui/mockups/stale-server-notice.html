@@ -1,0 +1,636 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<!--
+  DESIGN REFERENCE (kept) - not shipped code, retained to document the design.
+
+  Design exploration for the "agent server is running out-of-date code" notice
+  that the server pushes to each client on connect (see
+  packages/agentServer/server/src/connectionHandler.ts -> clientIO.notify).
+
+  DECISION: Option D (a persistent toast that collapses to a pinned pill).
+  Now implemented as a reusable chat-ui affordance:
+    - Model + event:  packages/chat-ui/src/statusNotice.ts (STATUS_NOTICE_EVENT)
+    - Renderer:       ChatPanel.showStatusNotice / clearStatusNotice + chat.css
+    - Server payload: packages/agentServer/server/src/connectionHandler.ts
+    - Host hooks:     shell chatPanelBridge.ts + vscode-shell webview/main.ts
+    - CLI:            cli/src/enhancedConsole.ts (prints a yellow line)
+    - Test on demand: @notify status [msg] [--level info|warning|error] [--restart]
+  See stale-server-notice.md for the write-up and stale-server-notice-live.html
+  for a preview rendered with the REAL chat.css.
+
+  Each card below is a mini chat panel showing one of the treatments that were
+  compared (0 bell, A toast, B banner, C strip, D toast->pill). Buttons are
+  interactive so you can feel the dismiss / restart / minimize behavior.
+-->
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>stale-server notice - design options</title>
+    <style>
+      :root {
+        --bg: #f3f3f3;
+        --panel: #ffffff;
+        --panel-2: #f7f7f7;
+        --header: #ececec;
+        --text: #1f1f1f;
+        --muted: #6b6b6b;
+        --border: #e0e0e0;
+        --user-bubble: #e7e4f7;
+        --agent-bubble: #f0f0f0;
+        --shadow: rgba(0, 0, 0, 0.12);
+        --accent: #6c63ff;
+        --ok: #2ea043;
+        /* stale/warning accent */
+        --warn-fg: #8a5b00;
+        --warn-bg: #fff4d6;
+        --warn-line: #e0a010;
+      }
+      [data-theme="dark"] {
+        --bg: #181818;
+        --panel: #1e1e1e;
+        --panel-2: #232323;
+        --header: #2a2a2c;
+        --text: #e6e6e6;
+        --muted: #9a9a9a;
+        --border: #333336;
+        --user-bubble: #3a3a5a;
+        --agent-bubble: #2d2d30;
+        --shadow: rgba(0, 0, 0, 0.4);
+        --accent: #8b7fff;
+        --ok: #3fb950;
+        /* Dracula-ish amber on dark, matches the toast surface family */
+        --warn-fg: #ffd479;
+        --warn-bg: rgba(255, 184, 108, 0.14);
+        --warn-line: #ffb86c;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 28px 32px 80px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", system-ui, sans-serif;
+        font-size: 14px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
+      }
+      .subtitle {
+        color: var(--muted);
+        margin: 0 0 8px;
+        max-width: 860px;
+        line-height: 1.5;
+      }
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        margin: 16px 0 24px;
+        flex-wrap: wrap;
+      }
+      .toolbar button {
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+        border-radius: 6px;
+        padding: 7px 13px;
+        cursor: pointer;
+        font: inherit;
+      }
+      .toolbar button:hover {
+        border-color: var(--muted);
+      }
+      .grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 26px;
+      }
+      .card {
+        width: 380px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .card-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .card-title {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .card-title .tag {
+        color: var(--muted);
+        font-weight: 400;
+        font-size: 12px;
+      }
+      .replay {
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--muted);
+        border-radius: 5px;
+        padding: 3px 9px;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+      }
+      .replay:hover {
+        color: var(--text);
+        border-color: var(--muted);
+      }
+      .note {
+        color: var(--muted);
+        font-size: 12.5px;
+        line-height: 1.5;
+        margin: 2px 2px 0;
+      }
+      .note b {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .pro {
+        color: var(--ok);
+      }
+      .con {
+        color: #e5687b;
+      }
+
+      /* ---------- mini chat panel scaffold ---------- */
+      .chat-panel {
+        position: relative;
+        height: 300px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--panel);
+        box-shadow: 0 4px 18px var(--shadow);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .chat-titlebar {
+        height: 38px;
+        flex: 0 0 auto;
+        background: var(--header);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 10px;
+        position: relative;
+        z-index: 5;
+      }
+      .brand-dot {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #fff;
+        font-size: 11px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .brand {
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .conn {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .conn .live {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--ok);
+      }
+      .chat-scroll {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .bubble {
+        max-width: 78%;
+        padding: 7px 11px;
+        border-radius: 9px;
+        font-size: 12.5px;
+        line-height: 1.4;
+      }
+      .bubble.agent {
+        align-self: flex-start;
+        background: var(--agent-bubble);
+      }
+      .bubble.user {
+        align-self: flex-end;
+        background: var(--user-bubble);
+      }
+      .chat-input {
+        flex: 0 0 auto;
+        border-top: 1px solid var(--border);
+        padding: 8px 10px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        background: var(--panel-2);
+      }
+      .chat-input .box {
+        flex: 1 1 auto;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 6px 12px;
+        color: var(--muted);
+        font-size: 12px;
+        background: var(--panel);
+      }
+      .chat-input .send {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: none;
+        background: var(--accent);
+        color: #fff;
+        cursor: pointer;
+      }
+
+      /* shared warning glyph */
+      .warn-ico {
+        color: var(--warn-line);
+        flex: 0 0 auto;
+      }
+      .kbd {
+        font-family: Consolas, monospace;
+        font-size: 11.5px;
+        background: rgba(127, 127, 127, 0.18);
+        border-radius: 4px;
+        padding: 1px 5px;
+      }
+      .hidden {
+        display: none !important;
+      }
+
+      /* ---------- A: persistent toast (top-right) ---------- */
+      .toast {
+        position: absolute;
+        top: 46px;
+        right: 12px;
+        width: 300px;
+        z-index: 20;
+        background: rgba(40, 42, 54, 0.97);
+        color: #f8f8f2;
+        border-radius: 8px;
+        border-left: 3px solid var(--warn-line);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        padding: 11px 12px 12px;
+        font-size: 12.5px;
+        line-height: 1.45;
+      }
+      .toast .t-head {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-weight: 600;
+        margin-bottom: 5px;
+      }
+      .toast .t-close {
+        margin-left: auto;
+        background: transparent;
+        border: none;
+        color: #cfcfe6;
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0 2px;
+      }
+      .toast .t-close:hover {
+        color: #fff;
+      }
+      .toast .t-body {
+        color: #d6d6e6;
+      }
+      .toast .t-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 9px;
+      }
+      .btn-warn {
+        background: var(--warn-line);
+        color: #201800;
+        border: none;
+        border-radius: 5px;
+        padding: 5px 11px;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn-warn:hover {
+        filter: brightness(1.08);
+      }
+
+      /* ---------- B: pinned top banner ---------- */
+      .banner {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 8px 11px;
+        background: var(--warn-bg);
+        color: var(--warn-fg);
+        border-bottom: 1px solid var(--warn-line);
+        font-size: 12.5px;
+        position: relative;
+        z-index: 4;
+      }
+      .banner .b-text b {
+        color: var(--warn-fg);
+      }
+      .banner .b-actions {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
+      }
+      .banner .b-close {
+        background: transparent;
+        border: none;
+        color: var(--warn-fg);
+        font-size: 16px;
+        cursor: pointer;
+        line-height: 1;
+        opacity: 0.8;
+      }
+      .banner .b-close:hover {
+        opacity: 1;
+      }
+      .link-restart {
+        color: var(--warn-fg);
+        font-weight: 600;
+        text-decoration: underline;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      /* ---------- C: compact pinned strip ---------- */
+      .strip {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 11px;
+        background: var(--warn-bg);
+        border-bottom: 1px solid var(--warn-line);
+        color: var(--warn-fg);
+        font-size: 12px;
+      }
+      .strip .s-close {
+        margin-left: auto;
+        background: transparent;
+        border: none;
+        color: var(--warn-fg);
+        cursor: pointer;
+        font-size: 15px;
+        line-height: 1;
+        opacity: 0.8;
+      }
+
+      /* ---------- D: hybrid toast <-> pinned chip ---------- */
+      .stale-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--warn-bg);
+        color: var(--warn-fg);
+        border: 1px solid var(--warn-line);
+        border-radius: 12px;
+        padding: 2px 9px 2px 7px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .stale-chip .cdot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--warn-line);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Stale-server notice - design options</h1>
+    <p class="subtitle">
+      The server pushes this on connect when it's running out-of-date code. You
+      want it <b>persistent (visible until dismissed)</b> and are weighing
+      whether to <b>pin</b> it. Compare the treatments below - buttons are live
+      (dismiss, restart, minimize). "Replay" re-sends the notice, mimicking a
+      reconnect to a still-stale server.
+    </p>
+    <div class="toolbar">
+      <button id="themeBtn">Toggle light / dark</button>
+      <button id="replayAll">Replay all</button>
+    </div>
+
+    <div class="grid" id="grid"></div>
+
+    <script>
+      const WARN_SVG =
+        '<svg class="warn-ico" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">' +
+        '<path fill="currentColor" d="M12 2 1 21h22L12 2zm0 6c.6 0 1 .4 1 1v5a1 1 0 0 1-2 0V9c0-.6.4-1 1-1zm0 9.4a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5z"/></svg>';
+
+      const MSG_TITLE = "Server out of date";
+      const MSG_BODY =
+        "This agent server was rebuilt on disk after it started, so it's running the old code.";
+      const HINT = '<span class="kbd">@server restart</span>';
+
+      // Sample conversation used inside every mini panel.
+      function scaffold(headerExtra) {
+        return `
+          <div class="chat-titlebar">
+            <span class="brand-dot">TA</span>
+            <span class="brand">TypeAgent</span>
+            ${headerExtra || ""}
+            <span class="conn"><span class="live"></span> connected</span>
+          </div>
+          <div class="notice-slot"></div>
+          <div class="chat-scroll">
+            <div class="bubble agent">How can I help?</div>
+            <div class="bubble user">list my calendar for today</div>
+            <div class="bubble agent">You have 2 meetings: standup at 9:30 and a design review at 2:00.</div>
+          </div>
+          <div class="chat-input">
+            <div class="box">Type a request...</div>
+            <button class="send">&#8593;</button>
+          </div>`;
+      }
+
+      // ---- variant renderers (return HTML for the .notice-slot / overlay) ----
+      const variants = {
+        current: {
+          title: "0 - Current",
+          tag: "notifications bell (baseline)",
+          headerExtra:
+            '<span class="stale-chip" style="margin-left:8px" title="unread notification"><span class="cdot"></span>1</span>',
+          notice: "",
+          note: '<b>Today\u2019s behavior.</b> Warning lands in the notifications bell as an unread item - easy to miss, no call to action. <span class="con">Not visible until dismissed; needs a click to even see it.</span>',
+        },
+        toast: {
+          title: "A - Persistent toast",
+          tag: "top-right, until dismissed",
+          overlay: `
+            <div class="toast">
+              <div class="t-head">${WARN_SVG}<span>${MSG_TITLE}</span>
+                <button class="t-close" data-act="dismiss" title="Dismiss">&times;</button>
+              </div>
+              <div class="t-body">${MSG_BODY}<br>Restart to load the latest code: ${HINT}</div>
+              <div class="t-actions">
+                <button class="btn-warn" data-act="restart">Restart server</button>
+              </div>
+            </div>`,
+          note: '<b>Smallest change</b> - extend <span class="kbd">showToast</span> with a no-auto-dismiss option. <span class="pro">Prominent, actionable.</span> <span class="con">Overlays messages; once dismissed it\u2019s gone until reconnect.</span>',
+        },
+        banner: {
+          title: "B - Pinned banner",
+          tag: "top of panel, stays put",
+          notice: `
+            <div class="banner">
+              ${WARN_SVG}
+              <span class="b-text"><b>Server out of date</b> - running old code.</span>
+              <span class="b-actions">
+                <span class="link-restart" data-act="restart">Restart</span>
+                <button class="b-close" data-act="dismiss" title="Dismiss">&times;</button>
+              </span>
+            </div>`,
+          note: '<b>Best "can\u2019t miss it".</b> Pinned under the title bar, pushes chat down, never scrolls away. <span class="pro">Matches a persistent server state.</span> <span class="con">New renderer affordance + host event; most work.</span>',
+        },
+        strip: {
+          title: "C - Compact strip",
+          tag: "thin pinned line",
+          notice: `
+            <div class="strip">
+              ${WARN_SVG}
+              <span>Running old code -</span>
+              <span class="link-restart" data-act="restart">restart server</span>
+              <button class="s-close" data-act="dismiss" title="Dismiss">&times;</button>
+            </div>`,
+          note: '<b>Subtle pin.</b> One thin line - low nag, still always visible. <span class="pro">Unobtrusive, persistent.</span> <span class="con">Easier to tune out; still a new affordance.</span>',
+        },
+        hybrid: {
+          title: "D - Toast, collapses to pin",
+          tag: "prominent, then minimizes",
+          headerExtra:
+            '<span class="stale-chip hidden" data-act="expand" style="margin-left:8px" title="Server out of date - click to expand"><span class="cdot"></span>stale</span>',
+          overlay: `
+            <div class="toast">
+              <div class="t-head">${WARN_SVG}<span>${MSG_TITLE}</span>
+                <button class="t-close" data-act="minimize" title="Minimize to a pin">&times;</button>
+              </div>
+              <div class="t-body">${MSG_BODY}<br>Restart to load the latest code: ${HINT}</div>
+              <div class="t-actions">
+                <button class="btn-warn" data-act="restart">Restart server</button>
+              </div>
+            </div>`,
+          note: '<b>My pick.</b> Loud on arrival; the &times; <b>minimizes to an amber pin</b> in the title bar (never fully lost while stale), click the pin to re-open. <span class="pro">Persistent without nagging.</span>',
+        },
+      };
+
+      const grid = document.getElementById("grid");
+      const order = ["current", "toast", "banner", "strip", "hybrid"];
+
+      function buildCard(key) {
+        const v = variants[key];
+        const card = document.createElement("div");
+        card.className = "card";
+        card.dataset.key = key;
+        card.innerHTML = `
+          <div class="card-head">
+            <span class="card-title">${v.title} <span class="tag">&middot; ${v.tag}</span></span>
+            <button class="replay">Replay</button>
+          </div>
+          <div class="chat-panel">${scaffold(v.headerExtra)}</div>
+          <p class="note">${v.note}</p>`;
+        const panel = card.querySelector(".chat-panel");
+        render(key, panel, v);
+        card
+          .querySelector(".replay")
+          .addEventListener("click", () => render(key, panel, v));
+        panel.addEventListener("click", (e) => {
+          const act = e.target.closest("[data-act]")?.dataset.act;
+          if (!act) return;
+          handle(key, panel, act);
+        });
+        return card;
+      }
+
+      function render(key, panel, v) {
+        // reset in-panel notice slot + overlay + chip
+        const slot = panel.querySelector(".notice-slot");
+        slot.innerHTML = v.notice || "";
+        panel.querySelectorAll(".toast").forEach((t) => t.remove());
+        if (v.overlay) panel.insertAdjacentHTML("beforeend", v.overlay);
+        const chip = panel.querySelector(".stale-chip[data-act]");
+        if (chip) chip.classList.add("hidden");
+      }
+
+      function handle(key, panel, act) {
+        const toast = panel.querySelector(".toast");
+        const chip = panel.querySelector(".stale-chip[data-act='expand']");
+        const notice = panel.querySelector(".banner, .strip");
+        if (act === "dismiss") {
+          if (toast) toast.remove();
+          if (notice) notice.remove();
+        } else if (act === "minimize") {
+          if (toast) toast.remove();
+          if (chip) chip.classList.remove("hidden");
+        } else if (act === "expand") {
+          const v = variants[key];
+          if (!panel.querySelector(".toast") && v.overlay)
+            panel.insertAdjacentHTML("beforeend", v.overlay);
+          if (chip) chip.classList.add("hidden");
+        } else if (act === "restart") {
+          flashRestart(panel);
+        }
+      }
+
+      function flashRestart(panel) {
+        const target = panel.querySelector(".toast, .banner, .strip");
+        if (!target) return;
+        const prev = target.innerHTML;
+        target.innerHTML =
+          '<div style="display:flex;align-items:center;gap:8px;padding:2px 0;color:inherit">' +
+          '<span class="spin">&#8635;</span> Restarting server\u2026</div>';
+        setTimeout(() => {
+          target.remove();
+          const chip = panel.querySelector(".stale-chip[data-act='expand']");
+          if (chip) chip.classList.add("hidden");
+        }, 1100);
+      }
+
+      order.forEach((k) => grid.appendChild(buildCard(k)));
+
+      document.getElementById("themeBtn").addEventListener("click", () => {
+        const el = document.documentElement;
+        el.dataset.theme = el.dataset.theme === "dark" ? "light" : "dark";
+      });
+      document.getElementById("replayAll").addEventListener("click", () => {
+        document.querySelectorAll(".card").forEach((card) => {
+          const key = card.dataset.key;
+          render(key, card.querySelector(".chat-panel"), variants[key]);
+        });
+      });
+    </script>
+  </body>
+</html>

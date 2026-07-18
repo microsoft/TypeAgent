@@ -9,6 +9,7 @@ import {
     CosmosPartitionKeyBuilder,
     CosmosBulkOperation,
 } from "./logger.js";
+import { filterSecretsFromObject } from "@typeagent/common-utils";
 import registerDebug from "debug";
 import { randomUUID } from "crypto";
 
@@ -120,7 +121,7 @@ class CosmosDBLoggerSink implements LoggerSink {
                             operationType: "Create" as const,
                             partitionKey: partitionKey,
                             resourceBody: {
-                                ...event,
+                                ...filterSecretsFromObject(event),
                                 id: partitionKey.toString(),
                             },
                         };

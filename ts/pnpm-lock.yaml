@@ -1580,6 +1580,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
       '@typeagent/agent-server-protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -1626,6 +1629,12 @@ importers:
 
   packages/agentServer/protocol:
     dependencies:
+      '@typeagent/agent-rpc':
+        specifier: workspace:*
+        version: link:../../agentRpc
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
@@ -1651,6 +1660,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
       '@typeagent/agent-server-client':
         specifier: workspace:*
         version: link:../client
@@ -3584,6 +3596,9 @@ importers:
       '@github/copilot-sdk':
         specifier: 1.0.5
         version: 1.0.5
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
@@ -4342,6 +4357,9 @@ importers:
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../dispatcher/types
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -5707,6 +5725,9 @@ importers:
 
   packages/telemetry:
     dependencies:
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
       chalk:
         specifier: ^5.4.1
         version: 5.6.2

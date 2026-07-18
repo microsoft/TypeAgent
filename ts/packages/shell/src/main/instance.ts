@@ -17,7 +17,7 @@ import { ShellWindow } from "./shellWindow.js";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { getConsolePrompt } from "agent-dispatcher/helpers/console";
 import { getTraceId } from "agent-dispatcher/helpers/data";
-import { createShellAgentProvider } from "./agent.js";
+import { createShellAgent, createShellAgentProvider } from "./agent.js";
 import {
     createInlineBrowserControl,
     createInlineBrowserControlRpcHandlers,
@@ -285,14 +285,41 @@ async function initializeDispatcher(
                 createInlineBrowserControlRpcHandlers(browserControl.control),
             );
 
+            // Register the shell's own agent (@shell commands) with the remote
+            // dispatcher. The agent's handlers run here in the Electron main
+            // process (against the live ShellWindow) via agent-rpc over the
+            // connection; the remote dispatcher only holds a proxy. serveLocalView
+            // is false in connect mode: the agent does not serve a local chat view
+            // and needs no assigned localHostPort. Must be called after each
+            // (re)join, since a fresh dispatcher has no shell agent.
+            const registerShellAgent = async (
+                conn: AgentServerConnection,
+            ): Promise<void> => {
+                const { manifest, agent } = createShellAgent(shellWindow, {
+                    serveLocalView: false,
+                });
+                try {
+                    await conn.registerClientAgent("shell", manifest, agent);
+                    debugShellInit("Registered shell agent with remote server");
+                } catch (e) {
+                    // A second shell on the same conversation, or an older
+                    // server without support, shouldn't block startup - the
+                    // shell still works, just without @shell commands.
+                    debugShellError(
+                        "Failed to register shell agent with remote server:",
+                        e instanceof Error ? e.message : e,
+                    );
+                }
+            };
+
             // Reconnect state. When the WebSocket drops we attempt a few
             // backoff retries before giving up and surfacing the modal
             // "Disconnected" dialog. This keeps the shell alive across
             // brief server hiccups (server restart, transient network
             // blip when running with --connect to a remote host).
             // Backoff schedule mirrors the vscode-shell extension's
-            // AgentServerBridge.scheduleReconnect (4/6/8/...30s cap).
-            const MAX_RECONNECT_ATTEMPTS = 12; // ~5 minutes total at the 30s cap
+            // AgentServerBridge.scheduleReconnect (5/10/20/40/60s cap).
+            const MAX_RECONNECT_ATTEMPTS = 5; // ~135s total (5/10/20/40/60s backoff)
             let reconnectAttempt = 0;
             let reconnecting = false;
             // Set once auto-reconnect has exhausted MAX_RECONNECT_ATTEMPTS. The
@@ -341,9 +368,11 @@ async function initializeDispatcher(
                         reconnectAttempt < MAX_RECONNECT_ATTEMPTS
                     ) {
                         reconnectAttempt++;
+                        // Exponential backoff (5/10/20/40/60s, capped at 60s),
+                        // matching the vscode-shell AgentServerBridge schedule.
                         const backoffSec = Math.min(
-                            30,
-                            2 + reconnectAttempt * 2,
+                            60,
+                            5 * 2 ** (reconnectAttempt - 1),
                         );
                         debugShellInit(
                             `Reconnect attempt ${reconnectAttempt} in ${backoffSec}s`,
@@ -428,6 +457,9 @@ async function initializeDispatcher(
                                 );
                             }
                             rebindDispatcher(freshConversation.dispatcher);
+                            // The reconnected server has a fresh dispatcher with
+                            // no shell agent; re-register it.
+                            await registerShellAgent(conn);
                             reconnectAttempt = 0;
                             broadcastReconnect(undefined);
                             debugShellInit("Reconnected to dispatcher");
@@ -506,6 +538,7 @@ async function initializeDispatcher(
             // Find-or-create the default "Shell" conversation, matching CLI
             // behavior. Shared with the standalone (embedded) path.
             await restoreOrJoinShellConversation(connection);
+            await registerShellAgent(connection);
             // Note: connection.close() is called by closeDispatcher() on
             // shutdown, so no override here — it would double-close the WebSocket.
 

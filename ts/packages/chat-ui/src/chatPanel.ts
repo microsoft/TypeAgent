@@ -34,6 +34,7 @@ import {
     type ConnectionStatus,
     type ConnectionActionHandler,
 } from "./connectionStatus.js";
+import { type StatusNotice, type StatusNoticeLevel } from "./statusNotice.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
 // passed in is built from values that, while in practice come from
@@ -596,6 +597,14 @@ export class ChatPanel {
      * chat in rootElement, lazily created on first toast.
      */
     private toastStack: HTMLDivElement | undefined;
+    /**
+     * Bottom-right overlay hosting persistent status notices (see
+     * showStatusNotice). Lazily created on first notice; distinct from the
+     * transient toastStack so the two never fight for the same corner.
+     */
+    private statusNoticeLayer: HTMLDivElement | undefined;
+    /** Active status notices keyed by id -> their root element. */
+    private statusNotices = new Map<string, HTMLElement>();
     private commandHistory: string[] = [];
     private historyIndex = -1;
     /** Local user's display name + initial used in user-bubble headers. */
@@ -2636,6 +2645,137 @@ export class ChatPanel {
     }
 
     /**
+     * Show a persistent status notice: a bottom-right toast that stays until
+     * dismissed (unlike showToast's 5s auto-hide). The dismiss (×) collapses
+     * it to a small pinned pill in the same corner; clicking the pill
+     * re-expands it. Re-calling with the same `id` replaces the notice (e.g. a
+     * reconnect re-sending it). An optional action button runs `actionCommand`
+     * through the chat input, so the affordance works identically in every
+     * host with no extra wiring.
+     */
+    public showStatusNotice(notice: StatusNotice): void {
+        if (!notice || !notice.id || !notice.title) {
+            return;
+        }
+        // Replace any existing notice with this id.
+        this.statusNotices.get(notice.id)?.remove();
+
+        const layer = this.ensureStatusNoticeLayer();
+        const level: StatusNoticeLevel = notice.level ?? "info";
+
+        const root = document.createElement("div");
+        root.className = `chat-status-notice level-${level}`;
+        root.dataset.id = notice.id;
+
+        // Expanded toast.
+        const toast = document.createElement("div");
+        toast.className = "csn-toast";
+
+        const head = document.createElement("div");
+        head.className = "csn-head";
+        const icon = document.createElement("span");
+        icon.className = "csn-icon-wrap";
+        // Fixed, non-user SVG literal — safe to assign as innerHTML.
+        icon.innerHTML = this.statusNoticeIconSvg(level);
+        head.appendChild(icon);
+        const titleEl = document.createElement("span");
+        titleEl.className = "csn-title";
+        titleEl.textContent = notice.title;
+        head.appendChild(titleEl);
+        const minBtn = document.createElement("button");
+        minBtn.type = "button";
+        minBtn.className = "csn-min";
+        minBtn.title = "Minimize";
+        minBtn.setAttribute("aria-label", "Minimize");
+        minBtn.textContent = "×";
+        head.appendChild(minBtn);
+        toast.appendChild(head);
+
+        if (notice.message) {
+            const body = document.createElement("div");
+            body.className = "csn-body";
+            body.textContent = notice.message;
+            toast.appendChild(body);
+        }
+
+        if (notice.actionLabel && notice.actionCommand) {
+            const actions = document.createElement("div");
+            actions.className = "csn-actions";
+            const actionBtn = document.createElement("button");
+            actionBtn.type = "button";
+            actionBtn.className = "csn-action";
+            actionBtn.textContent = notice.actionLabel;
+            const command = notice.actionCommand;
+            actionBtn.addEventListener("click", () => {
+                this.injectCommand(command);
+            });
+            actions.appendChild(actionBtn);
+            toast.appendChild(actions);
+        }
+
+        // Collapsed pill (hidden until minimized via the .collapsed class).
+        const pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "csn-pill";
+        pill.title = `${notice.title} — click to expand`;
+        pill.setAttribute("aria-label", `${notice.title} — click to expand`);
+        const dot = document.createElement("span");
+        dot.className = "csn-dot";
+        pill.appendChild(dot);
+        const pillLabel = document.createElement("span");
+        pillLabel.className = "csn-pill-label";
+        pillLabel.textContent = notice.title;
+        pill.appendChild(pillLabel);
+
+        minBtn.addEventListener("click", () => root.classList.add("collapsed"));
+        pill.addEventListener("click", () =>
+            root.classList.remove("collapsed"),
+        );
+
+        root.appendChild(toast);
+        root.appendChild(pill);
+        layer.appendChild(root);
+        this.statusNotices.set(notice.id, root);
+    }
+
+    /** Remove a status notice by id, or all of them when `id` is omitted. */
+    public clearStatusNotice(id?: string): void {
+        if (id === undefined) {
+            for (const el of this.statusNotices.values()) {
+                el.remove();
+            }
+            this.statusNotices.clear();
+        } else {
+            this.statusNotices.get(id)?.remove();
+            this.statusNotices.delete(id);
+        }
+        if (this.statusNotices.size === 0 && this.statusNoticeLayer) {
+            this.statusNoticeLayer.remove();
+            this.statusNoticeLayer = undefined;
+        }
+    }
+
+    private ensureStatusNoticeLayer(): HTMLDivElement {
+        if (!this.statusNoticeLayer) {
+            const layer = document.createElement("div");
+            layer.className = "chat-status-notice-layer";
+            (this.messageDiv.parentElement ?? this.rootElement).appendChild(
+                layer,
+            );
+            this.statusNoticeLayer = layer;
+        }
+        return this.statusNoticeLayer;
+    }
+
+    private statusNoticeIconSvg(level: StatusNoticeLevel): string {
+        if (level === "info") {
+            return '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>';
+        }
+        // warning + error share the triangle glyph; color comes from the level.
+        return '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V8h2v5z"/></svg>';
+    }
+
+    /**
      * Show a compact inline row in the chat scroll (no bubble chrome,
      * single line, dim styling). Persists in scroll history. Does NOT
      * participate in the thread map — fire-and-forget.
@@ -3081,6 +3221,9 @@ export class ChatPanel {
         if (this.toastStack) {
             this.toastStack.replaceChildren();
         }
+        // Drop persistent status notices too; they're re-pushed by the server
+        // on the next connect if the condition still holds.
+        this.clearStatusNotice();
         // Reset scroll state and pill
         this.userHasManuallyScrolled = false;
         this.hideNewMessagesPill();

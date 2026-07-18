@@ -26,6 +26,9 @@ export function createClientIORpcServer(
         closeLocalView: async (...args) => {
             return clientIO.closeLocalView(...args);
         },
+        getUserContext: async (...args) => {
+            return clientIO.getUserContext?.(...args);
+        },
     };
 
     const clientIOCallFunctions: ClientIOCallFunctions = {

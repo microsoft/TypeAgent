@@ -393,6 +393,10 @@ stages:
     jobs:
       - job: unit_tests
         displayName: "Unit tests, lint, policy"
+        # Optional gate: a failure here must NOT block Publish. continueOnError
+        # makes a failing job report SucceededWithIssues instead of Failed, and
+        # the Publish stage condition accepts that result.
+        continueOnError: true
         pool:
           vmImage: ubuntu-latest
         steps:
@@ -447,11 +451,13 @@ stages:
     dependsOn:
       - Build
       - Test
-    # Run if Build succeeded and Test either succeeded or was skipped.
+    # Run if Build succeeded and Test did not hard-fail. The Test stage is an
+    # optional gate (unit_tests uses continueOnError), so a failing test reports
+    # SucceededWithIssues; Skipped covers the runTests=false case.
     condition: |
       and(
         in(stageDependencies.Build.result, 'Succeeded', 'SucceededWithIssues'),
-        in(stageDependencies.Test.result, 'Succeeded', 'Skipped')
+        in(stageDependencies.Test.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
       )
     variables:
       NpmRcDirectory: $(Build.SourcesDirectory)

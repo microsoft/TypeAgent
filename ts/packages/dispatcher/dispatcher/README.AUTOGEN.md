@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=39997aea774daef1a585a17067895bccccd3395994218ca9f7cfbd1531cba613 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2040272b10ef9408d0abe4ccce2c2868414ca0d279210b90e13c54ceb57f1223 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a TypeScript library that acts as the central processing hub for user requests within the TypeAgent ecosystem. It translates natural language inputs into structured actions using large language models (LLMs) and coordinates interactions between various application agents. The Dispatcher is designed to be extensible, scalable, and capable of integrating with multiple front ends, such as the TypeAgent Shell and CLI.
+The TypeAgent Dispatcher is a TypeScript library that serves as the central component for processing user requests in the TypeAgent ecosystem. It translates natural language inputs into structured actions using large language models (LLMs) and coordinates interactions between various application agents. The Dispatcher is designed to work with multiple front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for building personal agents with natural language interfaces.
 
 ## What it does
 
@@ -20,7 +20,7 @@ The Dispatcher provides a framework for interpreting user inputs and orchestrati
 
 ### Natural Language Requests
 
-The Dispatcher leverages LLMs to process natural language inputs and translate them into structured actions defined by application agent schemas. For example:
+The Dispatcher uses LLMs to process natural language inputs and translate them into structured actions defined by application agent schemas. For example:
 
 ```bash
 [calendar]🤖> can you setup a meeting between 2-3PM
@@ -218,7 +218,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-r
 - [./src/context/dispatcher/schema/clarifyActionSchema.ts](./src/context/dispatcher/schema/clarifyActionSchema.ts)
 - [./src/context/dispatcher/schema/dispatcherActionSchema.ts](./src/context/dispatcher/schema/dispatcherActionSchema.ts)
 - [./src/context/dispatcher/schema/lookupActionSchema.ts](./src/context/dispatcher/schema/lookupActionSchema.ts)
-- _…and 210 more under `./src/`._
+- _…and 211 more under `./src/`._
 
 ### Environment variables
 
@@ -236,6 +236,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `27016facc11ab05d8556e8b89c421f6a0a90f2e2` on `2026-07-15T22:35:06.059Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `66ead8985b850f2775c9b1a96cb7de1d08e2aee1` on `2026-07-18T01:38:20.033Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

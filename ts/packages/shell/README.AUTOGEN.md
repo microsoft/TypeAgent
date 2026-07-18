@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ff63e64d14fc22db4139fd5b81a903f35cdb15426233d6f1dd7a4b877136459c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=aa5f9fb4b8b537b696c423ba780c995474b127c609a52083334742ae1b2379d0 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -16,7 +16,7 @@ The `agent-shell` package is a TypeScript library that serves as the graphical u
 
 ## What it does
 
-The `agent-shell` package offers a range of features to enable interactive and conversational agent experiences:
+The `agent-shell` package provides a range of features to enable interactive and conversational agent experiences:
 
 ### Conversation Management
 
@@ -172,6 +172,6 @@ _5 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `5c9fc637c2f0a96d75d41a3bc9054d06247d26d8` on `2026-07-15T08:50:41.068Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `bdf0bb82a95a3a61dfc2a32ea439f70c96228154` on `2026-07-18T01:48:24.228Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

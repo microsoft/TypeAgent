@@ -7,6 +7,7 @@ import {
     ConversationManager,
 } from "./conversationManager.js";
 import { createAgentServerConnectionHandler } from "./connectionHandler.js";
+import { startStaleBuildWatcher, isStaleBuild } from "./staleBuild.js";
 import {
     getInstanceDirAsync,
     getTraceIdAsync,
@@ -31,6 +32,7 @@ import {
 } from "@typeagent/agent-server-client";
 import registerDebug from "debug";
 import os from "node:os";
+import { spawn } from "node:child_process";
 import { DefaultAzureCredential } from "@azure/identity";
 
 // Load config from YAML layers + Key Vault (replacing legacy dotenv).
@@ -233,11 +235,38 @@ async function main() {
     // Shared shutdown logic — used by RPC handler, idle timer, and clientIO intercept.
     // The wss variable is assigned after createWebSocketChannelServer resolves below.
     let wss: Awaited<ReturnType<typeof createWebSocketChannelServer>>;
-    async function shutdownServer() {
-        console.log("Shutdown requested, stopping agent server...");
+
+    // Stop listening, close conversations (which releases the instance-dir
+    // lock), and drop the PID file. Shared by shutdown and restart so a
+    // relaunched successor finds the port free and the lock released.
+    async function teardownServer() {
         wss.close();
         await conversationManager.close();
         removeServerPid(port);
+    }
+
+    async function shutdownServer() {
+        console.log("Shutdown requested, stopping agent server...");
+        await teardownServer();
+        process.exit(0);
+    }
+
+    // Restart in place: tear this process down, then relaunch an identical
+    // successor (same node flags + argv) that loads freshly-rebuilt code. The
+    // successor inherits this console, and `detached` + `unref` let it outlive
+    // us. Releasing the port/lock *before* spawning keeps the successor's bind
+    // and lock acquisition from racing this process.
+    async function restartServer() {
+        process.stderr.write(
+            "\x1b[1;30;43m Restart requested - relaunching agent server... \x1b[0m\n",
+        );
+        await teardownServer();
+        const child = spawn(
+            process.execPath,
+            [...process.execArgv, ...process.argv.slice(1)],
+            { detached: true, stdio: "inherit", windowsHide: false },
+        );
+        child.unref();
         process.exit(0);
     }
 
@@ -273,6 +302,8 @@ async function main() {
     const connectionHandler = createAgentServerConnectionHandler({
         conversationManager,
         shutdown: shutdownServer,
+        restart: restartServer,
+        isStale: isStaleBuild,
         getUserIdentity: () => userIdentity,
         portRegistrar,
         onConnect: () => {
@@ -308,6 +339,9 @@ async function main() {
 
     console.log(`Agent server started at ws://localhost:${port}`);
     writeServerPid(port, process.pid);
+    // Warn (once) in this console if the server's own build changes on disk
+    // while this process keeps running the old code.
+    startStaleBuildWatcher(import.meta.url);
     scheduleIdleShutdown();
 }
 

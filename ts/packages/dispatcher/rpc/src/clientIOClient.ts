@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { createRpc } from "@typeagent/agent-rpc/rpc";
-import type { ClientIO } from "@typeagent/dispatcher-types";
+import type { ClientIO, UserContext } from "@typeagent/dispatcher-types";
 import type {
     ClientIOCallFunctions,
     ClientIOInvokeFunctions,
@@ -49,6 +49,12 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         },
         proposeAction(...args): Promise<unknown> {
             return rpc.invoke("proposeAction", ...args);
+        },
+        // requestId (when a caller passes one) selects a client at the routing
+        // layer; the per-client leaf reports its own editor state, so nothing
+        // is forwarded over the wire here.
+        getUserContext(): Promise<UserContext | undefined> {
+            return rpc.invoke("getUserContext");
         },
         notify(...args): void {
             return rpc.send("notify", ...args);

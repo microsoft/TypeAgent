@@ -68,7 +68,10 @@ move to the newest matching version (optionally constrained by a `<range>` such
 as `^1.4`, `~2.0`, or `>=3 <4`), path agents refresh from their recorded path,
 and catalog agents are looked up again by short name. If the recorded source is
 no longer configured, the installed agent can still load at runtime, but update
-fails until the source is added back or the agent is uninstalled.
+fails until the source is added back or the agent is uninstalled. A feed update
+reports the old and new package versions when its cross-session swap starts; if
+the resolved version is already serving, it reports that immediately and skips
+the swap.
 
 ### `@package uninstall <name>`
 
