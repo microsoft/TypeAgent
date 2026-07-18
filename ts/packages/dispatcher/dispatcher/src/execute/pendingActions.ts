@@ -161,7 +161,11 @@ interface EntityResolver {
         fieldType: ActionParamType,
         existing?: EntityValue,
     ) => Promise<PromptEntity | undefined>;
-    setResultEntity: (name: string, entity: PromptEntity, value?: unknown) => void;
+    setResultEntity: (
+        name: string,
+        entity: PromptEntity,
+        value?: unknown,
+    ) => void;
     // Look up the concrete value registered for a ${result-<id>} reference,
     // once the producing action has run. found=false before then.
     getResultValue?: (name: string) => { found: boolean; value: unknown };
@@ -190,7 +194,11 @@ function createResultEntityResolver(): EntityResolver {
                 throw new Error(`Result entity reference not found: ${value}`);
             }
         },
-        setResultEntity: (name: string, entity: PromptEntity, value?: unknown) => {
+        setResultEntity: (
+            name: string,
+            entity: PromptEntity,
+            value?: unknown,
+        ) => {
             resultEntityMap.set(name, entity);
             if (value !== undefined) {
                 resultValueMap.set(name, value);
