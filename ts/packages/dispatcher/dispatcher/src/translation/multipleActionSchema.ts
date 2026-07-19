@@ -84,7 +84,7 @@ export function createMultipleActionSchema(
             ? multipleActionOptions.pending
             : true);
 
-    const actionRequestEntryFields: any = {
+    const actionRequestEntryFields: sc.FieldSpec = {
         request: sc.string(),
         action: types,
     };
@@ -111,7 +111,7 @@ export function createMultipleActionSchema(
 
     const actionRequestEntryType = sc.obj(actionRequestEntryFields);
 
-    const parametersFields: any = {
+    const parametersFields: sc.FieldSpec = {
         requests: sc.array(actionRequestEntryType),
     };
     if (pending) {
