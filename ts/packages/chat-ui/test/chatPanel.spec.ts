@@ -356,3 +356,52 @@ describe("icons", () => {
         }
     });
 });
+
+describe("notifications (persistent, dismissable)", () => {
+    function agentBubbles(root: HTMLElement): HTMLElement[] {
+        return Array.from(
+            root.querySelectorAll<HTMLElement>(".chat-message-agent"),
+        );
+    }
+
+    it("addNotification renders a persistent agent bubble", () => {
+        const { root, panel } = makePanel();
+        panel.addNotification("Build finished", "osNotifications", "os:1");
+        const bubbles = agentBubbles(root);
+        expect(bubbles.length).toBe(1);
+        expect(bubbles[0].textContent).toContain("Build finished");
+    });
+
+    it("reusing an id updates the same bubble in place (no duplicate)", () => {
+        const { root, panel } = makePanel();
+        panel.addNotification("first", "osNotifications", "os:1");
+        panel.addNotification("second", "osNotifications", "os:1");
+        const bubbles = agentBubbles(root);
+        expect(bubbles.length).toBe(1);
+        expect(bubbles[0].textContent).toContain("second");
+        expect(bubbles[0].textContent).not.toContain("first");
+    });
+
+    it("removeNotification drops the matching bubble and returns true", () => {
+        const { root, panel } = makePanel();
+        panel.addNotification("Build finished", "osNotifications", "os:1");
+        expect(panel.removeNotification("os:1")).toBe(true);
+        expect(agentBubbles(root).length).toBe(0);
+    });
+
+    it("removeNotification is a no-op for unknown ids", () => {
+        const { panel } = makePanel();
+        expect(panel.removeNotification("os:unknown")).toBe(false);
+    });
+
+    it("distinct ids produce distinct bubbles removable independently", () => {
+        const { root, panel } = makePanel();
+        panel.addNotification("one", "osNotifications", "os:1");
+        panel.addNotification("two", "osNotifications", "os:2");
+        expect(agentBubbles(root).length).toBe(2);
+        panel.removeNotification("os:1");
+        const remaining = agentBubbles(root);
+        expect(remaining.length).toBe(1);
+        expect(remaining[0].textContent).toContain("two");
+    });
+});

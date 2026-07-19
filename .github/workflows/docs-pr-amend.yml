@@ -112,15 +112,60 @@ jobs:
           since: ${{ steps.base.outputs.since }}
           github-token: ${{ github.token }}
 
-      # Commit only the regenerated companions back onto the PR branch. The
-      # action no-ops when nothing changed (e.g. every changed package was
-      # skipped by the content-hash gate), which is what makes a re-triggered
-      # run terminate instead of looping. README.md is never touched.
+      # keytar - a transitive native dependency pulled in when the read-only
+      # dispatcher and action-browser boot in the two steps below - dlopens
+      # libsecret at load time, but the GitHub-hosted runner image doesn't ship
+      # it. Without this, both steps fail with "libsecret-1.so.0: cannot open
+      # shared object file" and, being advisory (continue-on-error), silently
+      # leave the command reference and action browser stale. The repo
+      # Dockerfile installs the same package for the same reason.
+      - name: Install libsecret (keytar native runtime dep)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsecret-1-0
+
+      # Regenerate the global command reference. Unlike the per-package
+      # READMEs above, this is a deterministic transform of the dispatcher +
+      # agent command descriptors (no LLM, no API keys), so it reuses the
+      # docs-autogen CLI the composite already built and needs no GitHub
+      # Models token. writeCommandReference only writes when the content
+      # changed, so a re-triggered run regenerates nothing and the amend loop
+      # still terminates. Advisory like the README step: a docs failure here
+      # must never block the code PR.
+      - name: Regenerate command reference
+        continue-on-error: true
+        working-directory: ts
+        run: node tools/docsAutogen/bin/docs-autogen.cjs --command-reference
+
+      # Regenerate the interactive Action Browser: a self-contained HTML
+      # catalog (plus its raw JSON) of every agent action, parameter, example
+      # phrasing, and system command. Like the command reference it is a
+      # static transform of the bundled agent manifests/schemas/grammar (no
+      # LLM, no API keys). Its tool is separate from docs-autogen, so build it
+      # here - tsc -b is incremental, so deps the composite already built are
+      # no-ops. Advisory: a docs failure must never block the code PR.
+      - name: Regenerate action browser
+        continue-on-error: true
+        working-directory: ts
+        run: |
+          pnpm --filter '@typeagent/action-browser...' build
+          node tools/actionBrowser/dist/cli.js --json
+
+      # Commit the regenerated companions, command reference, and action
+      # browser back onto the PR branch. The commit no-ops when nothing
+      # changed (e.g. every changed package was skipped by the content-hash
+      # gate and the generated docs were already current), which is what makes
+      # a re-triggered run terminate instead of looping. README.md is never
+      # touched.
       - name: Commit regenerated docs
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "docs: regenerate README.AUTOGEN.md for changed packages"
+          commit_message: "docs: regenerate README.AUTOGEN.md, command reference, and action browser"
           commit_user_name: typeagent-bot
           commit_user_email: typeagent-bot[bot]@users.noreply.github.com
           commit_author: "typeagent-bot <typeagent-bot[bot]@users.noreply.github.com>"
-          file_pattern: "ts/packages/**/README.AUTOGEN.md"
+          file_pattern: |
+            ts/packages/**/README.AUTOGEN.md
+            ts/docs/overview/command-reference.md
+            ts/docs/overview/action-browser.html
+            ts/docs/overview/action-browser.json

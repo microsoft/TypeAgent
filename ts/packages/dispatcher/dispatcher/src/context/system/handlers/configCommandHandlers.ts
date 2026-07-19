@@ -21,6 +21,7 @@ import {
     getCopilotClient,
     getActiveModelProvider,
     setActiveModelProvider,
+    setEgressSecretRedactionEnabled,
     getRuntimeConfig,
     PROVIDER_MODES,
     type ProviderMode,
@@ -3259,6 +3260,12 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                 },
             },
             request: new ConfigRequestCommandHandler(),
+            scrub: getToggleHandlerTable(
+                "outbound secret scrubbing",
+                async (_context, enable: boolean) => {
+                    setEgressSecretRedactionEnabled(enable);
+                },
+            ),
             match: {
                 description: "Configure match behavior",
                 commands: {

@@ -6,7 +6,8 @@ export type ListAction =
     | RemoveItemsAction
     | CreateListAction
     | GetListAction
-    | ClearListAction;
+    | ClearListAction
+    | ListListsAction;
 
 export type ListActivity = StartEditList;
 
@@ -52,6 +53,13 @@ export type ClearListAction = {
     parameters: {
         listName: string;
     };
+};
+
+// use this action to show the user which lists exist, for example,
+// "what lists are there?", "show me my lists", "what lists do I have?"
+export type ListListsAction = {
+    actionName: "listLists";
+    parameters: {};
 };
 
 export type StartEditList = {

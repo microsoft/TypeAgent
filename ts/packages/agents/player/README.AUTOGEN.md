@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d24fef7081b0073f229cef02becbf398382f82a97e80b520d43163397dd79bdb -->
+<!-- AUTOGEN:DOCS:HASH:sha256=bdedf2df4ae25635fa55eb520cefcac37c2603ae4d134c5d8efa2167146c9bfd -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # music — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `music` package, located in `ts/packages/agents/player/`, is a TypeAgent application agent that integrates with the Spotify API. It enables users to control Spotify playback, manage playlists, and explore music through a variety of actions. This agent interacts with Spotify's Web API and requires a one-time setup for authentication and authorization. Once configured, it can control playback on any active Spotify client, such as the desktop app, mobile app, or a browser tab on `open.spotify.com`.
+The `music` package, located in `ts/packages/agents/player/`, is a TypeAgent application agent that integrates with the Spotify API. It enables users to control Spotify playback, manage playlists, search for music, and retrieve information about tracks, albums, and playlists. This agent interacts with Spotify's Web API and requires a one-time setup for authentication and authorization. Once configured, it can control playback on any active Spotify client, such as the desktop app, mobile app, or a browser tab on `open.spotify.com`.
 
 ## What it does
 
-The `music` package provides a comprehensive set of actions for interacting with Spotify. These actions are grouped into the following categories:
+The `music` package provides a wide range of actions for interacting with Spotify. These actions are organized into several functional categories:
 
 ### Playback Control
 
@@ -86,13 +86,13 @@ For more detailed instructions, refer to the hand-written README.
 
 ## Key Files
 
-The `music` package is structured into several key files, each serving a specific purpose:
+The `music` package is organized into several key files, each with a specific role in the agent's functionality:
 
-- [playerManifest.json](./src/agent/playerManifest.json): Metadata about the agent, including its schema and description.
+- [playerManifest.json](./src/agent/playerManifest.json): Contains metadata about the agent, including its schema and description.
 - [playerSchema.agr](./src/agent/playerSchema.agr): Defines the grammar for parsing user commands related to music playback and control.
-- [playerSchema.ts](./src/agent/playerSchema.ts): Contains TypeScript definitions for the actions and entities used by the agent.
+- [playerSchema.ts](./src/agent/playerSchema.ts): Provides TypeScript definitions for the actions and entities used by the agent.
 - [playerHandlers.ts](./src/agent/playerHandlers.ts): Implements the logic for handling actions such as playback control, playlist management, and search.
-- [playerCommands.ts](./src/agent/playerCommands.ts): Provides command interfaces for enabling/disabling Spotify integration, authenticating users, and loading user data.
+- [playerCommands.ts](./src/agent/playerCommands.ts): Defines command interfaces for enabling/disabling Spotify integration, authenticating users, and loading user data.
 - [client.ts](./src/client.ts): Manages communication with the Spotify API, including authentication, token management, and API requests.
 - [playback.ts](./src/playback.ts): Handles playback-related functionality, such as managing active devices and playback status.
 
@@ -102,7 +102,7 @@ To extend the `music` package, follow these steps:
 
 1. **Understand the Current Implementation**:
 
-   - Start by reviewing [playerHandlers.ts](./src/agent/playerHandlers.ts) to understand how existing actions are implemented.
+   - Review [playerHandlers.ts](./src/agent/playerHandlers.ts) to understand how existing actions are implemented.
    - Familiarize yourself with [playerSchema.ts](./src/agent/playerSchema.ts), which defines the TypeScript types for actions and entities.
 
 2. **Define New Actions**:
@@ -164,6 +164,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `2a8c6e65a1638c435219fd5b8688faeeec78d4c7` on `2026-07-16T01:20:16.260Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music docs:verify-links` to spot-check._
+_Auto-generated against commit `493ac5696974a3cab9c5528399a245063e7eb727` on `2026-07-18T23:55:00.731Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

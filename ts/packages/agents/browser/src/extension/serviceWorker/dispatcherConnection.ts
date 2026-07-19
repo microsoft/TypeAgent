@@ -569,6 +569,7 @@ function makeConnectionAdapter(): AgentServerConnection {
             return rpc.invoke("deleteConversation", id) as Promise<void>;
         },
         shutdown: () => notSupported("shutdown"),
+        restart: () => notSupported("restart"),
         getSpeechToken: () => {
             const { rpc } = requireFresh();
             return rpc.invoke("getSpeechToken");
@@ -576,6 +577,10 @@ function makeConnectionAdapter(): AgentServerConnection {
         // In-place rebind reconnect isn't driven through this adapter; the
         // service worker reconnects via its own doConnect path.
         reconnect: async () => false,
+        registerClientAgent: () =>
+            notSupported("registerClientAgent") as Promise<void>,
+        unregisterClientAgent: () =>
+            notSupported("unregisterClientAgent") as Promise<void>,
         close: () => notSupported("close"),
     };
 }

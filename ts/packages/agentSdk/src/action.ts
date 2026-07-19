@@ -73,6 +73,12 @@ export type ActionResultSuccess = {
     displayContent: DisplayContent; // the display content to be appended with "block" mode
     entities: Entity[];
     resultEntity?: Entity | undefined;
+    // Concrete value this result represents (e.g. the list an action produced).
+    // Enables inline result-chaining: a later action in the same request can
+    // reference it via { "$result": "<id>" } in a parameter. The dispatcher
+    // substitutes this value at execution time and validates it against the
+    // consuming parameter's type.
+    resultValue?: unknown;
     dynamicDisplayId?: string | undefined;
     dynamicDisplayNextRefreshMs?: number | undefined;
     additionalInstructions?: string[] | undefined;

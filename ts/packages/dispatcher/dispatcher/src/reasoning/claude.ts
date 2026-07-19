@@ -16,6 +16,7 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { formatUserContextForPrompt } from "./userContextPrompt.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import {
     ConversationMessage,
@@ -208,6 +209,12 @@ function buildPromptWithContext(
     if (chatContext) {
         parts.push(chatContext);
     }
+    const editorContext = formatUserContextForPrompt(
+        context.sessionContext.agentContext.currentOptions?.userContext,
+    );
+    if (editorContext) {
+        parts.push(editorContext);
+    }
     if (fallbackContext) {
         const lines = ["[Fallback context — a prior action failed]"];
         if (fallbackContext.failedSchema && fallbackContext.failedAction) {
@@ -347,6 +354,11 @@ function getClaudeOptions(
     context: ActionContext<CommandHandlerContext>,
 ): Options {
     const systemContext = context.sessionContext.agentContext;
+    // Stable clientIO reference for get_user_context (see copilot.ts).
+    const baseClientIO = systemContext.clientIO;
+    // Originating request id (carries connectionId) so the agent-server routing
+    // can prefer this client's editor context (see copilot.ts).
+    const originatorRequestId = systemContext.currentRequestId;
     const config = systemContext.session.getConfig();
     const activeSchemas = systemContext.agents.getActiveSchemas();
     const schemaDescriptions: string[] = [];
@@ -668,6 +680,31 @@ function getClaudeOptions(
         },
     };
 
+    const userContextSchema = {};
+    const getUserContextTool: SdkMcpToolDefinition<typeof userContextSchema> = {
+        name: "get_user_context",
+        description: [
+            "Get a fresh, coarse snapshot of the user's current editor context:",
+            "active file path, language, cursor and selection ranges, workspace",
+            "folders, the open-editor list, the active file's diagnostics (with",
+            "messages), and the active selection's text (all bounded).",
+            "Does NOT include full file contents. To read those, use the code",
+            "agent's read actions (getActiveEditor, getSelection, getFileContent,",
+            "getDiagnostics) via discover_actions/execute_action.",
+        ].join("\n"),
+        inputSchema: userContextSchema,
+        handler: async () => {
+            const userContext =
+                await baseClientIO.getUserContext?.(originatorRequestId);
+            const text = userContext
+                ? JSON.stringify(userContext, null, 2)
+                : "No editor context is available (the client is not an editor, or there is no active editor).";
+            return {
+                content: [{ type: "text", text }],
+            };
+        },
+    };
+
     const sessionId = getSessionId(context);
 
     // Experimental override: if CLAUDE_CUSTOM_PROMPT_FILE is set, read that file
@@ -722,6 +759,7 @@ function getClaudeOptions(
                 "- `remember`: Durably save a new memory so it can be recalled later",
                 "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
                 "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
+                "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file, language, cursor/selection ranges, workspace, open editors, the active file's diagnostic messages) and the user's selected text (bounded) when present; use the code agent's read actions for full file contents",
                 "",
                 'For follow-up requests that refer to earlier turns (e.g. "those", "it", "mine"), first consult the [Recent conversation context] block included with the request; call search_memory only when you need older history not shown there.',
                 "",
@@ -1113,6 +1151,7 @@ function getClaudeOptions(
                     rememberTool,
                     getConversationInfoTool,
                     readConversationTool,
+                    getUserContextTool,
                 ],
             }),
         },

@@ -76,16 +76,19 @@ export interface TtsProvider {
 }
 
 /**
- * Image input capability. ChatPanel renders an attach-file button when
- * pickFile is present and a camera button when openCamera is present.
- * Both return base64 data URLs added to the next message's attachments.
+ * Image input capability. The attach-file button always renders (falling back
+ * to a web-native file input); supplying `pickFile` overrides that with a
+ * host-native picker. The camera button renders only when `openCamera` is
+ * present. Both hooks are independent and optional. Both return base64 data
+ * URLs added to the next message's attachments.
  */
 export interface ImageCaptureProvider {
     /**
-     * Open a native file picker and return the selected image(s) as base64
-     * data URLs, or undefined if cancelled.
+     * Optional host-native file picker returning the selected image(s) as
+     * base64 data URLs, or undefined if cancelled. When omitted, ChatPanel
+     * uses a built-in web-native `<input type="file">` for the attach button.
      */
-    pickFile(): Promise<string[] | undefined>;
+    pickFile?(): Promise<string[] | undefined>;
     /**
      * Optional in-app camera capture returning a single base64 data URL,
      * or undefined if cancelled.

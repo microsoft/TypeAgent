@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7223aadc58fc8d03fa098d1c67f2992beae96fbe12d8df5636901dad70970c3e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=797dfa79a4995311198fe64ef8b6155a8255b5170a5f87901852e415ff134cbe -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # taskflow-typeagent — AI-generated documentation
@@ -12,30 +12,30 @@
 
 ## Overview
 
-The `taskflow-typeagent` package is a TypeAgent application agent that enables users to define, manage, and execute task flows. Task flows are user-taught macros that automate sequences of TypeAgent actions, allowing for reusable workflows and simplifying complex tasks. This package is a key component of the TypeAgent ecosystem, providing a framework for creating and executing custom workflows.
+The `taskflow-typeagent` package is a TypeAgent application agent that allows users to define, manage, and execute task flows. Task flows are user-taught macros that automate sequences of TypeAgent actions, enabling reusable workflows and simplifying complex tasks. This package is an integral part of the TypeAgent ecosystem, providing a framework for creating and executing custom workflows.
 
 ## What it does
 
-The `taskflow-typeagent` package provides functionality for creating, listing, and deleting task flows. These task flows are defined by users and can be executed programmatically or through natural language commands. The package supports the following key actions:
+The `taskflow-typeagent` package provides tools for defining, managing, and executing task flows. These task flows are user-defined sequences of actions that can be executed programmatically or triggered through natural language commands. The package supports the following key actions:
 
-- `listTaskFlows`: Retrieves a list of all registered task flows, allowing users to view available workflows.
-- `deleteTaskFlow`: Removes a specified task flow by name, enabling users to manage and clean up their task flow library.
+- `listTaskFlows`: Retrieves a list of all registered task flows, allowing users to view and manage their available workflows.
+- `deleteTaskFlow`: Removes a specified task flow by name, enabling users to clean up or update their task flow library.
 
-In addition to these actions, the package includes tools for validating and executing task flows. It leverages natural language processing (NLP) to generate grammar patterns, enabling users to define task flows using intuitive, human-readable commands. A script execution environment is also provided, allowing for programmatic execution of task flows.
+The package also includes functionality for validating and executing task flows. It uses natural language processing (NLP) to generate grammar patterns, allowing users to define task flows using intuitive, human-readable commands. Additionally, it provides a script execution environment for programmatic task flow execution.
 
-The package integrates with other components in the TypeAgent ecosystem, such as `@typeagent/agent-flows` and `@typeagent/agent-sdk`, to provide a cohesive automation framework.
+The `taskflow-typeagent` package integrates with other components in the TypeAgent ecosystem, such as `@typeagent/agent-flows` and `@typeagent/agent-sdk`, to provide a cohesive and extensible automation framework.
 
 ## Setup
 
 To use the `taskflow-typeagent` package, you need to configure the following environment variable:
 
-- `TASKFLOW_STORE_PATH`: Specifies the directory where task flow definitions are stored. Ensure this path is accessible and writable by the application.
+- `TASKFLOW_STORE_PATH`: This variable specifies the directory where task flow definitions are stored. Ensure that the specified path is accessible and writable by the application.
 
-For additional setup details, such as configuring integrations or external services, refer to the hand-written README.
+For further details on setup, including any additional configuration or integration steps, refer to the hand-written README.
 
 ## Key Files
 
-The `taskflow-typeagent` package is organized into several key files, each serving a specific purpose:
+The `taskflow-typeagent` package is organized into several key files, each with a specific role in enabling task flow functionality:
 
 - **Schema and Grammar**:
 
@@ -44,7 +44,7 @@ The `taskflow-typeagent` package is organized into several key files, each servi
 
 - **Action Handlers**:
 
-  - [actionHandler.mts](./src/actionHandler.mts): Contains the logic for executing task flow actions, managing the task flow store, and handling user-taught macros.
+  - [actionHandler.mts](./src/actionHandler.mts): Implements the logic for executing task flow actions, managing the task flow store, and handling user-taught macros.
 
 - **Script Management**:
 
@@ -92,8 +92,8 @@ By following these steps, you can expand the capabilities of the `taskflow-typea
 ### Entry points
 
 - `./agent/manifest` → [./manifest.json](./manifest.json)
-- `./agent/handlers` → `./dist/actionHandler.mjs` _(not found on disk)_
-- `./recipe` → `./dist/types/recipe.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/actionHandler.mjs](./dist/actionHandler.mjs)
+- `./recipe` → [./dist/types/recipe.js](./dist/types/recipe.js)
 
 ### Dependencies
 
@@ -130,6 +130,6 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`, `typescript`
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter taskflow-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter taskflow-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

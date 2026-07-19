@@ -50,7 +50,7 @@
       "examples": ["show me the files in documents", "show files"]
     },
     {
-      "pattern": "list (my)? $(path:wildcard)",
+      "pattern": "list my $(path:wildcard)",
       "isAlias": false,
       "examples": ["list my downloads", "list my pictures", "list my documents"]
     },

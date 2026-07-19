@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=47f4fb7c7ca5e4b1950c4995b1ff6d63b86b5271cc503c03c1fb183c0241803c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=0c37621a504b976bdd00eaa10c57335b47309f60fefbe77bd97f80517226ac60 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a TypeScript library that serves as the central hub for processing user requests in the TypeAgent ecosystem. It translates natural language inputs into structured actions using large language models (LLMs) and coordinates interactions between various application agents. The Dispatcher is designed to be extensible, scalable, and capable of integrating with multiple front ends, such as the TypeAgent Shell and CLI.
+The TypeAgent Dispatcher is a TypeScript library that acts as the central component of the TypeAgent ecosystem. It processes user inputs, translates natural language into structured actions using large language models (LLMs), and coordinates interactions across various application agents. The Dispatcher is designed to integrate with multiple front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for building personal agents with natural language interfaces.
 
 ## What it does
 
@@ -218,7 +218,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-r
 - [./src/context/dispatcher/schema/clarifyActionSchema.ts](./src/context/dispatcher/schema/clarifyActionSchema.ts)
 - [./src/context/dispatcher/schema/dispatcherActionSchema.ts](./src/context/dispatcher/schema/dispatcherActionSchema.ts)
 - [./src/context/dispatcher/schema/lookupActionSchema.ts](./src/context/dispatcher/schema/lookupActionSchema.ts)
-- _…and 210 more under `./src/`._
+- _…and 212 more under `./src/`._
 
 ### Environment variables
 
@@ -236,6 +236,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `ee4eba45bcb87911335cb938a0ced6a001aa3882` on `2026-07-17T22:05:48.260Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `493ac5696974a3cab9c5528399a245063e7eb727` on `2026-07-18T23:55:00.731Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

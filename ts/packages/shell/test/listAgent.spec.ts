@@ -24,30 +24,13 @@ test.describe("List Agent Tests", () => {
             ],
             [
                 "Created list: shopping",
-                // Each list-query step accepts both the plain-text display and
-                // the structured-output display (heading + list block) so the
-                // test passes whether or not the list agent has been switched
-                // to structured output. Keep the structured strings in sync
-                // with buildListResult() in listActionHandler.ts.
-                [
-                    "List 'shopping' is empty.",
-                    "List 'shopping'\n\nThis list is empty.",
-                ],
+                "List 'shopping'\n\nThis list is empty.",
                 "Added items: bread,milk,flour to list shopping",
-                [
-                    "List 'shopping' has items:\n\nbread\nmilk\nflour",
-                    "List 'shopping' \u2014 3 items\n\nbread\nmilk\nflour",
-                ],
+                "List 'shopping' — 3 items\nbread\nmilk\nflour",
                 "Removed items: milk from list shopping",
-                [
-                    "List 'shopping' has items:\n\nbread\nflour",
-                    "List 'shopping' \u2014 2 items\n\nbread\nflour",
-                ],
+                "List 'shopping' — 2 items\nbread\nflour",
                 "Cleared list: shopping",
-                [
-                    "List 'shopping' is empty.",
-                    "List 'shopping'\n\nThis list is empty.",
-                ],
+                "List 'shopping'\n\nThis list is empty.",
             ],
         );
     });

@@ -18,6 +18,8 @@ export {
     ConversationNameCollisionBehavior,
     JoinConversationResult,
     RenameConversationOptions,
+    RegisterClientAgentParams,
+    UnregisterClientAgentParams,
     UserIdentity,
     DefaultUserIdentity,
     SpeechToken,
