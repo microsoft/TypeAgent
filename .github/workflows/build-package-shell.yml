@@ -41,7 +41,7 @@ jobs:
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
         continue-on-error: true
@@ -55,7 +55,7 @@ jobs:
         name: Install pnpm
         with:
           package_json_file: ts/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         with:
           node-version: ${{ matrix.version }}
@@ -93,7 +93,7 @@ jobs:
         shell: bash
         run: pnpm run shell:package
       
-      # - uses: actions/upload-artifact@v4
+      # - uses: actions/upload-artifact@v5
       #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
       #   name: Upload build artifact
       #   with:

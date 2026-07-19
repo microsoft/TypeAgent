@@ -10,6 +10,7 @@ import {
     resolveTypeReference,
     resolveUnionType,
     ActionSchemaEntityTypeDefinition,
+    isResultReference,
 } from "@typeagent/action-schema";
 import {
     ExecutableAction,
@@ -160,11 +161,19 @@ interface EntityResolver {
         fieldType: ActionParamType,
         existing?: EntityValue,
     ) => Promise<PromptEntity | undefined>;
-    setResultEntity: (name: string, entity: PromptEntity) => void;
+    setResultEntity: (
+        name: string,
+        entity: PromptEntity,
+        value?: unknown,
+    ) => void;
+    // Look up the concrete value registered for a ${result-<id>} reference,
+    // once the producing action has run. found=false before then.
+    getResultValue?: (name: string) => { found: boolean; value: unknown };
 }
 
 function createResultEntityResolver(): EntityResolver {
     const resultEntityMap = new Map<string, PromptEntity>();
+    const resultValueMap = new Map<string, unknown>();
     return {
         resolve: async (
             action: FullAction,
@@ -185,8 +194,20 @@ function createResultEntityResolver(): EntityResolver {
                 throw new Error(`Result entity reference not found: ${value}`);
             }
         },
-        setResultEntity: (name: string, entity: PromptEntity) => {
+        setResultEntity: (
+            name: string,
+            entity: PromptEntity,
+            value?: unknown,
+        ) => {
             resultEntityMap.set(name, entity);
+            if (value !== undefined) {
+                resultValueMap.set(name, value);
+            }
+        },
+        getResultValue: (name: string) => {
+            return resultValueMap.has(name)
+                ? { found: true, value: resultValueMap.get(name) }
+                : { found: false, value: undefined };
         },
     };
 }
@@ -901,6 +922,21 @@ async function getParameterEntities(
     entityResolver: EntityResolver,
     existing?: EntityField,
 ): Promise<EntityField | undefined> {
+    if (isResultReference(value)) {
+        // { "$result": "<id>" } references the value of a prior action's result.
+        // At execution (after that action ran) substitute its concrete value and
+        // let the type walking below validate it against the consuming
+        // parameter's type ("customer ready"). Before then (translation) the
+        // result is not available, so leave the reference in place.
+        const resolved = entityResolver.getResultValue?.(
+            `\${result-${value.$result}}`,
+        );
+        if (resolved?.found !== true) {
+            return;
+        }
+        value = resolved.value;
+        obj[key] = value;
+    }
     const resolvedType = resolveUnionType(
         originalFieldType,
         originalActualType,

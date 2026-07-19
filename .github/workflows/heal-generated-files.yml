@@ -7,12 +7,36 @@
 # queue.  This job merges main into each affected same-repo PR branch and
 # resolves those files so no one has to do it by hand.  The logic lives in
 # ts/tools/scripts/heal-generated-files.mjs.
+#
+# Triggers: the push-to-main scan reconciles every affected PR when main moves;
+# pull_request events heal a single PR the moment it needs it (opened behind
+# main, or an author push that reconflicts the lockfile).  No self-commit guard
+# is needed - the healing push re-triggers this workflow, but the re-run trial-
+# merges main, finds nothing left to resolve, and exits without pushing, so the
+# cycle terminates by idempotency (same reasoning as docs-pr-amend.yml).
 
 name: Heal Generated Files
 
 on:
+  # main moving is what pushes open PRs into conflict, so this scan stays the
+  # primary trigger - one run reconciles every affected branch at once.
   push:
     branches: ["main"]
+  # Also heal a single PR the moment it needs it, without waiting for the next
+  # push to main: opened/reopened already behind main, or an author push that
+  # reintroduces a lockfile conflict.  No `paths` filter - the conflict comes
+  # from merging main, not from what the PR itself changed, so the trial merge
+  # is the real gate and exits fast when there is nothing to resolve.
+  #
+  # `synchronize` fires a run on every push to every same-repo PR.  That is
+  # deliberate: the lockfile currently churns often, so PRs reconflict on it
+  # frequently and healing right on the author's push is what spares them the
+  # manual resolve.  Each run is cheap (checkout + trial-merge, exits fast when
+  # clean).  If that churn settles and the run volume stops being worth it, drop
+  # to [opened, reopened] and let the push-to-main scan catch author-push
+  # reconflicts on the next merge.
+  pull_request:
+    types: [opened, reopened, synchronize]
   workflow_dispatch:
     inputs:
       pr:
@@ -20,8 +44,9 @@ on:
         type: string
 
 concurrency:
-  # Serialize runs so two never push to the same branch at once, and never
-  # cancel a run mid-push.
+  # One shared lane for every trigger (push scan, PR events, manual dispatch)
+  # so two runs never push to the same branch at once, and never cancel a run
+  # mid-push.
   group: heal-generated-files
   cancel-in-progress: false
 
@@ -31,6 +56,12 @@ permissions:
 
 jobs:
   heal:
+    # Fork PRs are skipped: their pull_request runs get a read-only token and no
+    # app secret, so the healing commit could not be pushed back anyway.  push
+    # and workflow_dispatch carry no pull_request payload, so they always run.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       # `vars`/`secrets` cannot be used directly in step `if` conditions, so
@@ -72,5 +103,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          INPUT_PR: ${{ github.event.inputs.pr }}
+          # Empty on the push scan (heal every open PR); one number on a
+          # pull_request event or manual dispatch (heal just that PR).
+          INPUT_PR: ${{ github.event.inputs.pr || github.event.pull_request.number }}
         run: node ts/tools/scripts/heal-generated-files.mjs

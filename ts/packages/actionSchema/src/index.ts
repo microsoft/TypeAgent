@@ -37,7 +37,7 @@ export {
     ActionObjectJsonSchema,
     ActionFunctionJsonSchema,
 } from "./jsonSchemaGenerator.js";
-export { validateAction } from "./validate.js";
+export { validateAction, isResultReference } from "./validate.js";
 
 // Utils for any schemas
 export {

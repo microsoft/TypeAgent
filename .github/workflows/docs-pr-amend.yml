@@ -73,7 +73,7 @@ jobs:
           private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
 
       - name: Checkout PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.head_ref }}
           # Full history so the merge-base with the base branch resolves.
@@ -111,6 +111,18 @@ jobs:
         with:
           since: ${{ steps.base.outputs.since }}
           github-token: ${{ github.token }}
+
+      # keytar - a transitive native dependency pulled in when the read-only
+      # dispatcher and action-browser boot in the two steps below - dlopens
+      # libsecret at load time, but the GitHub-hosted runner image doesn't ship
+      # it. Without this, both steps fail with "libsecret-1.so.0: cannot open
+      # shared object file" and, being advisory (continue-on-error), silently
+      # leave the command reference and action browser stale. The repo
+      # Dockerfile installs the same package for the same reason.
+      - name: Install libsecret (keytar native runtime dep)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsecret-1-0
 
       # Regenerate the global command reference. Unlike the per-package
       # READMEs above, this is a deterministic transform of the dispatcher +
