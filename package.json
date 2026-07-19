@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "sort-package-json": "^3.2.1"
+  }
+}
