@@ -17,8 +17,8 @@ const multipleActionType = "MultipleAction";
 
 // A short identifier for a result within a multiple action, so a later request
 // can reference it. Format: a token matching ^[A-Za-z0-9_]+$ (e.g. '0',
-// 'favoritesList'). To use the result inside a later action's parameters,
-// reference it as ${result-<ResultEntityId>}.
+// 'favoritesList'). To use the result inside a later action's parameters, set
+// that parameter to an object: { "$result": "<ResultEntityId>" }.
 export type ResultEntityId = string;
 
 export type PendingRequestEntry = {
