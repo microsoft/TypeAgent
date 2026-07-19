@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export { loadConfig, loadConfigSync } from "./loader.js";
+export { loadConfig, loadConfigSync, computeConfigDrift } from "./loader.js";
 export { flatten, mergeFlat } from "./flatten.js";
 export {
     fetchKeyVaultConfig,
@@ -28,6 +28,8 @@ export { runCli, type CliIO, type CliArgs } from "./cli.js";
 export { validateConfigTree, configTreeSchema } from "./schema.js";
 export {
     ConfigSource,
+    type ComputeConfigDriftOptions,
+    type ConfigDrift,
     type ConfigScalar,
     type ConfigTree,
     type FlatEnv,

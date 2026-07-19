@@ -139,6 +139,13 @@ import {
     LookupAndAnswerActions,
     LookupAndAnswerInternet,
 } from "./lookupAndAnswerSchema.mjs";
+import {
+    formatAiSearchAnswer,
+    getAiSearchConfigFromEnv,
+    lookupViaAiSearch,
+    type AiSearchConfig,
+} from "./lookup/aiSearchLookup.mjs";
+import { LookupCommandHandlerTable } from "./lookup/lookupCommandHandlers.mjs";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { createAgentInvokeHandlers } from "./agentServiceHandlers.mjs";
 import { hookModelTokenUsage, runWithTokenUsage } from "./tokenUsage.mjs";
@@ -2436,25 +2443,129 @@ async function summarizeSearchResults(
     );
 }
 
+// Browser-less internet lookup: query an Azure AI Search knowledge base whose
+// web knowledge source does the search + fetch + summarization server-side.
+// Used when the client has no browser to drive (vscode-shell, CLI).
+async function lookupInternetViaAiSearch(
+    context: ActionContext<BrowserActionContext>,
+    action: LookupAndAnswerInternet,
+    config: AiSearchConfig,
+) {
+    const query = action.parameters.originalRequest;
+    displayStatus(
+        `Looking up '${query}' via Azure AI Search (${config.mode})`,
+        context,
+    );
+    try {
+        const result = await lookupViaAiSearch(config, query);
+        debug(
+            "Azure AI Search lookup backend=%s elapsedMs=%d refs=%d",
+            result.backend,
+            result.elapsedMs,
+            result.references.length,
+        );
+        if (result.answer.length === 0) {
+            return createActionResultFromTextDisplay(
+                `No answer found for '${query}'.`,
+            );
+        }
+        const entities = result.references
+            .filter((ref) => ref.url !== undefined)
+            .map((ref) => ({
+                name: ref.title ?? ref.url!,
+                type: ["WebPage"],
+                uniqueId: ref.url!,
+            }));
+        const { markdown, text } = formatAiSearchAnswer(result);
+        return createActionResultFromMarkdownDisplay(markdown, text, entities);
+    } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        debug("Azure AI Search lookup failed: %s", message);
+        return createActionResultFromError(
+            `Azure AI Search lookup failed: ${message}`,
+        );
+    }
+}
+
+// A browser is available for the lookup when the shell's inline control is
+// present or an extension client is connected for this session.
+function isBrowserConnected(agentContext: BrowserActionContext): boolean {
+    return (
+        agentContext.clientBrowserControl !== undefined ||
+        hasClientForSession(
+            agentContext.agentWebSocketServer,
+            agentContext.sessionId,
+        )
+    );
+}
+
+/**
+ * True when a browser-control failure means the extension's content script
+ * couldn't be reached on the active tab (most often: the extension was
+ * rebuilt but not reloaded, or the active tab can't host content scripts).
+ */
+function isBrowserExtensionUnreachable(message: string): boolean {
+    return (
+        message.includes("Could not establish connection") ||
+        message.includes("Receiving end does not exist") ||
+        message.includes("Content script did not respond")
+    );
+}
+
 async function lookup(
     context: ActionContext<BrowserActionContext>,
     action: LookupAndAnswerInternet,
 ) {
+    const agentContext = context.sessionContext.agentContext;
+    // Prefer the browser-less path when Azure AI Search lookup is configured.
+    // A runtime override (@browser lookup ...) wins over the configured mode.
+    const aiSearchConfig = getAiSearchConfigFromEnv(agentContext.lookupMode);
+    if (aiSearchConfig) {
+        return lookupInternetViaAiSearch(context, action, aiSearchConfig);
+    }
+
+    // Browser path. When no browser is connected, fall back to the Azure AI
+    // Search API path if it's configured, rather than failing the lookup.
+    if (!isBrowserConnected(agentContext)) {
+        const fallbackConfig = getAiSearchConfigFromEnv("api");
+        if (fallbackConfig) {
+            debug(
+                "No browser connected; using Azure AI Search (api) for the lookup",
+            );
+            return lookupInternetViaAiSearch(context, action, fallbackConfig);
+        }
+    }
+
     // run a search for the lookup, wait for the page to load
     displayStatus(
         `Searching the web for '${action.parameters.internetLookups.join(" ")}'`,
         context,
     );
 
-    const searchURL: URL = await getActionBrowserControl(context).search(
-        action.parameters.internetLookups.join(" "),
-        action.parameters.sites,
-        context.sessionContext.agentContext.activeSearchProvider,
-        { waitForPageLoad: true },
-    );
+    let searchURL: URL;
+    let content: string;
+    try {
+        searchURL = await getActionBrowserControl(context).search(
+            action.parameters.internetLookups.join(" "),
+            action.parameters.sites,
+            context.sessionContext.agentContext.activeSearchProvider,
+            { waitForPageLoad: true },
+        );
 
-    // go get the page contents
-    const content = await getActionBrowserControl(context).getPageTextContent();
+        // go get the page contents
+        content = await getActionBrowserControl(context).getPageTextContent();
+    } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        debug("browser lookup failed reading the results page: %s", message);
+        if (isBrowserExtensionUnreachable(message)) {
+            return createActionResultFromError(
+                "Couldn't read the search results page: the TypeAgent browser extension isn't responding on the active tab. If you just rebuilt the extension, reload it (edge://extensions or chrome://extensions -> reload), make sure a normal web page tab is active, and try again.",
+            );
+        }
+        return createActionResultFromError(
+            `The web search for the lookup failed: ${message}`,
+        );
+    }
 
     // now try to generate an answer from the page contents
     displayStatus(
@@ -3557,6 +3668,7 @@ export const handlers: CommandHandlerTable = {
                 },
             },
         },
+        lookup: new LookupCommandHandlerTable(),
         search: new SearchProviderCommandHandlerTable(),
     },
 };

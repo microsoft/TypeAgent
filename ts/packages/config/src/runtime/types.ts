@@ -209,6 +209,45 @@ export interface AzureFoundryConfig {
 }
 
 /**
+ * Azure AI Search (Foundry IQ) configuration for the browser-less internet
+ * lookup: the knowledge base endpoint, backend selection, and retrieval
+ * options, plus the settings the setup script uses to provision the web
+ * knowledge source and knowledge base. Mirrors the `AZURE_AI_SEARCH_*` env
+ * vars. All fields optional so partial configurations remain valid. Auth
+ * defaults to identity (DefaultAzureCredential); apiKey/bearerToken override.
+ */
+export interface AzureAISearchConfig {
+    /** AZURE_AI_SEARCH_LOOKUP_MODE ("off" | "api" | "mcp") */
+    readonly mode?: string | undefined;
+    /** AZURE_AI_SEARCH_ENDPOINT */
+    readonly endpoint?: string | undefined;
+    /** AZURE_AI_SEARCH_KNOWLEDGE_BASE */
+    readonly knowledgeBase?: string | undefined;
+    /** AZURE_AI_SEARCH_API_KEY (override; default is identity auth) */
+    readonly apiKey?: string | undefined;
+    /** AZURE_AI_SEARCH_BEARER_TOKEN (override; default is identity auth) */
+    readonly bearerToken?: string | undefined;
+    /** AZURE_AI_SEARCH_API_VERSION */
+    readonly apiVersion?: string | undefined;
+    /** AZURE_AI_SEARCH_OUTPUT_MODE ("answerSynthesis" | "extractedData") */
+    readonly outputMode?: string | undefined;
+    /** AZURE_AI_SEARCH_REASONING_EFFORT ("minimal" | "low" | "medium") */
+    readonly reasoningEffort?: string | undefined;
+    /** AZURE_AI_SEARCH_AOAI_ENDPOINT (setup only) */
+    readonly aoaiEndpoint?: string | undefined;
+    /** AZURE_AI_SEARCH_AOAI_DEPLOYMENT (setup only) */
+    readonly aoaiDeployment?: string | undefined;
+    /** AZURE_AI_SEARCH_AOAI_MODEL (setup only) */
+    readonly aoaiModel?: string | undefined;
+    /** AZURE_AI_SEARCH_AOAI_API_KEY (setup only; omit to use managed identity) */
+    readonly aoaiApiKey?: string | undefined;
+    /** AZURE_AI_SEARCH_WEB_KS_NAME (setup only) */
+    readonly webKnowledgeSource?: string | undefined;
+    /** AZURE_AI_SEARCH_WEB_KS_DOMAINS (setup only; comma-separated) */
+    readonly webKnowledgeSourceDomains?: string | undefined;
+}
+
+/**
  * LLM provider modes for the global override switch. Kept as a string
  * literal union (not an import from aiclient) to avoid a circular
  * package dependency — aiclient depends on @typeagent/config, not the
@@ -293,6 +332,7 @@ export interface Config {
     readonly storage: StorageConfig;
     readonly vault?: VaultConfig | undefined;
     readonly azureFoundry?: AzureFoundryConfig | undefined;
+    readonly azureAISearch?: AzureAISearchConfig | undefined;
     readonly reasoning?: ReasoningConfig | undefined;
     readonly copilot?: CopilotConfig | undefined;
     /**

@@ -2662,7 +2662,15 @@ export class ChatPanel {
      * host with no extra wiring.
      */
     public showStatusNotice(notice: StatusNotice): void {
-        if (!notice || !notice.id || !notice.title) {
+        if (!notice || !notice.id) {
+            return;
+        }
+        // A retract request removes an existing notice instead of showing one.
+        if (notice.dismiss) {
+            this.clearStatusNotice(notice.id);
+            return;
+        }
+        if (!notice.title) {
             return;
         }
         // Replace any existing notice with this id.
@@ -2699,8 +2707,9 @@ export class ChatPanel {
         head.appendChild(minBtn);
         toast.appendChild(head);
 
+        let body: HTMLDivElement | undefined;
         if (notice.message) {
-            const body = document.createElement("div");
+            body = document.createElement("div");
             body.className = "csn-body";
             body.textContent = notice.message;
             toast.appendChild(body);
@@ -2714,8 +2723,25 @@ export class ChatPanel {
             actionBtn.className = "csn-action";
             actionBtn.textContent = notice.actionLabel;
             const command = notice.actionCommand;
+            const busyLabel = notice.actionBusyLabel;
+            const busyMessage = notice.actionBusyMessage;
             actionBtn.addEventListener("click", () => {
+                if (actionBtn.disabled) {
+                    return;
+                }
                 this.injectCommand(command);
+                // Acknowledge the click and block a second trigger while the
+                // action is in flight (e.g. a duplicate "@server restart"
+                // racing the teardown). The emitter retracts this notice once
+                // the action completes (the agent-server dismisses it when the
+                // client rejoins the restarted server), so it clears itself.
+                actionBtn.disabled = true;
+                if (busyLabel) {
+                    actionBtn.textContent = busyLabel;
+                }
+                if (busyMessage && body) {
+                    body.textContent = busyMessage;
+                }
             });
             actions.appendChild(actionBtn);
             toast.appendChild(actions);
