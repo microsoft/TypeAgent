@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=3b85260e2b269ce9bc55c9ca40fdd24fb1cc2fd1bec208c8282d3ed5426035ec -->
+<!-- AUTOGEN:DOCS:HASH:sha256=735a3f8a1828e0478ff159ac3fe04ac5ad09a9a52781bf36295762cdf395309c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # list-agent — AI-generated documentation
@@ -12,39 +12,45 @@
 
 ## Overview
 
-The `list-agent` package is a TypeAgent application agent designed to manage lists. It provides a set of actions for creating, modifying, and retrieving lists, making it suitable for use cases such as to-do lists, shopping lists, or other item collections. This agent is part of the TypeAgent monorepo and integrates with other components in the system to handle user requests related to list management.
+The `list-agent` package is a TypeAgent application agent designed to manage lists. It provides a set of actions for creating, modifying, and retrieving lists, making it suitable for use cases such as to-do lists, shopping lists, or other item collections. This agent is part of the TypeAgent monorepo and integrates with other components to handle user requests related to list management.
 
 ## What it does
 
-The `list-agent` provides six key actions to manage lists effectively:
+The `list-agent` supports a range of actions for managing lists, which are defined in its schema and implemented in its action handler. These actions include:
 
-- **`addItems`**: Adds one or more items to a specified list. If the list does not exist, it is created. This action requires the `items` (array of strings) and `listName` (string) parameters.
+- **`addItems`**: Adds one or more items to a specified list. If the list does not exist, it will be created. This action requires the `items` (array of strings) and `listName` (string) parameters.
 - **`removeItems`**: Removes one or more items from a specified list. This action requires the `items` (array of strings) and `listName` (string) parameters.
-- **`createList`**: Creates a new list with the given name. This action requires the `listName` (string) parameter.
+- **`createList`**: Creates a new list with the specified name. This action requires the `listName` (string) parameter.
 - **`getList`**: Retrieves the contents of a specified list. This action is useful for queries like "What's on my grocery list?" or "What are the contents of my to-do list?" It requires the `listName` (string) parameter.
-- **`clearList`**: Clears all items from a specified list. This action requires the `listName` (string) parameter.
+- **`clearList`**: Removes all items from a specified list. This action requires the `listName` (string) parameter.
+- **`listLists`**: Lists all existing lists. This action is useful for queries like "What lists do I have?" or "Show me my lists."
 - **`startEditList`**: Initiates the editing of a specified list. This action requires the `listName` (string) parameter.
 
 These actions are defined in the [listSchema.ts](./src/listSchema.ts) file and implemented in the [listActionHandler.ts](./src/listActionHandler.ts) file. The agent uses schema definitions and grammar rules to interpret user input and map it to the appropriate actions.
 
 ## Setup
 
-The `list-agent` package does not require any special setup beyond installing its dependencies. To get started, navigate to the package directory and run:
+The `list-agent` package does not require any special setup beyond installing its dependencies. To get started:
 
-```sh
-pnpm install
-```
+1. Navigate to the package directory:
+   ```sh
+   cd ts/packages/agents/list/
+   ```
+2. Install the required dependencies:
+   ```sh
+   pnpm install
+   ```
 
-For further details, refer to the hand-written README.
+For additional details, refer to the hand-written README.
 
 ## Key Files
 
 The `list-agent` package is structured around several key files that define its behavior and functionality:
 
-- **[listManifest.json](./src/listManifest.json)**: Contains metadata about the agent, such as its description, emoji representation, and references to the schema and grammar files.
+- **[listManifest.json](./src/listManifest.json)**: Contains metadata about the agent, including its description, emoji representation, and references to the schema and grammar files.
 - **[listSchema.ts](./src/listSchema.ts)**: Defines the action types and their parameters. This file is the core of the agent's functionality, specifying the actions the agent can perform and the data they require.
 - **[listSchema.agr](./src/listSchema.agr)**: Contains grammar rules that map user utterances to actions. These rules help the agent interpret natural language input and determine the appropriate action to execute.
-- **[listActionHandler.ts](./src/listActionHandler.ts)**: Implements the logic for handling the actions defined in the schema. This file is where the actual behavior of each action is coded.
+- **[listActionHandler.ts](./src/listActionHandler.ts)**: Implements the logic for handling the actions defined in the schema. This file contains the code that executes the behavior of each action.
 
 ### File Responsibilities
 
@@ -57,21 +63,46 @@ The `list-agent` package is structured around several key files that define its 
 
 To extend the functionality of the `list-agent` package, follow these steps:
 
-1. **Add a new action**:
+### 1. Add a New Action
 
-   - Define the new action type in [listSchema.ts](./src/listSchema.ts). Specify the action name and its required parameters.
-   - Add grammar rules for the new action in [listSchema.agr](./src/listSchema.agr). These rules should map user input to the new action.
-   - Implement the action's logic in [listActionHandler.ts](./src/listActionHandler.ts). This is where you define how the action will be executed.
+- **Define the action**: Add the new action type and its parameters in [listSchema.ts](./src/listSchema.ts). For example:
+  ```ts
+  export type NewAction = {
+    actionName: "newAction";
+    parameters: {
+      param1: string;
+      param2: number;
+    };
+  };
+  ```
+- **Add grammar rules**: Define grammar rules for the new action in [listSchema.agr](./src/listSchema.agr). These rules should map user input to the new action. For example:
+  ```text
+  <NewAction> = do something with $(param1:wildcard) and $(param2:number) -> {
+      actionName: "newAction",
+      parameters: {
+          param1,
+          param2
+      }
+  }
+  ```
+- **Implement the action**: Add the logic for the new action in [listActionHandler.ts](./src/listActionHandler.ts). For example:
+  ```ts
+  async function handleNewAction(action: NewAction, context: ActionContext) {
+    // Your implementation here
+    return createActionResultFromTextDisplay("Action executed successfully.");
+  }
+  ```
 
-2. **Modify existing actions**:
+### 2. Modify Existing Actions
 
-   - Update the action type definitions in [listSchema.ts](./src/listSchema.ts) to reflect the changes.
-   - Adjust the corresponding grammar rules in [listSchema.agr](./src/listSchema.agr) to ensure they align with the updated action.
-   - Modify the implementation in [listActionHandler.ts](./src/listActionHandler.ts) to handle the updated behavior.
+- Update the action type definitions in [listSchema.ts](./src/listSchema.ts) to reflect the changes.
+- Adjust the corresponding grammar rules in [listSchema.agr](./src/listSchema.agr) to ensure they align with the updated action.
+- Modify the implementation in [listActionHandler.ts](./src/listActionHandler.ts) to handle the updated behavior.
 
-3. **Test your changes**:
-   - Add or update tests to cover the new or modified functionality.
-   - Run the test suite to ensure that your changes work as expected and do not introduce regressions.
+### 3. Test Your Changes
+
+- Add or update tests to cover the new or modified functionality.
+- Run the test suite to ensure that your changes work as expected and do not introduce regressions.
 
 By following these steps, you can customize the `list-agent` package to support additional use cases or modify its existing behavior to better suit your needs.
 
@@ -82,7 +113,7 @@ By following these steps, you can customize the `list-agent` package to support 
 ### Entry points
 
 - `./agent/manifest` → [./src/listManifest.json](./src/listManifest.json)
-- `./agent/handlers` → `./dist/listActionHandler.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/listActionHandler.js](./dist/listActionHandler.js)
 
 ### Dependencies
 
@@ -111,7 +142,7 @@ External: _None at runtime._
 
 ### Actions
 
-_6 actions implemented by this agent, parsed deterministically from `./src/listSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
+_7 actions implemented by this agent, parsed deterministically from `./src/listSchema.ts`. Sample utterances and parameter shapes are illustrative; consult the schema for the full signature._
 
 | User says                                                                                                                                     | Action                                                |
 | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
@@ -120,10 +151,11 @@ _6 actions implemented by this agent, parsed deterministically from `./src/listS
 | _(no sample)_                                                                                                                                 | `createList` → `{ "listName": "…" }`                  |
 | _use this action to show the user what's on the list, for example, "What's on my grocery list?" or "what are the contents of my to do list?"_ | `getList` → `{ "listName": "…" }`                     |
 | _(no sample)_                                                                                                                                 | `clearList` → `{ "listName": "…" }`                   |
+| _use this action to show the user which lists exist, for example, "what lists are there?", "show me my lists", "what lists do I have?"_       | `listLists`                                           |
 | _(no sample)_                                                                                                                                 | `startEditList` → `{ "listName": "…" }`               |
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `2c26e6d289e04ac54b08f8483b292693a8d4bb64` on `2026-07-18T00:58:44.432Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter list-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

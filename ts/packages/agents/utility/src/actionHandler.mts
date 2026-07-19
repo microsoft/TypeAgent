@@ -13,6 +13,7 @@ import {
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
+    mkdir,
     readFile as fsReadFile,
     writeFile as fsWriteFile,
 } from "node:fs/promises";
@@ -227,9 +228,12 @@ async function handleReadFile(path: string) {
     return createActionResultFromTextDisplay(content);
 }
 
-async function handleWriteFile(path: string, content: string) {
-    await fsWriteFile(path, content, "utf-8");
-    return createActionResultFromTextDisplay(`File written: ${path}`);
+async function handleWriteFile(filePath: string, content: string) {
+    // fs.writeFile does not create missing parent directories, so create them
+    // first - otherwise writing into a brand-new folder fails with ENOENT.
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await fsWriteFile(filePath, content, "utf-8");
+    return createActionResultFromTextDisplay(`File written: ${filePath}`);
 }
 
 async function handleLlmTransform(

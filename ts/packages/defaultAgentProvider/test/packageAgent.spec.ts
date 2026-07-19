@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAgentHost } from "agent-dispatcher";
+import { AppAgentProviderSetController } from "agent-dispatcher";
 import {
     buildPackageCommandTable,
     createPackageAppAgentProvider,
@@ -11,10 +11,14 @@ import {
 } from "../src/installSources/packageAgent.js";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 
-const noopHost: AppAgentHost = {
-    addProvider: async () => {},
-    removeProvider: async () => {},
-    replaceProvider: async () => {},
+const noopHost: AppAgentProviderSetController = {
+    runExclusive: async (callback) => {
+        const value = await callback({
+            addProvider: async () => {},
+            removeProvider: async () => {},
+        });
+        return { status: "completed", value };
+    },
 };
 
 type SourceCall =
@@ -50,6 +54,7 @@ function makeSource(overrides: Partial<InstalledAgentSourceApi> = {}): {
         },
         update: async (name, range) => {
             calls.push({ op: "update", name, range });
+            return { status: "started" };
         },
         listInstalled: () => [],
         listSources: () => [],
@@ -126,12 +131,14 @@ function capturingActionContext(agentContext: PackageAgentContext) {
 
 function tightlyCapturingActionContext(agentContext: PackageAgentContext) {
     const captured: string[] = [];
+    const modes: Array<string | undefined> = [];
     const stripAnsi = (text: string) =>
         text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
     const context = {
         sessionContext: { agentContext },
         actionIO: {
-            appendDisplay: (content: any) => {
+            appendDisplay: (content: any, mode?: string) => {
+                modes.push(mode);
                 const text =
                     typeof content === "string"
                         ? content
@@ -148,7 +155,7 @@ function tightlyCapturingActionContext(agentContext: PackageAgentContext) {
             takeAction: () => {},
         },
     } as any;
-    return { context, output: () => captured.join("") };
+    return { context, output: () => captured.join(""), modes };
 }
 
 function getHandler(
@@ -163,7 +170,7 @@ describe("@package agent", () => {
     it("vends a command-only agent named 'package' with the host-owned context", async () => {
         const { api } = makeSource();
         const ctx: PackageAgentContext = {
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         };
         const provider = createPackageAppAgentProvider(ctx);
@@ -185,7 +192,10 @@ describe("@package agent", () => {
         const { api, calls } = makeSource();
         const handler = getHandler(api, "install");
         await handler.run(
-            fakeActionContext({ appAgentHost: noopHost, source: api }),
+            fakeActionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+            }),
             {
                 args: { target: "/some/path", name: "foo" },
                 flags: { source: "path" },
@@ -206,7 +216,10 @@ describe("@package agent", () => {
         const handler = getHandler(api, "install");
         await expect(
             handler.run(
-                fakeActionContext({ appAgentHost: noopHost, source: api }),
+                fakeActionContext({
+                    appAgentProviderSetController: noopHost,
+                    source: api,
+                }),
                 {
                     args: { target: "/x", name: "bad name!" },
                     flags: {},
@@ -220,7 +233,10 @@ describe("@package agent", () => {
         const { api, calls } = makeSource();
         const handler = getHandler(api, "uninstall");
         await handler.run(
-            fakeActionContext({ appAgentHost: noopHost, source: api }),
+            fakeActionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+            }),
             { args: { name: "foo" } } as any,
         );
         expect(calls).toEqual([{ op: "uninstall", name: "foo" }]);
@@ -230,13 +246,16 @@ describe("@package agent", () => {
         const { api, calls } = makeSource();
         const handler = getHandler(api, "update");
         await handler.run(
-            fakeActionContext({ appAgentHost: noopHost, source: api }),
+            fakeActionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+            }),
             { args: { name: "foo", range: "^1.0" } } as any,
         );
         expect(calls).toEqual([{ op: "update", name: "foo", range: "^1.0" }]);
     });
 
-    it("uninstall does not echo a committed teardown (the source fan-out owns it)", async () => {
+    it("uninstall acknowledges start without echoing a committed teardown", async () => {
         // A committed uninstall is announced by the source's cross-session
         // fan-out ("was removed"), like install's "was added" — the command
         // adds no echo of its own.
@@ -246,12 +265,15 @@ describe("@package agent", () => {
             },
         });
         const handler = getHandler(api, "uninstall");
-        const { context, notifications } = notifyCapturingActionContext({
-            appAgentHost: noopHost,
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, { args: { name: "foo" } } as any);
-        expect(notifications).toEqual([]);
+        expect(output()).toContain(
+            "Agent 'foo' uninstall started; it will unload from each session shortly.",
+        );
+        expect(output()).not.toContain("was removed");
     });
 
     it("uninstall reports started when teardown outcome is asynchronous", async () => {
@@ -263,7 +285,7 @@ describe("@package agent", () => {
         });
         const handler = getHandler(api, "uninstall");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, { args: { name: "foo" } } as any);
@@ -280,7 +302,7 @@ describe("@package agent", () => {
         });
         const handler = getHandler(api, "uninstall");
         const { context, notifications } = notifyCapturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, { args: { name: "foo" } } as any);
@@ -293,11 +315,12 @@ describe("@package agent", () => {
         const { api } = makeSource({
             update: async (_name, _range, _host, onOutcome) => {
                 onOutcome?.("updated");
+                return { status: "started" };
             },
         });
         const handler = getHandler(api, "update");
         const { context, notifications } = notifyCapturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -310,11 +333,12 @@ describe("@package agent", () => {
         const { api } = makeSource({
             update: async (_name, _range, _host, onOutcome) => {
                 onOutcome?.("reverted");
+                return { status: "started" };
             },
         });
         const handler = getHandler(api, "update");
         const { context, notifications } = notifyCapturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -327,31 +351,26 @@ describe("@package agent", () => {
 
     it("update surfaces an already-current no-op", async () => {
         const { api } = makeSource({
-            update: async (_name, _range, _host, onOutcome) => {
-                onOutcome?.("unchanged");
-            },
+            update: async () => ({ status: "unchanged" }),
         });
         const handler = getHandler(api, "update");
-        const { context, notifications } = notifyCapturingActionContext({
-            appAgentHost: noopHost,
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
             args: { name: "foo", range: undefined },
         } as any);
-        expect(notifications).toEqual(["Agent 'foo' is already up to date."]);
+        expect(output()).toContain("Agent 'foo' is already up to date.");
     });
 
     it("update reports started when swap outcome is asynchronous", async () => {
         const { api } = makeSource({
-            update: async () => {
-                // Intentionally no immediate outcome callback: this models the
-                // real barrier swap path, where completion settles later.
-            },
+            update: async () => ({ status: "started" }),
         });
         const handler = getHandler(api, "update");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -359,6 +378,28 @@ describe("@package agent", () => {
         } as any);
         expect(output()).toContain(
             "Agent 'foo' update started; it will reload in each session shortly.",
+        );
+    });
+
+    it("update reports the package version change when available", async () => {
+        const { api } = makeSource({
+            update: async () => ({
+                status: "started",
+                packageName: "@typeagent/foo-agent",
+                oldVersion: "1.0.0",
+                newVersion: "1.4.0",
+            }),
+        });
+        const handler = getHandler(api, "update");
+        const { context, output } = capturingActionContext({
+            appAgentProviderSetController: noopHost,
+            source: api,
+        });
+        await handler.run(context, {
+            args: { name: "foo", range: undefined },
+        } as any);
+        expect(output()).toContain(
+            "Agent 'foo' update for package '@typeagent/foo-agent' (1.0.0 -> 1.4.0) started; it will reload in each session shortly.",
         );
     });
 });
@@ -394,7 +435,10 @@ describe("@package handler error handling", () => {
         const handler = getHandler(api, "install");
         await expect(
             handler.run(
-                fakeActionContext({ appAgentHost: noopHost, source: api }),
+                fakeActionContext({
+                    appAgentProviderSetController: noopHost,
+                    source: api,
+                }),
                 { args: { target: "bad" }, flags: {} } as any,
             ),
         ).rejects.toThrow(/resolution failed/);
@@ -409,7 +453,10 @@ describe("@package handler error handling", () => {
         const handler = getHandler(api, "uninstall");
         await expect(
             handler.run(
-                fakeActionContext({ appAgentHost: noopHost, source: api }),
+                fakeActionContext({
+                    appAgentProviderSetController: noopHost,
+                    source: api,
+                }),
                 { args: { name: "missing" } } as any,
             ),
         ).rejects.toThrow(/not found/);
@@ -424,7 +471,10 @@ describe("@package handler error handling", () => {
         const handler = getHandler(api, "update");
         await expect(
             handler.run(
-                fakeActionContext({ appAgentHost: noopHost, source: api }),
+                fakeActionContext({
+                    appAgentProviderSetController: noopHost,
+                    source: api,
+                }),
                 { args: { name: "foo" } } as any,
             ),
         ).rejects.toThrow(/no longer configured/);
@@ -437,22 +487,33 @@ describe("@package handler completions", () => {
             listAvailableAgents: async () => [
                 {
                     source: "catalog",
-                    ref: "k1",
-                    defaultAgentName: "catalog-agent",
-                    packageName: "@x/catalog-agent",
+                    agents: [
+                        {
+                            ref: "k1",
+                            defaultAgentName: "catalog-agent",
+                            packageName: "@x/catalog-agent",
+                        },
+                    ],
                 },
                 {
                     source: "feed",
-                    ref: "@x/feed-agent",
-                    defaultAgentName: "feed-agent",
-                    packageName: "@x/feed-agent",
+                    agents: [
+                        {
+                            ref: "@x/feed-agent",
+                            defaultAgentName: "feed-agent",
+                            packageName: "@x/feed-agent",
+                        },
+                    ],
                 },
             ],
             listSources: () => ["catalog", "feed"],
         });
         const handler = getHandler(api, "install");
         const result = await handler.getCompletion!(
-            fakeSessionContext({ appAgentHost: noopHost, source: api }),
+            fakeSessionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+            }),
             {} as any,
             ["target", "--source"],
         );
@@ -475,24 +536,36 @@ describe("@package handler completions", () => {
                     return [
                         {
                             source: "catalog",
-                            ref: "k1",
-                            defaultAgentName: "catalog-agent",
-                            packageName: "@x/catalog-agent",
+                            agents: [
+                                {
+                                    ref: "k1",
+                                    defaultAgentName: "catalog-agent",
+                                    packageName: "@x/catalog-agent",
+                                },
+                            ],
                         },
                     ];
                 }
                 return [
                     {
                         source: "catalog",
-                        ref: "k1",
-                        defaultAgentName: "catalog-agent",
-                        packageName: "@x/catalog-agent",
+                        agents: [
+                            {
+                                ref: "k1",
+                                defaultAgentName: "catalog-agent",
+                                packageName: "@x/catalog-agent",
+                            },
+                        ],
                     },
                     {
                         source: "feed",
-                        ref: "@x/feed-agent",
-                        defaultAgentName: "feed-agent",
-                        packageName: "@x/feed-agent",
+                        agents: [
+                            {
+                                ref: "@x/feed-agent",
+                                defaultAgentName: "feed-agent",
+                                packageName: "@x/feed-agent",
+                            },
+                        ],
                     },
                 ];
             },
@@ -500,7 +573,10 @@ describe("@package handler completions", () => {
         });
         const handler = getHandler(api, "install");
         const result = await handler.getCompletion!(
-            fakeSessionContext({ appAgentHost: noopHost, source: api }),
+            fakeSessionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+            }),
             { flags: { source: "catalog" } } as any,
             ["target"],
         );
@@ -516,14 +592,17 @@ describe("@package handler completions", () => {
     it("uninstall/update complete the managed agent names", async () => {
         const { api } = makeSource({
             listInstalled: () => [
-                { name: "a", source: "path" },
-                { name: "b", source: "feed" },
+                { source: "path", agents: [{ name: "a" }] },
+                { source: "feed", agents: [{ name: "b" }] },
             ],
         });
         for (const which of ["uninstall", "update"] as const) {
             const handler = getHandler(api, which);
             const result = await handler.getCompletion!(
-                fakeSessionContext({ appAgentHost: noopHost, source: api }),
+                fakeSessionContext({
+                    appAgentProviderSetController: noopHost,
+                    source: api,
+                }),
                 {} as any,
                 ["name"],
             );
@@ -536,42 +615,54 @@ describe("@package handler completions", () => {
 });
 
 describe("@package available", () => {
-    it("renders available agents (name, package, source) in sorted order", async () => {
+    it("renders one sorted table per source in source order", async () => {
         const { api } = makeSource({
             listAvailableAgents: async () => [
                 {
                     source: "feed",
-                    ref: "@x/zeta",
-                    defaultAgentName: "zeta",
-                    packageName: "@x/zeta",
+                    sourceKind: "feed",
+                    agents: [
+                        {
+                            ref: "@x/zeta",
+                            defaultAgentName: "zeta",
+                            packageName: "@x/zeta",
+                        },
+                        {
+                            ref: "@x/beta",
+                            defaultAgentName: "beta",
+                            packageName: "@x/beta",
+                        },
+                    ],
                 },
                 {
                     source: "catalog",
-                    ref: "k-alpha",
-                    defaultAgentName: "alpha",
-                    packageName: "alpha-pkg",
-                },
-                {
-                    source: "feed",
-                    ref: "@x/beta",
-                    defaultAgentName: "beta",
-                    packageName: "@x/beta",
+                    sourceKind: "catalog",
+                    agents: [
+                        {
+                            ref: "k-alpha",
+                            defaultAgentName: "alpha",
+                            packageName: "alpha-pkg",
+                        },
+                    ],
                 },
             ],
         });
         const handler = getHandler(api, "available");
-        const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+        const { context, output, modes } = tightlyCapturingActionContext({
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, { args: {}, flags: {} } as any);
         const text = output();
-        expect(text).toContain("Name Package Source");
-        expect(text).toContain("alpha alpha-pkg catalog");
-        expect(text).toContain("beta @x/beta feed");
-        expect(text).toContain("zeta @x/zeta feed");
-        expect(text.indexOf("alpha")).toBeLessThan(text.indexOf("beta"));
+        expect(text).toContain(
+            "feed (feed)\nName Package\nbeta @x/beta\nzeta @x/zeta",
+        );
+        expect(text).toContain(
+            "\ncatalog (catalog)\nName Package\nalpha alpha-pkg",
+        );
+        expect(text.indexOf("feed")).toBeLessThan(text.indexOf("catalog"));
         expect(text.indexOf("beta")).toBeLessThan(text.indexOf("zeta"));
+        expect(modes).toEqual(["block", "block", "block", "block"]);
     });
 
     it("reports empty state when no agents are available", async () => {
@@ -580,7 +671,7 @@ describe("@package available", () => {
         });
         const handler = getHandler(api, "available");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, { args: {}, flags: {} } as any);
@@ -594,31 +685,43 @@ describe("@package available", () => {
                     return [
                         {
                             source: "catalog",
-                            ref: "k-alpha",
-                            defaultAgentName: "alpha",
-                            packageName: "alpha-pkg",
+                            agents: [
+                                {
+                                    ref: "k-alpha",
+                                    defaultAgentName: "alpha",
+                                    packageName: "alpha-pkg",
+                                },
+                            ],
                         },
                     ];
                 }
                 return [
                     {
                         source: "catalog",
-                        ref: "k-alpha",
-                        defaultAgentName: "alpha",
-                        packageName: "alpha-pkg",
+                        agents: [
+                            {
+                                ref: "k-alpha",
+                                defaultAgentName: "alpha",
+                                packageName: "alpha-pkg",
+                            },
+                        ],
                     },
                     {
                         source: "feed",
-                        ref: "@x/beta",
-                        defaultAgentName: "beta",
-                        packageName: "@x/beta",
+                        agents: [
+                            {
+                                ref: "@x/beta",
+                                defaultAgentName: "beta",
+                                packageName: "@x/beta",
+                            },
+                        ],
                     },
                 ];
             },
         });
         const handler = getHandler(api, "available");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -626,8 +729,10 @@ describe("@package available", () => {
             flags: { source: "catalog" },
         } as any);
         const text = output();
-        expect(text).toContain("alpha alpha-pkg catalog");
-        expect(text).not.toContain("beta @x/beta feed");
+        expect(text).toContain("catalog");
+        expect(text).toContain("alpha alpha-pkg");
+        expect(text).not.toContain("feed");
+        expect(text).not.toContain("beta @x/beta");
     });
 
     it("completes --source from listSources", async () => {
@@ -636,7 +741,10 @@ describe("@package available", () => {
         });
         const handler = getHandler(api, "available");
         const result = await handler.getCompletion!(
-            fakeSessionContext({ appAgentHost: noopHost, source: api }),
+            fakeSessionContext({
+                appAgentProviderSetController: noopHost,
+                source: api,
+            }),
             {} as any,
             ["--source"],
         );
@@ -648,24 +756,33 @@ describe("@package available", () => {
 });
 
 describe("@package list", () => {
-    it("renders headings, tables, and footer with explicit line breaks", async () => {
+    it("renders source headings, tables, and footer in block mode", async () => {
         const { api } = makeSource({
             listInstalled: () => [
-                { name: "beta", source: "feed", ref: "pkg-beta" },
-                { name: "alpha", source: "catalog", ref: "pkg-alpha" },
+                {
+                    source: "feed-source",
+                    sourceKind: "feed",
+                    agents: [{ name: "beta", ref: "pkg-beta" }],
+                },
+                {
+                    source: "catalog-source",
+                    sourceKind: "catalog",
+                    agents: [{ name: "alpha", ref: "pkg-alpha" }],
+                },
             ],
         });
         const handler = getHandler(api, "list");
-        const { context, output } = tightlyCapturingActionContext({
-            appAgentHost: noopHost,
+        const { context, output, modes } = tightlyCapturingActionContext({
+            appAgentProviderSetController: noopHost,
             source: api,
         });
 
         await handler.run(context, { args: {} } as any);
 
         expect(output()).toContain(
-            "catalog\nAgent Reference\nalpha pkg-alpha\nfeed\nAgent Reference\nbeta pkg-beta\nShowing installable installed agents only.",
+            "feed-source (feed)\nName Reference\nbeta pkg-beta\ncatalog-source (catalog)\nName Reference\nalpha pkg-alpha\nShowing installable installed agents only.",
         );
+        expect(modes).toEqual(["block", "block", "block", "block", "block"]);
     });
 });
 
@@ -685,7 +802,7 @@ describe("@package install one-argument, dry-run, and refresh", () => {
         });
         const handler = getHandler(api, "install");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -721,7 +838,7 @@ describe("@package install one-argument, dry-run, and refresh", () => {
         });
         const handler = getHandler(api, "install");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -771,7 +888,7 @@ describe("@package install one-argument, dry-run, and refresh", () => {
         });
         const handler = getHandler(api, "install");
         const { context, output } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {
@@ -801,7 +918,7 @@ describe("@package install one-argument, dry-run, and refresh", () => {
         });
         const handler = getHandler(api, "install");
         const { context } = capturingActionContext({
-            appAgentHost: noopHost,
+            appAgentProviderSetController: noopHost,
             source: api,
         });
         await handler.run(context, {

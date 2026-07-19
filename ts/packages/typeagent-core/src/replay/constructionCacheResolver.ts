@@ -146,10 +146,11 @@ interface ConstructionCacheFileJSON {
 
 /**
  * Find the stored namespace for `schemaName` in a parsed cache file and extract
- * its schema-file hash. Only single-schema namespaces (`schemaName,<hash>`, not
- * combined `a,..|b,..` namespaces) are considered — the single-grammar replay
- * resolver targets standalone agents, and a combined namespace would require
- * validating every member's hash.
+ * its schema-file hash. Cache namespaces are keyed as
+ * `schemaName,<hash>,<activityName>`; the activity portion may be empty. Only
+ * single-schema namespaces (not combined `a,..|b,..` namespaces) are
+ * considered — the single-grammar replay resolver targets standalone agents,
+ * and a combined namespace would require validating every member's hash.
  */
 function findSchemaNamespace(
     json: ConstructionCacheFileJSON,
@@ -159,7 +160,6 @@ function findSchemaNamespace(
     if (!Array.isArray(namespaces)) {
         return undefined;
     }
-    const prefix = `${schemaName},`;
     for (const ns of namespaces) {
         const name = ns?.name;
         if (typeof name !== "string") {
@@ -169,8 +169,10 @@ function findSchemaNamespace(
         if (name.includes("|")) {
             continue;
         }
-        if (name.startsWith(prefix)) {
-            const hash = name.slice(prefix.length);
+        const [foundSchemaName, hash, activityName] = name.split(",", 3);
+        // Activity can be empty; only the schema and hash gate cache validity.
+        void activityName;
+        if (foundSchemaName === schemaName) {
             return {
                 namespaceName: name,
                 hash: hash !== "" ? hash : undefined,

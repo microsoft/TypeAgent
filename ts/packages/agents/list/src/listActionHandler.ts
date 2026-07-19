@@ -8,11 +8,11 @@ import {
     Storage,
     ActionResult,
     TypeAgentAction,
+    Entity,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
-    createActionResultFromMarkdownDisplay,
-    createActionResult,
+    createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ListAction, ListActivity } from "./listSchema.js";
 
@@ -185,6 +185,10 @@ class MemoryListCollection {
         return this.lists.get(name);
     }
 
+    getListNames(): string[] {
+        return Array.from(this.lists.keys());
+    }
+
     serialize(): string {
         const lists = Array.from(this.lists.values()).map((memList) => {
             return {
@@ -235,22 +239,21 @@ async function updateListContext(
     }
 }
 
-function getEntities(list: string, items?: string[]) {
-    const entities = [
-        {
-            name: list,
-            type: ["list"],
-        },
-    ];
-    if (items) {
-        for (const item of items) {
-            entities.push({
-                name: item,
-                type: ["item"],
-            });
-        }
+// Represent a list as a single entity whose current items are carried as a
+// facet (e.g. grocery -> { items: ["eggs", "cheese"] }). Items are deliberately
+// NOT emitted as separate top-level entities: a floating item entity with no
+// link to its list caused follow-up requests ("add cheese") to re-add the prior
+// item, and enumerating the items on the list entity gives the model the
+// containment it needs to resolve references like "the potatoes".
+function getEntities(list: string, items?: string[]): Entity[] {
+    const listEntity: Entity = {
+        name: list,
+        type: ["list"],
+    };
+    if (items && items.length > 0) {
+        listEntity.facets = [{ name: "items", value: items }];
     }
-    return entities;
+    return [listEntity];
 }
 
 function getStore(listContext: ListActionContext) {
@@ -274,20 +277,52 @@ function getListDisplay(
     suffix?: string,
 ) {
     const list = getList(listContext, listName);
-    if (list.itemsSet.size === 0) {
-        return createActionResult(
-            `List '${listName}' is empty.${suffix ? `\n${suffix}` : ""}`,
-            undefined,
-            getEntities(listName),
+    return buildListResult(listName, Array.from(list.itemsSet), suffix);
+}
+
+// Build the structured display for a list: a heading + list block (or an
+// empty-state text block) plus a machine-readable rawData payload. Pure —
+// exported for unit tests.
+export function buildListResult(
+    listName: string,
+    items: string[],
+    suffix?: string,
+) {
+    if (items.length === 0) {
+        return createStructuredResult(
+            [
+                { kind: "heading", level: 3, text: `List '${listName}'` },
+                { kind: "text", text: "This list is empty." },
+                ...(suffix ? [{ kind: "text" as const, text: suffix }] : []),
+            ],
+            {
+                entities: getEntities(listName),
+                rawData: { name: listName, items: [] },
+            },
         );
     }
-    const plainList = Array.from(list.itemsSet);
+    const plainList = items;
 
-    // set displayText to markdown list of the items
-    return createActionResultFromMarkdownDisplay(
-        `List '${listName}' has items:\n\n${plainList.map((item) => `- ${item}`).join("\n")}${suffix ? `\n\n${suffix}` : ""}`,
-        undefined,
-        getEntities(listName, plainList),
+    // Render the list as a structured heading + list block. The SDK derives
+    // the markdown/text fallback for clients that can't render blocks.
+    const count = plainList.length;
+    return createStructuredResult(
+        [
+            {
+                kind: "heading",
+                level: 3,
+                text: `List '${listName}' — ${count} item${count === 1 ? "" : "s"}`,
+            },
+            {
+                kind: "list",
+                items: plainList.map((item) => ({ text: item })),
+            },
+            ...(suffix ? [{ kind: "text" as const, text: suffix }] : []),
+        ],
+        {
+            entities: getEntities(listName, plainList),
+            rawData: { name: listName, items: plainList },
+        },
     );
 }
 async function handleListAction(
@@ -314,7 +349,10 @@ async function handleListAction(
                 displayText,
                 displayText,
             );
-            result.entities = getEntities(listName, items);
+            result.entities = getEntities(
+                listName,
+                Array.from(store.getList(listName)?.itemsSet ?? []),
+            );
             break;
         }
         case "removeItems": {
@@ -334,7 +372,10 @@ async function handleListAction(
                 displayText,
                 displayText,
             );
-            result.entities = getEntities(listName, items);
+            result.entities = getEntities(
+                listName,
+                Array.from(store.getList(listName)?.itemsSet ?? []),
+            );
             break;
         }
         case "createList": {
@@ -360,6 +401,41 @@ async function handleListAction(
         }
         case "getList": {
             result = getListDisplay(listContext, action.parameters.listName);
+            break;
+        }
+        case "listLists": {
+            const store = getStore(listContext);
+            const names = store.getListNames();
+            if (names.length === 0) {
+                result = createStructuredResult(
+                    [
+                        { kind: "heading", level: 3, text: "Lists" },
+                        { kind: "text", text: "There are no lists yet." },
+                    ],
+                    { entities: [] },
+                );
+            } else {
+                result = createStructuredResult(
+                    [
+                        {
+                            kind: "heading",
+                            level: 3,
+                            text: `Lists — ${names.length} list${names.length === 1 ? "" : "s"}`,
+                        },
+                        {
+                            kind: "list",
+                            items: names.map((name) => ({ text: name })),
+                        },
+                    ],
+                    {
+                        entities: names.map((name) => ({
+                            name,
+                            type: ["list"],
+                        })),
+                        rawData: { lists: names },
+                    },
+                );
+            }
             break;
         }
         case "clearList": {

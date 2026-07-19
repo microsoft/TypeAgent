@@ -34,7 +34,15 @@ param(
     [string]$BlobBaseUrl = "",
     [string]$LogPath = "$env:LOCALAPPDATA\TypeAgent\logs\install-shell.log",
     # Do not launch the shell after install.
-    [switch]$NoStart
+    [switch]$NoStart,
+    # Skip the check that the TypeAgent agent-server is installed. The shipped
+    # shell is connect-only and auto-spawns the agent-server, so by default this
+    # script ensures the agent-server is present (installing it via
+    # install-typeagent.ps1 when missing) before installing the shell.
+    [switch]$SkipTypeAgentCheck,
+    # Extra arguments splatted to install-typeagent.ps1 when the agent-server is
+    # missing (e.g. @{ Provider = "copilot"; BootstrapPrereqs = $true }).
+    [hashtable]$TypeAgentArgs = @{}
 )
 
 $ErrorActionPreference = "Stop"
@@ -131,6 +139,32 @@ function Get-PackagePathFromYml {
 }
 
 Initialize-Log -Path $LogPath
+
+# The shipped shell is connect-only: it auto-spawns and connects to a separately
+# installed TypeAgent agent-server. Ensure that server is installed first so the
+# shell has something to connect to, mirroring the MSI ordering (agent service
+# before shell). The agent-server install lays down typeagent-serve.mjs at its
+# InstallDir root (see install-typeagent.ps1).
+if (-not $SkipTypeAgentCheck) {
+    $agentServerMarker = Join-Path $env:LOCALAPPDATA "TypeAgent\agent-server\typeagent-serve.mjs"
+    if (Test-Path $agentServerMarker) {
+        Write-Log "Found TypeAgent agent-server at $agentServerMarker."
+    } else {
+        Write-Log "TypeAgent agent-server not found at $agentServerMarker; installing it first via install-typeagent.ps1."
+        $installTypeAgent = Join-Path $PSScriptRoot "install-typeagent.ps1"
+        if (-not (Test-Path $installTypeAgent)) {
+            Fail "Cannot find install-typeagent.ps1 next to install-shell.ps1 to satisfy the agent-server dependency. Re-run with -SkipTypeAgentCheck to bypass."
+        }
+        & $installTypeAgent @TypeAgentArgs
+        if ($LASTEXITCODE -ne 0) {
+            Fail "Agent-server install (install-typeagent.ps1) failed with exit code $LASTEXITCODE; aborting shell install."
+        }
+        if (-not (Test-Path $agentServerMarker)) {
+            Fail "install-typeagent.ps1 completed but agent-server marker still missing at $agentServerMarker."
+        }
+        Write-Log "TypeAgent agent-server installed."
+    }
+}
 
 if (-not $BlobBaseUrl -and -not $Storage) {
     Fail "Provide either -Storage (with optional -Container) or -BlobBaseUrl."

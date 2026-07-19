@@ -3,6 +3,7 @@
 
 import type {
     ActionContext,
+    ActionResultSuccess,
     AppAgent,
     SessionContext,
     TypeAgentAction,
@@ -10,6 +11,7 @@ import type {
 import {
     createActionResultFromTextDisplay,
     createActionResultFromError,
+    createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { WeatherAction } from "./weatherSchema.js";
 import {
@@ -86,16 +88,8 @@ async function handleGetCurrentConditions(
         );
     }
 
-    const tempUnit = units === "celsius" ? "°C" : "°F";
     const conditions = getWeatherDescription(weather.weatherCode);
     const windDir = getWindDirection(weather.windDirection);
-
-    const displayText =
-        `Current conditions in ${coords.name}:\n` +
-        `Temperature: ${Math.round(weather.temperature)}${tempUnit} (feels like ${Math.round(weather.apparentTemperature)}${tempUnit})\n` +
-        `Conditions: ${conditions}\n` +
-        `Humidity: ${weather.humidity}%\n` +
-        `Wind: ${Math.round(weather.windSpeed)} mph ${windDir}`;
 
     const historyText = `Got current weather for ${coords.name}`;
 
@@ -106,10 +100,69 @@ async function handleGetCurrentConditions(
         },
     ];
 
-    return createActionResultFromTextDisplay(
-        displayText,
+    return buildCurrentConditionsResult(
+        coords.name,
+        units,
+        { ...weather, conditions, windDir },
         historyText,
         entities,
+    );
+}
+
+// Build a structured current-conditions result (heading + keyValue block +
+// rawData). Pure — exported for unit tests.
+export function buildCurrentConditionsResult(
+    locationName: string,
+    units: "celsius" | "fahrenheit",
+    weather: {
+        temperature: number;
+        apparentTemperature: number;
+        humidity: number;
+        windSpeed: number;
+        conditions: string;
+        windDir: string;
+    },
+    historyText: string,
+    entities: { name: string; type: string[] }[],
+): ActionResultSuccess {
+    const tempUnit = units === "celsius" ? "°C" : "°F";
+    return createStructuredResult(
+        [
+            {
+                kind: "heading",
+                level: 3,
+                text: `Current conditions in ${locationName}`,
+            },
+            {
+                kind: "keyValue",
+                pairs: [
+                    {
+                        label: "Temperature",
+                        value: `${Math.round(weather.temperature)}${tempUnit} (feels like ${Math.round(weather.apparentTemperature)}${tempUnit})`,
+                    },
+                    { label: "Conditions", value: weather.conditions },
+                    { label: "Humidity", value: `${weather.humidity}%` },
+                    {
+                        label: "Wind",
+                        value: `${Math.round(weather.windSpeed)} mph ${weather.windDir}`,
+                    },
+                ],
+            },
+        ],
+        {
+            historyText,
+            entities,
+            rawData: {
+                location: locationName,
+                units,
+                temperature: weather.temperature,
+                apparentTemperature: weather.apparentTemperature,
+                conditions: weather.conditions,
+                humidity: weather.humidity,
+                windSpeed: weather.windSpeed,
+                windDirection: weather.windDir,
+            },
+        },
     );
 }
 
@@ -141,23 +194,6 @@ async function handleGetForecast(
         );
     }
 
-    const tempUnit = units === "celsius" ? "°C" : "°F";
-    const forecasts = forecastData.map((day, index) => {
-        const conditions = getWeatherDescription(day.weatherCode);
-        const precipitation =
-            day.precipitationProbability > 0
-                ? `, ${day.precipitationProbability}% chance of precipitation`
-                : "";
-        return (
-            `Day ${index + 1} (${day.date}): ${conditions}, ` +
-            `High: ${Math.round(day.maxTemp)}${tempUnit}, ` +
-            `Low: ${Math.round(day.minTemp)}${tempUnit}${precipitation}`
-        );
-    });
-
-    const displayText =
-        `${days}-day forecast for ${coords.name}:\n` + forecasts.join("\n");
-
     const historyText = `Got ${days}-day forecast for ${coords.name}`;
 
     const entities = [
@@ -167,10 +203,88 @@ async function handleGetForecast(
         },
     ];
 
-    return createActionResultFromTextDisplay(
-        displayText,
+    return buildForecastResult(
+        coords.name,
+        units,
+        days,
+        forecastData,
         historyText,
         entities,
+    );
+}
+
+// Build a structured forecast result (heading + sortable table + rawData).
+// Pure — exported for unit tests.
+export function buildForecastResult(
+    locationName: string,
+    units: "celsius" | "fahrenheit",
+    days: number,
+    forecastData: {
+        date: string;
+        weatherCode: number;
+        maxTemp: number;
+        minTemp: number;
+        precipitationProbability: number;
+    }[],
+    historyText: string,
+    entities: { name: string; type: string[] }[],
+): ActionResultSuccess {
+    const tempUnit = units === "celsius" ? "°C" : "°F";
+    const rows = forecastData.map((day) => {
+        const conditions = getWeatherDescription(day.weatherCode);
+        const precip =
+            day.precipitationProbability > 0
+                ? `${day.precipitationProbability}%`
+                : "—";
+        // Derive the weekday name from the ISO date. Append T00:00 so the
+        // date is parsed in local time rather than UTC (which can shift the
+        // day backward for negative-offset timezones).
+        const weekday = day.date
+            ? new Date(`${day.date}T00:00`).toLocaleDateString(undefined, {
+                  weekday: "long",
+              })
+            : "";
+        return [
+            weekday,
+            day.date,
+            conditions,
+            `${Math.round(day.maxTemp)}${tempUnit}`,
+            `${Math.round(day.minTemp)}${tempUnit}`,
+            precip,
+        ];
+    });
+
+    return createStructuredResult(
+        [
+            {
+                kind: "heading",
+                level: 3,
+                text: `${days}-day forecast for ${locationName}`,
+            },
+            {
+                kind: "table",
+                columns: [
+                    { id: "day", header: "Weekday" },
+                    { id: "date", header: "Date", type: "date" },
+                    { id: "conditions", header: "Conditions" },
+                    { id: "high", header: "High", align: "right" },
+                    { id: "low", header: "Low", align: "right" },
+                    { id: "precip", header: "Precip", align: "right" },
+                ],
+                rows,
+                sortable: true,
+            },
+        ],
+        {
+            historyText,
+            entities,
+            rawData: {
+                location: locationName,
+                units,
+                days,
+                forecast: forecastData,
+            },
+        },
     );
 }
 

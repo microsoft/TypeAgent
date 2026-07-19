@@ -3,6 +3,8 @@
 
 import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
 import type { QueueSnapshot } from "@typeagent/dispatcher-types";
+import type { AppAgentManifest } from "@typeagent/agent-sdk";
+import type { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
 
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
@@ -109,6 +111,13 @@ export type AgentServerInvokeFunctions = {
     ) => Promise<void>;
     deleteConversation: (conversationId: string) => Promise<void>;
     shutdown: () => Promise<void>;
+    /**
+     * Relaunch the server process so it loads freshly-rebuilt code. Supported
+     * only by the standalone agent-server; the in-process (embedded) server
+     * rejects this call. Like shutdown, the current process exits - callers
+     * lose their connection and must reconnect to the successor.
+     */
+    restart: () => Promise<void>;
     getUserIdentity: () => Promise<UserIdentity>;
     /**
      * Vend a short-lived Azure Speech authorization token from the server's
@@ -117,6 +126,42 @@ export type AgentServerInvokeFunctions = {
      * mic affordance.
      */
     getSpeechToken: () => Promise<SpeechToken | undefined>;
+    /**
+     * Register a client-hosted app agent with a joined conversation's
+     * dispatcher. The agent's handlers run in the connecting client's process
+     * (over agent-rpc on the connection's channel provider); the server builds
+     * an rpc proxy from `agentInterface` and installs it as a dynamic agent.
+     * The agent is removed automatically when the connection drops or leaves
+     * the conversation.
+     *
+     * The client must create its agent-rpc server on the `agent:<name>`
+     * channel (via createAgentRpcServer over the connection channel provider)
+     * before calling this. Rejects if an agent with `name` is already
+     * registered on the target conversation (e.g. a second client trying to
+     * register the same singleton agent).
+     */
+    registerClientAgent: (param: RegisterClientAgentParams) => Promise<void>;
+    /** Unregister a previously registered client-hosted agent. */
+    unregisterClientAgent: (
+        param: UnregisterClientAgentParams,
+    ) => Promise<void>;
+};
+
+export type RegisterClientAgentParams = {
+    name: string;
+    manifest: AppAgentManifest;
+    agentInterface: AgentInterfaceFunctionName[];
+    /**
+     * Target conversation. If omitted, the server uses the connection's single
+     * joined conversation (and errors if the connection has joined none or
+     * more than one).
+     */
+    conversationId?: string;
+};
+
+export type UnregisterClientAgentParams = {
+    name: string;
+    conversationId?: string;
 };
 
 /**

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ef97cc9a212056f34581503ddb9c93b8df51380f02fbafabd2ee9e2e7f5d01ea -->
+<!-- AUTOGEN:DOCS:HASH:sha256=988489b2a45c8a83d5688ad4091e078d2f09f9377c5ece61555b863bf7075ebe -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # email — AI-generated documentation
@@ -12,18 +12,18 @@
 
 ## Overview
 
-The Email agent is a TypeAgent application agent designed to facilitate email management through the Microsoft Graph API. It enables users to perform common email operations such as sending, replying to, forwarding, and searching for emails. By leveraging structured prompting and large language models (LLMs), the agent interprets user requests and interacts with the Outlook mail client via the Microsoft Graph API.
+The Email agent is a TypeAgent application agent that facilitates email management by integrating with the Microsoft Graph API. It enables users to perform common email operations such as sending, replying to, forwarding, and searching for emails. The agent leverages structured prompting and large language models (LLMs) to interpret user requests and execute email-related actions via the Outlook mail client.
 
 ## What it does
 
-The Email agent provides functionality for managing email communication through the following actions:
+The Email agent supports the following actions, which are implemented using the Microsoft Graph API:
 
-- **`sendEmail`**: Allows users to send an email with a subject, body, and recipients. Additional options include CC, BCC, and attachments (file paths or URLs). The `genContent` parameter can be used to generate email content dynamically.
-- **`forwardEmail`**: Enables forwarding an existing email to specified recipients, with an optional additional message.
-- **`replyEmail`**: Facilitates replying to an existing email, with options to include a body, CC, BCC, and attachments.
+- **`sendEmail`**: Sends an email with a subject, body, and recipients. Additional options include CC, BCC, and attachments (file paths or URLs). The `genContent` parameter allows dynamic content generation for the email body.
+- **`forwardEmail`**: Forwards an existing email to specified recipients, with an optional additional message.
+- **`replyEmail`**: Replies to an existing email, with options to include a body, CC, BCC, and attachments.
 - **`findEmail`**: Searches for an email message using a `messageRef` parameter, which identifies the email to be retrieved.
 
-These actions are implemented using the Microsoft Graph API, which provides access to email accounts and related operations. The agent also integrates with the `graph-utils` library for email-specific functionality and supports advanced features like content generation using LLMs.
+These actions are implemented in [emailActionHandler.ts](./src/emailActionHandler.ts) and rely on the `graph-utils` library for email-specific functionality. The agent also integrates with the `@microsoft/microsoft-graph-client` library to interact with the Microsoft Graph API.
 
 ## Setup
 
@@ -100,7 +100,7 @@ By following this process, you can extend the Email agent to support additional 
 ### Entry points
 
 - `./agent/manifest` → [./src/emailManifest.json](./src/emailManifest.json)
-- `./agent/handlers` → `./dist/emailActionHandler.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/emailActionHandler.js](./dist/emailActionHandler.js)
 
 ### Dependencies
 
@@ -143,6 +143,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/email
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter email docs:verify-links` to spot-check._
+_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter email docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

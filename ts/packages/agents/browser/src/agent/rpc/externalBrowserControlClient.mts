@@ -14,10 +14,7 @@ export function createExternalBrowserClient(
     sessionId: string,
 ): ExternalBrowserClient {
     function getActiveRpc() {
-        const client = agentWebSocketServer.getActiveClient(
-            sessionId,
-            "extension",
-        );
+        const client = agentWebSocketServer.getActiveClient(sessionId);
         if (!client?.browserControlRpc) {
             throw new Error("No browser control connection available");
         }

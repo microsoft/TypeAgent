@@ -8,11 +8,26 @@ import {
 
 import WebSocket from "ws";
 import { discoverPort } from "@typeagent/agent-server-client/discovery";
+import {
+    createChannelProviderAdapter,
+    type ChannelProviderAdapter,
+} from "@typeagent/agent-rpc/channel";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
+import type {
+    BrowserControlInvokeFunctions,
+    BrowserControlCallFunctions,
+} from "@typeagent/browser-control-rpc/types";
 import registerDebug from "debug";
 const debugBrowserIPC = registerDebug("typeagent:browser:ipc");
 const debugBrowserIPCError = registerDebug("typeagent:browser:ipc:error");
 
 const AGENT_SERVER_DEFAULT_URL = "ws://localhost:8999/";
+
+// Connect-mode override for the agent-server discovery base URL. In connect
+// mode the shell talks to a remote/standalone agent-server on a specific
+// port, so browser-agent discovery must target that server rather than the
+// default localhost:8999. Set via BrowserAgentIpc.setAgentServerUrl().
+let agentServerDiscoveryUrlOverride: string | undefined;
 
 export class BrowserAgentIpc {
     private static instance: BrowserAgentIpc;
@@ -26,6 +41,17 @@ export class BrowserAgentIpc {
     private maxQueueSize: number = 100;
     private reconnectAttempts: number = 0;
     private hasShownRestoringNotification: boolean = false;
+
+    // Connect-mode inline browser control: when set, the shell serves its
+    // in-process BrowserControl to the (remote) browser agent over the
+    // inlineBrowser socket's `browserControl` RPC channel. In standalone the
+    // control is provided in-process via agentInitOptions.browser and this
+    // stays undefined.
+    private browserControlHandlers?: {
+        invokeFunctions: BrowserControlInvokeFunctions;
+        callFunctions: BrowserControlCallFunctions;
+    };
+    private browserControlProvider?: ChannelProviderAdapter;
 
     private constructor() {
         this.webSocket = null;
@@ -41,6 +67,16 @@ export class BrowserAgentIpc {
 
         return BrowserAgentIpc.instance;
     };
+
+    /**
+     * Set the agent-server discovery base URL for the inline browser socket.
+     * Used in connect mode so browser-agent port discovery targets the
+     * connected agent-server (which hosts discovery on its main port) instead
+     * of the default localhost:8999.
+     */
+    public setAgentServerUrl(url: string | undefined) {
+        agentServerDiscoveryUrlOverride = url;
+    }
 
     public async ensureWebsocketConnected(): Promise<WebSocket | undefined> {
         // if there's a pending websocket promise, return it
@@ -79,6 +115,15 @@ export class BrowserAgentIpc {
                     try {
                         const data = JSON.parse(text) as any;
 
+                        // Browser control channel: served in-process (main)
+                        // by the shell's inline BrowserControl so the remote
+                        // browser agent can drive the shell's own tabs in
+                        // connect mode.
+                        if (data.name === "browserControl") {
+                            this.browserControlProvider?.notifyMessage(data);
+                            return;
+                        }
+
                         // Channel-multiplexed messages: forward agentService replies to renderer
                         if (data.name === "agentService") {
                             if (this.onRpcReply) {
@@ -109,9 +154,15 @@ export class BrowserAgentIpc {
 
                 this.webSocket.onclose = () => {
                     debugBrowserIPC("websocket connection closed");
+                    this.browserControlProvider?.notifyDisconnected();
+                    this.browserControlProvider = undefined;
                     this.webSocket = undefined;
                     this.reconnectWebSocket();
                 };
+
+                // Serve the inline BrowserControl over this socket if enabled
+                // (connect mode). Re-served on every (re)connect.
+                this.serveBrowserControl();
 
                 this.webSocketPromise = null;
 
@@ -243,6 +294,51 @@ export class BrowserAgentIpc {
     public isConnected(): boolean {
         return this.webSocket && this.webSocket.readyState === WebSocket.OPEN;
     }
+
+    /**
+     * Enable serving the shell's inline BrowserControl to the (remote) browser
+     * agent over the inlineBrowser socket's `browserControl` RPC channel. Used
+     * in connect mode, where the browser agent runs out-of-process and cannot
+     * receive the control in-process via `agentInitOptions.browser`. Safe to
+     * call before the socket connects; the channel is (re)served on each
+     * connect. Standalone must NOT call this (the in-process control is used).
+     */
+    public enableInlineBrowserControl(handlers: {
+        invokeFunctions: BrowserControlInvokeFunctions;
+        callFunctions: BrowserControlCallFunctions;
+    }) {
+        this.browserControlHandlers = handlers;
+        if (this.webSocket && this.webSocket.readyState === WebSocket.OPEN) {
+            this.serveBrowserControl();
+        }
+    }
+
+    private serveBrowserControl() {
+        if (!this.browserControlHandlers || !this.webSocket) {
+            return;
+        }
+        // Drop any provider bound to a superseded socket before rebinding.
+        this.browserControlProvider?.notifyDisconnected();
+        const provider = createChannelProviderAdapter(
+            "browser:inline-control",
+            (message) => {
+                if (
+                    this.webSocket &&
+                    this.webSocket.readyState === WebSocket.OPEN
+                ) {
+                    this.webSocket.send(JSON.stringify(message));
+                }
+            },
+        );
+        const channel = provider.createChannel("browserControl");
+        createRpc(
+            "shell:inlineBrowserControl",
+            channel,
+            this.browserControlHandlers.invokeFunctions,
+            this.browserControlHandlers.callFunctions,
+        );
+        this.browserControlProvider = provider;
+    }
 }
 
 /**
@@ -265,7 +361,9 @@ export class BrowserAgentIpc {
  */
 async function createInlineBrowserWebSocket(): Promise<WebSocket | undefined> {
     const agentServerUrl =
-        process.env["WEBSOCKET_HOST"] || AGENT_SERVER_DEFAULT_URL;
+        agentServerDiscoveryUrlOverride ||
+        process.env["WEBSOCKET_HOST"] ||
+        AGENT_SERVER_DEFAULT_URL;
     const sessionId = "default";
 
     const result = await discoverPort("browser", sessionId, {

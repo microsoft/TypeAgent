@@ -19,20 +19,6 @@ This folder contains Azure DevOps pipelines for the TypeAgent repo.
 | `azure-docs-aggregation-signal.yml` | Documentation signal pipeline. |
 | `component-detection.yml` | Security / compliance component detection scan. |
 
-### Individual build & publish pipelines
-
-These pipelines continue to run independently. Once the consolidated pipeline
-is validated end-to-end, their triggers can be retired.
-
-| Pipeline | What it publishes |
-| --- | --- |
-| `azure-build-ts.yml` | `@typeagent/*` npm packages + runs tests/lint |
-| `azure-build-publish-agent-server.yml` | `agent-server.<rid>` Universal packages |
-| `azure-build-publish-copilot-plugin.yml` | `typeagent-copilot-plugin` Universal package |
-| `azure-build-publish-mcp.yml` | `typeagent-mcp.<rid>` Universal packages |
-| `azure-build-package-shell.yml` | Shell installers → Azure Blob Storage |
-| `azure-build-package-agent-server-msi.yml` | Signed MSI → Universal feed + Azure Blob Storage |
-
 ### Shared templates
 
 | Template | Purpose |

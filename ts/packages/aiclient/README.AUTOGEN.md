@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=6cf63dd38c433bfb10a4c7dc0f0080e4b060febddc940586f7a6613c1f23accc -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b700ecd67acb598b3c80e4ec216b3339b9d5e9cd7d6647aaf5939841325549c9 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/aiclient — AI-generated documentation
@@ -40,6 +40,7 @@ The package includes debug logging capabilities for monitoring endpoint selectio
 
 To use the `@typeagent/aiclient` package, you need to configure the following environment variables:
 
+- **`COPILOT_ALLOW_GET_PROVIDER_ENDPOINT`**: Controls whether the Copilot SDK is allowed to retrieve provider endpoints dynamically.
 - **`TYPEAGENT_COPILOT_SDK_LOG_LEVEL`**: Sets the log level for the Copilot SDK. Valid values include `none`, `error`, `warning`, `info`, `debug`, and `all`.
 
 Additionally, the package relies on a set of environment variables for endpoint pools and API keys. These are dynamically discovered based on the model and region. For example:
@@ -109,6 +110,7 @@ By following these steps, you can effectively extend the functionality of the `a
 
 Workspace:
 
+- [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/config](../../packages/config/README.md)
 
 External: `@azure/identity`, `@github/copilot-sdk`, `@huggingface/transformers`, `async`, `debug`, `typechat`
@@ -129,16 +131,17 @@ External: `@azure/identity`, `@github/copilot-sdk`, `@huggingface/transformers`,
 
 ### Files of interest
 
-`./src/index.ts`, `./src/apiSettingsFromConfig.ts`, `./src/auth.ts`, …and 20 more under `./src/`.
+`./src/index.ts`, `./src/apiSettingsFromConfig.ts`, `./src/apiTypes.ts`, …and 22 more under `./src/`.
 
 ### Environment variables
 
-_1 environment variable referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_2 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
+- `COPILOT_ALLOW_GET_PROVIDER_ENDPOINT`
 - `TYPEAGENT_COPILOT_SDK_LOG_LEVEL`
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/aiclient docs:verify-links` to spot-check._
+_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/aiclient docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

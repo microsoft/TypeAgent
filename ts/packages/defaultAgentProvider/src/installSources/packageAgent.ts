@@ -22,13 +22,11 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import {
-    AppAgentHost,
     AppAgentProvider,
-    InstalledAgentInfo,
+    AppAgentProviderSetController,
 } from "agent-dispatcher";
 import chalk from "chalk";
 import {
-    AvailableInstallRow,
     InstallMatchKind,
     InstallPreview,
     InstallResult,
@@ -36,17 +34,39 @@ import {
     SourceStatus,
     UninstallOutcomeStatus,
     UpdateOutcomeStatus,
+    UpdateResult,
 } from "./config.js";
 
 // A legal dispatcher agent identifier (matches existing agent names such as
 // "github-cli", "osNotifications").
 const AGENT_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]*$/;
 
+/** A host-rendered summary of one installed agent for `@package list`. */
+export interface InstalledAgentInfo {
+    name: string;
+    // Feed specifier, package name, or path. Omitted when none is recorded.
+    ref?: string;
+}
+
+/** One install target advertised by a source. */
+export interface AvailableAgentInfo {
+    readonly ref: string;
+    readonly defaultAgentName?: string | undefined;
+    readonly packageName?: string | undefined;
+}
+
+/** Agent information grouped under one configured install source. */
+export interface AgentSourceGroup<T> {
+    readonly source: string;
+    readonly sourceKind?: string | undefined;
+    readonly agents: T[];
+}
+
 /**
  * The record-store / registry API the `@package` handlers use, supplied by
  * the host's `AppAgentSource`. All `agents.json` access, source resolution, and
  * the cross-session fan-out live behind this, so the handlers never touch the
- * dispatcher's internals. Each mutating op takes the `issuingHost` (the session
+ * dispatcher's internals. Each mutating op takes the `issuingController` (the session
  * that ran the command, reached off the package agent's own `agentContext`) so
  * the source can register/tear down the agent in the issuing session (awaited)
  * while fanning out to the other sessions best-effort as a follow-up.
@@ -68,7 +88,7 @@ export interface InstalledAgentSourceApi {
         nameOrTarget: string,
         ref: string | undefined,
         sourceName: string | undefined,
-        issuingHost: AppAgentHost,
+        issuingController: AppAgentProviderSetController,
         onStatus?: SourceStatus,
         abortSignal?: AbortSignal,
     ): Promise<InstallResult>;
@@ -96,7 +116,7 @@ export interface InstalledAgentSourceApi {
     // the unload lands at each session's next idle.
     uninstall(
         name: string,
-        issuingHost: AppAgentHost,
+        issuingController: AppAgentProviderSetController,
         onOutcome?: (status: UninstallOutcomeStatus) => void,
     ): Promise<void>;
     // Re-materialize against the recorded source (fails fast on error), write the
@@ -109,24 +129,24 @@ export interface InstalledAgentSourceApi {
     // issuing one — so this returns as soon as the record is committed. A
     // COMMITTED swap is announced by the cross-session fan-out ("Agent 'x' was
     // updated."), exactly as install announces an add, so callers need not echo
-    // it. `onOutcome` reports the final status: `updated` (committed), `reverted`
-    // (a rollback to v1 on timeout/failed-start), or `unchanged` (the requested
-    // version was already serving — a no-op the fan-out cannot express).
+    // it. Returns the immediate disposition: `unchanged`, or `started` with
+    // package version details when available. `onOutcome` reports the later
+    // barrier status: `updated` (committed) or `reverted` (rolled back).
     update(
         name: string,
         range: string | undefined,
-        issuingHost: AppAgentHost,
+        issuingController: AppAgentProviderSetController,
         onOutcome?: (status: UpdateOutcomeStatus) => void,
-    ): Promise<void>;
-    // Host-rendered summaries of installed agents, backing `@package list`.
-    listInstalled(): InstalledAgentInfo[];
+    ): Promise<UpdateResult>;
+    // Host-rendered summaries of installed agents, grouped in source order.
+    listInstalled(): AgentSourceGroup<InstalledAgentInfo>[];
     // Source names in resolution order (for `@package install --source`).
     listSources(): string[];
-    // Enumerable install rows (default agent name + package name) with source
-    // names. Optional source filter narrows results to one source.
+    // Enumerable install targets grouped in source order. Optional source
+    // filter narrows results to one source.
     listAvailableAgents(opts?: {
         sourceName?: string;
-    }): Promise<AvailableInstallRow[]>;
+    }): Promise<AgentSourceGroup<AvailableAgentInfo>[]>;
     // The host-owned source command table, nested under `@package source`.
     sourceCommands(): CommandHandlerTable;
 }
@@ -134,12 +154,12 @@ export interface InstalledAgentSourceApi {
 /**
  * The host-owned `agentContext` of the `@package` app agent. It is not the
  * dispatcher's `CommandHandlerContext`: the only dispatcher access it exposes
- * is the narrow {@link AppAgentHost} (to register/tear down agents in
+ * is the narrow {@link AppAgentProviderSetController} (to register/tear down agents in
  * the issuing session), plus the host's own {@link InstalledAgentSourceApi}
  * closures. So a handler can never reach back into dispatcher internals.
  */
 export interface PackageAgentContext {
-    readonly appAgentHost: AppAgentHost;
+    readonly appAgentProviderSetController: AppAgentProviderSetController;
     readonly source: InstalledAgentSourceApi;
 }
 
@@ -148,7 +168,46 @@ type PackageSessionContext = SessionContext<PackageAgentContext>;
 
 // Names of agents that can be uninstalled/updated.
 function managedAgentNames(context: PackageSessionContext): string[] {
-    return context.agentContext.source.listInstalled().map((info) => info.name);
+    return context.agentContext.source
+        .listInstalled()
+        .flatMap((group) => group.agents.map((info) => info.name));
+}
+
+function displaySourceTables<T>(
+    context: PackageActionContext,
+    groups: AgentSourceGroup<T>[],
+    columns: string[],
+    compareRows: (a: T, b: T) => number,
+    formatRow: (row: T) => string[],
+): void {
+    groups.forEach((group, index) => {
+        const sourceKind = group.sourceKind;
+        const sourceHeading =
+            sourceKind !== undefined
+                ? `${group.source} (${sourceKind})`
+                : group.source;
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: chalk.yellow(
+                    `${index === 0 ? "" : "\n"}${sourceHeading}\n`,
+                ),
+            },
+            "block",
+        );
+        const text: string[][] = [columns];
+        group.agents.sort(compareRows);
+        for (const row of group.agents) {
+            text.push(formatRow(row));
+        }
+        context.actionIO.appendDisplay(
+            {
+                type: "text",
+                content: text,
+            },
+            "block",
+        );
+    });
 }
 
 class ListInstalledCommandHandler implements CommandHandler {
@@ -160,54 +219,36 @@ class ListInstalledCommandHandler implements CommandHandler {
     ) {
         const { source } = context.sessionContext.agentContext;
         // `@package list` shows mutable installed records only.
-        const records = source.listInstalled();
-        if (records.length === 0) {
+        const groups = source.listInstalled();
+        if (groups.length === 0) {
             displayResult("No installed agents found.", context);
             return;
         }
 
-        // Group records by source so each source renders as its own table.
-        const groups = new Map<string, typeof records>();
-        for (const record of records) {
-            const group = groups.get(record.source);
-            if (group === undefined) {
-                groups.set(record.source, [record]);
-            } else {
-                group.push(record);
-            }
-        }
+        // Preserve source order, matching `@package available`. Sort agents
+        // within each source and render each heading and table as a block.
+        displaySourceTables(
+            context,
+            groups,
+            ["Name", "Reference"],
+            (a, b) => a.name.localeCompare(b.name),
+            (record) => [
+                chalk.cyanBright(record.name),
+                record.ref !== undefined
+                    ? chalk.gray(record.ref)
+                    : chalk.gray("—"),
+            ],
+        );
 
-        // Sources listed alphabetically; one table per source, with a heading.
-        const sortedSources = [...groups.keys()].sort();
-        sortedSources.forEach((source, index) => {
-            const groupRecords = groups
-                .get(source)!
-                .sort((a, b) => a.name.localeCompare(b.name));
-            context.actionIO.appendDisplay({
+        context.actionIO.appendDisplay(
+            {
                 type: "text",
-                content: chalk.yellow(`${index === 0 ? "" : "\n"}${source}\n`),
-            });
-            const text: string[][] = [["Agent", "Reference"]];
-            for (const record of groupRecords) {
-                text.push([
-                    chalk.cyanBright(record.name),
-                    record.ref !== undefined
-                        ? chalk.gray(record.ref)
-                        : chalk.gray("—"),
-                ]);
-            }
-            context.actionIO.appendDisplay({
-                type: "text",
-                content: text,
-            });
-        });
-
-        context.actionIO.appendDisplay({
-            type: "text",
-            content: chalk.gray(
-                "\nShowing installable installed agents only. Use '@config agent' to see all available agents and their status.",
-            ),
-        });
+                content: chalk.gray(
+                    "\nShowing installable installed agents only. Use '@config agent' to see all available agents and their status.",
+                ),
+            },
+            "block",
+        );
     }
 }
 
@@ -241,36 +282,30 @@ class ListAvailableCommandHandler implements CommandHandler {
             displayStatus("Refreshing source metadata...", context);
             await source.refresh(sourceName);
         }
-        const rows = (
-            await source.listAvailableAgents(
-                sourceName !== undefined ? { sourceName } : undefined,
-            )
-        ).sort(
-            (a, b) =>
-                (a.defaultAgentName ?? a.packageName ?? "").localeCompare(
-                    b.defaultAgentName ?? b.packageName ?? "",
-                ) || a.source.localeCompare(b.source),
+        const groups = await source.listAvailableAgents(
+            sourceName !== undefined ? { sourceName } : undefined,
         );
-        if (rows.length === 0) {
+        if (groups.length === 0) {
             displayResult("No installable agents found.", context);
             return;
         }
 
         // Show only what can be typed into `@package install`: the default agent
         // name and the package name. The internal catalog key / durable ref is
-        // never displayed.
-        const text: string[][] = [["Name", "Package", "Source"]];
-        for (const row of rows) {
-            text.push([
+        // never displayed. Keep unrelated catalogs and feeds in separate tables.
+        displaySourceTables(
+            context,
+            groups,
+            ["Name", "Package"],
+            (a, b) =>
+                (a.defaultAgentName ?? a.packageName ?? "").localeCompare(
+                    b.defaultAgentName ?? b.packageName ?? "",
+                ),
+            (row) => [
                 chalk.cyanBright(row.defaultAgentName ?? "—"),
                 row.packageName ? chalk.gray(row.packageName) : chalk.gray("—"),
-                chalk.gray(row.source),
-            ]);
-        }
-        context.actionIO.appendDisplay({
-            type: "text",
-            content: text,
-        });
+            ],
+        );
     }
 
     public async getCompletion(
@@ -364,7 +399,10 @@ class InstallCommandHandler implements CommandHandler {
         context: PackageActionContext,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const { appAgentHost, source } = context.sessionContext.agentContext;
+        const {
+            appAgentProviderSetController: appAgentProviderSetController,
+            source,
+        } = context.sessionContext.agentContext;
         const { args, flags } = params;
         const { target, name } = args;
         const sourceName = flags.source ?? undefined;
@@ -434,7 +472,7 @@ class InstallCommandHandler implements CommandHandler {
             nameOrTarget,
             ref,
             sourceName,
-            appAgentHost,
+            appAgentProviderSetController,
             (message) => displayStatus(message, context),
             context.abortSignal,
         );
@@ -485,16 +523,18 @@ class InstallCommandHandler implements CommandHandler {
                 // Complete default agent names and package names. The second
                 // argument (explicit installed name) is not completed.
                 const sourceName = params.flags?.source as string | undefined;
-                const rows = await source.listAvailableAgents(
+                const groups = await source.listAvailableAgents(
                     sourceName !== undefined ? { sourceName } : undefined,
                 );
                 const values = new Set<string>();
-                for (const row of rows) {
-                    if (row.defaultAgentName !== undefined) {
-                        values.add(row.defaultAgentName);
-                    }
-                    if (row.packageName !== undefined) {
-                        values.add(row.packageName);
+                for (const group of groups) {
+                    for (const agent of group.agents) {
+                        if (agent.defaultAgentName !== undefined) {
+                            values.add(agent.defaultAgentName);
+                        }
+                        if (agent.packageName !== undefined) {
+                            values.add(agent.packageName);
+                        }
                     }
                 }
                 completions.push({ name, completions: [...values] });
@@ -523,7 +563,10 @@ class UninstallCommandHandler implements CommandHandler {
         context: PackageActionContext,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const { appAgentHost, source } = context.sessionContext.agentContext;
+        const {
+            appAgentProviderSetController: appAgentProviderSetController,
+            source,
+        } = context.sessionContext.agentContext;
         const name = params.args.name;
         // Start the coordinated teardown and fan out the removal to every
         // session — including this one — through its idle-gated applicator, each
@@ -537,30 +580,25 @@ class UninstallCommandHandler implements CommandHandler {
         // ROLLBACK — a phase timeout that leaves the agent installed and changes
         // nothing, so the fan-out is silent — is surfaced here, through the
         // session's notification channel (which survives command completion).
-        let settledSynchronously = false;
-        await source.uninstall(name, appAgentHost, (outcome) => {
-            settledSynchronously = true;
-            if (outcome === "reverted") {
-                context.sessionContext.notify(
-                    AppAgentEvent.Inline,
-                    `Agent '${name}' uninstall reverted; the agent is still installed.`,
-                );
-            }
-        });
-        // The barrier teardown settles asynchronously, so print the "started"
-        // acknowledgement. The `settledSynchronously` guard mirrors the update
-        // handler and stays defensive: if a source ever reported its outcome
-        // synchronously (before this await resolved), the "was removed" fan-out
-        // would already be the whole story and a "will unload shortly" line
-        // would be misleading. Today's uninstall path never settles that way (a
-        // recorded name is torn down through the barrier; a non-active recorded
-        // name throws before reaching here), so this branch normally prints.
-        if (!settledSynchronously) {
-            displayResult(
-                `Agent '${name}' uninstall started; it will unload from each session shortly.`,
-                context,
-            );
-        }
+        await source.uninstall(
+            name,
+            appAgentProviderSetController,
+            (outcome) => {
+                if (outcome === "reverted") {
+                    context.sessionContext.notify(
+                        AppAgentEvent.Inline,
+                        `Agent '${name}' uninstall reverted; the agent is still installed.`,
+                    );
+                }
+            },
+        );
+        // A successful return means the asynchronous barrier was armed. Its
+        // terminal outcome cannot arrive in the issuing session until this
+        // command releases that session's command lock.
+        displayResult(
+            `Agent '${name}' uninstall started; it will unload from each session shortly.`,
+            context,
+        );
     }
 
     public async getCompletion(
@@ -601,7 +639,10 @@ class UpdateCommandHandler implements CommandHandler {
         context: PackageActionContext,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const { appAgentHost, source } = context.sessionContext.agentContext;
+        const {
+            appAgentProviderSetController: appAgentProviderSetController,
+            source,
+        } = context.sessionContext.agentContext;
         const { name, range } = params.args;
 
         // The source materializes the new version first and only rewrites the
@@ -614,36 +655,36 @@ class UpdateCommandHandler implements CommandHandler {
         // A COMMITTED swap is announced by the source's cross-session fan-out
         // ("Agent 'x' was updated."), delivered uniformly to every session
         // exactly as install announces an add; the command adds no echo of its
-        // own. Only the outcomes the fan-out cannot express are surfaced here,
-        // through the session's notification channel (which survives command
-        // completion): a ROLLBACK (v1 restored, nothing changed) and an
-        // UNCHANGED no-op (the requested version was already serving).
-        let settledSynchronously = false;
-        await source.update(name, range, appAgentHost, (outcome) => {
-            settledSynchronously = true;
-            if (outcome === "reverted") {
-                context.sessionContext.notify(
-                    AppAgentEvent.Inline,
-                    `Agent '${name}' update failed; reverted to the previous version.`,
-                );
-            } else if (outcome === "unchanged") {
-                context.sessionContext.notify(
-                    AppAgentEvent.Inline,
-                    `Agent '${name}' is already up to date.`,
-                );
-            }
-        });
-        // The barrier swap settles asynchronously, so print the "started"
-        // acknowledgement — unless the source already settled inline (an
-        // already-current no-op, or a non-active agent added with no barrier),
-        // in which case the inline outcome / fan-out is the whole story and a
-        // "will reload shortly" line would be misleading.
-        if (!settledSynchronously) {
-            displayResult(
-                `Agent '${name}' update started; it will reload in each session shortly.`,
-                context,
-            );
+        // own. A rollback is surfaced through the session's notification
+        // channel, which survives command completion. An unchanged no-op is
+        // returned immediately and displayed as part of this command.
+        const result = await source.update(
+            name,
+            range,
+            appAgentProviderSetController,
+            (outcome) => {
+                if (outcome === "reverted") {
+                    context.sessionContext.notify(
+                        AppAgentEvent.Inline,
+                        `Agent '${name}' update failed; reverted to the previous version.`,
+                    );
+                }
+            },
+        );
+        if (result.status === "unchanged") {
+            displayResult(`Agent '${name}' is already up to date.`, context);
+            return;
         }
+        const versionChange =
+            result.packageName !== undefined &&
+            result.oldVersion !== undefined &&
+            result.newVersion !== undefined
+                ? ` for package '${result.packageName}' (${result.oldVersion} -> ${result.newVersion})`
+                : "";
+        displayResult(
+            `Agent '${name}' update${versionChange} started; it will reload in each session shortly.`,
+            context,
+        );
     }
 
     public async getCompletion(
@@ -708,7 +749,7 @@ export function buildPackageCommandTable(
  * Build an in-memory {@link AppAgentProvider} that vends the single command-only
  * `@package` agent bound to the given host-owned context. One is
  * created per connected dispatcher (its `agentContext` carries that session's
- * {@link AppAgentHost}).
+ * {@link AppAgentProviderSetController}).
  */
 export function createPackageAppAgentProvider(
     ctx: PackageAgentContext,

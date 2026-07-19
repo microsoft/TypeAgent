@@ -112,6 +112,18 @@ export function getPackagingModel(endpoint?: string): ChatModel {
     );
 }
 
+// Keyword-vector distillation for the scaffolder phase (the "onboarding moment"
+// of the contextSelector keyword lifecycle). Runs a one-off distillation per
+// action so the scaffolded agent ships with committed `<schema>.keywords.json`
+// vectors for context-weighted collision resolution.
+export function getKeywordGenModel(endpoint?: string): ChatModel {
+    return instrumentModel(
+        openai.createChatModel(endpoint, undefined, undefined, [
+            "onboarding:keywordgen",
+        ]),
+    );
+}
+
 export function getExploreModel(endpoint?: string): ChatModel {
     // Default to GPT-5 — exploration benefits from reasoning when picking
     // the next frontier action and recognizing modal vs. neutral states.

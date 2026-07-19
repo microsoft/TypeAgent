@@ -145,6 +145,75 @@ class NotifyTestCommandHandler implements CommandHandler {
     }
 }
 
+class NotifyStatusTestCommandHandler implements CommandHandler {
+    public readonly description =
+        "Fire a persistent status notice (a toast that collapses to a pinned pill) to verify the chat-ui affordance without a stale server";
+    public readonly parameters = {
+        args: {
+            message: {
+                description: "Notice body text",
+                implicitQuotes: true,
+                optional: true,
+            },
+        },
+        flags: {
+            level: {
+                description: "Severity accent: info | warning | error",
+                default: "warning",
+            },
+            restart: {
+                description:
+                    "Include a 'Restart server' action button (runs @server restart when clicked)",
+                type: "boolean",
+                default: false,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        const systemContext = context.sessionContext.agentContext;
+        const levelArg = params.flags.level as string;
+        const level = ["info", "warning", "error"].includes(levelArg)
+            ? levelArg
+            : "warning";
+        if (level !== levelArg) {
+            context.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    content: `Unknown level '${levelArg}', using 'warning'.`,
+                    kind: "warning",
+                },
+                "block",
+            );
+        }
+        const notice: Record<string, unknown> = {
+            id: "notify-test-status",
+            level,
+            title: "Test status notice",
+            message:
+                params.args.message ??
+                "Dismissing this collapses it to a pinned pill; click the pill to re-expand.",
+        };
+        if (params.flags.restart) {
+            notice.actionLabel = "Restart server";
+            notice.actionCommand = "@server restart";
+        }
+        // "statusNotice" is chat-ui's STATUS_NOTICE_EVENT, kept as a literal so
+        // the dispatcher needn't depend on the chat-ui (DOM) package. Broadcast
+        // (notificationId undefined) so every connected client renders it: the
+        // shells show the toast/pill, the CLI prints a yellow line.
+        systemContext.clientIO.notify(
+            undefined,
+            "statusNotice",
+            notice,
+            "notify-test",
+        );
+    }
+}
+
 export function getNotifyCommandHandlers(): CommandHandlerTable {
     return {
         description: "Notify commands",
@@ -153,6 +222,7 @@ export function getNotifyCommandHandlers(): CommandHandlerTable {
             info: new NotifyInfoCommandHandler(),
             clear: new NotifyClearCommandHandler(),
             test: new NotifyTestCommandHandler(),
+            status: new NotifyStatusTestCommandHandler(),
             show: {
                 description: "Show notifications",
                 defaultSubCommand: "unread",

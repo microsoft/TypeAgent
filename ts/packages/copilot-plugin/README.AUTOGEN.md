@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ded13032b748700e08274f1ce1d068b1f3508bdeecb10de21a910854c7f1ade6 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=e03cd4fce7ed7b6ce892dcc72e29210f64e6c791ae3b330db9b3b4dbf028c504 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/copilot-plugin — AI-generated documentation
@@ -12,19 +12,19 @@
 
 ## Overview
 
-The `@typeagent/copilot-plugin` package is a TypeAgent integration plugin for the GitHub Copilot CLI. It enables the routing of action requests (e.g., calendar, email, music, browser automation) to TypeAgent for handling before they are passed to the Copilot LLM.
+The `@typeagent/copilot-plugin` package integrates TypeAgent with the GitHub Copilot CLI, enabling action requests such as scheduling, email, music playback, and browser automation to be routed to TypeAgent for handling before reaching the Copilot LLM. This plugin enhances the capabilities of the Copilot CLI by leveraging TypeAgent's action-handling features.
 
 ## What it does
 
-This plugin acts as a bridge between the GitHub Copilot CLI and TypeAgent. It intercepts user inputs and determines whether they are action requests or general questions. Based on the input type, the plugin routes the request as follows:
+The plugin intercepts user inputs in the Copilot CLI and determines whether they are action requests or general questions. Based on the input type, it routes the request as follows:
 
-- **Action Requests**: These are routed to TypeAgent, which can handle them directly or via the MCP server. If TypeAgent recognizes the action, it processes the request and returns a response, bypassing the Copilot LLM.
-- **General Questions**: These are passed through to the Copilot LLM for processing.
+- **Action Requests**: Routed to TypeAgent for direct handling. If TypeAgent recognizes the action, it processes the request and returns a response, bypassing the Copilot LLM entirely.
+- **General Questions**: Passed through to the Copilot LLM for processing.
 
 The plugin supports two integration modes:
 
-1. **Direct Mode**: The plugin connects directly to TypeAgent over WebSocket. Recognized actions are handled by TypeAgent, and the response is returned directly to the user. This mode is faster and does not consume LLM tokens but does not support streaming output.
-2. **MCP Mode**: The plugin modifies the prompt to instruct the LLM to call the `typeagent-processCommand` MCP tool. This mode allows for streaming output and LLM-formatted responses but is slower and consumes LLM tokens.
+1. **Direct Mode**: Connects directly to TypeAgent over WebSocket. Recognized actions are handled by TypeAgent, and the response is returned directly to the user. This mode is faster and avoids consuming LLM tokens but does not support streaming output.
+2. **MCP Mode**: Modifies the prompt to instruct the LLM to call the `typeagent-processCommand` MCP tool. This mode allows for streaming output and LLM-formatted responses but is slower and consumes LLM tokens.
 
 The plugin also provides hooks for various stages of user input processing, such as logging, debugging, and tracking interactions in TypeAgent history.
 
@@ -131,7 +131,7 @@ To extend the functionality of the `@typeagent/copilot-plugin`, follow these ste
      ```
    - Launch the Copilot CLI with the plugin to test your changes in a real-world scenario:
      ```powershell
-     copilot --plugin-dir D:\repos\TypeAgent\ts\packages\copilot-plugin
+     copilot --plugin-dir D:\repos\TypeAgent\ts\packages/copilot-plugin
      ```
 
 5. **Update Documentation**:
@@ -175,6 +175,6 @@ _7 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-plugin docs:verify-links` to spot-check._
+_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/copilot-plugin docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -10,9 +10,12 @@
     "request": "play some EDM please",
     "expected": {
       "schemaName": "player",
-      "actionName": "playGenre",
+      "actionName": "playMusic",
       "parameters": {
-        "genre": "EDM"
+        "target": {
+          "kind": "genre",
+          "genre": "EDM"
+        }
       }
     }
   },
@@ -23,14 +26,17 @@
         {
           "action": {
             "schemaName": "player",
-            "actionName": "playTrack",
+            "actionName": "playMusic",
             "parameters": {
-              "trackName": "Symphony",
-              "artists": ["Beethoven"]
+              "target": {
+                "kind": "track",
+                "trackName": "Symphony",
+                "artists": ["Beethoven"]
+              }
             }
           },
           "alternates": {
-            "artists.0": "Beethoven please"
+            "target.artists.0": "Beethoven please"
           }
         }
       ]
@@ -40,10 +46,13 @@
     "request": "play Hello by Adele",
     "expected": {
       "schemaName": "player",
-      "actionName": "playTrack",
+      "actionName": "playMusic",
       "parameters": {
-        "trackName": "Hello",
-        "artists": ["Adele"]
+        "target": {
+          "kind": "track",
+          "trackName": "Hello",
+          "artists": ["Adele"]
+        }
       }
     }
   },

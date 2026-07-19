@@ -1,7 +1,7 @@
 {
   "version": 2,
   "schemaName": "player",
-  "sourceHash": "/coyfq1j8qYAwzuqFo38QLrP2X7DZ/U6UJRPEiLjn7Q=",
+  "sourceHash": "kB4Ogob+UuGl3wZjGe1RRFI7o9aqISNeZoAIiCh0io8=",
   "explainerName": "v5",
   "entries": [
     {
@@ -43,7 +43,7 @@
             "synonyms": [
               "kindly",
               "if you don't mind",
-              "if you could"
+              "if possible"
             ],
             "isOptional": true
           }
@@ -77,8 +77,18 @@
             ]
           }
         ],
-        "politePrefixes": [],
-        "politeSuffixes": []
+        "politePrefixes": [
+          "Would you mind, ",
+          "If it's not too much trouble, ",
+          "Could you kindly, ",
+          "May I ask you to, "
+        ],
+        "politeSuffixes": [
+          " if that's okay.",
+          " when you have a moment.",
+          " if you don't mind.",
+          " please and thank you."
+        ]
       }
     },
     {
@@ -118,11 +128,11 @@
             "text": "the music",
             "category": "object",
             "synonyms": [
-              "the song",
-              "the track",
-              "the audio"
+              "this music",
+              "that music",
+              "the song"
             ],
-            "isOptional": true
+            "isOptional": false
           },
           {
             "text": "please",
@@ -130,7 +140,7 @@
             "synonyms": [
               "kindly",
               "if you don't mind",
-              "if you could"
+              "if possible"
             ],
             "isOptional": true
           }
@@ -164,39 +174,59 @@
             ]
           }
         ],
-        "politePrefixes": [],
-        "politeSuffixes": []
+        "politePrefixes": [
+          "Would you mind",
+          "If it's not too much trouble",
+          "Could you kindly",
+          "I would appreciate it if you could"
+        ],
+        "politeSuffixes": [
+          "if that's okay with you.",
+          "thank you so much.",
+          "please and thank you.",
+          "I’d be very grateful."
+        ]
       }
     },
     {
       "request": "Can you play Nocturne by Chopin",
       "action": {
-        "fullActionName": "player.playTrack",
+        "fullActionName": "player.playMusic",
         "parameters": {
-          "trackName": "Nocturne",
-          "artists": [
-            "Chopin"
-          ]
+          "target": {
+            "kind": "track",
+            "trackName": "Nocturne",
+            "artists": [
+              "Chopin"
+            ]
+          }
         }
       },
       "explanation": {
         "properties": [
           {
             "name": "fullActionName",
-            "value": "player.playTrack",
+            "value": "player.playMusic",
             "substrings": [
               "play"
             ]
           },
           {
-            "name": "parameters.trackName",
+            "name": "parameters.target.kind",
+            "value": "track",
+            "substrings": [
+              "play"
+            ]
+          },
+          {
+            "name": "parameters.target.trackName",
             "value": "Nocturne",
             "substrings": [
               "Nocturne"
             ]
           },
           {
-            "name": "parameters.artists.0",
+            "name": "parameters.target.artists.0",
             "value": "Chopin",
             "substrings": [
               "Chopin"
@@ -218,14 +248,15 @@
             "text": "play",
             "category": "action",
             "propertyNames": [
-              "fullActionName"
+              "fullActionName",
+              "parameters.target.kind"
             ]
           },
           {
             "text": "Nocturne",
-            "category": "trackName",
+            "category": "track name",
             "propertyNames": [
-              "parameters.trackName"
+              "parameters.target.trackName"
             ]
           },
           {
@@ -234,40 +265,41 @@
             "synonyms": [
               "from",
               "performed by",
-              "sung by"
+              "composed by"
             ],
             "isOptional": true
           },
           {
             "text": "Chopin",
-            "category": "artist",
+            "category": "artist name",
             "propertyNames": [
-              "parameters.artists.0"
-            ]
+              "parameters.target.artists.0"
+            ],
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "player.playTrack",
+            "propertyValue": "player.playMusic",
             "propertySubPhrases": [
               "play"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.pauseTrack",
+                "propertyValue": "player.pauseMusic",
                 "propertySubPhrases": [
                   "pause"
                 ]
               },
               {
-                "propertyValue": "player.stopTrack",
+                "propertyValue": "player.stopMusic",
                 "propertySubPhrases": [
                   "stop"
                 ]
               },
               {
-                "propertyValue": "player.resumeTrack",
+                "propertyValue": "player.resumeMusic",
                 "propertySubPhrases": [
                   "resume"
                 ]
@@ -275,18 +307,39 @@
             ]
           },
           {
-            "propertyName": "parameters.trackName",
+            "propertyName": "parameters.target.kind",
+            "propertyValue": "track",
+            "propertySubPhrases": [
+              "play"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "album",
+                "propertySubPhrases": [
+                  "play an album"
+                ]
+              },
+              {
+                "propertyValue": "playlist",
+                "propertySubPhrases": [
+                  "play a playlist"
+                ]
+              },
+              {
+                "propertyValue": "radio",
+                "propertySubPhrases": [
+                  "play the radio"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.target.trackName",
             "propertyValue": "Nocturne",
             "propertySubPhrases": [
               "Nocturne"
             ],
             "alternatives": [
-              {
-                "propertyValue": "Fur Elise",
-                "propertySubPhrases": [
-                  "Fur Elise"
-                ]
-              },
               {
                 "propertyValue": "Moonlight Sonata",
                 "propertySubPhrases": [
@@ -298,11 +351,17 @@
                 "propertySubPhrases": [
                   "Clair de Lune"
                 ]
+              },
+              {
+                "propertyValue": "Fur Elise",
+                "propertySubPhrases": [
+                  "Fur Elise"
+                ]
               }
             ]
           },
           {
-            "propertyName": "parameters.artists.0",
+            "propertyName": "parameters.target.artists.0",
             "propertyValue": "Chopin",
             "propertySubPhrases": [
               "Chopin"
@@ -315,15 +374,15 @@
                 ]
               },
               {
-                "propertyValue": "Mozart",
-                "propertySubPhrases": [
-                  "Mozart"
-                ]
-              },
-              {
                 "propertyValue": "Debussy",
                 "propertySubPhrases": [
                   "Debussy"
+                ]
+              },
+              {
+                "propertyValue": "Mozart",
+                "propertySubPhrases": [
+                  "Mozart"
                 ]
               }
             ]
@@ -331,33 +390,47 @@
         ],
         "politePrefixes": [
           "Could you please",
-          "Would you mind"
+          "Would you mind",
+          "If it's not too much trouble, could you",
+          "I would appreciate it if you could"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "I would appreciate it"
+          "thank you!",
+          "if that's okay with you.",
+          "please.",
+          "I’d be grateful."
         ]
       }
     },
     {
       "request": "Can you play some Bach for me please?",
       "action": {
-        "fullActionName": "player.playArtist",
+        "fullActionName": "player.playMusic",
         "parameters": {
-          "artist": "Bach"
+          "target": {
+            "kind": "artist",
+            "artist": "Bach"
+          }
         }
       },
       "explanation": {
         "properties": [
           {
             "name": "fullActionName",
-            "value": "player.playArtist",
+            "value": "player.playMusic",
             "substrings": [
               "play"
             ]
           },
           {
-            "name": "parameters.artist",
+            "name": "parameters.target.kind",
+            "value": "artist",
+            "substrings": [
+              "Bach"
+            ]
+          },
+          {
+            "name": "parameters.target.artist",
             "value": "Bach",
             "substrings": [
               "Bach"
@@ -383,29 +456,20 @@
             ]
           },
           {
-            "text": "some",
-            "category": "filler",
-            "synonyms": [
-              "a bit of",
-              "a little",
-              "any"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "Bach",
-            "category": "artist",
+            "text": "some Bach",
+            "category": "target",
             "propertyNames": [
-              "parameters.artist"
+              "parameters.target.kind",
+              "parameters.target.artist"
             ]
           },
           {
             "text": "for me",
-            "category": "politeness",
+            "category": "filler",
             "synonyms": [
-              "for us",
-              "for them",
-              "for everyone"
+              "to me",
+              "on my behalf",
+              "on my account"
             ],
             "isOptional": true
           },
@@ -423,25 +487,25 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "player.playArtist",
+            "propertyValue": "player.playMusic",
             "propertySubPhrases": [
               "play"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.pause",
+                "propertyValue": "player.pauseMusic",
                 "propertySubPhrases": [
                   "pause"
                 ]
               },
               {
-                "propertyValue": "player.stop",
+                "propertyValue": "player.stopMusic",
                 "propertySubPhrases": [
                   "stop"
                 ]
               },
               {
-                "propertyValue": "player.resume",
+                "propertyValue": "player.resumeMusic",
                 "propertySubPhrases": [
                   "resume"
                 ]
@@ -449,35 +513,72 @@
             ]
           },
           {
-            "propertyName": "parameters.artist",
+            "propertyName": "parameters.target.kind",
+            "propertyValue": "artist",
+            "propertySubPhrases": [
+              "some Bach"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "genre",
+                "propertySubPhrases": [
+                  "some classical music"
+                ]
+              },
+              {
+                "propertyValue": "playlist",
+                "propertySubPhrases": [
+                  "some playlist"
+                ]
+              },
+              {
+                "propertyValue": "album",
+                "propertySubPhrases": [
+                  "some album"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.target.artist",
             "propertyValue": "Bach",
             "propertySubPhrases": [
-              "Bach"
+              "some Bach"
             ],
             "alternatives": [
               {
                 "propertyValue": "Mozart",
                 "propertySubPhrases": [
-                  "Mozart"
+                  "some Mozart"
                 ]
               },
               {
                 "propertyValue": "Beethoven",
                 "propertySubPhrases": [
-                  "Beethoven"
+                  "some Beethoven"
                 ]
               },
               {
                 "propertyValue": "Chopin",
                 "propertySubPhrases": [
-                  "Chopin"
+                  "some Chopin"
                 ]
               }
             ]
           }
         ],
-        "politePrefixes": [],
-        "politeSuffixes": []
+        "politePrefixes": [
+          "If you don't mind, ",
+          "Would it be possible for you to ",
+          "I would greatly appreciate it if you could ",
+          "Whenever you have a moment, "
+        ],
+        "politeSuffixes": [
+          ", thank you so much!",
+          ", if that's okay with you.",
+          ", I’d really appreciate it.",
+          ", please and thank you!"
+        ]
       }
     }
   ]

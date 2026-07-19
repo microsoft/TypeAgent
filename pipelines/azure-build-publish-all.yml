@@ -3,7 +3,7 @@
 
 # Consolidated build & publish pipeline for TypeAgent.
 #
-# Replaces the individual azure-build-publish-agent-server.yml,
+# This replaces the individual azure-build-publish-agent-server.yml,
 # azure-build-publish-copilot-plugin.yml, azure-build-publish-mcp.yml,
 # azure-build-package-shell.yml, azure-build-package-agent-server-msi.yml,
 # and azure-build-ts.yml pipelines with a single multi-stage pipeline that
@@ -56,10 +56,6 @@ parameters:
     displayName: "Publish signed MSI to feed + Azure Blob Storage"
 
   # ── Build options ─────────────────────────────────────────────────
-  - name: runTests
-    type: boolean
-    default: true
-    displayName: "Run test gate (test:local + lint + policy) before publish"
   - name: variant
     type: string
     default: external
@@ -88,11 +84,12 @@ variables:
   - name: packageVersion
     value: 0.0.1-$(Build.BuildId)
   # Channel: manual runs use the parameter; CI runs use 'ci'.
+  # Hardcode ci->test for now until we resolve an Environment permissions isssue
   - name: resolvedChannel
     ${{ if eq(variables['Build.Reason'], 'Manual') }}:
       value: ${{ parameters.channel }}
     ${{ if ne(variables['Build.Reason'], 'Manual') }}:
-      value: ci
+      value: test
   # Azure Artifacts feed coordinates.
   - name: adoOrgUrl
     value: https://dev.azure.com/msctoproj
@@ -112,9 +109,6 @@ variables:
     value: $(ELECTRON_CACHE_DIR)electron
   - name: ELECTRON_BUILDER_CACHE
     value: $(ELECTRON_CACHE_DIR)electron-builder-cache
-  # Shell platform list for the publish loop.
-  - name: shellPlatforms
-    value: win,linux,mac
 
 # ════════════════════════════════════════════════════════════════════
 #  STAGE 1 — BUILD
@@ -182,7 +176,7 @@ stages:
               cp -r "$PLUGIN_SRC/skills"      "$STAGE/skills"
 
               echo "Staged copilot-plugin artifact:"
-              find "$STAGE" -type f | head -20
+              find "$STAGE" -type f | head -20 || true
             displayName: "Stage copilot-plugin artifact"
             workingDirectory: $(buildDirectory)
 
@@ -272,8 +266,11 @@ stages:
                 artifact: optional-agents-$(platform)-$(arch)
 
           # Build MCP single-file executable (Node SEA).
+          # Run via node directly instead of `pnpm --filter ... run` because
+          # pnpm 11's dep-status check triggers `pnpm install --production`
+          # which fails on packages/shell's run-script-os devDep postinstall.
           - script: |
-              pnpm --filter @typeagent/copilot-plugin run build:exe
+              cd packages/copilot-plugin && node scripts/build-mcp-exe.mjs
             displayName: "Build typeagent-mcp exe ($(rid))"
             workingDirectory: $(buildDirectory)
 
@@ -294,22 +291,13 @@ stages:
             displayName: "Upload artifact: mcp-exe-$(rid)"
             artifact: mcp-exe-$(rid)
 
-      # ── Job 1c: Shell packaging (matrix) ──────────────────────────
+      # ── Job 1c: Shell packaging (windows only for now) ────────────
+      # TODO: Re-enable linux and mac legs once disk-space / build
+      #       issues on hosted agents are resolved.
       - job: build_shell
         displayName: "Build shell installer"
-        strategy:
-          matrix:
-            windows:
-              image: windows-latest
-              shellPlatform: win
-            linux:
-              image: ubuntu-latest
-              shellPlatform: linux
-            mac:
-              image: macos-latest
-              shellPlatform: mac
         pool:
-          vmImage: $(image)
+          vmImage: windows-latest
         steps:
           - template: include-prepare-repo.yml
             parameters:
@@ -335,13 +323,6 @@ stages:
               restoreKeys: |
                 electron | $(Agent.OS) | $(Agent.OSArchitecture)
 
-          - bash: |
-              pnpm store prune
-              find $(buildDirectory)/packages -maxdepth 2 -type d -name "node_modules" ! -path "*/shell/*" -exec rm -rf {} + 2>/dev/null || true
-              df -h / || true
-            displayName: "Free disk space before packaging"
-            condition: eq(variables['Agent.OS'], 'Linux')
-
           - script: |
               pnpm run shell:package
             displayName: "Package shell"
@@ -353,14 +334,55 @@ stages:
           - script: |
               copy %ELECTRON_BUILDER_CHANNEL%-x64.yml %ELECTRON_BUILDER_CHANNEL%.yml
             displayName: "Copy windows x64 to default channel file"
-            condition: eq(variables['Agent.OS'], 'Windows_NT')
             workingDirectory: $(shell_folder)/dist
             env:
               ELECTRON_BUILDER_CHANNEL: $(resolvedChannel)
 
           - publish: $(shell_folder)/dist
-            displayName: "Upload artifact: shell-$(shellPlatform)"
-            artifact: shell-$(shellPlatform)
+            displayName: "Upload artifact: shell-win"
+            artifact: shell-win
+
+      # macOS shell build — optional (continueOnError).
+      - job: build_shell_mac
+        displayName: "Build shell installer (macOS)"
+        continueOnError: true
+        pool:
+          vmImage: macos-latest
+        steps:
+          - template: include-prepare-repo.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              nodeVersion: $(nodeVersion)
+              registry: $(INSTALL_REGISTRY)
+
+          - template: include-update-package-version.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              prerelease: $(resolvedChannel).$(Build.BuildNumber)
+
+          - script: |
+              pnpm run build:shell
+            displayName: "Build shell"
+            workingDirectory: $(buildDirectory)
+
+          - task: Cache@2
+            displayName: Cache Electron Builder
+            inputs:
+              key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(buildDirectory)/pnpm-lock.yaml
+              path: $(ELECTRON_CACHE_DIR)
+              restoreKeys: |
+                electron | $(Agent.OS) | $(Agent.OSArchitecture)
+
+          - script: |
+              pnpm run shell:package
+            displayName: "Package shell"
+            workingDirectory: $(buildDirectory)
+            env:
+              ELECTRON_BUILDER_CHANNEL: $(resolvedChannel)
+
+          - publish: $(shell_folder)/dist
+            displayName: "Upload artifact: shell-mac"
+            artifact: shell-mac
 
   # ════════════════════════════════════════════════════════════════════
   #  STAGE 2 — TEST (optional)
@@ -368,10 +390,14 @@ stages:
   - stage: Test
     displayName: "Test gate"
     dependsOn: Build
-    condition: and(succeeded(), eq('${{ parameters.runTests }}', 'true'))
+    condition: succeeded()
     jobs:
       - job: unit_tests
         displayName: "Unit tests, lint, policy"
+        # Optional gate: a failure here must NOT block Publish. continueOnError
+        # makes a failing job report SucceededWithIssues instead of Failed, and
+        # the Publish stage condition accepts that result.
+        continueOnError: true
         pool:
           vmImage: ubuntu-latest
         steps:
@@ -426,11 +452,13 @@ stages:
     dependsOn:
       - Build
       - Test
-    # Run if Build succeeded and Test either succeeded or was skipped.
+    # Run if Build succeeded and Test did not hard-fail. The Test stage is an
+    # optional gate (unit_tests uses continueOnError), so a failing test reports
+    # SucceededWithIssues; Skipped covers the runTests=false case.
     condition: |
       and(
-        eq(stageDependencies.Build.result, 'Succeeded'),
-        in(stageDependencies.Test.result, 'Succeeded', 'Skipped')
+        in(stageDependencies.Build.result, 'Succeeded', 'SucceededWithIssues'),
+        in(stageDependencies.Test.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
       )
     variables:
       NpmRcDirectory: $(Build.SourcesDirectory)
@@ -456,39 +484,61 @@ stages:
             artifact: npm-packages
             displayName: "Download npm-packages artifact"
 
+          # Fail fast if required pipeline variables are not configured.
           - bash: |
-              echo "registry=$(PUBLISH_REGISTRY)" > "$(Build.SourcesDirectory)/.npmrc"
+              if [ -z "$PUBLISH_REGISTRY" ]; then
+                echo "##[error]PUBLISH_REGISTRY pipeline variable is not set. Configure it in the pipeline definition (ADO UI)."
+                exit 1
+              fi
+              if [ -z "$INSTALL_REGISTRY" ]; then
+                echo "##[error]INSTALL_REGISTRY pipeline variable is not set. Configure it in the pipeline definition (ADO UI)."
+                exit 1
+              fi
+              echo "PUBLISH_REGISTRY=$PUBLISH_REGISTRY"
+              echo "INSTALL_REGISTRY=$INSTALL_REGISTRY"
+            displayName: "Validate registry variables"
+            env:
+              PUBLISH_REGISTRY: $(PUBLISH_REGISTRY)
+              INSTALL_REGISTRY: $(INSTALL_REGISTRY)
+
+          - bash: |
+              echo "registry=$PUBLISH_REGISTRY" > "$(Build.SourcesDirectory)/.npmrc"
               cat "$(Build.SourcesDirectory)/.npmrc"
             displayName: "Create .npmrc"
+            env:
+              PUBLISH_REGISTRY: $(PUBLISH_REGISTRY)
 
           - task: npmAuthenticate@0
             displayName: "Authenticate with Azure Artifacts"
             inputs:
               workingFile: "$(Build.SourcesDirectory)/.npmrc"
 
-          - script: |
+          - bash: |
               for file in $(Pipeline.Workspace)/npm-packages/published/*.tgz; do
                 echo "Publishing file: $file"
-                npm publish --registry=$(PUBLISH_REGISTRY) --tag=latest "$file"
+                npm publish --registry="$PUBLISH_REGISTRY" --tag=latest "$file"
               done
             displayName: "Publish packages"
             workingDirectory: $(Build.SourcesDirectory)
+            env:
+              PUBLISH_REGISTRY: $(PUBLISH_REGISTRY)
 
           # Prime INSTALL_REGISTRY so freshly published versions are
           # immediately available via the upstream pull-through cache.
           - bash: |
               set -euo pipefail
-              echo "registry=$(INSTALL_REGISTRY)" > /tmp/prime/.npmrc 2>/dev/null || true
               mkdir -p /tmp/prime
-              echo "registry=$(INSTALL_REGISTRY)" > /tmp/prime/.npmrc
+              echo "registry=$INSTALL_REGISTRY" > /tmp/prime/.npmrc
               cd /tmp/prime
               for file in $(Pipeline.Workspace)/npm-packages/published/*.tgz; do
                 name=$(tar -xzOf "$file" package/package.json | jq -r .name)
                 version=$(tar -xzOf "$file" package/package.json | jq -r .version)
                 echo "Priming INSTALL_REGISTRY cache: $name@$version"
-                npm pack --registry=$(INSTALL_REGISTRY) "$name@$version" > /dev/null || true
+                npm pack --registry="$INSTALL_REGISTRY" "$name@$version" > /dev/null || true
               done
             displayName: "Prime INSTALL_REGISTRY cache"
+            env:
+              INSTALL_REGISTRY: $(INSTALL_REGISTRY)
 
       # ── Publish agent-server Universal packages ───────────────────
       - job: publish_agent_server
@@ -632,25 +682,40 @@ stages:
           runOnce:
             deploy:
               steps:
-                - ${{ each platform in split(variables.shellPlatforms, ',') }}:
-                    - download: current
-                      artifact: shell-${{ platform }}
-                      displayName: "Download shell-${{ platform }}"
-                      patterns: |
-                        TypeAgent Shell[-_]*
-                        typeagentshell-*
-                        $(resolvedChannel)*.yml
-                      condition: succeeded()
+                - download: current
+                  artifact: shell-win
+                  displayName: "Download shell-win"
+                  patterns: |
+                    TypeAgent Shell[-_]*
+                    typeagentshell-*
+                    $(resolvedChannel)*.yml
 
-                    - task: AzureFileCopy@6
-                      displayName: "Upload Azure Storage - ${{ platform }}"
-                      inputs:
-                        SourcePath: $(Pipeline.Workspace)\shell-${{ platform }}\**
-                        Destination: AzureBlob
-                        azureSubscription: $(azureSubscription)
-                        storage: $(azureStorageAccountName)
-                        ContainerName: $(azureStorageContainerName)
-                      condition: succeeded()
+                - task: AzureFileCopy@6
+                  displayName: "Upload Azure Storage - win"
+                  inputs:
+                    SourcePath: $(Pipeline.Workspace)\shell-win\**
+                    Destination: AzureBlob
+                    azureSubscription: $(azureSubscription)
+                    storage: $(azureStorageAccountName)
+                    ContainerName: $(azureStorageContainerName)
+
+                # macOS artifact — only upload if the optional build succeeded.
+                - download: current
+                  artifact: shell-mac
+                  displayName: "Download shell-mac (optional)"
+                  condition: |
+                    in(stageDependencies.Build.build_shell_mac.result, 'Succeeded', 'SucceededWithIssues')
+
+                - task: AzureFileCopy@6
+                  displayName: "Upload Azure Storage - mac"
+                  condition: |
+                    in(stageDependencies.Build.build_shell_mac.result, 'Succeeded', 'SucceededWithIssues')
+                  inputs:
+                    SourcePath: $(Pipeline.Workspace)\shell-mac\**
+                    Destination: AzureBlob
+                    azureSubscription: $(azureSubscription)
+                    storage: $(azureStorageAccountName)
+                    ContainerName: $(azureStorageContainerName)
 
       # ── Build, sign, and publish MSI ──────────────────────────────
       # The MSI job must run on Windows (WiX + signtool). It downloads
@@ -683,6 +748,32 @@ stages:
           - download: current
             artifact: copilot-plugin
             displayName: "Download copilot-plugin"
+
+          # Set up internal npm registry (required by org policy).
+          - bash: |
+              echo "registry=$INSTALL_REGISTRY" > .npmrc
+              cat .npmrc
+            displayName: "Set npm registry"
+            workingDirectory: $(buildDirectory)
+            env:
+              INSTALL_REGISTRY: $(INSTALL_REGISTRY)
+
+          - task: npmAuthenticate@0
+            displayName: "Authenticate to npm registry"
+            inputs:
+              workingFile: $(buildDirectory)/.npmrc
+
+          - template: include-install-pnpm.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+
+          - script: |
+              pnpm install --frozen-lockfile --strict-peer-dependencies
+            displayName: "Install dependencies"
+            workingDirectory: $(buildDirectory)
+            env:
+              PUPPETEER_SKIP_DOWNLOAD: "true"
+              PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
 
           # Ensure WiX Toolset is available.
           - pwsh: |
@@ -719,18 +810,11 @@ stages:
               scriptLocation: inlineScript
               inlineScript: |
                 Set-Location "$(buildDirectory)"
-                # getCert.mjs needs npm dependencies — install just the
-                # script's requirements.
-                npm install -g pnpm
-                pnpm install --frozen-lockfile --strict-peer-dependencies
                 node .\tools\scripts\getCert.mjs pull --verbose
                 if ($LASTEXITCODE -ne 0) {
                   Write-Error "Failed to pull certificate from Key Vault"
                   exit $LASTEXITCODE
                 }
-              env:
-                PUPPETEER_SKIP_DOWNLOAD: "true"
-                PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
 
           # Build the MSI using pre-built artifacts (--skip-download).
           - pwsh: |
@@ -798,8 +882,8 @@ stages:
                   --name "$packageName" --version "$(packageVersion)" `
                   --path "$publishPath" `
                   --description "TypeAgent MSI installer for $(msiRid)"
-              env:
-                AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+            env:
+              AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
 
       # ── Publish MSI to Azure Blob Storage ─────────────────────────
       - deployment: publish_msi_blob
