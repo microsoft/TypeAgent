@@ -351,7 +351,6 @@ function buildMcpArguments(
         | {
               properties?: Record<string, unknown> | undefined;
           }
-        | null
         | undefined,
     query: string,
 ): Record<string, unknown> {
