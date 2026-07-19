@@ -84,11 +84,12 @@ variables:
   - name: packageVersion
     value: 0.0.1-$(Build.BuildId)
   # Channel: manual runs use the parameter; CI runs use 'ci'.
+  # Hardcode ci->test for now until we resolve an Environment permissions isssue
   - name: resolvedChannel
     ${{ if eq(variables['Build.Reason'], 'Manual') }}:
       value: ${{ parameters.channel }}
     ${{ if ne(variables['Build.Reason'], 'Manual') }}:
-      value: ci
+      value: test
   # Azure Artifacts feed coordinates.
   - name: adoOrgUrl
     value: https://dev.azure.com/msctoproj
