@@ -378,7 +378,9 @@ function buildMcpArguments(
     };
 }
 
-function extractMcpText(result: { isError?: boolean; content?: unknown[] } | null | undefined): string {
+function extractMcpText(
+    result: { isError?: boolean; content?: unknown[] } | null | undefined,
+): string {
     const content = result?.content;
     if (!Array.isArray(content)) {
         return "";
@@ -457,15 +459,11 @@ function extractReferences(references: unknown): AiSearchReference[] {
         const rawRef = ref as ApiRef;
         const sourceData: NonNullable<ApiRef["sourceData"]> =
             rawRef?.sourceData ?? {};
-        const id =
-            rawRef?.id !== undefined ? String(rawRef.id) : undefined;
+        const id = rawRef?.id !== undefined ? String(rawRef.id) : undefined;
         const url =
             sourceData.url ?? sourceData.Url ?? rawRef?.url ?? undefined;
         const title =
-            sourceData.title ??
-            sourceData.Title ??
-            rawRef?.title ??
-            undefined;
+            sourceData.title ?? sourceData.Title ?? rawRef?.title ?? undefined;
         if (url || title) {
             out.push({ id, title, url });
         }
