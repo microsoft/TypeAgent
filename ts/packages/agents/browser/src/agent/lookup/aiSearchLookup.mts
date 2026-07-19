@@ -455,7 +455,7 @@ function extractReferences(references: unknown): AiSearchReference[] {
     const out: AiSearchReference[] = [];
     for (const ref of references) {
         const rawRef = ref as ApiRef;
-        const sourceData: { url?: string; Url?: string; title?: string; Title?: string } =
+        const sourceData: NonNullable<ApiRef["sourceData"]> =
             rawRef?.sourceData ?? {};
         const id =
             rawRef?.id !== undefined ? String(rawRef.id) : undefined;
