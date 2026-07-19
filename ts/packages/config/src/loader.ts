@@ -13,6 +13,8 @@ import { flatten, mergeFlat } from "./flatten.js";
 import { fetchKeyVaultConfig } from "./keyVault.js";
 import { validateConfigTree } from "./schema.js";
 import {
+    ComputeConfigDriftOptions,
+    ConfigDrift,
     ConfigSource,
     ConfigTree,
     FlatEnv,
@@ -412,4 +414,83 @@ function applyToProcessEnv(merged: FlatEnv, sources?: SourceMap): void {
             sources[key] = ConfigSource.ProcessEnv;
         }
     }
+}
+
+/**
+ * Compare the local config file (`config.local.yaml`) against the shared
+ * Key Vault config and report the keys where they diverge. Used by the
+ * agent-server to warn clients (on connect) that their local config is out of
+ * sync with the shared vault - the same delivery path as the stale-build
+ * notice.
+ *
+ * The Key Vault is the reference: a key drifts when the vault defines it and
+ * the local file either omits it or sets a different value. Keys that exist
+ * only locally are intentional local overrides / additions (local wins by
+ * design) and are not reported.
+ *
+ * Returns `undefined` - meaning "no notice" - when there is nothing to compare
+ * or nothing differs: no vault is configured, the vault holds no config (or the
+ * fetch fails; the check is best-effort and never blocks startup), or the two
+ * layers already agree.
+ */
+export async function computeConfigDrift(
+    options: ComputeConfigDriftOptions = {},
+): Promise<ConfigDrift | undefined> {
+    const { localPath } = resolveConfigPaths(options);
+
+    // Resolve the vault name the same way loadConfig does: an explicit option,
+    // or auto-discovered from `vault.shared` (flattened to
+    // TYPEAGENT_SHAREDVAULT) in the defaults / local layers.
+    let vaultName = options.keyVault?.vaultName;
+    if (!vaultName) {
+        const pre = loadConfigSync({
+            ...options,
+            populateProcessEnv: false,
+            strict: false,
+        });
+        vaultName = pre.env.TYPEAGENT_SHAREDVAULT;
+    }
+    if (!vaultName) {
+        debug("config drift: no vault configured — skipping");
+        return undefined;
+    }
+
+    // Fetch the vault config. Best-effort: a fetch / parse failure yields null
+    // and no notice, matching the loader's offline-friendly behavior.
+    const vaultTree = await fetchKeyVaultConfig({
+        ...options.keyVault,
+        vaultName,
+        failOnError: false,
+    });
+    if (!vaultTree) {
+        debug("config drift: vault has no config — skipping");
+        return undefined;
+    }
+
+    let localTree: ConfigTree | null;
+    try {
+        localTree = readYamlFile(localPath);
+    } catch (err) {
+        // A malformed local file is the loader's problem to surface (strict
+        // mode throws there); the drift check stays silent rather than
+        // double-reporting.
+        debug("config drift: could not read local config (%s) — skipping", err);
+        return undefined;
+    }
+
+    const localFlat = flatten(localTree);
+    const vaultFlat = flatten(vaultTree);
+    const driftedKeys = Object.keys(vaultFlat)
+        .filter((key) => localFlat[key] !== vaultFlat[key])
+        .sort();
+
+    if (driftedKeys.length === 0) {
+        return undefined;
+    }
+    debug(
+        "config drift: %d key(s) differ from vault %s",
+        driftedKeys.length,
+        vaultName,
+    );
+    return { vaultName, driftedKeys };
 }

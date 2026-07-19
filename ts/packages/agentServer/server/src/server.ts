@@ -8,6 +8,7 @@ import {
 } from "./conversationManager.js";
 import { createAgentServerConnectionHandler } from "./connectionHandler.js";
 import { startStaleBuildWatcher, isStaleBuild } from "./staleBuild.js";
+import { printConfigDriftBanner } from "./banner.js";
 import {
     getInstanceDirAsync,
     getTraceIdAsync,
@@ -25,7 +26,7 @@ import {
     UserIdentity,
 } from "@typeagent/agent-server-protocol";
 import { PortRegistrar, SYSTEM_SESSION_CONTEXT_ID } from "agent-dispatcher";
-import { loadConfig } from "@typeagent/config";
+import { loadConfig, computeConfigDrift } from "@typeagent/config";
 import {
     writeServerPid,
     removeServerPid,
@@ -36,7 +37,7 @@ import { spawnSync } from "node:child_process";
 import { DefaultAzureCredential } from "@azure/identity";
 
 // Exit code the worker uses to ask the supervisor to relaunch it in place.
-const RESTART_EXIT_CODE = 42;  
+const RESTART_EXIT_CODE = 42;
 
 // A dead stdout/stderr pipe (e.g. the launching wrapper exited) must never
 // crash or busy-loop the server: swallow write errors so an EPIPE can't become
@@ -84,6 +85,15 @@ if (process.env.TYPEAGENT_SUPERVISED !== "1") {
 // Load config from YAML layers + Key Vault (replacing legacy dotenv).
 // vault.shared is auto-discovered from config.local.yaml / config.defaults.yaml.
 await loadConfig({ keyVault: {}, strict: false });
+
+// Snapshot whether this server's local config differs from the shared Key
+// Vault, so clients can be warned on connect (same delivery path as the
+// stale-build notice). Kicked off now so the vault fetch overlaps the rest of
+// startup; awaited before the connection handler is wired. Best-effort: any
+// failure resolves to "no drift" so it can never block or crash startup.
+const configDriftPromise = computeConfigDrift({ keyVault: {} }).catch(
+    () => undefined,
+);
 
 const debugStartup = registerDebug("agent-server:startup");
 
@@ -341,12 +351,21 @@ async function main() {
     // agent server used by the Electron shell — both go through the same
     // ConversationManager via createAgentServerConnectionHandler so there is
     // a single connection code path regardless of transport.
+    const configDrift = await configDriftPromise;
+    if (configDrift !== undefined) {
+        // Warn on the server console too (not just connected clients), the same
+        // yellow-banner treatment as a stale build.
+        printConfigDriftBanner(configDrift);
+    }
     const { handler: connectionHandler, broadcastStaleNotice } =
         createAgentServerConnectionHandler({
             conversationManager,
             shutdown: shutdownServer,
             restart: restartServer,
             isStale: isStaleBuild,
+            // Only pass when drift was detected - exactOptionalPropertyTypes
+            // forbids an explicit undefined on the optional deps property.
+            ...(configDrift !== undefined ? { configDrift } : {}),
             getUserIdentity: () => userIdentity,
             portRegistrar,
             onConnect: () => {

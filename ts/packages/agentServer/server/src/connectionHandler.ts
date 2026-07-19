@@ -17,6 +17,7 @@ import {
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
+import type { ConfigDrift } from "@typeagent/config";
 import type { Dispatcher } from "agent-dispatcher";
 import type { PortRegistrar } from "agent-dispatcher";
 import type { ConversationManager } from "./conversationManager.js";
@@ -57,6 +58,14 @@ export type ConnectionHandlerDeps = {
      * standalone agent-server supplies this.
      */
     isStale?: () => boolean;
+    /**
+     * Optional: a startup snapshot of how this server's local config differs
+     * from the shared Key Vault. When set, each joining client is warned that
+     * its local config is out of sync with the vault. Only the standalone
+     * agent-server supplies this; it is computed once before the server
+     * accepts clients, so (unlike {@link isStale}) it never changes mid-run.
+     */
+    configDrift?: ConfigDrift;
     /** Returns the current resolved user identity. */
     getUserIdentity: () => UserIdentity;
     /**
@@ -102,6 +111,46 @@ const STALE_BUILD_DISMISS = {
     dismiss: true,
 } as const;
 
+// Stable id for the "local config differs from the shared Key Vault" notice.
+const CONFIG_DRIFT_NOTICE_ID = "config-drift";
+
+// Cap how many key names are listed in the drift message so a large drift
+// doesn't produce a wall of text; the remainder is summarized as "and N more".
+const CONFIG_DRIFT_MAX_KEYS = 6;
+
+// Build the config-drift notice payload from a startup drift snapshot. Sent as
+// chat-ui's STATUS_NOTICE_EVENT ("statusNotice") on connect, the same delivery
+// path as STALE_BUILD_NOTICE. Kept a plain object (no chat-ui import) so the
+// server needn't depend on the DOM package. The message lists differing key
+// NAMES only - never values - so no secret can leak to a client.
+function makeConfigDriftNotice(drift: ConfigDrift) {
+    const keys = drift.driftedKeys;
+    const shown = keys.slice(0, CONFIG_DRIFT_MAX_KEYS);
+    const remainder = keys.length - shown.length;
+    const list =
+        remainder > 0
+            ? `${shown.join(", ")}, and ${remainder} more`
+            : shown.join(", ");
+    const count = keys.length === 1 ? "1 setting" : `${keys.length} settings`;
+    const verb = keys.length === 1 ? "differs" : "differ";
+    return {
+        id: CONFIG_DRIFT_NOTICE_ID,
+        level: "warning",
+        title: "Local config differs from Key Vault",
+        message:
+            `${count} in your local config ${verb} from the shared vault ` +
+            `(${drift.vaultName}): ${list}.`,
+    };
+}
+
+// Retracts the config-drift notice on a client that connects to a server with
+// no drift - clears a pill left over from a previous connection (e.g. after the
+// user reconciled their local config and restarted).
+const CONFIG_DRIFT_DISMISS = {
+    id: CONFIG_DRIFT_NOTICE_ID,
+    dismiss: true,
+} as const;
+
 /**
  * Build the per-connection handler shared by every agent-server transport.
  * This is the single place that wires a client connection's RPC channels to
@@ -126,11 +175,20 @@ export function createAgentServerConnectionHandler(
         shutdown,
         restart,
         isStale,
+        configDrift,
         getUserIdentity,
         portRegistrar,
         onConnect,
         onDisconnect,
     } = deps;
+
+    // Built once from the startup config-drift snapshot (undefined when the
+    // local config matches the vault, no vault is configured, or drift
+    // detection was skipped). Reused for every joining client.
+    const configDriftNotice =
+        configDrift !== undefined
+            ? makeConfigDriftNotice(configDrift)
+            : undefined;
 
     // Each live connection registers a fn here that pushes the stale-build
     // notice to its client (via that client's clientIO). Lets a mid-run stale
@@ -330,6 +388,24 @@ export function createAgentServerConnectionHandler(
                             } catch {
                                 // Best effort - never fail on a delivery error.
                             }
+                        }
+
+                        // Config-drift notice: on connect, warn when this
+                        // server's local config differs from the shared Key
+                        // Vault, or retract a stale pill when it doesn't. A
+                        // startup snapshot (computed before the server accepts
+                        // clients), so unlike the stale-build notice it never
+                        // changes mid-run and needs no broadcast path.
+                        // Idempotent across re-joins via the stable notice id.
+                        try {
+                            clientIORpcClient.notify(
+                                undefined,
+                                "statusNotice",
+                                configDriftNotice ?? CONFIG_DRIFT_DISMISS,
+                                "agent-server",
+                            );
+                        } catch {
+                            // Best effort - never fail on a delivery error.
                         }
                     });
 

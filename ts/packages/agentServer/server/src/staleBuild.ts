@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import registerDebug from "debug";
 
+import { printWarningBanner } from "./banner.js";
+
 const debug = registerDebug("agent-server:stale-build");
 
 // Set once a newer build is detected on disk. Read by the connection handler
@@ -21,14 +23,6 @@ let staleDetected = false;
 export function isStaleBuild(): boolean {
     return staleDetected;
 }
-
-// True black text (24-bit) on a yellow background - only emitted to a TTY so
-// redirected logs (files, pipes) stay readable. Uses an explicit RGB(0,0,0)
-// foreground instead of the ANSI "black" (30): most terminal themes remap
-// indexed black to a dark gray (so it shows on a dark background), which then
-// renders gray-on-yellow here and is hard to read. Truecolor can't be remapped.
-const YELLOW_BG = "\x1b[38;2;0;0;0;43m";
-const RESET = "\x1b[0m";
 
 type StaleDetail = {
     // The rebuilt .js file that tripped detection.
@@ -60,35 +54,16 @@ function formatClock(ms: number): string {
  */
 function printStaleBanner(detail: StaleDetail): void {
     const deltaS = ((detail.mtimeMs - detail.baselineMs) / 1000).toFixed(1);
-    const lines = [
-        "STALE BUILD",
-        "agent-server code on disk was rebuilt after this process started;",
-        "this window is still running the OLD build.",
-        `  rebuilt +${deltaS}s after start:  ${detail.filename}`,
-        `    baseline ${formatClock(detail.baselineMs)}  ->  file mtime ${formatClock(detail.mtimeMs)}`,
-        "Restart to load the new code:  @server restart   (CLI: /restart)",
-    ];
-
-    if (process.stdout.isTTY !== true) {
-        // No colors/box for non-interactive logs - just make it greppable.
-        process.stderr.write(
-            "\n" +
-                lines.map((line) => `[stale-build] ${line}`).join("\n") +
-                "\n\n",
-        );
-        return;
-    }
-
-    const width = Math.min(Math.max(process.stdout.columns ?? 80, 40), 100);
-    const inner = width - 4; // "| " + " |"
-    const bar = "-".repeat(width - 2);
-    const pad = (s: string) => {
-        const text = s.length > inner ? s.slice(0, inner - 3) + "..." : s;
-        return "| " + text + " ".repeat(inner - text.length) + " |";
-    };
-    const box = ["+" + bar + "+", ...lines.map(pad), "+" + bar + "+"];
-    process.stderr.write(
-        "\n" + box.map((l) => `${YELLOW_BG}${l}${RESET}`).join("\n") + "\n\n",
+    printWarningBanner(
+        [
+            "STALE BUILD",
+            "agent-server code on disk was rebuilt after this process started;",
+            "this window is still running the OLD build.",
+            `  rebuilt +${deltaS}s after start:  ${detail.filename}`,
+            `    baseline ${formatClock(detail.baselineMs)}  ->  file mtime ${formatClock(detail.mtimeMs)}`,
+            "Restart to load the new code:  @server restart   (CLI: /restart)",
+        ],
+        "stale-build",
     );
 }
 
