@@ -347,7 +347,12 @@ async function retrieveViaMcp(
 // can vary by API version. Inspect the advertised schema and pick the shape
 // it accepts rather than guessing.
 function buildMcpArguments(
-    inputSchema: { properties?: Record<string, unknown> },
+    inputSchema:
+        | {
+              properties?: Record<string, unknown> | undefined;
+          }
+        | null
+        | undefined,
     query: string,
 ): Record<string, unknown> {
     const props = inputSchema?.properties ?? {};
