@@ -8,7 +8,6 @@ export default {
     testEnvironment: "jsdom",
     roots: ["<rootDir>/src/", "<rootDir>/test/"],
     testMatch: ["<rootDir>/test/**/*.test.ts"],
-    setupFilesAfterEnv: ["<rootDir>/test/jest-setup.js"],
     transform: {
         "^.+\\.(ts|tsx|js|jsx)$": [
             "ts-jest",
@@ -29,16 +28,8 @@ export default {
     moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
     moduleNameMapper: {
         "^common-utils$": "<rootDir>/test/mocks/common-utils.js",
-        "../../common/webAgentMessageTypes.mjs":
-            "<rootDir>/test/mocks/webAgentMessageTypes.js",
         "^agent-rpc/channel$": "<rootDir>/test/mocks/agent-rpc-channel.js",
         "^agent-rpc/rpc$": "<rootDir>/test/mocks/agent-rpc-rpc.js",
-        "../../common/contentScriptRpc/client.mjs":
-            "<rootDir>/test/mocks/contentScriptRpc-client.js",
-        "../../common/contentScriptRpc/types.mjs":
-            "<rootDir>/test/mocks/contentScriptRpc-types.js",
-        "../../common/browserControl.mjs":
-            "<rootDir>/test/mocks/browserControl.js",
         "^src/(.*)$": "<rootDir>/src/$1",
         // Mock problematic modules that use import.meta.url
         "^.*queryAnalyzer\\.(mjs|mts)$":
