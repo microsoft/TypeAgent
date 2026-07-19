@@ -186,6 +186,24 @@ export async function lookupViaAiSearch(
 // REST retrieve action backend
 // ---------------------------------------------------------------------------
 
+type RetrieveApiResponse = {
+    response?: unknown;
+    references?: unknown;
+    activity?: unknown;
+};
+
+type ApiRef = {
+    id?: unknown;
+    url?: string;
+    title?: string;
+    sourceData?: {
+        url?: string;
+        Url?: string;
+        title?: string;
+        Title?: string;
+    };
+};
+
 async function retrieveViaApi(
     config: AiSearchConfig,
     query: string,
@@ -229,7 +247,7 @@ async function retrieveViaApi(
         );
     }
 
-    const data: any = await response.json();
+    const data = (await response.json()) as RetrieveApiResponse;
     const elapsedMs = Date.now() - start;
     const { answer, references } = parseRetrievePayload(
         extractResponseText(data?.response),
@@ -244,17 +262,17 @@ async function retrieveViaApi(
     };
 }
 
-function extractResponseText(response: any): string {
+function extractResponseText(response: unknown): string {
     if (!Array.isArray(response)) {
         return "";
     }
     const parts: string[] = [];
     for (const message of response) {
-        const content = message?.content;
+        const content = (message as { content?: unknown })?.content;
         if (Array.isArray(content)) {
             for (const item of content) {
-                if (typeof item?.text === "string") {
-                    parts.push(item.text);
+                if (typeof (item as { text?: unknown })?.text === "string") {
+                    parts.push((item as { text: string }).text);
                 }
             }
         }
@@ -289,6 +307,7 @@ async function retrieveViaMcp(
     try {
         // The SDK transport type doesn't satisfy exactOptionalPropertyTypes;
         // cast matches the pattern used by mcpAgentProvider.ts.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await client.connect(transport as any);
 
         const { tools } = await client.listTools();
@@ -300,10 +319,10 @@ async function retrieveViaMcp(
         }
         debug("mcp tool input schema: %o", tool.inputSchema);
 
-        const result: any = await client.callTool({
+        const result = (await client.callTool({
             name: "knowledge_base_retrieve",
             arguments: buildMcpArguments(tool.inputSchema, query),
-        });
+        })) as { isError?: boolean; content?: unknown[] };
         const elapsedMs = Date.now() - start;
 
         if (result?.isError) {
@@ -327,7 +346,10 @@ async function retrieveViaMcp(
 // The MCP tool mirrors the REST retrieve request, but the exact input schema
 // can vary by API version. Inspect the advertised schema and pick the shape
 // it accepts rather than guessing.
-function buildMcpArguments(inputSchema: any, query: string): any {
+function buildMcpArguments(
+    inputSchema: { properties?: Record<string, unknown> },
+    query: string,
+): Record<string, unknown> {
     const props = inputSchema?.properties ?? {};
     // Azure AI Search's knowledge_base_retrieve expects a `queries` array of
     // natural-language questions (currently min and max 1).
@@ -356,15 +378,15 @@ function buildMcpArguments(inputSchema: any, query: string): any {
     };
 }
 
-function extractMcpText(result: any): string {
+function extractMcpText(result: { isError?: boolean; content?: unknown[] } | null | undefined): string {
     const content = result?.content;
     if (!Array.isArray(content)) {
         return "";
     }
     const parts: string[] = [];
     for (const item of content) {
-        if (typeof item?.text === "string") {
-            parts.push(item.text);
+        if (typeof (item as { text?: unknown })?.text === "string") {
+            parts.push((item as { text: string }).text);
         }
     }
     return parts.join("\n").trim();
@@ -432,17 +454,17 @@ function extractReferences(references: unknown): AiSearchReference[] {
     }
     const out: AiSearchReference[] = [];
     for (const ref of references) {
-        const sourceData = (ref as any)?.sourceData ?? {};
+        const rawRef = ref as ApiRef;
+        const sourceData: { url?: string; Url?: string; title?: string; Title?: string } =
+            rawRef?.sourceData ?? {};
         const id =
-            (ref as any)?.id !== undefined
-                ? String((ref as any).id)
-                : undefined;
+            rawRef?.id !== undefined ? String(rawRef.id) : undefined;
         const url =
-            sourceData.url ?? sourceData.Url ?? (ref as any)?.url ?? undefined;
+            sourceData.url ?? sourceData.Url ?? rawRef?.url ?? undefined;
         const title =
             sourceData.title ??
             sourceData.Title ??
-            (ref as any)?.title ??
+            rawRef?.title ??
             undefined;
         if (url || title) {
             out.push({ id, title, url });

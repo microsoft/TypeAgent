@@ -201,7 +201,6 @@ async function main(): Promise<void> {
 
 // Run as a script (node dist/agent/lookup/aiSearchSetup.mjs).
 main().catch((e) => {
-    // eslint-disable-next-line no-console
     console.error(e instanceof Error ? e.message : e);
     process.exit(1);
 });
