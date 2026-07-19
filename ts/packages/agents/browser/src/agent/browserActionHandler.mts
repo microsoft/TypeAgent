@@ -3008,6 +3008,7 @@ export async function handleWebsiteLibraryStats(
                 responseText = statsResult.displayContent.join("\n");
             } else if (
                 typeof statsResult.displayContent === "object" &&
+                statsResult.displayContent.type !== "structured" &&
                 statsResult.displayContent.content
             ) {
                 // Handle DisplayMessage type

@@ -932,30 +932,52 @@ export function createChatPanelClient(
                     });
                     break;
                 case AppAgentEvent.Inline:
-                    chatPanel.showInline(data, source);
-                    if (source !== "osNotifications") {
-                        notifications.push({
-                            event,
-                            source,
+                    if (source === "osNotifications") {
+                        // OS notifications render as persistent, dismissable
+                        // bubbles (removed on osDismiss), NOT ephemeral
+                        // toast/inline rows. The notificationId ("os:<id>")
+                        // arrives as the notify requestId.
+                        chatPanel.addNotification(
                             data,
-                            read: false,
-                            requestId,
-                        });
+                            source,
+                            ridStr(requestId)!,
+                        );
+                        break;
                     }
+                    chatPanel.showInline(data, source);
+                    notifications.push({
+                        event,
+                        source,
+                        data,
+                        read: false,
+                        requestId,
+                    });
                     break;
                 case AppAgentEvent.Toast:
-                    chatPanel.showToast(data, source);
-                    if (source !== "osNotifications") {
-                        notifications.push({
-                            event,
-                            source,
+                    if (source === "osNotifications") {
+                        chatPanel.addNotification(
                             data,
-                            read: false,
-                            requestId,
-                        });
+                            source,
+                            ridStr(requestId)!,
+                        );
+                        break;
                     }
+                    chatPanel.showToast(data, source);
+                    notifications.push({
+                        event,
+                        source,
+                        data,
+                        read: false,
+                        requestId,
+                    });
                     break;
                 case "osDismiss":
+                    // The OS notification left the action center — drop the
+                    // corresponding persistent bubble. data.id matches the
+                    // notificationId ("os:<id>") used on the "added" event.
+                    if (data && typeof data.id === "string") {
+                        chatPanel.removeNotification(data.id);
+                    }
                     break;
                 default:
                     break;

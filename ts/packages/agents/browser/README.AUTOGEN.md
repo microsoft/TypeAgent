@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d948df2288b364044ea46d8a1fd6ffc3ccfdaa878c5f3816c0f6ce21d087675c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=df6d6d34383d262c4ee55858a51f70cef3ed33d8b5d8b89fe045c9dc85c910df -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # browser-typeagent — AI-generated documentation
@@ -16,7 +16,7 @@ The `browser-typeagent` package is a TypeAgent application agent designed for br
 
 ## What it does
 
-The `browser-typeagent` package provides a wide range of browser automation capabilities, including:
+The `browser-typeagent` package provides a range of browser automation capabilities, allowing users to interact with web pages and manage browser sessions programmatically. Key features include:
 
 - **Web Navigation**: Actions such as `openWebPage`, `goBack`, `goForward`, and `reloadPage` allow users to navigate between web pages and control browser tabs.
 - **User Interaction**: Users can interact with web content using actions like `clickOn`, `followLinkByText`, `scrollDown`, and `scrollUp`.
@@ -190,6 +190,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `b1b5bcafdde8ba2387d669eec198eb70e8fa5986` on `2026-07-17T23:52:55.795Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `c97eb42726a9196c7ac72138faa0777c5cbc1aab` on `2026-07-18T09:48:36.613Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

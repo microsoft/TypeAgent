@@ -11,6 +11,7 @@ import {
 import {
     createActionResultFromTextDisplay,
     createActionResultFromMarkdownDisplay,
+    createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { OnboardingActions } from "./onboardingSchema.js";
 import { DiscoveryActions } from "./discovery/discoverySchema.js";
@@ -234,21 +235,44 @@ async function executeOnboardingAction(
                     error: `Integration "${integrationName}" not found.`,
                 };
             }
-            const lines = [
-                `## ${integrationName} — Onboarding Status`,
-                ``,
-                `**Current phase:** ${state.currentPhase}`,
-                `**Started:** ${state.createdAt}`,
-                `**Updated:** ${state.updatedAt}`,
-                ``,
-                `| Phase | Status |`,
-                `|---|---|`,
-                ...Object.entries(state.phases).map(
-                    ([phase, ps]) =>
-                        `| ${phase} | ${statusIcon(ps.status)} ${ps.status} |`,
-                ),
-            ];
-            return createActionResultFromMarkdownDisplay(lines.join("\n"));
+            return createStructuredResult(
+                [
+                    {
+                        kind: "heading",
+                        level: 3,
+                        text: `${integrationName} — Onboarding Status`,
+                    },
+                    {
+                        kind: "keyValue",
+                        pairs: [
+                            {
+                                label: "Current phase",
+                                value: state.currentPhase,
+                            },
+                            { label: "Started", value: state.createdAt },
+                            { label: "Updated", value: state.updatedAt },
+                        ],
+                    },
+                    {
+                        kind: "table",
+                        columns: [
+                            { id: "phase", header: "Phase" },
+                            { id: "status", header: "Status", type: "badge" },
+                        ],
+                        rows: Object.entries(state.phases).map(
+                            ([phase, ps]) => [
+                                phase,
+                                {
+                                    text: `${statusIcon(ps.status)} ${ps.status}`,
+                                    badge: phaseStatusBadge(ps.status),
+                                },
+                            ],
+                        ),
+                        readonly: true,
+                    },
+                ],
+                { rawData: state },
+            );
         }
 
         case "listIntegrations": {
@@ -259,7 +283,8 @@ async function executeOnboardingAction(
                     "No integrations found. Use startOnboarding to begin.",
                 );
             }
-            const lines = [`## Integrations`, ``];
+            const rows: (string | number)[][] = [];
+            const raw: unknown[] = [];
             for (const name of names) {
                 const state = await loadState(name);
                 if (!state) continue;
@@ -270,11 +295,34 @@ async function executeOnboardingAction(
                     state.currentPhase === "complete"
                 )
                     continue;
-                lines.push(
-                    `- **${name}** — ${state.currentPhase} (updated ${state.updatedAt})`,
+                rows.push([name, state.currentPhase, state.updatedAt]);
+                raw.push({
+                    name,
+                    currentPhase: state.currentPhase,
+                    updatedAt: state.updatedAt,
+                });
+            }
+            if (rows.length === 0) {
+                return createActionResultFromTextDisplay(
+                    "No matching integrations found.",
                 );
             }
-            return createActionResultFromMarkdownDisplay(lines.join("\n"));
+            return createStructuredResult(
+                [
+                    { kind: "heading", level: 3, text: "Integrations" },
+                    {
+                        kind: "table",
+                        columns: [
+                            { id: "name", header: "Integration" },
+                            { id: "phase", header: "Phase" },
+                            { id: "updated", header: "Updated", type: "date" },
+                        ],
+                        rows,
+                        sortable: true,
+                    },
+                ],
+                { rawData: raw },
+            );
         }
     }
 }
@@ -311,5 +359,22 @@ function statusIcon(status: string): string {
             return "⏭️";
         default:
             return "❓";
+    }
+}
+
+function phaseStatusBadge(
+    status: string,
+): "neutral" | "info" | "success" | "warning" | "error" {
+    switch (status) {
+        case "approved":
+            return "success";
+        case "in-progress":
+            return "info";
+        case "pending":
+            return "warning";
+        case "skipped":
+            return "neutral";
+        default:
+            return "neutral";
     }
 }

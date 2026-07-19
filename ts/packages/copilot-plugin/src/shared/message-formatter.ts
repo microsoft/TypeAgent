@@ -7,7 +7,15 @@
  */
 
 import type { IAgentMessage } from "@typeagent/agent-server-client";
-import type { DisplayAppendMode } from "@typeagent/agent-sdk";
+import type {
+    DisplayAppendMode,
+    DisplayContent,
+    StructuredContent,
+} from "@typeagent/agent-sdk";
+import {
+    getStructuredFallback,
+    isStructuredContent,
+} from "@typeagent/agent-sdk/helpers/display";
 import { convert } from "html-to-text";
 
 /**
@@ -27,6 +35,9 @@ function extractText(msg: unknown): string | undefined {
 
     if (typeof msg === "string") {
         text = msg;
+    } else if (isStructuredContent(msg as DisplayContent)) {
+        // StructuredContent — use the pre-derived text alternate.
+        text = String(getStructuredFallback(msg as StructuredContent, "text"));
     } else if (typeof msg === "object" && msg && "content" in msg) {
         text = String((msg as { content: unknown }).content);
         if ("type" in msg && (msg as { type: unknown }).type === "html") {

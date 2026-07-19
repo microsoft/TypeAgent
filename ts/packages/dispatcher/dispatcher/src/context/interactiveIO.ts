@@ -43,6 +43,7 @@ export function makeClientIOMessage(
     if (
         typeof message === "object" &&
         !Array.isArray(message) &&
+        message.type !== "structured" &&
         message.kind === "error"
     ) {
         const commandResult = getCommandResult(context);

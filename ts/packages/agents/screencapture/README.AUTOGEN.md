@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ba3bf63187d14dc4e868df4407f295805fdff3994c08c48f254b2668d75a8472 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=cc7fa9d9c12935a25c4c99e1be41bce8865a223a3a18d09ade62951ab1c8aff9 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # screencapture-agent — AI-generated documentation
@@ -12,14 +12,14 @@
 
 ## Overview
 
-The `screencapture-agent` is a TypeAgent application agent designed for screen capture and recording tasks. It supports taking screenshots and recording the screen on Windows and Linux (X11), with the ability to target specific programs or windows by name. This agent integrates with the TypeAgent ecosystem, enabling users to perform screen capture actions through natural language commands.
+The `screencapture-agent` is a TypeAgent application agent designed for screen capture and recording tasks. It enables users to take screenshots and record their screens on Windows and Linux (X11) systems. The agent supports capturing the entire screen or targeting specific application windows by name, and it integrates with the TypeAgent ecosystem to allow natural language commands for these operations.
 
 ## What it does
 
-The `screencapture-agent` provides the following key functionalities:
+The `screencapture-agent` provides a set of actions for screen capture and recording:
 
 - **`takeScreenshot`**: Captures a screenshot of the entire screen or a specific window. If a `target` parameter is provided, the agent attempts to match the name to a visible window (e.g., "Chrome" or "Visual Studio").
-- **`startRecording`**: Initiates a screen recording of the entire screen or a specific window. Only one recording can be active at a time.
+- **`startRecording`**: Starts a screen recording of the entire screen or a specific window. Only one recording can be active at a time.
 - **`stopRecording`**: Stops the currently active screen recording.
 - **`listWindows`**: Lists all currently visible windows, allowing users to identify and target them by name.
 - **`recording`**: Tracks the activity of an ongoing recording, including details such as the target, output path, and start time.
@@ -113,7 +113,7 @@ By following these steps, you can enhance the `screencapture-agent` to support a
 ### Entry points
 
 - `./agent/manifest` → [./src/screencaptureManifest.json](./src/screencaptureManifest.json)
-- `./agent/handlers` → `./dist/screencaptureActionHandler.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/screencaptureActionHandler.js](./dist/screencaptureActionHandler.js)
 
 ### Dependencies
 
@@ -163,6 +163,6 @@ _5 actions implemented by this agent, parsed deterministically from `./src/scree
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter screencapture-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter screencapture-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

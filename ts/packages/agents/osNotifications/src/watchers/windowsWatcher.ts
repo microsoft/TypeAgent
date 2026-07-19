@@ -3,6 +3,7 @@
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import registerDebug from "debug";
@@ -29,6 +30,10 @@ export class HelperNotBuiltError extends Error {
         super(message);
         this.name = "HelperNotBuiltError";
     }
+}
+
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
 }
 
 // Spawns the bundled OsNotificationListener.exe helper. The helper subscribes
@@ -89,7 +94,7 @@ export function startWindowsWatcher(
                 try {
                     const evt = JSON.parse(line) as OsNotificationEvent;
                     listener(evt);
-                } catch (e: any) {
+                } catch {
                     debug("invalid line from helper: %s", line);
                 }
             }
@@ -173,6 +178,27 @@ export function isWindowsHelperBuilt(): boolean {
     return resolveHelperPath() !== undefined;
 }
 
+// Public probe used by checkReadiness — verifies the WinAppSDK sparse identity
+// package is actually registered for the current user. Exe presence alone is
+// NOT sufficient: without this registration the exe launches but its
+// UserNotificationListener subscription fails at runtime with
+// COMException 0x80070490 ("the identity package isn't registered for this exe
+// location"). Returning false here lets `@config agent setup` re-run the
+// pack/sign/register pipeline instead of short-circuiting on "already ready".
+//
+// Best-effort: any PowerShell failure is treated as "not registered" so a
+// probe error never masks a genuinely-missing registration.
+export function isSparsePackageRegistered(): boolean {
+    try {
+        const out = runPowerShellSync(
+            `if (Get-AppxPackage -Name '${IDENTITY_PACKAGE_NAME}' -ErrorAction SilentlyContinue) { 'YES' } else { 'NO' }`,
+        ).trim();
+        return out.endsWith("YES");
+    } catch {
+        return false;
+    }
+}
+
 // Resolves the directory holding the C# helper project. The project lives at
 // <repo>/dotnet/osNotificationListener/, alongside other repo C# projects.
 // This module compiles into dist/watchers/, so we walk six levels up to the
@@ -222,6 +248,8 @@ const CODE_SIGNING_EKU = "1.3.6.1.5.5.7.3.3";
 const IDENTITY_PACKAGE_NAME = "TypeAgent.OsNotificationListener";
 const IDENTITY_DIR = "identity";
 const MSIX_FILE = "TypeAgent.OsNotificationListener.msix";
+// Public cert exported by tools/scripts/getCert.mjs under ~/.typeagent.
+const DEV_CERT_FILE = "TypeAgent-Development-Certificate.cer";
 
 // Full build pipeline for the WinAppSDK sparse-packaged helper:
 //   dotnet clean + publish -> writes exe under publish/
@@ -382,6 +410,105 @@ function findSigningCertThumbprint(): string {
     return out;
 }
 
+// True when the dev signing cert is trusted at the LocalMachine scope (Root).
+// AppX deployment runs in SYSTEM context and only honors LocalMachine trust, so
+// this — not the CurrentUser trust that signtool uses — is what governs whether
+// Add-AppxPackage accepts the MSIX signature. LocalMachine\Root is world-
+// readable, so the probe itself needs no elevation.
+function isCertTrustedLocalMachine(): boolean {
+    try {
+        const ps = `
+            $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root','LocalMachine')
+            $store.Open('ReadOnly')
+            $found = $store.Certificates | Where-Object { $_.Subject -eq '${SIGNING_CERT_SUBJECT}' }
+            $store.Close()
+            if ($found) { 'YES' } else { 'NO' }
+        `;
+        return runPowerShellSync(ps).trim().endsWith("YES");
+    } catch {
+        return false;
+    }
+}
+
+// Ensures the dev signing cert is trusted at the LocalMachine scope, importing
+// it (into Root + TrustedPeople) via a single elevated PowerShell if it isn't.
+// This is the step that was previously a manual, easy-to-miss prerequisite —
+// folding it into setup means a first-time user gets one UAC prompt instead of
+// a cryptic 0x800B0109 failure. Idempotent: no-op when already trusted.
+//
+// Uses -EncodedCommand for the elevated inner script to sidestep nested-quoting
+// issues, and .NET X509Store APIs rather than Import-Certificate/the Cert:
+// PSDrive (which can fail to autoload under -NoProfile).
+async function ensureCertTrustedLocalMachine(opts: {
+    onProgress?: (line: string) => void;
+}): Promise<void> {
+    if (isCertTrustedLocalMachine()) return;
+
+    const cerPath = path.join(os.homedir(), ".typeagent", DEV_CERT_FILE);
+    if (!existsSync(cerPath)) {
+        throw new Error(
+            `Dev cert public file not found at ${cerPath}. Run:\n` +
+                "  node tools/scripts/getCert.mjs install --trusted-root\n" +
+                "then retry setup.",
+        );
+    }
+
+    opts.onProgress?.(
+        "[setup] Trusting dev cert at LocalMachine scope (accept the elevation prompt)…",
+    );
+
+    const esc = (s: string) => s.replace(/'/g, "''");
+    const importScript = `
+        $cer = '${esc(cerPath)}'
+        $c = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $cer
+        foreach ($name in @('Root','TrustedPeople')) {
+            $store = New-Object System.Security.Cryptography.X509Certificates.X509Store($name,'LocalMachine')
+            $store.Open('ReadWrite')
+            $store.Add($c)
+            $store.Close()
+        }
+    `;
+    const encoded = Buffer.from(importScript, "utf16le").toString("base64");
+    // Launch an elevated child (UAC prompt) and wait for it; propagate its exit
+    // code so a declined prompt / import failure surfaces as a setup error.
+    const launcher =
+        "$p = Start-Process powershell.exe -Verb RunAs -PassThru -Wait " +
+        "-ArgumentList '-NoProfile','-NonInteractive','-ExecutionPolicy'," +
+        `'Bypass','-EncodedCommand','${encoded}'; exit $p.ExitCode`;
+    try {
+        await runProcess(
+            "powershell.exe",
+            [
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                launcher,
+            ],
+            os.homedir(),
+            opts,
+        );
+    } catch (error: unknown) {
+        throw new Error(
+            "Failed to trust the dev cert at LocalMachine scope " +
+                "(the elevation prompt may have been declined). Either re-run " +
+                "setup and accept the UAC prompt, or from an elevated " +
+                "PowerShell run:\n" +
+                `  $cer = '${cerPath}'\n` +
+                "  Import-Certificate -FilePath $cer -CertStoreLocation Cert:\\LocalMachine\\Root\n" +
+                "  Import-Certificate -FilePath $cer -CertStoreLocation Cert:\\LocalMachine\\TrustedPeople\n" +
+                `Original error: ${getErrorMessage(error)}`,
+        );
+    }
+    if (!isCertTrustedLocalMachine()) {
+        throw new Error(
+            "Dev cert still not trusted at LocalMachine scope after the import " +
+                "attempt. Accept the UAC prompt when re-running setup.",
+        );
+    }
+}
+
 // Registers the identity package against an external exe location. Idempotent —
 // if the same package is already registered, Add-AppxPackage replaces it.
 async function registerSparsePackage(
@@ -389,6 +516,11 @@ async function registerSparsePackage(
     externalLocation: string,
     opts: { onProgress?: (line: string) => void },
 ): Promise<void> {
+    // AppX signature validation runs as SYSTEM and only honors LocalMachine
+    // trust — make sure the dev cert is trusted there before we deploy, so a
+    // first-time user never hits the raw 0x800B0109 CERT_E_UNTRUSTEDROOT.
+    await ensureCertTrustedLocalMachine(opts);
+
     // Both paths embedded as PowerShell single-quoted literals; escape '
     // by doubling per PowerShell's quoting rules.
     const esc = (s: string) => s.replace(/'/g, "''");
@@ -418,19 +550,20 @@ async function registerSparsePackage(
             path.dirname(msixPath),
             opts,
         );
-    } catch (e: any) {
-        const msg = e?.message ?? String(e);
+    } catch (error: unknown) {
+        const msg = getErrorMessage(error);
         if (msg.includes("0x800B0109")) {
             throw new Error(
-                "Add-AppxPackage failed with CERT_E_UNTRUSTEDROOT — the dev cert isn't trusted at the LocalMachine scope. " +
-                    "From an elevated PowerShell, run:\n" +
+                "Add-AppxPackage failed with CERT_E_UNTRUSTEDROOT even after the " +
+                    "LocalMachine trust step. The dev cert may have been imported " +
+                    "into the wrong store or removed. From an elevated PowerShell, run:\n" +
                     '  $cer = "$env:USERPROFILE\\.typeagent\\TypeAgent-Development-Certificate.cer"\n' +
                     "  Import-Certificate -FilePath $cer -CertStoreLocation Cert:\\LocalMachine\\Root\n" +
                     "  Import-Certificate -FilePath $cer -CertStoreLocation Cert:\\LocalMachine\\TrustedPeople\n" +
                     "Then retry. (One-time per machine; cert renewals via getCert renew keep the same Subject so this stays valid.)",
             );
         }
-        throw e;
+        throw error;
     }
 }
 

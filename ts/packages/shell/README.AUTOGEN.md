@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=aa5f9fb4b8b537b696c423ba780c995474b127c609a52083334742ae1b2379d0 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=f3163713b44484c5dcdabee1cc1d7c587a97b13b528ae69e10819fd1270b1de6 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) entry point for the TypeAgent ecosystem. It provides a personal agent interface for processing user requests, performing actions, answering questions, and managing conversations. Built on Electron, it integrates with other TypeAgent components, such as the dispatcher and agent server, to deliver an interactive and extensible experience. The shell supports both text and voice input, multi-conversation management, and local or remote operation modes.
+The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) entry point for the TypeAgent ecosystem. It provides a personal agent interface for processing user requests, performing actions, answering questions, and managing conversations. Built on Electron, the shell integrates with other TypeAgent components, such as the dispatcher and agent server, to deliver an interactive and extensible experience. It supports both text and voice input, multi-conversation management, and local or remote operation modes.
 
 ## What it does
 
-The `agent-shell` package provides a range of features to enable interactive and conversational agent experiences:
+The `agent-shell` package offers a variety of features to enable interactive and conversational agent experiences:
 
 ### Conversation Management
 
@@ -57,6 +57,7 @@ To set up and run the `agent-shell` package, follow these steps:
      - `SPEECH_SDK_ENDPOINT`: The service URL or speech API resource ID for Azure Speech Services.
      - `SPEECH_SDK_KEY`: The API key for Azure Speech Services.
      - `SPEECH_SDK_REGION`: The region of the Azure Speech Services (e.g., `westus2`).
+     - `TYPEAGENT_MODEL_PROVIDER`: Specifies the model provider for TypeAgent.
      - `WEBSOCKET_HOST`: The host for WebSocket connections.
 
 3. **Run the Shell**:
@@ -162,16 +163,17 @@ External: `@azure/identity`, `@azure/msal-node-extensions`, `@electron-toolkit/p
 
 ### Environment variables
 
-_5 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_6 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `ELECTRON_RENDERER_URL`
 - `SPEECH_SDK_ENDPOINT`
 - `SPEECH_SDK_KEY`
 - `SPEECH_SDK_REGION`
+- `TYPEAGENT_MODEL_PROVIDER`
 - `WEBSOCKET_HOST`
 
 ---
 
-_Auto-generated against commit `bdf0bb82a95a3a61dfc2a32ea439f70c96228154` on `2026-07-18T01:48:24.228Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `c97eb42726a9196c7ac72138faa0777c5cbc1aab` on `2026-07-18T09:48:36.613Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

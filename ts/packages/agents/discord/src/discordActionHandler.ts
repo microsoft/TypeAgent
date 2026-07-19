@@ -7,10 +7,13 @@ import {
     TypeAgentAction,
     ActionResult,
     SessionContext,
+    StructuredBlock,
+    ListItem,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
     createActionResultFromError,
+    createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ChatModel, openai } from "@typeagent/aiclient";
 import { DiscordActions } from "./discordSchema.js";
@@ -496,7 +499,8 @@ async function executeAction(
                             `4. Save and restart the bot`,
                     );
                 }
-                const display = messages.slice(0, 10).map((m) => {
+                const shown = messages.slice(0, 10);
+                const rows = shown.map((m) => {
                     let content = m.content?.trim() ?? "";
                     if (!content) {
                         content = SYSTEM_MESSAGE_TYPES[m.type]
@@ -512,12 +516,35 @@ async function executeAction(
                         minute: "2-digit",
                         hour12: true,
                     });
-                    return `[${ts}] ${m.author?.username ?? "unknown"}: ${content}`;
+                    return [ts, m.author?.username ?? "unknown", content];
                 });
-                return createActionResultFromTextDisplay(
-                    display.length > 0
-                        ? display.join("\n")
-                        : "No messages found.",
+                if (rows.length === 0) {
+                    return createActionResultFromTextDisplay(
+                        "No messages found.",
+                    );
+                }
+                return createStructuredResult(
+                    [
+                        {
+                            kind: "table",
+                            columns: [
+                                { id: "time", header: "Time", type: "date" },
+                                { id: "author", header: "Author" },
+                                { id: "message", header: "Message" },
+                            ],
+                            rows,
+                            sortable: true,
+                        },
+                    ],
+                    {
+                        rawData: shown.map((m) => ({
+                            id: m.id,
+                            timestamp: m.timestamp,
+                            author: m.author?.username,
+                            content: m.content,
+                            type: m.type,
+                        })),
+                    },
                 );
             }
             case "getCurrentUser": {
@@ -576,29 +603,56 @@ async function executeAction(
                     group.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
                 }
 
-                const lines: string[] = [];
-                // Uncategorized channels first
-                for (const ch of byParent.get(undefined) ?? []) {
-                    const label = TYPE_LABELS[ch.type] ?? `type-${ch.type}`;
-                    lines.push(`  • ${ch.name} (${label})`);
-                }
-                // Each category and its children
-                for (const cat of categories) {
-                    lines.push(`\n  ${cat.name?.toUpperCase() ?? cat.id}`);
-                    for (const ch of byParent.get(cat.id) ?? []) {
-                        const label = TYPE_LABELS[ch.type] ?? `type-${ch.type}`;
-                        lines.push(`    • ${ch.name} (${label})`);
-                    }
-                }
-
+                const blocks: StructuredBlock[] = [];
                 const totalNonCategory = all.filter(
                     (ch) => ch.type !== 4,
                 ).length;
-                return createActionResultFromTextDisplay(
-                    lines.length > 0
-                        ? `Channels (${totalNonCategory}):\n${lines.join("\n")}`
-                        : "No channels found.",
-                );
+                blocks.push({
+                    kind: "heading",
+                    level: 3,
+                    text: `Channels (${totalNonCategory})`,
+                });
+
+                const toItems = (chans: DiscordChannel[]): ListItem[] =>
+                    chans.map((ch) => ({
+                        text: ch.name ?? ch.id,
+                        subtitle: TYPE_LABELS[ch.type] ?? `type-${ch.type}`,
+                    }));
+
+                // Uncategorized channels first
+                const uncategorized = byParent.get(undefined) ?? [];
+                if (uncategorized.length > 0) {
+                    blocks.push({
+                        kind: "list",
+                        items: toItems(uncategorized),
+                    });
+                }
+                // Each category and its children
+                for (const cat of categories) {
+                    const children = byParent.get(cat.id) ?? [];
+                    if (children.length === 0) continue;
+                    blocks.push({
+                        kind: "heading",
+                        level: 3,
+                        text: cat.name?.toUpperCase() ?? cat.id,
+                    });
+                    blocks.push({ kind: "list", items: toItems(children) });
+                }
+
+                if (totalNonCategory === 0) {
+                    return createActionResultFromTextDisplay(
+                        "No channels found.",
+                    );
+                }
+                return createStructuredResult(blocks, {
+                    rawData: all.map((ch) => ({
+                        id: ch.id,
+                        name: ch.name,
+                        type: ch.type,
+                        parent_id: ch.parent_id,
+                        position: ch.position,
+                    })),
+                });
             }
             case "refreshChannels": {
                 await fetchAndCacheChannels(
