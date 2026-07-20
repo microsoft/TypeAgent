@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c97e0c3404b5430bcb9ddac5763968954fb7bd1703ecc9d277884773ecdb3167 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=afd2338074eb0e0bb6587dbb78e51554dd03e50419cda128897ab20bca5d7949 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent — AI-generated documentation
@@ -16,13 +16,14 @@ The `typeagent` package is a sample library designed to support the development 
 
 ## What it does
 
-The `typeagent` package provides a wide range of utilities and components that are essential for building and running agents. These include:
+The `typeagent` package offers a variety of utilities and components that are essential for building and running agents. These include:
 
-- **Async Processing**: Functions like `mapAsync` in [arrayAsync.ts](./src/arrayAsync.ts) and `callWithRetry` in [async.ts](./src/async.ts) enable efficient handling of concurrent and retryable asynchronous operations.
-- **Vectors and Embeddings**: Tools for managing vector operations and embeddings, such as `vectorIndex` and `semanticMap`, are located in the `vector` directory. These utilities are useful for tasks like similarity searches and semantic indexing.
-- **Storage**: Components for managing data storage, including `objectFolder`, `objectPage`, and `embeddingFS`, are found in the `storage` directory. These utilities help manage structured data and embeddings in a file system-like manner.
-- **Text Processing**: Utilities for text-related tasks, such as `createTypeChat` in [chat.ts](./src/chat.ts) for chat interactions and `createTextClassifier` in [textClassifier.ts](./src/classifier/textClassifier.ts) for text classification.
-- **Collections**: A variety of collection utilities, such as `binarySearch` and `isUndefinedOrEmpty`, are provided in [lib/array.ts](./src/lib/array.ts). These utilities simplify operations on arrays and collections.
+- **Async Processing**: Utilities like `mapAsync` in [arrayAsync.ts](./src/arrayAsync.ts) and `callWithRetry` in [async.ts](./src/async.ts) enable efficient handling of concurrent and retryable asynchronous operations.
+- **Vectors and Embeddings**: The `vector` directory contains tools for managing vector operations and embeddings, such as `vectorIndex` and `semanticMap`. These are useful for tasks like similarity searches and semantic indexing.
+- **Storage**: The `storage` directory provides components for managing structured data and embeddings in a file system-like manner. Examples include `objectFolder`, `objectPage`, and `embeddingFS`.
+- **Text Processing**: Functions like `createTypeChat` in [chat.ts](./src/chat.ts) and `createTextClassifier` in [textClassifier.ts](./src/classifier/textClassifier.ts) support chat interactions and text classification tasks.
+- **Collections**: A variety of utilities for working with arrays and collections, such as `binarySearch` and `isUndefinedOrEmpty`, are provided in [lib/array.ts](./src/lib/array.ts).
+- **Date and Time Utilities**: Functions in [dateTime.ts](./src/dateTime.ts) handle operations like timestamp formatting and parsing.
 
 These features are widely used across the TypeAgent project, making `typeagent` a critical component for enabling the functionality of other agents and applications.
 
@@ -80,7 +81,7 @@ By following these steps, you can effectively extend the `typeagent` package and
 
 ### Entry points
 
-- default → `./dist/index.js` _(not found on disk)_
+- default → [./dist/index.js](./dist/index.js)
 
 ### Dependencies
 
@@ -111,6 +112,6 @@ External: `async`, `cheerio`, `debug`, `typechat`, `typescript`
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `a65d34f106a823321e96a3664e1ab686ffa1d08f` on `2026-07-20T17:48:10.168Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
