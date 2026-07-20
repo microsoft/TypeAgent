@@ -11,7 +11,7 @@ import {
     getBrowserControl,
     getCurrentPageScreenshot,
 } from "../browserActions.mjs";
-import { BrowserControl } from "../../common/browserControl.mjs";
+import { BrowserControl } from "@typeagent/browser-control-rpc/types";
 import {
     createDiscoveryPageTranslator,
     SchemaDiscoveryAgent,

@@ -6,7 +6,7 @@ import {
     PDFAnnotation,
     PDFBookmark,
     UserPresence,
-} from "./pdfTypes.js";
+} from "@typeagent/browser-control-rpc/pdfTypes";
 import registerDebug from "debug";
 import * as fs from "fs/promises";
 import * as path from "path";

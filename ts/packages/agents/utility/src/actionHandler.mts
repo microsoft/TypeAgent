@@ -24,7 +24,7 @@ import path from "node:path";
 import type { Browser } from "puppeteer";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import { createNodeHtmlReducer } from "browser-typeagent/htmlReducer";
+import { createNodeHtmlReducer } from "@typeagent/browser-control-rpc/htmlReducer";
 import { convert } from "html-to-text";
 import type { UtilityAction } from "./utilitySchema.mjs";
 
