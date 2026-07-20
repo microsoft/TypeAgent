@@ -45,7 +45,11 @@ export async function createAgentProcess(
     modulePath: string,
 ): Promise<AgentProcess> {
     const env = { ...process.env };
-    const forkOptions: child_process.ForkOptions = { env };
+    // `windowsHide` isn't declared on ForkOptions, but fork() forwards its
+    // options to spawn(), which honors it - so widen the type to set it below.
+    const forkOptions: child_process.ForkOptions & { windowsHide?: boolean } = {
+        env,
+    };
     const systemNode = getSystemNodeExecPath();
     if (systemNode) {
         forkOptions.execPath = systemNode;
@@ -53,6 +57,12 @@ export async function createAgentProcess(
     // Pipe child stderr so it flows through the parent's process.stderr.write,
     // which may be intercepted for debug output formatting (e.g. --testUI).
     forkOptions.stdio = ["pipe", "inherit", "pipe", "ipc"];
+    // Never let an agent worker pop its own console window. stdout is inherited
+    // and stderr is piped back to the parent, so output still flows; this only
+    // suppresses a visible console. It matters when the parent has no console
+    // of its own (e.g. a restarted/detached agent-server): without it, Windows
+    // gives each forked child a fresh console window (CREATE_NEW_CONSOLE).
+    forkOptions.windowsHide = true;
     const agentProcess = child_process.fork(
         fileURLToPath(new URL(`./agentProcess.js`, import.meta.url)),
         [agentName, modulePath],

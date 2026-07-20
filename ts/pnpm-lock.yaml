@@ -10,6 +10,7 @@ overrides:
   fast-xml-parser: '>=5.5.7 <6.0.0'
   hono: '>=4.12.8 <5.0.0'
   http-proxy-agent: '>=7.0.0 <8.0.0'
+  '@modelcontextprotocol/sdk': 1.26.0
   node-forge: '>=1.4.0 <2.0.0'
   node-gyp: ^12.2.0
   router>path-to-regexp: '>=8.4.0 <9.0.0'
@@ -484,8 +485,8 @@ importers:
   examples/mcpMemory:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.26.0
-        version: 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+        specifier: 1.26.0
+        version: 1.26.0(zod@4.1.13)
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -1322,7 +1323,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
@@ -1523,7 +1524,7 @@ importers:
         specifier: ^0.93.0
         version: 0.93.0(zod@4.3.6)
       '@modelcontextprotocol/sdk':
-        specifier: ^1.26.0
+        specifier: 1.26.0
         version: 1.26.0(zod@4.3.6)
       '@typeagent/action-grammar':
         specifier: workspace:*
@@ -1842,7 +1843,10 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
+      '@modelcontextprotocol/sdk':
+        specifier: 1.26.0
+        version: 1.26.0(zod@4.3.6)
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0
@@ -2385,7 +2389,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -3076,7 +3080,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
       '@typeagent/agent-flows':
         specifier: workspace:*
         version: link:../../agent-flows
@@ -3260,7 +3264,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
       '@typeagent/agent-flows':
         specifier: workspace:*
         version: link:../../agent-flows
@@ -3378,7 +3382,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -4168,7 +4172,7 @@ importers:
   packages/coderWrapper:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.26.0
+        specifier: 1.26.0
         version: 1.26.0(zod@4.3.6)
       '@typeagent/agent-server-client':
         specifier: workspace:*
@@ -4196,8 +4200,8 @@ importers:
   packages/commandExecutor:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.26.0
-        version: 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+        specifier: 1.26.0
+        version: 1.26.0(zod@4.1.13)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -4309,8 +4313,8 @@ importers:
   packages/copilot-plugin:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.26.0
-        version: 1.29.0(zod@3.25.76)
+        specifier: 1.26.0
+        version: 1.26.0(zod@3.25.76)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -4349,8 +4353,8 @@ importers:
   packages/defaultAgentProvider:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.26.0
-        version: 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+        specifier: 1.26.0
+        version: 1.26.0(zod@4.1.13)
       '@modelcontextprotocol/server-filesystem':
         specifier: 2026.1.14
         version: 2026.1.14(zod@4.1.13)
@@ -4564,7 +4568,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.29.0(zod@4.1.13))(zod@4.1.13)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.26.0(zod@4.1.13))(zod@4.1.13)
       '@azure/core-client':
         specifier: ^1.10.0
         version: 1.10.1
@@ -5104,7 +5108,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
@@ -5141,7 +5145,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
       '@anthropic-ai/sdk':
         specifier: ^0.93.0
         version: 0.93.0(zod@4.3.6)
@@ -5485,8 +5489,8 @@ importers:
   packages/security/mcpValidation:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.12.1
-        version: 1.29.0(zod@3.25.76)
+        specifier: 1.26.0
+        version: 1.26.0(zod@3.25.76)
       fast-glob:
         specifier: ^3.3.3
         version: 3.3.3
@@ -5499,7 +5503,7 @@ importers:
     devDependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@3.25.76))(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(zod@3.25.76)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@3.25.76))(@modelcontextprotocol/sdk@1.26.0(zod@3.25.76))(zod@3.25.76)
       '@types/node':
         specifier: ^22.0.0
         version: 22.15.18
@@ -5517,7 +5521,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
-        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
+        version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(zod@4.3.6)
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -6493,7 +6497,7 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@anthropic-ai/sdk': '>=0.93.0'
-      '@modelcontextprotocol/sdk': ^1.29.0
+      '@modelcontextprotocol/sdk': 1.26.0
       zod: ^4.0.0
 
   '@anthropic-ai/sdk@0.93.0':
@@ -11245,8 +11249,8 @@ packages:
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
-  baseline-browser-mapping@2.10.42:
-    resolution: {integrity: sha512-c/jurFrDLyui7o1J86yLkRu4LMsTYcBohveus7/I2Hzdn9KIP2bdJPTue/lR1KH46enoPbD77GKeSYNdyPoD3Q==}
+  baseline-browser-mapping@2.10.43:
+    resolution: {integrity: sha512-AjYpR78kDWAY3Efj+cDTFH9t9SCoL7OoTp1BOb0mQV7S+6CiLwnWM3FyxhJtdPufDFKzmCSFoUncKjWgJEZTCQ==}
     engines: {node: '>=6.0.0'}
     hasBin: true
 
@@ -11338,8 +11342,8 @@ packages:
   browser-stdout@1.3.1:
     resolution: {integrity: sha512-qhAVI1+Av2X7qelOfAIYwXONood6XlZE/fXaBSmW/T5SzLAmCgzi+eiWE7fUvbHaeNBQH13UftjpXxsfLkMpgw==}
 
-  browserslist@4.28.5:
-    resolution: {integrity: sha512-Cu2E6QejHWzuDMTkuwgpABFgDfZrXLQq5V13YOACZx4mFAG4IwGTbTfHPMr4WtxlHoXSM8FIuRwYYCz5XiabaQ==}
+  browserslist@4.28.6:
+    resolution: {integrity: sha512-FQBYNK15VMslhLHpA7+n+n1GOlF1kId2xcCg7/j95f24AOF6VDYMNH4mFxF7KuaTdv627faazpOAjFzMrfJOUw==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
@@ -11459,8 +11463,8 @@ packages:
     resolution: {integrity: sha512-Gmy6FhYlCY7uOElZUSbxo2UCDH8owEk996gkbrpsgGtrJLM3J7jGxl9Ic7Qwwj4ivOE5AWZWRMecDdF7hqGjFA==}
     engines: {node: '>=10'}
 
-  caniuse-lite@1.0.30001803:
-    resolution: {integrity: sha512-g/uHREV2ZpK9qMalCsWaxmA6ol+DX8GYhuf3T40RKoP+oL7vhRJh8LNt73PCjpnR6l14FzfPrB5Yux4PKm2meg==}
+  caniuse-lite@1.0.30001805:
+    resolution: {integrity: sha512-52noaS3DubycKSXaU30TwPGIp+POyQSUVa5jBEq3vkRkY0kjyb3LQgvhU6WGyCcyXqVLWO0Cw0Q6BSdD0kUfVA==}
 
   caseless@0.12.0:
     resolution: {integrity: sha512-4tYFyifaFfGacoiObjJegolkwSU4xQNGbVgUiNYVUxbQ2x2lUsFvY4hVgVzGiIe6WLOPqycWXA40l+PWsxthUw==}
@@ -12656,8 +12660,8 @@ packages:
   es-module-lexer@1.7.0:
     resolution: {integrity: sha512-jEQoCwk8hyb2AZziIOLhDqpm5+2ww5uIE6lkO/6jcOCusfk6LhMHpXXfBLXTZ7Ydyt0j4VoUQv6uGNYbdW+kBA==}
 
-  es-module-lexer@2.3.0:
-    resolution: {integrity: sha512-KLdwQm2NvGLDkQDCGvmiQrhkd0JbMzXthwQAUgWjQuQdBLFa3eiBP5arXZyA+f8x+x7OXgud6bq2rxjGtHV2tw==}
+  es-module-lexer@2.3.1:
+    resolution: {integrity: sha512-shc1dbU90Yl/xq1QrC7QRtfcwURZuVRfPhZbDoldJ1cn1gzDvBaBWlv0eFolj5+0znnPJz5TXLxsN77X/12KTA==}
 
   es-object-atoms@1.1.1:
     resolution: {integrity: sha512-FGgH2h8zKNim9ljj7dankFPcICIK9Cp5bm+c2gQSYePhpaG5+esrLODihIorn+Pe6FGJzWhXQotPv73jTaldXA==}
@@ -17003,8 +17007,8 @@ packages:
     resolution: {integrity: sha512-56adEpPMouktRlBLXiaYFFzZ/3+JXa8P9n7WbR+ibIjtviN55mEaOkiysCnPnWm+7kkui1Dn8J9l+g6zV8731w==}
     engines: {node: '>=18'}
 
-  tar@7.5.19:
-    resolution: {integrity: sha512-4LeEWl96twnS2Q7Bz4MGqgazLqO+hJN63GZxXoIqh1T3VweYD997gbU1ItNsQafqqXTXd5WFyFdReLtwvRBNiw==}
+  tar@7.5.20:
+    resolution: {integrity: sha512-9FcyK4PA6+WbzlTM9WhQm6vB5W7cP7dUiPsv1g7YDwEQnQ1CGpK3MGlKk/ITVWMk05kHZuBhmVhiv8LZoy/PFQ==}
     engines: {node: '>=18'}
 
   temp-file@3.4.0:
@@ -18244,10 +18248,10 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.162':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.162(@anthropic-ai/sdk@0.93.0(zod@3.25.76))(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(zod@3.25.76)':
+  '@anthropic-ai/claude-agent-sdk@0.3.162(@anthropic-ai/sdk@0.93.0(zod@3.25.76))(@modelcontextprotocol/sdk@1.26.0(zod@3.25.76))(zod@3.25.76)':
     dependencies:
       '@anthropic-ai/sdk': 0.93.0(zod@3.25.76)
-      '@modelcontextprotocol/sdk': 1.29.0(zod@3.25.76)
+      '@modelcontextprotocol/sdk': 1.26.0(zod@3.25.76)
       zod: 3.25.76
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.162
@@ -18259,10 +18263,10 @@ snapshots:
       '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.162
       '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.162
 
-  '@anthropic-ai/claude-agent-sdk@0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.29.0(zod@4.1.13))(zod@4.1.13)':
+  '@anthropic-ai/claude-agent-sdk@0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.1.13))(@modelcontextprotocol/sdk@1.26.0(zod@4.1.13))(zod@4.1.13)':
     dependencies:
       '@anthropic-ai/sdk': 0.93.0(zod@4.1.13)
-      '@modelcontextprotocol/sdk': 1.29.0(zod@4.1.13)
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.1.13)
       zod: 4.1.13
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.162
@@ -18278,21 +18282,6 @@ snapshots:
     dependencies:
       '@anthropic-ai/sdk': 0.93.0(zod@4.3.6)
       '@modelcontextprotocol/sdk': 1.26.0(zod@4.3.6)
-      zod: 4.3.6
-    optionalDependencies:
-      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.162
-      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.3.162
-      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.3.162
-      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.3.162
-      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.3.162
-      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.3.162
-      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.162
-      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.162
-
-  '@anthropic-ai/claude-agent-sdk@0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)':
-    dependencies:
-      '@anthropic-ai/sdk': 0.93.0(zod@4.3.6)
-      '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
       zod: 4.3.6
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.162
@@ -19269,7 +19258,7 @@ snapshots:
     dependencies:
       '@babel/compat-data': 7.29.7
       '@babel/helper-validator-option': 7.29.7
-      browserslist: 4.28.5
+      browserslist: 4.28.6
       lru-cache: 5.1.1
       semver: 6.3.1
 
@@ -19842,7 +19831,7 @@ snapshots:
       fs-extra: 10.1.0
       isbinaryfile: 4.0.10
       minimist: 1.2.8
-      plist: 3.1.1
+      plist: 3.1.0
     transitivePeerDependencies:
       - supports-color
 
@@ -19865,7 +19854,7 @@ snapshots:
       dir-compare: 4.2.0
       fs-extra: 11.3.6
       minimatch: 9.0.9
-      plist: 3.1.1
+      plist: 3.1.0
     transitivePeerDependencies:
       - supports-color
 
@@ -20367,10 +20356,6 @@ snapshots:
       '@github/copilot-win32-x64': 1.0.69
 
   '@hapi/bourne@3.0.0': {}
-
-  '@hono/node-server@1.19.14(hono@4.12.25)':
-    dependencies:
-      hono: 4.12.25
 
   '@hono/node-server@1.19.14(hono@4.12.29)':
     dependencies:
@@ -21656,51 +21641,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/sdk@1.26.0(supports-color@8.1.1)(zod@4.1.13)':
-    dependencies:
-      '@hono/node-server': 1.19.14(hono@4.12.25)
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
-      content-type: 1.0.5
-      cors: 2.8.5
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.0.6
-      express: 5.2.1(supports-color@8.1.1)
-      express-rate-limit: 8.3.1(express@5.2.1)
-      hono: 4.12.25
-      jose: 6.1.3
-      json-schema-typed: 8.0.2
-      pkce-challenge: 5.0.1
-      raw-body: 3.0.2
-      zod: 4.1.13
-      zod-to-json-schema: 3.25.1(zod@4.1.13)
-    transitivePeerDependencies:
-      - supports-color
-
-  '@modelcontextprotocol/sdk@1.26.0(zod@4.3.6)':
-    dependencies:
-      '@hono/node-server': 1.19.14(hono@4.12.25)
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
-      content-type: 1.0.5
-      cors: 2.8.5
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.0.6
-      express: 5.2.1(supports-color@8.1.1)
-      express-rate-limit: 8.3.1(express@5.2.1)
-      hono: 4.12.25
-      jose: 6.1.3
-      json-schema-typed: 8.0.2
-      pkce-challenge: 5.0.1
-      raw-body: 3.0.2
-      zod: 4.3.6
-      zod-to-json-schema: 3.25.1(zod@4.3.6)
-    transitivePeerDependencies:
-      - supports-color
-
-  '@modelcontextprotocol/sdk@1.29.0(zod@3.25.76)':
+  '@modelcontextprotocol/sdk@1.26.0(zod@3.25.76)':
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.29)
       ajv: 8.20.0
@@ -21710,7 +21651,7 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
       hono: 4.12.29
       jose: 6.2.3
@@ -21722,7 +21663,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/sdk@1.29.0(zod@4.1.13)':
+  '@modelcontextprotocol/sdk@1.26.0(zod@4.1.13)':
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.29)
       ajv: 8.20.0
@@ -21732,7 +21673,7 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
       hono: 4.12.29
       jose: 6.2.3
@@ -21744,7 +21685,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/sdk@1.29.0(zod@4.3.6)':
+  '@modelcontextprotocol/sdk@1.26.0(zod@4.3.6)':
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.29)
       ajv: 8.20.0
@@ -21754,7 +21695,7 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
       hono: 4.12.29
       jose: 6.2.3
@@ -21768,7 +21709,7 @@ snapshots:
 
   '@modelcontextprotocol/server-filesystem@2026.1.14(zod@4.1.13)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.29.0(zod@4.1.13)
+      '@modelcontextprotocol/sdk': 1.26.0(zod@4.1.13)
       diff: 5.2.2
       glob: 10.5.0
       minimatch: 10.2.4
@@ -23421,7 +23362,6 @@ snapshots:
   '@types/node@26.1.1':
     dependencies:
       undici-types: 8.3.0
-    optional: true
 
   '@types/normalize-package-data@2.4.4': {}
 
@@ -24191,7 +24131,8 @@ snapshots:
 
   '@xmldom/xmldom@0.8.13': {}
 
-  '@xmldom/xmldom@0.9.10': {}
+  '@xmldom/xmldom@0.9.10':
+    optional: true
 
   '@xtuc/ieee754@1.2.0': {}
 
@@ -24266,10 +24207,6 @@ snapshots:
   ajv-formats@2.1.1(ajv@8.20.0):
     optionalDependencies:
       ajv: 8.20.0
-
-  ajv-formats@3.0.1(ajv@8.18.0):
-    optionalDependencies:
-      ajv: 8.18.0
 
   ajv-formats@3.0.1(ajv@8.20.0):
     optionalDependencies:
@@ -24396,7 +24333,7 @@ snapshots:
       proper-lockfile: 4.1.2
       resedit: 1.7.2
       semver: 7.7.4
-      tar: 7.5.19
+      tar: 7.5.20
       temp-file: 3.4.0
       tiny-async-pool: 1.3.0
       which: 5.0.0
@@ -24644,7 +24581,7 @@ snapshots:
 
   base64-js@1.5.1: {}
 
-  baseline-browser-mapping@2.10.42: {}
+  baseline-browser-mapping@2.10.43: {}
 
   basic-ftp@5.3.0: {}
 
@@ -24720,7 +24657,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  body-parser@2.2.2(supports-color@8.1.1):
+  body-parser@2.2.2:
     dependencies:
       bytes: 3.1.2
       content-type: 1.0.5
@@ -24771,13 +24708,13 @@ snapshots:
 
   browser-stdout@1.3.1: {}
 
-  browserslist@4.28.5:
+  browserslist@4.28.6:
     dependencies:
-      baseline-browser-mapping: 2.10.42
-      caniuse-lite: 1.0.30001803
+      baseline-browser-mapping: 2.10.43
+      caniuse-lite: 1.0.30001805
       electron-to-chromium: 1.5.389
       node-releases: 2.0.51
-      update-browserslist-db: 1.2.3(browserslist@4.28.5)
+      update-browserslist-db: 1.2.3(browserslist@4.28.6)
 
   bs-logger@0.2.6:
     dependencies:
@@ -24920,7 +24857,7 @@ snapshots:
 
   camelcase@6.3.0: {}
 
-  caniuse-lite@1.0.30001803: {}
+  caniuse-lite@1.0.30001805: {}
 
   caseless@0.12.0: {}
 
@@ -26323,7 +26260,7 @@ snapshots:
 
   es-module-lexer@1.7.0: {}
 
-  es-module-lexer@2.3.0: {}
+  es-module-lexer@2.3.1: {}
 
   es-object-atoms@1.1.1:
     dependencies:
@@ -26654,8 +26591,6 @@ snapshots:
 
   events@3.3.0: {}
 
-  eventsource-parser@3.0.6: {}
-
   eventsource-parser@3.1.0: {}
 
   eventsource@3.0.7:
@@ -26718,14 +26653,9 @@ snapshots:
     dependencies:
       express: 4.22.1
 
-  express-rate-limit@8.3.1(express@5.2.1):
-    dependencies:
-      express: 5.2.1(supports-color@8.1.1)
-      ip-address: 10.1.0
-
   express-rate-limit@8.5.2(express@5.2.1):
     dependencies:
-      express: 5.2.1(supports-color@8.1.1)
+      express: 5.2.1
       ip-address: 10.2.0
 
   express@4.22.1:
@@ -26800,10 +26730,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  express@5.2.1(supports-color@8.1.1):
+  express@5.2.1:
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.2.2(supports-color@8.1.1)
+      body-parser: 2.2.2
       content-disposition: 1.0.1
       content-type: 1.0.5
       cookie: 0.7.2
@@ -26813,7 +26743,7 @@ snapshots:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
-      finalhandler: 2.1.1(supports-color@8.1.1)
+      finalhandler: 2.1.1
       fresh: 2.0.0
       http-errors: 2.0.1
       merge-descriptors: 2.0.0
@@ -26824,8 +26754,8 @@ snapshots:
       proxy-addr: 2.0.7
       qs: 6.15.3
       range-parser: 1.2.1
-      router: 2.2.0(supports-color@8.1.1)
-      send: 1.2.1(supports-color@8.1.1)
+      router: 2.2.0
+      send: 1.2.1
       serve-static: 2.2.1
       statuses: 2.0.2
       type-is: 2.0.1
@@ -26967,7 +26897,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  finalhandler@2.1.1(supports-color@8.1.1):
+  finalhandler@2.1.1:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       encodeurl: 2.0.0
@@ -27530,8 +27460,6 @@ snapshots:
 
   highlight.js@10.7.3: {}
 
-  hono@4.12.25: {}
-
   hono@4.12.29: {}
 
   hosted-git-info@4.1.0:
@@ -27839,8 +27767,6 @@ snapshots:
   interpret@1.4.0: {}
 
   interpret@3.1.1: {}
-
-  ip-address@10.1.0: {}
 
   ip-address@10.2.0: {}
 
@@ -28685,7 +28611,7 @@ snapshots:
   jest-util@29.7.0:
     dependencies:
       '@jest/types': 29.6.3
-      '@types/node': 22.20.1
+      '@types/node': 26.1.1
       chalk: 4.1.2
       ci-info: 3.9.0
       graceful-fs: 4.2.11
@@ -28713,7 +28639,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 26.1.1
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
@@ -28777,8 +28703,6 @@ snapshots:
   jju@1.4.0: {}
 
   jose@5.10.0: {}
-
-  jose@6.1.3: {}
 
   jose@6.2.3: {}
 
@@ -30069,7 +29993,7 @@ snapshots:
 
   node-abi@4.33.0:
     dependencies:
-      semver: 7.8.4
+      semver: 7.7.4
 
   node-addon-api@1.7.2:
     optional: true
@@ -30080,7 +30004,7 @@ snapshots:
 
   node-api-version@0.2.1:
     dependencies:
-      semver: 7.8.4
+      semver: 7.7.4
 
   node-domexception@1.0.0: {}
 
@@ -30109,8 +30033,8 @@ snapshots:
       graceful-fs: 4.2.11
       nopt: 9.0.0
       proc-log: 6.1.0
-      semver: 7.8.4
-      tar: 7.5.19
+      semver: 7.7.4
+      tar: 7.5.20
       tinyglobby: 0.2.17
       undici: 6.27.0
       which: 6.0.1
@@ -30644,6 +30568,7 @@ snapshots:
       '@xmldom/xmldom': 0.9.10
       base64-js: 1.5.1
       xmlbuilder: 15.1.1
+    optional: true
 
   pluralize@2.0.0: {}
 
@@ -31554,7 +31479,7 @@ snapshots:
       points-on-curve: 0.2.0
       points-on-path: 0.2.1
 
-  router@2.2.0(supports-color@8.1.1):
+  router@2.2.0:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       depd: 2.0.0
@@ -31752,7 +31677,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  send@1.2.1(supports-color@8.1.1):
+  send@1.2.1:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       encodeurl: 2.0.0
@@ -31810,7 +31735,7 @@ snapshots:
       encodeurl: 2.0.0
       escape-html: 1.0.3
       parseurl: 1.3.3
-      send: 1.2.1(supports-color@8.1.1)
+      send: 1.2.1
     transitivePeerDependencies:
       - supports-color
 
@@ -32384,7 +32309,7 @@ snapshots:
       yallist: 5.0.0
     optional: true
 
-  tar@7.5.19:
+  tar@7.5.20:
     dependencies:
       '@isaacs/fs-minipass': 4.0.1
       chownr: 3.0.0
@@ -32961,8 +32886,7 @@ snapshots:
 
   undici-types@7.24.4: {}
 
-  undici-types@8.3.0:
-    optional: true
+  undici-types@8.3.0: {}
 
   undici@6.27.0: {}
 
@@ -33033,9 +32957,9 @@ snapshots:
 
   untildify@4.0.0: {}
 
-  update-browserslist-db@1.2.3(browserslist@4.28.5):
+  update-browserslist-db@1.2.3(browserslist@4.28.6):
     dependencies:
-      browserslist: 4.28.5
+      browserslist: 4.28.6
       escalade: 3.2.0
       picocolors: 1.1.1
 
@@ -33333,10 +33257,10 @@ snapshots:
       '@webassemblyjs/wasm-parser': 1.14.1
       acorn: 8.17.0
       acorn-import-phases: 1.0.4(acorn@8.17.0)
-      browserslist: 4.28.5
+      browserslist: 4.28.6
       chrome-trace-event: 1.0.4
       enhanced-resolve: 5.24.2
-      es-module-lexer: 2.3.0
+      es-module-lexer: 2.3.1
       eslint-scope: 5.1.1
       events: 3.3.0
       glob-to-regexp: 0.4.1
@@ -33374,10 +33298,10 @@ snapshots:
       '@webassemblyjs/wasm-parser': 1.14.1
       acorn: 8.17.0
       acorn-import-phases: 1.0.4(acorn@8.17.0)
-      browserslist: 4.28.5
+      browserslist: 4.28.6
       chrome-trace-event: 1.0.4
       enhanced-resolve: 5.24.2
-      es-module-lexer: 2.3.0
+      es-module-lexer: 2.3.1
       eslint-scope: 5.1.1
       events: 3.3.0
       glob-to-regexp: 0.4.1
@@ -33415,10 +33339,10 @@ snapshots:
       '@webassemblyjs/wasm-parser': 1.14.1
       acorn: 8.17.0
       acorn-import-phases: 1.0.4(acorn@8.17.0)
-      browserslist: 4.28.5
+      browserslist: 4.28.6
       chrome-trace-event: 1.0.4
       enhanced-resolve: 5.24.2
-      es-module-lexer: 2.3.0
+      es-module-lexer: 2.3.1
       eslint-scope: 5.1.1
       events: 3.3.0
       glob-to-regexp: 0.4.1
@@ -33769,10 +33693,6 @@ snapshots:
   zod-to-json-schema@3.25.1(zod@4.1.13):
     dependencies:
       zod: 4.1.13
-
-  zod-to-json-schema@3.25.1(zod@4.3.6):
-    dependencies:
-      zod: 4.3.6
 
   zod-to-json-schema@3.25.2(zod@3.25.76):
     dependencies:

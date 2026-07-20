@@ -157,6 +157,7 @@ export function buildConfig(flat: FlatEnv): Config {
     const storage = buildStorage(remaining);
     const vault = buildVault(remaining);
     const azureFoundry = buildAzureFoundry(remaining);
+    const azureAISearch = buildAzureAISearch(remaining);
     const reasoning = buildReasoning(remaining);
     const copilot = buildCopilot(remaining);
     const modelProvider = buildModelProvider(remaining);
@@ -174,6 +175,7 @@ export function buildConfig(flat: FlatEnv): Config {
         storage,
         vault,
         ...(azureFoundry ? { azureFoundry } : {}),
+        ...(azureAISearch ? { azureAISearch } : {}),
         ...(reasoning ? { reasoning } : {}),
         ...(copilot ? { copilot } : {}),
         ...(modelProvider !== undefined ? { modelProvider } : {}),
@@ -790,6 +792,31 @@ function buildAzureFoundry(flat: Map<string, string>) {
             ? { httpEndpointLogicAppConnectionId }
             : {}),
     };
+}
+
+function buildAzureAISearch(flat: Map<string, string>) {
+    const fields: Array<[string, string]> = [
+        ["mode", "AZURE_AI_SEARCH_LOOKUP_MODE"],
+        ["endpoint", "AZURE_AI_SEARCH_ENDPOINT"],
+        ["knowledgeBase", "AZURE_AI_SEARCH_KNOWLEDGE_BASE"],
+        ["apiKey", "AZURE_AI_SEARCH_API_KEY"],
+        ["bearerToken", "AZURE_AI_SEARCH_BEARER_TOKEN"],
+        ["apiVersion", "AZURE_AI_SEARCH_API_VERSION"],
+        ["outputMode", "AZURE_AI_SEARCH_OUTPUT_MODE"],
+        ["reasoningEffort", "AZURE_AI_SEARCH_REASONING_EFFORT"],
+        ["aoaiEndpoint", "AZURE_AI_SEARCH_AOAI_ENDPOINT"],
+        ["aoaiDeployment", "AZURE_AI_SEARCH_AOAI_DEPLOYMENT"],
+        ["aoaiModel", "AZURE_AI_SEARCH_AOAI_MODEL"],
+        ["aoaiApiKey", "AZURE_AI_SEARCH_AOAI_API_KEY"],
+        ["webKnowledgeSource", "AZURE_AI_SEARCH_WEB_KS_NAME"],
+        ["webKnowledgeSourceDomains", "AZURE_AI_SEARCH_WEB_KS_DOMAINS"],
+    ];
+    const out: Record<string, string> = {};
+    for (const [key, envVar] of fields) {
+        const value = popString(flat, envVar);
+        if (value !== undefined) out[key] = value;
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function buildModelProvider(

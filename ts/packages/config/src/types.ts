@@ -171,3 +171,49 @@ export interface LoadConfigResult {
     /** Per-key provenance, when `trackSources: true`. */
     sources?: SourceMap;
 }
+
+/**
+ * Options for `computeConfigDrift`. The file-resolution fields mirror
+ * `LoadConfigOptions` so the same workspace / path overrides apply.
+ */
+export interface ComputeConfigDriftOptions {
+    /**
+     * Workspace root used to resolve the config file paths. Defaults to
+     * the detected `ts/` workspace root (or `~/.typeagent`), matching
+     * `loadConfig`.
+     */
+    workspaceRoot?: string;
+
+    /** Path to the committed defaults file (used only for vault-name discovery). */
+    defaultsPath?: string;
+
+    /** Path to the gitignored local override file - the file compared against the vault. */
+    localPath?: string;
+
+    /**
+     * Key Vault to compare the local file against. When `vaultName` is
+     * omitted it is auto-discovered from `vault.shared`
+     * (`TYPEAGENT_SHAREDVAULT`) exactly as `loadConfig` does. Tests inject
+     * a `fetcher` here to bypass the live Azure SDK.
+     */
+    keyVault?: KeyVaultOptions;
+}
+
+/**
+ * Result of comparing the local config file against the shared Key Vault
+ * config. Produced by `computeConfigDrift`; consumed by the agent-server to
+ * warn clients (on connect) that their local config is out of sync with the
+ * vault.
+ */
+export interface ConfigDrift {
+    /** Key Vault the local config was compared against. */
+    vaultName: string;
+
+    /**
+     * Flat env keys the Key Vault config defines but the local file does not
+     * match - either missing locally or set to a different value. Key names
+     * only (never values), so the result is safe to surface to a client
+     * without leaking secrets. Sorted for stable presentation.
+     */
+    driftedKeys: string[];
+}

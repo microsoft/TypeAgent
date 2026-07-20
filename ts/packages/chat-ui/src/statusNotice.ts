@@ -41,6 +41,26 @@ export interface StatusNotice {
     actionLabel?: string;
     /** Command run (via the chat input) when the action button is clicked. */
     actionCommand?: string;
+    /**
+     * When set, the action button is relabeled to this after it is clicked. The
+     * button is always disabled on click to block a second trigger; supplying
+     * this gives that disabled state a "working" label (e.g. "Restarting...").
+     */
+    actionBusyLabel?: string;
+    /**
+     * When set, the notice body text is replaced with this after the action
+     * button is clicked - e.g. to explain that the notice clears itself once
+     * the action completes. Only applies when the notice has a {@link message}.
+     */
+    actionBusyMessage?: string;
+    /**
+     * When true this is a *retract* request rather than a notice to show: the
+     * host removes any existing notice with {@link id} and renders nothing.
+     * Lets an emitter take back a notice it previously pushed (e.g. the
+     * agent-server dropping the stale-build warning once a fresh build
+     * reconnects). Only {@link id} is required; other fields are ignored.
+     */
+    dismiss?: boolean;
 }
 
 /**
@@ -53,7 +73,14 @@ export function parseStatusNotice(data: unknown): StatusNotice | undefined {
         return undefined;
     }
     const d = data as Record<string, unknown>;
-    if (typeof d.id !== "string" || typeof d.title !== "string") {
+    if (typeof d.id !== "string") {
+        return undefined;
+    }
+    // A retract only needs an id; there is nothing to render.
+    if (d.dismiss === true) {
+        return { id: d.id, title: "", dismiss: true };
+    }
+    if (typeof d.title !== "string") {
         return undefined;
     }
     const notice: StatusNotice = { id: d.id, title: d.title };
@@ -68,6 +95,12 @@ export function parseStatusNotice(data: unknown): StatusNotice | undefined {
     }
     if (typeof d.actionCommand === "string") {
         notice.actionCommand = d.actionCommand;
+    }
+    if (typeof d.actionBusyLabel === "string") {
+        notice.actionBusyLabel = d.actionBusyLabel;
+    }
+    if (typeof d.actionBusyMessage === "string") {
+        notice.actionBusyMessage = d.actionBusyMessage;
     }
     return notice;
 }

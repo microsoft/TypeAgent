@@ -941,7 +941,12 @@ export function createEnhancedClientIO(
             title?: string;
             message?: string;
             actionCommand?: string;
+            dismiss?: boolean;
         };
+        // Retract requests have nothing to print in a scrollback console.
+        if (notice.dismiss === true) {
+            return;
+        }
         const text = [notice.title, notice.message].filter(Boolean).join(" — ");
         const hint = notice.actionCommand ? `  (${notice.actionCommand})` : "";
         const line = `⚠ ${text}${hint}`;

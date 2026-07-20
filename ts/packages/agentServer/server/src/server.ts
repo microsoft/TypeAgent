@@ -8,6 +8,7 @@ import {
 } from "./conversationManager.js";
 import { createAgentServerConnectionHandler } from "./connectionHandler.js";
 import { startStaleBuildWatcher, isStaleBuild } from "./staleBuild.js";
+import { printConfigDriftBanner } from "./banner.js";
 import {
     getInstanceDirAsync,
     getTraceIdAsync,
@@ -25,19 +26,74 @@ import {
     UserIdentity,
 } from "@typeagent/agent-server-protocol";
 import { PortRegistrar, SYSTEM_SESSION_CONTEXT_ID } from "agent-dispatcher";
-import { loadConfig } from "@typeagent/config";
+import { loadConfig, computeConfigDrift } from "@typeagent/config";
 import {
     writeServerPid,
     removeServerPid,
 } from "@typeagent/agent-server-client";
 import registerDebug from "debug";
 import os from "node:os";
-import { spawn } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { DefaultAzureCredential } from "@azure/identity";
+
+// Exit code the worker uses to ask the supervisor to relaunch it in place.
+const RESTART_EXIT_CODE = 42;
+
+// A dead stdout/stderr pipe (e.g. the launching wrapper exited) must never
+// crash or busy-loop the server: swallow write errors so an EPIPE can't become
+// an uncaughtException that the handler then re-logs into an infinite loop.
+// Applies to both the supervisor and the worker (each evaluates this module).
+for (const stream of [process.stdout, process.stderr]) {
+    stream.on("error", () => {
+        // Intentionally ignored - keep serving even if our output goes nowhere.
+    });
+}
+
+// Supervisor bootstrap. The first invocation (no TYPEAGENT_SUPERVISED marker)
+// stays alive as a thin supervisor and spawn-loops a worker copy of itself,
+// sharing this process's stdio. Because the supervisor never exits, the
+// launching console/pipe (e.g. `pnpm start`) stays alive under the worker - so
+// a restart reuses the exact console instead of orphaning a dead-pipe zombie.
+// Restart = the worker exits RESTART_EXIT_CODE and we relaunch it in place; any
+// other exit ends the supervisor with that same code.
+if (process.env.TYPEAGENT_SUPERVISED !== "1") {
+    let code: number | null = RESTART_EXIT_CODE;
+    while (code === RESTART_EXIT_CODE) {
+        const result = spawnSync(
+            process.execPath,
+            [...process.execArgv, ...process.argv.slice(1)],
+            {
+                stdio: "inherit",
+                windowsHide: true,
+                env: { ...process.env, TYPEAGENT_SUPERVISED: "1" },
+            },
+        );
+        if (result.error) {
+            console.error(
+                "[agent-server] supervisor could not launch the worker:",
+                result.error,
+            );
+            process.exit(1);
+        }
+        code = result.status;
+    }
+    process.exit(code ?? 0);
+}
+
+// ===== From here down we are the worker: the real agent server. =====
 
 // Load config from YAML layers + Key Vault (replacing legacy dotenv).
 // vault.shared is auto-discovered from config.local.yaml / config.defaults.yaml.
 await loadConfig({ keyVault: {}, strict: false });
+
+// Snapshot whether this server's local config differs from the shared Key
+// Vault, so clients can be warned on connect (same delivery path as the
+// stale-build notice). Kicked off now so the vault fetch overlaps the rest of
+// startup; awaited before the connection handler is wired. Best-effort: any
+// failure resolves to "no drift" so it can never block or crash startup.
+const configDriftPromise = computeConfigDrift({ keyVault: {} }).catch(
+    () => undefined,
+);
 
 const debugStartup = registerDebug("agent-server:startup");
 
@@ -251,23 +307,19 @@ async function main() {
         process.exit(0);
     }
 
-    // Restart in place: tear this process down, then relaunch an identical
-    // successor (same node flags + argv) that loads freshly-rebuilt code. The
-    // successor inherits this console, and `detached` + `unref` let it outlive
-    // us. Releasing the port/lock *before* spawning keeps the successor's bind
-    // and lock acquisition from racing this process.
+    // Restart in place: tear this process down, then exit with
+    // RESTART_EXIT_CODE so the supervisor at the top of this file relaunches a
+    // fresh worker in the SAME console/stdio (picking up rebuilt code).
+    // Releasing the port/lock here, before we exit, lets the relaunched worker
+    // bind and acquire the lock cleanly.
     async function restartServer() {
+        // True 24-bit black on yellow: indexed ANSI black (30) is remapped to a
+        // dark gray by most terminal themes, which reads as gray-on-yellow.
         process.stderr.write(
-            "\x1b[1;30;43m Restart requested - relaunching agent server... \x1b[0m\n",
+            "\x1b[38;2;0;0;0;43m Restart requested - relaunching agent server... \x1b[0m\n",
         );
         await teardownServer();
-        const child = spawn(
-            process.execPath,
-            [...process.execArgv, ...process.argv.slice(1)],
-            { detached: true, stdio: "inherit", windowsHide: false },
-        );
-        child.unref();
-        process.exit(0);
+        process.exit(RESTART_EXIT_CODE);
     }
 
     function scheduleIdleShutdown() {
@@ -299,25 +351,35 @@ async function main() {
     // agent server used by the Electron shell — both go through the same
     // ConversationManager via createAgentServerConnectionHandler so there is
     // a single connection code path regardless of transport.
-    const connectionHandler = createAgentServerConnectionHandler({
-        conversationManager,
-        shutdown: shutdownServer,
-        restart: restartServer,
-        isStale: isStaleBuild,
-        getUserIdentity: () => userIdentity,
-        portRegistrar,
-        onConnect: () => {
-            connectionCount++;
-            if (idleShutdownTimer !== undefined) {
-                clearTimeout(idleShutdownTimer);
-                idleShutdownTimer = undefined;
-            }
-        },
-        onDisconnect: () => {
-            connectionCount--;
-            scheduleIdleShutdown();
-        },
-    });
+    const configDrift = await configDriftPromise;
+    if (configDrift !== undefined) {
+        // Warn on the server console too (not just connected clients), the same
+        // yellow-banner treatment as a stale build.
+        printConfigDriftBanner(configDrift);
+    }
+    const { handler: connectionHandler, broadcastStaleNotice } =
+        createAgentServerConnectionHandler({
+            conversationManager,
+            shutdown: shutdownServer,
+            restart: restartServer,
+            isStale: isStaleBuild,
+            // Only pass when drift was detected - exactOptionalPropertyTypes
+            // forbids an explicit undefined on the optional deps property.
+            ...(configDrift !== undefined ? { configDrift } : {}),
+            getUserIdentity: () => userIdentity,
+            portRegistrar,
+            onConnect: () => {
+                connectionCount++;
+                if (idleShutdownTimer !== undefined) {
+                    clearTimeout(idleShutdownTimer);
+                    idleShutdownTimer = undefined;
+                }
+            },
+            onDisconnect: () => {
+                connectionCount--;
+                scheduleIdleShutdown();
+            },
+        });
 
     wss = await createWebSocketChannelServer({ port }, connectionHandler);
 
@@ -340,8 +402,9 @@ async function main() {
     console.log(`Agent server started at ws://localhost:${port}`);
     writeServerPid(port, process.pid);
     // Warn (once) in this console if the server's own build changes on disk
-    // while this process keeps running the old code.
-    startStaleBuildWatcher(import.meta.url);
+    // while this process keeps running the old code, and push the notice to
+    // any already-connected clients the moment it's detected.
+    startStaleBuildWatcher(import.meta.url, broadcastStaleNotice);
     scheduleIdleShutdown();
 }
 
