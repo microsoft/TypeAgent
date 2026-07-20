@@ -13,7 +13,7 @@ import {
     PDFAnnotation,
     PDFBookmark,
     UserPresence,
-} from "./pdfTypes.js";
+} from "@typeagent/browser-control-rpc/pdfTypes";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:views:server:pdf:routes");

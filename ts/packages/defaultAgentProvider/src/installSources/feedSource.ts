@@ -132,6 +132,18 @@ function installRootFor(moduleName: string, version: string): string {
     return `${sanitizeLabel(moduleName)}@${version}`;
 }
 
+function versionFromInstallRoot(
+    moduleName: string,
+    installRoot: string | undefined,
+): string | undefined {
+    const prefix = `${sanitizeLabel(moduleName)}@`;
+    if (installRoot === undefined || !installRoot.startsWith(prefix)) {
+        return undefined;
+    }
+    const version = installRoot.slice(prefix.length);
+    return isConcreteVersion(version) ? version : undefined;
+}
+
 // A short, unique, filesystem-safe install-id. Used to
 // name the TEMPORARY install root (`.tmp-<id>`) a slow-path materialize installs
 // into before atomically adopting it as the content-addressed `module@version`
@@ -873,9 +885,18 @@ export function createFeedSource(
                     record: noOpRecord,
                 };
             }
+            const oldVersion = versionFromInstallRoot(
+                moduleName,
+                record.installRoot,
+            );
             return {
                 status: "updated" as const,
                 record: await this.materialize(candidate),
+                packageName: moduleName,
+                ...(oldVersion !== undefined ? { oldVersion } : {}),
+                ...(candidate.version !== undefined
+                    ? { newVersion: candidate.version }
+                    : {}),
             };
         },
         async materialize(

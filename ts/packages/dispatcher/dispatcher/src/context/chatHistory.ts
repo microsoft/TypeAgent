@@ -487,6 +487,14 @@ const assistantInputSchema = sc.obj({
                 type: sc.array(sc.string()),
                 uniqueId: sc.optional(sc.string()),
                 sourceAppAgentName: sc.optional(sc.string()),
+                facets: sc.optional(
+                    sc.array(
+                        sc.obj({
+                            name: sc.string(),
+                            value: sc.any(),
+                        }),
+                    ),
+                ),
             }),
         ),
     ),

@@ -18,7 +18,11 @@ import {
     DisplayContent,
     MessageContent,
 } from "@typeagent/agent-sdk";
-import { getContentForType } from "@typeagent/agent-sdk/helpers/display";
+import {
+    getContentForType,
+    getStructuredFallback,
+    isStructuredContent,
+} from "@typeagent/agent-sdk/helpers/display";
 import type {
     RequestId,
     ClientIO,
@@ -709,14 +713,20 @@ export function createEnhancedClientIO(
         if (typeof content === "string" || Array.isArray(content)) {
             message = content;
         } else {
-            // CLI prefers text alternates when available
-            const textContent = getContentForType(content, "text");
-            if (textContent !== undefined && content.type !== "text") {
-                message = textContent;
+            if (isStructuredContent(content)) {
+                // CLI gets the text fallback; no interactive table rendering yet.
+                message = getStructuredFallback(content, "text");
                 contentType = "text";
             } else {
-                message = content.content;
-                contentType = content.type || "text";
+                // CLI prefers text alternates when available
+                const textContent = getContentForType(content, "text");
+                if (textContent !== undefined && content.type !== "text") {
+                    message = textContent;
+                    contentType = "text";
+                } else {
+                    message = content.content;
+                    contentType = content.type || "text";
+                }
             }
             switch (content.kind) {
                 case "status":
@@ -926,6 +936,27 @@ export function createEnhancedClientIO(
         }
     }
 
+    function displayStatusNotice(data: unknown): void {
+        const notice = (data ?? {}) as {
+            title?: string;
+            message?: string;
+            actionCommand?: string;
+            dismiss?: boolean;
+        };
+        // Retract requests have nothing to print in a scrollback console.
+        if (notice.dismiss === true) {
+            return;
+        }
+        const text = [notice.title, notice.message].filter(Boolean).join(" — ");
+        const hint = notice.actionCommand ? `  (${notice.actionCommand})` : "";
+        const line = `⚠ ${text}${hint}`;
+        if (currentSpinner?.isActive()) {
+            currentSpinner.writeAbove(chalk.yellow(line));
+        } else {
+            console.warn(chalk.yellow(line));
+        }
+    }
+
     return {
         clear(): void {
             console.clear();
@@ -1095,6 +1126,14 @@ export function createEnhancedClientIO(
                 case AppAgentEvent.Toast:
                     displayToastNotification(data, source, timestamp);
                     break;
+
+                case "statusNotice": {
+                    // Persistent status notice (chat-ui STATUS_NOTICE_EVENT).
+                    // The shells render a toast/pill; the console prints one
+                    // yellow line, preserving the pre-existing behavior.
+                    displayStatusNotice(data);
+                    break;
+                }
 
                 case "grammarRule":
                     // Grammar rule notifications - log to file to avoid disrupting prompt

@@ -106,7 +106,7 @@
   "mcpServers": {
     "mcpfilesystem": {
       "emojiChar": "📁",
-      "description": "File system agent",
+      "description": "Local file system agent — reads, writes, edits, and organizes files and folders on the local disk within a set of allowed directories. Use this for requests to read a file's text or contents, read an image or media file, read several files at once, create or overwrite a file, make line-based edits to a file, create a folder or directory, list the contents of a directory (optionally with file sizes), show a recursive directory tree, move or rename a file or folder, search for files by name or pattern, get file metadata (size, timestamps, permissions), or list the directories it is allowed to access.",
       "defaultEnabled": false,
       "serverScript": "./node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
       "serverScriptArgs": {

@@ -376,6 +376,13 @@ function getGenerateTestDataFn(
             const translatedAction = result.data as TranslatedAction;
 
             if (isMultipleAction(translatedAction)) {
+                if (translatedAction.parameters.pendingRequests?.length) {
+                    return toFailedResult({
+                        request,
+                        message: "Failed translation: Pending action",
+                        tags,
+                    });
+                }
                 const newActions: ExecutableAction[] = [];
                 for (const e of translatedAction.parameters.requests) {
                     if (isPendingRequest(e)) {

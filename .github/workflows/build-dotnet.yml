@@ -33,7 +33,7 @@ jobs:
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
         continue-on-error: true
@@ -56,7 +56,7 @@ jobs:
           package_json_file: ts/package.json
       - name: Setup Node.js
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: "pnpm"

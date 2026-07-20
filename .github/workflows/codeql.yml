@@ -4,11 +4,11 @@
 # CodeQL advanced setup.
 #
 # Why this is not the stock single-file setup:
-#   Merging is gated by rulesets ("Require code scanning results" + "Require code
-#   quality results"). GitHub's CodeQL *default setup* — and any plain
-#   `on: pull_request` CodeQL workflow — cannot produce results for pull requests
-#   from FORKS, because fork-triggered runs get a read-only GITHUB_TOKEN and no
-#   secrets, so `analyze` cannot upload. Those PRs would then be blocked forever.
+#   Merging is gated by a ruleset ("Require code scanning results"). GitHub's
+#   CodeQL *default setup* - and any plain `on: pull_request` CodeQL workflow -
+#   cannot produce results for pull requests from FORKS, because fork-triggered
+#   runs get a read-only GITHUB_TOKEN and no secrets, so `analyze` cannot upload.
+#   Those PRs would then be blocked forever.
 #
 #   To fix that safely, this workflow ANALYZES the code (including untrusted fork
 #   code) in the unprivileged `pull_request` context and, for fork PRs, saves the
@@ -66,7 +66,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # For fork PRs, analyze the PR head commit so results map to the PR.
           # Otherwise use the default ref (merge ref for internal PRs, branch tip
@@ -78,11 +78,15 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
-          # Enable both the security ("code-scanning") and "code-quality" analyses
-          # so both ruleset rules can be satisfied. code-quality is currently a
-          # preview capability; if the analyze step rejects this input, remove the
-          # line and drop the "Require code quality results" rule from the ruleset.
-          analysis-kinds: code-scanning,code-quality
+          # This runs a code-scanning (security) analysis only. The experimental,
+          # GitHub-internal `analysis-kinds` input that previously also requested a
+          # "code-quality" analysis is no longer supported in custom workflows:
+          # passing multiple values, or any kind other than `code-scanning`, now
+          # warns and will become a fatal error. To also run the code-quality
+          # queries as part of code scanning, add `queries: code-quality` here --
+          # that surfaces them as code-scanning alerts rather than a separate
+          # code-quality result, so also drop any "Require code quality results"
+          # rule from the branch ruleset.
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
@@ -96,7 +100,7 @@ jobs:
 
       - name: Stage SARIF for fork PR upload
         if: ${{ env.IS_FORK_PR == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: codeql-sarif-${{ matrix.language }}
           path: sarif-results

@@ -147,7 +147,8 @@ async function canTranslateWithoutContext(
             }
             const newActions = result.data;
             const count = isMultipleAction(newActions)
-                ? newActions.parameters.requests.length
+                ? newActions.parameters.requests.length +
+                  (newActions.parameters.pendingRequests?.length ?? 0)
                 : 1;
 
             if (count !== oldActions.length) {
@@ -163,7 +164,7 @@ async function canTranslateWithoutContext(
             let newAction: TranslatedAction;
             if (isMultipleAction(newTranslatedActions)) {
                 const entry = newTranslatedActions.parameters.requests[index];
-                if (isPendingRequest(entry)) {
+                if (entry === undefined || isPendingRequest(entry)) {
                     throw new Error("Pending request in multiple action");
                 }
                 newAction = entry.action;

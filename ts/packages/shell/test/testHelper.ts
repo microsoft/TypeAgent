@@ -576,7 +576,12 @@ export async function getAllAgentMessages(page: Page): Promise<string[]> {
  */
 export async function testUserRequest(
     userRequests: string[],
-    expectedResponses: string[],
+    // Each entry is either the exact expected response or a list of acceptable
+    // responses. Accepting several lets a test tolerate more than one valid
+    // rendering of the same result - e.g. the list agent's plain-text display
+    // ("List 'x' is empty.") vs its structured-output display (heading plus a
+    // "This list is empty." block).
+    expectedResponses: (string | string[])[],
 ): Promise<void> {
     if (userRequests.length != expectedResponses.length) {
         throw new Error("Request/Response count mismatch!");
@@ -589,15 +594,18 @@ export async function testUserRequest(
                 userRequests[i],
                 mainWindow,
             );
-            // verify expected result
+            const expected = expectedResponses[i];
+            const accepted = Array.isArray(expected) ? expected : [expected];
+            // verify the response matches one of the accepted messages
             expect(
-                msg,
+                accepted,
                 [
-                    `Chat agent didn't respond with the expected message. Request: '${userRequests[i]}', Response: '${expectedResponses[i]}'`,
-                    `All response so far:`,
+                    `Chat agent didn't respond with an expected message. Request: '${userRequests[i]}', Expected one of: ${JSON.stringify(accepted)}`,
+                    `Actual: '${msg}'`,
+                    `All responses so far:`,
                     ...(await getAllAgentMessages(mainWindow)),
                 ].join("\n"),
-            ).toBe(expectedResponses[i]);
+            ).toContain(msg);
         }
     });
 }

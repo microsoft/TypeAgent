@@ -26,6 +26,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-rpc": "workspace:*",
+    "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*"
   },

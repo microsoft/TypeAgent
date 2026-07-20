@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { fileURLToPath } from "node:url";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -11,27 +10,112 @@ import {
     reproduceSchemaSourceHash,
 } from "../src/replay/constructionCacheResolver.js";
 
-// Validate against the real, shipped player construction cache that lives
-// alongside the agent's construction code, rather than a hand-maintained copy
-// that can drift from it. The spec runs from `dist/test`; resolve the file
-// relative to the package root.
-const PKG_ROOT = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "../..",
-);
-const FIXTURE = path.resolve(
-    PKG_ROOT,
-    "../defaultAgentProvider/data/explainer/v5/constructions.json",
-);
+const FIXTURE_HASH = "fixture-hash=";
 
-/** The single namespace name (`player,<hash>`) stored in the cache file. */
-function fixtureNamespace(): { name: string; hash: string } {
-    const json = JSON.parse(readFileSync(FIXTURE, "utf8")) as {
-        constructionNamespaces: { name: string }[];
-    };
-    const name = json.constructionNamespaces[0].name;
-    const hash = name.slice(name.indexOf(",") + 1);
-    return { name, hash };
+function writeFixtureCache(dir: string, activityName = ""): string {
+    const cacheFilePath = path.join(dir, "constructions.json");
+    writeFileSync(
+        cacheFilePath,
+        JSON.stringify({
+            version: 3,
+            explainerName: "test",
+            matchSets: [
+                {
+                    matches: ["pause"],
+                    basename: "pause",
+                    index: 0,
+                    canBeMerged: true,
+                    namespace: "player.pause::fullActionName",
+                },
+                {
+                    matches: ["play"],
+                    basename: "play",
+                    index: 1,
+                    canBeMerged: true,
+                    namespace: "player.playMusic::fullActionName",
+                },
+                {
+                    matches: ["despacito"],
+                    basename: "song",
+                    index: 2,
+                    canBeMerged: true,
+                },
+            ],
+            constructionNamespaces: [
+                {
+                    name: `player,${FIXTURE_HASH},${activityName}`,
+                    constructions: [
+                        {
+                            parts: [
+                                {
+                                    matchSet: "pause_0",
+                                    transformInfos: [
+                                        {
+                                            namespace: "player.pause",
+                                            transformName: "fullActionName",
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                        {
+                            parts: [
+                                {
+                                    matchSet: "play_1",
+                                    transformInfos: [
+                                        {
+                                            namespace: "player.playMusic",
+                                            transformName: "fullActionName",
+                                        },
+                                    ],
+                                },
+                                {
+                                    matchSet: "song_2",
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+            transformNamespaces: [
+                {
+                    name: "player.pause",
+                    transforms: [
+                        {
+                            name: "fullActionName",
+                            transform: [
+                                [
+                                    "pause",
+                                    {
+                                        value: "player.pause",
+                                        count: 1,
+                                    },
+                                ],
+                            ],
+                        },
+                    ],
+                },
+                {
+                    name: "player.playMusic",
+                    transforms: [
+                        {
+                            name: "fullActionName",
+                            transform: [
+                                [
+                                    "play",
+                                    {
+                                        value: "player.playMusic",
+                                        count: 1,
+                                    },
+                                ],
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }),
+    );
+    return cacheFilePath;
 }
 
 function tempDir(): string {
@@ -143,68 +227,105 @@ describe("computeWorkingTreeSchemaHash", () => {
 
 describe("loadConstructionCacheLayer", () => {
     test("valid: a matching hash yields a faithful construction hit", async () => {
-        const { hash } = fixtureNamespace();
-        const layer = await loadConstructionCacheLayer({
-            cacheFilePath: FIXTURE,
-            schemaName: "player",
-            currentHash: hash,
-        });
-        expect(layer.status).toBe("valid");
-        expect(layer.cachedHash).toBe(hash);
-        // "pause" resolves to the player pause action straight from the cache.
-        expect(layer.match("pause")).toEqual({
-            schemaName: "player",
-            actionName: "pause",
-        });
-        // The schemaName is re-stamped onto the action regardless of the cache.
-        const play = layer.match("play despacito");
-        expect(play?.schemaName).toBe("player");
-        expect(typeof play?.actionName).toBe("string");
+        const dir = tempDir();
+        try {
+            const layer = await loadConstructionCacheLayer({
+                cacheFilePath: writeFixtureCache(dir),
+                schemaName: "player",
+                currentHash: FIXTURE_HASH,
+            });
+            expect(layer.status).toBe("valid");
+            expect(layer.cachedHash).toBe(FIXTURE_HASH);
+            // "pause" resolves to the player pause action straight from the cache.
+            expect(layer.match("pause")).toEqual({
+                schemaName: "player",
+                actionName: "pause",
+            });
+            // The schemaName is re-stamped onto the action regardless of the cache.
+            const play = layer.match("play despacito");
+            expect(play?.schemaName).toBe("player");
+            expect(typeof play?.actionName).toBe("string");
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test("valid: a non-empty activity suffix still validates the hash", async () => {
+        const dir = tempDir();
+        try {
+            const layer = await loadConstructionCacheLayer({
+                cacheFilePath: writeFixtureCache(dir, "playMusic"),
+                schemaName: "player",
+                currentHash: FIXTURE_HASH,
+            });
+            expect(layer.status).toBe("valid");
+            expect(layer.match("pause")).toEqual({
+                schemaName: "player",
+                actionName: "pause",
+            });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test("valid: matchEntry surfaces the matched construction's identity", async () => {
-        const { name, hash } = fixtureNamespace();
-        const layer = await loadConstructionCacheLayer({
-            cacheFilePath: FIXTURE,
-            schemaName: "player",
-            currentHash: hash,
-        });
-        const entry = layer.matchEntry("pause");
-        expect(entry).toBeDefined();
-        expect(entry?.action).toEqual({
-            schemaName: "player",
-            actionName: "pause",
-        });
-        // Identity is drawn from the matched construction and its namespace.
-        expect(entry?.namespace).toBe(name);
-        expect(entry?.constructionId).toMatch(/^\d+$/);
-        expect(entry?.parts?.length).toBeGreaterThan(0);
-        expect(entry?.scores?.matchedCount).toBeGreaterThanOrEqual(0);
-        expect(entry?.cacheFileId).toBe(FIXTURE);
+        const dir = tempDir();
+        try {
+            const cacheFilePath = writeFixtureCache(dir);
+            const layer = await loadConstructionCacheLayer({
+                cacheFilePath,
+                schemaName: "player",
+                currentHash: FIXTURE_HASH,
+            });
+            const entry = layer.matchEntry("pause");
+            expect(entry).toBeDefined();
+            expect(entry?.action).toEqual({
+                schemaName: "player",
+                actionName: "pause",
+            });
+            // Identity is drawn from the matched construction and its namespace
+            // (schema,hash,activity with an empty activity for the default fixture).
+            expect(entry?.namespace).toBe(`player,${FIXTURE_HASH},`);
+            expect(entry?.constructionId).toMatch(/^\d+$/);
+            expect(entry?.parts?.length).toBeGreaterThan(0);
+            expect(entry?.scores?.matchedCount).toBeGreaterThanOrEqual(0);
+            expect(entry?.cacheFileId).toBe(cacheFilePath);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test("stale: a mismatched hash falls back (no cache match)", async () => {
-        const layer = await loadConstructionCacheLayer({
-            cacheFilePath: FIXTURE,
-            schemaName: "player",
-            currentHash: "a-different-hash=",
-        });
-        expect(layer.status).toBe("stale");
-        expect(layer.cachedHash).toBeDefined();
-        expect(layer.match("pause")).toBeUndefined();
-        expect(layer.matchEntry("pause")).toBeUndefined();
+        const dir = tempDir();
+        try {
+            const layer = await loadConstructionCacheLayer({
+                cacheFilePath: writeFixtureCache(dir),
+                schemaName: "player",
+                currentHash: "a-different-hash=",
+            });
+            expect(layer.status).toBe("stale");
+            expect(layer.cachedHash).toBe(FIXTURE_HASH);
+            expect(layer.match("pause")).toBeUndefined();
+            expect(layer.matchEntry("pause")).toBeUndefined();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test("absent: no namespace for the schema", async () => {
-        const { hash } = fixtureNamespace();
-        const layer = await loadConstructionCacheLayer({
-            cacheFilePath: FIXTURE,
-            schemaName: "not-an-agent",
-            currentHash: hash,
-        });
-        expect(layer.status).toBe("absent");
-        expect(layer.match("pause")).toBeUndefined();
-        expect(layer.matchEntry("pause")).toBeUndefined();
+        const dir = tempDir();
+        try {
+            const layer = await loadConstructionCacheLayer({
+                cacheFilePath: writeFixtureCache(dir),
+                schemaName: "not-an-agent",
+                currentHash: FIXTURE_HASH,
+            });
+            expect(layer.status).toBe("absent");
+            expect(layer.match("pause")).toBeUndefined();
+            expect(layer.matchEntry("pause")).toBeUndefined();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test("absent: missing cache file degrades cleanly (never throws)", async () => {

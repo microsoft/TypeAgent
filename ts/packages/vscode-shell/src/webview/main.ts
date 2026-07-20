@@ -12,10 +12,17 @@ import {
     ConversationBar,
     HistoryEntry,
     formatHistorySeparatorLabel,
+    STATUS_NOTICE_EVENT,
+    parseStatusNotice,
     type ConnectionStatus,
 } from "chat-ui";
-import type { TemplateEditServices, DynamicDisplayResult } from "chat-ui";
+import type {
+    TemplateEditServices,
+    DynamicDisplayResult,
+    ImageCaptureProvider,
+} from "chat-ui";
 import { VsCodeAzureSpeechProvider } from "./azureSpeechProvider.js";
+import { CameraView } from "./cameraView.js";
 import type { SpeechToken } from "@typeagent/agent-server-protocol";
 import chatPanelStyles from "chat-ui/styles";
 import completionUiStyles from "@typeagent/completion-ui/styles.css";
@@ -130,6 +137,55 @@ function requestSpeechToken(
     });
 }
 
+// VS Code webviews cannot use getUserMedia: the webview-content iframe is
+// created without `camera`/`microphone` in its Permissions-Policy `allow`
+// attribute (only autoplay/clipboard/etc.), and an extension cannot change that
+// attribute. This blocks BOTH the mic (Azure speech) and the in-webview camera
+// capture. The affordances below are kept in the codebase but gated off until
+// VS Code ships the proposed opt-in media API for webviews
+// (microsoft/vscode#323602). Flip this to true to re-enable the mic + camera
+// buttons once that lands.
+//
+// TODO: re-enable mic + camera when microsoft/vscode#323602 (opt-in webview
+// media access) ships. Set this to true, adopt whatever opt-in the API
+// requires, and verify getUserMedia works; the CameraView, speech provider,
+// camera CSS, and CSP media-src are already in place.
+const WEBVIEW_MEDIA_CAPTURE_SUPPORTED: boolean = false;
+
+// Speech (mic) provider. Omitted while capture is unsupported so the mic button
+// is not rendered; the Azure-backed provider (overriding the non-functional
+// browser Web Speech API) is preserved for when it works again.
+const speechProvider = WEBVIEW_MEDIA_CAPTURE_SUPPORTED
+    ? new VsCodeAzureSpeechProvider(requestSpeechToken)
+    : undefined;
+
+// In-webview camera capture. chat-ui renders the camera button only when the
+// host supplies imageCaptureProvider.openCamera; we mount a CameraView overlay
+// and resolve openCamera() with the captured data URL. Gated off with the mic
+// (see above) until getUserMedia is permitted. pickFile is intentionally left
+// unset so the attach button keeps chat-ui's web-native file picker, which is
+// NOT permissions-policy gated and works today.
+let imageCaptureProvider: ImageCaptureProvider | undefined;
+if (WEBVIEW_MEDIA_CAPTURE_SUPPORTED) {
+    let pendingCapture: ((url: string | undefined) => void) | undefined;
+    const cameraView = new CameraView((dataUrl) => {
+        const resolve = pendingCapture;
+        pendingCapture = undefined;
+        resolve?.(dataUrl);
+    });
+    document.body.appendChild(cameraView.getContainer());
+    imageCaptureProvider = {
+        openCamera: () =>
+            new Promise<string | undefined>((resolve) => {
+                // Resolve any prior outstanding capture first (defensive; the
+                // overlay is modal so overlap shouldn't normally happen).
+                pendingCapture?.(undefined);
+                pendingCapture = resolve;
+                cameraView.show();
+            }),
+    };
+}
+
 const chatPanel = new ChatPanel(rootEl, {
     platformAdapter: {
         // Open links via the extension host — webviews can't call window.open
@@ -138,10 +194,11 @@ const chatPanel = new ChatPanel(rootEl, {
             vscode.postMessage({ type: "openExternal", href });
         },
     },
-    // The browser Web Speech API doesn't work inside VS Code webviews, so
-    // override chat-ui's default with an Azure-backed provider fed by a
-    // server-vended token.
-    speechProvider: new VsCodeAzureSpeechProvider(requestSpeechToken),
+    // Mic + camera providers (see WEBVIEW_MEDIA_CAPTURE_SUPPORTED). Both are
+    // undefined while getUserMedia is blocked in VS Code webviews, so neither
+    // button renders; the attach-file button (web-native) still appears.
+    speechProvider,
+    imageCaptureProvider,
     onSend: (text: string, attachments, requestId: string) => {
         vscode.postMessage({
             type: "sendCommand",
@@ -896,9 +953,32 @@ window.addEventListener("message", (event) => {
                 clearQueueChip(rid);
                 if (msg.aliasRequestId) clearQueueChip(msg.aliasRequestId);
             } else if (msg.event === "inline") {
-                chatPanel.showInline(msg.data, msg.source);
+                if (msg.source === "osNotifications" && rid) {
+                    // OS notifications render as persistent, dismissable
+                    // bubbles (removed on osDismiss), not ephemeral rows.
+                    // The notificationId ("os:<id>") arrives as requestId.
+                    chatPanel.addNotification(msg.data, msg.source, rid);
+                } else {
+                    chatPanel.showInline(msg.data, msg.source);
+                }
             } else if (msg.event === "toast") {
-                chatPanel.showToast(msg.data, msg.source);
+                if (msg.source === "osNotifications" && rid) {
+                    chatPanel.addNotification(msg.data, msg.source, rid);
+                } else {
+                    chatPanel.showToast(msg.data, msg.source);
+                }
+            } else if (msg.event === "osDismiss") {
+                // The OS notification left the action center — drop the
+                // matching persistent bubble. data.id is the "os:<id>"
+                // notificationId used on the corresponding "added" event.
+                if (msg.data && typeof msg.data.id === "string") {
+                    chatPanel.removeNotification(msg.data.id);
+                }
+            } else if (msg.event === STATUS_NOTICE_EVENT) {
+                const notice = parseStatusNotice(msg.data);
+                if (notice) {
+                    chatPanel.showStatusNotice(notice);
+                }
             } else {
                 chatPanel.addSystemMessage(`[${msg.source}] ${msg.event}`);
             }

@@ -15,6 +15,7 @@ import {
 import {
     createActionResultFromTextDisplay,
     createActionResultFromError,
+    createStructuredResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { readFileSync, readdirSync } from "fs";
 import { join, dirname } from "path";
@@ -132,12 +133,36 @@ async function handleTaskFlowAction(
                     "No task flows registered.",
                 );
             }
-            const lines = entries.map(
-                (e) =>
-                    `  \u2022 ${e.actionName}: ${e.description} [usage: ${e.usageCount}]${e.source === "seed" ? " (sample)" : ""}`,
-            );
-            return createActionResultFromTextDisplay(
-                `Task flows (${entries.length}):\n${lines.join("\n")}`,
+            return createStructuredResult(
+                [
+                    {
+                        kind: "heading",
+                        level: 3,
+                        text: `Task flows (${entries.length})`,
+                    },
+                    {
+                        kind: "table",
+                        columns: [
+                            { id: "actionName", header: "Task Flow" },
+                            { id: "description", header: "Description" },
+                            {
+                                id: "usageCount",
+                                header: "Usage",
+                                type: "number",
+                                align: "right",
+                            },
+                            { id: "source", header: "Source" },
+                        ],
+                        rows: entries.map((e) => [
+                            e.actionName,
+                            e.description,
+                            e.usageCount,
+                            e.source === "seed" ? "sample" : "user",
+                        ]),
+                        sortable: true,
+                    },
+                ],
+                { rawData: entries },
             );
         }
 

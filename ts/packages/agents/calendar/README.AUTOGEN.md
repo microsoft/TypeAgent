@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=6eb646b7486426393bd57cc5e337a04c10b1cdaced058e0be2eb7ed6a15cce6a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2033aefe14c756df276767c16446f39cf47a2d60fb4aa43c1579534dcf4e41f4 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # calendar — AI-generated documentation
@@ -16,7 +16,7 @@ The `calendar` package is a TypeAgent application agent designed to manage calen
 
 ## What it does
 
-The calendar agent provides a set of actions to manage and manipulate calendar events. These actions are grouped into two main categories:
+The calendar agent provides a range of actions to manage and manipulate calendar events. These actions are grouped into two main categories:
 
 ### Event Management
 
@@ -147,6 +147,6 @@ External: `chalk`, `date-fns`, `debug`
 
 ---
 
-_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
+_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter calendar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

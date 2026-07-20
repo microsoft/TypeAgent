@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=987a754a12f968bfa3193fe9a72c4a68afc12a7c5346ab374f9d658979bf524a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=00f9fb4c99c20c00452f50795ecaac220a6fd99f44258f64d747a1411d746d20 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # discord-agent — AI-generated documentation
@@ -12,30 +12,31 @@
 
 ## Overview
 
-The `discord-agent` package is a TypeAgent application agent that facilitates interaction with Discord servers using natural language commands. It integrates with the Discord REST API v10 to perform tasks such as sending messages, managing channels, creating invites, and more. This agent is designed to simplify server management and communication by interpreting user commands and executing the appropriate actions.
+The `discord-agent` package is a TypeAgent application agent that enables interaction with Discord servers through natural language commands. By leveraging the Discord REST API v10, this agent allows users to perform various tasks such as sending messages, managing channels, creating invites, and more. It simplifies server management and communication by interpreting user commands and executing corresponding actions.
 
 ## What it does
 
-The `discord-agent` provides a range of actions to interact with Discord servers. These actions are grouped into several categories:
+The `discord-agent` provides a set of actions that allow users to interact with Discord servers. These actions are grouped into the following categories:
 
-- **Message Management**:
+### Message Management
 
-  - `createMessage`: Sends a specific message to a channel.
-  - `craftMessage`: Uses an LLM to generate a message based on a high-level intent and posts it to a channel.
-  - `getChannelMessages`: Retrieves messages from a specified channel.
+- **`createMessage`**: Sends a specific message to a channel. For example, "Send a message to the general channel saying 'Hello everyone!'".
+- **`craftMessage`**: Uses an LLM to generate a message based on a high-level intent and posts it to a channel. For example, "Send a message to #general that welcomes everyone to the discord".
+- **`getChannelMessages`**: Retrieves messages from a specified channel. For example, "Can you show me the latest messages from the channel with ID 12345?".
 
-- **User and Server Management**:
+### User and Server Management
 
-  - `getCurrentUser`: Fetches details about the bot's account.
-  - `setGuild`: Sets the default Discord server (guild) for all operations.
+- **`getCurrentUser`**: Fetches details about the bot's account, such as username, discriminator, and ID.
+- **`setGuild`**: Sets the default Discord server (guild) for all operations. For example, "Set my Discord server to YOUR_SERVER_ID".
 
-- **Channel Management**:
+### Channel Management
 
-  - `listChannels`: Lists all channels in the current Discord server.
-  - `refreshChannels`: Refreshes the cached list of channels from the server.
+- **`listChannels`**: Lists all channels in the current Discord server, grouped by categories.
+- **`refreshChannels`**: Refreshes the cached list of channels from the server.
 
-- **Invite Management**:
-  - `createChannelInvite`: Creates a new invite link for a specific channel.
+### Invite Management
+
+- **`createChannelInvite`**: Creates a new invite link for a specific channel. For example, "Create an invite for #general that never expires".
 
 These actions allow users to perform common Discord tasks without directly interacting with the Discord interface. The agent also supports natural language processing to interpret user commands and map them to the appropriate actions.
 
@@ -43,78 +44,82 @@ These actions allow users to perform common Discord tasks without directly inter
 
 To use the `discord-agent`, you need to configure a Discord bot and set up the required environment variables. Follow these steps:
 
-1. **Prerequisites**:
+### Prerequisites
 
-   - Install Node.js (version 20 or higher) and pnpm (version 10 or higher).
-   - Create a Discord account and have access to a Discord server (guild) that you manage.
+- Install **Node.js** (version 20 or higher) and **pnpm** (version 10 or higher).
+- Create a Discord account and have access to a Discord server (guild) that you manage.
 
-2. **Create and Configure a Discord Bot**:
+### Create and Configure a Discord Bot
 
-   - Visit the Discord Developer Portal at `https://discord.com/developers/applications` and create a new application.
-   - Navigate to the **Bot** tab, create a bot, and reset its token. Copy the token for later use.
-   - Add the token to the `ts/.env` file in the project root:
-     ```env
-     DISCORD_BOT_TOKEN=your_token_here
-     ```
-   - Enable the **Message Content Intent** in the **Bot → Privileged Gateway Intents** section of the Developer Portal.
-   - Use the **OAuth2 URL Generator** in the Developer Portal to create an invite link for your bot:
-     - Select the **bot** scope.
-     - Grant the bot permissions such as **Send Messages** and **Read Message History**.
-     - Add a redirect URL (e.g., `https://localhost`) in the **OAuth2 > General > Redirects** section before generating the invite link.
-     - Open the generated URL in your browser, select your server, and click **Authorize**.
+1. Visit the Discord Developer Portal at `https://discord.com/developers/applications` and create a new application.
+2. Navigate to the **Bot** tab, create a bot, and reset its token. Copy the token for later use.
+3. Add the token to the `ts/.env` file in the project root:
+   ```env
+   DISCORD_BOT_TOKEN=your_token_here
+   ```
+4. Enable the **Message Content Intent** in the **Bot → Privileged Gateway Intents** section of the Developer Portal.
+5. Use the **OAuth2 URL Generator** in the Developer Portal to create an invite link for your bot:
+   - Select the **bot** scope.
+   - Grant the bot permissions such as **Send Messages** and **Read Message History**.
+   - Add a redirect URL (e.g., `https://localhost`) in the **OAuth2 > General > Redirects** section before generating the invite link.
+   - Open the generated URL in your browser, select your server, and click **Authorize**.
 
-3. **Enable Developer Mode in Discord**:
+### Enable Developer Mode in Discord
 
-   - In Discord, go to **Settings → Advanced → Developer Mode** and enable it.
-   - Right-click your server name in the sidebar and select **Copy Server ID** to obtain your server's ID.
+- In Discord, go to **Settings → Advanced → Developer Mode** and enable it.
+- Right-click your server name in the sidebar and select **Copy Server ID** to obtain your server's ID.
 
-4. **First-Time Setup in TypeAgent**:
-   - Restart TypeAgent with the bot token configured.
-   - Set your Discord server ID using the following command:
-     ```bash
-     set my discord server to YOUR_SERVER_ID
-     ```
-   - The agent will automatically fetch and cache all channels in the server.
+### First-Time Setup in TypeAgent
+
+- Restart TypeAgent with the bot token configured.
+- Set your Discord server ID using the following command:
+  ```bash
+  set my discord server to YOUR_SERVER_ID
+  ```
+- The agent will automatically fetch and cache all channels in the server.
 
 ## Key Files
 
-The `discord-agent` package is organized into several key files that define its functionality:
+The `discord-agent` package is structured around key files that define its functionality:
 
-- [src/discordActionHandler.ts](./src/discordActionHandler.ts): Contains the implementation of the action handlers, including logic for sending messages, creating invites, and managing channels.
-- [src/discordManifest.json](./src/discordManifest.json): Defines the agent's metadata, including its description, schema, and default settings.
-- [src/discordSchema.ts](./src/discordSchema.ts): Specifies the TypeScript types and structures for the actions supported by the agent.
-- [src/discordSchema.agr](./src/discordSchema.agr): Contains the grammar definitions for parsing natural language commands into actionable intents.
+- **[src/discordActionHandler.ts](./src/discordActionHandler.ts)**: Implements the logic for handling actions such as sending messages, creating invites, and managing channels.
+- **[src/discordManifest.json](./src/discordManifest.json)**: Contains metadata about the agent, including its description, schema, and default settings.
+- **[src/discordSchema.ts](./src/discordSchema.ts)**: Defines the TypeScript types and structures for the actions supported by the agent.
+- **[src/discordSchema.agr](./src/discordSchema.agr)**: Specifies the grammar rules for parsing natural language commands into actionable intents.
+
+These files work together to enable the agent's functionality, from understanding user commands to executing the corresponding actions via the Discord API.
 
 ## How to extend
 
 To extend the `discord-agent` package, you can add new actions, update the grammar, and implement the corresponding handlers. Here’s how:
 
-1. **Define New Actions**:
+### 1. Define New Actions
 
-   - Add the new action's type definition to [discordSchema.ts](./src/discordSchema.ts).
-   - Specify the action's parameters and expected behavior.
+- Add the new action's type definition to [discordSchema.ts](./src/discordSchema.ts).
+- Specify the action's parameters and expected behavior.
 
-2. **Update the Grammar**:
+### 2. Update the Grammar
 
-   - Modify [discordSchema.agr](./src/discordSchema.agr) to include new natural language patterns for the action.
-   - Ensure the grammar maps user commands to the new action and its parameters.
+- Modify [discordSchema.agr](./src/discordSchema.agr) to include new natural language patterns for the action.
+- Ensure the grammar maps user commands to the new action and its parameters.
 
-3. **Implement the Action Handler**:
+### 3. Implement the Action Handler
 
-   - Add the logic for the new action in [discordActionHandler.ts](./src/discordActionHandler.ts).
-   - Use the Discord REST API to perform the desired operation.
+- Add the logic for the new action in [discordActionHandler.ts](./src/discordActionHandler.ts).
+- Use the Discord REST API to perform the desired operation.
 
-4. **Test the New Functionality**:
+### 4. Test the New Functionality
 
-   - Write unit tests for the new action and its handler.
-   - Run the tests using:
-     ```bash
-     pnpm run test
-     ```
+- Write unit tests for the new action and its handler.
+- Run the tests using:
+  ```bash
+  pnpm run test
+  ```
 
-5. **Update Documentation**:
-   - Document the new action in the hand-written README or other relevant documentation files.
-   - Ensure the grammar and schema changes are reflected in the auto-generated documentation.
+### 5. Update Documentation
+
+- Document the new action in the hand-written README or other relevant documentation files.
+- Ensure the grammar and schema changes are reflected in the auto-generated documentation.
 
 By following these steps, you can enhance the `discord-agent` package to support additional Discord functionalities or customize it for specific use cases.
 
@@ -125,7 +130,7 @@ By following these steps, you can enhance the `discord-agent` package to support
 ### Entry points
 
 - `./agent/manifest` → [./src/discordManifest.json](./src/discordManifest.json)
-- `./agent/handlers` → `./dist/discordActionHandler.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/discordActionHandler.js](./dist/discordActionHandler.js)
 
 ### Dependencies
 
@@ -176,6 +181,6 @@ _8 actions implemented by this agent, parsed deterministically from `./src/disco
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter discord-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

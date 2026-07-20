@@ -24,6 +24,7 @@
 
 import { instantiate, getSharedCodePort } from "../src/codeActionHandler.js";
 import type { SessionContext } from "@typeagent/agent-sdk";
+import { WebSocket } from "ws";
 
 // Minimal stub of SessionContext — only the surface the code agent uses
 // during updateAgentContext. registerPort records every call so we can
@@ -35,11 +36,13 @@ type StubContext = {
     registerCalls: RegisterCall[];
     releaseSpy: () => void;
     releaseCount: number;
+    readinessNotifyCount: number;
 };
 
 function makeStubContext(agentContext: any): StubContext {
     const registerCalls: RegisterCall[] = [];
     let releaseCount = 0;
+    let readinessNotifyCount = 0;
     const releaseSpy = () => {
         releaseCount++;
     };
@@ -52,6 +55,11 @@ function makeStubContext(agentContext: any): StubContext {
         notifyClientCountChanged(_role: string, _count: number) {
             // no-op stub; tested elsewhere via registrar unit tests
         },
+        async notifyReadinessChanged() {
+            // Records the readiness-refresh pushes the code agent fires from
+            // the server's onClientCountChanged fanout on connect/disconnect.
+            readinessNotifyCount++;
+        },
         // The rest of SessionContext isn't touched by updateCodeContext.
     } as unknown as SessionContext<any>;
     return {
@@ -60,8 +68,28 @@ function makeStubContext(agentContext: any): StubContext {
         get releaseCount() {
             return releaseCount;
         },
+        get readinessNotifyCount() {
+            return readinessNotifyCount;
+        },
         releaseSpy,
     } as any;
+}
+
+// Poll a predicate until it holds or the timeout elapses. Used to await the
+// asynchronous onClientCountChanged fanout that fires after a ws client
+// connects or closes.
+async function waitFor(
+    predicate: () => boolean,
+    timeoutMs = 2000,
+): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+        if (predicate()) return;
+        await new Promise((r) => setTimeout(r, 20));
+    }
+    if (!predicate()) {
+        throw new Error(`waitFor timed out after ${timeoutMs}ms`);
+    }
 }
 
 describe("code agent shared server + per-session registration", () => {
@@ -218,5 +246,50 @@ describe("code agent shared server + per-session registration", () => {
 
         await agent.updateAgentContext!(false, b.sessionContext, "code");
         expect(getSharedCodePort()).toBeUndefined();
+    });
+
+    test("a client connecting and disconnecting refreshes cached readiness", async () => {
+        // Regression: the code agent used to fan out only client-count
+        // updates on connect/disconnect, leaving the dispatcher's cached
+        // readiness stuck at the value probed on enable (usually
+        // `setup-required`, before the Coda extension connected). The first
+        // code action after enabling then tripped the setupOnFirstUse gate
+        // and ran `setup` in place of the action. The onClientCountChanged
+        // fanout must also push a readiness refresh so the cache tracks the
+        // live connection state.
+        const s = await newSession();
+        await agent.updateAgentContext!(true, s.sessionContext, "code");
+        try {
+            const port = getSharedCodePort();
+            expect(port).toBeDefined();
+            // No client yet, so no readiness push has fired from a count change.
+            expect(s.readinessNotifyCount).toBe(0);
+
+            // A Node `ws` client sends no Origin header, which the code
+            // agent's allowlist permits (loopback / no-Origin baseline).
+            const client = new WebSocket(`ws://127.0.0.1:${port}`);
+            try {
+                await new Promise<void>((resolve, reject) => {
+                    client.once("open", () => resolve());
+                    client.once("error", reject);
+                });
+                // Connecting flips the cached readiness toward `ready`.
+                await waitFor(() => s.readinessNotifyCount >= 1);
+                const afterConnect = s.readinessNotifyCount;
+                expect(afterConnect).toBeGreaterThanOrEqual(1);
+
+                // Disconnecting flips it back toward `setup-required`.
+                client.close();
+                await waitFor(() => s.readinessNotifyCount > afterConnect);
+                expect(s.readinessNotifyCount).toBeGreaterThan(afterConnect);
+            } finally {
+                // Double close is a no-op; guards against a thrown assertion
+                // leaking the socket.
+                client.close();
+            }
+        } finally {
+            await agent.updateAgentContext!(false, s.sessionContext, "code");
+            expect(getSharedCodePort()).toBeUndefined();
+        }
     });
 });
