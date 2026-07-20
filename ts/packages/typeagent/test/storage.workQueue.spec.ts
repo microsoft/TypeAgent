@@ -31,4 +31,57 @@ describe("storage.workQueue", () => {
         },
         timeoutMs,
     );
+    test(
+        "drainTask awaits async processors",
+        async () => {
+            const queuePath = testDirectoryPath("workQueueAwait");
+            await removeDir(queuePath);
+            const queue = await createWorkQueueFolder(queuePath, "tasks");
+            const tasks = ["One", "Two", "Three"];
+            for (const task of tasks) {
+                await queue.addTask(task);
+            }
+
+            let finished = 0;
+            const successCount = await queue.drainTask(1, async () => {
+                await new Promise((resolve) => setTimeout(resolve, 10));
+                finished++;
+            });
+
+            // drainTask must not resolve until every async processor settles,
+            // so the reported success count matches work that actually finished.
+            expect(finished).toBe(tasks.length);
+            expect(successCount).toBe(tasks.length);
+            expect(await queue.count()).toBe(0);
+        },
+        timeoutMs,
+    );
+    test(
+        "drainTask routes rejected processors to onError",
+        async () => {
+            const queuePath = testDirectoryPath("workQueueError");
+            await removeDir(queuePath);
+            const queue = await createWorkQueueFolder(queuePath, "tasks");
+            const tasks = ["ok1", "boom", "ok2"];
+            for (const task of tasks) {
+                await queue.addTask(task);
+            }
+
+            const errors: unknown[] = [];
+            queue.onError = (err) => errors.push(err);
+
+            const successCount = await queue.drainTask(1, async (task) => {
+                if (task === "boom") {
+                    throw new Error("processor failed");
+                }
+            });
+
+            // The throwing task must be caught and excluded from the success
+            // count rather than escaping as an unhandled rejection.
+            expect(errors).toHaveLength(1);
+            expect(successCount).toBe(tasks.length - 1);
+            expect(await queue.count()).toBe(0);
+        },
+        timeoutMs,
+    );
 });
