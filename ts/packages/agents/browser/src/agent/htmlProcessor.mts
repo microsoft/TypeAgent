@@ -9,7 +9,7 @@
 import {
     CrossContextHtmlReducer,
     createNodeHtmlReducer,
-} from "../common/crossContextHtmlReducer.js";
+} from "@typeagent/browser-control-rpc/htmlReducer";
 import {
     processHtmlContent,
     ProcessingOptions,

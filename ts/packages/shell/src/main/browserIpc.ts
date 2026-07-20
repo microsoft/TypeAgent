@@ -16,7 +16,7 @@ import { createRpc } from "@typeagent/agent-rpc/rpc";
 import type {
     BrowserControlInvokeFunctions,
     BrowserControlCallFunctions,
-} from "browser-typeagent/agent/types";
+} from "@typeagent/browser-control-rpc/types";
 import registerDebug from "debug";
 const debugBrowserIPC = registerDebug("typeagent:browser:ipc");
 const debugBrowserIPCError = registerDebug("typeagent:browser:ipc:error");
