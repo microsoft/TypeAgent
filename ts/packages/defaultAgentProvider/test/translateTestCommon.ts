@@ -108,12 +108,13 @@ const repeat = 5;
 const concurrency = 1;
 const embeddingCacheDir = path.join(os.tmpdir(), ".typeagent", "cache");
 
-// Agents that exist for compiled task flows (invoked explicitly by a flow),
-// not for direct request routing. Disable their schemas in the translate tests
-// so their generic actions (e.g. utility.webSearch / readFile) don't
-// out-compete the agents under test (browser.lookupAndAnswer, mcpfilesystem,
-// etc.). The product manifests are intentionally left untouched.
-const flowOnlySchemas = ["utility"];
+// Flow-only agent schemas turned off in these translation-stability tests via
+// `@config schema --off` (product manifests are left untouched): "utility"'s
+// generic actions (webSearch / readFile) otherwise out-compete the agents under
+// test (browser.lookupAndAnswer, mcpfilesystem). The reasoning escape hatch is
+// handled by execution.reasoning:"none" (below), NOT by disabling its schema —
+// disabling dispatcher.reasoning regressed unrelated player/mcpfs routing.
+const disabledSchemas = ["utility"];
 
 // Per-attempt Jest timeout budget for a single request translation.
 const perAttemptTimeoutMs = 30000;
@@ -243,16 +244,22 @@ export async function defineTranslateTest(
                             actions: false,
                             commands: ["dispatcher"],
                         },
-                        execution: { history: false }, // don't generate chat history, the test manually imports them
+                        // history: false - the test manually imports history.
+                        // reasoning: "none" - this is a translation-stability
+                        // test; the execution-time reasoning fallback otherwise
+                        // diverts dispatcher.clarify / unknown actions away from
+                        // executeActions, leaving commandResult.actions empty so
+                        // clarify expectations can never match.
+                        execution: { history: false, reasoning: "none" },
                         explainer: { enabled: false },
                         cache: { enabled: false },
                         embeddingCacheDir, // Cache the embedding to avoid recomputation.
                         collectCommandResult: true,
                     },
                 );
-                // Take flow-only agents out of the translation candidate set
-                // so they don't out-compete the agents under test.
-                for (const schema of flowOnlySchemas) {
+                // Take the flow-only schemas out of the translation candidate
+                // set (see disabledSchemas above).
+                for (const schema of disabledSchemas) {
                     checkResultError(
                         await awaitCommand(
                             dispatcher,
@@ -467,10 +474,22 @@ function checkPossibleMatch(
     action: TypeAgentAction,
     possibleMatch: PossibleMatch,
 ) {
+    // action.entities is resolved-reference metadata the translator may or may
+    // not attach run-to-run (e.g. a "grocery" list entity whose items facet
+    // reflects the current, history-dependent list contents). It is not part of
+    // the translated action shape most cases care about, so only assert it when
+    // the expected action explicitly specifies entities (e.g.
+    // translate-image-history-e2e.json). Otherwise drop it so its
+    // non-determinism can't cause spurious toEqual mismatches.
+    let actual = action;
+    if (possibleMatch.action.entities === undefined && action.entities) {
+        actual = { ...action };
+        delete actual.entities;
+    }
     if (possibleMatch.partial) {
-        expect(action).toMatchObject(possibleMatch.action);
+        expect(actual).toMatchObject(possibleMatch.action);
     } else {
-        expect(action).toEqual(possibleMatch.action);
+        expect(actual).toEqual(possibleMatch.action);
     }
 }
 

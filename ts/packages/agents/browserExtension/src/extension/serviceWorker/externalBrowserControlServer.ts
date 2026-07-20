@@ -12,6 +12,7 @@ import {
     BrowserControlCallFunctions,
     BrowserControlInvokeFunctions,
     BrowserSettings,
+    SearchProvider,
 } from "@typeagent/browser-control-rpc/types";
 import { showBadgeBusy, showBadgeHealthy } from "./ui";
 import { createContentScriptRpcClient } from "@typeagent/browser-control-rpc/contentScriptRpc/client";
@@ -65,6 +66,22 @@ function waitForTabComplete(
         chrome.tabs.onUpdated.addListener(handler);
     });
 }
+
+/**
+ * Returns true when a chrome.tabs.sendMessage rejection means no content
+ * script was listening in the target tab: either it hasn't been injected yet,
+ * or the tab was reloaded/replaced out from under us. These are the failures
+ * that injecting the content script and retrying can recover from.
+ */
+function isNoReceiverError(error: unknown): boolean {
+    const message =
+        typeof error === "string" ? error : ((error as any)?.message ?? "");
+    return (
+        message.includes("Could not establish connection") ||
+        message.includes("Receiving end does not exist")
+    );
+}
+
 export function createExternalBrowserServer(channel: RpcChannel) {
     const rpcMap = new Map<
         number,
@@ -91,6 +108,66 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         });
     }
 
+    /**
+     * Send a message to a tab's content script, injecting the content script
+     * and retrying with backoff when nothing is listening yet. This covers
+     * tabs that were open before the extension loaded, plus SPA/scripted
+     * navigations that don't pass through openWebPage's onUpdated 'complete'
+     * gate. Returns the content script's response, so it also works for
+     * request/response messages like read_page_content and get_image_url.
+     */
+    async function sendTabMessageWithInjection(
+        tabId: number,
+        message: any,
+        options: chrome.tabs.MessageSendOptions = {},
+    ): Promise<any> {
+        try {
+            return await chrome.tabs.sendMessage(tabId, message, options);
+        } catch (error) {
+            // A failure other than "no content script listening" won't be
+            // fixed by injecting and waiting, so surface it immediately.
+            if (!isNoReceiverError(error)) {
+                throw error;
+            }
+            let lastError: unknown = error;
+            try {
+                await injectContentScripts(tabId);
+                // Backoff in multiples of 200 ms (200, 400, 600, 800, 1000)
+                // to let the freshly-injected content script finish
+                // initializing. Max total wait ~3s before giving up.
+                for (let attempt = 1; attempt <= 5; attempt++) {
+                    await new Promise((r) => setTimeout(r, 200 * attempt));
+                    try {
+                        return await chrome.tabs.sendMessage(
+                            tabId,
+                            message,
+                            options,
+                        );
+                    } catch (retryError) {
+                        lastError = retryError;
+                        if (!isNoReceiverError(retryError)) {
+                            break;
+                        }
+                    }
+                }
+            } catch (injectError) {
+                lastError = injectError;
+            }
+            // Injecting + retrying still didn't reach a listener. The raw
+            // Chrome "Receiving end does not exist" is opaque, so wrap it with
+            // the tab and message to make the failure diagnosable. Most often
+            // the extension was rebuilt but not reloaded, or the active tab
+            // can't host a content script (chrome://, the web store, a PDF).
+            const detail =
+                lastError instanceof Error
+                    ? lastError.message
+                    : String(lastError);
+            throw new Error(
+                `Content script did not respond to '${message?.type ?? "message"}' on tab ${tabId}: ${detail}`,
+            );
+        }
+    }
+
     function getContentScriptRpc(tabId: number) {
         const entry = rpcMap.get(tabId);
         if (entry) {
@@ -104,66 +181,12 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         const contentScriptRpcChannel = createChannelAdapter(
             async (message, cb) => {
                 try {
-                    await chrome.tabs.sendMessage(
+                    await sendTabMessageWithInjection(
                         tabId,
                         { type: "rpc", message },
                         sendOptions,
                     );
-                } catch (error: any) {
-                    // If the content script isn't loaded, inject it and
-                    // retry with backoff. This still happens for SPA
-                    // navigations or scripted navigations that don't go
-                    // through openWebPage's onUpdated 'complete' gate.
-                    const isNoReceiver = (e: any) => {
-                        const m =
-                            typeof e === "string" ? e : (e?.message ?? "");
-                        return (
-                            m.includes("Could not establish connection") ||
-                            m.includes("Receiving end does not exist")
-                        );
-                    };
-                    if (isNoReceiver(error)) {
-                        let lastError: any = error;
-                        try {
-                            await injectContentScripts(tabId);
-                            // Backoff in multiples of 200 ms (200, 400,
-                            // 600, 800, 1000) to let the freshly-injected
-                            // content script finish initializing. Max
-                            // total wait ~3s before giving up.
-                            for (let attempt = 1; attempt <= 5; attempt++) {
-                                await new Promise((r) =>
-                                    setTimeout(r, 200 * attempt),
-                                );
-                                try {
-                                    await chrome.tabs.sendMessage(
-                                        tabId,
-                                        { type: "rpc", message },
-                                        sendOptions,
-                                    );
-                                    return;
-                                } catch (retryError: any) {
-                                    lastError = retryError;
-                                    // Stop retrying if the error is not
-                                    // a "no receiver" error — different
-                                    // class of failure won't be fixed by
-                                    // waiting longer.
-                                    if (!isNoReceiver(retryError)) {
-                                        break;
-                                    }
-                                }
-                            }
-                        } catch (injectError) {
-                            lastError = injectError;
-                        }
-                        console.error(
-                            "Error after injecting content script:",
-                            lastError,
-                        );
-                        if (cb) {
-                            cb(lastError as Error);
-                        }
-                        return;
-                    }
+                } catch (error) {
                     console.error(
                         "Error sending message to content script:",
                         error,
@@ -451,39 +474,54 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         search: async (
             query?: string,
             sites?: string[],
-            searchProvider?: any,
+            searchProvider?: SearchProvider,
             options?: { waitForPageLoad?: boolean; newTab?: boolean },
         ): Promise<URL> => {
-            // Use the search provider URL template if provided
-            let searchUrl: string;
-            if (searchProvider?.url) {
-                searchUrl = searchProvider.url.replace(
-                    "%s",
-                    encodeURIComponent(query || ""),
-                );
-            } else {
-                // Default to Bing search
-                searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query || "")}`;
-            }
-
-            // If sites are specified, add site: operator to the query
+            // Scope the query to specific sites before building the URL,
+            // matching the inline browser's behavior. Appending `site:` to
+            // the query (rather than a second `q=` param) avoids emitting a
+            // malformed URL with two query parameters.
+            let scopedQuery = query ?? "";
             if (sites && sites.length > 0) {
-                const siteQuery = sites.map((s) => `site:${s}`).join(" OR ");
-                const separator = searchUrl.includes("?") ? "&" : "?";
-                searchUrl =
-                    searchUrl +
-                    separator +
-                    `q=${encodeURIComponent(`${query} (${siteQuery})`)}`;
+                for (const site of sites) {
+                    scopedQuery += ` site:${site}`;
+                }
             }
 
-            const disposition = options?.newTab ? "NEW_TAB" : "CURRENT_TAB";
-            await chrome.tabs.update({ url: searchUrl });
+            // Build the search URL from the active provider, defaulting to Bing.
+            const searchUrl = searchProvider?.url
+                ? searchProvider.url.replace(
+                      "%s",
+                      encodeURIComponent(scopedQuery),
+                  )
+                : `https://www.bing.com/search?q=${encodeURIComponent(scopedQuery)}`;
+
+            // Reuse the active tab unless a new tab was requested. Register
+            // the load-complete listener BEFORE navigating (mirrors
+            // openWebPage) so callers that pass waitForPageLoad - e.g.
+            // lookupAndAnswer - read page content only after the results
+            // have rendered instead of racing the pending navigation.
+            const activeTab = options?.newTab
+                ? undefined
+                : await getActiveTab();
+            if (activeTab?.id !== undefined) {
+                const ready = options?.waitForPageLoad
+                    ? waitForTabComplete(activeTab.id)
+                    : undefined;
+                await chrome.tabs.update(activeTab.id, { url: searchUrl });
+                await ready;
+            } else {
+                const created = await chrome.tabs.create({ url: searchUrl });
+                if (created.id !== undefined && options?.waitForPageLoad) {
+                    await waitForTabComplete(created.id);
+                }
+            }
 
             return new URL(searchUrl);
         },
         readPageContent: async () => {
             const targetTab = await getActiveTab();
-            const article = await chrome.tabs.sendMessage(targetTab?.id!, {
+            const article = await sendTabMessageWithInjection(targetTab?.id!, {
                 type: "read_page_content",
             });
 
@@ -518,7 +556,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         },
         getPageTextContent: async (): Promise<string> => {
             const targetTab = await getActiveTab();
-            const article = await chrome.tabs.sendMessage(targetTab?.id!, {
+            const article = await sendTabMessageWithInjection(targetTab?.id!, {
                 type: "read_page_content",
             });
 
@@ -626,7 +664,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         ): Promise<string> => {
             const targetTab = await ensureActiveTab();
 
-            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+            const response = await sendTabMessageWithInjection(targetTab.id!, {
                 type: "get_image_url",
                 cssSelector,
                 imageDescription,

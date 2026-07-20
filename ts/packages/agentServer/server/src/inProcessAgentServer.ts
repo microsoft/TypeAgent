@@ -78,7 +78,7 @@ export async function createInProcessAgentServer(
     // Pre-warm so the first join is fast and conversation metadata exists.
     await conversationManager.prewarmMostRecentConversation();
 
-    const handler = createAgentServerConnectionHandler({
+    const { handler } = createAgentServerConnectionHandler({
         conversationManager,
         shutdown: options.shutdown,
         getUserIdentity: options.getUserIdentity ?? defaultUserIdentity,

@@ -94,7 +94,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Full history so the --since baseline (last README.AUTOGEN.md
           # commit) resolves and the diff against it is complete.

@@ -81,8 +81,12 @@ clientIO.notify(
 ## Lifecycle
 
 Ephemeral: not written to the DisplayLog, so it does not replay on rejoin; a
-fresh connect re-sends it (once per connection) while the condition holds.
-Cleared on `ChatPanel.clear()` (conversation switch / reconnect replay).
+fresh connect re-sends it (once per connection) while the condition holds, and
+a (re)connect to a server that is _not_ stale retracts it — the server sends a
+`dismiss` for the `stale-build` id on join, so a pill left over from a
+pre-restart connection is cleared even though the fresh successor never
+re-pushes. Also cleared on `ChatPanel.clear()` (conversation switch / explicit
+replay).
 
 ## Test on demand
 

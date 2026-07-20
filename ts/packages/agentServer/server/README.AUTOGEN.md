@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=3008059e45af46e7278e220bd01bbfd401b6b2acbf4d2359d3a3decc9546617f -->
+<!-- AUTOGEN:DOCS:HASH:sha256=dcdaaf81ac5b3038b25930f38dfdf7062ab6282ae8873115aa860e5563ec1988 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-server — AI-generated documentation
@@ -12,13 +12,13 @@
 
 ## Overview
 
-The `agent-server` package is a TypeScript library that implements a long-running WebSocket server for hosting TypeAgent dispatchers. It serves as a central hub for managing client connections, facilitating communication between clients and agents, and orchestrating conversation management. The server is designed to handle multiple clients and conversations simultaneously, with features such as conversation persistence, idle timeouts, and ephemeral conversation cleanup.
+The `agent-server` package is a TypeScript library that implements a long-running WebSocket server for hosting TypeAgent dispatchers. It acts as a central hub for managing client connections, orchestrating conversations, and facilitating communication between clients and agents. The server supports multiple clients and conversations simultaneously, with features like conversation persistence, idle timeouts, and ephemeral conversation cleanup.
 
 ## What it does
 
-The `agent-server` provides the following key functionalities:
+The `agent-server` provides the following core functionalities:
 
-- **WebSocket Server**: Hosts a WebSocket server that listens for client connections and facilitates communication between clients and agents.
+- **WebSocket Server**: Hosts a WebSocket server to manage client connections and enable communication between clients and agents.
 - **Conversation Management**: Supports actions such as `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation`. These actions allow clients to manage and interact with conversations.
 - **Server Control**: Includes a `shutdown` action for graceful server termination.
 - **Idle Timeout**: Configurable idle timeout to automatically shut down the server after a specified period of inactivity.
@@ -36,6 +36,7 @@ To set up the `agent-server`, you need to configure the following environment va
 - `SPEECH_SDK_KEY`: The API key for the speech SDK. Refer to the hand-written README for details on obtaining this value.
 - `SPEECH_SDK_REGION`: The region for the speech SDK. Refer to the hand-written README for details on obtaining this value.
 - `TYPEAGENT_DEV`: A flag to enable development mode. Set this to `true` for development purposes.
+- `TYPEAGENT_SUPERVISED`: A flag to enable supervised mode for the server.
 - `TYPEAGENT_USER_NAME`: The username for the TypeAgent user. This can override the default OS user name.
 - `XDG_CONFIG_HOME`: Specifies the base directory for configuration files. If not set, the default is typically `~/.config`.
 
@@ -43,7 +44,7 @@ These variables can be set in your environment or defined in a `.env` file in th
 
 ## Key Files
 
-The `agent-server` package is structured into several key files, each with specific responsibilities:
+The `agent-server` package is organized into several key files, each responsible for specific functionality:
 
 ### [server.ts](./src/server.ts) — WebSocket Listener
 
@@ -131,6 +132,7 @@ By following these guidelines, you can effectively extend the `agent-server` pac
 Workspace:
 
 - [@typeagent/agent-rpc](../../../packages/agentRpc/README.md)
+- [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-client](../../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../../packages/agentServer/protocol/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
@@ -150,22 +152,23 @@ External: `@azure/identity`, `better-sqlite3`, `debug`, `dotenv`, `ws`
 
 ### Files of interest
 
-`./src/connectionHandler.ts`, `./src/conversationManager.ts`, `./src/copilot/displayLogSynthesis.ts`, …and 12 more under `./src/`.
+`./src/connectionHandler.ts`, `./src/banner.ts`, `./src/conversationManager.ts`, …and 13 more under `./src/`.
 
 ### Environment variables
 
-_7 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_8 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `AGENT_SERVER_PORT`
 - `SPEECH_SDK_ENDPOINT`
 - `SPEECH_SDK_KEY`
 - `SPEECH_SDK_REGION`
 - `TYPEAGENT_DEV`
+- `TYPEAGENT_SUPERVISED`
 - `TYPEAGENT_USER_NAME`
 - `XDG_CONFIG_HOME`
 
 ---
 
-_Auto-generated against commit `66ead8985b850f2775c9b1a96cb7de1d08e2aee1` on `2026-07-18T01:38:20.033Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
+_Auto-generated against commit `d9ee555d43867e97462e8fa147f7ef73b8da05ec` on `2026-07-19T20:27:13.071Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

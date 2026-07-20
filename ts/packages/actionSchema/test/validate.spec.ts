@@ -109,3 +109,35 @@ describe("Action Schema Creator", () => {
         });
     });
 });
+
+describe("result reference placeholder", () => {
+    // A { "$result": "<id>" } reference stands in for a value produced by an
+    // earlier action and is resolved at execution time, so it validates against
+    // any expected type.
+    const ref = { $result: "favoritesList" };
+    const schemas: [string, SchemaType][] = [
+        ["string", sc.string()],
+        ["number", sc.number()],
+        ["boolean", sc.boolean()],
+        ["object", obj],
+        ["array of objects", sc.array(obj)],
+        ["string union", sc.string("a", "b")],
+    ];
+    it.each(schemas)("accepted against %s", (_name, schema) => {
+        validateSchema("param", schema, ref);
+    });
+
+    it("only the exact { $result: string } shape bypasses validation", () => {
+        // A non-string id, an extra key, or an array are NOT references and must
+        // validate normally (and thus throw against a string schema).
+        expect(() =>
+            validateSchema("param", sc.string(), { $result: 1 }),
+        ).toThrow();
+        expect(() =>
+            validateSchema("param", sc.string(), { $result: "x", extra: 1 }),
+        ).toThrow();
+        expect(() =>
+            validateSchema("param", sc.string(), ["$result"]),
+        ).toThrow();
+    });
+});

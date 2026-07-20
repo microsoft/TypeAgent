@@ -92,6 +92,12 @@ overrides:
   fast-xml-parser: ">=5.5.7 <6.0.0"
   hono: ">=4.12.8 <5.0.0"
   http-proxy-agent: ">=7.0.0 <8.0.0"
+  # Pin the Model Context Protocol SDK to 1.26.0. 1.29.0 added explicit `types`
+  # conditions to its `exports` that resolve the `./client/*.js` deep-import
+  # style (used across this repo) to a non-existent `*.js.d.ts`, breaking `tsc`
+  # under Node16 resolution; the no-extension alternative then breaks ESM
+  # runtime. Every package already declares `^1.26.0`; this only prevents drift.
+  "@modelcontextprotocol/sdk": "1.26.0"
   node-forge: ">=1.4.0 <2.0.0"
   node-gyp: "^12.2.0"
   "router>path-to-regexp": ">=8.4.0 <9.0.0"

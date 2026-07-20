@@ -428,6 +428,32 @@ export function configToTree(config: Config): ConfigTree {
         if (Object.keys(af).length > 0) tree.azureFoundry = af;
     }
 
+    if (config.azureAISearch) {
+        const s = config.azureAISearch;
+        const ais: ConfigTree = {};
+        const keys = [
+            "mode",
+            "endpoint",
+            "knowledgeBase",
+            "apiKey",
+            "bearerToken",
+            "apiVersion",
+            "outputMode",
+            "reasoningEffort",
+            "aoaiEndpoint",
+            "aoaiDeployment",
+            "aoaiModel",
+            "aoaiApiKey",
+            "webKnowledgeSource",
+            "webKnowledgeSourceDomains",
+        ] as const;
+        for (const k of keys) {
+            const v = s[k];
+            if (v !== undefined) ais[k] = v;
+        }
+        if (Object.keys(ais).length > 0) tree.azureAISearch = ais;
+    }
+
     if (config.reasoning) {
         const r: ConfigTree = {};
         if (config.reasoning.timeoutMs !== undefined)
@@ -495,6 +521,7 @@ const TYPED_SECTION_KEYS = new Set([
     "storage",
     "vault",
     "azureFoundry",
+    "azureAISearch",
     "reasoning",
     "copilot",
     "modelProvider",
@@ -990,6 +1017,30 @@ function emitAzureFoundry(node: unknown, out: FlatEnv): void {
     }
 }
 
+function emitAzureAISearch(node: unknown, out: FlatEnv): void {
+    const s = asObject(node, "azureAISearch");
+    const map: Array<[string, string]> = [
+        ["mode", "AZURE_AI_SEARCH_LOOKUP_MODE"],
+        ["endpoint", "AZURE_AI_SEARCH_ENDPOINT"],
+        ["knowledgeBase", "AZURE_AI_SEARCH_KNOWLEDGE_BASE"],
+        ["apiKey", "AZURE_AI_SEARCH_API_KEY"],
+        ["bearerToken", "AZURE_AI_SEARCH_BEARER_TOKEN"],
+        ["apiVersion", "AZURE_AI_SEARCH_API_VERSION"],
+        ["outputMode", "AZURE_AI_SEARCH_OUTPUT_MODE"],
+        ["reasoningEffort", "AZURE_AI_SEARCH_REASONING_EFFORT"],
+        ["aoaiEndpoint", "AZURE_AI_SEARCH_AOAI_ENDPOINT"],
+        ["aoaiDeployment", "AZURE_AI_SEARCH_AOAI_DEPLOYMENT"],
+        ["aoaiModel", "AZURE_AI_SEARCH_AOAI_MODEL"],
+        ["aoaiApiKey", "AZURE_AI_SEARCH_AOAI_API_KEY"],
+        ["webKnowledgeSource", "AZURE_AI_SEARCH_WEB_KS_NAME"],
+        ["webKnowledgeSourceDomains", "AZURE_AI_SEARCH_WEB_KS_DOMAINS"],
+    ];
+    for (const [yamlKey, envKey] of map) {
+        if (s[yamlKey] !== undefined)
+            out[envKey] = asString(s[yamlKey], `azureAISearch.${yamlKey}`);
+    }
+}
+
 function emitModelProvider(node: unknown, out: FlatEnv): void {
     if (typeof node !== "string") {
         throw new Error(
@@ -1105,6 +1156,9 @@ export function typedSectionToFlat(key: string, node: unknown): FlatEnv {
             break;
         case "azureFoundry":
             emitAzureFoundry(node, out);
+            break;
+        case "azureAISearch":
+            emitAzureAISearch(node, out);
             break;
         case "reasoning":
             emitReasoning(node, out);

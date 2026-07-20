@@ -571,6 +571,7 @@ export async function executeActions(
                     ...result.resultEntity,
                     sourceAppAgentName: appAgentName,
                 },
+                result.resultValue,
             );
         }
 

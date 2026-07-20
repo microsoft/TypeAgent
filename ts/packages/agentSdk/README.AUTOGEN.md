@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=aa76f672a8bdc8c6d4809b4689989b4852919ea06795a53708972959a32ddbc1 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=48105684a9b92b1ff4ef770068d9d1fd2f61051473391ae08f643e765f5a933f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-sdk — AI-generated documentation
@@ -12,16 +12,16 @@
 
 ## Overview
 
-The `@typeagent/agent-sdk` package provides the foundational interfaces, types, and utilities for building Dispatcher Agents within the TypeAgent ecosystem. It is a core library that enables developers to create agents capable of handling user commands, executing actions, and managing their lifecycle and context. This package is widely used across the TypeAgent ecosystem, serving as a critical dependency for various tools and agents.
+The `@typeagent/agent-sdk` package is a foundational TypeScript library in the TypeAgent ecosystem. It provides the core interfaces, types, and utilities required to build and manage Dispatcher Agents. These agents are responsible for handling user commands, executing actions, and managing their lifecycle and context. The package is widely used across the TypeAgent ecosystem and serves as a critical dependency for numerous tools and agents.
 
 ## What it does
 
-The `@typeagent/agent-sdk` package facilitates the development of Dispatcher Agents by providing a comprehensive set of features and utilities:
+The `@typeagent/agent-sdk` package enables developers to create and manage Dispatcher Agents by offering a comprehensive set of features:
 
 ### Manifest and Instantiation
 
-- **Manifest**: The `AppAgentManifest` defines metadata about the agent, such as its emoji, description, and translator configuration. This manifest is the first point of interaction between the Dispatcher and the agent.
-- **Instantiation Entry Point**: The `AppAgent` interface is the core contract that agents implement. The Dispatcher uses the `instantiate` function exported from the `./agent/handlers` module to create an instance of the agent.
+- **Manifest**: The `AppAgentManifest` defines the agent's metadata, including its emoji, description, and translator configuration. This manifest is the first interaction point between the Dispatcher and the agent.
+- **Instantiation Entry Point**: The `AppAgent` interface is the primary contract that agents implement. The Dispatcher uses the `instantiate` function exported from the `./agent/handlers` module to create an instance of the agent.
 
 ### Lifecycle Management
 
@@ -182,6 +182,6 @@ External: `debug`, `type-fest`
 
 ---
 
-_Auto-generated against commit `c97eb42726a9196c7ac72138faa0777c5cbc1aab` on `2026-07-18T09:48:36.613Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
+_Auto-generated against commit `493ac5696974a3cab9c5528399a245063e7eb727` on `2026-07-18T23:55:00.731Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

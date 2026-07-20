@@ -1094,6 +1094,12 @@ async function finalizeMultipleActions(
             actions.push(finalizedActions);
         }
     }
+    // Deferred "next" requests: each becomes a pendingRequestAction that is
+    // regenerated once its referenced result is available.
+    for (const pending of action.parameters.pendingRequests ?? []) {
+        context.sessionContext.agentContext.currentAbortSignal?.throwIfAborted();
+        actions.push(createPendingRequestAction(pending));
+    }
     return actions;
 }
 
