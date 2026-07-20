@@ -3,6 +3,28 @@
 
 import { collections } from "../src/index.js";
 
+describe("collections.MultiMap", () => {
+    test("addUnique with comparer inserts each value once", () => {
+        const map = new collections.MultiMap<string, { id: number }>();
+        const sameId = (x: { id: number }, y: { id: number }) => x.id === y.id;
+
+        map.addUnique("key", { id: 1 }, sameId);
+        map.addUnique("key", { id: 2 }, sameId);
+        map.addUnique("key", { id: 2 }, sameId);
+
+        expect(map.get("key")).toEqual([{ id: 1 }, { id: 2 }]);
+    });
+
+    test("addUnique without comparer keeps primitive values unique", () => {
+        const map = new collections.MultiMap<string, number>();
+
+        map.addUnique("key", 1);
+        map.addUnique("key", 1);
+
+        expect(map.get("key")).toEqual([1]);
+    });
+});
+
 describe("collections.array", () => {
     test("getInRange", () => {
         const items = [];
