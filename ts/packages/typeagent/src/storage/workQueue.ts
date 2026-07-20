@@ -92,7 +92,7 @@ export async function createWorkQueueFolder(
             concurrency,
             async (item, index, total) => {
                 const task = await readJsonFile(item);
-                await processor(task, index, total);
+                processor(task, index, total);
             },
             maxItems,
             pauseMs,
