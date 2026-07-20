@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { BrowserControl, SearchProvider } from "../common/browserControl.mjs";
+import {
+    BrowserControl,
+    SearchProvider,
+} from "@typeagent/browser-control-rpc/types";
 import { ExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import type { AiSearchLookupMode } from "./lookup/aiSearchLookup.mjs";
 import { ChildProcess } from "child_process";

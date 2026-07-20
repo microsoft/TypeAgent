@@ -11,7 +11,7 @@ import {
 } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { BrowserActionContext } from "./browserActions.mjs";
-import { WebAgentMessage } from "../common/webAgentMessageTypes.mjs";
+import { WebAgentMessage } from "@typeagent/browser-control-rpc/webAgentMessageTypes";
 
 import registerDebug from "debug";
 import { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
