@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c97e0c3404b5430bcb9ddac5763968954fb7bd1703ecc9d277884773ecdb3167 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=defa207de402d9d4238d34e6cc81391fe34893bb6f3a744d7e763170a4a31375 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent — AI-generated documentation
@@ -80,7 +80,7 @@ By following these steps, you can effectively extend the `typeagent` package and
 
 ### Entry points
 
-- default → `./dist/index.js` _(not found on disk)_
+- default → [./dist/index.js](./dist/index.js)
 
 ### Dependencies
 
@@ -111,6 +111,6 @@ External: `async`, `cheerio`, `debug`, `typechat`, `typescript`
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `39a849889253ec3158c06e840286e7d5938a43c8` on `2026-07-20T17:56:07.959Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
