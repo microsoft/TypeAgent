@@ -13,6 +13,10 @@ describe("collections.MultiMap", () => {
         map.addUnique("key", { id: 2 }, sameId);
 
         expect(map.get("key")).toEqual([{ id: 1 }, { id: 2 }]);
+
+        map.addUnique("key", { id: 3 }, sameId);
+
+        expect(map.get("key")).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
     });
 
     test("addUnique without comparer keeps primitive values unique", () => {
