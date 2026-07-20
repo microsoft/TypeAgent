@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c97e0c3404b5430bcb9ddac5763968954fb7bd1703ecc9d277884773ecdb3167 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=51a8bd8b53680b7a76e0b13859b481a1da5c005bee9b30590002d8164b3ec47f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent — AI-generated documentation
@@ -16,7 +16,7 @@ The `typeagent` package is a sample library designed to support the development 
 
 ## What it does
 
-The `typeagent` package provides a wide range of utilities and components that are essential for building and running agents. These include:
+The `typeagent` package offers a variety of utilities and components that are essential for building and running agents. These include:
 
 - **Async Processing**: Functions like `mapAsync` in [arrayAsync.ts](./src/arrayAsync.ts) and `callWithRetry` in [async.ts](./src/async.ts) enable efficient handling of concurrent and retryable asynchronous operations.
 - **Vectors and Embeddings**: Tools for managing vector operations and embeddings, such as `vectorIndex` and `semanticMap`, are located in the `vector` directory. These utilities are useful for tasks like similarity searches and semantic indexing.
@@ -80,7 +80,7 @@ By following these steps, you can effectively extend the `typeagent` package and
 
 ### Entry points
 
-- default → `./dist/index.js` _(not found on disk)_
+- default → [./dist/index.js](./dist/index.js)
 
 ### Dependencies
 
@@ -111,6 +111,6 @@ External: `async`, `cheerio`, `debug`, `typechat`, `typescript`
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `cc00de21eede9683b099f479dc2f31cac2abb5d9` on `2026-07-20T17:44:18.759Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
