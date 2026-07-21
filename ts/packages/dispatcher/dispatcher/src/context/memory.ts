@@ -17,6 +17,7 @@ import type {
     ActionContext,
     ActionResult,
     ActionResultActivityContext,
+    AppAction,
     Entity,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
@@ -134,6 +135,7 @@ export function addResultToMemory(
     entities?: Entity[],
     additionalInstructions?: string[],
     activityContext?: ActionResultActivityContext,
+    action?: AppAction,
 ) {
     context.chatHistory.addAssistantEntry(
         message,
@@ -141,6 +143,7 @@ export function addResultToMemory(
         entities,
         additionalInstructions,
         activityContext,
+        action,
     );
 
     if (context.actionResultKnowledgeExtraction) {
@@ -216,6 +219,7 @@ export function addActionResultToMemory(
             combinedEntities,
             result.additionalInstructions,
             result.activityContext,
+            executableAction.action,
         );
     }
 }
