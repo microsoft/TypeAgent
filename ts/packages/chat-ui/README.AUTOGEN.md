@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d8430538e64a37606c4ce524d9103b2cc75302e1c9e5845804f7dc526ba1ee3c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=96fdd92c82f0f7184f4cc4e918fbfc16c26aeaaf8ec49d8db56d73f142910935 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-ui — AI-generated documentation
@@ -16,12 +16,12 @@ The `chat-ui` package provides a shared, framework-free chat user interface for 
 
 ## What it does
 
-The `chat-ui` package offers a comprehensive set of features to support dynamic and interactive chat interfaces:
+The `chat-ui` package offers a range of features to support dynamic and interactive chat interfaces:
 
-- **ChatPanel**: The core component for rendering the chat interface. It provides methods for:
+- **ChatPanel**: The primary component for rendering the chat interface. It supports:
 
-  - Adding user and agent messages using `addAgentMessage`.
-  - Updating display metadata with `setDisplayInfo`.
+  - Adding user and agent messages with `addAgentMessage`.
+  - Updating display metadata using `setDisplayInfo`.
   - Replaying historical chat entries via `replayHistory`.
   - Streaming updates for dynamic content display.
 
@@ -29,7 +29,7 @@ The `chat-ui` package offers a comprehensive set of features to support dynamic 
 
 - **PartialCompletion**: Integrates with the `@typeagent/completion-ui` package to handle command completions, including input updates, acceptance, and dismissal.
 
-- **Connection Status Management**: A shared model and UI for displaying the connection status between the chat client and the server. This includes reconnect options and error handling.
+- **Connection Status Management**: Provides a shared model and UI for displaying the connection status between the chat client and the server. This includes reconnect options and error handling.
 
 - **PlatformAdapter**: Abstracts platform-specific behaviors, such as handling link clicks and settings, to ensure compatibility across different environments.
 
@@ -56,7 +56,7 @@ For additional details on usage and integration, refer to the hand-written READM
 
 ## Key Files
 
-The `chat-ui` package is structured into several key files, each responsible for specific functionality:
+The `chat-ui` package is organized into several key files, each responsible for specific functionality:
 
 - **[index.ts](./src/index.ts)**: The main entry point, exporting the package's primary components and utilities.
 - **[chatPanel.ts](./src/chatPanel.ts)**: Implements the `ChatPanel` component, which is the core of the chat UI. It handles user input, agent messages, and display updates.
@@ -108,6 +108,7 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ### Used by
 
+- [@typeagent/browser-extension](../../packages/agents/browserExtension/README.md)
 - [agent-shell](../../packages/shell/README.md)
 - [browser-typeagent](../../packages/agents/browser/README.md)
 - visualstudio-extension-webview
@@ -119,6 +120,6 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ---
 
-_Auto-generated against commit `d9ee555d43867e97462e8fa147f7ef73b8da05ec` on `2026-07-19T20:27:13.071Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `f22a17dadf56cb37905b665aad3c062a4d39a0e8` on `2026-07-21T08:50:15.658Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
