@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=96fdd92c82f0f7184f4cc4e918fbfc16c26aeaaf8ec49d8db56d73f142910935 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=662d8456f5c043e23268a20fab6825320688af212176e17d8366f32449c95fe1 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-ui — AI-generated documentation
@@ -16,12 +16,12 @@ The `chat-ui` package provides a shared, framework-free chat user interface for 
 
 ## What it does
 
-The `chat-ui` package offers a range of features to support dynamic and interactive chat interfaces:
+The `chat-ui` package is a comprehensive library for building and managing chat interfaces. Its primary features include:
 
-- **ChatPanel**: The primary component for rendering the chat interface. It supports:
+- **ChatPanel**: The core component for rendering the chat interface. It supports:
 
-  - Adding user and agent messages with `addAgentMessage`.
-  - Updating display metadata using `setDisplayInfo`.
+  - Adding user and agent messages using `addAgentMessage`.
+  - Updating display metadata with `setDisplayInfo`.
   - Replaying historical chat entries via `replayHistory`.
   - Streaming updates for dynamic content display.
 
@@ -35,7 +35,7 @@ The `chat-ui` package offers a range of features to support dynamic and interact
 
 - **Shared Styles**: A CSS file (`styles/chat.css`) is included to provide a consistent appearance for the chat UI across all host applications.
 
-The package is used by several TypeAgent components, such as the VS Code shell, the browser extension, and the Visual Studio extension webview.
+The package is utilized by several TypeAgent components, such as the VS Code shell, the browser extension, and the Visual Studio extension webview, ensuring a unified user experience across these platforms.
 
 ## Setup
 
@@ -120,6 +120,6 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ---
 
-_Auto-generated against commit `f22a17dadf56cb37905b665aad3c062a4d39a0e8` on `2026-07-21T08:50:15.658Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `17ffbd73665bd7b4aa7ead4f43e8dcb298a62700` on `2026-07-21T19:31:32.401Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
