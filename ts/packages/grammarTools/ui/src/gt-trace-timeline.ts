@@ -2,8 +2,10 @@
 // Licensed under the MIT License.
 
 import { LitElement, html, css, nothing } from "lit";
+import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type {
+    GrammarDebugInfo,
     LoadedGrammar,
     MatchTrace,
     TraceEvent,
@@ -42,21 +44,23 @@ const EVENT_LABELS: Record<string, string> = {
     backtrack: "back",
 };
 
-const EVENT_COLORS: Record<string, string> = {
-    ruleEntered: "var(--vscode-editorInfo-foreground, #3794ff)",
-    ruleExited: "var(--vscode-editorInfo-foreground, #3794ff)",
-    partAttempted: "var(--vscode-descriptionForeground, #9d9d9d)",
-    partMatched: "#4ec9b0",
-    partFailed: "var(--vscode-errorForeground, #f48771)",
-    backtrack: "var(--vscode-editorWarning-foreground, #cca700)",
-};
-
 interface DerivedTraceData {
     trace: MatchTrace;
     depths: number[];
     groupSize: number[];
     attemptPosForEvent: number[];
     onSuccessPath: Set<number>;
+}
+
+/** One event as laid out for the table: the event, its row index, indent depth,
+ *  group size (>0 for a ruleEntered with collapsible children), and the input
+ *  position carried over from the preceding partAttempted. */
+interface VisibleEvent {
+    event: TraceEvent;
+    index: number;
+    depth: number;
+    groupSize: number;
+    attemptPos?: number;
 }
 
 /**
@@ -249,6 +253,29 @@ export class GtTraceTimeline extends LitElement {
                 font-size: 0.9em;
                 color: var(--vscode-descriptionForeground, #9d9d9d);
             }
+            .evk-ruleEntered,
+            .evk-ruleExited {
+                color: var(--vscode-editorInfo-foreground, #3794ff);
+            }
+            .evk-partAttempted {
+                color: var(--vscode-descriptionForeground, #9d9d9d);
+            }
+            .evk-partMatched {
+                color: #4ec9b0;
+            }
+            .evk-partFailed {
+                color: var(--vscode-errorForeground, #f48771);
+            }
+            .evk-backtrack {
+                color: var(--vscode-editorWarning-foreground, #cca700);
+            }
+            .indent-unit {
+                display: inline-block;
+                width: 12px;
+            }
+            .status-line {
+                padding: 8px;
+            }
         `,
     ];
 
@@ -263,6 +290,19 @@ export class GtTraceTimeline extends LitElement {
 
     @property({ attribute: false })
     onSourceClick: ((loc: SourceLocation) => void) | undefined;
+
+    /**
+     * Display-only inputs. When set, the component renders this stored trace
+     * directly and never recomputes via the backend: the input box, match-policy
+     * options, and Trace button are hidden. Source jumps resolve through
+     * displayDebugInfo instead of a live grammar, so a persisted trace can be
+     * shown with no grammar-tools backend or live grammar present.
+     */
+    @property({ attribute: false })
+    displayTrace: MatchTrace | undefined;
+
+    @property({ attribute: false })
+    displayDebugInfo: GrammarDebugInfo | undefined;
 
     @state()
     private _input: string = "";
@@ -313,6 +353,36 @@ export class GtTraceTimeline extends LitElement {
         if (!this._initialized && this.initialInput) {
             this._input = this.initialInput;
             this._initialized = true;
+        }
+    }
+
+    /** True when the component shows a supplied stored trace instead of running
+     *  its own live match. */
+    private get _readOnly(): boolean {
+        return this.displayTrace !== undefined;
+    }
+
+    /** The trace currently rendered: the supplied stored one in display-only
+     *  mode, otherwise the one this component computed via the backend. */
+    private get _activeTrace(): MatchTrace | undefined {
+        return this.displayTrace ?? this._trace;
+    }
+
+    /** The debug info used to map events to source spans and part labels: the
+     *  supplied serialized one in display-only mode, otherwise the live
+     *  grammar's. */
+    private get _activeDebugInfo(): GrammarDebugInfo | undefined {
+        return this._readOnly ? this.displayDebugInfo : this.grammar?.debugInfo;
+    }
+
+    override willUpdate(changed: PropertyValues<this>): void {
+        // A new stored trace is a fresh table: drop selection and expansion
+        // state that referenced the previous trace's row indices.
+        if (changed.has("displayTrace")) {
+            this._selectedRow = -1;
+            this._hoveredRow = -1;
+            this._expandedRows = new Set();
+            this._collapsedGroups = new Set();
         }
     }
 
@@ -370,18 +440,13 @@ export class GtTraceTimeline extends LitElement {
         this._collapsedGroups = next;
     }
 
-    private _visibleEvents(): Array<{
-        event: TraceEvent;
-        index: number;
-        depth: number;
-        groupSize: number; // >0 for ruleEntered with children
-        attemptPos?: number; // inputPos from preceding partAttempted
-    }> {
-        if (!this._trace) return [];
+    private _visibleEvents(): VisibleEvent[] {
+        const trace = this._activeTrace;
+        if (!trace) return [];
         const derived = this._derivedTraceData();
         const { depths, groupSize, attemptPosForEvent, onSuccessPath } =
             derived;
-        const events = this._trace.events;
+        const events = trace.events;
         const n = events.length;
 
         // Build the hidden set from collapsed groups.
@@ -423,10 +488,10 @@ export class GtTraceTimeline extends LitElement {
      */
     private _derivedTraceData(): DerivedTraceData {
         const cached = this._derivedCache;
-        if (cached !== undefined && cached.trace === this._trace) {
+        if (cached !== undefined && cached.trace === this._activeTrace) {
             return cached;
         }
-        const events = this._trace!.events;
+        const events = this._activeTrace!.events;
         const n = events.length;
 
         // Compute depth for every event.  ruleEntered carries an
@@ -523,7 +588,7 @@ export class GtTraceTimeline extends LitElement {
         }
 
         this._derivedCache = {
-            trace: this._trace!,
+            trace: this._activeTrace!,
             depths,
             groupSize,
             attemptPosForEvent,
@@ -533,8 +598,9 @@ export class GtTraceTimeline extends LitElement {
     }
 
     private _highlightRange(): { start: number; end: number } | undefined {
-        if (!this._trace || this._hoveredRow < 0) return undefined;
-        const event = this._trace.events[this._hoveredRow];
+        const trace = this._activeTrace;
+        if (!trace || this._hoveredRow < 0) return undefined;
+        const event = trace.events[this._hoveredRow];
         if (!event) return undefined;
         const start = "inputPos" in event ? event.inputPos : 0;
         const end = "endPos" in event ? event.endPos : start;
@@ -542,7 +608,7 @@ export class GtTraceTimeline extends LitElement {
     }
 
     private _renderInputDisplay() {
-        const text = this._trace?.input ?? this._input;
+        const text = this._activeTrace?.input ?? this._input;
         const range = this._highlightRange();
         if (!range || range.start === range.end) {
             return html`<div class="input-display">${text}</div>`;
@@ -565,7 +631,7 @@ export class GtTraceTimeline extends LitElement {
             case "ruleExited":
                 return event.result;
             case "partMatched": {
-                const input = this._trace?.input ?? "";
+                const input = this._activeTrace?.input ?? "";
                 const start = attemptPos ?? 0;
                 const end = event.endPos;
                 let matchedSpan: string | undefined;
@@ -596,6 +662,7 @@ export class GtTraceTimeline extends LitElement {
 
     override render() {
         const visible = this._visibleEvents();
+        const trace = this._activeTrace;
         const allKinds: EventKindFilter[] = [
             "ruleEntered",
             "ruleExited",
@@ -606,7 +673,35 @@ export class GtTraceTimeline extends LitElement {
         ];
 
         return html`
-            <details class="options-panel">
+            ${this._renderControls()}
+            ${trace ? this._renderInputDisplay() : nothing}
+            ${this._error
+                ? html`<div class="error-text status-line">${this._error}</div>`
+                : nothing}
+            ${this._loading
+                ? html`<div class="muted status-line">Tracing...</div>`
+                : nothing}
+            ${trace
+                ? html`
+                      ${this._renderSummaryBar(trace)}
+                      ${this._renderFilterBar(allKinds)}
+                      ${this._renderTraceTable(visible)}
+                  `
+                : !this._loading && !this._error
+                  ? html`<div class="empty-state">
+                        Enter input and click Trace
+                    </div>`
+                  : nothing}
+        `;
+    }
+
+    /** The match-options panel and the input/Trace row. Live mode only;
+     *  a display-only trace hides both since it can't re-run a match. */
+    private _renderControls() {
+        if (this._readOnly) {
+            return nothing;
+        }
+        return html`<details class="options-panel">
                 <summary>Match Options</summary>
                 <div class="options-bar">
                     <label
@@ -713,261 +808,197 @@ export class GtTraceTimeline extends LitElement {
                 >
                     Trace
                 </button>
+            </div>`;
+    }
+
+    /** The one-line tally of the trace: event/rule/backtrack counts and the
+     *  final result and value. */
+    private _renderSummaryBar(trace: MatchTrace) {
+        return html`
+            <div class="summary-bar">
+                ${trace.events.length} events,
+                ${trace.events.filter((e) => e.kind === "ruleEntered").length}
+                rules entered,
+                ${trace.events.filter((e) => e.kind === "backtrack").length}
+                backtracks, result:
+                <strong>${trace.result}</strong>
+                ${trace.matchValue !== undefined
+                    ? html`, value:
+                          <code
+                              >${JSON.stringify(
+                                  trace.matchValue,
+                                  null,
+                                  2,
+                              )}</code
+                          >`
+                    : nothing}
             </div>
+        `;
+    }
 
-            ${this._trace ? this._renderInputDisplay() : nothing}
-            ${this._error
-                ? html`<div class="error-text" style="padding: 8px">
-                      ${this._error}
-                  </div>`
-                : nothing}
-            ${this._loading
-                ? html`<div class="muted" style="padding: 8px">Tracing...</div>`
-                : nothing}
-            ${this._trace
-                ? html`
-                      <div class="summary-bar">
-                          ${this._trace.events.length} events,
-                          ${this._trace.events.filter(
-                              (e) => e.kind === "ruleEntered",
-                          ).length}
-                          rules entered,
-                          ${this._trace.events.filter(
-                              (e) => e.kind === "backtrack",
-                          ).length}
-                          backtracks, result:
-                          <strong>${this._trace.result}</strong>
-                          ${this._trace.matchValue !== undefined
-                              ? html`, value:
-                                    <code
-                                        >${JSON.stringify(
-                                            this._trace.matchValue,
-                                            null,
-                                            2,
-                                        )}</code
-                                    >`
-                              : nothing}
-                      </div>
+    /** The event-kind toggles plus the success/failure path filters. */
+    private _renderFilterBar(allKinds: EventKindFilter[]) {
+        return html`
+            <div class="filter-bar">
+                ${allKinds.map(
+                    (kind) => html`
+                        <button
+                            class="filter-btn ${this._hiddenKinds.has(kind)
+                                ? ""
+                                : "active"}"
+                            aria-pressed=${!this._hiddenKinds.has(kind)}
+                            @click=${() => this._toggleKind(kind)}
+                        >
+                            <span class="evk-${kind}"
+                                >${EVENT_ICONS[kind]}</span
+                            >
+                            ${kind}
+                        </button>
+                    `,
+                )}
+                <span class="filter-separator"></span>
+                <button
+                    class="filter-btn ${this._showSuccessPath ? "active" : ""}"
+                    aria-pressed=${this._showSuccessPath}
+                    @click=${() => {
+                        this._showSuccessPath = !this._showSuccessPath;
+                    }}
+                >
+                    <span class="evk-partMatched">✓</span>
+                    Success path
+                </button>
+                <button
+                    class="filter-btn ${this._showFailurePath ? "active" : ""}"
+                    aria-pressed=${this._showFailurePath}
+                    @click=${() => {
+                        this._showFailurePath = !this._showFailurePath;
+                    }}
+                >
+                    <span class="evk-partFailed">✗</span>
+                    Failure path
+                </button>
+            </div>
+        `;
+    }
 
-                      <div class="filter-bar">
-                          ${allKinds.map(
-                              (kind) => html`
-                                  <button
-                                      class="filter-btn ${this._hiddenKinds.has(
-                                          kind,
-                                      )
-                                          ? ""
-                                          : "active"}"
-                                      aria-pressed=${!this._hiddenKinds.has(
-                                          kind,
-                                      )}
-                                      @click=${() => this._toggleKind(kind)}
-                                  >
-                                      <span style="color: ${EVENT_COLORS[kind]}"
-                                          >${EVENT_ICONS[kind]}</span
-                                      >
-                                      ${kind}
-                                  </button>
-                              `,
-                          )}
-                          <span class="filter-separator"></span>
-                          <button
-                              class="filter-btn ${this._showSuccessPath
-                                  ? "active"
-                                  : ""}"
-                              aria-pressed=${this._showSuccessPath}
-                              @click=${() => {
-                                  this._showSuccessPath =
-                                      !this._showSuccessPath;
+    /** The trace table: a fixed header and one body row per visible event. */
+    private _renderTraceTable(visible: VisibleEvent[]) {
+        return html`<table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Rule</th>
+                    <th>Part</th>
+                    <th>Event</th>
+                    <th>Input Pos</th>
+                    <th>Detail</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${visible.map((row) => this._renderTraceRow(row))}
+            </tbody>
+        </table>`;
+    }
+
+    /** One event's table row: indent, rule/part links, the event cell, input
+     *  position and detail, plus an expanded slots row for a captured value. */
+    private _renderTraceRow(row: VisibleEvent) {
+        const { event, index, depth, groupSize, attemptPos } = row;
+        const isPartEvent =
+            event.kind === "partAttempted" ||
+            event.kind === "partMatched" ||
+            event.kind === "partFailed";
+        const partId = isPartEvent
+            ? (event as { part: number }).part
+            : undefined;
+        const partLabel =
+            partId !== undefined
+                ? this._activeDebugInfo?.partLabels.get(partId)
+                : undefined;
+        const ruleName = event.kind !== "backtrack" ? event.rule : undefined;
+        const hasSlots =
+            event.kind === "partMatched" && event.capturedValue !== undefined;
+        const isGroup = groupSize > 0;
+        const collapsed = this._collapsedGroups.has(index);
+        const rowClass = [
+            this._selectedRow === index ? "selected" : "",
+            event.kind === "partMatched" ? "row-matched" : "",
+            event.kind === "partFailed" ? "row-failed" : "",
+            event.kind === "backtrack" ? "row-backtrack" : "",
+        ]
+            .filter(Boolean)
+            .join(" ");
+        return html`
+            <tr
+                class="${rowClass}"
+                @mouseenter=${() => {
+                    this._hoveredRow = index;
+                }}
+                @mouseleave=${() => {
+                    this._hoveredRow = -1;
+                }}
+                @click=${() => {
+                    this._selectedRow = index;
+                    if (hasSlots) this._toggleExpand(index);
+                }}
+            >
+                <td>${index + 1}</td>
+                <td>
+                    ${Array.from(
+                        { length: depth },
+                        () => html`<span class="indent-unit"></span>`,
+                    )}${isGroup
+                        ? html`<span
+                              class="group-toggle"
+                              @click=${(e: Event) => {
+                                  e.stopPropagation();
+                                  this._toggleCollapse(index);
                               }}
-                          >
-                              <span style="color: #4ec9b0">✓</span>
-                              Success path
-                          </button>
-                          <button
-                              class="filter-btn ${this._showFailurePath
-                                  ? "active"
-                                  : ""}"
-                              aria-pressed=${this._showFailurePath}
-                              @click=${() => {
-                                  this._showFailurePath =
-                                      !this._showFailurePath;
-                              }}
-                          >
-                              <span
-                                  style="color: var(--vscode-errorForeground, #f48771)"
-                                  >✗</span
-                              >
-                              Failure path
-                          </button>
-                      </div>
-
-                      <table>
-                          <thead>
-                              <tr>
-                                  <th>#</th>
-                                  <th>Rule</th>
-                                  <th>Part</th>
-                                  <th>Event</th>
-                                  <th>Input Pos</th>
-                                  <th>Detail</th>
-                              </tr>
-                          </thead>
-                          <tbody>
-                              ${visible.map(
-                                  ({
-                                      event,
-                                      index,
-                                      depth,
-                                      groupSize,
-                                      attemptPos,
-                                  }) => {
-                                      const isPartEvent =
-                                          event.kind === "partAttempted" ||
-                                          event.kind === "partMatched" ||
-                                          event.kind === "partFailed";
-                                      const partLabel = isPartEvent
-                                          ? this.grammar?.debugInfo?.partLabels.get(
-                                                (event as { part: number })
-                                                    .part,
-                                            )
-                                          : undefined;
-                                      const ruleName =
-                                          event.kind !== "backtrack"
-                                              ? event.rule
-                                              : undefined;
-                                      const hasSlots =
-                                          event.kind === "partMatched" &&
-                                          event.capturedValue !== undefined;
-                                      const isGroup = groupSize > 0;
-                                      const collapsed =
-                                          this._collapsedGroups.has(index);
-                                      const rowClass = [
-                                          this._selectedRow === index
-                                              ? "selected"
-                                              : "",
-                                          event.kind === "partMatched"
-                                              ? "row-matched"
-                                              : "",
-                                          event.kind === "partFailed"
-                                              ? "row-failed"
-                                              : "",
-                                          event.kind === "backtrack"
-                                              ? "row-backtrack"
-                                              : "",
-                                      ]
-                                          .filter(Boolean)
-                                          .join(" ");
-                                      return html`
-                                          <tr
-                                              class="${rowClass}"
-                                              @mouseenter=${() => {
-                                                  this._hoveredRow = index;
-                                              }}
-                                              @mouseleave=${() => {
-                                                  this._hoveredRow = -1;
-                                              }}
-                                              @click=${() => {
-                                                  this._selectedRow = index;
-                                                  if (hasSlots)
-                                                      this._toggleExpand(index);
-                                              }}
-                                          >
-                                              <td>${index + 1}</td>
-                                              <td>
-                                                  <span
-                                                      class="depth-indent"
-                                                      style="width: ${depth *
-                                                      12}px"
-                                                  ></span
-                                                  >${isGroup
-                                                      ? html`<span
-                                                            class="group-toggle"
-                                                            @click=${(
-                                                                e: Event,
-                                                            ) => {
-                                                                e.stopPropagation();
-                                                                this._toggleCollapse(
-                                                                    index,
-                                                                );
-                                                            }}
-                                                            >${collapsed
-                                                                ? "\u25B6"
-                                                                : "\u25BC"}</span
-                                                        >`
-                                                      : nothing}
-                                                  ${this._renderRuleLink(
-                                                      ruleName ?? "",
-                                                  )}${isGroup && collapsed
-                                                      ? html`<span
-                                                            class="muted"
-                                                        >
-                                                            (${groupSize})</span
-                                                        >`
-                                                      : nothing}
-                                              </td>
-                                              <td>${partLabel ?? ""}</td>
-                                              <td>
-                                                  <span
-                                                      class="event-icon"
-                                                      style="color: ${EVENT_COLORS[
-                                                          event.kind
-                                                      ]}"
-                                                      >${EVENT_ICONS[
-                                                          event.kind
-                                                      ]}</span
-                                                  >
-                                                  ${EVENT_LABELS[event.kind] ??
-                                                  event.kind}
-                                              </td>
-                                              <td>
-                                                  ${event.kind === "partMatched"
-                                                      ? `${attemptPos ?? 0}..${event.endPos}`
-                                                      : event.inputPos}
-                                              </td>
-                                              <td>
-                                                  ${this._eventDetail(
-                                                      event,
-                                                      attemptPos,
-                                                  )}
-                                              </td>
-                                          </tr>
-                                          ${hasSlots &&
-                                          this._expandedRows.has(index)
-                                              ? html`<tr>
-                                                    <td colspan="6">
-                                                        <div class="slots">
-                                                            ${`$${(event as PartMatchedEvent).capturedValue!.variable}`}
-                                                            =
-                                                            ${JSON.stringify(
-                                                                (
-                                                                    event as PartMatchedEvent
-                                                                ).capturedValue!
-                                                                    .value,
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>`
-                                              : nothing}
-                                      `;
-                                  },
+                              >${collapsed ? "\u25B6" : "\u25BC"}</span
+                          >`
+                        : nothing}
+                    ${this._renderRuleLink(ruleName ?? "")}${isGroup &&
+                    collapsed
+                        ? html`<span class="muted"> (${groupSize})</span>`
+                        : nothing}
+                </td>
+                <td>${this._renderPartLink(partId, partLabel)}</td>
+                <td>
+                    <span class="event-icon evk-${event.kind}"
+                        >${EVENT_ICONS[event.kind]}</span
+                    >
+                    ${EVENT_LABELS[event.kind] ?? event.kind}
+                </td>
+                <td>
+                    ${event.kind === "partMatched"
+                        ? `${attemptPos ?? 0}..${event.endPos}`
+                        : event.inputPos}
+                </td>
+                <td>${this._eventDetail(event, attemptPos)}</td>
+            </tr>
+            ${hasSlots && this._expandedRows.has(index)
+                ? html`<tr>
+                      <td colspan="6">
+                          <div class="slots">
+                              ${`$${(event as PartMatchedEvent).capturedValue!.variable}`}
+                              =
+                              ${JSON.stringify(
+                                  (event as PartMatchedEvent).capturedValue!
+                                      .value,
                               )}
-                          </tbody>
-                      </table>
-                  `
-                : !this._loading && !this._error
-                  ? html`<div class="empty-state">
-                        Enter input and click Trace
-                    </div>`
-                  : nothing}
+                          </div>
+                      </td>
+                  </tr>`
+                : nothing}
         `;
     }
 
     private _renderRuleLink(ruleName: string) {
-        if (!this.onSourceClick || !this.grammar?.debugInfo) {
+        const debugInfo = this._activeDebugInfo;
+        if (!this.onSourceClick || !debugInfo) {
             return html`<span>${ruleName}</span>`;
         }
-        const loc = this.grammar.debugInfo.rules.get(ruleName);
+        const loc = debugInfo.rules.get(ruleName);
         if (!loc) return html`<span>${ruleName}</span>`;
         return html`<span
             class="rule-link"
@@ -976,6 +1007,26 @@ export class GtTraceTimeline extends LitElement {
                 this.onSourceClick!(loc);
             }}
             >${ruleName}</span
+        >`;
+    }
+
+    private _renderPartLink(
+        part: number | undefined,
+        label: string | undefined,
+    ) {
+        if (label === undefined) return html`${""}`;
+        const debugInfo = this._activeDebugInfo;
+        const loc = part !== undefined ? debugInfo?.parts.get(part) : undefined;
+        if (!this.onSourceClick || !loc) {
+            return html`<span>${label}</span>`;
+        }
+        return html`<span
+            class="rule-link"
+            @click=${(e: Event) => {
+                e.stopPropagation();
+                this.onSourceClick!(loc);
+            }}
+            >${label}</span
         >`;
     }
 }

@@ -16,6 +16,7 @@ import {
     createGrammarReplayResolver,
     normalizeGrammarAction,
     resolveGrammarReplayTarget,
+    captureResolutionTrace,
     ReplayVersionBuildError,
     selectValidatedMatchAction,
     type GrammarReplayTarget,
@@ -236,6 +237,22 @@ describe("createGrammarReplayResolver (construction-cache layer, L2)", () => {
                     ? { schemaName: "demo", actionName: "pause" }
                     : undefined;
             },
+            matchEntry(utterance: string) {
+                return utterance === "pause"
+                    ? {
+                          action: { schemaName: "demo", actionName: "pause" },
+                          constructionId: "1",
+                          namespace: "demo,hash=",
+                          parts: ["pause"],
+                          scores: {
+                              matchedCount: 1,
+                              wildcardCharCount: 0,
+                              nonOptionalCount: 1,
+                          },
+                          cacheFileId: "/stub/constructions.json",
+                      }
+                    : undefined;
+            },
         };
     }
 
@@ -415,6 +432,32 @@ maybeDescribe("createGrammarReplayResolver (git working-tree vs HEAD)", () => {
         expect(summary.changedCount).toBe(0);
         expect(summary.newMatchCount).toBe(0);
     });
+
+    it("captures a source-realized trace with live-only layers not-applicable on a git ref", async () => {
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+        });
+        await resolver.prepare(
+            { kind: "git", ref: "HEAD" },
+            { kind: "workingTree" },
+        );
+        const { sideTrace } = await resolver.resolveWithTrace(
+            entry("g", "pause"),
+            { kind: "git", ref: "HEAD" },
+            "A",
+        );
+
+        expect(sideTrace.realization).toBe("source");
+        const cache = sideTrace.nodes.find((n) => n.kind === "cache-consult");
+        expect(cache?.execution).toBe("not-applicable");
+        const wildcard = sideTrace.nodes.find(
+            (n) => n.kind === "wildcard-validation",
+        );
+        expect(wildcard?.execution).toBe("not-applicable");
+        // HEAD still contains <Pause>, so the grammar match runs and hits.
+        const grammar = sideTrace.nodes.find((n) => n.kind === "grammar-match");
+        expect(grammar?.execution).toBe("ran");
+    });
 });
 
 const DEMO_SCHEMA_TS = [
@@ -516,6 +559,51 @@ describe("resolveGrammarReplayTarget + schema enrichment (L1)", () => {
         );
         expect(res.cacheState).toBe("hit");
         expect(res.action).toEqual({ schemaName: "demo", actionName: "pause" });
+    });
+
+    it("omits the action schema source for a side that produced no action", async () => {
+        const { agentRoots } = scaffoldAgentPackage(dir);
+        const target = await resolveGrammarReplayTarget(
+            agentRoots,
+            "demo",
+            dir,
+        );
+        expect(target?.schema?.sourceFilePath).toBeDefined();
+        const resolver = createGrammarReplayResolver({ target: target! });
+        await resolver.prepare(
+            { kind: "workingTree" },
+            { kind: "workingTree" },
+        );
+
+        // "nonsense" matches no rule, so the action stage is a miss: with no
+        // resolved action the node must not carry a schema for the viewer to
+        // offer a jump or A/B compare against.
+        const miss = await resolver.resolveWithTrace(
+            entry("miss", "nonsense"),
+            { kind: "workingTree" },
+            "A",
+        );
+        const missAction = miss.sideTrace.nodes.find(
+            (n) => n.kind === "action",
+        );
+        expect(missAction?.kind === "action" && missAction.outcome).toBe(
+            "miss",
+        );
+        expect(
+            missAction?.kind === "action" && missAction.schema,
+        ).toBeUndefined();
+
+        // A produced action still carries its schema source.
+        const hit = await resolver.resolveWithTrace(
+            entry("hit", "pause"),
+            { kind: "workingTree" },
+            "A",
+        );
+        const hitAction = hit.sideTrace.nodes.find((n) => n.kind === "action");
+        expect(hitAction?.kind === "action" && hitAction.outcome).toBe("hit");
+        expect(
+            hitAction?.kind === "action" && hitAction.schema?.sourceFilePath,
+        ).toMatch(/demoSchema\.ts$/);
     });
 
     it("falls back to a non-enriched resolver when no schema is discoverable", async () => {
@@ -746,5 +834,165 @@ describe("selectValidatedMatchAction (ranked-list contract)", () => {
         );
         expect(result.action).toMatchObject({ actionName: "top" });
         expect(result.consulted).toBe(false);
+    });
+});
+
+describe("resolveWithTrace / captureResolutionTrace", () => {
+    let dir: string;
+    let grammarPath: string;
+
+    beforeEach(() => {
+        dir = tempDir();
+        grammarPath = path.join(dir, "schema.agr");
+        writeFileSync(grammarPath, GRAMMAR_V1, "utf8");
+    });
+
+    afterEach(() => {
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("captures an ordered four-layer trace for a working-tree match", async () => {
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+        });
+        const { resolution, sideTrace } = await resolver.resolveWithTrace(
+            entry("t1", "pause"),
+            { kind: "workingTree" },
+            "A",
+        );
+
+        expect(resolution.action).toEqual({
+            schemaName: "demo",
+            actionName: "pause",
+        });
+        expect(sideTrace.side).toBe("A");
+        expect(sideTrace.realization).toBe("built-live");
+        expect(sideTrace.cacheState).toBe("hit");
+        expect(sideTrace.nodes.map((n) => n.kind)).toEqual([
+            "cache-consult",
+            "grammar-match",
+            "wildcard-validation",
+            "action",
+        ]);
+
+        const grammar = sideTrace.nodes.find((n) => n.kind === "grammar-match");
+        expect(grammar?.kind === "grammar-match" && grammar.execution).toBe(
+            "ran",
+        );
+        expect(grammar?.kind === "grammar-match" && grammar.rankingParity).toBe(
+            "matched",
+        );
+        expect(
+            grammar?.kind === "grammar-match" && grammar.source,
+        ).toBeDefined();
+
+        const action = sideTrace.nodes.find((n) => n.kind === "action");
+        expect(action?.kind === "action" && action.action).toEqual({
+            schemaName: "demo",
+            actionName: "pause",
+        });
+    });
+
+    it("marks live-only layers not-applicable when no cache or validator is set", async () => {
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+        });
+        const { sideTrace } = await resolver.resolveWithTrace(
+            entry("t2", "resume"),
+            { kind: "workingTree" },
+            "A",
+        );
+
+        const cache = sideTrace.nodes.find((n) => n.kind === "cache-consult");
+        expect(cache?.execution).toBe("not-applicable");
+        const wildcard = sideTrace.nodes.find(
+            (n) => n.kind === "wildcard-validation",
+        );
+        expect(wildcard?.execution).toBe("not-applicable");
+    });
+
+    it("records a construction hit and leaves the grammar node not-reached", async () => {
+        const cache: ConstructionCacheLayer = {
+            status: "valid",
+            cacheFilePath: "/stub/constructions.json",
+            schemaName: "demo",
+            currentHash: "h",
+            cachedHash: "h",
+            match: (u) =>
+                u === "pause"
+                    ? { schemaName: "demo", actionName: "pause" }
+                    : undefined,
+            matchEntry: (u) =>
+                u === "pause"
+                    ? {
+                          action: { schemaName: "demo", actionName: "pause" },
+                          constructionId: "7",
+                          namespace: "demo,h",
+                          parts: ["pause"],
+                      }
+                    : undefined,
+        };
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+            constructionCache: cache,
+        });
+        const { sideTrace } = await resolver.resolveWithTrace(
+            entry("t3", "pause"),
+            { kind: "workingTree" },
+            "A",
+        );
+
+        const cacheNode = sideTrace.nodes.find(
+            (n) => n.kind === "cache-consult",
+        );
+        expect(cacheNode?.kind === "cache-consult" && cacheNode.execution).toBe(
+            "ran",
+        );
+        expect(cacheNode?.kind === "cache-consult" && cacheNode.outcome).toBe(
+            "hit",
+        );
+        expect(
+            cacheNode?.kind === "cache-consult" &&
+                cacheNode.entry?.constructionId,
+        ).toBe("7");
+        const grammar = sideTrace.nodes.find((n) => n.kind === "grammar-match");
+        expect(grammar?.execution).toBe("not-reached");
+    });
+
+    it("assembles both sides keyed by the entry id, with an injected clock", async () => {
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+        });
+        let clock = 100;
+        const trace = await captureResolutionTrace(
+            resolver,
+            entry("row-7", "pause"),
+            "run-1",
+            { kind: "workingTree" },
+            { kind: "workingTree" },
+            () => clock++,
+        );
+
+        expect(trace.runId).toBe("run-1");
+        expect(trace.utteranceId).toBe("row-7");
+        expect(trace.utterance).toBe("pause");
+        expect(trace.a.side).toBe("A");
+        expect(trace.b.side).toBe("B");
+        expect(trace.capturedAt).toBe(100);
+    });
+
+    it("survives a JSON round-trip (persistable with the run)", async () => {
+        const resolver = createGrammarReplayResolver({
+            target: target(grammarPath),
+        });
+        const trace = await captureResolutionTrace(
+            resolver,
+            entry("row-8", "pause"),
+            "run-2",
+            { kind: "workingTree" },
+            { kind: "workingTree" },
+            () => 0,
+        );
+        expect(JSON.parse(JSON.stringify(trace))).toEqual(trace);
     });
 });

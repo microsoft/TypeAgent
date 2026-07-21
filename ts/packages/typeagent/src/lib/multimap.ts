@@ -51,7 +51,6 @@ export class MultiMap<K, V> extends Map<K, V[]> {
                     return this;
                 }
             }
-            values.push(value);
         } else if (values.includes(value)) {
             return this;
         }
