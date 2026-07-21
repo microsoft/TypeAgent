@@ -34,7 +34,7 @@ export interface ClarifyMissingParameter {
     };
 }
 
-// The user request is for an action, but parameters are referring to unresolved pronouns or references that is not found in the request or recent chat context.
+// The user request is for an action but parameters are referring to unresolved pronouns, memories, or references that are not available in the request or chat history.
 export interface ClarifyUnresolvedReference {
     actionName: "clarifyUnresolvedReference";
     parameters: {
@@ -42,7 +42,7 @@ export interface ClarifyUnresolvedReference {
         request: string;
         actionName: string;
         parameterName: string;
-        reference: string; // words of the unresolved pronoun or reference
+        reference: string; // words of the unresolved pronoun, reference, or memory
         clarifyingQuestion: string;
     };
 }
