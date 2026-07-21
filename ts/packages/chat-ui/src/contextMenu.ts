@@ -277,3 +277,77 @@ function selectAll(target: HTMLElement) {
     sel?.removeAllRanges();
     sel?.addRange(range);
 }
+
+/**
+ * Copy or cut the active selection for a Ctrl/Cmd+C or Ctrl/Cmd+X
+ * keyboard shortcut, using the same clipboard path as the right-click
+ * menu (getSelection + navigator.clipboard, with an execCommand
+ * fallback).
+ *
+ * VS Code webviews don't run the native clipboard action on the DOM
+ * selection for these keys, so only the JS path works - that is why the
+ * right-click menu copies but the keyboard doesn't. A host can call this
+ * from a keydown listener to restore keyboard copy/cut over the chat
+ * history and the message input. The Electron shell gets these natively
+ * and does not need it.
+ *
+ * Returns true when it acted on a non-empty selection, so the caller can
+ * call preventDefault().
+ */
+export function handleClipboardShortcut(e: KeyboardEvent): boolean {
+    if (
+        e.defaultPrevented ||
+        e.altKey ||
+        e.shiftKey ||
+        !(e.ctrlKey || e.metaKey)
+    ) {
+        return false;
+    }
+    const key = e.key.toLowerCase();
+    const isCopy = key === "c";
+    const isCut = key === "x";
+    if (!isCopy && !isCut) {
+        return false;
+    }
+
+    // Native <input>/<textarea> keep their selection outside of
+    // window.getSelection(), so read it off the focused element.
+    const active = document.activeElement;
+    if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement
+    ) {
+        const start = active.selectionStart ?? 0;
+        const end = active.selectionEnd ?? 0;
+        if (end <= start) {
+            return false;
+        }
+        copyText(active.value.slice(start, end));
+        if (isCut && !active.readOnly && !active.disabled) {
+            active.setRangeText("", start, end, "end");
+            active.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        return true;
+    }
+
+    const sel = window.getSelection();
+    const text = sel ? sel.toString() : "";
+    if (!text) {
+        return false;
+    }
+    if (isCut && isEditableSelection(sel)) {
+        cutSelection(text);
+    } else {
+        copyText(text);
+    }
+    return true;
+}
+
+// True when the selection sits inside editable content (the message
+// input) rather than the read-only chat history, so Ctrl+X only deletes
+// where deletion is valid.
+function isEditableSelection(sel: Selection | null): boolean {
+    const node = sel?.anchorNode ?? null;
+    const el = node instanceof Element ? node : (node?.parentElement ?? null);
+    return el instanceof HTMLElement && el.isContentEditable;
+}
