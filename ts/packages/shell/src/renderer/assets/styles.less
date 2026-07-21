@@ -349,6 +349,14 @@ body {
   width: 100%;
   min-width: 0;
   min-height: 0;
+}
+
+// Chat conversation palette. Declared at :root (light) and body.dark-mode
+// (dark) rather than on .chat-shell-layout so that floating menus and popovers
+// - the feedback/flag menu, delete menu, and right-click context menu - which
+// are appended to document.body (outside the layout) inherit the themed values
+// too. Same reasoning as the --completion-menu-* variables above.
+:root {
   --chat-conversation-background: #f7f7f8;
   --chat-conversation-border: #d8d8df;
   --chat-conversation-foreground: #202124;
@@ -373,7 +381,7 @@ body {
   --chat-conversation-separator-color: #e0e0e0;
 }
 
-.dark-mode .chat-shell-layout {
+body.dark-mode {
   --chat-conversation-background: #13131d;
   --chat-conversation-border: #3b3b4c;
   --chat-conversation-foreground: #f3f4f6;
@@ -565,6 +573,90 @@ body {
 }
 
 .pick-remember-panel .choice-button:first-child:hover {
+  background-color: #2f59b5;
+}
+
+.question-form-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  background-color: #fafafa;
+}
+
+.question-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+}
+
+.question-form-field + .question-form-field {
+  border-top: 1px solid #e8e8e8;
+  margin-top: 4px;
+}
+
+.question-form-prompt {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.question-form-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+}
+
+.question-form-choice:hover {
+  background-color: #eef4ff;
+}
+
+.question-form-choice input[type="radio"],
+.question-form-choice input[type="checkbox"] {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.question-form-choice span {
+  font-family:
+    ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+  font-size: 13px;
+}
+
+.question-form-other-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 13px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+.question-form-panel .checkbox-buttons {
+  margin-top: 8px;
+}
+
+.question-form-panel .choice-button {
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.question-form-panel .choice-button:first-child {
+  border-color: #3a6cd9;
+  background-color: #3a6cd9;
+  color: #fff;
+}
+
+.question-form-panel .choice-button:first-child:hover {
   background-color: #2f59b5;
 }
 
