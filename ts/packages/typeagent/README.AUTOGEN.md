@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=afd2338074eb0e0bb6587dbb78e51554dd03e50419cda128897ab20bca5d7949 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=51a8bd8b53680b7a76e0b13859b481a1da5c005bee9b30590002d8164b3ec47f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent — AI-generated documentation
@@ -111,6 +111,6 @@ External: `async`, `cheerio`, `debug`, `typechat`, `typescript`
 
 ---
 
-_Auto-generated against commit `23eb0ded6c45dab43991c41d2dbcd01f513df2c5` on `2026-07-20T17:58:59.905Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `2e9b80fda11742ce351fd15e82b4eb0003b203c9` on `2026-07-21T00:06:05.901Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
