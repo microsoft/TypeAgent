@@ -1094,25 +1094,26 @@
   border-bottom: 1px solid var(--chat-expand-border, rgba(127, 127, 127, 0.25));
   font-weight: 600;
 }
-/* The body reuses .chat-message-content for typography; flatten its bubble
-   chrome and give it room to scroll. */
+/* Both expand surfaces reuse .chat-message-content for typography; flatten its
+   bubble chrome (shadow + rounding). */
+.chat-expand-body,
+.chat-expand-page {
+  box-shadow: none;
+  border-radius: 0;
+}
+/* Overlay body: fills the panel and scrolls. */
 .chat-expand-body {
   flex: 1 1 auto;
   overflow: auto;
   padding: 16px 18px;
-  box-shadow: none;
-  border-radius: 0;
 }
 
-/* Standalone expanded message page (a host-native window, e.g. a VS Code
-   editor panel). Reuses .chat-message-content for typography but drops the
-   bubble chrome and centers a readable column. */
+/* Standalone page (a host-native window, e.g. a VS Code editor panel): a
+   centered, readable column. */
 .chat-expand-page {
   max-width: 900px;
   margin: 0 auto;
   padding: 16px 20px;
-  box-shadow: none;
-  border-radius: 0;
 }
 /* The expand panel is a standalone scrollable page; some hosts set the chat
    body to a fixed-height, overflow-hidden flex layout (media/chat.css), so

@@ -5,6 +5,7 @@ import * as vscode from "vscode";
 import { createWebviewNonce } from "@typeagent/core/webview";
 import { ChatViewProvider } from "./chatViewProvider.js";
 import { AgentServerBridge } from "./agentServerBridge.js";
+import { stampedWebviewUri } from "./webviewResources.js";
 
 interface ChatEntry {
     bridge: AgentServerBridge;
@@ -601,27 +602,15 @@ function openExpandPanel(
     panel.iconPath = panelIcon(context);
 
     const webview = panel.webview;
-    // Append each resource's mtime so a redeploy/reload doesn't serve a stale
-    // cached bundle/stylesheet (mirrors ChatViewProvider).
-    const fs: typeof import("fs") = require("fs");
-    const asUri = (...parts: string[]) => {
-        const fsUri = vscode.Uri.joinPath(context.extensionUri, ...parts);
-        let stamp: number;
-        try {
-            stamp = fs.statSync(fsUri.fsPath).mtimeMs | 0;
-        } catch {
-            stamp = Date.now();
-        }
-        return `${webview.asWebviewUri(fsUri)}?v=${stamp}`;
-    };
+    const asUri = (...parts: string[]) =>
+        stampedWebviewUri(webview, context.extensionUri, ...parts);
     const scriptUri = asUri("dist", "expand.js");
     const styleUri = asUri("media", "chat.css");
     const codiconUri = asUri("media", "codicon.css");
     const nonce = createWebviewNonce();
 
     // Register the listener before setting the HTML so we can't miss the
-    // webview's initial "expandReady". expand.js re-sanitizes the content
-    // before rendering, so no HTML is built from the message here.
+    // webview's initial "expandReady".
     const sub = webview.onDidReceiveMessage((msg) => {
         if (msg?.type === "expandReady") {
             void webview.postMessage({ type: "expandContent", html });

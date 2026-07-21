@@ -5418,21 +5418,27 @@ class AgentMessageContainer {
                 headerDiv: this.timestampDiv,
                 messageDiv: this.messageDiv,
                 expandMessage: this.platformAdapter.expandMessage
-                    ? () =>
-                          // Messages backed by an <iframe> (script-driven
-                          // image/video/settings displays) don't survive
-                          // re-sanitization in a separate panel; keep those on
-                          // the live overlay by declining here.
-                          this.messageDiv.querySelector("iframe")
-                              ? false
-                              : this.platformAdapter.expandMessage!(
-                                    this.messageDiv.innerHTML,
-                                    this.nameSpan.textContent ?? undefined,
-                                )
+                    ? () => this.expandInHost()
                     : undefined,
             },
             controller,
             variant,
+        );
+    }
+
+    // Ask the host to open this message in a separate window. Messages backed
+    // by an <iframe> (script-driven image/video/settings displays) don't
+    // survive re-sanitization in a separate panel, so decline and let the
+    // feedback widget fall back to the in-page overlay.
+    private expandInHost(): boolean {
+        if (this.messageDiv.querySelector("iframe")) {
+            return false;
+        }
+        return (
+            this.platformAdapter.expandMessage?.(
+                this.messageDiv.innerHTML,
+                this.nameSpan.textContent ?? undefined,
+            ) ?? false
         );
     }
 

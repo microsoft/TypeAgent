@@ -10,20 +10,11 @@
 import DOMPurify from "dompurify";
 import chatPanelStyles from "chat-ui/styles";
 import vscodeThemeStyles from "./vscode-theme.css";
+import { injectStyle } from "./injectStyle.js";
 
-function injectStyles(css: string): void {
-    const styleEl = document.createElement("style");
-    styleEl.textContent = css;
-    document.head.appendChild(styleEl);
-}
-injectStyles(chatPanelStyles as unknown as string);
-injectStyles(vscodeThemeStyles as unknown as string);
+injectStyle(chatPanelStyles as unknown as string);
+injectStyle(vscodeThemeStyles as unknown as string);
 
-declare function acquireVsCodeApi(): {
-    postMessage(message: unknown): void;
-    getState(): unknown;
-    setState(state: unknown): void;
-};
 const vscode = acquireVsCodeApi();
 
 const root = document.getElementById("expand-root")!;
