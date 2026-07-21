@@ -52,6 +52,19 @@ function isAnyOfActionMatch(a: ActionMatch): a is AnyOfActionMatch {
     return typeof a === "object" && "anyof" in a;
 }
 
+// Sentinel usable only in `extraActions`: the trailing action passes only when
+// it is an exact duplicate of the action immediately preceding it. Scopes the
+// tolerance tightly to the known flake where the model repeats its final action
+// (e.g. a duplicated dispatcher.pendingRequestAction), instead of accepting an
+// arbitrary extra action of a given type.
+type DuplicateOfPreviousMatch = { duplicateOfPrevious: true };
+type ExtraActionMatch = ActionMatch | DuplicateOfPreviousMatch;
+function isDuplicateOfPreviousMatch(
+    a: ExtraActionMatch,
+): a is DuplicateOfPreviousMatch {
+    return typeof a === "object" && a !== null && "duplicateOfPrevious" in a;
+}
+
 function toActionMatchWithAlternates(
     match: OneActionMatch,
 ): ActionMatchWithAlternates {
@@ -97,8 +110,11 @@ export type TranslateTestStep = {
     // 0..extraActions.length additional actions, each validated in order against
     // the corresponding entry here. Use for multi-action requests with variable
     // tails (e.g. an extra pendingRequestAction that defers "add the filtered
-    // tracks to the playlist").
-    extraActions?: ActionMatch | ActionMatch[];
+    // tracks to the playlist"). A `{ duplicateOfPrevious: true }` entry passes
+    // only when the trailing action is an exact duplicate of the action right
+    // before it - tolerating the model repeating its final action without
+    // accepting an arbitrary extra one.
+    extraActions?: ExtraActionMatch | ExtraActionMatch[];
 };
 
 export type TranslateTestEntry = TranslateTestStep | TranslateTestStep[];
@@ -388,21 +404,56 @@ function validateCommandResult(
         // `expected` is required and validated as the leading prefix.
         // `extraActions` are optional trailing actions: the result may contain
         // 0..extraActions.length of them, each validated in order against the
-        // corresponding entry.
-        const extraMatches =
-            step.extraActions !== undefined
-                ? normalizeActionMatches(step.extraActions)
-                : [];
+        // corresponding entry. A `{ duplicateOfPrevious: true }` entry passes
+        // only when the trailing action is an exact duplicate of the action
+        // immediately before it.
+        const extraSpecs: ExtraActionMatch[] =
+            step.extraActions === undefined
+                ? []
+                : Array.isArray(step.extraActions)
+                  ? step.extraActions
+                  : [step.extraActions];
         expect(actions.length).toBeGreaterThanOrEqual(actionMatches.length);
         expect(actions.length).toBeLessThanOrEqual(
-            actionMatches.length + extraMatches.length,
+            actionMatches.length + extraSpecs.length,
         );
 
-        const allMatches = [...actionMatches, ...extraMatches];
         for (let i = 0; i < actions.length; i++) {
-            validateExpectedAction(allMatches[i], actions[i]);
+            if (i < actionMatches.length) {
+                validateExpectedAction(actionMatches[i], actions[i]);
+                continue;
+            }
+            const extra = extraSpecs[i - actionMatches.length];
+            if (isDuplicateOfPreviousMatch(extra)) {
+                checkDuplicateOfPreviousAction(actions, i);
+            } else {
+                validateExpectedAction(
+                    normalizeActionMatches(extra)[0],
+                    actions[i],
+                );
+            }
         }
     }
+}
+
+// A `{ duplicateOfPrevious: true }` extraActions slot passes only when the
+// trailing action is an exact duplicate of the action immediately preceding it.
+// Both actions are normalized (and their run-to-run `entities` metadata dropped,
+// as in checkPossibleMatch) before the equality check.
+function checkDuplicateOfPreviousAction(
+    actions: TypeAgentAction[],
+    i: number,
+) {
+    const normalizeForCompare = (a: TypeAgentAction) => {
+        const n = structuredClone(a);
+        normalizeAction(n);
+        normalizeUrlParams(n);
+        delete n.entities;
+        return n;
+    };
+    expect(normalizeForCompare(actions[i])).toEqual(
+        normalizeForCompare(actions[i - 1]),
+    );
 }
 
 type PossibleMatch = {
