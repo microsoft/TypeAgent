@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=6d08d5bcdecdd212e39bfe81a026fb4eff1cfc66a7827c658581a9a4443fc474 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=84e8fd1edf330933c4fcfad9094e7ff5be4fd5296dca3679af614dae734d4a7b -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # grammar-tools-ui — AI-generated documentation
@@ -12,91 +12,111 @@
 
 ## Overview
 
-The `grammar-tools-ui` package provides a set of Lit web components for grammar visualization, editing, and debugging. These components are designed to work with the `grammar-tools-core` package, offering a user interface for interacting with grammar data.
+The `grammar-tools-ui` package provides a set of Lit-based web components for grammar visualization, editing, and debugging. These components are designed to work in conjunction with the `grammar-tools-core` package, enabling developers to build interactive user interfaces for exploring and analyzing grammar data. The package is utilized in other parts of the TypeAgent monorepo, such as the `agr-language` extension.
 
 ## What it does
 
-The package includes several web components that facilitate various grammar-related tasks:
+This package includes a collection of modular web components that facilitate various grammar-related tasks. These components interact with a `GrammarBackend` interface, which serves as a bridge to the `grammar-tools-core` service. Key components include:
 
-- `GtRuleList`: Displays a list of grammar rules.
-- `GtSourceView`: Shows the source code of the grammar.
-- `GtCompletionPanel`: Provides an interactive completion preview panel.
-- `GtTraceTimeline`: Visualizes the trace of grammar matches.
-- `GtCoverageHeatmap`: Displays a heatmap of grammar rule coverage.
-- `GtDiffView`: Shows side-by-side grammar rule differences.
-- `GtDebugPanel`: A composite debug panel that integrates multiple components for a comprehensive debugging experience.
+- **`GtRuleList`**: Displays a list of grammar rules, allowing users to navigate and interact with individual rules.
+- **`GtSourceView`**: Provides a detailed view of the grammar's source code, enabling users to explore its structure and origins.
+- **`GtCompletionPanel`**: Offers an interactive interface for previewing completions based on partial input, helping users understand how inputs are parsed.
+- **`GtTraceTimeline`**: Visualizes the trace of grammar matches, showing how the grammar processes input step by step.
+- **`GtCoverageHeatmap`**: Displays a heatmap of grammar rule coverage, highlighting the frequency of rule usage.
+- **`GtDiffView`**: Provides a side-by-side comparison of grammar rule differences, useful for analyzing changes between versions.
+- **`GtDebugPanel`**: A composite panel that integrates multiple components, such as grammar loading, completion preview, trace visualization, coverage analysis, and diff comparison, into a single interface.
 
-These components interact with a `GrammarBackend` interface, which defines methods for loading grammars, previewing completions, tracing matches, computing coverage, and more.
+These components can be used individually or combined to create a comprehensive grammar debugging and visualization tool.
 
 ## Setup
 
-To set up the `grammar-tools-ui` package, ensure you have the following environment variables configured:
+To use the `grammar-tools-ui` package, follow these steps:
 
-- `GRAMMAR_TOOLS_CORE_PATH`: Path to the `grammar-tools-core` package.
+1. **Install Dependencies**: Ensure that the `grammar-tools-core` package and the `lit` library are installed in your project. Use `pnpm` to manage dependencies:
 
-For detailed setup instructions, see the hand-written README.
+   ```bash
+   pnpm install
+   ```
+
+2. **Environment Variables**: Set the `GRAMMAR_TOOLS_CORE_PATH` environment variable to the path of the `grammar-tools-core` package. This is necessary for the `GrammarBackend` interface to function properly.
+
+3. **Build the Package**: After installing dependencies, build the package:
+
+   ```bash
+   pnpm build
+   ```
+
+4. **Integration**: Import the required components into your project and use them as custom elements in your HTML or TypeScript files. For example:
+   ```html
+   <script type="module" src="path-to-grammar-tools-ui/dist/index.js"></script>
+   <gt-rule-list></gt-rule-list>
+   ```
+
+For additional setup details, refer to the hand-written README.
 
 ## Key Files
 
-The package is structured as follows:
+The `grammar-tools-ui` package is organized into several key files, each responsible for specific functionality:
 
-- [src/index.ts](./src/index.ts): Exports the main components and types.
-- [src/backend.ts](./src/backend.ts): Defines the `GrammarBackend` interface, which mirrors the `grammar-tools-core` service interface.
-- src/fixture/index.ts: Exports the `FixtureBackend` for development and testing.
-- [src/gt-completion-panel.ts](./src/gt-completion-panel.ts): Implements the `GtCompletionPanel` component.
-- [src/gt-coverage-heatmap.ts](./src/gt-coverage-heatmap.ts): Implements the `GtCoverageHeatmap` component.
-- [src/gt-debug-panel.ts](./src/gt-debug-panel.ts): Implements the `GtDebugPanel` component.
-- [src/gt-diff-view.ts](./src/gt-diff-view.ts): Implements the `GtDiffView` component.
-- [src/gt-rule-list.ts](./src/gt-rule-list.ts): Implements the `GtRuleList` component.
-- [src/gt-source-view.ts](./src/gt-source-view.ts): Implements the `GtSourceView` component.
-
-### Component Details
-
-- **GtRuleList**: Displays a list of grammar rules, allowing users to view and interact with individual rules.
-- **GtSourceView**: Shows the source code of the grammar, providing a detailed view of the grammar's structure.
-- **GtCompletionPanel**: Provides an interactive panel for previewing completions based on partial input, helping users understand how different inputs are parsed.
-- **GtTraceTimeline**: Visualizes the trace of grammar matches, offering insights into how the grammar processes input.
-- **GtCoverageHeatmap**: Displays a heatmap of grammar rule coverage, highlighting which rules are most frequently used.
-- **GtDiffView**: Shows side-by-side differences between grammar rules, useful for comparing changes between versions.
-- **GtDebugPanel**: Integrates multiple components into a single panel for comprehensive debugging, including grammar loading, completion preview, trace visualization, coverage analysis, and diff comparison.
+- **[src/index.ts](./src/index.ts)**: The main entry point of the package, exporting all components and types.
+- **[src/backend.ts](./src/backend.ts)**: Defines the `GrammarBackend` interface, which mirrors the `grammar-tools-core` service interface. This interface includes methods for loading grammars, previewing completions, tracing matches, computing coverage, and more.
+- **src/fixture/index.ts**: Provides the `FixtureBackend`, a mock implementation of the `GrammarBackend` interface for development and testing purposes.
+- **[src/gt-completion-panel.ts](./src/gt-completion-panel.ts)**: Implements the `GtCompletionPanel` component for interactive completion previews.
+- **[src/gt-coverage-heatmap.ts](./src/gt-coverage-heatmap.ts)**: Implements the `GtCoverageHeatmap` component for visualizing grammar rule coverage.
+- **[src/gt-debug-panel.ts](./src/gt-debug-panel.ts)**: Implements the `GtDebugPanel` component, which integrates multiple debugging tools into a single interface.
+- **[src/gt-diff-view.ts](./src/gt-diff-view.ts)**: Implements the `GtDiffView` component for side-by-side grammar rule comparisons.
+- **[src/gt-rule-list.ts](./src/gt-rule-list.ts)**: Implements the `GtRuleList` component for displaying and interacting with a list of grammar rules.
+- **[src/gt-source-view.ts](./src/gt-source-view.ts)**: Implements the `GtSourceView` component for exploring grammar source code.
+- **[src/gt-trace-timeline.ts](./src/gt-trace-timeline.ts)**: Implements the `GtTraceTimeline` component for visualizing the trace of grammar matches.
 
 ## How to extend
 
-To extend the `grammar-tools-ui` package, follow these steps:
+To extend the `grammar-tools-ui` package, you can add new components or enhance existing ones. Follow these steps to get started:
 
-1. **Add a new component**: Create a new TypeScript file in the `src/` directory and define your Lit component.
-2. **Export the component**: Update [src/index.ts](./src/index.ts) to export your new component.
-3. **Implement backend methods**: If your component requires new backend methods, update [src/backend.ts](./src/backend.ts) to include these methods.
-4. **Test your component**: Ensure your component works correctly by writing tests and using the `FixtureBackend` for mock data.
+1. **Create a New Component**:
 
-For example, to add a new component for visualizing grammar errors:
+   - Add a new TypeScript file in the `src/` directory.
+   - Use the Lit framework to define your custom element. For example:
 
-```ts
-// src/gt-error-view.ts
-import { LitElement, html, css } from "lit";
-import { customElement, property } from "lit/decorators.js";
+     ```ts
+     import { LitElement, html, css } from "lit";
+     import { customElement, property } from "lit/decorators.js";
 
-@customElement("gt-error-view")
-export class GtErrorView extends LitElement {
-  static override styles = css`
-    /* Your styles here */
-  `;
+     @customElement("gt-new-component")
+     export class GtNewComponent extends LitElement {
+       static override styles = css`
+         /* Add your styles here */
+       `;
 
-  @property({ type: Array })
-  errors = [];
+       @property({ type: String })
+       title = "New Component";
 
-  override render() {
-    return html`
-      <div>${this.errors.map((error) => html`<p>${error.message}</p>`)}</div>
-    `;
-  }
-}
+       override render() {
+         return html`<div>${this.title}</div>`;
+       }
+     }
+     ```
 
-// src/index.ts
-export { GtErrorView } from "./gt-error-view.js";
-```
+2. **Export the Component**:
 
-By following these steps, you can extend the functionality of the `grammar-tools-ui` package to meet your specific needs.
+   - Update [src/index.ts](./src/index.ts) to export your new component:
+     ```ts
+     export { GtNewComponent } from "./gt-new-component.js";
+     ```
+
+3. **Update the Backend Interface**:
+
+   - If your component requires new backend methods, add them to [src/backend.ts](./src/backend.ts). Ensure these methods align with the `grammar-tools-core` service interface.
+
+4. **Test Your Component**:
+
+   - Use the `FixtureBackend` from `src/fixture/index.ts` to mock backend data for development and testing.
+   - Write unit tests for your component to ensure it behaves as expected.
+
+5. **Integrate with Existing Components**:
+   - If your new component interacts with existing components, update the relevant files to include your component. For example, you might add your component to the `GtDebugPanel` if it provides debugging functionality.
+
+By following these steps, you can enhance the `grammar-tools-ui` package to support additional grammar-related features or customize it for your specific use case.
 
 ## Reference
 
@@ -104,7 +124,7 @@ By following these steps, you can extend the functionality of the `grammar-tools
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -124,6 +144,6 @@ External: `lit`
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `38f6b8e5cb0688da34e930559899bb2ea7bb0aca` on `2026-07-21T01:16:36.018Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

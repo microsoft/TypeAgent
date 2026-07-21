@@ -21,6 +21,10 @@
  *   node typeagent-serve.mjs provision # run getKeys to write config.local.yaml
  *   node typeagent-serve.mjs status    # report whether the daemon is listening
  *   node typeagent-serve.mjs stop       # stop the daemon (best effort)
+ *   node typeagent-serve.mjs autostart [enable|disable|status]  # register a
+ *                                       # per-user OS trigger (Scheduled Task /
+ *                                       # systemd user unit / LaunchAgent) so the
+ *                                       # daemon starts again after logout/reboot
  *   node typeagent-serve.mjs tunnel [start|stop|status]  # manage the dev-tunnel
  *                                       # host so remote devices can reach the service
  * Options: --port <n> (default $TYPEAGENT_PORT / $AGENT_SERVER_PORT / 8999),
@@ -36,7 +40,8 @@ import fs from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const artifactDir = path.dirname(fileURLToPath(import.meta.url));
+const selfPath = fileURLToPath(import.meta.url);
+const artifactDir = path.dirname(selfPath);
 const serverEntry = path.join(artifactDir, "dist", "server.js");
 const getKeysEntry = path.join(artifactDir, "tools", "getKeys.mjs");
 const generateConfigEntry = path.join(
@@ -508,6 +513,360 @@ function cmdLogs() {
     return 0;
 }
 
+// ---- Autostart / service registration -----------------------------------
+// Register a per-user OS mechanism so the daemon comes back after logout/reboot:
+//   Windows -> Scheduled Task (logon trigger) supervising dist/server.js in the
+//              foreground, launched hidden through a wscript wait-shim so no
+//              console window appears. A Scheduled Task terminates its action's
+//              process tree when the action exits, so a fire-and-forget detached
+//              daemon would be killed; the task action must stay alive for the
+//              server's lifetime.
+//   Linux   -> systemd user unit supervising dist/server.js (Restart=on-failure).
+//   macOS   -> LaunchAgent supervising dist/server.js (KeepAlive).
+// Install is per-user everywhere, so none of these need admin. Each variant runs
+// the server in the foreground so its supervisor can stop and restart it.
+
+const AUTOSTART_TASK_NAME = "TypeAgent Agent Server";
+const AUTOSTART_LABEL = "com.microsoft.typeagent.agent-server";
+const AUTOSTART_SYSTEMD_UNIT = "typeagent-agent-server.service";
+
+function autostartAction() {
+    const a = process.argv[3];
+    return a && !a.startsWith("--") ? a : "status";
+}
+
+// Foreground server args (mirrors spawnDaemon, minus --idle-timeout: an
+// autostarted service should stay up rather than self-exit when idle).
+function autostartServerArgs(port) {
+    const args = [serverEntry, "--port", String(port)];
+    const profile =
+        arg("--config") ??
+        process.env.TYPEAGENT_AGENT_PROFILE ??
+        readProfileMarker();
+    if (profile) args.push("--config", profile);
+    return args;
+}
+
+// Pin the config dir the same way the launcher does, so the supervised server
+// reads config from where getKeys wrote it.
+function autostartEnv() {
+    const env = { TYPEAGENT_CONFIG_DIR: pinnedConfigDir() };
+    if (process.env.TYPEAGENT_USER_DATA_DIR) {
+        env.TYPEAGENT_USER_DATA_DIR = process.env.TYPEAGENT_USER_DATA_DIR;
+    }
+    return env;
+}
+
+function run(cmd, args, opts = {}) {
+    return spawnSync(cmd, args, { encoding: "utf-8", ...opts });
+}
+
+function psQuote(s) {
+    return "'" + String(s).replace(/'/g, "''") + "'";
+}
+
+function windowsShimPath() {
+    return path.join(artifactDir, "autostart-run.vbs");
+}
+
+// A WScript shim that launches the server hidden (window style 0) and WAITS for
+// it (bWaitOnReturn = True). Waiting keeps the shim alive as the Scheduled Task's
+// action for the server's whole lifetime, so Task Scheduler treats the task as
+// running and does not tear down the server; window style 0 hides node's console.
+function windowsShimContent(port) {
+    const cmdline = [process.execPath, ...autostartServerArgs(port)]
+        .map((a) => `"${a}"`)
+        .join(" ");
+    const runLiteral = `"${cmdline.replace(/"/g, '""')}"`;
+    const envLines = Object.entries(autostartEnv())
+        .map(([k, v]) => `env("${k}") = "${String(v).replace(/"/g, '""')}"`)
+        .join("\r\n");
+    return (
+        `Set sh = CreateObject("WScript.Shell")\r\n` +
+        `Set env = sh.Environment("Process")\r\n` +
+        (envLines ? envLines + "\r\n" : "") +
+        `sh.Run ${runLiteral}, 0, True\r\n`
+    );
+}
+
+async function autostartWindows(action, port) {
+    const powershell = "powershell.exe";
+    const shim = windowsShimPath();
+    if (action === "enable") {
+        fs.writeFileSync(shim, windowsShimContent(port));
+        const ps =
+            `$ErrorActionPreference='Stop';` +
+            `$u="$env:USERDOMAIN\\$env:USERNAME";` +
+            `$a=New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ${psQuote(`"${shim}"`)};` +
+            `$t=New-ScheduledTaskTrigger -AtLogOn -User $u;` +
+            `$p=New-ScheduledTaskPrincipal -UserId $u -LogonType Interactive;` +
+            `$s=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Hidden -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1);` +
+            `Register-ScheduledTask -TaskName ${psQuote(AUTOSTART_TASK_NAME)} -Action $a -Trigger $t -Principal $p -Settings $s -Force | Out-Null;`;
+        const r = run(powershell, [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            ps,
+        ]);
+        if (r.status !== 0) {
+            console.error(
+                `Failed to register scheduled task.\n${r.stderr ?? ""}`.trim(),
+            );
+            return 1;
+        }
+        console.log(
+            `Registered scheduled task "${AUTOSTART_TASK_NAME}" (starts the agent server at logon).`,
+        );
+        return 0;
+    }
+    if (action === "disable") {
+        run(powershell, [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            // Stop-ScheduledTask ends the wscript action, but node launched via
+            // WScript.Shell.Run escapes the task's job object and is orphaned, so
+            // also terminate the server started from THIS artifact's server.js
+            // (matched by command line, leaving any unrelated server untouched).
+            `$m=${psQuote(serverEntry)};` +
+                `Stop-ScheduledTask -TaskName ${psQuote(AUTOSTART_TASK_NAME)} -ErrorAction SilentlyContinue;` +
+                `Unregister-ScheduledTask -TaskName ${psQuote(AUTOSTART_TASK_NAME)} -Confirm:$false -ErrorAction SilentlyContinue;` +
+                `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -like ('*'+$m+'*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue };`,
+        ]);
+        try {
+            fs.rmSync(shim, { force: true });
+        } catch {}
+        console.log(`Removed scheduled task "${AUTOSTART_TASK_NAME}".`);
+        return 0;
+    }
+    const r = run(powershell, [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `if(Get-ScheduledTask -TaskName ${psQuote(AUTOSTART_TASK_NAME)} -ErrorAction SilentlyContinue){'registered'}else{'absent'}`,
+    ]);
+    const registered = (r.stdout ?? "").trim() === "registered";
+    console.log(
+        `Autostart (Scheduled Task "${AUTOSTART_TASK_NAME}"): ${registered ? "registered" : "not registered"}.`,
+    );
+    return registered ? 0 : 1;
+}
+
+function systemdUnitPath() {
+    const base =
+        process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config");
+    return path.join(base, "systemd", "user", AUTOSTART_SYSTEMD_UNIT);
+}
+
+function systemdUnitContent(port) {
+    const exec = [process.execPath, ...autostartServerArgs(port)]
+        .map((a) => `"${a}"`)
+        .join(" ");
+    const envLines = Object.entries(autostartEnv())
+        .map(([k, v]) => `Environment="${k}=${v}"`)
+        .join("\n");
+    return (
+        `[Unit]\n` +
+        `Description=TypeAgent Agent Server\n` +
+        `After=network-online.target\n` +
+        `Wants=network-online.target\n\n` +
+        `[Service]\n` +
+        `Type=simple\n` +
+        `ExecStart=${exec}\n` +
+        (envLines ? envLines + "\n" : "") +
+        `Restart=on-failure\n` +
+        `RestartSec=5\n\n` +
+        `[Install]\n` +
+        `WantedBy=default.target\n`
+    );
+}
+
+async function autostartLinux(action, port) {
+    if (run("systemctl", ["--version"]).status !== 0) {
+        console.error(
+            "systemd (systemctl) not found. Auto-start on Linux requires a systemd user session.",
+        );
+        return 1;
+    }
+    const unitPath = systemdUnitPath();
+    if (action === "enable") {
+        fs.mkdirSync(path.dirname(unitPath), { recursive: true });
+        fs.writeFileSync(unitPath, systemdUnitContent(port));
+        run("systemctl", ["--user", "daemon-reload"]);
+        // The installer may already have started a detached daemon on this port;
+        // enabling with --now would collide. Enable-only in that case and let
+        // systemd take over at the next login/boot.
+        const up = await isPortListening(port);
+        const enableArgs = up
+            ? ["--user", "enable", AUTOSTART_SYSTEMD_UNIT]
+            : ["--user", "enable", "--now", AUTOSTART_SYSTEMD_UNIT];
+        const r = run("systemctl", enableArgs);
+        if (r.status !== 0) {
+            console.error(
+                `Failed to enable systemd unit.\n${r.stderr ?? ""}`.trim(),
+            );
+            return 1;
+        }
+        // Best-effort: keep the service running without an interactive login.
+        const linger = run("loginctl", ["enable-linger"]);
+        console.log(
+            `Enabled systemd user unit ${AUTOSTART_SYSTEMD_UNIT} (${unitPath}).`,
+        );
+        if (up) {
+            console.log(
+                "A daemon is already running on the port; systemd takes over at the next login/boot.",
+            );
+        }
+        if (linger.status !== 0) {
+            console.log(
+                "Note: 'loginctl enable-linger' failed; the service starts at login rather than at boot.",
+            );
+        }
+        return 0;
+    }
+    if (action === "disable") {
+        run("systemctl", [
+            "--user",
+            "disable",
+            "--now",
+            AUTOSTART_SYSTEMD_UNIT,
+        ]);
+        try {
+            fs.rmSync(unitPath, { force: true });
+        } catch {}
+        run("systemctl", ["--user", "daemon-reload"]);
+        console.log(`Disabled systemd user unit ${AUTOSTART_SYSTEMD_UNIT}.`);
+        return 0;
+    }
+    const enabled = run("systemctl", [
+        "--user",
+        "is-enabled",
+        AUTOSTART_SYSTEMD_UNIT,
+    ]);
+    const active = run("systemctl", [
+        "--user",
+        "is-active",
+        AUTOSTART_SYSTEMD_UNIT,
+    ]);
+    const isEnabled = (enabled.stdout ?? "").trim() === "enabled";
+    console.log(
+        `Autostart (systemd user unit ${AUTOSTART_SYSTEMD_UNIT}): ${isEnabled ? "enabled" : "not enabled"}, ${(active.stdout ?? "").trim() || "inactive"}.`,
+    );
+    return isEnabled ? 0 : 1;
+}
+
+function launchAgentPath() {
+    return path.join(
+        os.homedir(),
+        "Library",
+        "LaunchAgents",
+        `${AUTOSTART_LABEL}.plist`,
+    );
+}
+
+function xmlEscape(s) {
+    return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+
+function launchAgentContent(port) {
+    const programArgs = [process.execPath, ...autostartServerArgs(port)]
+        .map((a) => `        <string>${xmlEscape(a)}</string>`)
+        .join("\n");
+    const envEntries = Object.entries(autostartEnv())
+        .map(
+            ([k, v]) =>
+                `        <key>${xmlEscape(k)}</key>\n        <string>${xmlEscape(v)}</string>`,
+        )
+        .join("\n");
+    const logPath = daemonLogPath();
+    return (
+        `<?xml version="1.0" encoding="UTF-8"?>\n` +
+        `<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n` +
+        `<plist version="1.0">\n` +
+        `<dict>\n` +
+        `    <key>Label</key>\n    <string>${AUTOSTART_LABEL}</string>\n` +
+        `    <key>ProgramArguments</key>\n    <array>\n${programArgs}\n    </array>\n` +
+        `    <key>EnvironmentVariables</key>\n    <dict>\n${envEntries}\n    </dict>\n` +
+        `    <key>RunAtLoad</key>\n    <true/>\n` +
+        `    <key>KeepAlive</key>\n    <true/>\n` +
+        `    <key>StandardOutPath</key>\n    <string>${xmlEscape(logPath)}</string>\n` +
+        `    <key>StandardErrorPath</key>\n    <string>${xmlEscape(logPath)}</string>\n` +
+        `</dict>\n</plist>\n`
+    );
+}
+
+async function autostartMac(action, port) {
+    const plist = launchAgentPath();
+    const uid = process.getuid ? process.getuid() : 0;
+    const domain = `gui/${uid}`;
+    if (action === "enable") {
+        fs.mkdirSync(path.dirname(plist), { recursive: true });
+        fs.mkdirSync(path.dirname(daemonLogPath()), { recursive: true });
+        fs.writeFileSync(plist, launchAgentContent(port));
+        // A daemon already listening (installer start) would collide on the port
+        // and trip KeepAlive; defer loading to the next login in that case.
+        if (await isPortListening(port)) {
+            console.log(
+                `Wrote LaunchAgent ${plist}. A daemon is already running; it will be supervised at the next login.`,
+            );
+            return 0;
+        }
+        let r = run("launchctl", ["bootstrap", domain, plist]);
+        if (r.status !== 0) {
+            r = run("launchctl", ["load", "-w", plist]);
+        }
+        if (r.status !== 0) {
+            console.error(
+                `Failed to load LaunchAgent.\n${r.stderr ?? ""}`.trim(),
+            );
+            return 1;
+        }
+        console.log(`Loaded LaunchAgent ${AUTOSTART_LABEL} (${plist}).`);
+        return 0;
+    }
+    if (action === "disable") {
+        run("launchctl", ["bootout", `${domain}/${AUTOSTART_LABEL}`]);
+        run("launchctl", ["unload", "-w", plist]);
+        try {
+            fs.rmSync(plist, { force: true });
+        } catch {}
+        console.log(`Removed LaunchAgent ${AUTOSTART_LABEL}.`);
+        return 0;
+    }
+    const registered = run("launchctl", ["list", AUTOSTART_LABEL]).status === 0;
+    console.log(
+        `Autostart (LaunchAgent ${AUTOSTART_LABEL}): ${registered ? "loaded" : "not loaded"}.`,
+    );
+    return registered ? 0 : 1;
+}
+
+async function cmdAutostart() {
+    const action = autostartAction();
+    if (!["enable", "disable", "status"].includes(action)) {
+        console.error(
+            `Unknown autostart action '${action}'. Use enable|disable|status.`,
+        );
+        return 1;
+    }
+    const port = resolvePort();
+    switch (process.platform) {
+        case "win32":
+            return autostartWindows(action, port);
+        case "linux":
+            return autostartLinux(action, port);
+        case "darwin":
+            return autostartMac(action, port);
+        default:
+            console.error(
+                `Autostart is not supported on platform '${process.platform}'.`,
+            );
+            return 1;
+    }
+}
+
 async function main() {
     pinnedConfigDir();
     const cmd =
@@ -526,6 +885,8 @@ async function main() {
             return cmdTunnel();
         case "logs":
             return cmdLogs();
+        case "autostart":
+            return cmdAutostart();
         case "stop": {
             // Best-effort: defer to the deployed control utility if present.
             const stop = path.join(artifactDir, "dist", "stop.js");

@@ -12,6 +12,8 @@ import type {
     AvailableAgent,
     StudioReplayRequest,
     StudioReplayResult,
+    ReplayResolutionTraceRequest,
+    ReplayResolutionTraceResult,
     StudioCollisionScanRequest,
     StudioCollisionScanResult,
     StudioCorpusImportRequest,
@@ -134,6 +136,14 @@ export type StudioServiceInvokeFunctions = {
         repoRoot: string | undefined,
         request: StudioReplayRequest,
     ): Promise<StudioReplayResult>;
+    /**
+     * Recompute a single utterance's resolution trace from a stored run
+     * descriptor (the drill-in "replay this trace" path).
+     */
+    replayResolutionTrace(
+        repoRoot: string | undefined,
+        request: ReplayResolutionTraceRequest,
+    ): Promise<ReplayResolutionTraceResult>;
     /**
      * Start pushing live `studioEvent` calls to *this* connection for the given
      * repo. Idempotent per connection: a second call replaces the connection's

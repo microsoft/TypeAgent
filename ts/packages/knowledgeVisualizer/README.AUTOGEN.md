@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=3ebe7a3c0ec093b5c00292d47b5e836dd58e5cba3d8c093b6fc266df569f4592 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=1be83159ea46c2db14e3a41e3531615413c65ce58efba9f2267e7c8ddaeb48f3 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # knowledgevisualizer — AI-generated documentation
@@ -12,53 +12,53 @@
 
 ## Overview
 
-The Knowledge Visualizer is an experimental TypeScript library designed to assist developers in browsing and debugging stored knowledge within the system. Its primary purpose is to serve as a debugging tool, providing visual representations of hierarchical structures, word clouds, and other data forms. This enables developers to better understand and interact with the system's knowledge base.
+The Knowledge Visualizer is an experimental TypeScript library designed to help developers browse and debug stored knowledge within the system. It provides a suite of visualization tools to represent hierarchical structures, word clouds, and other data forms, making it easier to understand and interact with the system's knowledge base. While primarily intended as a debugging tool, it also serves as a foundation for exploring and analyzing complex data relationships.
 
 ## What it does
 
-The Knowledge Visualizer provides a set of tools for visualizing and interacting with stored knowledge. It supports the following key functionalities:
+The Knowledge Visualizer offers several visualization capabilities, each tied to specific actions that dynamically update the displayed data:
 
-- **List Visualization**: Displays a structured list of data, updated dynamically via the `updateListVisualization` action.
-- **Knowledge Graph Visualization**: Renders a graph representation of the knowledge base, updated through the `updateKnowledgeVisualization` action.
-- **Hierarchical Visualization**: Displays hierarchical relationships in the data, updated via the `updateKnowledgeHierarchyVisualization` action.
-- **Word Cloud Visualization**: Generates a word cloud based on the data, updated using the `updateWordCloud` action.
+- **List Visualization**: Displays structured lists of data, updated via the `updateListVisualization` action.
+- **Knowledge Graph Visualization**: Renders graph-based representations of the knowledge base, updated through the `updateKnowledgeVisualization` action.
+- **Hierarchical Visualization**: Illustrates hierarchical relationships in the data, updated using the `updateKnowledgeHierarchyVisualization` action.
+- **Word Cloud Visualization**: Generates word clouds from the data, updated via the `updateWordCloud` action.
 
-These visualizations are dynamically updated in real-time using server-sent events (SSE), ensuring that the displayed data reflects the most current state of the system. The package integrates with the `agent-dispatcher` workspace dependency to fetch and process the required data.
+These visualizations are updated in real-time using server-sent events (SSE), ensuring that the displayed data reflects the latest state of the system. The package integrates with the `agent-dispatcher` dependency to fetch and process the required data.
 
 ## Setup
 
-To run the Knowledge Visualizer tool, follow these steps:
+To set up and run the Knowledge Visualizer tool:
 
-1. Ensure that all dependencies are installed by running:
+1. Install all dependencies by running:
 
    ```sh
    pnpm install
    ```
 
-2. Start the Knowledge Visualizer tool using the following command:
+2. Start the Knowledge Visualizer tool with:
    ```sh
    pnpm run kv
    ```
 
-This will launch the development server and enable the visualization tool. For additional setup details, refer to the hand-written README.
+This will launch the development server and enable the visualization tool. For additional details, refer to the hand-written README.
 
 ## Key Files
 
-The Knowledge Visualizer package is organized into several key components:
+The Knowledge Visualizer package is organized into several key components, each responsible for specific functionality:
 
 ### Route Handling
 
-- **[route.ts](./src/route/route.ts)**: This file sets up the middleware for the development server and handles server-sent events (SSE). It listens for data changes and triggers the appropriate visualization updates by emitting events such as `updateListVisualization`, `updateKnowledgeVisualization`, `updateKnowledgeHierarchyVisualization`, and `updateWordCloud`.
+- **[route.ts](./src/route/route.ts)**: Configures middleware for the development server and handles server-sent events (SSE). It listens for data changes and triggers visualization updates by emitting events such as `updateListVisualization`, `updateKnowledgeVisualization`, `updateKnowledgeHierarchyVisualization`, and `updateWordCloud`.
 
 ### Visualization Notifier
 
-- **[visualizationNotifier.ts](./src/route/visualizationNotifier.ts)**: This file defines the `VisualizationNotifier` class, which manages updates to the visualizations. It includes methods for handling different types of data updates, such as lists, knowledge graphs, hierarchies, and word clouds, and notifies the front-end components accordingly.
+- **[visualizationNotifier.ts](./src/route/visualizationNotifier.ts)**: Defines the `VisualizationNotifier` class, which manages updates to the visualizations. It includes methods for handling different types of data updates (e.g., lists, graphs, hierarchies, word clouds) and notifies the front-end components accordingly.
 
 ### Front-End Components
 
-- **[site/index.ts](./src/site/index.ts)**: The entry point for the front-end application. It initializes the visualization components, sets up event listeners for SSE, and updates the visualizations dynamically.
-- **[collapsableContainer.ts](./src/site/collapsableContainer.ts)**: Defines a reusable container component with expand/collapse functionality, used to organize and display visualizations.
-- **[visualizations](./src/site/visualizations/)**: This directory contains specific visualization components, such as:
+- **[site/index.ts](./src/site/index.ts)**: The entry point for the front-end application. It initializes visualization components, sets up event listeners for SSE, and dynamically updates the visualizations.
+- **[collapsableContainer.ts](./src/site/collapsableContainer.ts)**: Implements a reusable container component with expand/collapse functionality, used to organize and display visualizations.
+- **[visualizations](./src/site/visualizations/)**: Contains specific visualization components, such as:
   - **[wordCloud.ts](./src/site/visualizations/wordCloud.ts)**: Implements the word cloud visualization.
   - **[hierarchicalEdgeBundling.ts](./src/site/visualizations/hierarchicalEdgeBundling.ts)**: Implements the hierarchical edge bundling visualization.
   - **[tidyTree.ts](./src/site/visualizations/tidyTree.ts)**: Implements the tidy tree visualization.
@@ -66,7 +66,7 @@ The Knowledge Visualizer package is organized into several key components:
 ### Static Assets
 
 - **[index.html](./src/site/index.html)**: The main HTML file for the front-end application.
-- **[styles.css](./src/site/styles.css)**: Contains the CSS styles for the front-end components, including layout and visual design.
+- **[styles.css](./src/site/styles.css)**: Contains CSS styles for the front-end components, including layout and visual design.
 
 ## How to extend
 
@@ -74,7 +74,7 @@ To extend the Knowledge Visualizer, you can add new visualizations, modify exist
 
 1. **Understand the Route Handling**:
 
-   - Begin by reviewing [route.ts](./src/route/route.ts). This file sets up the middleware and SSE endpoints. If you need to handle new types of data updates, add new event listeners here.
+   - Review [route.ts](./src/route/route.ts), which sets up middleware and SSE endpoints. If you need to handle new types of data updates, add event listeners here.
 
 2. **Enhance the Visualization Notifier**:
 
@@ -115,6 +115,6 @@ External: `chalk`, `d3`, `d3-cloud`, `debug`
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowledgevisualizer docs:verify-links` to spot-check._
+_Auto-generated against commit `de9d1d44c33525463327199c8f244a24ddfdd874` on `2026-07-21T11:18:03.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter knowledgevisualizer docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

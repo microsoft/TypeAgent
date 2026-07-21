@@ -1,0 +1,562 @@
+/* Copyright (c) Microsoft Corporation.
+   Licensed under the MIT License. */
+
+/* The codicon icon font ships next to this stylesheet (copied from
+   @vscode/codicons at build time) so the viewer can use VS Code's native icon
+   set under the webview's font-src policy. */
+@font-face {
+  font-family: "codicon";
+  font-display: block;
+  src: url("codicon.ttf") format("truetype");
+}
+.codicon {
+  font: normal normal normal 16px/1 codicon;
+  display: inline-block;
+  text-decoration: none;
+  text-rendering: auto;
+  text-align: center;
+  vertical-align: middle;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+.codicon-go-to-file::before {
+  content: "\ea94";
+}
+
+:root {
+  --tv-gap: 10px;
+  --tv-radius: 6px;
+  --tv-border: var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  --tv-muted: var(--vscode-descriptionForeground, #8a8a8a);
+  --tv-mono: var(--vscode-editor-font-family, monospace);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  margin: 0;
+  padding: 0;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 14px 18px 28px;
+  box-sizing: border-box;
+  gap: var(--tv-gap);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+code.mono,
+.mono {
+  font-family: var(--tv-mono);
+  font-size: 0.92em;
+}
+
+/* --- Header --------------------------------------------------------------- */
+.trace-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.utterance {
+  font-family: var(--tv-mono);
+  font-size: 1.15em;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+/* --- Verdict + subtitle -------------------------------------------------- */
+.header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.header-top .utterance {
+  flex: 1;
+  min-width: 0;
+}
+/* The one-word answer to "did A and B agree?", parked top-right of the header. */
+.verdict {
+  flex: none;
+  font-size: 0.8em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.verdict.is-match {
+  background: rgba(70, 160, 90, 0.16);
+  color: var(--vscode-charts-green, #6bbf78);
+  border-color: rgba(70, 160, 90, 0.4);
+}
+.verdict.is-differ {
+  background: rgba(200, 150, 0, 0.16);
+  color: var(--vscode-charts-orange, #c8961e);
+  border-color: rgba(200, 150, 0, 0.45);
+}
+.verdict.is-neutral {
+  background: rgba(128, 128, 128, 0.16);
+  color: var(--tv-muted);
+  border-color: var(--tv-border);
+}
+.verdict.is-low-confidence {
+  border-style: dashed;
+}
+
+/* The optional one-line reading under the header: only shown when it adds
+   something the verdict badge and cause stage don't already say. */
+.subtitle {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.subtitle-text {
+  font-size: 1.02em;
+  line-height: 1.4;
+}
+.subtitle-note {
+  font-size: 0.85em;
+  color: var(--tv-muted);
+}
+.subtitle.is-low-confidence .subtitle-text {
+  font-style: italic;
+}
+
+.note-banner {
+  font-size: 0.88em;
+  color: var(--tv-muted);
+  padding: 6px 10px;
+  border-radius: var(--tv-radius);
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.1));
+}
+
+/* --- Pipeline ------------------------------------------------------------- */
+/* Stages stack vertically in runtime order and hang off a single left rail so
+   the panel reads as one flow the utterance traveled down. */
+.pipeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 26px;
+}
+.pipeline::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 10px;
+  bottom: 14px;
+  width: 2px;
+  background: var(--tv-border);
+}
+
+.stage {
+  position: relative;
+  border: 1px solid transparent;
+  border-radius: var(--tv-radius);
+  padding: 8px 12px;
+}
+/* Marker dot sitting on the rail; its fill encodes the stage's parity status. */
+.stage-marker {
+  position: absolute;
+  left: -26px;
+  top: 11px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--tv-border);
+  background: var(--vscode-editor-background);
+  box-sizing: border-box;
+}
+.stage.status-agree .stage-marker {
+  border-color: var(--vscode-charts-green, #6bbf78);
+  background: var(--vscode-charts-green, #6bbf78);
+}
+.stage.status-diverge .stage-marker,
+.stage.is-cause .stage-marker {
+  border-color: var(--vscode-charts-orange, #c8961e);
+  background: var(--vscode-charts-orange, #c8961e);
+}
+.stage.status-one-sided .stage-marker {
+  border-color: var(--vscode-charts-blue, #4ea1ff);
+  background: var(--vscode-editor-background);
+}
+.stage.status-inapplicable .stage-marker {
+  border-style: dashed;
+}
+
+.stage-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.stage-name {
+  font-weight: 600;
+  font-size: 0.96em;
+}
+.stage-status {
+  font-size: 0.76em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--tv-muted);
+}
+.stage.is-cause .stage-status {
+  color: var(--vscode-charts-orange, #c8961e);
+  font-weight: 600;
+}
+/* Directional status wording ("new in B" / "lost in B") reuses the outcome
+   palette: green for a match B gained, orange for one it lost. The green wins
+   over the cause card's orange so an improvement still reads as a win. */
+.stage-status.is-positive {
+  color: var(--vscode-charts-green, #6bbf78);
+  font-weight: 600;
+}
+.stage-status.is-negative {
+  color: var(--vscode-charts-orange, #c8961e);
+  font-weight: 600;
+}
+.stage.is-cause .stage-status.is-positive {
+  color: var(--vscode-charts-green, #6bbf78);
+}
+
+/* The accented "this is where they split" card. */
+.stage.is-cause {
+  border-color: var(--vscode-charts-orange, rgba(200, 150, 0, 0.5));
+  background: var(
+    --vscode-inputValidation-warningBackground,
+    rgba(200, 150, 0, 0.08)
+  );
+}
+.stage.is-result {
+  border-color: var(--tv-border);
+  margin-top: 6px;
+}
+.stage.is-result.is-cause {
+  border-color: var(--vscode-charts-orange, rgba(200, 150, 0, 0.5));
+}
+/* A converged Result collapses like the agreeing pre-action stages: no card
+   border, just the compact one-liner, so "same" reads the same way down the
+   whole pipeline. A diverged Result keeps its bordered card for the A/B split. */
+.stage.is-result.status-agree {
+  border-color: transparent;
+}
+
+/* Compact (converged / one-sided / n/a) stage: a single summary line. */
+.stage-compact .stage-summary {
+  margin-top: 4px;
+  font-size: 0.88em;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.stage-compact .stage-summary.is-muted {
+  color: var(--tv-muted);
+}
+.summary-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* The single tone-colored outcome phrase every side card and compact row leads
+   with, so status reads the same way at a glance across all stages. */
+.outcome {
+  overflow-wrap: anywhere;
+}
+.outcome.is-positive {
+  color: var(--vscode-charts-green, #6bbf78);
+}
+.outcome.is-negative {
+  color: var(--vscode-charts-orange, #c8961e);
+}
+.outcome.is-neutral {
+  color: var(--vscode-foreground);
+}
+.outcome.is-muted {
+  color: var(--tv-muted);
+  font-style: italic;
+}
+.only-side {
+  font-weight: 700;
+  font-size: 0.82em;
+  color: var(--vscode-charts-blue, #4ea1ff);
+}
+.cache-id {
+  font-size: 0.82em;
+  color: var(--tv-muted);
+}
+
+/* Expanded cause body: A/B columns + the "What changed" callout. */
+.stage-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* The cause bar: the single ⇄ diff chip naming the grammar/schema file a
+   divergence traces to, set on an accent rail so it reads as the answer inside
+   the tinted cause card. */
+.cause-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border: 1px solid var(--tv-border);
+  border-left: 3px solid var(--vscode-charts-orange, #d9822b);
+  border-radius: var(--tv-radius);
+  background: var(--vscode-editor-background);
+}
+/* Names the cause bar's meaning in a word, tinted to the accent rail so the
+   file chip beside it reads as the divergence's attributed change. */
+.cause-label {
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--vscode-charts-orange, #d9822b);
+}
+.stage-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.side-col {
+  border: 1px solid var(--tv-border);
+  border-radius: var(--tv-radius);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  background: var(--vscode-editor-background);
+}
+.side-col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.side-tag {
+  font-weight: 700;
+  font-size: 0.85em;
+  width: 1.3em;
+  height: 1.3em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  color: #fff;
+  flex: none;
+}
+.side-col.side-a .side-tag {
+  background: var(--vscode-charts-blue, #4ea1ff);
+}
+.side-col.side-b .side-tag {
+  background: var(--vscode-charts-purple, #b48ead);
+}
+/* The side card's primary outcome phrase, a step up in weight from the compact
+   rows so a diverging stage's two verdicts read first. */
+.side-col .outcome {
+  font-size: 0.95em;
+  font-weight: 600;
+}
+/* A side card's artifact on its own line under the outcome: the dim micro-label
+   and the mono value (matched rule / produced action / construction id). */
+.side-artifact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.artifact-label {
+  font-size: 0.68em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--tv-muted);
+}
+/* A small, secondary go-to-file icon beside a rule/action value; a distinct
+   affordance from the value token, brightening to a link tone on hover. */
+.open-source {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: var(--tv-muted);
+  cursor: pointer;
+}
+.open-source .codicon {
+  font-size: 13px;
+}
+.open-source:hover {
+  color: var(--vscode-textLink-foreground);
+}
+.open-source:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.side-empty {
+  font-size: 0.85em;
+  color: var(--tv-muted);
+  font-style: italic;
+}
+
+.compare-link {
+  font: inherit;
+  font-size: 0.9em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: var(--vscode-textLink-foreground);
+  cursor: pointer;
+}
+.compare-link:hover {
+  color: var(
+    --vscode-textLink-activeForeground,
+    var(--vscode-textLink-foreground)
+  );
+}
+.compare-link:hover .compare-label {
+  text-decoration: underline;
+}
+.compare-link:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.compare-glyph {
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+/* Output difference: the unified JSON diff of the two produced actions, shown at
+   the Result whenever the actions differ. Mirrors the Impact Report's diff
+   colors so the two surfaces read the same. */
+.output-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.output-diff-label {
+  font-size: 0.72em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--tv-muted);
+}
+.action-diff {
+  margin: 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  border: 1px solid var(--tv-border);
+  border-radius: var(--tv-radius);
+  background: var(--vscode-editor-background);
+  font-family: var(--tv-mono);
+  font-size: 0.86em;
+  line-height: 1.4;
+}
+.action-diff .diff-line {
+  display: block;
+  white-space: pre;
+  padding: 0 4px;
+  border-radius: 2px;
+}
+.action-diff .diff-added {
+  color: var(
+    --vscode-charts-green,
+    var(--vscode-gitDecoration-addedResourceForeground)
+  );
+  background: var(--vscode-diffEditor-insertedTextBackground, transparent);
+}
+.action-diff .diff-removed {
+  color: var(
+    --vscode-errorForeground,
+    var(--vscode-gitDecoration-deletedResourceForeground)
+  );
+  background: var(--vscode-diffEditor-removedTextBackground, transparent);
+}
+.action-diff .diff-context {
+  color: var(--vscode-descriptionForeground);
+}
+
+.rule,
+.action-name {
+  background: var(--vscode-textCodeBlock-background, rgba(128, 128, 128, 0.14));
+  padding: 1px 6px;
+  border-radius: 3px;
+  overflow-wrap: anywhere;
+}
+
+/* --- State screens -------------------------------------------------------- */
+.state-screen {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+.state-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 40ch;
+  text-align: center;
+  color: var(--tv-muted);
+  line-height: 1.5;
+}
+.spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--tv-border);
+  border-top-color: var(--vscode-focusBorder, #4ea1ff);
+  animation: tv-spin 0.8s linear infinite;
+}
+@keyframes tv-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+/* --- Narrow layout -------------------------------------------------------- */
+@media (max-width: 560px) {
+  /* Stack the A/B columns of a diverging stage when the panel gets too narrow
+     to keep them side-by-side and legible. */
+  .stage-sides {
+    grid-template-columns: 1fr;
+  }
+}

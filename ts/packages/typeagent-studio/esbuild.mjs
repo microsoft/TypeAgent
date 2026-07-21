@@ -153,18 +153,37 @@ const webviewConfig = {
     minify: !watch,
 };
 
+/**
+ * The Trace Viewer webview client bundle. Same browser-only constraints as the
+ * Impact Report client; renders the side-by-side resolution trace for one row.
+ * @type {import('esbuild').BuildOptions}
+ */
+const traceViewerConfig = {
+    entryPoints: ["src/webviewKit/client/traceViewer.ts"],
+    bundle: true,
+    outfile: "dist/webview/traceViewer.js",
+    format: "iife",
+    platform: "browser",
+    target: "es2020",
+    sourcemap: true,
+    minify: !watch,
+};
+
 if (watch) {
     const ctx = await esbuild.context(extensionConfig);
     const serviceCtx = await esbuild.context(serviceConfig);
     const webviewCtx = await esbuild.context(webviewConfig);
+    const traceViewerCtx = await esbuild.context(traceViewerConfig);
     await ctx.watch();
     await serviceCtx.watch();
     await webviewCtx.watch();
+    await traceViewerCtx.watch();
     copyRuntimeAssets();
     console.log("typeagent-studio: watching…");
 } else {
     await esbuild.build(extensionConfig);
     await esbuild.build(serviceConfig);
     await esbuild.build(webviewConfig);
+    await esbuild.build(traceViewerConfig);
     copyRuntimeAssets();
 }
