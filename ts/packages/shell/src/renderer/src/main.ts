@@ -276,6 +276,27 @@ document.addEventListener("DOMContentLoaded", async function () {
         baseConversationChanged?.(conversationId, name, queueSnapshot);
     };
 
+    // Render the collapsed status-notice affordance as a bell next to the
+    // connection indicator — but only when the conversation bar is actually
+    // shown (i.e. connected to a separate agent server). In the standalone
+    // shell the bar is hidden, so return falsy and let ChatPanel fall back to
+    // its own floating bell.
+    chatPanel.onStatusNoticeBadgeChange = (badge) => {
+        if (!conversationBarEnabled) {
+            return false;
+        }
+        conversationBar.setNotificationBadge(
+            badge
+                ? {
+                      count: badge.count,
+                      level: badge.level,
+                      onClick: () => chatPanel.expandAllStatusNotices(),
+                  }
+                : undefined,
+        );
+        return true;
+    };
+
     // The camera overlay lives alongside the panel and is toggled by the
     // image-capture provider.
     wrapper.appendChild(cameraView.getContainer());
