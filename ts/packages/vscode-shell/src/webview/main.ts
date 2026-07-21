@@ -12,6 +12,7 @@ import {
     ConversationBar,
     HistoryEntry,
     formatHistorySeparatorLabel,
+    handleClipboardShortcut,
     STATUS_NOTICE_EVENT,
     parseStatusNotice,
     type ConnectionStatus,
@@ -1384,6 +1385,18 @@ document.addEventListener("keydown", (e) => {
         lastEscapeTime = 0;
         e.preventDefault();
         vscode.postMessage({ type: "cancelAllQueuedAndRunning" });
+    }
+});
+
+// VS Code webviews don't perform the native clipboard action on the DOM
+// selection for Ctrl/Cmd+C|X the way the Electron shell does - only the
+// JS clipboard path runs, which is why the right-click menu copies but
+// the keyboard doesn't. Route these keys through chat-ui's shared
+// clipboard logic so keyboard copy/cut work over the chat history and
+// the message input.
+document.addEventListener("keydown", (e) => {
+    if (handleClipboardShortcut(e)) {
+        e.preventDefault();
     }
 });
 

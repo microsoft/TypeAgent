@@ -21,9 +21,13 @@
  *   push:
  *     Upload the local ts/.npmrc as the '<secret>' secret (vault writers only).
  *
- * Key Vault auth uses @azure/identity (DefaultAzureCredential, falling back to
- * an interactive browser login) — identical to getKeys. The feed tokenHelper
- * uses the Azure CLI (run `az login` once); pnpm re-runs it on every install.
+ * This script provisions the repo `.npmrc` and therefore runs BEFORE
+ * `pnpm install`, so it must have NO installed-package dependencies (needing a
+ * package to write the file that lets you install packages is the very
+ * chicken-and-egg it exists to break). It uses only Node built-ins plus the
+ * Azure CLI (`az`) — which the feed tokenHelper already depends on. Key Vault
+ * auth and token acquisition go through `az` and the Key Vault REST API; run
+ * `az login` once. The feed tokenHelper re-runs `az`/azureauth on every install.
  */
 
 import fs from "node:fs";
@@ -31,15 +35,44 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import chalk from "chalk";
-import {
-    DefaultAzureCredential,
-    InteractiveBrowserCredential,
-} from "@azure/identity";
-import { SecretClient } from "@azure/keyvault-secrets";
+import { execFileSync } from "node:child_process";
 
 const require = createRequire(import.meta.url);
 const config = require("./getNPMRC.config.json");
+
+// --- native ANSI colors (dependency-free chalk stand-in) -----------------
+// This script runs before `pnpm install`, so it can't import chalk. Colorize
+// only when writing to a TTY and NO_COLOR is unset, matching chalk's default
+// auto-detection so redirected logs / CI output stay clean.
+const colorEnabled =
+    !("NO_COLOR" in process.env) &&
+    process.env.TERM !== "dumb" &&
+    Boolean(process.stdout.isTTY);
+function ansi(open, close) {
+    const on = `\u001b[${open}m`;
+    const off = `\u001b[${close}m`;
+    return (s) => (colorEnabled ? `${on}${s}${off}` : String(s));
+}
+// Same call surface (and SGR codes) as the chalk methods this script uses.
+const chalk = {
+    bold: ansi(1, 22),
+    dim: ansi(2, 22),
+    red: ansi(31, 39),
+    green: ansi(32, 39),
+    yellow: ansi(33, 39),
+    blue: ansi(34, 39),
+    magenta: ansi(35, 39),
+    cyan: ansi(36, 39),
+    gray: ansi(90, 39),
+    grey: ansi(90, 39),
+    redBright: ansi(91, 39),
+    greenBright: ansi(92, 39),
+    yellowBright: ansi(93, 39),
+    blueBright: ansi(94, 39),
+    magentaBright: ansi(95, 39),
+    cyanBright: ansi(96, 39),
+    whiteBright: ansi(97, 39),
+};
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoNpmrcPath = path.resolve(__dirname, config.npmrcPath);
@@ -55,10 +88,16 @@ let paramAuthOnly = false;
 // Feed auth mechanism (default "azureauth"):
 //   azureauth    — tokenHelper using the azureauth CLI; an Entra ID token for
 //                  Azure DevOps, cached & silently refreshed via the OS broker
-//                  (WAM). No PAT stored, no rotation, CAE-aware.
+//                  (WAM). No PAT stored, no rotation, CAE-aware. If the azureauth
+//                  CLI isn't installed and this default wasn't chosen explicitly,
+//                  it falls back to the az-backed token-helper below.
 //   pat          — mint a rotating Azure DevOps PAT; Basic auth in ~/.npmrc.
 //   token-helper — az-backed tokenHelper (CAE-fragile; needs `az login`).
 let paramAuthMode = process.env.TYPEAGENT_NPM_AUTH ?? "azureauth";
+// Whether the mode was chosen explicitly (env var or --auth) vs. defaulted. A
+// defaulted azureauth mode falls back to token-helper when azureauth is absent;
+// an explicit azureauth still hard-errors so the user gets what they asked for.
+let authModeExplicit = process.env.TYPEAGENT_NPM_AUTH !== undefined;
 
 // --- identity (mirrors getKeys.mjs) --------------------------------------
 
@@ -83,38 +122,98 @@ function printIdentity(jwt) {
     if (who) console.log(`Logged in as ${chalk.cyanBright(who)}`);
 }
 
-// Try DefaultAzureCredential (az cli, az powershell, VS Code, managed identity,
-// env vars, ...) and fall back to an interactive browser login. Returns a
-// credential usable for Key Vault requests.
-async function getAzureCredential() {
-    const tenantId = process.env.AZURE_TENANT_ID;
-    const defaultCred = new DefaultAzureCredential(
-        tenantId ? { tenantId } : undefined,
-    );
-    let token;
+// az takes a resource/audience URI, not an OAuth scope: strip a trailing
+// "/.default" so "https://vault.azure.net/.default" -> "https://vault.azure.net"
+// and "<guid>/.default" -> "<guid>".
+function scopeToResource(scope) {
+    return scope.replace(/\/\.default$/i, "");
+}
+
+// Run an `az` subcommand and capture stdout. Returns { ok, stdout }; ok is false
+// when az is missing, errors, or isn't signed in (stderr is discarded). Never
+// throws, so callers can branch on az's state from its JSON output instead of
+// handling exceptions.
+function runAz(args) {
     try {
-        token = await defaultCred.getToken(KEY_VAULT_SCOPE);
+        const stdout = execFileSync("az", args, {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "ignore"],
+            shell: process.platform === "win32",
+        });
+        return { ok: true, stdout };
     } catch {
-        // fall through to interactive login below
+        return { ok: false, stdout: "" };
     }
-    if (!token) {
+}
+
+// Acquire an access token for `scope` from the signed-in Azure CLI session.
+// Shape mirrors @azure/identity's getToken() result ({ token }); returns
+// undefined when `az` is missing or not signed in. Never logs the token.
+async function azGetToken(scope) {
+    const tenantId = process.env.AZURE_TENANT_ID;
+    const args = [
+        "account",
+        "get-access-token",
+        "--resource",
+        scopeToResource(scope),
+        "--output",
+        "json",
+        "--only-show-errors",
+    ];
+    if (tenantId) args.push("--tenant", tenantId);
+    const res = runAz(args);
+    if (!res.ok) return undefined; // az missing or not signed in
+    try {
+        const data = JSON.parse(res.stdout);
+        return data?.accessToken ? { token: data.accessToken } : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+// A credential compatible with the callers below (they only need getToken).
+const azCredential = { getToken: azGetToken };
+
+// Interactive `az login` (opens a browser) — the dependency-free equivalent of
+// @azure/identity's InteractiveBrowserCredential fallback. Cross-tenant vaults
+// are handled by az's own tenant selection (honoring AZURE_TENANT_ID).
+function azLogin() {
+    const tenantId = process.env.AZURE_TENANT_ID;
+    const args = ["login", "--only-show-errors"];
+    if (tenantId) args.push("--tenant", tenantId);
+    execFileSync("az", args, {
+        stdio: "inherit",
+        shell: process.platform === "win32",
+    });
+}
+
+// Get an Azure credential backed by the Azure CLI. If no silent token is
+// available (az not signed in), fall back to an interactive `az login`, then
+// retry. Returns a credential exposing getToken(scope).
+async function getAzureCredential() {
+    let token = await azCredential.getToken(KEY_VAULT_SCOPE);
+    if (!token?.token) {
         console.warn(
             chalk.yellowBright(
-                "No silent Azure credential available — launching interactive browser login...",
+                "No signed-in Azure CLI session — launching `az login`...",
             ),
         );
-        const interactive = new InteractiveBrowserCredential({
-            ...(tenantId ? { tenantId } : {}),
-            // Key Vaults / feeds may live in a different tenant than the
-            // user's home tenant.
-            additionallyAllowedTenants: ["*"],
-        });
-        token = await interactive.getToken(KEY_VAULT_SCOPE);
-        printIdentity(token.token);
-        return interactive;
+        try {
+            azLogin();
+        } catch {
+            throw new Error(
+                "Azure CLI login failed. Install the Azure CLI (https://aka.ms/azcli) and run `az login`, then retry.",
+            );
+        }
+        token = await azCredential.getToken(KEY_VAULT_SCOPE);
+        if (!token?.token) {
+            throw new Error(
+                "Could not acquire an Azure token after `az login`. Run `az login` and retry.",
+            );
+        }
     }
     printIdentity(token.token);
-    return defaultCred;
+    return azCredential;
 }
 
 // Cache the credential so we don't re-run the auth chain (or prompt twice) when
@@ -125,6 +224,57 @@ async function getCredential() {
         cachedCredential = await getAzureCredential();
     }
     return cachedCredential;
+}
+
+// --- Key Vault REST (no SDK) ---------------------------------------------
+// Talk to Key Vault's data-plane REST API directly with a bearer token from
+// `az`, replacing @azure/keyvault-secrets. Same vault URL and 404 handling the
+// SDK surfaced, so the callers' error paths are unchanged.
+const KEY_VAULT_API_VERSION = "7.4";
+
+function keyVaultSecretUrl(vault, secret) {
+    return `https://${vault}.vault.azure.net/secrets/${encodeURIComponent(
+        secret,
+    )}?api-version=${KEY_VAULT_API_VERSION}`;
+}
+
+// Perform a Key Vault request with a bearer token; throw an Error carrying the
+// HTTP status (as .statusCode, matching the SDK) on failure.
+async function keyVaultRequest(credential, url, init) {
+    const at = await credential.getToken(KEY_VAULT_SCOPE);
+    if (!at?.token) {
+        throw new Error("Could not acquire a Key Vault access token.");
+    }
+    const res = await fetch(url, {
+        ...init,
+        headers: { ...init?.headers, authorization: `Bearer ${at.token}` },
+    });
+    if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        const err = new Error(
+            `HTTP ${res.status} ${res.statusText}. ${body.slice(0, 300)}`.trim(),
+        );
+        err.statusCode = res.status;
+        throw err;
+    }
+    return res;
+}
+
+async function keyVaultGetSecret(credential, vault, secret) {
+    const res = await keyVaultRequest(
+        credential,
+        keyVaultSecretUrl(vault, secret),
+    );
+    const data = await res.json();
+    return data.value;
+}
+
+async function keyVaultSetSecret(credential, vault, secret, value) {
+    await keyVaultRequest(credential, keyVaultSecretUrl(vault, secret), {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value }),
+    });
 }
 
 // --- npmrc helpers -------------------------------------------------------
@@ -366,18 +516,24 @@ function upsertFeedBasicAuth(nerfDart, org, pat) {
     }
 }
 
-// Quick, non-fatal check that the Azure CLI is available and signed in — the
-// feed tokenHelper depends on it at pnpm-install time.
-async function hasAzLogin() {
+// Azure CLI health for the feed tokenHelper (which shells out to `az` at
+// pnpm-install time). Uses az's JSON output to distinguish "not installed" from
+// "installed but not signed in", and returns the signed-in identity when
+// available. Non-fatal: callers warn on a missing/blank state, they don't abort.
+function azAccountStatus() {
+    // `az version` prints JSON only when the CLI is installed and runnable.
+    if (!runAz(["version", "--output", "json"]).ok) {
+        return { installed: false, signedIn: false };
+    }
+    const res = runAz(["account", "show", "--output", "json"]);
+    if (!res.ok) {
+        return { installed: true, signedIn: false };
+    }
     try {
-        const { execFileSync } = await import("node:child_process");
-        execFileSync("az", ["account", "show"], {
-            stdio: "ignore",
-            shell: process.platform === "win32",
-        });
-        return true;
+        const account = JSON.parse(res.stdout);
+        return { installed: true, signedIn: true, user: account?.user?.name };
     } catch {
-        return false;
+        return { installed: true, signedIn: true };
     }
 }
 
@@ -699,13 +855,9 @@ async function pull() {
             `Pulling ${chalk.cyanBright(secret)} from ${chalk.cyanBright(vault)} key vault...`,
         );
         const credential = await getCredential();
-        const client = new SecretClient(
-            `https://${vault}.vault.azure.net`,
-            credential,
-        );
         let value;
         try {
-            value = (await client.getSecret(secret)).value;
+            value = await keyVaultGetSecret(credential, vault, secret);
         } catch (e) {
             const status = e?.statusCode ?? e?.status;
             console.error(
@@ -764,8 +916,12 @@ async function pull() {
         return;
     }
 
-    if (paramAuthMode === "azureauth") {
-        if (!(await hasAzureAuth())) {
+    // Default mode is 'azureauth', which needs a separate azureauth CLI. When it
+    // isn't installed and the user didn't explicitly ask for it, fall back to the
+    // az-backed token helper (az is already required by this script and was
+    // confirmed working above) rather than failing the whole bootstrap.
+    if (paramAuthMode === "azureauth" && !(await hasAzureAuth())) {
+        if (authModeExplicit) {
             console.error(
                 chalk.red(
                     "azureauth CLI not found. Install it (https://aka.ms/azureauth), or use\n" +
@@ -775,6 +931,17 @@ async function pull() {
             process.exitCode = 1;
             return;
         }
+        console.warn(
+            chalk.yellow(
+                "azureauth CLI not found — falling back to the az-backed token helper.\n" +
+                    "Install azureauth (https://aka.ms/azureauth) for broker-cached, CAE-aware\n" +
+                    "auth, or pass --auth pat.",
+            ),
+        );
+        paramAuthMode = "token-helper";
+    }
+
+    if (paramAuthMode === "azureauth") {
         const helperPath = writeAzureAuthTokenHelper();
         upsertTokenHelper(nerfDart, helperPath);
         console.log(
@@ -827,13 +994,45 @@ async function pull() {
                 `Feed tokenHelper installed in ${chalk.cyanBright(userNpmrcPath)} (auto-refreshes via az).`,
             ),
         );
-        if (!(await hasAzLogin())) {
+        const status = azAccountStatus();
+        if (!status.installed) {
             console.warn(
                 chalk.yellowBright(
-                    "\nWARNING: `az` is not signed in (or not installed). Run `az login` so the\n" +
-                        "feed tokenHelper can mint tokens — otherwise `pnpm install` will 401.",
+                    "\nWARNING: the Azure CLI (`az`) was not found. Install it\n" +
+                        "(https://aka.ms/azcli) and run `az login`, or `pnpm install` will 401.",
                 ),
             );
+        } else if (!status.signedIn) {
+            console.warn(
+                chalk.yellowBright(
+                    "\nWARNING: `az` is not signed in. Run `az login` so the feed tokenHelper\n" +
+                        "can mint tokens — otherwise `pnpm install` will 401.",
+                ),
+            );
+        } else {
+            // Verify the helper will work by actually minting the feed token now
+            // (JSON captured, token never printed) — symmetric with the azureauth
+            // path's verification.
+            const adoResource =
+                process.env.TYPEAGENT_ADO_RESOURCE ?? config.adoResource;
+            const at = await azCredential.getToken(`${adoResource}/.default`);
+            if (at?.token) {
+                console.log(
+                    chalk.green(
+                        "Verified: az returned an Azure DevOps feed token" +
+                            (status.user
+                                ? ` for ${chalk.cyanBright(status.user)}.`
+                                : "."),
+                    ),
+                );
+            } else {
+                console.warn(
+                    chalk.yellowBright(
+                        "Signed in to `az`, but couldn't mint an Azure DevOps feed token just now.\n" +
+                            "Re-run `az login` if `pnpm install` later returns 401.",
+                    ),
+                );
+            }
         }
         return;
     }
@@ -937,12 +1136,8 @@ async function push() {
         );
         return;
     }
-    const client = new SecretClient(
-        `https://${vault}.vault.azure.net`,
-        credential,
-    );
     try {
-        await client.setSecret(secret, content);
+        await keyVaultSetSecret(credential, vault, secret, content);
         console.log(
             chalk.green(`Secret '${secret}' updated in vault '${vault}'.`),
         );
@@ -1019,6 +1214,7 @@ const commands = ["push", "pull", "help"];
                     "Missing value for --auth (pat | token-helper)",
                 );
             }
+            authModeExplicit = true;
             continue;
         }
         if (arg === "--auth-only") {

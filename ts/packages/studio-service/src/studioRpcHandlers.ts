@@ -97,6 +97,9 @@ export function createStudioInvokeHandlers(
                 ? { ...result, rows: result.rows.slice(0, MAX_ROWS) }
                 : result;
         },
+        async replayResolutionTrace(repoRoot, request) {
+            return conn.getRuntime(repoRoot).replayResolutionTrace(request);
+        },
         async subscribeEvents(repoRoot) {
             // Subscribe this connection to the repo's event stream. Installing
             // replaces any prior subscription (idempotent — never stacks

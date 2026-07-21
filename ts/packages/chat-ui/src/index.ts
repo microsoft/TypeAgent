@@ -63,7 +63,11 @@ export {
     type StatusNoticeLevel,
 } from "./statusNotice.js";
 
-export { ChatContextMenu, ContextMenuTargetOptions } from "./contextMenu.js";
+export {
+    ChatContextMenu,
+    ContextMenuTargetOptions,
+    handleClipboardShortcut,
+} from "./contextMenu.js";
 
 export type {
     SpeechState,
