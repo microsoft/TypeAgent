@@ -41,16 +41,25 @@ const webviewConfig = {
     },
 };
 
+/** @type {import('esbuild').BuildOptions} */
+const expandConfig = {
+    ...webviewConfig,
+    entryPoints: ["src/webview/expand.ts"],
+    outfile: "dist/expand.js",
+};
+
 async function build() {
     if (watch) {
         const extCtx = await esbuild.context(extensionConfig);
         const webCtx = await esbuild.context(webviewConfig);
-        await Promise.all([extCtx.watch(), webCtx.watch()]);
+        const expandCtx = await esbuild.context(expandConfig);
+        await Promise.all([extCtx.watch(), webCtx.watch(), expandCtx.watch()]);
         console.log("Watching for changes...");
     } else {
         await Promise.all([
             esbuild.build(extensionConfig),
             esbuild.build(webviewConfig),
+            esbuild.build(expandConfig),
         ]);
         console.log("Build complete");
     }

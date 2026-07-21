@@ -42,6 +42,12 @@ type FeedbackHost = {
     bodyDiv: HTMLElement;
     headerDiv: HTMLElement;
     messageDiv: HTMLElement;
+    /**
+     * Optional host-native "expand" (e.g. open in a separate VS Code editor
+     * panel). Returns true if the host handled it; otherwise the widget falls
+     * back to the in-page overlay.
+     */
+    expandMessage?: () => boolean;
 };
 
 type ActionRow = {
@@ -118,7 +124,13 @@ export class FeedbackWidget {
                 "expand",
                 "Expand message",
                 iconExpand(),
-                () => openMessageExpand(this.host.messageDiv),
+                () => {
+                    // Prefer a host-native window (e.g. a VS Code editor
+                    // panel); fall back to the in-page overlay.
+                    if (!this.host.expandMessage?.()) {
+                        openMessageExpand(this.host.messageDiv);
+                    }
+                },
             );
             root.appendChild(expandBtn);
         }

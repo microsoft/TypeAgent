@@ -8,7 +8,10 @@ import type { FeedbackController } from "../src/feedbackWidget.js";
 // FeedbackWidget renders the per-message action row (copy / expand / rate).
 // These tests run under jsdom (see jest.config.cjs).
 
-function makeWidget(messageHtml = "<p>hello</p>") {
+function makeWidget(
+    messageHtml = "<p>hello</p>",
+    expandMessage?: () => boolean,
+) {
     const container = document.createElement("div");
     const messageDiv = document.createElement("div");
     messageDiv.innerHTML = messageHtml;
@@ -23,6 +26,7 @@ function makeWidget(messageHtml = "<p>hello</p>") {
             bodyDiv: document.createElement("div"),
             headerDiv: document.createElement("div"),
             messageDiv,
+            expandMessage,
         },
         controller,
         "footer-always",
@@ -47,6 +51,27 @@ describe("FeedbackWidget expand", () => {
             "thumbs-down",
             "more",
         ]);
+    });
+
+    it("delegates to a host expand callback instead of the overlay", () => {
+        const expandMessage = jest.fn(() => true);
+        const { container } = makeWidget("<p>x</p>", expandMessage);
+        container
+            .querySelector<HTMLButtonElement>('[data-action="expand"]')!
+            .click();
+        expect(expandMessage).toHaveBeenCalledTimes(1);
+        expect(document.querySelector(".chat-expand-overlay")).toBeNull();
+    });
+
+    it("falls back to the overlay when the host callback returns false", () => {
+        const expandMessage = jest.fn(() => false);
+        const { container } = makeWidget("<p>x</p>", expandMessage);
+        container
+            .querySelector<HTMLButtonElement>('[data-action="expand"]')!
+            .click();
+        expect(expandMessage).toHaveBeenCalledTimes(1);
+        expect(document.querySelector(".chat-expand-overlay")).not.toBeNull();
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
 
     it("moves the message content into the overlay and back when closed", () => {

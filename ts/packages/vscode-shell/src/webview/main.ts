@@ -194,6 +194,13 @@ const chatPanel = new ChatPanel(rootEl, {
         handleLinkClick: (href: string, _target: string | null) => {
             vscode.postMessage({ type: "openExternal", href });
         },
+        // Open the message in a separate VS Code editor panel (movable /
+        // snappable) rather than the in-page overlay. The extension host owns
+        // the panel; it re-sanitizes the content before rendering.
+        expandMessage: (html: string, title?: string) => {
+            vscode.postMessage({ type: "expandMessage", html, title });
+            return true;
+        },
     },
     // Mic + camera providers (see WEBVIEW_MEDIA_CAPTURE_SUPPORTED). Both are
     // undefined while getUserMedia is blocked in VS Code webviews, so neither

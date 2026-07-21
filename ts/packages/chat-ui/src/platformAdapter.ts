@@ -10,6 +10,15 @@
 export interface PlatformAdapter {
     /** Handle a click on an <a> link in rendered content. */
     handleLinkClick(href: string, target: string | null): void;
+
+    /**
+     * Open a message's rendered content in a host-native separate window
+     * (e.g. a VS Code editor panel the user can move/snap). Given the message
+     * content as an HTML string plus an optional title. Return true if the host
+     * handled it; when absent or returning false, chat-ui falls back to an
+     * in-page overlay.
+     */
+    expandMessage?(html: string, title?: string): boolean;
 }
 
 /**

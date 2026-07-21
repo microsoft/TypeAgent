@@ -1104,6 +1104,26 @@
   border-radius: 0;
 }
 
+/* Standalone expanded message page (a host-native window, e.g. a VS Code
+   editor panel). Reuses .chat-message-content for typography but drops the
+   bubble chrome and centers a readable column. */
+.chat-expand-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px 20px;
+  box-shadow: none;
+  border-radius: 0;
+}
+/* The expand panel is a standalone scrollable page; some hosts set the chat
+   body to a fixed-height, overflow-hidden flex layout (media/chat.css), so
+   restore normal document scrolling for the panel body. */
+body.chat-expand-standalone {
+  height: auto;
+  min-height: 100vh;
+  overflow: auto;
+  display: block;
+}
+
 .chat-lightbox-overlay {
   position: fixed;
   inset: 0;

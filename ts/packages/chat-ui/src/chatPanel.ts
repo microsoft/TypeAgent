@@ -5417,6 +5417,19 @@ class AgentMessageContainer {
                 bodyDiv: this.messageDiv,
                 headerDiv: this.timestampDiv,
                 messageDiv: this.messageDiv,
+                expandMessage: this.platformAdapter.expandMessage
+                    ? () =>
+                          // Messages backed by an <iframe> (script-driven
+                          // image/video/settings displays) don't survive
+                          // re-sanitization in a separate panel; keep those on
+                          // the live overlay by declining here.
+                          this.messageDiv.querySelector("iframe")
+                              ? false
+                              : this.platformAdapter.expandMessage!(
+                                    this.messageDiv.innerHTML,
+                                    this.nameSpan.textContent ?? undefined,
+                                )
+                    : undefined,
             },
             controller,
             variant,

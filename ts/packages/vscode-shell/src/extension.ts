@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
+import { createWebviewNonce } from "@typeagent/core/webview";
 import { ChatViewProvider } from "./chatViewProvider.js";
 import { AgentServerBridge } from "./agentServerBridge.js";
 
@@ -39,6 +40,7 @@ export function activate(context: vscode.ExtensionContext): void {
         restoreSessionId: sidebarRestoreId,
         // Sidebar-only default; tab panels stay ephemeral.
         defaultSessionName: "VS Code",
+        onExpandMessage: (html, title) => openExpandPanel(context, html, title),
     });
 
     // Persist the sidebar's current session so reopening VS Code rejoins it
@@ -557,6 +559,94 @@ function openNewChatPanel(
     });
 }
 
+/**
+ * Open a message's rendered content in a standalone editor panel (a movable /
+ * snappable window) for easier reading. The panel HTML is static; the content
+ * is delivered over postMessage and re-sanitized in the webview (expand.ts), so
+ * no HTML is constructed from the message on the extension side.
+ */
+function openExpandPanel(
+    context: vscode.ExtensionContext,
+    html: string,
+    title?: string,
+): void {
+    const panel = vscode.window.createWebviewPanel(
+        "vscode-shell.expandPanel",
+        title && title.trim() ? title : "TypeAgent Message",
+        vscode.ViewColumn.Beside,
+        {
+            enableScripts: true,
+            localResourceRoots: [
+                vscode.Uri.joinPath(context.extensionUri, "dist"),
+                vscode.Uri.joinPath(context.extensionUri, "media"),
+            ],
+        },
+    );
+    panel.iconPath = vscode.Uri.joinPath(
+        context.extensionUri,
+        "media",
+        "icons",
+        "typeagent.svg",
+    );
+
+    const webview = panel.webview;
+    // Append each resource's mtime so a redeploy/reload doesn't serve a stale
+    // cached bundle/stylesheet (mirrors ChatViewProvider).
+    const fs: typeof import("fs") = require("fs");
+    const asUri = (...parts: string[]) => {
+        const fsUri = vscode.Uri.joinPath(context.extensionUri, ...parts);
+        let stamp: number;
+        try {
+            stamp = fs.statSync(fsUri.fsPath).mtimeMs | 0;
+        } catch {
+            stamp = Date.now();
+        }
+        return `${webview.asWebviewUri(fsUri)}?v=${stamp}`;
+    };
+    const scriptUri = asUri("dist", "expand.js");
+    const styleUri = asUri("media", "chat.css");
+    const codiconUri = asUri("media", "codicon.css");
+    const nonce = createWebviewNonce();
+
+    // Register the listener before setting the HTML so we can't miss the
+    // webview's initial "expandReady". expand.js re-sanitizes the content
+    // before rendering, so no HTML is built from the message here.
+    const sub = webview.onDidReceiveMessage((msg) => {
+        if (msg?.type === "expandReady") {
+            void webview.postMessage({ type: "expandContent", html });
+        } else if (
+            msg?.type === "openExternal" &&
+            typeof msg.href === "string"
+        ) {
+            void vscode.env.openExternal(vscode.Uri.parse(msg.href));
+        }
+    });
+    panel.onDidDispose(() => sub.dispose());
+
+    webview.html = /* html */ `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'none';
+                   style-src ${webview.cspSource} 'unsafe-inline';
+                   script-src 'nonce-${nonce}';
+                   img-src ${webview.cspSource} data:;
+                   font-src ${webview.cspSource};
+                   form-action 'none';
+                   base-uri 'none';">
+    <link href="${codiconUri}" rel="stylesheet">
+    <link href="${styleUri}" rel="stylesheet">
+    <title>TypeAgent Message</title>
+</head>
+<body class="chat-expand-standalone">
+    <div id="expand-root" class="chat-expand-page chat-message-content"></div>
+    <script nonce="${nonce}" src="${scriptUri}"></script>
+</body>
+</html>`;
+}
+
 function attachChatPanel(
     context: vscode.ExtensionContext,
     provider: ChatViewProvider,
@@ -579,6 +669,7 @@ function attachChatPanel(
         ephemeralSessionName: opts.ephemeralSessionName,
         displayName: opts.displayName,
         restoreSessionId: opts.restoreSessionId,
+        onExpandMessage: (html, title) => openExpandPanel(context, html, title),
     });
 
     const entry: ChatEntry = {

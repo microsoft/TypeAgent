@@ -194,6 +194,8 @@ export class AgentServerBridge {
     private onWebviewFocusChanged?: (focused: boolean) => void;
     /** If set, connect() will join this existing session instead of creating one. */
     private restoreSessionId: string | undefined;
+    /** Host callback that opens a message's content in a separate editor panel. */
+    private readonly onExpandMessage?: (html: string, title?: string) => void;
 
     // Per-session command-completion controller (lazy).  Each webview that
     // requests completions is tracked here; replies are sent only to the
@@ -217,12 +219,14 @@ export class AgentServerBridge {
         defaultSessionName?: string;
         displayName?: string;
         restoreSessionId?: string;
+        onExpandMessage?: (html: string, title?: string) => void;
     }) {
         this.ownsStatusBar = opts?.ownsStatusBar ?? true;
         this.ephemeralSessionName = opts?.ephemeralSessionName;
         this.defaultSessionName = opts?.defaultSessionName;
         this.displayName = opts?.displayName ?? "TypeAgent";
         this.restoreSessionId = opts?.restoreSessionId;
+        this.onExpandMessage = opts?.onExpandMessage;
         if (this.ownsStatusBar) {
             this.statusBarItem = vscode.window.createStatusBarItem(
                 vscode.StatusBarAlignment.Left,
@@ -1483,6 +1487,11 @@ export class AgentServerBridge {
                 if (msg.href) {
                     void vscode.env.openExternal(vscode.Uri.parse(msg.href));
                 }
+                break;
+            case "expandMessage":
+                // Open the message content in a separate editor panel (a
+                // movable window). The extension owns the panel.
+                this.onExpandMessage?.(msg.html, msg.title);
                 break;
             case "getSpeechToken": {
                 // Relay a speech-token request to the agent server (which owns
