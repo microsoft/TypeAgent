@@ -388,7 +388,11 @@ const defaultSessionConfig: SessionConfig = {
     request: DispatcherName,
     translation: {
         enabled: true,
-        model: "",
+        // Default translation model. "GPT_4_1" resolves to the gpt-4.1
+        // deployment in both config.local.yaml and the CI build-pipeline-kv
+        // config, keeping local dev and CI on the same model. Override per
+        // session with `@config translation model <name>`.
+        model: "GPT_4_1",
         stream: true,
         promptConfig: {
             additionalInstructions: true,
