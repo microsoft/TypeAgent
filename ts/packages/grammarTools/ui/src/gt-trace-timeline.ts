@@ -52,6 +52,17 @@ interface DerivedTraceData {
     onSuccessPath: Set<number>;
 }
 
+/** One event as laid out for the table: the event, its row index, indent depth,
+ *  group size (>0 for a ruleEntered with collapsible children), and the input
+ *  position carried over from the preceding partAttempted. */
+interface VisibleEvent {
+    event: TraceEvent;
+    index: number;
+    depth: number;
+    groupSize: number;
+    attemptPos?: number;
+}
+
 /**
  * Step-by-step match trace table.
  * @element gt-trace-timeline
@@ -429,13 +440,7 @@ export class GtTraceTimeline extends LitElement {
         this._collapsedGroups = next;
     }
 
-    private _visibleEvents(): Array<{
-        event: TraceEvent;
-        index: number;
-        depth: number;
-        groupSize: number; // >0 for ruleEntered with children
-        attemptPos?: number; // inputPos from preceding partAttempted
-    }> {
+    private _visibleEvents(): VisibleEvent[] {
         const trace = this._activeTrace;
         if (!trace) return [];
         const derived = this._derivedTraceData();
@@ -668,122 +673,7 @@ export class GtTraceTimeline extends LitElement {
         ];
 
         return html`
-            ${this._readOnly
-                ? nothing
-                : html`<details class="options-panel">
-                          <summary>Match Options</summary>
-                          <div class="options-bar">
-                              <label
-                                  ><strong>Wildcard:</strong>
-                                  <select
-                                      @change=${(e: Event) => {
-                                          this._wildcardPolicy = (
-                                              e.target as HTMLSelectElement
-                                          ).value as WildcardPolicy;
-                                      }}
-                                  >
-                                      <option
-                                          value="exhaustive"
-                                          ?selected=${this._wildcardPolicy ===
-                                          "exhaustive"}
-                                      >
-                                          exhaustive
-                                      </option>
-                                      <option
-                                          value="shortest"
-                                          ?selected=${this._wildcardPolicy ===
-                                          "shortest"}
-                                      >
-                                          shortest
-                                      </option>
-                                  </select></label
-                              >
-                              <label
-                                  ><strong>Optional:</strong>
-                                  <select
-                                      @change=${(e: Event) => {
-                                          this._optionalPolicy = (
-                                              e.target as HTMLSelectElement
-                                          ).value as OptionalPolicy;
-                                      }}
-                                  >
-                                      <option
-                                          value="exhaustive"
-                                          ?selected=${this._optionalPolicy ===
-                                          "exhaustive"}
-                                      >
-                                          exhaustive
-                                      </option>
-                                      <option
-                                          value="preferTake"
-                                          ?selected=${this._optionalPolicy ===
-                                          "preferTake"}
-                                      >
-                                          preferTake
-                                      </option>
-                                      <option
-                                          value="preferSkip"
-                                          ?selected=${this._optionalPolicy ===
-                                          "preferSkip"}
-                                      >
-                                          preferSkip
-                                      </option>
-                                  </select></label
-                              >
-                              <label
-                                  ><strong>Repeat:</strong>
-                                  <select
-                                      @change=${(e: Event) => {
-                                          this._repeatPolicy = (
-                                              e.target as HTMLSelectElement
-                                          ).value as RepeatPolicy;
-                                      }}
-                                  >
-                                      <option
-                                          value="exhaustive"
-                                          ?selected=${this._repeatPolicy ===
-                                          "exhaustive"}
-                                      >
-                                          exhaustive
-                                      </option>
-                                      <option
-                                          value="greedy"
-                                          ?selected=${this._repeatPolicy ===
-                                          "greedy"}
-                                      >
-                                          greedy
-                                      </option>
-                                      <option
-                                          value="nonGreedy"
-                                          ?selected=${this._repeatPolicy ===
-                                          "nonGreedy"}
-                                      >
-                                          nonGreedy
-                                      </option>
-                                  </select></label
-                              >
-                          </div>
-                      </details>
-
-                      <div class="input-row">
-                          <input
-                              type="text"
-                              placeholder="Enter input to trace..."
-                              .value=${this._input}
-                              @input=${(e: Event) => {
-                                  this._input = (
-                                      e.target as HTMLInputElement
-                                  ).value;
-                              }}
-                              @keydown=${this._onInputKeydown}
-                          />
-                          <button
-                              @click=${this._runTrace}
-                              ?disabled=${this._loading || !this._input}
-                          >
-                              Trace
-                          </button>
-                      </div>`}
+            ${this._renderControls()}
             ${trace ? this._renderInputDisplay() : nothing}
             ${this._error
                 ? html`<div class="error-text status-line">${this._error}</div>`
@@ -793,241 +683,313 @@ export class GtTraceTimeline extends LitElement {
                 : nothing}
             ${trace
                 ? html`
-                      <div class="summary-bar">
-                          ${trace.events.length} events,
-                          ${trace.events.filter((e) => e.kind === "ruleEntered")
-                              .length}
-                          rules entered,
-                          ${trace.events.filter((e) => e.kind === "backtrack")
-                              .length}
-                          backtracks, result:
-                          <strong>${trace.result}</strong>
-                          ${trace.matchValue !== undefined
-                              ? html`, value:
-                                    <code
-                                        >${JSON.stringify(
-                                            trace.matchValue,
-                                            null,
-                                            2,
-                                        )}</code
-                                    >`
-                              : nothing}
-                      </div>
-
-                      <div class="filter-bar">
-                          ${allKinds.map(
-                              (kind) => html`
-                                  <button
-                                      class="filter-btn ${this._hiddenKinds.has(
-                                          kind,
-                                      )
-                                          ? ""
-                                          : "active"}"
-                                      aria-pressed=${!this._hiddenKinds.has(
-                                          kind,
-                                      )}
-                                      @click=${() => this._toggleKind(kind)}
-                                  >
-                                      <span class="evk-${kind}"
-                                          >${EVENT_ICONS[kind]}</span
-                                      >
-                                      ${kind}
-                                  </button>
-                              `,
-                          )}
-                          <span class="filter-separator"></span>
-                          <button
-                              class="filter-btn ${this._showSuccessPath
-                                  ? "active"
-                                  : ""}"
-                              aria-pressed=${this._showSuccessPath}
-                              @click=${() => {
-                                  this._showSuccessPath =
-                                      !this._showSuccessPath;
-                              }}
-                          >
-                              <span class="evk-partMatched">✓</span>
-                              Success path
-                          </button>
-                          <button
-                              class="filter-btn ${this._showFailurePath
-                                  ? "active"
-                                  : ""}"
-                              aria-pressed=${this._showFailurePath}
-                              @click=${() => {
-                                  this._showFailurePath =
-                                      !this._showFailurePath;
-                              }}
-                          >
-                              <span class="evk-partFailed">✗</span>
-                              Failure path
-                          </button>
-                      </div>
-
-                      <table>
-                          <thead>
-                              <tr>
-                                  <th>#</th>
-                                  <th>Rule</th>
-                                  <th>Part</th>
-                                  <th>Event</th>
-                                  <th>Input Pos</th>
-                                  <th>Detail</th>
-                              </tr>
-                          </thead>
-                          <tbody>
-                              ${visible.map(
-                                  ({
-                                      event,
-                                      index,
-                                      depth,
-                                      groupSize,
-                                      attemptPos,
-                                  }) => {
-                                      const isPartEvent =
-                                          event.kind === "partAttempted" ||
-                                          event.kind === "partMatched" ||
-                                          event.kind === "partFailed";
-                                      const partId = isPartEvent
-                                          ? (event as { part: number }).part
-                                          : undefined;
-                                      const partLabel =
-                                          partId !== undefined
-                                              ? this._activeDebugInfo?.partLabels.get(
-                                                    partId,
-                                                )
-                                              : undefined;
-                                      const ruleName =
-                                          event.kind !== "backtrack"
-                                              ? event.rule
-                                              : undefined;
-                                      const hasSlots =
-                                          event.kind === "partMatched" &&
-                                          event.capturedValue !== undefined;
-                                      const isGroup = groupSize > 0;
-                                      const collapsed =
-                                          this._collapsedGroups.has(index);
-                                      const rowClass = [
-                                          this._selectedRow === index
-                                              ? "selected"
-                                              : "",
-                                          event.kind === "partMatched"
-                                              ? "row-matched"
-                                              : "",
-                                          event.kind === "partFailed"
-                                              ? "row-failed"
-                                              : "",
-                                          event.kind === "backtrack"
-                                              ? "row-backtrack"
-                                              : "",
-                                      ]
-                                          .filter(Boolean)
-                                          .join(" ");
-                                      return html`
-                                          <tr
-                                              class="${rowClass}"
-                                              @mouseenter=${() => {
-                                                  this._hoveredRow = index;
-                                              }}
-                                              @mouseleave=${() => {
-                                                  this._hoveredRow = -1;
-                                              }}
-                                              @click=${() => {
-                                                  this._selectedRow = index;
-                                                  if (hasSlots)
-                                                      this._toggleExpand(index);
-                                              }}
-                                          >
-                                              <td>${index + 1}</td>
-                                              <td>
-                                                  ${Array.from(
-                                                      { length: depth },
-                                                      () =>
-                                                          html`<span
-                                                              class="indent-unit"
-                                                          ></span>`,
-                                                  )}${isGroup
-                                                      ? html`<span
-                                                            class="group-toggle"
-                                                            @click=${(
-                                                                e: Event,
-                                                            ) => {
-                                                                e.stopPropagation();
-                                                                this._toggleCollapse(
-                                                                    index,
-                                                                );
-                                                            }}
-                                                            >${collapsed
-                                                                ? "\u25B6"
-                                                                : "\u25BC"}</span
-                                                        >`
-                                                      : nothing}
-                                                  ${this._renderRuleLink(
-                                                      ruleName ?? "",
-                                                  )}${isGroup && collapsed
-                                                      ? html`<span
-                                                            class="muted"
-                                                        >
-                                                            (${groupSize})</span
-                                                        >`
-                                                      : nothing}
-                                              </td>
-                                              <td>
-                                                  ${this._renderPartLink(
-                                                      partId,
-                                                      partLabel,
-                                                  )}
-                                              </td>
-                                              <td>
-                                                  <span
-                                                      class="event-icon evk-${event.kind}"
-                                                      >${EVENT_ICONS[
-                                                          event.kind
-                                                      ]}</span
-                                                  >
-                                                  ${EVENT_LABELS[event.kind] ??
-                                                  event.kind}
-                                              </td>
-                                              <td>
-                                                  ${event.kind === "partMatched"
-                                                      ? `${attemptPos ?? 0}..${event.endPos}`
-                                                      : event.inputPos}
-                                              </td>
-                                              <td>
-                                                  ${this._eventDetail(
-                                                      event,
-                                                      attemptPos,
-                                                  )}
-                                              </td>
-                                          </tr>
-                                          ${hasSlots &&
-                                          this._expandedRows.has(index)
-                                              ? html`<tr>
-                                                    <td colspan="6">
-                                                        <div class="slots">
-                                                            ${`$${(event as PartMatchedEvent).capturedValue!.variable}`}
-                                                            =
-                                                            ${JSON.stringify(
-                                                                (
-                                                                    event as PartMatchedEvent
-                                                                ).capturedValue!
-                                                                    .value,
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>`
-                                              : nothing}
-                                      `;
-                                  },
-                              )}
-                          </tbody>
-                      </table>
+                      ${this._renderSummaryBar(trace)}
+                      ${this._renderFilterBar(allKinds)}
+                      ${this._renderTraceTable(visible)}
                   `
                 : !this._loading && !this._error
                   ? html`<div class="empty-state">
                         Enter input and click Trace
                     </div>`
                   : nothing}
+        `;
+    }
+
+    /** The match-options panel and the input/Trace row. Live mode only;
+     *  a display-only trace hides both since it can't re-run a match. */
+    private _renderControls() {
+        if (this._readOnly) {
+            return nothing;
+        }
+        return html`<details class="options-panel">
+                <summary>Match Options</summary>
+                <div class="options-bar">
+                    <label
+                        ><strong>Wildcard:</strong>
+                        <select
+                            @change=${(e: Event) => {
+                                this._wildcardPolicy = (
+                                    e.target as HTMLSelectElement
+                                ).value as WildcardPolicy;
+                            }}
+                        >
+                            <option
+                                value="exhaustive"
+                                ?selected=${this._wildcardPolicy ===
+                                "exhaustive"}
+                            >
+                                exhaustive
+                            </option>
+                            <option
+                                value="shortest"
+                                ?selected=${this._wildcardPolicy === "shortest"}
+                            >
+                                shortest
+                            </option>
+                        </select></label
+                    >
+                    <label
+                        ><strong>Optional:</strong>
+                        <select
+                            @change=${(e: Event) => {
+                                this._optionalPolicy = (
+                                    e.target as HTMLSelectElement
+                                ).value as OptionalPolicy;
+                            }}
+                        >
+                            <option
+                                value="exhaustive"
+                                ?selected=${this._optionalPolicy ===
+                                "exhaustive"}
+                            >
+                                exhaustive
+                            </option>
+                            <option
+                                value="preferTake"
+                                ?selected=${this._optionalPolicy ===
+                                "preferTake"}
+                            >
+                                preferTake
+                            </option>
+                            <option
+                                value="preferSkip"
+                                ?selected=${this._optionalPolicy ===
+                                "preferSkip"}
+                            >
+                                preferSkip
+                            </option>
+                        </select></label
+                    >
+                    <label
+                        ><strong>Repeat:</strong>
+                        <select
+                            @change=${(e: Event) => {
+                                this._repeatPolicy = (
+                                    e.target as HTMLSelectElement
+                                ).value as RepeatPolicy;
+                            }}
+                        >
+                            <option
+                                value="exhaustive"
+                                ?selected=${this._repeatPolicy === "exhaustive"}
+                            >
+                                exhaustive
+                            </option>
+                            <option
+                                value="greedy"
+                                ?selected=${this._repeatPolicy === "greedy"}
+                            >
+                                greedy
+                            </option>
+                            <option
+                                value="nonGreedy"
+                                ?selected=${this._repeatPolicy === "nonGreedy"}
+                            >
+                                nonGreedy
+                            </option>
+                        </select></label
+                    >
+                </div>
+            </details>
+
+            <div class="input-row">
+                <input
+                    type="text"
+                    placeholder="Enter input to trace..."
+                    .value=${this._input}
+                    @input=${(e: Event) => {
+                        this._input = (e.target as HTMLInputElement).value;
+                    }}
+                    @keydown=${this._onInputKeydown}
+                />
+                <button
+                    @click=${this._runTrace}
+                    ?disabled=${this._loading || !this._input}
+                >
+                    Trace
+                </button>
+            </div>`;
+    }
+
+    /** The one-line tally of the trace: event/rule/backtrack counts and the
+     *  final result and value. */
+    private _renderSummaryBar(trace: MatchTrace) {
+        return html`
+            <div class="summary-bar">
+                ${trace.events.length} events,
+                ${trace.events.filter((e) => e.kind === "ruleEntered").length}
+                rules entered,
+                ${trace.events.filter((e) => e.kind === "backtrack").length}
+                backtracks, result:
+                <strong>${trace.result}</strong>
+                ${trace.matchValue !== undefined
+                    ? html`, value:
+                          <code
+                              >${JSON.stringify(
+                                  trace.matchValue,
+                                  null,
+                                  2,
+                              )}</code
+                          >`
+                    : nothing}
+            </div>
+        `;
+    }
+
+    /** The event-kind toggles plus the success/failure path filters. */
+    private _renderFilterBar(allKinds: EventKindFilter[]) {
+        return html`
+            <div class="filter-bar">
+                ${allKinds.map(
+                    (kind) => html`
+                        <button
+                            class="filter-btn ${this._hiddenKinds.has(kind)
+                                ? ""
+                                : "active"}"
+                            aria-pressed=${!this._hiddenKinds.has(kind)}
+                            @click=${() => this._toggleKind(kind)}
+                        >
+                            <span class="evk-${kind}"
+                                >${EVENT_ICONS[kind]}</span
+                            >
+                            ${kind}
+                        </button>
+                    `,
+                )}
+                <span class="filter-separator"></span>
+                <button
+                    class="filter-btn ${this._showSuccessPath ? "active" : ""}"
+                    aria-pressed=${this._showSuccessPath}
+                    @click=${() => {
+                        this._showSuccessPath = !this._showSuccessPath;
+                    }}
+                >
+                    <span class="evk-partMatched">✓</span>
+                    Success path
+                </button>
+                <button
+                    class="filter-btn ${this._showFailurePath ? "active" : ""}"
+                    aria-pressed=${this._showFailurePath}
+                    @click=${() => {
+                        this._showFailurePath = !this._showFailurePath;
+                    }}
+                >
+                    <span class="evk-partFailed">✗</span>
+                    Failure path
+                </button>
+            </div>
+        `;
+    }
+
+    /** The trace table: a fixed header and one body row per visible event. */
+    private _renderTraceTable(visible: VisibleEvent[]) {
+        return html`<table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Rule</th>
+                    <th>Part</th>
+                    <th>Event</th>
+                    <th>Input Pos</th>
+                    <th>Detail</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${visible.map((row) => this._renderTraceRow(row))}
+            </tbody>
+        </table>`;
+    }
+
+    /** One event's table row: indent, rule/part links, the event cell, input
+     *  position and detail, plus an expanded slots row for a captured value. */
+    private _renderTraceRow(row: VisibleEvent) {
+        const { event, index, depth, groupSize, attemptPos } = row;
+        const isPartEvent =
+            event.kind === "partAttempted" ||
+            event.kind === "partMatched" ||
+            event.kind === "partFailed";
+        const partId = isPartEvent
+            ? (event as { part: number }).part
+            : undefined;
+        const partLabel =
+            partId !== undefined
+                ? this._activeDebugInfo?.partLabels.get(partId)
+                : undefined;
+        const ruleName = event.kind !== "backtrack" ? event.rule : undefined;
+        const hasSlots =
+            event.kind === "partMatched" && event.capturedValue !== undefined;
+        const isGroup = groupSize > 0;
+        const collapsed = this._collapsedGroups.has(index);
+        const rowClass = [
+            this._selectedRow === index ? "selected" : "",
+            event.kind === "partMatched" ? "row-matched" : "",
+            event.kind === "partFailed" ? "row-failed" : "",
+            event.kind === "backtrack" ? "row-backtrack" : "",
+        ]
+            .filter(Boolean)
+            .join(" ");
+        return html`
+            <tr
+                class="${rowClass}"
+                @mouseenter=${() => {
+                    this._hoveredRow = index;
+                }}
+                @mouseleave=${() => {
+                    this._hoveredRow = -1;
+                }}
+                @click=${() => {
+                    this._selectedRow = index;
+                    if (hasSlots) this._toggleExpand(index);
+                }}
+            >
+                <td>${index + 1}</td>
+                <td>
+                    ${Array.from(
+                        { length: depth },
+                        () => html`<span class="indent-unit"></span>`,
+                    )}${isGroup
+                        ? html`<span
+                              class="group-toggle"
+                              @click=${(e: Event) => {
+                                  e.stopPropagation();
+                                  this._toggleCollapse(index);
+                              }}
+                              >${collapsed ? "\u25B6" : "\u25BC"}</span
+                          >`
+                        : nothing}
+                    ${this._renderRuleLink(ruleName ?? "")}${isGroup &&
+                    collapsed
+                        ? html`<span class="muted"> (${groupSize})</span>`
+                        : nothing}
+                </td>
+                <td>${this._renderPartLink(partId, partLabel)}</td>
+                <td>
+                    <span class="event-icon evk-${event.kind}"
+                        >${EVENT_ICONS[event.kind]}</span
+                    >
+                    ${EVENT_LABELS[event.kind] ?? event.kind}
+                </td>
+                <td>
+                    ${event.kind === "partMatched"
+                        ? `${attemptPos ?? 0}..${event.endPos}`
+                        : event.inputPos}
+                </td>
+                <td>${this._eventDetail(event, attemptPos)}</td>
+            </tr>
+            ${hasSlots && this._expandedRows.has(index)
+                ? html`<tr>
+                      <td colspan="6">
+                          <div class="slots">
+                              ${`$${(event as PartMatchedEvent).capturedValue!.variable}`}
+                              =
+                              ${JSON.stringify(
+                                  (event as PartMatchedEvent).capturedValue!
+                                      .value,
+                              )}
+                          </div>
+                      </td>
+                  </tr>`
+                : nothing}
         `;
     }
 

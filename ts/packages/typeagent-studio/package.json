@@ -309,6 +309,12 @@
           },
           "default": [],
           "description": "Additional directories that contain agent subdirectories (peer to 'packages/agents') to discover and load agents from — e.g. a sibling 'agents' directory in another repo or submodule. Relative paths are resolved against the detected repo root. The repo's own 'packages/agents' is always included."
+        },
+        "typeagentStudio.traceViewer.maxRetainedRuns": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 8,
+          "description": "How many agents' most-recent replay runs keep their captured resolution traces for the Trace Viewer. One run is retained per agent; once traces for this many agents are stored, the oldest agent's traces are evicted to keep the persisted payload bounded."
         }
       }
     },

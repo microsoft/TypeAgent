@@ -17,9 +17,10 @@ import type {
 // (a new run for the agent evicts the previous one), and a small global cap
 // bounds how many agents' runs are retained at once.
 
-/** Keep the last run for at most this many agents so the persisted payload stays
+/** Default number of agents whose most-recent run keeps its captured traces, used
+ *  when the caller doesn't supply a configured cap. Keeps the persisted payload
  *  bounded even if the user cycles through many agents. */
-const MAX_RETAINED_RUNS = 8;
+export const DEFAULT_MAX_RETAINED_RUNS = 8;
 
 const runKey = (runId: string): string => `traceRun.${runId}`;
 const agentRunKey = (agent: string): string => `traceRun.byAgent.${agent}`;
@@ -125,6 +126,7 @@ export async function saveTraceRun(
     state: vscode.Memento,
     descriptor: ReplayRunDescriptor,
     traces: readonly ReplayResolutionTrace[],
+    maxRetainedRuns: number = DEFAULT_MAX_RETAINED_RUNS,
 ): Promise<void> {
     const debugInfos: Record<string, SerializedGrammarDebugInfo> = {};
     const rows: Record<string, ReplayResolutionTrace> = {};
@@ -159,8 +161,9 @@ export async function saveTraceRun(
 
     // evictRun rewrites the order list in state, so re-read it each pass rather
     // than trusting the stale local copy.
+    const cap = Math.max(1, Math.floor(maxRetainedRuns));
     let retained = order;
-    while (retained.length > MAX_RETAINED_RUNS) {
+    while (retained.length > cap) {
         await evictRun(state, retained[0]);
         retained = state.get<string[]>(RUN_ORDER_KEY) ?? [];
     }

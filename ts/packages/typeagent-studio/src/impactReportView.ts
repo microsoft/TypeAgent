@@ -658,6 +658,9 @@ export function openImpactReport(
                     context.workspaceState,
                     descriptor,
                     payload.resolutionTraces,
+                    vscode.workspace
+                        .getConfiguration("typeagentStudio.traceViewer")
+                        .get<number>("maxRetainedRuns", 8),
                 );
             }
         } catch (e) {
