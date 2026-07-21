@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c5399ef3c2ea2a1a6a110eb5f81e2fe0184a7a051313c74c4346c19c1655f942 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=630782cfba989575c5a123fc366fa2f7289a19e7a6cc2d90aee33f7a894ad5d3 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-ui — AI-generated documentation
@@ -120,6 +120,6 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ---
 
-_Auto-generated against commit `4f7693322e181137049b7af9ff36387934d81930` on `2026-07-21T08:52:40.173Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `2c30376e7c64d637818336b4eb2e056078b5254c` on `2026-07-21T20:02:46.119Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
