@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=defa207de402d9d4238d34e6cc81391fe34893bb6f3a744d7e763170a4a31375 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=51a8bd8b53680b7a76e0b13859b481a1da5c005bee9b30590002d8164b3ec47f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent — AI-generated documentation
@@ -16,7 +16,7 @@ The `typeagent` package is a sample library designed to support the development 
 
 ## What it does
 
-The `typeagent` package provides a wide range of utilities and components that are essential for building and running agents. These include:
+The `typeagent` package offers a variety of utilities and components that are essential for building and running agents. These include:
 
 - **Async Processing**: Functions like `mapAsync` in [arrayAsync.ts](./src/arrayAsync.ts) and `callWithRetry` in [async.ts](./src/async.ts) enable efficient handling of concurrent and retryable asynchronous operations.
 - **Vectors and Embeddings**: Tools for managing vector operations and embeddings, such as `vectorIndex` and `semanticMap`, are located in the `vector` directory. These utilities are useful for tasks like similarity searches and semantic indexing.
@@ -111,6 +111,6 @@ External: `async`, `cheerio`, `debug`, `typechat`, `typescript`
 
 ---
 
-_Auto-generated against commit `39a849889253ec3158c06e840286e7d5938a43c8` on `2026-07-20T17:56:07.959Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `2e9b80fda11742ce351fd15e82b4eb0003b203c9` on `2026-07-21T00:06:05.901Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
