@@ -566,8 +566,8 @@ export class ChatPanel {
     /**
      * Buffered `@notify` entries surfaced via `@notify show` / `@notify info`.
      * Populated by {@link recordNotification}; read, marked-read, or emptied by
-     * {@link showNotifications}. Intentionally survives {@link clear} (the chat
-     * `@clear`) — only `@notify clear` empties it, matching prior host behavior.
+     * {@link showNotifications}. The chat `@clear` ({@link clear}) leaves it
+     * intact; only `@notify clear` empties it.
      */
     private notifications: Array<{
         event: string;
@@ -2703,11 +2703,10 @@ export class ChatPanel {
 
     /**
      * Show a persistent status notice: a bottom-right toast that stays until
-     * dismissed (unlike showToast's 5s auto-hide). The minimize (×) collapses
-     * it into the top-right bell as an unread item; clicking the bell re-opens
-     * every collapsed notice. Re-calling with the same `id` replaces the notice
-     * (e.g. a reconnect re-sending it). An optional action button runs
-     * `actionCommand` through the chat input, so the affordance works
+     * dismissed. The minimize (×) collapses it into the top-right bell as an
+     * unread item; clicking the bell re-opens every collapsed notice. Calling
+     * with an existing `id` replaces that notice. An optional action button
+     * runs `actionCommand` through the chat input, so the affordance works
      * identically in every host with no extra wiring.
      */
     public showStatusNotice(notice: StatusNotice): void {
@@ -2804,8 +2803,7 @@ export class ChatPanel {
         root.appendChild(toast);
         layer.appendChild(root);
         this.statusNotices.set(notice.id, root);
-        // A fresh notice shows expanded, so refresh the bell's unread count in
-        // case this replaced a previously-collapsed notice with the same id.
+        // The notice shows expanded; refresh the bell's unread count.
         this.updateStatusNoticeBell();
     }
 

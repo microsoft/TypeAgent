@@ -251,8 +251,8 @@ chatPanel.onDemoAction = (action: "continue" | "cancel") => {
 };
 
 // Render the collapsed status-notice affordance as a bell next to the
-// connection indicator in the conversation bar (instead of ChatPanel's own
-// floating bell). Returning true tells ChatPanel we displayed it.
+// connection indicator in the conversation bar. Returning true tells ChatPanel
+// the host displayed the badge.
 chatPanel.onStatusNoticeBadgeChange = (badge) => {
     conversationBar.setNotificationBadge(
         badge

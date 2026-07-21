@@ -113,8 +113,7 @@ function toTemplateType(
         case "any":
         case "true":
         case "false":
-            // No editable template representation for these; skip the field
-            // instead of failing the whole template build.
+            // These have no editable template representation, so skip the field.
             return undefined;
         default: {
             const invalid: never = type;

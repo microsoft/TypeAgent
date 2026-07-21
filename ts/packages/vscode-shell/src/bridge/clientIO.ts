@@ -312,8 +312,7 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
                 );
             } else if (action === "open-folder") {
                 // The dispatcher's @open command resolves a folder path and
-                // asks the client to reveal it. Match the Electron shell
-                // (shell.openPath) by opening the folder in the OS file
+                // asks the client to reveal it. Open the folder in the OS file
                 // manager via the platform's default handler.
                 const folder = typeof data === "string" ? data : "";
                 if (folder) {
