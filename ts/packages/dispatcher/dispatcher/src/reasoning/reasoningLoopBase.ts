@@ -177,6 +177,51 @@ export function formatThinkingDisplay(thinkingText: string): string {
 }
 
 /**
+ * Collapses runs of identical, back-to-back tool-call lines into a single line
+ * with an "xN" suffix (e.g. three identical calls render as "... x3"). Only
+ * direct neighbors merge: any other display between two identical calls (a
+ * thinking block, streamed text, a tool result, or a different tool call) ends
+ * the run and keeps the calls separate.
+ *
+ * Tool lines are buffered instead of emitted right away, because the count is
+ * not known until the run ends. Callers must:
+ *   - route every tool-call line through tool()
+ *   - call flush() before emitting any non-tool display
+ *   - call flush() once more after the reasoning stream completes
+ */
+export class ToolRunFolder {
+    private pending: string | undefined;
+    private count = 0;
+
+    constructor(private readonly emit: (content: string) => void) {}
+
+    // Record a tool-call line, folding it into the current run when identical
+    // to the immediately preceding one.
+    tool(display: string): void {
+        if (this.pending === display) {
+            this.count++;
+            return;
+        }
+        this.flush();
+        this.pending = display;
+        this.count = 1;
+    }
+
+    // Emit the buffered run (if any) and reset. A run of two or more identical
+    // calls gets an "xN" suffix; a single call is emitted unchanged.
+    flush(): void {
+        if (this.pending === undefined) {
+            return;
+        }
+        const content =
+            this.count > 1 ? `${this.pending} x${this.count}` : this.pending;
+        this.pending = undefined;
+        this.count = 0;
+        this.emit(content);
+    }
+}
+
+/**
  * Process a reasoning session's event stream with display output and optional tracing.
  * Shared loop logic used by all reasoning adapters.
  */
