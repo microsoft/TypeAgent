@@ -28,25 +28,38 @@ export async function executeChatResponseAction(
     return handleChatResponse(chatAction, context);
 }
 
-async function rehydrateImages(context: ActionContext, files: string[]) {
+// Extract the bare file name from an attachment path. The path can arrive with
+// Windows (\) or POSIX (/) separators depending on its origin (an uploaded
+// attachment vs. a highlighted editor file), so strip whichever appears last.
+export function getAttachmentFileName(file: string): string {
+    const sepIndex = Math.max(file.lastIndexOf("\\"), file.lastIndexOf("/"));
+    return sepIndex > -1 ? file.substring(sepIndex + 1) : file;
+}
+
+export async function rehydrateImages(context: ActionContext, files: string[]) {
     let html = "<div>";
 
     for (let i = 0; i < files.length; i++) {
-        let name = files[i];
+        const name = getAttachmentFileName(files[i]);
         console.log(`Rehydrating Image ${name}`);
-        if (files[i].lastIndexOf("\\") > -1) {
-            name = files[i].substring(files[i].lastIndexOf("\\") + 1);
-        }
 
-        const a = await context.sessionContext.sessionStorage?.read(
-            `\\..\\user_files\\${name}`,
-            "base64",
-        );
-
-        if (a) {
-            html += getImageElement(
-                `data:image/${getMimeType(name.substring(name.indexOf(".")))};base64,${a}`,
+        try {
+            const a = await context.sessionContext.sessionStorage?.read(
+                `\\..\\user_files\\${name}`,
+                "base64",
             );
+
+            if (a) {
+                html += getImageElement(
+                    `data:image/${getMimeType(name.substring(name.indexOf(".")))};base64,${a}`,
+                );
+            }
+        } catch (e) {
+            // Not every related file is an uploaded attachment in user_files.
+            // A highlighted workspace file, for example, is listed in
+            // relatedFiles but never staged there, so the read throws ENOENT.
+            // Skip it rather than failing the entire response.
+            console.log(`Skipping related file ${name}: ${e}`);
         }
     }
 
@@ -126,12 +139,8 @@ async function generateResponse(
         if (generateResponseAction.parameters.relatedFiles !== undefined) {
             const fileEntities: Entity[] = new Array<Entity>();
             for (const file of generateResponseAction.parameters.relatedFiles) {
-                let name = file;
-                if (file.lastIndexOf("\\") > -1) {
-                    name = file.substring(file.lastIndexOf("\\") + 1);
-                }
                 fileEntities.push({
-                    name,
+                    name: getAttachmentFileName(file),
                     type: ["file", "image", "data"],
                 });
             }
