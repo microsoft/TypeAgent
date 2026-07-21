@@ -7,6 +7,8 @@ import {
     type ConnectionActionId,
     type ConnectionStatus,
 } from "./connectionStatus.js";
+import { createStrokeIconSvg, createBellIconSvg } from "./icons.js";
+import { type StatusNoticeLevel } from "./statusNotice.js";
 
 export type ConversationBarConversation = {
     conversationId: string;
@@ -119,56 +121,17 @@ function formatRelativeTime(createdAtIso: string): string {
     }
 }
 
-const SVG_NS = "http://www.w3.org/2000/svg" as const;
-
 /**
  * Build the "connected" plug glyph as an inline SVG. Strokes use
- * `currentColor` so the icon follows the status color set in CSS. Built via
- * the DOM (no innerHTML) so the markup stays trusted and host-neutral.
+ * `currentColor` so the icon follows the status color set in CSS.
  */
 function createConnectIconSvg(): SVGSVGElement {
-    const svg = document.createElementNS(SVG_NS, "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("fill", "none");
-    svg.setAttribute("stroke", "currentColor");
-    svg.setAttribute("stroke-width", "2");
-    svg.setAttribute("stroke-linecap", "round");
-    svg.setAttribute("stroke-linejoin", "round");
-    for (const d of [
+    return createStrokeIconSvg([
         "M12 22v-5",
         "M9 8V2",
         "M15 8V2",
         "M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z",
-    ]) {
-        const path = document.createElementNS(SVG_NS, "path");
-        path.setAttribute("d", d);
-        svg.appendChild(path);
-    }
-    return svg;
-}
-
-/**
- * Build the notification bell glyph as an inline SVG. Strokes use
- * `currentColor` so it follows the severity color set in CSS, matching the
- * host-neutral, no-innerHTML approach of {@link createConnectIconSvg}.
- */
-function createBellIconSvg(): SVGSVGElement {
-    const svg = document.createElementNS(SVG_NS, "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("fill", "none");
-    svg.setAttribute("stroke", "currentColor");
-    svg.setAttribute("stroke-width", "2");
-    svg.setAttribute("stroke-linecap", "round");
-    svg.setAttribute("stroke-linejoin", "round");
-    for (const d of [
-        "M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9",
-        "M13.73 21a2 2 0 0 1-3.46 0",
-    ]) {
-        const path = document.createElementNS(SVG_NS, "path");
-        path.setAttribute("d", d);
-        svg.appendChild(path);
-    }
-    return svg;
+    ]);
 }
 
 /**
@@ -178,7 +141,7 @@ function createBellIconSvg(): SVGSVGElement {
  */
 export interface ConversationNotificationBadge {
     count: number;
-    level: "info" | "warning" | "error";
+    level: StatusNoticeLevel;
     onClick: () => void;
 }
 

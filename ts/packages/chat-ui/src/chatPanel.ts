@@ -35,6 +35,7 @@ import {
     type ConnectionActionHandler,
 } from "./connectionStatus.js";
 import { type StatusNotice, type StatusNoticeLevel } from "./statusNotice.js";
+import { createBellIconSvg } from "./icons.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
 // passed in is built from values that, while in practice come from
@@ -2808,21 +2809,20 @@ export class ChatPanel {
     }
 
     // Bell glyph. Static, non-user SVG literal — safe to assign as innerHTML.
-    private static readonly CSN_BELL_SVG =
-        '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">' +
-        '<path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 ' +
-        "0 0 0 12 22zm7-5v-1l-1.6-1.6V10a5.4 5.4 0 0 0-4-5.23V4.2a1.4 1.4 0 0 " +
-        '0-2.8 0v.57A5.4 5.4 0 0 0 6.6 10v3.4L5 15v1h14z"/></svg>';
-
     private ensureStatusNoticeBell(): HTMLButtonElement {
         if (!this.statusNoticeBell) {
             const bell = document.createElement("button");
             bell.type = "button";
             bell.className = "chat-status-bell";
             bell.style.display = "none";
-            bell.innerHTML =
-                ChatPanel.CSN_BELL_SVG +
-                '<span class="chat-status-bell-badge"></span>';
+            const icon = createBellIconSvg();
+            icon.setAttribute("width", "16");
+            icon.setAttribute("height", "16");
+            icon.setAttribute("aria-hidden", "true");
+            bell.appendChild(icon);
+            const badge = document.createElement("span");
+            badge.className = "chat-status-bell-badge";
+            bell.appendChild(badge);
             bell.addEventListener("click", () => this.expandAllStatusNotices());
             (this.messageDiv.parentElement ?? this.rootElement).appendChild(
                 bell,
