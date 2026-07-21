@@ -564,6 +564,8 @@ export class ChatPanel {
      * the underlying OS notification leaves the action center (osDismiss).
      */
     private notificationContainers = new Map<string, AgentMessageContainer>();
+    /** Upper bound on {@link notifications}; oldest entries drop past this. */
+    private static readonly MAX_BUFFERED_NOTIFICATIONS = 500;
     /**
      * Buffered `@notify` entries surfaced via `@notify show` / `@notify info`.
      * Populated by {@link recordNotification}; read, marked-read, or emptied by
@@ -3031,7 +3033,9 @@ export class ChatPanel {
      * Buffer a notification for later retrieval via {@link showNotifications}.
      * Hosts call this from their notify-event adapter for
      * toast/inline/info/warning/error events so the notification center has
-     * content to summarize. Purely UI state — no host dependency.
+     * content to summarize. Purely UI state — no host dependency. The buffer
+     * is capped at {@link ChatPanel.MAX_BUFFERED_NOTIFICATIONS}; once full the
+     * oldest entry is dropped so it can't grow without bound.
      */
     public recordNotification(
         event: string,
@@ -3039,6 +3043,13 @@ export class ChatPanel {
         data: unknown,
     ): void {
         this.notifications.push({ event, source, data, read: false });
+        if (this.notifications.length > ChatPanel.MAX_BUFFERED_NOTIFICATIONS) {
+            this.notifications.splice(
+                0,
+                this.notifications.length -
+                    ChatPanel.MAX_BUFFERED_NOTIFICATIONS,
+            );
+        }
     }
 
     /**
@@ -3062,22 +3073,20 @@ export class ChatPanel {
                     ? `<ul style="margin: 0; padding-left: 1.2em; list-style-position: inside;">${items
                           .map((n) => {
                               n.read = true;
-                              return `<li class="notification-${n.event}">${n.event} ${String(n.data)}</li>`;
+                              const event = escapeHtml(n.event);
+                              return `<li class="notification-${event}">${event} ${escapeHtml(String(n.data))}</li>`;
                           })
                           .join("")}</ul>`
                     : "No notifications.";
-                this.showInline({ type: "html", content }, "shell");
+                this.showInline({ type: "html", content });
                 break;
             }
             case "summarize": {
                 const unread = this.notifications.filter((n) => !n.read).length;
-                this.showInline(
-                    {
-                        type: "html",
-                        content: `There are <b>${unread}</b> unread and <b>${this.notifications.length}</b> total notifications.`,
-                    },
-                    "shell",
-                );
+                this.showInline({
+                    type: "html",
+                    content: `There are <b>${unread}</b> unread and <b>${this.notifications.length}</b> total notifications.`,
+                });
                 break;
             }
             default:
