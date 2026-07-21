@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=240c2453bd87fa60f6a8c4e37fcd1fa88d72b5890b1251c256a9115a7046d48b -->
+<!-- AUTOGEN:DOCS:HASH:sha256=46b8a58311343c63085839959f30698aa9f5c432f0c46083639bbccceb07ebdd -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-shell — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, allowing users to interact with TypeAgent conversations directly within the editor. It provides a side panel and editor tabs for managing conversations hosted by a running TypeAgent agent server.
+The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, providing a chat-based interface for interacting with TypeAgent conversations. It allows users to manage and participate in conversations directly within the editor, using a side panel and editor tabs.
 
 ## What it does
 
-The `vscode-shell` package enables a chat-based interface within Visual Studio Code to interact with the TypeAgent ecosystem. Key features include:
+The `vscode-shell` package enables a rich chat interface within Visual Studio Code, designed to interact with the TypeAgent ecosystem. Its key features include:
 
 - **Chat Interface**:
 
@@ -174,6 +174,6 @@ External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `micr
 
 ---
 
-_Auto-generated against commit `296dbc72b659a615918e97949f106f0fee2bb9db` on `2026-07-18T05:37:16.532Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `2353118509b02d4e8cf94303aea43ad6726f610c` on `2026-07-21T19:50:04.245Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
