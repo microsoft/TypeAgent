@@ -341,6 +341,10 @@ export async function createSharedDispatcher(
             callback(requestId, (clientIO) =>
                 clientIO.requestChoice(requestId, ...args),
             ),
+        requestForm: (requestId, ...args) =>
+            callback(requestId, (clientIO) =>
+                clientIO.requestForm(requestId, ...args),
+            ),
         requestInteraction: (interaction) => {
             // Broadcast to all clients
             broadcast("requestInteraction", interaction.requestId, (cio) =>

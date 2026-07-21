@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAction, ActionResult, TypeAgentAction } from "./action.js";
+import {
+    AppAction,
+    ActionResult,
+    QuestionFormResponse,
+    TypeAgentAction,
+} from "./action.js";
 import { AppAgentCommandInterface } from "./command.js";
 import {
     ActionIO,
@@ -173,10 +178,14 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
         context: ActionContext<unknown>,
     ): Promise<ActionResult | undefined>;
 
-    // Choice (yes/no confirmation or multi-select)
+    // Choice (yes/no confirmation, multi-select, or multi-question form)
     handleChoice?(
         choiceId: string,
-        response: boolean | number[] | { selected: number; remember: boolean },
+        response:
+            | boolean
+            | number[]
+            | { selected: number; remember: boolean }
+            | QuestionFormResponse,
         context: ActionContext<unknown>,
     ): Promise<ActionResult | undefined>;
 

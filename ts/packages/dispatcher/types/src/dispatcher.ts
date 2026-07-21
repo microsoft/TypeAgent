@@ -6,6 +6,7 @@ import {
     CompletionGroup,
     DisplayType,
     DynamicDisplay,
+    QuestionFormResponse,
     TemplateSchema,
     TypeAgentAction,
     AfterWildcard,
@@ -410,11 +411,16 @@ export interface Dispatcher {
      * Respond to a pending choice from an agent.
      * @param choiceId the choice ID returned from ChoiceManager.registerChoice
      * @param response boolean for yesNo, number[] of selected indices for
-     *   multiChoice, or `{ selected, remember }` for pickRemember
+     *   multiChoice, `{ selected, remember }` for pickRemember, or a
+     *   QuestionFormResponse for a multi-question form
      */
     respondToChoice(
         choiceId: string,
-        response: boolean | number[] | { selected: number; remember: boolean },
+        response:
+            | boolean
+            | number[]
+            | { selected: number; remember: boolean }
+            | QuestionFormResponse,
     ): Promise<CommandResult | undefined>;
 
     /**

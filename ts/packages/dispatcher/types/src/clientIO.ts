@@ -5,6 +5,7 @@ import {
     AgentMessageKind,
     DisplayAppendMode,
     DisplayContent,
+    QuestionForm,
     TemplateSchema,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
@@ -159,6 +160,18 @@ export interface ClientIO {
         choices: string[],
         source: string,
         checkboxLabel?: string,
+    ): void;
+
+    // Non-blocking multi-question form request. `form.fields` holds one or more
+    // questions (pick / multiChoice / yesNo, optionally with a free-text
+    // "Other" escape) answered together and submitted once. The response (a
+    // QuestionFormResponse) is delivered back via Dispatcher.respondToChoice,
+    // keyed by `choiceId` - the same return path as requestChoice.
+    requestForm(
+        requestId: RequestId,
+        choiceId: string,
+        form: QuestionForm,
+        source: string,
     ): void;
 
     // Non-blocking interaction requests (async deferred pattern)

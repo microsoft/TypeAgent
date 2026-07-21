@@ -7,6 +7,12 @@ import {
     ActionResultSuccess,
     ActionResultSuccessNoDisplay,
 } from "../action.js";
+import type {
+    QuestionFormField,
+    QuestionFormPickField,
+    QuestionFormPickAnswer,
+    QuestionFormResponse,
+} from "../action.js";
 import { ActionContext } from "../agentInterface.js";
 import { DisplayMessageKind, StructuredBlock } from "../display.js";
 import { Entity } from "../memory.js";
@@ -220,6 +226,100 @@ export function createPickRememberChoiceResult(
             checkboxLabel,
         },
     };
+}
+
+// A multi-question "form" card: one or more questions (single-select,
+// multi-select, or yes/no, optionally with a free-text "Other" escape). The
+// callback receives the whole `QuestionFormResponse` (answers keyed by field
+// id). Like the other choice helpers, the callback's `actionContext` is the
+// LIVE context created when the user submits. `message` is the card heading;
+// each field carries its own prompt. Pass `opts.paged` to render the fields as
+// a Back/Next wizard (one question at a time) instead of all at once.
+export function createQuestionFormResult(
+    choiceManager: ChoiceManager,
+    message: string,
+    fields: QuestionFormField[],
+    onResponse: (
+        response: QuestionFormResponse,
+        actionContext: ActionContext<unknown>,
+    ) => Promise<ActionResult | undefined>,
+    opts?: { displayHtml?: string; paged?: boolean },
+): ActionResultSuccess {
+    const choiceId = choiceManager.registerChoice((response, actionContext) =>
+        onResponse(response as QuestionFormResponse, actionContext),
+    );
+    return {
+        entities: [],
+        displayContent: opts?.displayHtml
+            ? { type: "html", content: opts.displayHtml }
+            : message,
+        // `paged` is only set when requested - exactOptionalPropertyTypes
+        // forbids assigning `paged: undefined` on the pendingChoice.
+        pendingChoice: opts?.paged
+            ? { choiceId, type: "form", message, fields, paged: true }
+            : { choiceId, type: "form", message, fields },
+    };
+}
+
+// Convenience wrapper for the common single-select case: one radio group,
+// optionally with a free-text "Other" escape. Built on top of
+// createQuestionFormResult as a one-field form. The callback receives the
+// picked index (or -1 when the free-text option was used or the card was
+// dismissed) and the typed `text` when free text was entered.
+export function createSingleChoiceResult(
+    choiceManager: ChoiceManager,
+    message: string,
+    choices: string[],
+    onResponse: (
+        selected: number,
+        text: string | undefined,
+        actionContext: ActionContext<unknown>,
+    ) => Promise<ActionResult | undefined>,
+    opts?: {
+        defaultId?: number;
+        allowFreeText?: boolean;
+        freeTextPlaceholder?: string;
+        displayHtml?: string;
+    },
+): ActionResultSuccess {
+    const fieldId = "choice";
+    const field: QuestionFormPickField = {
+        id: fieldId,
+        kind: "pick",
+        // Empty prompt: the card heading (`message`) already labels the single
+        // question, so a per-field prompt would duplicate it.
+        prompt: "",
+        choices,
+    };
+    // exactOptionalPropertyTypes forbids setting an optional property to
+    // `undefined`, so only assign when the caller provided a value.
+    if (opts?.defaultId !== undefined) {
+        field.defaultId = opts.defaultId;
+    }
+    if (opts?.allowFreeText !== undefined) {
+        field.allowFreeText = opts.allowFreeText;
+    }
+    if (opts?.freeTextPlaceholder !== undefined) {
+        field.freeTextPlaceholder = opts.freeTextPlaceholder;
+    }
+    return createQuestionFormResult(
+        choiceManager,
+        message,
+        [field],
+        async (response, actionContext) => {
+            const answer = response.answers[fieldId] as
+                | QuestionFormPickAnswer
+                | undefined;
+            return onResponse(
+                answer?.selected ?? -1,
+                answer?.text,
+                actionContext,
+            );
+        },
+        opts?.displayHtml !== undefined
+            ? { displayHtml: opts.displayHtml }
+            : undefined,
+    );
 }
 
 export function createActionResultFromError(error: string): ActionResultError {

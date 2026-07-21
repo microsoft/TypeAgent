@@ -11,6 +11,7 @@ import {
 } from "@jest/globals";
 import { ChatPanel } from "../src/chatPanel.js";
 import { iconStop, iconJumpQueue, iconX } from "../src/icons.js";
+import type { QuestionForm } from "@typeagent/agent-sdk";
 
 // chat-ui is DOM-rendering; these tests run under jsdom (see jest.config.cjs)
 // and assert the DOM produced by the status-rail / roadrunner affordances.
@@ -403,5 +404,89 @@ describe("notifications (persistent, dismissable)", () => {
         const remaining = agentBubbles(root);
         expect(remaining.length).toBe(1);
         expect(remaining[0].textContent).toContain("two");
+    });
+});
+
+describe("question form wizard (paged)", () => {
+    const form: QuestionForm = {
+        message: "Q",
+        paged: true,
+        fields: [
+            { id: "a", kind: "pick", prompt: "Pick A", choices: ["X", "Y"] },
+            { id: "b", kind: "yesNo", prompt: "OK?" },
+        ],
+    };
+
+    function panelEl(root: HTMLElement): HTMLElement {
+        const el = root.querySelector<HTMLElement>(".question-form-panel");
+        if (!el) throw new Error("no question-form-panel");
+        return el;
+    }
+    function progress(root: HTMLElement): string {
+        return (
+            panelEl(root).querySelector<HTMLElement>(".question-form-progress")
+                ?.textContent ?? ""
+        );
+    }
+    function navButtons(root: HTMLElement): HTMLButtonElement[] {
+        return Array.from(
+            panelEl(root).querySelectorAll<HTMLButtonElement>(
+                ".question-form-nav-buttons .choice-button",
+            ),
+        );
+    }
+    function radios(root: HTMLElement): HTMLInputElement[] {
+        return Array.from(
+            panelEl(root).querySelectorAll<HTMLInputElement>(
+                'input[type="radio"]',
+            ),
+        );
+    }
+
+    it("shows one question at a time; Back disabled on the first step", () => {
+        const { root, panel } = makePanel();
+        void panel.addQuestionForm(form, { showMessage: false });
+        expect(progress(root)).toBe("Question 1 of 2");
+        expect(panelEl(root).textContent).toContain("Pick A");
+        expect(panelEl(root).textContent).not.toContain("OK?");
+        const [back, next] = navButtons(root);
+        expect(back.disabled).toBe(true);
+        expect(next.textContent).toBe("Next");
+    });
+
+    it("navigates Next/Back, restores answers, and resolves on Finish", async () => {
+        const { root, panel } = makePanel();
+        const done = panel.addQuestionForm(form, { showMessage: false });
+
+        // Step 1: choose "Y" (index 1), then Next.
+        radios(root)[1].click();
+        navButtons(root)[1].click();
+
+        // Step 2: yes/no. Back enabled, Next relabelled "Finish".
+        expect(progress(root)).toBe("Question 2 of 2");
+        const [back2, next2] = navButtons(root);
+        expect(back2.disabled).toBe(false);
+        expect(next2.textContent).toBe("Finish");
+
+        // Back to step 1: the "Y" selection is restored.
+        back2.click();
+        expect(progress(root)).toBe("Question 1 of 2");
+        expect(radios(root)[1].checked).toBe(true);
+
+        // Forward and Finish.
+        navButtons(root)[1].click(); // -> step 2
+        navButtons(root)[1].click(); // Finish
+        const response = await done;
+        expect(response.cancelled).toBeFalsy();
+        expect(response.answers.a).toEqual({ kind: "pick", selected: 1 });
+        expect(response.answers.b.kind).toBe("yesNo");
+    });
+
+    it("Cancel resolves with { cancelled: true }", async () => {
+        const { root, panel } = makePanel();
+        const done = panel.addQuestionForm(form, { showMessage: false });
+        navButtons(root)[2].click(); // Cancel
+        const response = await done;
+        expect(response.cancelled).toBe(true);
     });
 });

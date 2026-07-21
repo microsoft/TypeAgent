@@ -24,6 +24,7 @@ import type {
 import { VsCodeAzureSpeechProvider } from "./azureSpeechProvider.js";
 import { CameraView } from "./cameraView.js";
 import type { SpeechToken } from "@typeagent/agent-server-protocol";
+import type { QuestionForm, QuestionFormResponse } from "@typeagent/agent-sdk";
 import chatPanelStyles from "chat-ui/styles";
 import completionUiStyles from "@typeagent/completion-ui/styles.css";
 import vscodeThemeStyles from "./vscode-theme.css";
@@ -419,6 +420,32 @@ function handleRequestChoice(msg: {
             response,
         });
     })().catch((e) => console.error("[requestChoice] failed", e));
+}
+
+// Render a multi-question form card (ClientIO.requestForm). Like
+// handleRequestChoice, the heading is already shown as the action's
+// displayContent, so `showMessage:false` suppresses the duplicate and
+// `requestId` anchors the controls onto that agent bubble. Replies with the
+// same `choiceResponse` message, carrying a QuestionFormResponse.
+function handleRequestForm(msg: {
+    choiceId: string;
+    form: QuestionForm;
+    requestId?: string;
+}): void {
+    void (async () => {
+        const response: QuestionFormResponse = await chatPanel.addQuestionForm(
+            msg.form,
+            {
+                showMessage: false,
+                requestId: msg.requestId,
+            },
+        );
+        vscode.postMessage({
+            type: "choiceResponse",
+            choiceId: msg.choiceId,
+            response,
+        });
+    })().catch((e) => console.error("[requestForm] failed", e));
 }
 
 // Mirror of dispatcher's queue lifecycle (requestQueued / requestStarted
@@ -1244,6 +1271,9 @@ window.addEventListener("message", (event) => {
             break;
         case "requestChoice":
             handleRequestChoice(msg);
+            break;
+        case "requestForm":
+            handleRequestForm(msg);
             break;
         case "setDynamicDisplay":
             // Register/refresh a live-updating display. chat-ui owns the

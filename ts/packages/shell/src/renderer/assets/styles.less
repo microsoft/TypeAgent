@@ -650,13 +650,51 @@ body.dark-mode {
   cursor: pointer;
 }
 
-.question-form-panel .choice-button:first-child {
+// Paged (wizard) form navigation: progress label + Back/Next/Cancel.
+.question-form-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #e8e8e8;
+}
+
+.question-form-nav-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.question-form-nav-buttons .choice-button {
+  width: auto;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.question-form-nav-buttons .choice-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.question-form-progress {
+  font-size: 12px;
+  color: #666;
+}
+
+// Primary buttons: all-at-once Submit (first in .checkbox-buttons) and the
+// wizard's Next/Finish. Scoped to .checkbox-buttons so the wizard's first
+// nav button (Back) is NOT painted as the primary.
+.question-form-panel .checkbox-buttons .choice-button:first-child,
+.question-form-nav-buttons .question-form-next {
   border-color: #3a6cd9;
   background-color: #3a6cd9;
   color: #fff;
 }
 
-.question-form-panel .choice-button:first-child:hover {
+.question-form-panel .checkbox-buttons .choice-button:first-child:hover,
+.question-form-nav-buttons .question-form-next:hover {
   background-color: #2f59b5;
 }
 

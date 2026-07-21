@@ -1147,7 +1147,9 @@ table.sc-table {
 
 table.sc-table th,
 table.sc-table td {
-  border: 1px solid var(--vscode-editorWidget-border, #ccc);
+  /* Final fallback (used where --vscode-* isn't defined, e.g. the Electron
+     shell) is a mid-gray alpha so borders read on both light and dark. */
+  border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.35));
   padding: 4px 10px;
   text-align: left;
   vertical-align: top;
@@ -1164,7 +1166,9 @@ table.sc-table thead th {
 }
 
 table.sc-table tbody tr:nth-child(even) {
-  background: var(--vscode-list-hoverBackground, rgba(0, 0, 0, 0.04));
+  /* Mid-gray alpha fallback so the zebra stripe stays visible on the Electron
+     shell's dark bubbles (where --vscode-list-hoverBackground is undefined). */
+  background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12));
 }
 
 .sc-cell-number {
@@ -1697,6 +1701,166 @@ table.sc-kv-table.sc-card-fields {
     0px 0.5px 1px rgba(0, 0, 0, 0.1),
     0px 0px 0px 3.5px rgba(58, 108, 217, 0.5);
   outline: 0;
+}
+
+/* =========================================================================
+   Pick + remember and multi-question form cards
+
+   These panels are built by chat-ui's ChatPanel (addPickRememberPrompt /
+   addQuestionForm). Without these rules the radios/checkboxes collapse to a
+   cramped inline row and the Confirm/Cancel buttons stack full width (they
+   inherit .choice-button's width:100%). Mirrors the Electron shell's
+   styles.less; colors use --vscode-* vars so they read in light and dark.
+   ========================================================================= */
+
+/* Confirm/Cancel (and Submit) button row for both card types. */
+.checkbox-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pick-remember-panel,
+.question-form-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--vscode-widget-border, #e0e0e0);
+  border-radius: 10px;
+  background: var(--vscode-editorWidget-background, #fafafa);
+}
+
+.pick-remember-choice,
+.question-form-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+}
+
+.pick-remember-choice:hover,
+.question-form-choice:hover {
+  background: var(--vscode-list-hoverBackground, #eef4ff);
+}
+
+.pick-remember-choice input,
+.question-form-choice input[type="radio"],
+.question-form-choice input[type="checkbox"] {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.pick-remember-choice span,
+.question-form-choice span {
+  font-size: 13px;
+}
+
+.pick-remember-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin-top: 6px;
+  padding: 6px 8px 0;
+  border-top: 1px solid var(--vscode-widget-border, #e8e8e8);
+  font-size: 12px;
+}
+
+.pick-remember-toggle input[type="checkbox"] {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.question-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+}
+
+.question-form-field + .question-form-field {
+  border-top: 1px solid var(--vscode-widget-border, #e8e8e8);
+  margin-top: 4px;
+}
+
+.question-form-prompt {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.question-form-other-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 13px;
+  border: 1px solid var(--vscode-input-border, #ccc);
+  border-radius: 5px;
+  background: var(--vscode-input-background, #fff);
+  color: var(--vscode-input-foreground, inherit);
+}
+
+/* Confirm/Cancel keep the base .choice-button width:100%; the flex
+   .checkbox-buttons row distributes them ~50/50 (matches the Electron shell). */
+.pick-remember-panel .choice-button,
+.question-form-panel .choice-button {
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Paged (wizard) form navigation: progress label + Back/Next/Cancel. */
+.question-form-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--vscode-widget-border, #e8e8e8);
+}
+
+.question-form-nav-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.question-form-nav-buttons .choice-button {
+  width: auto;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.question-form-nav-buttons .choice-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.question-form-progress {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+/* Primary buttons: all-at-once Submit / pick-remember Confirm (first in the
+   .checkbox-buttons row) and the wizard's Next/Finish. Scoped to
+   .checkbox-buttons so the wizard's first nav button (Back) stays secondary. */
+.pick-remember-panel .checkbox-buttons .choice-button:first-child,
+.question-form-panel .checkbox-buttons .choice-button:first-child,
+.question-form-nav-buttons .question-form-next {
+  border-color: #3a6cd9;
+  background-color: #3a6cd9;
+  color: #fff;
+}
+
+.pick-remember-panel .checkbox-buttons .choice-button:first-child:hover,
+.question-form-panel .checkbox-buttons .choice-button:first-child:hover,
+.question-form-nav-buttons .question-form-next:hover {
+  background-color: #2f59b5;
 }
 
 /* =========================================================================

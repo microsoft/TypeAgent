@@ -93,6 +93,7 @@ const clientIO = {
     openLocalView: async () => {},
     closeLocalView: async () => {},
     requestChoice: noop,
+    requestForm: noop,
     takeAction: noop,
     requestInteraction: noop,
     interactionResolved: noop,

@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
+import type {
+    DisplayAppendMode,
+    QuestionForm,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
 import type {
     IAgentMessage,
     NotifyOptions,
@@ -79,6 +83,13 @@ export type ClientIOCallFunctions = {
         choices: string[],
         source: string,
         checkboxLabel?: string,
+    ): void;
+
+    requestForm(
+        requestId: RequestId,
+        choiceId: string,
+        form: QuestionForm,
+        source: string,
     ): void;
 
     requestInteraction(interaction: PendingInteractionRequest): void;

@@ -364,15 +364,32 @@ export function emitActionResult(
             requestId,
             actionIndex,
         });
-        systemContext.clientIO.requestChoice(
-            requestId,
-            pc.choiceId,
-            pc.type,
-            pc.message,
-            pc.type === "yesNo" ? [] : pc.choices,
-            schemaName,
-            pc.type === "pickRemember" ? pc.checkboxLabel : undefined,
-        );
+        if (pc.type === "form") {
+            // Only include optionals when set - exactOptionalPropertyTypes
+            // forbids assigning `undefined` to QuestionForm's optional props.
+            systemContext.clientIO.requestForm(
+                requestId,
+                pc.choiceId,
+                {
+                    fields: pc.fields,
+                    ...(pc.message !== undefined
+                        ? { message: pc.message }
+                        : {}),
+                    ...(pc.paged !== undefined ? { paged: pc.paged } : {}),
+                },
+                schemaName,
+            );
+        } else {
+            systemContext.clientIO.requestChoice(
+                requestId,
+                pc.choiceId,
+                pc.type,
+                pc.message,
+                pc.type === "yesNo" ? [] : pc.choices,
+                schemaName,
+                pc.type === "pickRemember" ? pc.checkboxLabel : undefined,
+            );
+        }
     }
 }
 
