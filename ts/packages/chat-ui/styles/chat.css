@@ -321,6 +321,89 @@
   outline-offset: 1px;
 }
 
+/* Collapsed status-notice bell, rendered next to the connection indicator and
+   styled to match its ambient plug glyph. Hidden (via the `hidden` attribute)
+   until the host reports collapsed notices. The severity level tints the
+   glyph; a small count badge floats at the top-right like the client-count
+   badge on the connected indicator. */
+.conversation-notification-bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  padding: 3px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--chat-conversation-muted-foreground, #666);
+}
+
+.conversation-notification-bell[hidden] {
+  display: none;
+}
+
+.conversation-notification-bell:hover {
+  background: var(--chat-conversation-button-hover-background, #dcdcdc);
+}
+
+.conversation-notification-bell:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
+.conversation-notification-bell.level-info {
+  color: var(--chat-conversation-muted-foreground, #666);
+}
+
+.conversation-notification-bell.level-warning {
+  color: var(--chat-conversation-warning-foreground, #b26a00);
+}
+
+.conversation-notification-bell.level-error {
+  color: var(--chat-conversation-error-foreground, #c42b1c);
+}
+
+.conversation-notification-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.conversation-notification-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.conversation-notification-count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--chat-conversation-muted-foreground, #666);
+  color: var(--chat-conversation-status-foreground, #fff);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  /* punch-out ring so the badge reads as floating above the bar */
+  border: 1.5px solid var(--chat-conversation-background, #f5f5f5);
+}
+
+.conversation-notification-bell.level-warning .conversation-notification-count {
+  background: var(--chat-conversation-warning-foreground, #b26a00);
+}
+
+.conversation-notification-bell.level-error .conversation-notification-count {
+  background: var(--chat-conversation-error-foreground, #c42b1c);
+}
+
 /* Gentle pulse while (re)connecting. */
 @keyframes conversation-status-pulse {
   0%,
@@ -2691,29 +2774,42 @@ span.ansi-bright-white-fg {
   pointer-events: auto;
 }
 
-.chat-status-notice.level-warning {
-  --csn-bg: #fff4ce;
+/* Minimized notices live in the top bell, not on the canvas. */
+.chat-status-notice.collapsed {
+  display: none;
+}
+
+/* Level palettes. The card surface (background / text / border) prefers the
+   host's native notification theme so it adapts to light/dark; the pastel
+   values are the fallback for non-VS Code hosts (e.g. the Electron shell).
+   The severity color rides on --csn-line, which drives the left accent bar and
+   the icon, and prefers VS Code's per-severity notification icon color. */
+.chat-status-notice.level-warning,
+.chat-status-bell.level-warning {
+  --csn-bg: #ffe8a3;
   --csn-fg: #5c3c00;
-  --csn-line: #e0a010;
+  --csn-line: var(--vscode-notificationsWarningIcon-foreground, #e0a010);
 }
 
-.chat-status-notice.level-error {
-  --csn-bg: #fde7e9;
+.chat-status-notice.level-error,
+.chat-status-bell.level-error {
+  --csn-bg: #fbccd0;
   --csn-fg: #6f1720;
-  --csn-line: #e5484d;
+  --csn-line: var(--vscode-notificationsErrorIcon-foreground, #e5484d);
 }
 
-.chat-status-notice.level-info {
-  --csn-bg: #e7f2ff;
+.chat-status-notice.level-info,
+.chat-status-bell.level-info {
+  --csn-bg: #cfe4ff;
   --csn-fg: #0a3a66;
-  --csn-line: #3b82f6;
+  --csn-line: var(--vscode-notificationsInfoIcon-foreground, #3b82f6);
 }
 
 .csn-toast {
-  background: var(--csn-bg);
-  color: var(--csn-fg);
-  border: 1px solid var(--csn-line);
-  border-left-width: 4px;
+  background: var(--vscode-notifications-background, var(--csn-bg));
+  color: var(--vscode-notifications-foreground, var(--csn-fg));
+  border: 1px solid var(--vscode-notifications-border, var(--csn-line));
+  border-left: 4px solid var(--csn-line);
   border-radius: 8px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
   padding: 10px 12px;
@@ -2722,10 +2818,6 @@ span.ansi-bright-white-fg {
   line-height: 1.45;
   width: 300px;
   max-width: 78vw;
-}
-
-.chat-status-notice.collapsed .csn-toast {
-  display: none;
 }
 
 .csn-head {
@@ -2750,7 +2842,7 @@ span.ansi-bright-white-fg {
   flex: 0 0 auto;
   background: transparent;
   border: none;
-  color: var(--csn-fg);
+  color: inherit;
   opacity: 0.7;
   font-size: 16px;
   line-height: 1;
@@ -2800,39 +2892,48 @@ span.ansi-bright-white-fg {
   filter: none;
 }
 
-.csn-pill {
+/* Top bell: collapsed status notices minimize here (top-right of the chat).
+   Hidden until at least one notice is minimized. Level classes provide the
+   --csn-* palette (see the level rules above). */
+.chat-status-bell {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 121;
   display: none;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--csn-line);
+  border-radius: 50%;
   background: var(--csn-bg);
   color: var(--csn-fg);
-  border: 1px solid var(--csn-line);
-  border-radius: 13px;
-  padding: 3px 10px 3px 8px;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  font-size: 11.5px;
-  font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.32);
 }
 
-.chat-status-notice.collapsed .csn-pill {
-  display: inline-flex;
+.chat-status-bell:hover {
+  filter: brightness(0.95);
 }
 
-.csn-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+.chat-status-bell-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 8px;
   background: var(--csn-line);
-  flex: 0 0 auto;
-}
-
-.csn-pill-label {
-  white-space: nowrap;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: #ffffff;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
 }
 
 /* Transient "Copied!" confirmation shown when a click-to-copy status badge

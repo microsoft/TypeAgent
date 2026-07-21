@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d80f9cff5bbc7127e980fb0fa3354f9348c52ef5e6c4af1b4c6f9ecfcb13304c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=48492cc0b0a2aa8a4e0d5bc7cacb70fbd8b903c4448bedf64fb6b67f345bd40c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-shell — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, providing a chat-based interface for interacting with TypeAgent conversations. It allows users to manage conversations directly within the editor through a side panel and editor tabs, all backed by a running TypeAgent agent server.
+The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, providing a chat-based interface for interacting with TypeAgent conversations. It allows users to manage and participate in conversations directly within the editor, using a side panel and editor tabs.
 
 ## What it does
 
-The `vscode-shell` package enables a rich chat interface within Visual Studio Code to interact with the TypeAgent ecosystem. Its key features include:
+The `vscode-shell` package enables a rich chat interface within Visual Studio Code, designed to interact with the TypeAgent ecosystem. Its key features include:
 
 - **Chat Interface**:
 
@@ -174,6 +174,6 @@ External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `micr
 
 ---
 
-_Auto-generated against commit `4f7693322e181137049b7af9ff36387934d81930` on `2026-07-21T08:52:40.173Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `abfa7f206e497772254557b7d65cf9252a4728b2` on `2026-07-21T21:21:02.587Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
