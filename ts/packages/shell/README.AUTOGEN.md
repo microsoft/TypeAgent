@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=f3163713b44484c5dcdabee1cc1d7c587a97b13b528ae69e10819fd1270b1de6 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=fc7bd591b36b63eea834baf240ca1c77859fa325f3d325be07bde547a8074e6a -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) entry point for the TypeAgent ecosystem. It provides a personal agent interface for processing user requests, performing actions, answering questions, and managing conversations. Built on Electron, the shell integrates with other TypeAgent components, such as the dispatcher and agent server, to deliver an interactive and extensible experience. It supports both text and voice input, multi-conversation management, and local or remote operation modes.
+The `agent-shell` package is a TypeScript library that acts as the graphical user interface (GUI) entry point for the TypeAgent ecosystem. It provides a personal agent interface for handling user requests, performing actions, answering questions, and managing conversations. Built on Electron, the shell integrates with other TypeAgent components, such as the dispatcher and agent server, to deliver an interactive and extensible experience. It supports both text and voice input, multi-conversation management, and local or remote operation modes.
 
 ## What it does
 
-The `agent-shell` package offers a variety of features to enable interactive and conversational agent experiences:
+The `agent-shell` package provides a range of features to enable interactive and conversational agent experiences:
 
 ### Conversation Management
 
@@ -139,6 +139,8 @@ Workspace:
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
 - [@typeagent/aiclient](../../packages/aiclient/README.md)
+- [@typeagent/browser-control-rpc](../../packages/agents/browserControlRpc/README.md)
+- [@typeagent/browser-extension](../../packages/agents/browserExtension/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/completion-ui](../../packages/completionUI/README.md)
 - [@typeagent/config](../../packages/config/README.md)
@@ -174,6 +176,6 @@ _6 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `c97eb42726a9196c7ac72138faa0777c5cbc1aab` on `2026-07-18T09:48:36.613Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `f22a17dadf56cb37905b665aad3c062a4d39a0e8` on `2026-07-21T08:50:15.658Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
