@@ -518,6 +518,22 @@ function refreshStatusBar(): void {
     statusBarItem.show();
 }
 
+/**
+ * Theme-aware tab icon for our webview panels. VS Code renders a custom SVG
+ * panel icon literally - it doesn't recolor `currentColor` the way it does for
+ * ThemeIcons - so the default (currentColor) robot renders black and is
+ * invisible on dark themes. Pair it with a light-colored variant for dark
+ * themes.
+ */
+function panelIcon(context: vscode.ExtensionContext): {
+    light: vscode.Uri;
+    dark: vscode.Uri;
+} {
+    const icon = (name: string) =>
+        vscode.Uri.joinPath(context.extensionUri, "media", "icons", name);
+    return { light: icon("typeagent.svg"), dark: icon("typeagent-dark.svg") };
+}
+
 function openNewChatPanel(
     context: vscode.ExtensionContext,
     provider: ChatViewProvider,
@@ -582,12 +598,7 @@ function openExpandPanel(
             ],
         },
     );
-    panel.iconPath = vscode.Uri.joinPath(
-        context.extensionUri,
-        "media",
-        "icons",
-        "typeagent.svg",
-    );
+    panel.iconPath = panelIcon(context);
 
     const webview = panel.webview;
     // Append each resource's mtime so a redeploy/reload doesn't serve a stale
@@ -657,12 +668,7 @@ function attachChatPanel(
         restoreSessionId?: string;
     },
 ): void {
-    panel.iconPath = vscode.Uri.joinPath(
-        context.extensionUri,
-        "media",
-        "icons",
-        "typeagent.svg",
-    );
+    panel.iconPath = panelIcon(context);
 
     const bridge = new AgentServerBridge({
         ownsStatusBar: false,
