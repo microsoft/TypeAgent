@@ -268,6 +268,33 @@ describe("loadConstructionCacheLayer", () => {
         }
     });
 
+    test("valid: matchEntry surfaces the matched construction's identity", async () => {
+        const dir = tempDir();
+        try {
+            const cacheFilePath = writeFixtureCache(dir);
+            const layer = await loadConstructionCacheLayer({
+                cacheFilePath,
+                schemaName: "player",
+                currentHash: FIXTURE_HASH,
+            });
+            const entry = layer.matchEntry("pause");
+            expect(entry).toBeDefined();
+            expect(entry?.action).toEqual({
+                schemaName: "player",
+                actionName: "pause",
+            });
+            // Identity is drawn from the matched construction and its namespace
+            // (schema,hash,activity with an empty activity for the default fixture).
+            expect(entry?.namespace).toBe(`player,${FIXTURE_HASH},`);
+            expect(entry?.constructionId).toMatch(/^\d+$/);
+            expect(entry?.parts?.length).toBeGreaterThan(0);
+            expect(entry?.scores?.matchedCount).toBeGreaterThanOrEqual(0);
+            expect(entry?.cacheFileId).toBe(cacheFilePath);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     test("stale: a mismatched hash falls back (no cache match)", async () => {
         const dir = tempDir();
         try {
@@ -279,6 +306,7 @@ describe("loadConstructionCacheLayer", () => {
             expect(layer.status).toBe("stale");
             expect(layer.cachedHash).toBe(FIXTURE_HASH);
             expect(layer.match("pause")).toBeUndefined();
+            expect(layer.matchEntry("pause")).toBeUndefined();
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -294,6 +322,7 @@ describe("loadConstructionCacheLayer", () => {
             });
             expect(layer.status).toBe("absent");
             expect(layer.match("pause")).toBeUndefined();
+            expect(layer.matchEntry("pause")).toBeUndefined();
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { fixture, html, expect, waitUntil } from "@open-wc/testing";
+import type { SourceLocation } from "grammar-tools-core";
 import type { GtTraceTimeline } from "../../src/gt-trace-timeline.js";
 import { FixtureBackend } from "../fixture/fixtureBackend.js";
 
@@ -111,5 +112,87 @@ describe("gt-trace-timeline", () => {
 
         const filterBtns = el.shadowRoot!.querySelectorAll(".filter-btn");
         expect(filterBtns.length).to.be.greaterThan(0);
+    });
+
+    describe("display-only mode", () => {
+        it("renders a stored trace with no backend and hides live controls", async () => {
+            const result = await backend.loadGrammarFromFile("test.agr");
+            if (!result.ok) throw new Error("load failed");
+            const trace = await backend.traceMatch(
+                result.grammar,
+                "play songs by the beatles",
+            );
+
+            const el = await fixture<GtTraceTimeline>(
+                html`<gt-trace-timeline
+                    .displayTrace=${trace}
+                    .displayDebugInfo=${result.grammar.debugInfo}
+                ></gt-trace-timeline>`,
+            );
+
+            // Live-mode controls are hidden.
+            expect(el.shadowRoot!.querySelector("input")).to.not.exist;
+            expect(el.shadowRoot!.querySelector(".options-panel")).to.not.exist;
+            expect(el.shadowRoot!.querySelector(".input-row")).to.not.exist;
+
+            // The table and summary render immediately, without clicking Trace.
+            expect(el.shadowRoot!.querySelector("table")).to.exist;
+            expect(el.shadowRoot!.querySelector(".summary-bar")).to.exist;
+            const rows = el.shadowRoot!.querySelectorAll("tbody tr");
+            expect(rows.length).to.be.greaterThan(0);
+        });
+
+        it("colors event icons via class, never inline style", async () => {
+            const result = await backend.loadGrammarFromFile("test.agr");
+            if (!result.ok) throw new Error("load failed");
+            const trace = await backend.traceMatch(
+                result.grammar,
+                "play songs by the beatles",
+            );
+
+            const el = await fixture<GtTraceTimeline>(
+                html`<gt-trace-timeline
+                    .displayTrace=${trace}
+                    .displayDebugInfo=${result.grammar.debugInfo}
+                ></gt-trace-timeline>`,
+            );
+
+            const icons =
+                el.shadowRoot!.querySelectorAll<HTMLElement>(".event-icon");
+            expect(icons.length).to.be.greaterThan(0);
+            Array.from(icons).forEach((icon) => {
+                expect(icon.getAttribute("style")).to.not.exist;
+                const classes = Array.from(icon.classList) as string[];
+                expect(classes.some((c) => c.startsWith("evk-"))).to.equal(
+                    true,
+                );
+            });
+        });
+
+        it("invokes onSourceClick from a rule link in display-only mode", async () => {
+            const result = await backend.loadGrammarFromFile("test.agr");
+            if (!result.ok) throw new Error("load failed");
+            const trace = await backend.traceMatch(
+                result.grammar,
+                "play songs by the beatles",
+            );
+
+            let clicked: SourceLocation | undefined;
+            const el = await fixture<GtTraceTimeline>(
+                html`<gt-trace-timeline
+                    .displayTrace=${trace}
+                    .displayDebugInfo=${result.grammar.debugInfo}
+                    .onSourceClick=${(loc: SourceLocation) => {
+                        clicked = loc;
+                    }}
+                ></gt-trace-timeline>`,
+            );
+
+            const link =
+                el.shadowRoot!.querySelector<HTMLElement>(".rule-link");
+            expect(link, "a rule link should render").to.exist;
+            link!.click();
+            expect(clicked).to.exist;
+        });
     });
 });

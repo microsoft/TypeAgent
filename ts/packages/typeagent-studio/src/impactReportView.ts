@@ -11,6 +11,7 @@ import {
 import type {
     ResolvedVersion,
     RunProvenance,
+    VersionProvenance,
 } from "./webviewKit/replayViewModel.js";
 import {
     defaultGitExec,
@@ -22,6 +23,15 @@ import {
 import { StudioServiceClient } from "./studioServiceClient.js";
 import type { StudioConnectionState } from "./studioServiceConnection.js";
 import { loadPersistedRun, savePersistedRun } from "./impactReportStore.js";
+import { saveTraceRun } from "./traceStore.js";
+import { openTraceViewer, focusTraceViewer } from "./traceViewerView.js";
+import {
+    buildReplayRunDescriptor,
+    buildTraceVersionPin,
+    type ReplayTraceMode,
+    type TraceVersionPin,
+    type VersionSpec,
+} from "@typeagent/core/replay";
 import type { StudioReplayResult } from "@typeagent/core/runtime";
 
 const VIEW_TYPE = "typeagentStudio.impactReport";
@@ -151,15 +161,34 @@ export function openImpactReport(
 
     const post = (message: HostToWebviewMessage) => panel.post(message);
 
+    // The webview only needs the set of traced utterances (carried by
+    // `tracedUtteranceIds`) to offer the "Open trace" affordance; the full
+    // traces are large (per-red-row grammar debug info) and are persisted
+    // separately for the Trace Viewer. Strip them from anything sent to the
+    // webview so a big changed set doesn't inflate the host→webview message.
+    const forWebview = (result: StudioReplayResult): StudioReplayResult => {
+        if (result.resolutionTraces === undefined) {
+            return result;
+        }
+        const { resolutionTraces, ...slim } = result;
+        return {
+            ...slim,
+            tracedUtteranceIds:
+                result.tracedUtteranceIds ??
+                resolutionTraces.map((t) => t.utteranceId),
+        };
+    };
+
     // Let an external Replay (launched from the Corpora view) refresh this open
     // report in place: adopt its result as this panel's last result (so a later
     // reload/ready re-push shows it) and, when the webview is listening, post it
     // as an external result the client accepts regardless of its own request-id
     // sequence.
     openReportRefreshers.set(agent, (update) => {
+        const slim = forWebview(update.payload);
         lastResult = {
             requestId: 0,
-            payload: update.payload,
+            payload: slim,
             runAt: update.runAt,
             versionA: update.versionA,
             versionB: update.versionB,
@@ -170,7 +199,7 @@ export function openImpactReport(
                 type: "result",
                 requestId: 0,
                 external: true,
-                payload: update.payload,
+                payload: slim,
                 runAt: update.runAt,
                 versionA: update.versionA,
                 versionB: update.versionB,
@@ -483,6 +512,19 @@ export function openImpactReport(
             await pickVersion(msg.side);
             return;
         }
+        if (msg.type === "openTrace") {
+            // Drill into the full resolution trace behind one red row, side-by-
+            // side with this report. The viewer reads the exact trace this run
+            // persisted, so it always reflects what produced the row.
+            openTraceViewer(context, repoRoot, msg.runId, msg.utteranceId);
+            return;
+        }
+        if (msg.type === "focusTrace") {
+            // The selected row changed: follow it into an already-open Trace
+            // Viewer, but don't open one if none is showing.
+            focusTraceViewer(msg.runId, msg.utteranceId);
+            return;
+        }
         if (msg.type === "searchUtterances") {
             // A live input box: each keystroke posts the current text back so the
             // report filters as the user types. Closing it (accept or Esc) keeps
@@ -556,10 +598,11 @@ export function openImpactReport(
                 missPolicy: "needs-explanation",
             });
             const completedAt = Date.now();
+            const slim = forWebview(payload);
             post({
                 type: "result",
                 requestId: msg.requestId,
-                payload,
+                payload: slim,
                 runAt: completedAt,
                 versionA: msg.resolvedA,
                 versionB: msg.resolvedB,
@@ -567,7 +610,7 @@ export function openImpactReport(
             });
             lastResult = {
                 requestId: msg.requestId,
-                payload,
+                payload: slim,
                 runAt: completedAt,
                 versionA: msg.resolvedA,
                 versionB: msg.resolvedB,
@@ -582,6 +625,44 @@ export function openImpactReport(
                 msg.resolvedA,
                 msg.resolvedB,
             );
+            // Persist the captured per-red-row traces + the run descriptor so the
+            // Trace Viewer can reopen the exact resolution behind a row and
+            // recompute a fresh one from the same pinned inputs.
+            if (
+                payload.resolutionTraces &&
+                payload.resolutionTraces.length > 0
+            ) {
+                const pinFor = (
+                    spec: VersionSpec,
+                    prov: VersionProvenance | undefined,
+                ): TraceVersionPin =>
+                    buildTraceVersionPin({
+                        spec,
+                        label:
+                            prov?.label ??
+                            (spec.kind === "git" ? spec.ref : "working tree"),
+                        ...(prov?.sha !== undefined ? { sha: prov.sha } : {}),
+                    });
+                const descriptor = buildReplayRunDescriptor({
+                    runId: payload.runId,
+                    agent,
+                    a: pinFor(msg.versionA, provenance?.a),
+                    b: pinFor(msg.versionB, provenance?.b),
+                    mode: (msg.mode ?? "nfa-grammar") as ReplayTraceMode,
+                    missPolicy: "needs-explanation",
+                    validateWildcards: msg.validateWildcards === true,
+                    corpus: {},
+                    runAt: completedAt,
+                });
+                await saveTraceRun(
+                    context.workspaceState,
+                    descriptor,
+                    payload.resolutionTraces,
+                    vscode.workspace
+                        .getConfiguration("typeagentStudio.traceViewer")
+                        .get<number>("maxRetainedRuns", 8),
+                );
+            }
         } catch (e) {
             post({
                 type: "error",

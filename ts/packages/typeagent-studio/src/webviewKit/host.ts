@@ -24,6 +24,13 @@ export interface WebviewKitPanelOptions {
      * handshake. Costs memory while hidden.
      */
     retainContextWhenHidden?: boolean;
+    /**
+     * Which editor column to open the panel in. Defaults to
+     * {@link vscode.ViewColumn.Active}. A drill-in panel opened from another
+     * webview passes {@link vscode.ViewColumn.Beside} so it sits next to its
+     * originator instead of stealing its column.
+     */
+    viewColumn?: vscode.ViewColumn;
     /** Path segments (from the extension root) to the client script bundle. */
     scriptPath: string[];
     /** Path segments (from the extension root) to the stylesheet. */
@@ -87,7 +94,7 @@ export class WebviewKitPanel {
         const panel = vscode.window.createWebviewPanel(
             options.viewType,
             options.title,
-            vscode.ViewColumn.Active,
+            options.viewColumn ?? vscode.ViewColumn.Active,
             {
                 enableScripts: true,
                 retainContextWhenHidden:

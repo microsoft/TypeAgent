@@ -45,6 +45,7 @@ export function stubInvokeHandlers(
             summary: {} as never,
             rows: [],
         }),
+        replayResolutionTrace: async () => ({ status: "unavailable" }),
         subscribeEvents: async () => {},
         unsubscribeEvents: async () => {},
         listSandboxes: async () => [],
