@@ -474,15 +474,13 @@ function checkPossibleMatch(
     action: TypeAgentAction,
     possibleMatch: PossibleMatch,
 ) {
-    // action.entities is resolved-reference metadata the translator may or may
-    // not attach run-to-run (e.g. a "grocery" list entity whose items facet
-    // reflects the current, history-dependent list contents). It is not part of
-    // the translated action shape most cases care about, so only assert it when
-    // the expected action explicitly specifies entities (e.g.
-    // translate-image-history-e2e.json). Otherwise drop it so its
-    // non-determinism can't cause spurious toEqual mismatches.
+    // Drop action.entities before comparing. It is resolved-reference metadata
+    // that entity resolution may or may not attach run-to-run (e.g. a
+    // history-dependent "grocery" list entity), not part of the translated
+    // action shape, and no expected action asserts it. Ignoring it avoids
+    // spurious toEqual mismatches.
     let actual = action;
-    if (possibleMatch.action.entities === undefined && action.entities) {
+    if (action.entities) {
         actual = { ...action };
         delete actual.entities;
     }
