@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=30eb1a4bdc6042d21504a51bfbf5b8a417ed13af213881d5235ae69727e17dda -->
+<!-- AUTOGEN:DOCS:HASH:sha256=cec32dc662d6b58433a15f2756a8cad32970f8a5aed4cad7b2ea9376a1457565 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/core — AI-generated documentation
@@ -12,40 +12,40 @@
 
 ## Overview
 
-The `@typeagent/core` package is a foundational TypeScript library that provides shared functionality for various TypeAgent Studio extensions. It serves as the backbone for managing critical subsystems such as sandbox lifecycles, federated corpora, structured event streams, feedback collection, health monitoring, collision detection, corpus replay, and onboarding workflows. This package is a key dependency for other components in the TypeAgent ecosystem, including `typeagent-studio`, `agr-language`, and `vscode-shell`.
+The `@typeagent/core` package is a foundational TypeScript library that provides shared functionality for the TypeAgent Studio ecosystem. It serves as the core engine for various extensions and subsystems, enabling features such as sandbox lifecycle management, federated corpus handling, structured event streaming, feedback collection, health monitoring, collision detection, corpus replay, and onboarding workflows. This package is a critical dependency for other components in the TypeAgent ecosystem, including `typeagent-studio`, `agr-language`, and `vscode-shell`.
 
 ## What it does
 
-The `@typeagent/core` package is organized into modular subsystems, each addressing a specific aspect of the TypeAgent Studio's functionality. These subsystems include:
+The `@typeagent/core` package is organized into modular subsystems, each of which provides specific functionality to support the broader TypeAgent Studio platform. These subsystems include:
 
-- **Events**: Provides tools for managing structured event streams, including event creation, logging, and dispatching. This is essential for tracking and analyzing system activities.
-- **Sandbox**: Manages the lifecycle of sandboxes, including their creation, destruction, and state management. This is critical for isolating and managing execution environments.
-- **Corpus**: Offers utilities for managing federated corpora, such as file-based corpus services, JSONL utilities, and unique identifier generation for corpus entries.
-- **Feedback**: Implements mechanisms for collecting and processing user feedback, enabling better user interaction and system improvement.
-- **Health**: Includes a rule engine for monitoring and maintaining the health of the system, ensuring stability and reliability.
+- **Events**: Manages structured event streams, enabling the creation, logging, and dispatching of events. This is essential for tracking system activities and interactions.
+- **Sandbox**: Handles the lifecycle of sandboxes, including their creation, destruction, and state management. Sandboxes are isolated environments used for executing agents and other processes.
+- **Corpus**: Provides tools for managing federated corpora, including file-based corpus services, JSONL utilities, and unique identifier generation for corpus entries. This subsystem is crucial for organizing and accessing large datasets.
+- **Feedback**: Implements mechanisms for collecting and processing user feedback, which can be used to improve system behavior and user experience.
+- **Health**: Includes a rule engine for monitoring the health of the system, ensuring stability and identifying potential issues.
 - **Collisions**: Detects and manages collision events, supporting both dispatcher-based and grammar-based collision detection. This is particularly useful for identifying and resolving conflicts in agent grammars.
-- **Replay**: Facilitates corpus replay for testing and debugging purposes, allowing developers to simulate and analyze past interactions.
+- **Replay**: Facilitates the replay of corpus data for testing and debugging purposes, allowing developers to simulate and analyze past interactions.
 - **Onboarding Bridge**: Manages snapshot and restore operations to support onboarding workflows, ensuring a smooth user experience during setup and transitions.
 
-Each subsystem is designed to be lightweight, reusable, and easily integrable into other parts of the TypeAgent ecosystem.
+These subsystems are designed to be modular, lightweight, and reusable, making them easy to integrate into other parts of the TypeAgent ecosystem.
 
 ## Setup
 
-To configure and use the `@typeagent/core` package, you need to set the following environment variable:
+To use the `@typeagent/core` package, you need to configure the following environment variable:
 
-- `TYPEAGENT_USER_DATA_DIR`: This variable specifies the directory where user data is stored. Ensure that the directory exists and is accessible by the application. For more details on how to configure this variable, refer to the hand-written README.
+- `TYPEAGENT_USER_DATA_DIR`: This environment variable specifies the directory where user data is stored. Ensure that the directory exists and is accessible by the application. For more details on how to configure this variable, refer to the hand-written README.
 
 No additional setup steps are required beyond setting this environment variable.
 
 ## Key Files
 
-The `@typeagent/core` package is structured into several key directories and files, each responsible for specific functionalities. Below is an overview of the most important files and their roles:
+The `@typeagent/core` package is organized into several key directories and files, each responsible for specific functionalities. Below is an overview of the most important files and their roles:
 
 ### Core Modules
 
 - **[src/index.ts](./src/index.ts)**: The main entry point for the package, exporting shared types and services across all subsystems.
-- **[src/events/index.ts](./src/events/index.ts)**: Handles structured event streams, including event creation, logging, and dispatching.
-- **[src/sandbox/index.ts](./src/sandbox/index.ts)**: Manages sandbox lifecycles, including creation, destruction, and state management.
+- **[src/events/index.ts](./src/events/index.ts)**: Manages structured event streams, including event creation, logging, and dispatching.
+- **[src/sandbox/index.ts](./src/sandbox/index.ts)**: Handles sandbox lifecycles, including creation, destruction, and state management.
 - **[src/corpus/index.ts](./src/corpus/index.ts)**: Provides tools for managing federated corpora, including file-based corpus services, JSONL utilities, and unique identifier generation.
 - **[src/feedback/index.ts](./src/feedback/index.ts)**: Implements feedback collection and processing mechanisms.
 - **[src/health/index.ts](./src/health/index.ts)**: Contains the health rule engine for monitoring and maintaining system health.
@@ -55,7 +55,7 @@ The `@typeagent/core` package is structured into several key directories and fil
 
 ### Supporting Files
 
-- **[src/collisions/scanner.ts](./src/collisions/scanner.ts)**: Implements a repository-backed grammar collision scanner that integrates with the `grammar-tools-core` library. This file is kept separate to avoid unnecessary dependencies when importing lightweight collision services.
+- **[src/collisions/scanner.ts](./src/collisions/scanner.ts)**: Implements a repository-backed grammar collision scanner that integrates with the `grammar-tools-core` library. This file is designed to be lightweight and modular, avoiding unnecessary dependencies when importing collision services.
 - **[src/corpus/fileCorpusService.ts](./src/corpus/fileCorpusService.ts)**: Provides a filesystem-backed service for managing corpora, including support for multiple data sources.
 - **[src/corpus/id.ts](./src/corpus/id.ts)**: Contains utilities for generating unique identifiers for corpus entries.
 - **[src/corpus/jsonl.ts](./src/corpus/jsonl.ts)**: Includes utilities for parsing and formatting JSONL files, which are used to store corpus data.
@@ -135,6 +135,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `fbf54a8aff55bd1ef482ad8fbf2064bc3d38486c` on `2026-07-17T05:44:32.534Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/core docs:verify-links` to spot-check._
+_Auto-generated against commit `d7d1b43eebfadec45d2f3199e628189b353920b9` on `2026-07-17T20:31:18.363Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/core docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
