@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d8430538e64a37606c4ce524d9103b2cc75302e1c9e5845804f7dc526ba1ee3c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=630782cfba989575c5a123fc366fa2f7289a19e7a6cc2d90aee33f7a894ad5d3 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-ui — AI-generated documentation
@@ -16,20 +16,20 @@ The `chat-ui` package provides a shared, framework-free chat user interface for 
 
 ## What it does
 
-The `chat-ui` package offers a comprehensive set of features to support dynamic and interactive chat interfaces:
+The `chat-ui` package offers a range of features to support dynamic and interactive chat interfaces:
 
-- **ChatPanel**: The core component for rendering the chat interface. It provides methods for:
+- **ChatPanel**: The primary component for rendering the chat interface. It supports:
 
-  - Adding user and agent messages using `addAgentMessage`.
+  - Adding user and agent messages via `addAgentMessage`.
   - Updating display metadata with `setDisplayInfo`.
-  - Replaying historical chat entries via `replayHistory`.
+  - Replaying historical chat entries using `replayHistory`.
   - Streaming updates for dynamic content display.
 
 - **FeedbackWidget**: A component for collecting user feedback, including thumbs-up/thumbs-down ratings, comments, and contextual information.
 
 - **PartialCompletion**: Integrates with the `@typeagent/completion-ui` package to handle command completions, including input updates, acceptance, and dismissal.
 
-- **Connection Status Management**: A shared model and UI for displaying the connection status between the chat client and the server. This includes reconnect options and error handling.
+- **Connection Status Management**: Provides a shared model and UI for displaying the connection status between the chat client and the server. This includes reconnect options and error handling.
 
 - **PlatformAdapter**: Abstracts platform-specific behaviors, such as handling link clicks and settings, to ensure compatibility across different environments.
 
@@ -108,6 +108,7 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ### Used by
 
+- [@typeagent/browser-extension](../../packages/agents/browserExtension/README.md)
 - [agent-shell](../../packages/shell/README.md)
 - [browser-typeagent](../../packages/agents/browser/README.md)
 - visualstudio-extension-webview
@@ -119,6 +120,6 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ---
 
-_Auto-generated against commit `d9ee555d43867e97462e8fa147f7ef73b8da05ec` on `2026-07-19T20:27:13.071Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `2c30376e7c64d637818336b4eb2e056078b5254c` on `2026-07-21T20:02:46.119Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
