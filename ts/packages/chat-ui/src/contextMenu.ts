@@ -215,6 +215,12 @@ function fallbackCopy(text: string) {
     ta.remove();
 }
 
+// Notify listeners (send-button enable state, completion fetch) that an
+// element's value changed from a programmatic edit.
+function fireInputEvent(el: EventTarget | null | undefined) {
+    el?.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 function cutSelection(text: string) {
     if (!text) return;
     copyText(text);
@@ -222,10 +228,7 @@ function cutSelection(text: string) {
     if (sel && sel.rangeCount > 0) {
         const range = sel.getRangeAt(0);
         range.deleteContents();
-        // Fire an input event so listeners (e.g. send-button enable
-        // state, completion fetch) react to the deletion.
-        const active = document.activeElement as HTMLElement | null;
-        active?.dispatchEvent(new Event("input", { bubbles: true }));
+        fireInputEvent(document.activeElement);
     }
 }
 
@@ -267,7 +270,7 @@ async function pasteInto(target: HTMLElement) {
     range.setEndAfter(node);
     sel?.removeAllRanges();
     sel?.addRange(range);
-    target.dispatchEvent(new Event("input", { bubbles: true }));
+    fireInputEvent(target);
 }
 
 function selectAll(target: HTMLElement) {
@@ -304,11 +307,10 @@ export function handleClipboardShortcut(e: KeyboardEvent): boolean {
         return false;
     }
     const key = e.key.toLowerCase();
-    const isCopy = key === "c";
-    const isCut = key === "x";
-    if (!isCopy && !isCut) {
+    if (key !== "c" && key !== "x") {
         return false;
     }
+    const isCut = key === "x";
 
     // Native <input>/<textarea> keep their selection outside of
     // window.getSelection(), so read it off the focused element.
@@ -325,7 +327,7 @@ export function handleClipboardShortcut(e: KeyboardEvent): boolean {
         copyText(active.value.slice(start, end));
         if (isCut && !active.readOnly && !active.disabled) {
             active.setRangeText("", start, end, "end");
-            active.dispatchEvent(new Event("input", { bubbles: true }));
+            fireInputEvent(active);
         }
         return true;
     }
