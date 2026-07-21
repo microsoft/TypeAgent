@@ -389,6 +389,14 @@
   background-color: transparent;
 }
 
+/* Message expand overlay: theme the panel to match the editor (the shared
+   base in chat-ui/styles/chat.css only sets a light-mode fallback). */
+.chat-expand-panel {
+  background: var(--vscode-editor-background);
+  color: var(--vscode-foreground);
+  border-color: var(--vscode-widget-border, rgba(127, 127, 127, 0.3));
+}
+
 /* ── In-webview camera capture overlay (vscode-shell only) ──────────
    Mirrors the Electron shell's CameraView. Built by webview/cameraView.ts and
    toggled by the ChatPanel camera button (chat-ui imageCaptureProvider.

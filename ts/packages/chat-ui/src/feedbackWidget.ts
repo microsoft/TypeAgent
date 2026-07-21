@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 /**
- * Feedback widget. Mirrors packages/shell/src/renderer/src/feedbackWidget.ts —
- * keep these in sync when changing trigger DOM, popover layout, or the
- * CSS class names so the styling can stay shared between the Electron
- * shell and the Chrome / vscode webview hosts.
+ * Feedback widget. Renders the per-message action row (copy / expand / rate)
+ * plus the feedback popover. Shared by the Electron shell (via chat-ui's
+ * ChatPanel) and the Chrome / vscode webview hosts, so keep the trigger DOM and
+ * CSS class names stable when changing it.
  */
 
 import type {
@@ -16,9 +16,11 @@ import type {
 import {
     iconCheck,
     iconCopy,
+    iconExpand,
     iconMore,
     iconThumbsDown,
     iconThumbsUp,
+    iconX,
 } from "./icons.js";
 
 export type FeedbackUIVariant = "footer-always";
@@ -111,6 +113,14 @@ export class FeedbackWidget {
                 () => this.copyMessage(copyBtn),
             );
             root.appendChild(copyBtn);
+
+            const expandBtn = makeIconButton(
+                "expand",
+                "Expand message",
+                iconExpand(),
+                () => openMessageExpand(this.host.messageDiv),
+            );
+            root.appendChild(expandBtn);
         }
 
         const thumbsUp = makeIconButton(
@@ -309,6 +319,67 @@ function makeIconButton(
     btn.appendChild(glyph);
     btn.addEventListener("click", onClick);
     return btn;
+}
+
+// The single expand overlay currently open (its disposer), so a second click
+// replaces rather than stacks overlays.
+let activeExpand: (() => void) | undefined;
+
+// Open a message's rendered content in a full-window overlay for easier reading
+// of long responses. The live content nodes are moved into the overlay (not
+// cloned) so links, tables and other interactivity keep working, then moved
+// back when it closes. Dismissed by the close button, Escape, or a backdrop
+// click.
+function openMessageExpand(sourceEl: HTMLElement) {
+    activeExpand?.();
+    const previousFocus = document.activeElement as HTMLElement | null;
+
+    const overlay = document.createElement("div");
+    overlay.className = "chat-expand-overlay";
+    overlay.tabIndex = -1;
+
+    const body = document.createElement("div");
+    body.className = "chat-expand-body chat-message-content";
+    body.append(...Array.from(sourceEl.childNodes));
+
+    const close = () => {
+        document.removeEventListener("keydown", onKey, true);
+        // Return the content to its bubble before removing the overlay.
+        sourceEl.append(...Array.from(body.childNodes));
+        overlay.remove();
+        activeExpand = undefined;
+        previousFocus?.focus?.();
+    };
+    const onKey = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+            e.preventDefault();
+            close();
+        }
+    };
+
+    const panel = document.createElement("div");
+    panel.className = "chat-expand-panel";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-modal", "true");
+    panel.setAttribute("aria-label", "Expanded message");
+
+    const header = document.createElement("div");
+    header.className = "chat-expand-header";
+    const title = document.createElement("span");
+    title.textContent = "Message";
+    const closeBtn = makeIconButton("close", "Close", iconX(), close);
+    header.append(title, closeBtn);
+
+    panel.append(header, body);
+    overlay.appendChild(panel);
+    overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) close();
+    });
+
+    document.addEventListener("keydown", onKey, true);
+    document.body.appendChild(overlay);
+    activeExpand = close;
+    closeBtn.focus();
 }
 
 function formatCategory(c: UserFeedbackCategory): string {
