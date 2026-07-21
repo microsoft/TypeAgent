@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=5d6e82e17477492de8ba7e0ed30e82f699af78cf14708d40f8ab3e9c7e270162 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7553eb832fec82464301785691d6822d248e5ac63cf2c00bb6e9e03627b7d0d0 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent-studio — AI-generated documentation
@@ -12,28 +12,28 @@
 
 ## Overview
 
-The `typeagent-studio` package is a TypeScript library that powers the TypeAgent developer experience within Visual Studio Code. It provides a suite of tools for authoring, debugging, and optimizing TypeAgent agents. This package supports workflows such as schema and grammar tuning, compare-and-replay regression detection, trace investigation, and live observation of agent behavior. It is designed to streamline the development and debugging process for TypeAgent agents, offering an integrated and interactive environment.
+The `typeagent-studio` package is a TypeScript library that provides the developer experience for working with TypeAgent agents within Visual Studio Code. It offers tools for authoring, debugging, and optimizing agents, with features such as schema and grammar tuning, compare-and-replay regression detection, trace investigation, and live observation. This package is designed to support developers in creating and refining TypeAgent agents efficiently.
 
 ## What it does
 
-The `typeagent-studio` package integrates with Visual Studio Code to provide a rich set of features for managing and debugging TypeAgent agents. These features are accessible through a combination of commands and views, enabling developers to efficiently manage their workflows.
+The `typeagent-studio` package integrates with Visual Studio Code to deliver a comprehensive set of tools for managing and debugging TypeAgent agents. These tools are accessible through commands and views, enabling developers to perform tasks such as onboarding, sandbox management, corpus replay, and collision detection.
 
 ### Commands
 
-The package provides a comprehensive set of commands accessible via the VS Code command palette. These commands are grouped into several categories:
+The package provides a wide range of commands accessible via the VS Code command palette. These commands are grouped into several categories:
 
 - **Onboarding and Sandbox Management**:
 
-  - Commands such as `TypeAgent Studio: Start onboarding session`, `TypeAgent Studio: Run onboarding phase`, and `TypeAgent Studio: Advance onboarding phase` guide developers through the onboarding process for new agents.
-  - Sandbox management commands like `TypeAgent Studio: Start sandbox`, `TypeAgent Studio: Stop sandbox`, and `TypeAgent Studio: Refresh sandboxes` allow developers to manage and interact with sandboxes for testing and debugging.
+  - Commands like `TypeAgent Studio: Start onboarding session`, `TypeAgent Studio: Run onboarding phase`, and `TypeAgent Studio: Advance onboarding phase` guide developers through the onboarding process for new agents.
+  - Sandbox-related commands such as `TypeAgent Studio: Start sandbox`, `TypeAgent Studio: Stop sandbox`, and `TypeAgent Studio: Refresh sandboxes` allow developers to manage and interact with sandboxes for testing and debugging.
 
 - **Agent and Corpus Management**:
 
-  - Commands such as `TypeAgent Studio: Install latest onboarding session to sandbox` and `TypeAgent Studio: Refresh corpora` help manage agents and their associated corpora.
+  - Commands like `TypeAgent Studio: Install latest onboarding session to sandbox` and `TypeAgent Studio: Refresh corpora` help manage agents and their associated corpora.
   - The `TypeAgent Studio: Replay corpus` command enables developers to replay a corpus through the `replayCorpus()` engine, facilitating regression testing and comparison of agent behavior across versions.
 
 - **Health and Diagnostics**:
-  - Commands like `TypeAgent Studio: Check packaging health gate` and `TypeAgent Studio: Enforce packaging health gate` provide insights into the health and readiness of agents.
+  - Commands such as `TypeAgent Studio: Check packaging health gate` and `TypeAgent Studio: Enforce packaging health gate` provide insights into the health and readiness of agents.
   - The `TypeAgent Studio: Export onboarding artifact...` command allows developers to export various artifacts, including summaries, health snapshots, and diagnostics bundles.
 
 ### Views
@@ -168,10 +168,10 @@ External: `debug`, `ws`
 
 ### Files of interest
 
-`./src/baseTreeProvider.ts`, `./src/collisionsPresentation.ts`, `./src/collisionsSource.ts`, …and 63 more under `./src/`.
+`./src/baseTreeProvider.ts`, `./src/collisionsPresentation.ts`, `./src/collisionsSource.ts`, …and 70 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `d7d1b43eebfadec45d2f3199e628189b353920b9` on `2026-07-17T20:31:18.363Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent-studio docs:verify-links` to spot-check._
+_Auto-generated against commit `38f6b8e5cb0688da34e930559899bb2ea7bb0aca` on `2026-07-21T01:16:36.018Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent-studio docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

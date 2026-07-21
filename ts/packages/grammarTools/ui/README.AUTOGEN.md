@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=75438531f6bf5dde7e67fecfb03277db21bf8a029f62107e177b04361311340d -->
+<!-- AUTOGEN:DOCS:HASH:sha256=84e8fd1edf330933c4fcfad9094e7ff5be4fd5296dca3679af614dae734d4a7b -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # grammar-tools-ui — AI-generated documentation
@@ -12,34 +12,45 @@
 
 ## Overview
 
-The `grammar-tools-ui` package provides a collection of reusable Lit web components designed for grammar visualization, editing, and debugging. These components are tightly integrated with the `grammar-tools-core` package, enabling developers to create interactive user interfaces for working with grammar data. The package is used in other parts of the TypeAgent monorepo, such as the `agr-language` extension.
+The `grammar-tools-ui` package provides a set of Lit-based web components for grammar visualization, editing, and debugging. These components are designed to work in conjunction with the `grammar-tools-core` package, enabling developers to build interactive user interfaces for exploring and analyzing grammar data. The package is utilized in other parts of the TypeAgent monorepo, such as the `agr-language` extension.
 
 ## What it does
 
-This package offers a suite of web components that support various grammar-related tasks, including visualization, debugging, and editing. These components are designed to work with a `GrammarBackend` interface, which acts as a bridge to the `grammar-tools-core` service. The key components include:
+This package includes a collection of modular web components that facilitate various grammar-related tasks. These components interact with a `GrammarBackend` interface, which serves as a bridge to the `grammar-tools-core` service. Key components include:
 
-- **`GtRuleList`**: Displays a list of grammar rules, allowing users to view and interact with individual rules.
-- **`GtSourceView`**: Provides a detailed view of the grammar's source code, enabling users to explore its structure.
-- **`GtCompletionPanel`**: An interactive panel for previewing completions based on partial input, helping users understand how different inputs are parsed.
-- **`GtTraceTimeline`**: Visualizes the trace of grammar matches, offering insights into how the grammar processes input step by step.
-- **`GtCoverageHeatmap`**: Displays a heatmap of grammar rule coverage, highlighting which rules are most frequently used.
+- **`GtRuleList`**: Displays a list of grammar rules, allowing users to navigate and interact with individual rules.
+- **`GtSourceView`**: Provides a detailed view of the grammar's source code, enabling users to explore its structure and origins.
+- **`GtCompletionPanel`**: Offers an interactive interface for previewing completions based on partial input, helping users understand how inputs are parsed.
+- **`GtTraceTimeline`**: Visualizes the trace of grammar matches, showing how the grammar processes input step by step.
+- **`GtCoverageHeatmap`**: Displays a heatmap of grammar rule coverage, highlighting the frequency of rule usage.
 - **`GtDiffView`**: Provides a side-by-side comparison of grammar rule differences, useful for analyzing changes between versions.
 - **`GtDebugPanel`**: A composite panel that integrates multiple components, such as grammar loading, completion preview, trace visualization, coverage analysis, and diff comparison, into a single interface.
 
-These components are designed to be modular and can be used individually or combined to create a comprehensive grammar debugging and visualization tool.
+These components can be used individually or combined to create a comprehensive grammar debugging and visualization tool.
 
 ## Setup
 
-To use the `grammar-tools-ui` package, ensure the following prerequisites are met:
+To use the `grammar-tools-ui` package, follow these steps:
 
-1. **Install Dependencies**: This package depends on the `grammar-tools-core` package and the `lit` library. Ensure these dependencies are installed in your project.
-2. **Environment Variables**: Set the `GRAMMAR_TOOLS_CORE_PATH` environment variable to the path of the `grammar-tools-core` package. This is required for the `GrammarBackend` interface to function correctly.
-3. **Build the Package**: Use `pnpm` to install dependencies and build the package:
+1. **Install Dependencies**: Ensure that the `grammar-tools-core` package and the `lit` library are installed in your project. Use `pnpm` to manage dependencies:
+
    ```bash
    pnpm install
+   ```
+
+2. **Environment Variables**: Set the `GRAMMAR_TOOLS_CORE_PATH` environment variable to the path of the `grammar-tools-core` package. This is necessary for the `GrammarBackend` interface to function properly.
+
+3. **Build the Package**: After installing dependencies, build the package:
+
+   ```bash
    pnpm build
    ```
-4. **Integration**: Import the required components into your project and use them as custom elements in your HTML or JavaScript/TypeScript files.
+
+4. **Integration**: Import the required components into your project and use them as custom elements in your HTML or TypeScript files. For example:
+   ```html
+   <script type="module" src="path-to-grammar-tools-ui/dist/index.js"></script>
+   <gt-rule-list></gt-rule-list>
+   ```
 
 For additional setup details, refer to the hand-written README.
 
@@ -60,7 +71,7 @@ The `grammar-tools-ui` package is organized into several key files, each respons
 
 ## How to extend
 
-To extend the `grammar-tools-ui` package, you can add new components or enhance existing ones. Below are the steps to guide you through the process:
+To extend the `grammar-tools-ui` package, you can add new components or enhance existing ones. Follow these steps to get started:
 
 1. **Create a New Component**:
 
@@ -99,7 +110,7 @@ To extend the `grammar-tools-ui` package, you can add new components or enhance 
 
 4. **Test Your Component**:
 
-   - Use the `FixtureBackend` from src/fixture/index.ts to mock backend data for development and testing.
+   - Use the `FixtureBackend` from `src/fixture/index.ts` to mock backend data for development and testing.
    - Write unit tests for your component to ensure it behaves as expected.
 
 5. **Integrate with Existing Components**:
@@ -133,6 +144,6 @@ External: `lit`
 
 ---
 
-_Auto-generated against commit `fbf54a8aff55bd1ef482ad8fbf2064bc3d38486c` on `2026-07-17T05:44:32.534Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `38f6b8e5cb0688da34e930559899bb2ea7bb0aca` on `2026-07-21T01:16:36.018Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter grammar-tools-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
