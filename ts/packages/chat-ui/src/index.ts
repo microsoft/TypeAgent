@@ -26,6 +26,7 @@ export {
     NotifyExplainedData,
     HistoryEntry,
     formatHistorySeparatorLabel,
+    type StatusNoticeBadge,
 } from "./chatPanel.js";
 
 export {
@@ -44,6 +45,7 @@ export {
     type ConversationBarIcons,
     type ConversationBarOptions,
     type ConversationBarStatus,
+    type ConversationNotificationBadge,
 } from "./conversationBar.js";
 
 export {

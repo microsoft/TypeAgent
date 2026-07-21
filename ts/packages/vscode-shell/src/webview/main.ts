@@ -250,6 +250,22 @@ chatPanel.onDemoAction = (action: "continue" | "cancel") => {
     vscode.postMessage({ type: "demoCommand", action });
 };
 
+// Render the collapsed status-notice affordance as a bell next to the
+// connection indicator in the conversation bar (instead of ChatPanel's own
+// floating bell). Returning true tells ChatPanel we displayed it.
+chatPanel.onStatusNoticeBadgeChange = (badge) => {
+    conversationBar.setNotificationBadge(
+        badge
+            ? {
+                  count: badge.count,
+                  level: badge.level,
+                  onClick: () => chatPanel.expandAllStatusNotices(),
+              }
+            : undefined,
+    );
+    return true;
+};
+
 // Mount inline + dropdown command-completion driven by the host
 // (CompletionController in AgentServerBridge). The chat-ui posts
 // pcUpdate / pcAccept / pcDismiss / pcHide / pcDispose; the host
@@ -960,13 +976,35 @@ window.addEventListener("message", (event) => {
                     chatPanel.addNotification(msg.data, msg.source, rid);
                 } else {
                     chatPanel.showInline(msg.data, msg.source);
+                    chatPanel.recordNotification(
+                        msg.event,
+                        msg.source,
+                        msg.data,
+                    );
                 }
             } else if (msg.event === "toast") {
                 if (msg.source === "osNotifications" && rid) {
                     chatPanel.addNotification(msg.data, msg.source, rid);
                 } else {
                     chatPanel.showToast(msg.data, msg.source);
+                    chatPanel.recordNotification(
+                        msg.event,
+                        msg.source,
+                        msg.data,
+                    );
                 }
+            } else if (msg.event === "showNotifications") {
+                // `@notify` / `@notify clear` / `@notify show [unread|all]`
+                // read back the buffered notification center.
+                chatPanel.showNotifications(msg.data);
+            } else if (
+                msg.event === "info" ||
+                msg.event === "warning" ||
+                msg.event === "error"
+            ) {
+                // Agent status events: buffer silently for the notification
+                // center, surfaced later via `@notify show` / `@notify info`.
+                chatPanel.recordNotification(msg.event, msg.source, msg.data);
             } else if (msg.event === "osDismiss") {
                 // The OS notification left the action center — drop the
                 // matching persistent bubble. data.id is the "os:<id>"

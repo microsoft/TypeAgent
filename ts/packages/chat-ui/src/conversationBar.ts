@@ -147,6 +147,41 @@ function createConnectIconSvg(): SVGSVGElement {
     return svg;
 }
 
+/**
+ * Build the notification bell glyph as an inline SVG. Strokes use
+ * `currentColor` so it follows the severity color set in CSS, matching the
+ * host-neutral, no-innerHTML approach of {@link createConnectIconSvg}.
+ */
+function createBellIconSvg(): SVGSVGElement {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    for (const d of [
+        "M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9",
+        "M13.73 21a2 2 0 0 1-3.46 0",
+    ]) {
+        const path = document.createElementNS(SVG_NS, "path");
+        path.setAttribute("d", d);
+        svg.appendChild(path);
+    }
+    return svg;
+}
+
+/**
+ * Describes the collapsed status-notice affordance rendered next to the
+ * connection indicator: a count and its highest severity, plus the handler
+ * that re-opens the collapsed notices when the bell is clicked.
+ */
+export interface ConversationNotificationBadge {
+    count: number;
+    level: "info" | "warning" | "error";
+    onClick: () => void;
+}
+
 export class ConversationBar {
     private readonly controller: ConversationBarController;
     private readonly icons: ConversationBarIcons;
@@ -177,6 +212,8 @@ export class ConversationBar {
     private readonly currentRenameBtn: HTMLButtonElement;
     private readonly currentDeleteBtn: HTMLButtonElement;
     private readonly statusEl: HTMLSpanElement;
+    private readonly notificationBellEl: HTMLButtonElement;
+    private notificationBadgeOnClick: (() => void) | undefined;
     private readonly createPopoverEl: HTMLDivElement;
     private readonly newNameEl: HTMLInputElement;
     private readonly createBtn: HTMLButtonElement;
@@ -258,6 +295,29 @@ export class ConversationBar {
         this.statusEl.setAttribute("aria-live", "polite");
         this.statusEl.textContent = "Disconnected";
         this.rootEl.appendChild(this.statusEl);
+
+        // Collapsed status-notice bell, sitting right next to the connection
+        // indicator and styled to match it. Hidden until the host reports
+        // collapsed notices via setNotificationBadge(); clicking re-opens them.
+        this.notificationBellEl = document.createElement("button");
+        this.notificationBellEl.type = "button";
+        this.notificationBellEl.className = "conversation-notification-bell";
+        this.notificationBellEl.hidden = true;
+        const bellIconEl = document.createElement("span");
+        bellIconEl.className = "conversation-notification-icon";
+        bellIconEl.setAttribute("aria-hidden", "true");
+        bellIconEl.appendChild(createBellIconSvg());
+        this.notificationBellEl.appendChild(bellIconEl);
+        const bellCountEl = document.createElement("span");
+        bellCountEl.className = "conversation-notification-count";
+        bellCountEl.setAttribute("aria-hidden", "true");
+        this.notificationBellEl.appendChild(bellCountEl);
+        this.notificationBellEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.notificationBadgeOnClick?.();
+        });
+        this.rootEl.appendChild(this.notificationBellEl);
 
         // Thin rule fencing the status off from the action buttons so the
         // ambient connected indicator isn't mistaken for another button.
@@ -355,6 +415,39 @@ export class ConversationBar {
         }
         this.updateSummary();
         this.updateControlsEnabled();
+    }
+
+    /**
+     * Show (or hide) the collapsed status-notice bell next to the connection
+     * indicator. Pass a badge to reveal it with a count + severity color and a
+     * click handler that re-opens the notices; pass `undefined` (or a zero
+     * count) to hide it.
+     */
+    public setNotificationBadge(
+        badge: ConversationNotificationBadge | undefined,
+    ): void {
+        const bell = this.notificationBellEl;
+        bell.classList.remove("level-info", "level-warning", "level-error");
+        if (!badge || badge.count <= 0) {
+            bell.hidden = true;
+            this.notificationBadgeOnClick = undefined;
+            return;
+        }
+        bell.classList.add(`level-${badge.level}`);
+        const countEl = bell.querySelector(
+            ".conversation-notification-count",
+        ) as HTMLElement | null;
+        if (countEl) {
+            countEl.textContent = String(badge.count);
+        }
+        const label =
+            badge.count === 1
+                ? "1 status notification — click to open"
+                : `${badge.count} status notifications — click to open`;
+        bell.title = label;
+        bell.setAttribute("aria-label", label);
+        this.notificationBadgeOnClick = badge.onClick;
+        bell.hidden = false;
     }
 
     public setCurrentConversation(

@@ -504,6 +504,28 @@ export interface ChatPanelOptions {
         target: "user" | "agent",
         permanent: boolean,
     ) => void;
+    /**
+     * Optional hook letting the host render the collapsed status-notice
+     * affordance in its own chrome (e.g. a bell next to the connection
+     * indicator in the conversation bar) instead of ChatPanel's floating
+     * bell. Called whenever the set of collapsed notices changes, with a
+     * badge describing the count + highest severity, or `undefined` when
+     * nothing is collapsed. Return `true` to signal the host displayed it;
+     * when it returns anything else, ChatPanel falls back to its own bell.
+     */
+    onStatusNoticeBadgeChange?: (
+        badge: StatusNoticeBadge | undefined,
+    ) => boolean | void;
+}
+
+/**
+ * Describes the set of currently-collapsed status notices for hosts that
+ * render the collapsed affordance themselves (see
+ * `ChatPanelOptions.onStatusNoticeBadgeChange`).
+ */
+export interface StatusNoticeBadge {
+    count: number;
+    level: StatusNoticeLevel;
 }
 
 /**
@@ -541,6 +563,18 @@ export class ChatPanel {
      * the underlying OS notification leaves the action center (osDismiss).
      */
     private notificationContainers = new Map<string, AgentMessageContainer>();
+    /**
+     * Buffered `@notify` entries surfaced via `@notify show` / `@notify info`.
+     * Populated by {@link recordNotification}; read, marked-read, or emptied by
+     * {@link showNotifications}. Intentionally survives {@link clear} (the chat
+     * `@clear`) — only `@notify clear` empties it, matching prior host behavior.
+     */
+    private notifications: Array<{
+        event: string;
+        source: string;
+        data: unknown;
+        read: boolean;
+    }> = [];
     /**
      * For reasoning "step" bubbles: the div of the most recently committed
      * step bubble per thread. New step/temporary bubbles anchor on it so
@@ -606,13 +640,18 @@ export class ChatPanel {
      */
     private toastStack: HTMLDivElement | undefined;
     /**
-     * Bottom-right overlay hosting persistent status notices (see
-     * showStatusNotice). Lazily created on first notice; distinct from the
-     * transient toastStack so the two never fight for the same corner.
+     * Overlay hosting persistent status notices (see showStatusNotice).
+     * Lazily created on first notice; distinct from the transient toastStack
+     * so the two never fight for the same corner. Anchored bottom-right.
      */
     private statusNoticeLayer: HTMLDivElement | undefined;
     /** Active status notices keyed by id -> their root element. */
     private statusNotices = new Map<string, HTMLElement>();
+    /**
+     * Top-right bell that collapsed status notices minimize into. Lazily
+     * created on first minimize; hidden whenever nothing is collapsed.
+     */
+    private statusNoticeBell: HTMLButtonElement | undefined;
     private commandHistory: string[] = [];
     private historyIndex = -1;
     /** Local user's display name + initial used in user-bubble headers. */
@@ -755,6 +794,15 @@ export class ChatPanel {
         target: "user" | "agent",
         permanent: boolean,
     ) => void;
+    /**
+     * Host hook to render the collapsed status-notice badge in its own chrome.
+     * Settable post-construction (e.g. by the Electron host once it has both
+     * the ChatPanel and the ConversationBar in scope). See
+     * ChatPanelOptions.onStatusNoticeBadgeChange.
+     */
+    public onStatusNoticeBadgeChange?: (
+        badge: StatusNoticeBadge | undefined,
+    ) => boolean | void;
     private developerMode = false;
     // Input-bar affordances created only when the matching provider exists.
     private micButton?: HTMLButtonElement;
@@ -787,6 +835,7 @@ export class ChatPanel {
         this.settingsPanel = options.settingsPanel;
         this.helpPanel = options.helpPanel;
         this.onDeleteMessage = options.onDeleteMessage;
+        this.onStatusNoticeBadgeChange = options.onStatusNoticeBadgeChange;
 
         // Web-native default: when the host doesn't inject a speech provider,
         // fall back to the browser's Web Speech API so the mic button works
@@ -2654,12 +2703,12 @@ export class ChatPanel {
 
     /**
      * Show a persistent status notice: a bottom-right toast that stays until
-     * dismissed (unlike showToast's 5s auto-hide). The dismiss (×) collapses
-     * it to a small pinned pill in the same corner; clicking the pill
-     * re-expands it. Re-calling with the same `id` replaces the notice (e.g. a
-     * reconnect re-sending it). An optional action button runs `actionCommand`
-     * through the chat input, so the affordance works identically in every
-     * host with no extra wiring.
+     * dismissed (unlike showToast's 5s auto-hide). The minimize (×) collapses
+     * it into the top-right bell as an unread item; clicking the bell re-opens
+     * every collapsed notice. Re-calling with the same `id` replaces the notice
+     * (e.g. a reconnect re-sending it). An optional action button runs
+     * `actionCommand` through the chat input, so the affordance works
+     * identically in every host with no extra wiring.
      */
     public showStatusNotice(notice: StatusNotice): void {
         if (!notice || !notice.id) {
@@ -2747,29 +2796,118 @@ export class ChatPanel {
             toast.appendChild(actions);
         }
 
-        // Collapsed pill (hidden until minimized via the .collapsed class).
-        const pill = document.createElement("button");
-        pill.type = "button";
-        pill.className = "csn-pill";
-        pill.title = `${notice.title} — click to expand`;
-        pill.setAttribute("aria-label", `${notice.title} — click to expand`);
-        const dot = document.createElement("span");
-        dot.className = "csn-dot";
-        pill.appendChild(dot);
-        const pillLabel = document.createElement("span");
-        pillLabel.className = "csn-pill-label";
-        pillLabel.textContent = notice.title;
-        pill.appendChild(pillLabel);
-
-        minBtn.addEventListener("click", () => root.classList.add("collapsed"));
-        pill.addEventListener("click", () =>
-            root.classList.remove("collapsed"),
+        // Minimize collapses the toast into the top-right bell.
+        minBtn.addEventListener("click", () =>
+            this.collapseStatusNoticeToBell(root),
         );
 
         root.appendChild(toast);
-        root.appendChild(pill);
         layer.appendChild(root);
         this.statusNotices.set(notice.id, root);
+        // A fresh notice shows expanded, so refresh the bell's unread count in
+        // case this replaced a previously-collapsed notice with the same id.
+        this.updateStatusNoticeBell();
+    }
+
+    // Bell glyph. Static, non-user SVG literal — safe to assign as innerHTML.
+    private static readonly CSN_BELL_SVG =
+        '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">' +
+        '<path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 ' +
+        "0 0 0 12 22zm7-5v-1l-1.6-1.6V10a5.4 5.4 0 0 0-4-5.23V4.2a1.4 1.4 0 0 " +
+        '0-2.8 0v.57A5.4 5.4 0 0 0 6.6 10v3.4L5 15v1h14z"/></svg>';
+
+    private ensureStatusNoticeBell(): HTMLButtonElement {
+        if (!this.statusNoticeBell) {
+            const bell = document.createElement("button");
+            bell.type = "button";
+            bell.className = "chat-status-bell";
+            bell.style.display = "none";
+            bell.innerHTML =
+                ChatPanel.CSN_BELL_SVG +
+                '<span class="chat-status-bell-badge"></span>';
+            bell.addEventListener("click", () => this.expandAllStatusNotices());
+            (this.messageDiv.parentElement ?? this.rootElement).appendChild(
+                bell,
+            );
+            this.statusNoticeBell = bell;
+        }
+        return this.statusNoticeBell;
+    }
+
+    // Collapse a notice into the bell (hides the toast, bumps the unread count).
+    private collapseStatusNoticeToBell(root: HTMLElement): void {
+        root.classList.add("collapsed");
+        this.updateStatusNoticeBell();
+    }
+
+    // Re-open every collapsed notice and clear the bell.
+    public expandAllStatusNotices(): void {
+        for (const root of this.statusNotices.values()) {
+            root.classList.remove("collapsed");
+        }
+        this.updateStatusNoticeBell();
+    }
+
+    // Sync the collapsed-notice affordance (host badge or, failing that, the
+    // floating bell) with the set of currently-collapsed notices.
+    private updateStatusNoticeBell(): void {
+        const collapsed = [...this.statusNotices.values()].filter((r) =>
+            r.classList.contains("collapsed"),
+        );
+        const badge: StatusNoticeBadge | undefined =
+            collapsed.length === 0
+                ? undefined
+                : {
+                      count: collapsed.length,
+                      level: collapsed.some((r) =>
+                          r.classList.contains("level-error"),
+                      )
+                          ? "error"
+                          : collapsed.some((r) =>
+                                  r.classList.contains("level-warning"),
+                              )
+                            ? "warning"
+                            : "info",
+                  };
+
+        // Prefer a host-rendered badge (e.g. a bell next to the connection
+        // indicator). If the host handles it, keep the floating bell hidden.
+        let handled = false;
+        if (this.onStatusNoticeBadgeChange) {
+            try {
+                handled = this.onStatusNoticeBadgeChange(badge) === true;
+            } catch (e) {
+                console.error("onStatusNoticeBadgeChange callback failed", e);
+            }
+        }
+        if (handled) {
+            if (this.statusNoticeBell) {
+                this.statusNoticeBell.style.display = "none";
+            }
+            return;
+        }
+
+        // Fallback: ChatPanel's own floating bell.
+        if (!badge) {
+            if (this.statusNoticeBell) {
+                this.statusNoticeBell.style.display = "none";
+            }
+            return;
+        }
+        const bell = this.ensureStatusNoticeBell();
+        bell.classList.remove("level-info", "level-warning", "level-error");
+        bell.classList.add(`level-${badge.level}`);
+        const badgeEl = bell.querySelector(".chat-status-bell-badge");
+        if (badgeEl) {
+            badgeEl.textContent = String(badge.count);
+        }
+        const label =
+            badge.count === 1
+                ? "1 status notification — click to open"
+                : `${badge.count} status notifications — click to open`;
+        bell.title = label;
+        bell.setAttribute("aria-label", label);
+        bell.style.display = "inline-flex";
     }
 
     /** Remove a status notice by id, or all of them when `id` is omitted. */
@@ -2783,9 +2921,18 @@ export class ChatPanel {
             this.statusNotices.get(id)?.remove();
             this.statusNotices.delete(id);
         }
-        if (this.statusNotices.size === 0 && this.statusNoticeLayer) {
-            this.statusNoticeLayer.remove();
-            this.statusNoticeLayer = undefined;
+        if (this.statusNotices.size === 0) {
+            if (this.statusNoticeLayer) {
+                this.statusNoticeLayer.remove();
+                this.statusNoticeLayer = undefined;
+            }
+            if (this.statusNoticeBell) {
+                this.statusNoticeBell.remove();
+                this.statusNoticeBell = undefined;
+            }
+        } else {
+            // A removed notice may have been the only collapsed one.
+            this.updateStatusNoticeBell();
         }
     }
 
@@ -2880,6 +3027,64 @@ export class ChatPanel {
         container.remove();
         this.notificationContainers.delete(notificationId);
         return true;
+    }
+
+    /**
+     * Buffer a notification for later retrieval via {@link showNotifications}.
+     * Hosts call this from their notify-event adapter for
+     * toast/inline/info/warning/error events so the notification center has
+     * content to summarize. Purely UI state — no host dependency.
+     */
+    public recordNotification(
+        event: string,
+        source: string,
+        data: unknown,
+    ): void {
+        this.notifications.push({ event, source, data, read: false });
+    }
+
+    /**
+     * Render the buffered notification center inline in response to `@notify`
+     * commands. `command` is the dispatcher NotifyCommands value, which arrives
+     * as a bare string: "summarize" | "clear" | "unread" | "all". Kept as
+     * literals here so chat-ui needn't depend on the dispatcher (node) package.
+     */
+    public showNotifications(command: unknown): void {
+        switch (command) {
+            case "clear":
+                this.notifications.length = 0;
+                break;
+            case "all":
+            case "unread": {
+                const showAll = command === "all";
+                const items = this.notifications.filter(
+                    (n) => showAll || !n.read,
+                );
+                const content = items.length
+                    ? `<ul style="margin: 0; padding-left: 1.2em; list-style-position: inside;">${items
+                          .map((n) => {
+                              n.read = true;
+                              return `<li class="notification-${n.event}">${n.event} ${String(n.data)}</li>`;
+                          })
+                          .join("")}</ul>`
+                    : "No notifications.";
+                this.showInline({ type: "html", content }, "shell");
+                break;
+            }
+            case "summarize": {
+                const unread = this.notifications.filter((n) => !n.read).length;
+                this.showInline(
+                    {
+                        type: "html",
+                        content: `There are <b>${unread}</b> unread and <b>${this.notifications.length}</b> total notifications.`,
+                    },
+                    "shell",
+                );
+                break;
+            }
+            default:
+                break;
+        }
     }
 
     /**
