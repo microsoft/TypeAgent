@@ -55,7 +55,7 @@ import {
     type AgentRootsInput,
 } from "../health/index.js";
 import type { CorpusEntry } from "../corpus/types.js";
-import type { VersionSpec } from "./types.js";
+import type { VersionSpec, ReplayCacheState } from "./types.js";
 import {
     actionsEqual,
     type ReplayActionResolver,
@@ -67,6 +67,19 @@ import type {
     ConstructionCacheStatus,
 } from "./constructionCacheResolver.js";
 import type { WildcardMatchValidator } from "./wildcardValidator.js";
+import { captureGrammarMatchTrace } from "./resolutionTraceCapture.js";
+import type {
+    ActionTraceNode,
+    CacheConsultTraceNode,
+    ConstructionCacheEntryDto,
+    GrammarMatchTraceNode,
+    ReplayResolutionTrace,
+    ReplaySideTrace,
+    TraceRealization,
+    WildcardValidationTraceNode,
+} from "./resolutionTrace.js";
+
+export { captureGrammarMatchTrace } from "./resolutionTraceCapture.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -78,6 +91,11 @@ const execFileAsync = promisify(execFile);
 type BuiltGrammar = {
     store: GrammarStoreImpl;
     enriched: boolean;
+    /** The grammar source that was compiled, retained so a trace can re-run the
+     *  tracing matcher over the exact same text this side matched against. */
+    grammarText: string;
+    /** File identity used when re-loading the grammar for tracing. */
+    grammarFileName: string;
 };
 
 /**
@@ -227,6 +245,57 @@ export interface GrammarReplayResolver extends ReplayActionResolver {
      * `false` when no validator was supplied.
      */
     readonly wildcardValidationApplied: boolean;
+    /**
+     * Resolve one utterance for a side exactly as {@link resolve} does, and also
+     * capture the step-by-step {@link ReplaySideTrace} that explains the result
+     * (the fidelity layers exercised, the grammar-match event stream mapped to
+     * `.agr` spans, and the construction-cache entry when hit). The extra work
+     * — re-running the tracing matcher and resolving cache identity — is only
+     * paid here, so streaming a run through {@link resolve} stays cheap. Call
+     * with the live resolver right after a run so the working tree still matches
+     * what produced the row.
+     */
+    resolveWithTrace(
+        entry: CorpusEntry,
+        version: VersionSpec,
+        side: "A" | "B",
+    ): Promise<{
+        resolution: ReplayAgentResolution;
+        sideTrace: ReplaySideTrace;
+    }>;
+}
+
+/**
+ * What one side's resolution touched, recorded cheaply during {@link
+ * GrammarReplayResolver.resolve} so a trace can be built later without re-running
+ * the resolution. Holds no grammar-tools objects — only the inputs a trace needs.
+ */
+interface SideResolutionArtifacts {
+    utterance: string;
+    version: VersionSpec;
+    realization: TraceRealization;
+    /** True when the live construction cache was consulted (working-tree side,
+     *  valid cache). */
+    cacheConsulted: boolean;
+    /** True when the construction cache resolved the utterance. */
+    cacheHit: boolean;
+    /** True once the grammar match was reached (i.e. the cache did not short-
+     *  circuit). */
+    grammarReached: boolean;
+    /** True when the grammar failed to build for this side. */
+    buildFailed: boolean;
+    /** The built grammar for this side, present when the grammar was reached. */
+    grammar?: BuiltGrammar;
+    /** The normalized action the grammar match produced, when the grammar was
+     *  reached and matched. Drives the trace's ranking-parity check. */
+    grammarAction?: unknown;
+    /** Whether a wildcard validator was configured for this run. */
+    validatorAvailable: boolean;
+    /** Outcome of the wildcard-validation pass for this row. */
+    wildcard: "accepted" | "rejected" | "not-run";
+    /** The action this side ultimately produced (cache or grammar), when any. */
+    finalAction?: unknown;
+    cacheState: ReplayCacheState;
 }
 
 let entitiesRegistered = false;
@@ -366,8 +435,10 @@ async function buildGrammar(
     }
 
     try {
+        const grammarFileName =
+            target.grammarFileName ?? path.basename(target.grammarFilePath);
         const grammar = loadGrammarRules(
-            target.grammarFileName ?? path.basename(target.grammarFilePath),
+            grammarFileName,
             content,
             target.start !== undefined ? { start: target.start } : undefined,
         );
@@ -382,7 +453,7 @@ async function buildGrammar(
         const store = new GrammarStoreImpl(undefined);
         store.setUseNFA(true);
         store.addGrammar(target.schemaName, grammar);
-        return { store, enriched };
+        return { store, enriched, grammarText: content, grammarFileName };
     } catch (err) {
         throw new ReplayVersionBuildError(
             side,
@@ -507,98 +578,370 @@ export function createGrammarReplayResolver(
             version: VersionSpec,
             side: "A" | "B",
         ): Promise<ReplayAgentResolution> {
-            const t0 = now();
-            // A rating is observation-scoped: it judges the action that was on
-            // screen in the run where it was recorded (the action co-captured on
-            // this entry), not the utterance in the abstract. Attach it to a side
-            // only when that side reproduces that exact action; a rating for a
-            // now-different action says nothing about what this side resolved, so
-            // it is dropped and the structural delta decides.
-            const feedbackFor = (resolved: unknown) =>
-                entry.feedback !== undefined &&
-                entry.expectedAction !== undefined &&
-                actionsEqual(resolved, entry.expectedAction)
-                    ? { feedback: entry.feedback }
-                    : {};
+            return (await resolveSide(entry, version, side)).resolution;
+        },
 
-            // On the working-tree side, consult the live construction cache
-            // first — the dispatcher's real first check. A construction hit is a
-            // genuine cache `hit`; everything the cache doesn't resolve falls
-            // through to the grammar path below and is reported as a `miss`
-            // (deterministically resolvable, but not served from the cache).
-            const useConstruction =
-                constructionActive && version.kind === "workingTree";
-            if (useConstruction) {
-                const cacheAction = constructionCache!.match(entry.utterance);
-                if (cacheAction !== undefined) {
-                    return {
+        async resolveWithTrace(
+            entry: CorpusEntry,
+            version: VersionSpec,
+            side: "A" | "B",
+        ): Promise<{
+            resolution: ReplayAgentResolution;
+            sideTrace: ReplaySideTrace;
+        }> {
+            const { resolution, artifacts } = await resolveSide(
+                entry,
+                version,
+                side,
+            );
+            // Resolve the construction identity only now (not on the hot
+            // `resolve` path): a hit means the cache is live, so the lookup is
+            // faithful and cheap.
+            const cacheEntry = artifacts.cacheHit
+                ? constructionCache!.matchEntry(entry.utterance)
+                : undefined;
+            const sideTrace = buildSideTrace(
+                side,
+                target,
+                artifacts,
+                cacheEntry,
+            );
+            return { resolution, sideTrace };
+        },
+    };
+
+    /**
+     * Resolve one side and record the {@link SideResolutionArtifacts} a trace
+     * needs. This is the single source of resolution logic; `resolve` returns
+     * just its resolution and `resolveWithTrace` additionally builds the trace,
+     * so the two entry points can never drift.
+     */
+    async function resolveSide(
+        entry: CorpusEntry,
+        version: VersionSpec,
+        side: "A" | "B",
+    ): Promise<{
+        resolution: ReplayAgentResolution;
+        artifacts: SideResolutionArtifacts;
+    }> {
+        const t0 = now();
+        // A rating is observation-scoped: it judges the action that was on
+        // screen in the run where it was recorded (the action co-captured on
+        // this entry), not the utterance in the abstract. Attach it to a side
+        // only when that side reproduces that exact action; a rating for a
+        // now-different action says nothing about what this side resolved, so
+        // it is dropped and the structural delta decides.
+        const feedbackFor = (resolved: unknown) =>
+            entry.feedback !== undefined &&
+            entry.expectedAction !== undefined &&
+            actionsEqual(resolved, entry.expectedAction)
+                ? { feedback: entry.feedback }
+                : {};
+
+        const useConstruction =
+            constructionActive && version.kind === "workingTree";
+        const artifacts: SideResolutionArtifacts = {
+            utterance: entry.utterance,
+            version,
+            realization:
+                version.kind === "workingTree" ? "built-live" : "source",
+            cacheConsulted: useConstruction,
+            cacheHit: false,
+            grammarReached: false,
+            buildFailed: false,
+            validatorAvailable: wildcardValidator !== undefined,
+            wildcard: "not-run",
+            cacheState: "needs-explanation",
+        };
+
+        // On the working-tree side, consult the live construction cache
+        // first — the dispatcher's real first check. A construction hit is a
+        // genuine cache `hit`; everything the cache doesn't resolve falls
+        // through to the grammar path below and is reported as a `miss`
+        // (deterministically resolvable, but not served from the cache).
+        if (useConstruction) {
+            const cacheAction = constructionCache!.match(entry.utterance);
+            if (cacheAction !== undefined) {
+                artifacts.cacheHit = true;
+                artifacts.finalAction = cacheAction;
+                artifacts.cacheState = "hit";
+                return {
+                    resolution: {
                         action: cacheAction,
                         cacheState: "hit",
                         latencyMs: now() - t0,
                         ...feedbackFor(cacheAction),
-                    };
-                }
+                    },
+                    artifacts,
+                };
             }
+        }
 
-            let g: BuiltGrammar;
-            try {
-                g = await build(version, side);
-            } catch {
-                // prepare() is expected to have surfaced build failures as a
-                // run-level error already; degrade safely here rather than throw
-                // (a throw would hang the engine's row stream). No action
-                // resolved, so no rating can pertain to this side.
-                return {
+        let g: BuiltGrammar;
+        try {
+            g = await build(version, side);
+        } catch {
+            // prepare() is expected to have surfaced build failures as a
+            // run-level error already; degrade safely here rather than throw
+            // (a throw would hang the engine's row stream). No action
+            // resolved, so no rating can pertain to this side.
+            artifacts.buildFailed = true;
+            return {
+                resolution: {
                     cacheState: "needs-explanation",
                     latencyMs: now() - t0,
-                };
+                },
+                artifacts,
+            };
+        }
+        artifacts.grammarReached = true;
+        artifacts.grammar = g;
+
+        const results = g.store.match(entry.utterance);
+
+        // Wildcard validation: on the working-tree side, run the
+        // agent's real `validateWildcardMatch` over the ranked candidates and
+        // resolve the first accepted match — mirroring the dispatcher's
+        // post-match `getValidatedMatches`. Never on a git ref (we can't load
+        // arbitrary-ref agent code). When no validator is supplied this is a
+        // plain top-match resolution (unchanged behavior).
+        const validateHere =
+            wildcardValidator !== undefined && version.kind === "workingTree";
+        let rawAction: unknown;
+        if (validateHere) {
+            const validated = await selectValidatedMatchAction(
+                results,
+                wildcardValidator!,
+            );
+            rawAction = validated.action;
+            if (validated.consulted) {
+                wildcardValidationApplied = true;
+                artifacts.wildcard =
+                    validated.action !== undefined ? "accepted" : "rejected";
             }
+        } else {
+            rawAction =
+                results.length > 0 ? topMatchAction(results) : undefined;
+        }
 
-            const results = g.store.match(entry.utterance);
+        const latencyMs = now() - t0;
+        const action =
+            rawAction !== undefined
+                ? normalizeAction(target.schemaName, rawAction)
+                : undefined;
+        artifacts.grammarAction = action;
 
-            // Wildcard validation: on the working-tree side, run the
-            // agent's real `validateWildcardMatch` over the ranked candidates and
-            // resolve the first accepted match — mirroring the dispatcher's
-            // post-match `getValidatedMatches`. Never on a git ref (we can't load
-            // arbitrary-ref agent code). When no validator is supplied this is a
-            // plain top-match resolution (unchanged behavior).
-            const validateHere =
-                wildcardValidator !== undefined &&
-                version.kind === "workingTree";
-            let rawAction: unknown;
-            if (validateHere) {
-                const validated = await selectValidatedMatchAction(
-                    results,
-                    wildcardValidator!,
-                );
-                rawAction = validated.action;
-                if (validated.consulted) {
-                    wildcardValidationApplied = true;
-                }
-            } else {
-                rawAction =
-                    results.length > 0 ? topMatchAction(results) : undefined;
-            }
+        if (action === undefined) {
+            return {
+                resolution: { cacheState: "needs-explanation", latencyMs },
+                artifacts,
+            };
+        }
+        // When the live construction cache is in play, a grammar-only
+        // resolution is reported as a `miss` (not in the cache) to keep the
+        // working-tree side's cache states faithful; otherwise it is a plain
+        // grammar `hit` (unchanged grammar-match semantics).
+        const cacheState = useConstruction ? "miss" : "hit";
+        artifacts.finalAction = action;
+        artifacts.cacheState = cacheState;
+        return {
+            resolution: {
+                action,
+                cacheState,
+                latencyMs,
+                ...feedbackFor(action),
+            },
+            artifacts,
+        };
+    }
+}
 
-            const latencyMs = now() - t0;
-            const action =
-                rawAction !== undefined
-                    ? normalizeAction(target.schemaName, rawAction)
-                    : undefined;
+/**
+ * Build the construction-cache-consult node from the run's artifacts. The cache
+ * is a live-only concept: `not-applicable` on a git-ref side or when no live
+ * cache was supplied, otherwise `ran` with the hit/miss outcome.
+ */
+function cacheConsultNode(
+    artifacts: SideResolutionArtifacts,
+    cacheEntry: ConstructionCacheEntryDto | undefined,
+): CacheConsultTraceNode {
+    if (!artifacts.cacheConsulted) {
+        const detail =
+            artifacts.version.kind === "workingTree"
+                ? "no live construction cache"
+                : "cache consulted only on the working-tree side";
+        return { kind: "cache-consult", execution: "not-applicable", detail };
+    }
+    if (artifacts.cacheHit) {
+        return {
+            kind: "cache-consult",
+            execution: "ran",
+            outcome: "hit",
+            ...(cacheEntry !== undefined ? { entry: cacheEntry } : {}),
+        };
+    }
+    return { kind: "cache-consult", execution: "ran", outcome: "miss" };
+}
 
-            if (action === undefined) {
-                return {
-                    cacheState: "needs-explanation",
-                    latencyMs,
-                };
-            }
-            // When the live construction cache is in play, a grammar-only
-            // resolution is reported as a `miss` (not in the cache) to keep the
-            // working-tree side's cache states faithful; otherwise it is a plain
-            // grammar `hit` (unchanged grammar-match semantics).
-            const cacheState = useConstruction ? "miss" : "hit";
-            return { action, cacheState, latencyMs, ...feedbackFor(action) };
-        },
+/**
+ * Build the grammar-match node. When the grammar was reached and built, re-run
+ * the tracing matcher over its source to capture the full event stream and
+ * source spans; otherwise record why no trace exists (cache short-circuit or a
+ * build failure).
+ */
+function grammarMatchNode(
+    target: GrammarReplayTarget,
+    artifacts: SideResolutionArtifacts,
+): GrammarMatchTraceNode {
+    if (!artifacts.grammarReached) {
+        return {
+            kind: "grammar-match",
+            execution: "not-reached",
+            input: artifacts.utterance,
+            rankingParity: "unavailable",
+            detail: "resolved from the construction cache",
+        };
+    }
+    if (artifacts.buildFailed || artifacts.grammar === undefined) {
+        return {
+            kind: "grammar-match",
+            execution: "unavailable",
+            input: artifacts.utterance,
+            rankingParity: "unavailable",
+            detail: "grammar failed to build",
+        };
+    }
+    return captureGrammarMatchTrace(
+        target.schemaName,
+        artifacts.grammar.grammarFileName,
+        artifacts.grammar.grammarText,
+        artifacts.utterance,
+        artifacts.grammarAction,
+        undefined,
+        target.grammarFilePath,
+    );
+}
+
+/** Build the wildcard-validation node. Live-only; `ran` only when a configured
+ *  validator actually judged a wildcard match this row. */
+function wildcardValidationNode(
+    artifacts: SideResolutionArtifacts,
+): WildcardValidationTraceNode {
+    if (artifacts.version.kind !== "workingTree") {
+        return {
+            kind: "wildcard-validation",
+            execution: "not-applicable",
+            detail: "validation runs only on the working tree",
+        };
+    }
+    if (!artifacts.validatorAvailable) {
+        return {
+            kind: "wildcard-validation",
+            execution: "not-applicable",
+            detail: "no wildcard validator configured",
+        };
+    }
+    if (
+        artifacts.wildcard === "accepted" ||
+        artifacts.wildcard === "rejected"
+    ) {
+        return {
+            kind: "wildcard-validation",
+            execution: "ran",
+            outcome: artifacts.wildcard,
+        };
+    }
+    return {
+        kind: "wildcard-validation",
+        execution: "not-reached",
+        detail: "no wildcard match to validate",
+    };
+}
+
+/** Build the produced-action node, carrying the action JSON and its schema
+ *  location for the jump-to-variant action. */
+function actionNode(
+    target: GrammarReplayTarget,
+    artifacts: SideResolutionArtifacts,
+): ActionTraceNode {
+    const action = artifacts.finalAction;
+    const produced = action !== undefined;
+    const rec =
+        action !== null && typeof action === "object"
+            ? (action as Record<string, unknown>)
+            : undefined;
+    const actionName =
+        typeof rec?.actionName === "string" ? rec.actionName : undefined;
+    // Only surface the schema source for a side that actually produced an
+    // action. On a miss there is no resolved action, so the viewer must not
+    // offer a schema jump or A/B compare for this stage.
+    const sourceFilePath = produced ? target.schema?.sourceFilePath : undefined;
+    const schema =
+        sourceFilePath !== undefined || actionName !== undefined
+            ? {
+                  ...(sourceFilePath !== undefined ? { sourceFilePath } : {}),
+                  ...(actionName !== undefined ? { actionName } : {}),
+              }
+            : undefined;
+    return {
+        kind: "action",
+        execution: "ran",
+        outcome: produced ? "hit" : "miss",
+        ...(produced ? { action } : {}),
+        ...(schema !== undefined ? { schema } : {}),
+    };
+}
+
+/** Assemble one side's ordered fidelity-layer trace from its resolution
+ *  artifacts. Nodes are always present (as `not-applicable` when a layer did not
+ *  run) so both sides render as aligned rows in the viewer. */
+function buildSideTrace(
+    side: "A" | "B",
+    target: GrammarReplayTarget,
+    artifacts: SideResolutionArtifacts,
+    cacheEntry: ConstructionCacheEntryDto | undefined,
+): ReplaySideTrace {
+    return {
+        side,
+        version: artifacts.version,
+        realization: artifacts.realization,
+        nodes: [
+            cacheConsultNode(artifacts, cacheEntry),
+            grammarMatchNode(target, artifacts),
+            wildcardValidationNode(artifacts),
+            actionNode(target, artifacts),
+        ],
+        ...(artifacts.finalAction !== undefined
+            ? { finalAction: artifacts.finalAction }
+            : {}),
+        cacheState: artifacts.cacheState,
+    };
+}
+
+/**
+ * Capture the full {@link ReplayResolutionTrace} for one utterance by resolving
+ * both sides with tracing. Call with the live resolver used for the run (right
+ * after it, before any working-tree edit) so the trace reflects exactly what
+ * produced the row. Keyed by `entry.id`, matching the `utteranceId` the engine
+ * stamps on rows.
+ */
+export async function captureResolutionTrace(
+    resolver: GrammarReplayResolver,
+    entry: CorpusEntry,
+    runId: string,
+    versionA: VersionSpec,
+    versionB: VersionSpec,
+    now: () => number = () => Date.now(),
+): Promise<ReplayResolutionTrace> {
+    const a = await resolver.resolveWithTrace(entry, versionA, "A");
+    const b = await resolver.resolveWithTrace(entry, versionB, "B");
+    return {
+        runId,
+        utteranceId: entry.id,
+        utterance: entry.utterance,
+        a: a.sideTrace,
+        b: b.sideTrace,
+        capturedAt: now(),
     };
 }
 

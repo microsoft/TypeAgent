@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c1b24b5756ab0435c3d0ca5153fd51f064ac1dcee59fe9e09466e32addcee087 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7553eb832fec82464301785691d6822d248e5ac63cf2c00bb6e9e03627b7d0d0 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent-studio — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The `typeagent-studio` package is a TypeScript library that powers the TypeAgent developer experience within Visual Studio Code. It provides a suite of tools for authoring, debugging, and optimizing TypeAgent agents. Key functionalities include schema and grammar tuning, compare-and-replay regression detection, trace investigation, and live observation of agent behavior. This package is integral to the development and validation workflows for TypeAgent agents, offering a streamlined and interactive environment for developers.
+The `typeagent-studio` package is a TypeScript library that provides the developer experience for working with TypeAgent agents within Visual Studio Code. It offers tools for authoring, debugging, and optimizing agents, with features such as schema and grammar tuning, compare-and-replay regression detection, trace investigation, and live observation. This package is designed to support developers in creating and refining TypeAgent agents efficiently.
 
 ## What it does
 
-The `typeagent-studio` package integrates with Visual Studio Code to deliver a comprehensive set of features for working with TypeAgent agents. These features are exposed through a combination of commands and views, enabling developers to manage, debug, and optimize their agents effectively.
+The `typeagent-studio` package integrates with Visual Studio Code to deliver a comprehensive set of tools for managing and debugging TypeAgent agents. These tools are accessible through commands and views, enabling developers to perform tasks such as onboarding, sandbox management, corpus replay, and collision detection.
 
 ### Commands
 
-The package provides a rich set of commands accessible via the VS Code command palette. These commands are grouped into several categories:
+The package provides a wide range of commands accessible via the VS Code command palette. These commands are grouped into several categories:
 
 - **Onboarding and Sandbox Management**:
 
@@ -50,21 +50,16 @@ The package introduces several specialized views within the **TypeAgent Studio**
    - Organizes and displays corpus entries for agents, grouped by source (e.g., in-repo, captures, external, feedback).
    - Allows users to explore and manage corpora associated with loaded agents.
 
-3. **Feedback Capture**:
-
-   - Offers a guided flow for recording feedback on agent performance, including ratings, comments, and categories.
-   - Feedback is integrated into the Corpora view for further analysis.
-
-4. **Event Log View**:
+3. **Event Log View**:
 
    - Displays a chronological list of recent events related to agent activity, with timestamps, icons, and tooltips for quick reference.
 
-5. **Collisions View**:
+4. **Collisions View**:
 
    - Lists detected schema/grammar collisions, categorized by type (e.g., overlap, shadow, ambiguity).
    - Provides tools for investigating and resolving conflicts in agent definitions.
 
-6. **Health Status Bar**:
+5. **Health Status Bar**:
    - Summarizes the health of all agents loaded into running sandboxes.
    - Offers a quick visual indicator of the overall system health.
 
@@ -101,7 +96,7 @@ For additional setup details, refer to the hand-written README or other relevant
 
 ## Key Files
 
-The `typeagent-studio` package is structured into several key files and modules, each responsible for specific aspects of the extension's functionality:
+The `typeagent-studio` package is organized into several key files and modules, each responsible for specific functionalities:
 
 - **[extension.ts](./src/extension.ts)**: The main entry point for the VS Code extension. It initializes the extension, registers commands, and sets up views.
 - **[commands.ts](./src/commands.ts)**: Implements the commands available in the VS Code command palette, such as managing sandboxes, running onboarding sessions, and exporting artifacts.
@@ -167,15 +162,16 @@ Workspace:
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/core](../../packages/typeagent-core/README.md)
 - [@typeagent/websocket-utils](../../packages/utils/webSocketUtils/README.md)
+- [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 
 External: `debug`, `ws`
 
 ### Files of interest
 
-`./src/baseTreeProvider.ts`, `./src/collisionsPresentation.ts`, `./src/collisionsSource.ts`, …and 54 more under `./src/`.
+`./src/baseTreeProvider.ts`, `./src/collisionsPresentation.ts`, `./src/collisionsSource.ts`, …and 70 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent-studio docs:verify-links` to spot-check._
+_Auto-generated against commit `38f6b8e5cb0688da34e930559899bb2ea7bb0aca` on `2026-07-21T01:16:36.018Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent-studio docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

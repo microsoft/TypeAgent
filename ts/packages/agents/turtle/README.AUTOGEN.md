@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4eadac908536e0d5e6ddc9d555c56710fc3999dcfff01d4fc0effe00b44f53a2 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=160c8079e4837bb1a9d4d6ec9718e8de3b2d2807b07a97e000690cb7b56a1189 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # turtle — AI-generated documentation
@@ -12,42 +12,77 @@
 
 ## Overview
 
-The Turtle package is a TypeAgent application agent designed to provide a web-based interface for visualizing and controlling a turtle that can draw on a canvas. It integrates with the TypeAgent framework to execute drawing actions and render the results in a browser.
+The Turtle package is a TypeAgent application agent that provides a browser-based interface for visualizing and controlling a turtle graphic. The turtle can move and draw on a canvas, executing actions defined by the TypeAgent framework. This package is particularly useful for demonstrating and visualizing sequential commands in a graphical environment.
 
 ## What it does
 
-The Turtle package allows users to control a turtle graphic through various actions. These actions include `forward`, `left`, `right`, `penUp`, and `penDown`. The turtle's movements and drawing actions are visualized on a canvas within a web page. The package communicates with the TypeAgent framework to receive and execute these actions, updating the canvas accordingly. This visualization helps users understand the sequence and effect of the turtle's movements and drawing commands.
+The Turtle package enables users to control a virtual turtle that moves and draws on a canvas. It supports the following actions:
+
+- `forward`: Moves the turtle forward by a specified number of pixels.
+- `left`: Rotates the turtle left by a specified number of degrees.
+- `right`: Rotates the turtle right by a specified number of degrees.
+- `penUp`: Lifts the turtle's pen, preventing it from drawing while moving.
+- `penDown`: Lowers the turtle's pen, allowing it to draw while moving.
+
+These actions are visualized in real-time on a web page, where the turtle's movements and drawings are rendered on an HTML canvas. The package integrates with the TypeAgent framework to handle action execution and updates the canvas accordingly. This visualization helps users understand the sequence and effects of the turtle's commands.
 
 ## Setup
 
-To set up the Turtle package, follow these steps:
+To set up and run the Turtle package:
 
-1. Ensure you have all necessary dependencies installed by running `pnpm install`.
-2. Start the web application by running `pnpm run start` in the package directory.
+1. Install dependencies by running `pnpm install` in the package directory.
+2. Start the web application with the command `pnpm run start`.
+3. Open the application in a browser to interact with the turtle and visualize its actions.
 
-For detailed setup instructions, see the hand-written README.
+For additional details, refer to the hand-written README.
 
 ## Key Files
 
-The Turtle package is structured as follows:
+The Turtle package is organized into several key files, each responsible for specific functionality:
 
-- **Entry Point**: The main entry point is [index.ts](./src/site/index.ts), which initializes the web application and registers the turtle agent with TypeAgent.
-- **HTML and CSS**: The web interface is defined in [index.html](./src/site/index.html) and styled using [styles.css](./src/site/styles.css).
-- **Turtle Agent**: The turtle agent is created in [turtleAgent.ts](./src/site/turtleAgent.ts). This file defines the agent's behavior and how it executes actions.
-- **Action Schema**: The action schema is defined in [turtleActionSchema.ts](./src/site/turtleActionSchema.ts), specifying the types of actions the turtle can perform.
-- **Canvas Management**: The canvas and turtle graphics are managed in [turtleCanvas.ts](./src/site/turtleCanvas.ts), which handles drawing and updating the turtle's position and orientation.
-- **Turtle Types**: The turtle's methods and properties are defined in [turtleTypes.ts](./src/site/turtleTypes.ts).
+- **[index.ts](./src/site/index.ts)**: The main entry point of the application. It initializes the web interface, sets up the turtle agent, and registers it with the TypeAgent framework.
+- **[index.html](./src/site/index.html)**: Defines the structure of the web page, including the canvas where the turtle's movements are visualized.
+- **[styles.css](./src/site/styles.css)**: Provides styling for the web interface, including the canvas and turtle elements.
+- **[turtleAgent.ts](./src/site/turtleAgent.ts)**: Implements the turtle agent, defining how it processes and executes actions such as `forward`, `left`, and `penDown`.
+- **[turtleActionSchema.ts](./src/site/turtleActionSchema.ts)**: Specifies the schema for turtle actions, including their names and parameters.
+- **[turtleCanvas.ts](./src/site/turtleCanvas.ts)**: Manages the canvas and turtle graphics, handling drawing operations, position updates, and orientation changes.
+- **[turtleTypes.ts](./src/site/turtleTypes.ts)**: Defines the `Turtle` interface, which includes methods for moving and controlling the turtle.
 
 ## How to extend
 
-To extend the Turtle package, follow these steps:
+To extend the functionality of the Turtle package, follow these steps:
 
-1. **Add New Actions**: Define new actions in [turtleActionSchema.ts](./src/site/turtleActionSchema.ts). Ensure each action has a unique `actionName` and appropriate parameters.
-2. **Implement Action Handling**: Update [turtleAgent.ts](./src/site/turtleAgent.ts) to handle the new actions. Add cases in the `executeAction` method to execute the new actions.
-3. **Update Canvas Logic**: Modify [turtleCanvas.ts](./src/site/turtleCanvas.ts) if the new actions require changes to how the turtle is drawn or positioned.
-4. **Test Changes**: Run the web application using `pnpm run start` and verify that the new actions work as expected.
+1. **Add New Actions**:
 
-By following these steps, you can extend the functionality of the Turtle package to support additional drawing actions or modify existing behavior.
+   - Define new actions in [turtleActionSchema.ts](./src/site/turtleActionSchema.ts). Each action should have a unique `actionName` and appropriate parameters.
+   - For example, to add a `backward` action, define it as:
+     ```ts
+     interface TurtleBackward {
+       actionName: "backward";
+       parameters: {
+         pixel: number;
+       };
+     }
+     ```
+
+2. **Implement Action Handling**:
+
+   - Update [turtleAgent.ts](./src/site/turtleAgent.ts) to handle the new actions. Add a case in the `executeAction` method to implement the desired behavior.
+   - For example:
+     ```ts
+     case "backward":
+         turtle.forward(-action.parameters.pixel);
+         break;
+     ```
+
+3. **Update Canvas Logic**:
+
+   - If the new actions require changes to how the turtle is drawn or positioned, modify [turtleCanvas.ts](./src/site/turtleCanvas.ts). Ensure the canvas updates correctly to reflect the new behavior.
+
+4. **Test Changes**:
+   - Run the application using `pnpm run start` and verify that the new actions work as expected. Test edge cases to ensure the turtle behaves correctly.
+
+By following these steps, you can extend the Turtle package to support additional drawing actions, modify existing behavior, or enhance the visualization.
 
 ## Reference
 
@@ -55,7 +90,7 @@ By following these steps, you can extend the functionality of the Turtle package
 
 ### Entry points
 
-- default → [./dist/index.js](./dist/index.js)
+- default → `./dist/index.js` _(not found on disk)_
 
 ### Dependencies
 
@@ -72,6 +107,6 @@ External: `chalk`, `debug`
 
 ---
 
-_Auto-generated against commit `bc2dc7df084977bc3da24a9398fd3a08d55c3e7e` on `2026-05-29T04:54:39.605Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter turtle docs:verify-links` to spot-check._
+_Auto-generated against commit `de9d1d44c33525463327199c8f244a24ddfdd874` on `2026-07-21T11:18:03.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter turtle docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

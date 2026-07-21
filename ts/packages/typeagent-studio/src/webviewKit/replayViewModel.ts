@@ -884,12 +884,16 @@ function diffLines(a: string[], b: string[]): DiffLine[] {
 }
 
 /**
- * Build the A→B action diff for a row drill-in from the {@link ActionDelta} we
- * already have — no engine round-trip. A side that resolved no action (a new or
- * lost match) is rendered against the `(no action)` placeholder so the diff still
- * reads as a clean add/remove block.
+ * Build the A→B action diff from the two resolved actions — no engine round-trip.
+ * Accepts anything carrying `actionA`/`actionB` (a full {@link ActionDelta} row,
+ * or a bare pair built from a resolution trace's two `finalAction`s), so the same
+ * canonical diff is reused wherever two actions are compared. A side that resolved
+ * no action (a new or lost match) is rendered against the `(no action)`
+ * placeholder so the diff still reads as a clean add/remove block.
  */
-export function toActionDiff(row: ActionDelta): ActionDiff {
+export function toActionDiff(
+    row: Pick<ActionDelta, "actionA" | "actionB">,
+): ActionDiff {
     const aPresent = row.actionA !== undefined;
     const bPresent = row.actionB !== undefined;
     const aText = aPresent ? stableStringify(row.actionA) : NO_ACTION_TEXT;

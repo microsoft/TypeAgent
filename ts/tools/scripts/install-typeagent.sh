@@ -13,6 +13,7 @@ FEED="typeagent"
 PLUGIN_SOURCE=""
 UPGRADE=0
 NO_START=0
+NO_AUTOSTART=0
 PROVIDER="aisystems"
 EMBEDDING="local"
 OLLAMA_HOST="http://localhost:11434"
@@ -45,6 +46,8 @@ Options:
   --feed <name>                      Azure Artifacts feed
   --upgrade                          Force fresh artifact download
   --no-start                         Do not start agent server after install
+  --no-autostart                     Do not register auto-start (systemd user unit on
+                                     Linux, LaunchAgent on macOS). Registered by default.
   --provider <name>                  Endpoint provider: aisystems (default), ollama, or copilot.
                                      aisystems downloads config from Key Vault (needs az access);
                                      ollama/copilot synthesize config.local.yaml locally.
@@ -152,6 +155,7 @@ while [[ $# -gt 0 ]]; do
     --feed) FEED="$2"; shift 2 ;;
     --upgrade) UPGRADE=1; shift ;;
     --no-start) NO_START=1; shift ;;
+    --no-autostart) NO_AUTOSTART=1; shift ;;
     --provider) PROVIDER="$2"; shift 2 ;;
     --embedding) EMBEDDING="$2"; shift 2 ;;
     --ollama-host) OLLAMA_HOST="$2"; shift 2 ;;
@@ -328,12 +332,20 @@ if [[ "$NO_START" -eq 0 ]]; then
   node "$SERVE" start
 fi
 
+if [[ "$NO_AUTOSTART" -eq 0 ]]; then
+  log_step "Registering agent-server autostart (per-user)"
+  if ! node "$SERVE" autostart enable; then
+    echo "  WARNING: autostart registration failed; the server will not start automatically after logout/reboot." >&2
+  fi
+fi
+
 echo ""
 echo "TypeAgent installed at $INSTALL_DIR"
 echo "  Start:  node \"$SERVE\" start"
 echo "  Status: node \"$SERVE\" status"
 echo "  Logs:   node \"$SERVE\" logs"
 echo "  Stop:   node \"$SERVE\" stop"
+echo "  Autostart: node \"$SERVE\" autostart status"
 
 if [[ "$SHELL_INSTALL" -eq 1 ]]; then
   log_step "Installing TypeAgent Shell (desktop app)"
