@@ -46,6 +46,8 @@ import {
     type ReplayActionResolver,
     type ReplayAgentResolution,
     type ReplayMissPolicy,
+    type ReplayResolutionTrace,
+    type ReplayRunDescriptor,
     type ReplaySummary,
     type VersionSpec,
 } from "../replay/index.js";
@@ -62,6 +64,7 @@ import {
 import {
     createGrammarReplayResolver,
     resolveGrammarReplayTarget,
+    captureResolutionTrace,
     ReplayVersionBuildError,
     type ReplayRunError,
     type GrammarReplayTarget,
@@ -276,6 +279,23 @@ export interface StudioReplayRequest {
     validateWildcards?: boolean;
 }
 
+/** Request to recompute one utterance's resolution trace from a stored run
+ *  descriptor — the drill-in's "replay this trace" path, reusing the same
+ *  grammar resolution a full run would. */
+export interface ReplayResolutionTraceRequest {
+    descriptor: ReplayRunDescriptor;
+    utteranceId: string;
+}
+
+/** Outcome of {@link StudioRuntime.replayResolutionTrace}: a freshly recomputed
+ *  trace, or why one couldn't be produced — the utterance is no longer in the
+ *  corpus (`entry-missing`), or the descriptor's versions don't reconstruct into
+ *  a grammar run (`unavailable`, e.g. identity baseline or a build failure). */
+export type ReplayResolutionTraceResult =
+    | { status: "recomputed"; trace: ReplayResolutionTrace }
+    | { status: "entry-missing" }
+    | { status: "unavailable" };
+
 /**
  * How a replay resolved corpus utterances into actions:
  * - `identity` — the deterministic baseline (surfaces each entry's captured
@@ -370,6 +390,22 @@ export interface StudioReplayResult {
      * validation pass) so the Impact Report can show an honest "what ran" matrix.
      */
     sideFidelity: SideFidelity;
+    /**
+     * Per-row resolution traces captured right after the run, while the live
+     * resolver still matches what produced each row. Present only for a grammar
+     * run (the identity baseline has nothing to trace) and bounded so a large
+     * corpus doesn't inflate the result — changed rows are captured first, then
+     * unchanged ones fill the remaining capacity; the viewer reads these back
+     * through the trace store. Omitted when nothing was captured.
+     */
+    resolutionTraces?: ReplayResolutionTrace[];
+    /**
+     * The utterances that captured a resolution trace. Mirrors the ids in
+     * `resolutionTraces` so a consumer can show a "trace available" affordance
+     * without shipping the (large) traces themselves. Omitted when none were
+     * captured.
+     */
+    tracedUtteranceIds?: string[];
     /**
      * with an empty summary rather than emitting fabricated regression rows.
      */
@@ -786,6 +822,16 @@ export interface StudioRuntime {
      */
     replayCorpus(request: StudioReplayRequest): Promise<StudioReplayResult>;
     /**
+     * Recompute the resolution trace for a single utterance from a stored run
+     * descriptor, reusing the same grammar path the run used. Returns
+     * `entry-missing` when the utterance is no longer in the corpus and
+     * `unavailable` when the descriptor's versions can't be reconstructed into a
+     * grammar run (identity baseline, or a version build failure).
+     */
+    replayResolutionTrace(
+        request: ReplayResolutionTraceRequest,
+    ): Promise<ReplayResolutionTraceResult>;
+    /**
      * Report a detected schema/grammar collision. Stores it and emits a
      * `collision.detected` event (visible in the Event Log and the Collisions
      * view). Returns the stored event.
@@ -1003,6 +1049,58 @@ interface ReplayResolution {
     wildcardValidator: WildcardMatchValidator | undefined;
     activeGrammarResolver: GrammarReplayResolver | undefined;
     aborted?: StudioReplayResult;
+}
+
+/** Cap how many traces one run captures so a large corpus doesn't inflate the
+ *  result or the persisted payload; the report still lists every row, and the
+ *  viewer drills into the captured ones first. */
+const MAX_CAPTURED_TRACES = 100;
+
+/** Capture a {@link ReplayResolutionTrace} for each row, up to the cap, by
+ *  re-resolving with tracing on the live resolver. Changed (red) rows are traced
+ *  first so a corpus larger than the cap never drops a divergence in favour of an
+ *  unchanged row; remaining capacity captures equal rows so the viewer can open
+ *  any row, changed or not. Entries are listed only when there is at least one
+ *  row to trace and mapped by id to the row's `utteranceId`; a row whose entry
+ *  can't be found is skipped rather than failing the run. Call while the resolver
+ *  is still live so the trace reflects exactly what produced the row. */
+export async function captureRowTraces(
+    resolver: GrammarReplayResolver,
+    listEntries: () => Promise<CorpusEntry[]>,
+    rows: readonly ActionDelta[],
+    runId: string,
+    versionA: VersionSpec,
+    versionB: VersionSpec,
+): Promise<ReplayResolutionTrace[]> {
+    // Changed rows first, then unchanged, so the cap never crowds out a
+    // divergence — the row a developer is most likely to inspect.
+    const ordered = [
+        ...rows.filter((row) => !row.equal),
+        ...rows.filter((row) => row.equal),
+    ].slice(0, MAX_CAPTURED_TRACES);
+    if (ordered.length === 0) {
+        return [];
+    }
+    const entriesById = new Map(
+        (await listEntries()).map((entry) => [entry.id, entry] as const),
+    );
+    const traces: ReplayResolutionTrace[] = [];
+    for (const row of ordered) {
+        const entry = entriesById.get(row.utteranceId);
+        if (entry === undefined) {
+            continue;
+        }
+        traces.push(
+            await captureResolutionTrace(
+                resolver,
+                entry,
+                runId,
+                versionA,
+                versionB,
+            ),
+        );
+    }
+    return traces;
 }
 
 export function createStudioRuntimeCore(
@@ -1539,9 +1637,23 @@ export function createStudioRuntimeCore(
             });
 
             const rows: ActionDelta[] = [];
+            let resolutionTraces: ReplayResolutionTrace[] = [];
             try {
                 for await (const row of handle.rows) {
                     rows.push(row);
+                }
+                // Capture per-row traces while the resolver (and any wildcard
+                // validator) is still live and the working tree still matches what
+                // produced the rows — the dispose below tears the validator down.
+                if (resolution.activeGrammarResolver !== undefined) {
+                    resolutionTraces = await captureRowTraces(
+                        resolution.activeGrammarResolver,
+                        () => corpus.list(request.agent, replayOptions.corpus),
+                        rows,
+                        handle.runId,
+                        replayOptions.versionA,
+                        replayOptions.versionB,
+                    );
                 }
             } finally {
                 await wildcardValidator?.dispose();
@@ -1581,7 +1693,65 @@ export function createStudioRuntimeCore(
                 ...(wildcardValidation !== undefined
                     ? { wildcardValidation }
                     : {}),
+                ...(resolutionTraces.length > 0
+                    ? {
+                          resolutionTraces,
+                          tracedUtteranceIds: resolutionTraces.map(
+                              (t) => t.utteranceId,
+                          ),
+                      }
+                    : {}),
             };
+        },
+        async replayResolutionTrace(request) {
+            const { descriptor, utteranceId } = request;
+            const replayOptions = {
+                agent: descriptor.agent,
+                corpus: descriptor.corpus,
+                versionA: descriptor.a.spec,
+                versionB: descriptor.b.spec,
+                missPolicy: descriptor.missPolicy,
+            } satisfies Parameters<typeof replayCorpus>[0];
+            const synthRequest: StudioReplayRequest = {
+                agent: descriptor.agent,
+                corpus: descriptor.corpus,
+                versionA: descriptor.a.spec,
+                versionB: descriptor.b.spec,
+                missPolicy: descriptor.missPolicy,
+                mode: descriptor.mode,
+                validateWildcards: descriptor.validateWildcards,
+            };
+            const resolution = await resolveReplayActions(
+                replayOptions,
+                synthRequest,
+                descriptor.mode,
+            );
+            try {
+                if (
+                    resolution.aborted !== undefined ||
+                    resolution.activeGrammarResolver === undefined
+                ) {
+                    return { status: "unavailable" };
+                }
+                const entry = (
+                    await corpus.list(descriptor.agent, descriptor.corpus)
+                ).find((candidate) => candidate.id === utteranceId);
+                if (entry === undefined) {
+                    return { status: "entry-missing" };
+                }
+                return {
+                    status: "recomputed",
+                    trace: await captureResolutionTrace(
+                        resolution.activeGrammarResolver,
+                        entry,
+                        descriptor.runId,
+                        descriptor.a.spec,
+                        descriptor.b.spec,
+                    ),
+                };
+            } finally {
+                await resolution.wildcardValidator?.dispose();
+            }
         },
         reportCollision(event) {
             return collisions.report(event);
