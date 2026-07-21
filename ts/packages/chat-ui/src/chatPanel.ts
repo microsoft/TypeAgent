@@ -507,6 +507,12 @@ export interface ChatPanelOptions {
 }
 
 /**
+ * A caret position inside a contentEditable, as accepted by
+ * Selection.setBaseAndExtent / Range boundary APIs.
+ */
+type CaretPoint = { node: Node; offset: number };
+
+/**
  * A lightweight chat panel that renders user and agent messages.
  * Designed for embedding in a Chrome extension side panel or any
  * standalone web page.
@@ -879,25 +885,7 @@ export class ChatPanel {
         textWrapper.className = "chat-input-text-wrapper";
         textWrapper.appendChild(this.textInput);
         textWrapper.appendChild(this.ghostSpan);
-        // The contentEditable .user-textarea has display:inline and
-        // min-width:1px, so when empty its native click target is a
-        // 1px stripe at the top-left of the wrapper. Clicking
-        // elsewhere in the wrapper would land on the flex container
-        // and never focus the input — leaving no caret. Forward those
-        // clicks to focus the input and place the caret at the end.
-        textWrapper.addEventListener("mousedown", (event) => {
-            const target = event.target as Node | null;
-            if (target === this.textInput) return;
-            if (target && this.textInput.contains(target)) return;
-            event.preventDefault();
-            this.textInput.focus();
-            const range = document.createRange();
-            range.selectNodeContents(this.textInput);
-            range.collapse(false);
-            const sel = window.getSelection();
-            sel?.removeAllRanges();
-            sel?.addRange(range);
-        });
+        this.setupInputPaddingSelection(textWrapper);
 
         this.inputArea.appendChild(textWrapper);
         this.inputArea.appendChild(this.sendButton);
@@ -1291,6 +1279,112 @@ export class ChatPanel {
         menu.attach(this.textInput, { editable: true });
         // Read-only message stream: Copy / Select All.
         menu.attach(this.messageDiv, { editable: false });
+    }
+
+    // The contentEditable .user-textarea is display:inline with min-width:1px,
+    // so the input box (its flex wrapper) is wider than the text run. A press
+    // in that empty padding lands on the wrapper, not the editable, so the
+    // browser can't start a text selection there - the user could only select
+    // by starting the drag on the text itself. Forward presses in the padding
+    // to the editable: focus it, anchor a caret at the position nearest the
+    // pointer, and extend the selection as the pointer moves, so the whole box
+    // (up to the buttons) is click-to-focus and drag-selectable.
+    private setupInputPaddingSelection(textWrapper: HTMLElement) {
+        // Anchor of an in-progress padding drag; null when not dragging.
+        let anchor: CaretPoint | null = null;
+        textWrapper.addEventListener("pointerdown", (event) => {
+            const target = event.target as Node | null;
+            // Presses on the text run: let the browser select natively.
+            if (
+                target === this.textInput ||
+                (target && this.textInput.contains(target))
+            ) {
+                return;
+            }
+            // Only a primary-button press drives caret placement / selection.
+            if (event.button !== 0) {
+                return;
+            }
+            event.preventDefault();
+            this.textInput.focus();
+            anchor = this.caretPointInInput(event.clientX, event.clientY);
+            this.applyInputSelection(anchor, anchor);
+            // Capture the pointer so move/up still reach us when the drag
+            // leaves the box, and so the listeners can't leak on a lost
+            // mouseup (capture is released automatically on up/cancel).
+            textWrapper.setPointerCapture(event.pointerId);
+        });
+        textWrapper.addEventListener("pointermove", (event) => {
+            if (anchor === null) {
+                return;
+            }
+            this.applyInputSelection(
+                anchor,
+                this.caretPointInInput(event.clientX, event.clientY),
+            );
+        });
+        const endDrag = () => {
+            anchor = null;
+        };
+        textWrapper.addEventListener("pointerup", endDrag);
+        textWrapper.addEventListener("pointercancel", endDrag);
+    }
+
+    private applyInputSelection(anchor: CaretPoint, focus: CaretPoint) {
+        window
+            .getSelection()
+            ?.setBaseAndExtent(
+                anchor.node,
+                anchor.offset,
+                focus.node,
+                focus.offset,
+            );
+    }
+
+    // Map a viewport point to a caret position (node + offset) inside the
+    // editable. When the point falls outside the editable (empty padding, the
+    // ghost preview, or off the input mid-drag), clamp to the nearest text
+    // edge by geometry - so dragging left/above the text selects toward the
+    // start and right/below toward the end - returning a text-node boundary
+    // that matches a real caret rather than an element-index boundary.
+    private caretPointInInput(clientX: number, clientY: number): CaretPoint {
+        const doc = document as Document & {
+            caretRangeFromPoint?(x: number, y: number): Range | null;
+            caretPositionFromPoint?(
+                x: number,
+                y: number,
+            ): { offsetNode: Node; offset: number } | null;
+        };
+        let node: Node | null = null;
+        let offset = 0;
+        const range = doc.caretRangeFromPoint?.(clientX, clientY);
+        if (range) {
+            node = range.startContainer;
+            offset = range.startOffset;
+        } else {
+            const pos = doc.caretPositionFromPoint?.(clientX, clientY);
+            if (pos) {
+                node = pos.offsetNode;
+                offset = pos.offset;
+            }
+        }
+        if (node && this.textInput.contains(node)) {
+            return { node, offset };
+        }
+        const rect = this.textInput.getBoundingClientRect();
+        const atEnd =
+            clientY > rect.bottom ||
+            (clientY >= rect.top && clientX >= rect.left);
+        const edge = atEnd
+            ? this.textInput.lastChild
+            : this.textInput.firstChild;
+        if (edge && edge.nodeType === Node.TEXT_NODE) {
+            return { node: edge, offset: atEnd ? (edge as Text).length : 0 };
+        }
+        return {
+            node: this.textInput,
+            offset: atEnd ? this.textInput.childNodes.length : 0,
+        };
     }
 
     private setupInputHandlers() {
