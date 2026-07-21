@@ -13,6 +13,20 @@ describe("Flag parsing", () => {
             obj: { description: "testing", type: "json" },
         },
     } as const;
+    const shortFlags = {
+        flags: {
+            output: {
+                description: "output",
+                type: "string",
+                char: "o",
+            },
+            verbose: {
+                description: "verbose",
+                type: "boolean",
+                char: "v",
+            },
+        },
+    } as const;
     const o1 = { hello: "str", num: 11, bool: true };
     const o2 = { ...o1, obj: o1, arr: [o1, o1] };
     it("type", () => {
@@ -255,6 +269,20 @@ describe("Flag parsing", () => {
         } catch (e: any) {
             expect(e.message).toStrictEqual("Invalid flag '-n'");
         }
+    });
+
+    it("does not consume a following short flag as a string value", () => {
+        expect(() => parseParams("-o -v", shortFlags)).toThrow(
+            "Missing value for flag '-o'",
+        );
+    });
+
+    it("accepts a negative numeric-looking string as a short flag value", () => {
+        expect(parseParams("-o -1", shortFlags).flags.output).toBe("-1");
+    });
+
+    it("accepts a quoted short-flag-looking string as a short flag value", () => {
+        expect(parseParams("-o '-v'", shortFlags).flags.output).toBe("-v");
     });
 
     it("Duplicate flags", () => {

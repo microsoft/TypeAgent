@@ -110,6 +110,71 @@ describe("Action Schema Creator", () => {
     });
 });
 
+describe("primitive coercion", () => {
+    const numberAlias = sc.type("NumberAlias", sc.number());
+
+    it("returns a coerced value through a type union", () => {
+        expect(
+            validateSchema(
+                "value",
+                sc.union(sc.number(), sc.boolean()),
+                "42",
+                true,
+            ),
+        ).toBe(42);
+    });
+
+    it("returns a coerced value through a type reference", () => {
+        expect(validateSchema("value", sc.ref(numberAlias), "42", true)).toBe(
+            42,
+        );
+    });
+
+    it("coerces object fields and array elements through type unions", () => {
+        const value = {
+            field: "42",
+            array: ["1", "false"],
+        };
+
+        validateSchema(
+            "value",
+            sc.obj({
+                field: sc.union(sc.number(), sc.boolean()),
+                array: sc.array(sc.union(sc.number(), sc.boolean())),
+            }),
+            value,
+            true,
+        );
+
+        expect(value).toEqual({
+            field: 42,
+            array: [1, false],
+        });
+    });
+
+    it("coerces object fields and array elements through type references", () => {
+        const value = {
+            field: "42",
+            array: ["1", "2"],
+        };
+
+        validateSchema(
+            "value",
+            sc.obj({
+                field: sc.ref(numberAlias),
+                array: sc.array(sc.ref(numberAlias)),
+            }),
+            value,
+            true,
+        );
+
+        expect(value).toEqual({
+            field: 42,
+            array: [1, 2],
+        });
+    });
+});
+
 describe("result reference placeholder", () => {
     // A { "$result": "<id>" } reference stands in for a value produced by an
     // earlier action and is resolved at execution time, so it validates against
