@@ -1601,6 +1601,45 @@ table.sc-kv-table.sc-card-fields {
   margin-left: 6px;
 }
 
+/* Reasoning "Thinking" block (shared). The reasoning engine emits
+   <details class="reasoning-thinking" open><summary>Thinking</summary>
+   <pre>...</pre></details> (dispatcher reasoning/*.ts). Group it into a
+   subtle box and wrap the prose (it is prose, not code) with room so wrapped
+   bullet/list lines are not clipped against the border. chat-ui owns this
+   default structure + padding; hosts (the VS Code theme overlay, the Electron
+   shell) override the colors/font. Completed blocks are collapsed in JS
+   (AgentMessageContainer.collapseReasoning drops the `open` attribute). */
+.reasoning-thinking {
+  margin: 4px 0;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.reasoning-thinking > summary {
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #7a7a7a;
+  background-color: rgba(127, 127, 127, 0.08);
+  user-select: none;
+}
+.reasoning-thinking > pre {
+  margin: 0;
+  padding: 10px 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: hidden;
+  max-height: none;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Gap that separates a reasoning answer (prose) from the "Thinking"/tool
+   trail above it. */
+.chat-reasoning-answer {
+  margin-top: 12px;
+}
+
 /* Clickable timestamp to toggle action details */
 .chat-timestamp-toggle {
   cursor: pointer;
@@ -1774,6 +1813,11 @@ table.sc-kv-table.sc-card-fields {
    lighter mid-tones. */
 .chat-message-status-rail[data-status="running"] {
   background: #70b0e0;
+}
+/* Reasoning requests read as reasoning (light purple) rather than a generic
+   running request (blue). */
+.chat-message-status-rail[data-status="running"][data-variant="reasoning"] {
+  background: #b39ddb;
 }
 .chat-message-status-rail[data-status="queued"] {
   background: #eabf63;
