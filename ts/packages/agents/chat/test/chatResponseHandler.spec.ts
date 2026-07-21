@@ -1,88 +1,69 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext } from "@typeagent/agent-sdk";
+import { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
+import { ChatResponseAction } from "../src/chatResponseActionSchema.js";
 import {
-    getAttachmentFileName,
-    rehydrateImages,
+    executeChatResponseAction,
+    relatedFileToEntity,
 } from "../src/chatResponseHandler.js";
 
-type ReadFn = (path: string) => Promise<string | undefined>;
+describe("relatedFileToEntity", () => {
+    it("tags an uploaded image attachment as an image entity", () => {
+        const entity = relatedFileToEntity("attachment_0.png");
 
-// Build a minimal ActionContext whose sessionStorage.read is driven by `read`
-// and records the paths it was asked to read.
-function createMockContext(read: ReadFn): {
-    context: ActionContext;
-    reads: string[];
-} {
-    const reads: string[] = [];
-    const context = {
-        sessionContext: {
-            sessionStorage: {
-                read: (path: string) => {
-                    reads.push(path);
-                    return read(path);
-                },
-            },
-        },
-    } as unknown as ActionContext;
-    return { context, reads };
-}
-
-describe("getAttachmentFileName", () => {
-    it("strips a POSIX path to its base name", () => {
-        expect(
-            getAttachmentFileName("pipelines/azure-build-docker-container.yml"),
-        ).toBe("azure-build-docker-container.yml");
+        expect(entity.name).toBe("attachment_0.png");
+        expect(entity.type).toEqual(["file", "image", "data"]);
     });
 
-    it("strips a Windows path to its base name", () => {
-        expect(getAttachmentFileName("a\\b\\photo.png")).toBe("photo.png");
-    });
+    it("records a highlighted workspace file as a plain file reference", () => {
+        const entity = relatedFileToEntity(
+            "pipelines/azure-build-docker-container.yml",
+        );
 
-    it("uses the last separator when both kinds are present", () => {
-        expect(getAttachmentFileName("a/b\\c/photo.png")).toBe("photo.png");
-    });
-
-    it("returns the input unchanged when there is no separator", () => {
-        expect(getAttachmentFileName("photo.png")).toBe("photo.png");
+        // Base name only, and not tagged as an image.
+        expect(entity.name).toBe("azure-build-docker-container.yml");
+        expect(entity.type).toEqual(["file"]);
     });
 });
 
-describe("rehydrateImages", () => {
-    it("skips a related file missing from user_files instead of throwing", async () => {
-        const { context, reads } = createMockContext(() => {
-            return Promise.reject(new Error("ENOENT"));
+describe("executeChatResponseAction", () => {
+    it("answers with a highlighted workspace file without reading storage", async () => {
+        const reads: string[] = [];
+        const context = {
+            actionIO: {
+                setDisplay: () => {},
+                appendDisplay: () => {},
+            },
+            sessionContext: {
+                sessionStorage: {
+                    read: (path: string) => {
+                        reads.push(path);
+                        return Promise.reject(new Error("ENOENT"));
+                    },
+                },
+            },
+        } as unknown as ActionContext;
+
+        const action = {
+            actionName: "generateResponse",
+            parameters: {
+                originalRequest: "what does this pipeline do",
+                generatedText: "It builds and publishes a container image.",
+                userRequestEntities: [],
+                generatedTextEntities: [],
+                relatedFiles: ["pipelines/azure-build-docker-container.yml"],
+            },
+        } as unknown as TypeAgentAction<ChatResponseAction>;
+
+        const result = await executeChatResponseAction(action, context);
+
+        // A non-image editor reference must neither hit storage nor throw, and
+        // is recorded as a plain file entity.
+        expect(reads).toEqual([]);
+        expect(result?.entities).toContainEqual({
+            name: "azure-build-docker-container.yml",
+            type: ["file"],
         });
-
-        const html = await rehydrateImages(context, [
-            "pipelines/azure-build-docker-container.yml",
-        ]);
-
-        expect(html).toBe("<div></div>");
-        // The forward-slash path is reduced to its base name before lookup.
-        expect(reads).toEqual([
-            "\\..\\user_files\\azure-build-docker-container.yml",
-        ]);
-    });
-
-    it("embeds an uploaded image that exists in user_files", async () => {
-        const { context } = createMockContext(() => Promise.resolve("AAAA"));
-
-        const html = await rehydrateImages(context, ["cat.png"]);
-
-        expect(html).toContain("base64,AAAA");
-    });
-
-    it("keeps embedding later files after skipping a missing one", async () => {
-        const { context } = createMockContext((path) =>
-            path.endsWith("missing.yml")
-                ? Promise.reject(new Error("ENOENT"))
-                : Promise.resolve("BBBB"),
-        );
-
-        const html = await rehydrateImages(context, ["missing.yml", "dog.png"]);
-
-        expect(html).toContain("base64,BBBB");
     });
 });
