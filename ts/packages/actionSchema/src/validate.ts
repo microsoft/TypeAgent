@@ -59,8 +59,7 @@ export function validateSchema(
             const errors: [SchemaType, Error][] = [];
             for (const type of expected.types) {
                 try {
-                    validateSchema(name, type, actual, coerce);
-                    return;
+                    return validateSchema(name, type, actual, coerce);
                 } catch (e: any) {
                     errors.push([type, e]);
                 }
@@ -78,7 +77,12 @@ export function validateSchema(
         }
         case "type-reference":
             if (expected.definition !== undefined) {
-                validateSchema(name, expected.definition.type, actual, coerce);
+                return validateSchema(
+                    name,
+                    expected.definition.type,
+                    actual,
+                    coerce,
+                );
             }
             break;
         case "object":
