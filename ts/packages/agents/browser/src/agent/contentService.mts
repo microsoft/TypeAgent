@@ -3,7 +3,7 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./browserActions.mjs";
-import { BrowserControl } from "../common/browserControl.mjs";
+import { BrowserControl } from "@typeagent/browser-control-rpc/types";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:content-service");

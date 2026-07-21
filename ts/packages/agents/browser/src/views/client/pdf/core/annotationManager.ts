@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { PDFAnnotation } from "../../../server/features/pdf/pdfTypes";
+import { PDFAnnotation } from "@typeagent/browser-control-rpc/pdfTypes";
 import { SelectionInfo } from "./textSelectionManager";
 import { PDFApiService } from "../services/pdfApiService";
 import { HighlightColor } from "../components/ColorPicker";

@@ -7,6 +7,7 @@ import { ExtensionStorageManager } from "./extensionStorage.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import type { WebSocketMessageV2 } from "@typeagent/websocket-utils";
 import path from "path";
+import { existsSync } from "fs";
 import { getShellWindow, getShellWindowForIpcEvent } from "./instance.js";
 
 // If instanceDir is undefined, the external storage is "in memory" and will not persist across restarts
@@ -81,29 +82,54 @@ export function initializePDFViewerIpcHandlers() {
 }
 
 export async function initializeBrowserExtension(_appPath: string) {
+    // The Electron browser extension is loaded as an unpacked extension from
+    // the @typeagent/browser-extension package build output. In a packaged app
+    // electron-builder copies it into resources/browser-typeagent-extension
+    // (see electron-builder.config.js extraResources). In dev it is resolved
+    // from the shell package's node_modules symlink to the workspace package.
     const browserExtensionPath = app.isPackaged
         ? path.join(process.resourcesPath, "browser-typeagent-extension")
         : path.join(
               app.getAppPath(),
-              "node_modules/browser-typeagent/dist/electron",
+              "node_modules/@typeagent/browser-extension/dist/electron",
           );
 
-    const extension = await session.defaultSession.extensions.loadExtension(
-        browserExtensionPath,
-        {
-            allowFileAccess: true,
-        },
-    );
+    // Guard against a missing/unbuilt extension so a bad path degrades
+    // gracefully (extension views disabled) instead of aborting the rest of
+    // shell startup or the browser IPC handlers registered below.
+    if (!existsSync(path.join(browserExtensionPath, "manifest.json"))) {
+        debugShellError(
+            `Browser extension not found at ${browserExtensionPath}. ` +
+                (app.isPackaged
+                    ? "The packaged app is missing the browser-typeagent-extension resource."
+                    : "Build the @typeagent/browser-extension package (pnpm --filter @typeagent/browser-extension build) before running the shell."),
+        );
+    } else {
+        try {
+            const extension =
+                await session.defaultSession.extensions.loadExtension(
+                    browserExtensionPath,
+                    {
+                        allowFileAccess: true,
+                    },
+                );
 
-    // Store extension info for later URL construction
-    (global as any).browserExtensionId = extension.id;
-    (global as any).browserExtensionUrls = {
-        "/annotationsLibrary.html": `chrome-extension://${extension.id}/views/annotationsLibrary.html`,
-        "/knowledgeLibrary.html": `chrome-extension://${extension.id}/views/knowledgeLibrary.html`,
-        "/macrosLibrary.html": `chrome-extension://${extension.id}/views/macrosLibrary.html`,
-        "/entityGraphView.html": `chrome-extension://${extension.id}/views/entityGraphView.html`,
-        "/topicGraphView.html": `chrome-extension://${extension.id}/views/topicGraphView.html`,
-    };
+            // Store extension info for later URL construction
+            (global as any).browserExtensionId = extension.id;
+            (global as any).browserExtensionUrls = {
+                "/annotationsLibrary.html": `chrome-extension://${extension.id}/views/annotationsLibrary.html`,
+                "/knowledgeLibrary.html": `chrome-extension://${extension.id}/views/knowledgeLibrary.html`,
+                "/macrosLibrary.html": `chrome-extension://${extension.id}/views/macrosLibrary.html`,
+                "/entityGraphView.html": `chrome-extension://${extension.id}/views/entityGraphView.html`,
+                "/topicGraphView.html": `chrome-extension://${extension.id}/views/topicGraphView.html`,
+            };
+        } catch (error) {
+            debugShellError(
+                `Failed to load browser extension from ${browserExtensionPath}:`,
+                error,
+            );
+        }
+    }
 
     ipcMain.handle("init-browser-ipc", async () => {
         await BrowserAgentIpc.getinstance().ensureWebsocketConnected();

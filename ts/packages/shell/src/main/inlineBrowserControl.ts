@@ -8,18 +8,11 @@ import type {
     BrowserControlCallFunctions,
     BrowserControlInvokeFunctions,
     SearchProvider,
-} from "browser-typeagent/agent/types";
-import { createContentScriptRpcClient } from "browser-typeagent/contentScriptRpc/client";
+} from "@typeagent/browser-control-rpc/types";
+import { createContentScriptRpcClient } from "@typeagent/browser-control-rpc/contentScriptRpc/client";
 import { app, ipcMain, net } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { openai } from "@typeagent/aiclient";
-import {
-    indexesOfNearest,
-    NormalizedEmbedding,
-    SimilarityType,
-    generateEmbedding,
-} from "typeagent";
 
 type InlineBrowserControl = {
     control: BrowserControl;
@@ -111,60 +104,24 @@ export function createInlineBrowserControl(
                 }
             }
 
-            // try to get tab by description
-            const ids: string[] = [];
-            const score_threshold = 0.85;
-            const titleEmbedding: NormalizedEmbedding[] = [];
-            const urlEmbedding: NormalizedEmbedding[] = [];
-            const embeddingModel = openai.createEmbeddingModel();
-            const queryEmbedding = await generateEmbedding(
-                embeddingModel,
-                tabDescription,
-            );
-
-            for (let i = 0; i < tabs.length; i++) {
-                const tab = tabs[i];
-                ids.push(tab.id.toString());
-                titleEmbedding.push(
-                    await generateEmbedding(
-                        embeddingModel,
-                        tab.webContentsView.webContents.getTitle(),
-                    ),
+            // try to match a tab by description using a case-insensitive
+            // substring match over each tab's title and URL.
+            const query = tabDescription.toLowerCase();
+            const match = tabs.find((tab) => {
+                const webContents = tab.webContentsView.webContents;
+                return (
+                    webContents.getTitle().toLowerCase().includes(query) ||
+                    webContents.getURL().toLowerCase().includes(query)
                 );
-                urlEmbedding.push(
-                    await generateEmbedding(
-                        embeddingModel,
-                        tab.webContentsView.webContents.getURL(),
-                    ),
-                );
-            }
+            });
 
-            const topNTitle = indexesOfNearest(
-                titleEmbedding,
-                queryEmbedding,
-                1,
-                SimilarityType.Dot,
-            );
-            const topNUrl = indexesOfNearest(
-                urlEmbedding,
-                queryEmbedding,
-                1,
-                SimilarityType.Dot,
-            );
-
-            const idx =
-                topNTitle[0].score > topNUrl[0].score
-                    ? topNTitle[0].item
-                    : topNUrl[0].item;
-            const maxScore = Math.max(topNTitle[0].score, topNUrl[0].score);
-
-            if (maxScore < score_threshold) {
+            if (!match) {
                 throw new Error(
                     `No matching tabs found for '${tabDescription}'.`,
                 );
             }
 
-            return await shellWindow.switchBrowserTab(ids[idx]);
+            return await shellWindow.switchBrowserTab(match.id);
         },
         async goForward() {
             if (!shellWindow.browserGoForward()) {

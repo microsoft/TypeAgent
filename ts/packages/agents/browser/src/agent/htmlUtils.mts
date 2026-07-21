@@ -6,7 +6,7 @@
  * Replaces the legacy htmlProcessor.mts functionality
  */
 
-import { createNodeHtmlReducer } from "../common/crossContextHtmlReducer.js";
+import { createNodeHtmlReducer } from "@typeagent/browser-control-rpc/htmlReducer";
 import {
     ContentExtractor,
     ExtractionInput,

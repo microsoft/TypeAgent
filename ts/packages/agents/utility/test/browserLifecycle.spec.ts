@@ -45,7 +45,7 @@ jest.unstable_mockModule("puppeteer-extra-plugin-stealth", () => ({
     default: jest.fn(),
 }));
 
-jest.unstable_mockModule("browser-typeagent/htmlReducer", () => ({
+jest.unstable_mockModule("@typeagent/browser-control-rpc/htmlReducer", () => ({
     createNodeHtmlReducer: jest.fn(),
 }));
 

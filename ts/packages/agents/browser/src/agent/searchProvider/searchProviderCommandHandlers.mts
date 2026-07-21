@@ -12,7 +12,7 @@ import {
     displayError,
     displayResult,
 } from "@typeagent/agent-sdk/helpers/display";
-import { SearchProvider } from "../../common/browserControl.mjs";
+import { SearchProvider } from "@typeagent/browser-control-rpc/types";
 
 export class SearchProviderCommandHandlerTable implements CommandHandlerTable {
     public readonly description = "List search providers";

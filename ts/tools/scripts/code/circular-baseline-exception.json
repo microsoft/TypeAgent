@@ -11,6 +11,24 @@
     },
     {
       "key": "packages/dispatcher/dispatcher/src/execute/actionHandlers.ts > packages/dispatcher/dispatcher/src/context/memory.ts > packages/dispatcher/dispatcher/src/internal.ts > packages/dispatcher/dispatcher/src/context/inlineAgentProvider.ts > packages/dispatcher/dispatcher/src/context/system/systemAgent.ts > packages/dispatcher/dispatcher/src/context/system/handlers/copilotCommandHandlers.ts"
+    },
+    {
+      "key": "packages/agents/browserExtension/src/extension/contentScript/recording/index.ts > packages/agents/browserExtension/src/extension/contentScript/recording/actions.ts > packages/agents/browserExtension/src/extension/contentScript/recording/capture.ts"
+    },
+    {
+      "key": "packages/agents/browserExtension/src/extension/contentScript/recording/index.ts > packages/agents/browserExtension/src/extension/contentScript/recording/actions.ts"
+    },
+    {
+      "key": "packages/agents/browserExtension/src/extension/interfaces/folderImport.types.ts > packages/agents/browserExtension/src/extension/interfaces/websiteImport.types.ts"
+    },
+    {
+      "key": "packages/agents/browserExtension/src/extension/serviceWorker/browserActions.ts > packages/agents/browserExtension/src/extension/serviceWorker/messageHandlers.ts > packages/agents/browserExtension/src/extension/serviceWorker/websocket.ts > packages/agents/browserExtension/src/extension/serviceWorker/externalBrowserControlServer.ts"
+    },
+    {
+      "key": "packages/agents/browserExtension/src/extension/serviceWorker/messageHandlers.ts > packages/agents/browserExtension/src/extension/serviceWorker/websocket.ts"
+    },
+    {
+      "key": "packages/agents/browserExtension/src/extension/views/knowledgeUtilities.ts > packages/agents/browserExtension/src/extension/views/services/cachedAnalyticsService.ts"
     }
   ]
 }

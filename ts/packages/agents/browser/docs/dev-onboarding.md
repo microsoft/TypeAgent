@@ -82,7 +82,7 @@ npm run package          # Package extension as .crx/.zip for distribution
 1. Navigate to `chrome://extensions`
 2. Enable **Developer mode** (toggle in top-right)
 3. Click **Load unpacked**
-4. Select `TypeAgent/ts/packages/agents/browser/dist/extension/`
+4. Select `TypeAgent/ts/packages/agents/browserExtension/dist/extension/`
 
 The extension icon appears in the toolbar. A red badge indicates the
 WebSocket connection to the agent is not established.

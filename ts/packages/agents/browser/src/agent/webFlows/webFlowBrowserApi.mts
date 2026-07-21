@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { BrowserControl } from "../../common/browserControl.mjs";
+import { BrowserControl } from "@typeagent/browser-control-rpc/types";
 import { WebFlowScope } from "./types.js";
 import { openai as ai } from "@typeagent/aiclient";
 import { createJsonTranslator, MultimodalPromptContent } from "typechat";
