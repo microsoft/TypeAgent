@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ff214e7c90fb5de07ffba6e760e9c4591d26ebb708609cb21024a01252c6f064 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=72f2a4e9b2d72a7424828cc382d1f5dc9f46a7693f4e173b8d30c8d974725542 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # montage-agent — AI-generated documentation
@@ -12,13 +12,13 @@
 
 ## Overview
 
-The `montage-agent` package is a TypeAgent application agent designed to facilitate the creation and management of photo montages. It provides a collaborative environment where users can interact with the agent to organize, edit, and display images in a montage format. The package includes both backend logic for handling montage-related actions and a web-based interface for user interaction.
+The `montage-agent` package is a TypeAgent application agent designed to assist users in creating and managing photo montages. It provides a collaborative environment where users can interact with the agent to organize, edit, and display images in a montage format. The package includes backend logic for handling montage-related actions and a web-based interface for user interaction.
 
-This package is part of the TypeAgent monorepo and integrates with other system components, such as image processing libraries, knowledge processors, and WebSocket utilities, to deliver its functionality.
+This agent is part of the TypeAgent monorepo and integrates with other system components, such as image processing libraries, knowledge processors, and WebSocket utilities, to deliver its functionality.
 
 ## What it does
 
-The `montage-agent` supports a range of actions that enable users to create, customize, and manage photo montages. These actions are grouped into the following categories:
+The `montage-agent` supports a variety of actions that enable users to create, customize, and manage photo montages. These actions are grouped into the following categories:
 
 - **Montage Management**:
 
@@ -150,9 +150,9 @@ By following these steps, you can enhance the `montage-agent` package to meet ad
 
 ### Entry points
 
-- default → `./dist/route/route.js` _(not found on disk)_
+- default → [./dist/route/route.js](./dist/route/route.js)
 - `./agent/manifest` → [./src/agent/montageManifest.json](./src/agent/montageManifest.json)
-- `./agent/handlers` → `./dist/agent/montageActionHandler.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/agent/montageActionHandler.js](./dist/agent/montageActionHandler.js)
 
 ### Dependencies
 
@@ -189,6 +189,6 @@ External: `body-parser`, `d3`, `d3-cloud`, `debug`, `express`, `express-rate-lim
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter montage-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `de9d1d44c33525463327199c8f244a24ddfdd874` on `2026-07-21T11:18:03.349Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter montage-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
