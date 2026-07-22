@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=987b6dc1d9fc822e64c704990cbbeb15df8aab74203e101b11067a7ba371293c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4f9cfd597c14a089c496c09ee10ea565047235f3743038b07676b34c67c42d01 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The `agent-shell` package is a TypeScript library that provides the graphical user interface (GUI) for the TypeAgent ecosystem. Built on Electron, it serves as a personal agent interface for handling user requests, performing actions, answering questions, and managing conversations. The shell integrates with other TypeAgent components, such as the dispatcher and agent server, to deliver an interactive and extensible experience. It supports both text and voice input, multi-conversation management, and local or remote operation modes.
+The `agent-shell` package is a TypeScript library that provides the graphical user interface (GUI) for the TypeAgent ecosystem. Built on Electron, it acts as a personal agent interface, enabling users to interact with an extensible set of agents to perform actions, answer questions, and manage conversations. The shell supports both text and voice input, multi-conversation management, and operates in either local or remote modes. It integrates with other TypeAgent components, such as the dispatcher and agent server, to deliver a cohesive and interactive experience.
 
 ## What it does
 
-The `agent-shell` package offers a variety of features to enable interactive and conversational agent experiences:
+The `agent-shell` package offers a range of features to facilitate interactive and conversational agent experiences:
 
 ### Conversation Management
 
-- **Multi-Conversation Support**: Users can create, switch, rename, and delete conversations. Conversations persist across sessions, and history is replayed on reconnect.
+- **Multi-Conversation Support**: Users can create, switch, rename, and delete conversations. Conversations persist across sessions, and their history is replayed on reconnect.
 - **Default Conversation**: Automatically joins a default conversation named `"Shell"` when connected to the agent server. This conversation is persistent and serves as the starting point for interactions.
 - **Commands for Conversation Management**: Users can manage conversations using commands like `/conversation list`, `/conversation new [name]`, `/conversation switch <id|name>`, and more. These commands can also be executed via natural language inputs.
 - **Request Queue Management**: Visual indicators for queued and running requests allow users to manage and cancel requests directly from the chat interface.
@@ -176,6 +176,6 @@ _6 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `7ce1eee94a63e167f769c489c71fd7d0095312b0` on `2026-07-22T09:25:46.891Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `172faf4c6ee2a870dfbbea224eac971f969e4384` on `2026-07-22T17:05:15.695Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
