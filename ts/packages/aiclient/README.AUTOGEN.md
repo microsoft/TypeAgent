@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=233ab2e2562a4d1be02be3664950a6ae30d1b1d8f81e1ee78fec0a15e311b2ef -->
+<!-- AUTOGEN:DOCS:HASH:sha256=460c00288db1689212dbb9bfba3e09ce7cbf4a072bf0f4e995a26c8aa285a565 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/aiclient — AI-generated documentation
@@ -12,40 +12,40 @@
 
 ## Overview
 
-The `@typeagent/aiclient` package is a TypeScript library designed to facilitate interaction with AI APIs, including OpenAI endpoints (both Azure-hosted and OpenAI-hosted) and Bing search APIs. It is primarily used within the TypeAgent project for sample agents and examples, providing tools for API settings management, authentication, and multi-region endpoint pooling.
+The `@typeagent/aiclient` package is a TypeScript library designed to interact with AI APIs, including OpenAI (both Azure-hosted and OpenAI-hosted) and Bing. It is primarily used within the TypeAgent project for sample agents and examples. The library provides tools for API settings management, authentication, and multi-region endpoint pooling to ensure high availability and resilience.
 
 ## What it does
 
-The `aiclient` package provides a comprehensive set of features for working with AI services:
+The `aiclient` package offers the following capabilities:
 
-- **OpenAI API Integration**: Supports interaction with OpenAI models such as GPT-4, embeddings, and image generation, hosted on both Azure and OpenAI platforms.
-- **Bing API Integration**: Includes tools for querying Bing search APIs.
-- **Multi-region Endpoint Pools**: Implements a mechanism to distribute requests across multiple endpoints, ensuring high availability and resilience to throttling or regional outages.
-- **Environment-based Configuration**: Automatically discovers and configures API settings, such as endpoints and API keys, from environment variables.
+- **OpenAI API Integration**: Supports GPT-4, embeddings, and image generation models hosted on Azure and OpenAI.
+- **Bing API Integration**: Provides tools for querying Bing search APIs.
+- **Multi-region Endpoint Pools**: Implements a mechanism to distribute requests across multiple endpoints, handling throttling and regional outages.
+- **Environment-based Configuration**: Automatically discovers API settings, such as endpoints and API keys, from environment variables.
 - **Authentication**: Supports Azure identity-based authentication and API key-based authentication.
-- **Debug Logging**: Provides detailed logging for endpoint selection, rotation, and retry behavior.
+- **Debug Logging**: Offers detailed logging for endpoint selection, rotation, and retry behavior.
 
 ### Multi-region Endpoint Pools
 
-The package's endpoint pooling mechanism is designed to handle throttling and regional failures gracefully. Key features include:
+The package's endpoint pooling mechanism ensures reliability and performance by:
 
-- **Endpoint Discovery**: Automatically scans environment variables to build pools of endpoints for each model and region.
-- **Priority-based Selection**: Endpoints are grouped into priority tiers, with the lowest-priority tier containing healthy endpoints being selected.
-- **Cooldown Mechanism**: Endpoints that return transient errors (e.g., 429, 5xx) are temporarily marked as unavailable and excluded from selection.
-- **Custom Pool Configuration**: Users can override default endpoint discovery and priority settings using JSON-based environment variables.
+- **Endpoint Discovery**: Scanning environment variables to build pools of endpoints for each model and region.
+- **Priority-based Selection**: Grouping endpoints into priority tiers and selecting the lowest-priority tier with healthy endpoints.
+- **Cooldown Mechanism**: Temporarily marking endpoints as unavailable after transient errors (e.g., 429, 5xx).
+- **Custom Pool Configuration**: Allowing users to override default endpoint discovery and priority settings using JSON-based environment variables.
 
 ### Debugging and Logging
 
-The package includes debug logging capabilities for monitoring endpoint selection, rotation, and retry behavior. Enabling the `typeagent:pool` namespace provides detailed logs for troubleshooting.
+Debug logging can be enabled for monitoring endpoint selection, rotation, and retry behavior. Use the `typeagent:pool` namespace for detailed logs.
 
 ## Setup
 
-To use the `@typeagent/aiclient` package, you need to configure the following environment variables:
+To use the `@typeagent/aiclient` package, configure the following environment variables:
 
-- **`COPILOT_ALLOW_GET_PROVIDER_ENDPOINT`**: Determines whether the Copilot SDK is allowed to dynamically retrieve provider endpoints.
+- **`COPILOT_ALLOW_GET_PROVIDER_ENDPOINT`**: Determines whether the Copilot SDK can dynamically retrieve provider endpoints.
 - **`TYPEAGENT_COPILOT_SDK_LOG_LEVEL`**: Sets the log level for the Copilot SDK. Valid values include `none`, `error`, `warning`, `info`, `debug`, and `all`.
 
-Additionally, the package relies on a set of environment variables for endpoint pools and API keys. These are dynamically discovered based on the model and region. Examples include:
+Additionally, the package relies on dynamically discovered environment variables for endpoint pools and API keys. Examples include:
 
 - `AZURE_OPENAI_ENDPOINT_<MODEL>_<REGION>`: Specifies the endpoint for a given model and region.
 - `AZURE_OPENAI_API_KEY_<MODEL>_<REGION>`: Specifies the API key for a given model and region.
@@ -144,6 +144,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `8192acc149ab6f52296dcc71202b20253b6a3089` on `2026-07-22T05:16:33.340Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/aiclient docs:verify-links` to spot-check._
+_Auto-generated against commit `3849e13a69115bff7c01ea3995c20bb2cf23343f` on `2026-07-22T05:45:45.787Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/aiclient docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
