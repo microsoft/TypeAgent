@@ -24,6 +24,7 @@ import type {
 } from "chat-ui";
 import { VsCodeAzureSpeechProvider } from "./azureSpeechProvider.js";
 import { CameraView } from "./cameraView.js";
+import { injectStyle } from "./injectStyle.js";
 import type { SpeechToken } from "@typeagent/agent-server-protocol";
 import chatPanelStyles from "chat-ui/styles";
 import completionUiStyles from "@typeagent/completion-ui/styles.css";
@@ -39,20 +40,9 @@ import type {
 // Inject the chat-ui base styles first, then the completion-ui dropdown
 // styles, then the VS Code theme overlay so it can override defaults via
 // --vscode-* CSS variables.
-function injectStyles(css: string): void {
-    const styleEl = document.createElement("style");
-    styleEl.textContent = css;
-    document.head.appendChild(styleEl);
-}
-injectStyles(chatPanelStyles as unknown as string);
-injectStyles(completionUiStyles as unknown as string);
-injectStyles(vscodeThemeStyles as unknown as string);
-
-declare function acquireVsCodeApi(): {
-    postMessage(message: unknown): void;
-    getState(): unknown;
-    setState(state: unknown): void;
-};
+injectStyle(chatPanelStyles as unknown as string);
+injectStyle(completionUiStyles as unknown as string);
+injectStyle(vscodeThemeStyles as unknown as string);
 
 const vscode = acquireVsCodeApi();
 
@@ -193,6 +183,13 @@ const chatPanel = new ChatPanel(rootEl, {
         // for arbitrary URLs in a useful way.
         handleLinkClick: (href: string, _target: string | null) => {
             vscode.postMessage({ type: "openExternal", href });
+        },
+        // Open the message in a new VS Code editor panel (movable / snappable)
+        // rather than an in-page overlay. The extension host owns the panel; it
+        // re-sanitizes the content before rendering.
+        openMessageInWindow: (html: string, title?: string) => {
+            vscode.postMessage({ type: "openMessageWindow", html, title });
+            return true;
         },
     },
     // Mic + camera providers (see WEBVIEW_MEDIA_CAPTURE_SUPPORTED). Both are

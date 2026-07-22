@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=dbaa740e7ff735e14b9f9a6676ef77b467f1b53f27d42a0b2318258d3f39ecc8 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7959ae9242254859bcf3c0b91fb2e38446304bf0918c5c71012cfb816f27c1a8 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `agent-shell` package is a TypeScript library that provides the graphical user interface (GUI) for the TypeAgent ecosystem. Built on Electron, it serves as a personal agent interface for processing user requests, managing conversations, and integrating with other components of the TypeAgent system. The shell supports both text and voice input, multi-conversation management, and can operate in either local or remote modes.
+The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) entry point for the TypeAgent ecosystem. Built on Electron, it provides a personal agent interface for handling user requests, performing actions, answering questions, and managing conversations. The shell integrates with other TypeAgent components, such as the dispatcher and agent server, to deliver an interactive and extensible experience. It supports both text and voice input, multi-conversation management, and local or remote operation modes.
 
 ## What it does
 
@@ -176,6 +176,6 @@ _6 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `2353118509b02d4e8cf94303aea43ad6726f610c` on `2026-07-21T19:50:04.245Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `8ec451103180b2a383dfb4e1c7f80c1ad50e9d35` on `2026-07-22T00:05:15.961Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

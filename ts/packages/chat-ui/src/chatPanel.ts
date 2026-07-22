@@ -1874,11 +1874,17 @@ export class ChatPanel {
      */
     private clearAgentRunning(threadId: string): void {
         this.agentRunningRequestIds.delete(threadId);
-        this.threadContainers.get(threadId)?.clearRunning();
+        // The request finished: collapse every step's reasoning "Thinking"
+        // block (including the last, still-expanded one) so completed reasoning
+        // minimizes.
+        const current = this.threadContainers.get(threadId);
+        current?.clearRunning();
+        current?.collapseReasoning();
         const all = this.requestAgentContainers.get(threadId);
         if (all) {
             for (const container of all) {
                 container.clearRunning();
+                container.collapseReasoning();
             }
         }
     }
@@ -2541,6 +2547,10 @@ export class ChatPanel {
                 source.startsWith("dispatcher.reasoningAction")
             ) {
                 stepContainer.overrideSource(source, sourceIcon);
+                // Also covers a reused existing bubble (e.g. a generic
+                // "Executing action" temporary) that never passed through the
+                // reasoning detection in getOrCreateAgentContainer.
+                stepContainer.markReasoning();
             }
             if (requestId) {
                 const start = this.requestStartByRequestId.get(requestId);
@@ -2560,6 +2570,7 @@ export class ChatPanel {
                 for (const prior of priorSteps) {
                     if (prior !== stepContainer) {
                         prior.clearRunning();
+                        prior.collapseReasoning();
                     }
                 }
             }
@@ -2630,8 +2641,17 @@ export class ChatPanel {
         requestId: string | undefined,
     ): AgentMessageContainer {
         const threadId = this.resolveThreadId(requestId);
+        // A reasoning display carries a "dispatcher.reasoningAction.*" source;
+        // mark the bubble so its working rail reads as reasoning (purple)
+        // whether the content streams (temporary), commits as a step, or
+        // arrives as a block.
+        const isReasoning =
+            source?.startsWith("dispatcher.reasoningAction") ?? false;
         const existing = this.threadContainers.get(threadId);
         if (existing) {
+            if (isReasoning) {
+                existing.markReasoning();
+            }
             return existing;
         }
         // sourceIcon="🤖"). Without this, the bubble would be created with
@@ -2670,6 +2690,9 @@ export class ChatPanel {
             anchor,
         );
         this.threadContainers.set(threadId, container);
+        if (isReasoning) {
+            container.markReasoning();
+        }
         container.div.dataset.requestId = threadId;
         if (this.developerMode) {
             this.attachDeleteControl(container.div, threadId, "agent");
@@ -3722,6 +3745,17 @@ export class ChatPanel {
             (requestContainers.length > 0
                 ? requestContainers[requestContainers.length - 1]
                 : undefined);
+        // For a reasoning thread with a trail of "Thinking"/tool steps, give
+        // the final answer step a gap separating it from the reasoning above.
+        // Target the last committed STEP (the answer), not the newest
+        // container, which can be a post-answer status block (e.g. copilot's
+        // "Task flow registered").
+        const answerStep = requestContainers.find(
+            (c) => c.div === this.lastStepAnchorByThread.get(threadId),
+        );
+        if (requestContainers.length > 1 && answerStep?.isReasoning()) {
+            answerStep.setReasoningAnswer(true);
+        }
         const firstMessageMs = this.firstMessageMsByRequestId.get(threadId);
         if (result?.cancelled) {
             // Mirror Electron's "⚠ Cancelled" status, anchored to the
@@ -5188,6 +5222,8 @@ class AgentMessageContainer {
     private readonly timestampDiv: HTMLDivElement;
     private feedbackWidget?: FeedbackWidget;
     private statusRail?: HTMLDivElement;
+    private reasoning = false;
+    private readonly collapsedReasoning = new WeakSet<HTMLDetailsElement>();
     private lastAppendMode?: DisplayAppendMode;
     // Mirrors the shell's swapContent pattern: when action JSON is set,
     // clicking the agent name toggles the message body between the
@@ -5593,9 +5629,28 @@ class AgentMessageContainer {
                 bodyDiv: this.messageDiv,
                 headerDiv: this.timestampDiv,
                 messageDiv: this.messageDiv,
+                openInWindow: this.platformAdapter.openMessageInWindow
+                    ? () => this.openMessageInWindow()
+                    : undefined,
             },
             controller,
             variant,
+        );
+    }
+
+    // Ask the host to open this message in a new window. Messages backed by an
+    // <iframe> (script-driven image/video/settings displays) don't survive
+    // re-sanitization in a separate panel, so decline them; there's no in-page
+    // fallback, so the button is simply inert for those.
+    private openMessageInWindow(): boolean {
+        if (this.messageDiv.querySelector("iframe")) {
+            return false;
+        }
+        return (
+            this.platformAdapter.openMessageInWindow?.(
+                this.messageDiv.innerHTML,
+                this.nameSpan.textContent ?? undefined,
+            ) ?? false
         );
     }
 
@@ -5634,6 +5689,11 @@ class AgentMessageContainer {
         // Ensure the rail reads as "running" even if it was previously showing
         // the muted "unknown" state (setUnknown reuses this same rail element).
         rail.dataset.status = "running";
+        if (this.reasoning) {
+            rail.dataset.variant = "reasoning";
+        } else {
+            delete rail.dataset.variant;
+        }
         const stateZone = rail.querySelector<HTMLElement>(
             ":scope > .chat-status-state-zone",
         )!;
@@ -5673,6 +5733,55 @@ class AgentMessageContainer {
     public clearRunning() {
         this.statusRail?.remove();
         this.statusRail = undefined;
+    }
+
+    /**
+     * Mark this bubble as part of a reasoning ("Thinking") flow so its working
+     * rail reads as reasoning (light purple) rather than a generic running
+     * request (blue). Updates an already-rendered rail immediately, since the
+     * rail is stamped before the reasoning source is known.
+     */
+    public markReasoning() {
+        this.reasoning = true;
+        if (this.statusRail) {
+            this.statusRail.dataset.variant = "reasoning";
+        }
+    }
+
+    /** Whether this bubble belongs to a reasoning ("Thinking") flow. */
+    public isReasoning(): boolean {
+        return this.reasoning;
+    }
+
+    /**
+     * Collapse this step's reasoning "Thinking" blocks once it is no longer
+     * active (superseded by the next step, or the request completed) so
+     * finished reasoning minimizes while the active step stays expanded. Each
+     * block is collapsed at most once - tracked per element - so a block the
+     * user manually re-opens is not re-collapsed by a later pass, while a block
+     * added after an earlier collapse still minimizes.
+     */
+    public collapseReasoning() {
+        this.bodyDiv
+            .querySelectorAll<HTMLDetailsElement>(
+                "details.reasoning-thinking[open]",
+            )
+            .forEach((details) => {
+                if (this.collapsedReasoning.has(details)) {
+                    return;
+                }
+                this.collapsedReasoning.add(details);
+                details.removeAttribute("open");
+            });
+    }
+
+    /**
+     * Tag this reasoning step as the final prose answer rather than a
+     * "Thinking"/tool trail step, so it renders with a gap separating it from
+     * the reasoning above it.
+     */
+    public setReasoningAnswer(isAnswer: boolean) {
+        this.div.classList.toggle("chat-reasoning-answer", isAnswer);
     }
 
     /**
