@@ -1317,6 +1317,7 @@ export function createEnhancedClientIO(
                 resolveChoice = resolve;
             });
 
+            // code-complexity-allow: multi-field form UI handler; branches over field kind and free-text option
             (async () => {
                 try {
                     if (currentSpinner) {

@@ -1515,6 +1515,7 @@ async function executeReasoningWithoutPlanning(
  * Execute reasoning action with trace capture
  * Captures execution traces for plan generation
  */
+// code-complexity-allow: reasoning-session orchestration with event subscriptions and per-turn token tracking
 async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,

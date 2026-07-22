@@ -346,6 +346,7 @@ function createConsoleClientIO(
             form: QuestionForm,
             source: string,
         ): void {
+            // code-complexity-allow: multi-field form UI handler; branches over field kind and free-text option
             (async () => {
                 if (form.message) {
                     console.log(`${chalk.cyan(`[${source}]`)} ${form.message}`);

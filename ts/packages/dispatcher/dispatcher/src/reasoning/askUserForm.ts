@@ -30,6 +30,41 @@ function asString(value: unknown): string {
     return typeof value === "string" ? value : "";
 }
 
+// Build a pick or multiChoice field from the raw LLM-authored question object.
+function buildChoiceField(
+    id: string,
+    prompt: string,
+    kind: "pick" | "multiChoice",
+    q: Record<string, unknown>,
+): { field: QuestionFormField } | { error: string } {
+    const choices = Array.isArray(q?.choices)
+        ? q.choices.map((c) => asString(c)).filter((c) => c.length > 0)
+        : [];
+    if (choices.length < 2) {
+        return {
+            error: `Question "${id}" (${kind}) needs at least 2 non-empty choices.`,
+        };
+    }
+    const allowFreeText = q?.allowFreeText === true;
+    if (kind === "pick") {
+        const field: QuestionFormPickField = { id, kind: "pick", prompt, choices };
+        if (allowFreeText) {
+            field.allowFreeText = true;
+        }
+        return { field };
+    }
+    const field: QuestionFormMultiChoiceField = {
+        id,
+        kind: "multiChoice",
+        prompt,
+        choices,
+    };
+    if (allowFreeText) {
+        field.allowFreeText = true;
+    }
+    return { field };
+}
+
 // Validate and normalize the LLM args into a QuestionForm, or return an error
 // string describing what the model got wrong so it can correct and retry.
 export function buildReasoningForm(
@@ -63,38 +98,16 @@ export function buildReasoningForm(
             continue;
         }
         if (kind === "pick" || kind === "multiChoice") {
-            const choices = Array.isArray(q?.choices)
-                ? q.choices.map((c) => asString(c)).filter((c) => c.length > 0)
-                : [];
-            if (choices.length < 2) {
-                return {
-                    error: `Question "${id}" (${kind}) needs at least 2 non-empty choices.`,
-                };
+            const result = buildChoiceField(
+                id,
+                prompt,
+                kind as "pick" | "multiChoice",
+                q,
+            );
+            if ("error" in result) {
+                return result;
             }
-            const allowFreeText = q?.allowFreeText === true;
-            if (kind === "pick") {
-                const field: QuestionFormPickField = {
-                    id,
-                    kind: "pick",
-                    prompt,
-                    choices,
-                };
-                if (allowFreeText) {
-                    field.allowFreeText = true;
-                }
-                fields.push(field);
-            } else {
-                const field: QuestionFormMultiChoiceField = {
-                    id,
-                    kind: "multiChoice",
-                    prompt,
-                    choices,
-                };
-                if (allowFreeText) {
-                    field.allowFreeText = true;
-                }
-                fields.push(field);
-            }
+            fields.push(result.field);
             continue;
         }
         return {
