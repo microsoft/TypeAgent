@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7959ae9242254859bcf3c0b91fb2e38446304bf0918c5c71012cfb816f27c1a8 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7f986fd02c90cbcde410d2aea6c675827d1bd4e27739435d5d428495fee42fdb -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -12,27 +12,27 @@
 
 ## Overview
 
-The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) entry point for the TypeAgent ecosystem. Built on Electron, it provides a personal agent interface for handling user requests, performing actions, answering questions, and managing conversations. The shell integrates with other TypeAgent components, such as the dispatcher and agent server, to deliver an interactive and extensible experience. It supports both text and voice input, multi-conversation management, and local or remote operation modes.
+The `agent-shell` package is a TypeScript library that provides the graphical user interface (GUI) for the TypeAgent ecosystem. Built on Electron, it acts as a personal agent interface, enabling users to interact with an extensible set of agents to perform actions, answer questions, and manage conversations. The shell supports both text and voice input, integrates with other TypeAgent components like the dispatcher and agent server, and operates in both local and remote modes.
 
 ## What it does
 
-The `agent-shell` package offers a range of features to enable interactive and conversational agent experiences:
+The `agent-shell` package offers the following key features:
 
 ### Conversation Management
 
-- **Multi-Conversation Support**: Users can create, switch, rename, and delete conversations. Conversations persist across sessions, and history is replayed on reconnect.
-- **Default Conversation**: Automatically joins a default conversation named `"Shell"` when connected to the agent server. This conversation is persistent and serves as the starting point for interactions.
+- **Multi-Conversation Support**: Users can create, switch, rename, and delete conversations. Conversations persist across sessions, with history replayed on reconnect.
+- **Default Conversation**: Automatically joins a persistent default conversation named `"Shell"` when connected to the agent server.
 - **Commands for Conversation Management**: Users can manage conversations using commands like `/conversation list`, `/conversation new [name]`, `/conversation switch <id|name>`, and more. These commands can also be executed via natural language inputs.
 - **Request Queue Management**: Visual indicators for queued and running requests allow users to manage and cancel requests directly from the chat interface.
 
 ### Speech Input
 
-- **Azure Speech Services**: Enables speech-to-text functionality using Azure's cloud-based service.
-- **Local Whisper Service**: Provides an alternative for speech-to-text processing using a local service.
+- **Azure Speech Services**: Provides cloud-based speech-to-text functionality.
+- **Local Whisper Service**: Offers an alternative for speech-to-text processing using a local service.
 
 ### Multi-Client Notifications
 
-- The shell notifies users when other clients join or leave the same conversation, facilitating collaborative interactions.
+- Notifies users when other clients join or leave the same conversation, enabling collaborative interactions.
 
 ### Local Mode
 
@@ -176,6 +176,6 @@ _6 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `8ec451103180b2a383dfb4e1c7f80c1ad50e9d35` on `2026-07-22T00:05:15.961Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

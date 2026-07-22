@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=e8d3ae3208d6e72dbfc73b40036923060e4a18350a5e57fc396f8bc2160c61d6 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=070aa0fa83de5c1706f23b642690d03b843e1cd9d13ae257863cf895d350ef3e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-shell — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, allowing users to interact with TypeAgent conversations directly within the editor. It provides a chat interface accessible via a side panel and editor tabs, enabling efficient conversation management and interaction.
+The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, providing a chat interface directly within the editor. This extension allows users to interact with TypeAgent conversations through a side panel or editor tabs, enabling efficient communication and conversation management.
 
 ## What it does
 
-The `vscode-shell` package provides a rich chat interface within Visual Studio Code, designed to work with the TypeAgent ecosystem. Its key features include:
+The `vscode-shell` package offers a feature-rich chat interface tailored for the TypeAgent ecosystem. Key capabilities include:
 
 - **Chat Interface**:
 
@@ -174,6 +174,6 @@ External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `micr
 
 ---
 
-_Auto-generated against commit `0b06d6a1cc9d93888e91e217057d9c148b3cc49f` on `2026-07-22T04:45:01.388Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

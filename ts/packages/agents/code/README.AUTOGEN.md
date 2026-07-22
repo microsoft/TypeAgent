@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=568ef3ec7687aa53aed3c928bb6d97782f3056afa486bd3990ec219bfa442753 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=dd198ff53607a677a579f0cca2add29021d07462af9f5e672fb5c9e1e9f3eeb6 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # code-agent — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `code-agent` package is a TypeAgent application agent designed to automate tasks within Visual Studio Code (VSCode). It acts as a dispatcher for code-related actions, enabling users to interact with VSCode through natural language commands. This agent is integrated with the [coda](../../coda/README.md) VSCode extension, which must be deployed for the `code-agent` to function. The agent is not enabled by default and requires explicit configuration to activate.
+The `code-agent` package is a TypeAgent application agent designed to automate tasks in Visual Studio Code (VSCode). It acts as a dispatcher for code-related actions, enabling users to interact with VSCode through natural language commands. This agent integrates with the [coda](../../coda/README.md) VSCode extension, which must be deployed for the `code-agent` to function. The agent is not enabled by default and requires explicit configuration to activate.
 
 ## What it does
 
@@ -158,6 +158,6 @@ _1 action implemented by this agent, parsed deterministically from `./src/codeAc
 
 ---
 
-_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter code-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
