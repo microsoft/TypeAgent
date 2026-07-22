@@ -550,6 +550,7 @@ export function createDispatcherFromContext(
                 // Use original requestId so display appends to same message group
                 context.currentRequestId = pending.requestId;
                 context.commandResult = undefined;
+                let commandResult: CommandResult | undefined;
                 try {
                     const appAgent = context.agents.getAppAgent(
                         pending.agentName,
@@ -611,11 +612,11 @@ export function createDispatcherFromContext(
                         }
                     }
                 } finally {
-                    const result = context.commandResult;
+                    commandResult = context.commandResult;
                     context.commandResult = undefined;
                     context.currentRequestId = undefined;
-                    return result;
                 }
+                return commandResult;
             });
         },
         async respondToInteraction(

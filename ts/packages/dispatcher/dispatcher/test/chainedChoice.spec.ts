@@ -51,6 +51,13 @@ const handlers = {
                     ),
                 ),
         },
+        fail: {
+            description: "Returns a choice whose callback fails",
+            run: async () =>
+                createYesNoChoiceResult(choiceManager, "fail?", async () => {
+                    throw new Error("choice callback failed");
+                }),
+        },
     },
 } as const;
 
@@ -140,4 +147,13 @@ describe("Chained choice cards", () => {
         expect(captured[1].message).toBe("second?");
         expect(captured[1].choiceId).not.toBe(captured[0].choiceId);
     }, 10_000);
+
+    it("propagates choice callback failures", async () => {
+        await awaitCommand(dispatcher, "@choicechain fail");
+        const choice = captured.at(-1)!;
+
+        await expect(
+            dispatcher.respondToChoice(choice.choiceId, true),
+        ).rejects.toThrow("choice callback failed");
+    });
 });
