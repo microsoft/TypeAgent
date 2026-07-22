@@ -13,11 +13,14 @@ export interface PlatformAdapter {
 
     /**
      * Open a message's content (an HTML string, plus an optional title) in a
-     * host-native separate window, e.g. a movable VS Code editor panel. Return
-     * true if handled; when absent or false, chat-ui falls back to an in-page
-     * overlay.
+     * host-native new window, e.g. a movable VS Code editor panel. Return true
+     * if handled. This is an opt-in capability: chat-ui only shows the "open in
+     * new window" action when a host provides it. A host may decline a specific
+     * message (return false, e.g. iframe-backed content that can't be
+     * serialized into a window); there's no in-page fallback, so the click is
+     * simply a no-op in that case.
      */
-    expandMessage?(html: string, title?: string): boolean;
+    openMessageInWindow?(html: string, title?: string): boolean;
 }
 
 /**

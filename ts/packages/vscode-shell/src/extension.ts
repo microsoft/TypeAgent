@@ -41,7 +41,8 @@ export function activate(context: vscode.ExtensionContext): void {
         restoreSessionId: sidebarRestoreId,
         // Sidebar-only default; tab panels stay ephemeral.
         defaultSessionName: "VS Code",
-        onExpandMessage: (html, title) => openExpandPanel(context, html, title),
+        onOpenMessageWindow: (html, title) =>
+            openMessageWindowPanel(context, html, title),
     });
 
     // Persist the sidebar's current session so reopening VS Code rejoins it
@@ -578,17 +579,18 @@ function openNewChatPanel(
 
 /**
  * Open a message's rendered content in a standalone editor panel (a movable /
- * snappable window) for easier reading. The panel HTML is static; the content
- * is delivered over postMessage and re-sanitized in the webview (expand.ts), so
- * no HTML is constructed from the message on the extension side.
+ * snappable new window) for easier reading. The panel HTML is static; the
+ * content is delivered over postMessage and re-sanitized in the webview
+ * (messageWindow.ts), so no HTML is constructed from the message on the
+ * extension side.
  */
-function openExpandPanel(
+function openMessageWindowPanel(
     context: vscode.ExtensionContext,
     html: string,
     title?: string,
 ): void {
     const panel = vscode.window.createWebviewPanel(
-        "vscode-shell.expandPanel",
+        "vscode-shell.messageWindow",
         title && title.trim() ? title : "TypeAgent Message",
         vscode.ViewColumn.Beside,
         {
@@ -604,16 +606,16 @@ function openExpandPanel(
     const webview = panel.webview;
     const asUri = (...parts: string[]) =>
         stampedWebviewUri(webview, context.extensionUri, ...parts);
-    const scriptUri = asUri("dist", "expand.js");
+    const scriptUri = asUri("dist", "messageWindow.js");
     const styleUri = asUri("media", "chat.css");
     const codiconUri = asUri("media", "codicon.css");
     const nonce = createWebviewNonce();
 
     // Register the listener before setting the HTML so we can't miss the
-    // webview's initial "expandReady".
+    // webview's initial "messageWindowReady".
     const sub = webview.onDidReceiveMessage((msg) => {
-        if (msg?.type === "expandReady") {
-            void webview.postMessage({ type: "expandContent", html });
+        if (msg?.type === "messageWindowReady") {
+            void webview.postMessage({ type: "messageWindowContent", html });
         } else if (
             msg?.type === "openExternal" &&
             typeof msg.href === "string"
@@ -640,8 +642,8 @@ function openExpandPanel(
     <link href="${styleUri}" rel="stylesheet">
     <title>TypeAgent Message</title>
 </head>
-<body class="chat-expand-standalone">
-    <div id="expand-root" class="chat-expand-page chat-message-content"></div>
+<body class="chat-message-window-standalone">
+    <div id="message-window-root" class="chat-message-window-page chat-message-content"></div>
     <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
@@ -664,7 +666,8 @@ function attachChatPanel(
         ephemeralSessionName: opts.ephemeralSessionName,
         displayName: opts.displayName,
         restoreSessionId: opts.restoreSessionId,
-        onExpandMessage: (html, title) => openExpandPanel(context, html, title),
+        onOpenMessageWindow: (html, title) =>
+            openMessageWindowPanel(context, html, title),
     });
 
     const entry: ChatEntry = {

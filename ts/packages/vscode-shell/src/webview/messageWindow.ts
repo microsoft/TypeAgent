@@ -1,11 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Standalone "expanded message" webview. Runs in a separate VS Code editor
-// panel (which the user can move/snap) and shows one chat message's rendered
-// content at full size. The extension host sends the (already-sanitized)
-// content over postMessage; we re-sanitize with DOMPurify before rendering as
-// defense in depth, so no HTML is constructed from input on the extension side.
+// Standalone "open in new window" message view. Runs in a separate VS Code
+// editor panel (which the user can move/snap) and shows one chat message's
+// rendered content at full size. The extension host sends the (already-
+// sanitized) content over postMessage; we re-sanitize with DOMPurify before
+// rendering as defense in depth, so no HTML is constructed from input on the
+// extension side.
 
 import DOMPurify from "dompurify";
 import chatPanelStyles from "chat-ui/styles";
@@ -17,11 +18,15 @@ injectStyle(vscodeThemeStyles as unknown as string);
 
 const vscode = acquireVsCodeApi();
 
-const root = document.getElementById("expand-root")!;
+const root = document.getElementById("message-window-root")!;
 
 window.addEventListener("message", (event) => {
     const msg = event.data;
-    if (msg && msg.type === "expandContent" && typeof msg.html === "string") {
+    if (
+        msg &&
+        msg.type === "messageWindowContent" &&
+        typeof msg.html === "string"
+    ) {
         root.innerHTML = DOMPurify.sanitize(msg.html, {
             ADD_ATTR: ["target"],
         }) as string;
@@ -48,4 +53,4 @@ root.addEventListener("click", (event) => {
 });
 
 // Signal the host that we're ready to receive the content.
-vscode.postMessage({ type: "expandReady" });
+vscode.postMessage({ type: "messageWindowReady" });

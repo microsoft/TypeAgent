@@ -389,12 +389,25 @@
   background-color: transparent;
 }
 
-/* Message expand overlay: theme the panel to match the editor (the shared
-   base in chat-ui/styles/chat.css only sets a light-mode fallback). */
-.chat-expand-panel {
-  background: var(--vscode-editor-background);
-  color: var(--vscode-foreground);
-  border-color: var(--vscode-widget-border, rgba(127, 127, 127, 0.3));
+/* Standalone "open in new window" page (a movable VS Code editor panel; see
+   webview/messageWindow.ts). This host is the only one that renders the page,
+   so its layout lives here rather than in chat-ui's shared stylesheet. Reuses
+   .chat-message-content typography but flattens the bubble chrome (shadow +
+   rounding) into a centered, readable column. */
+.chat-message-window-page {
+  box-shadow: none;
+  border-radius: 0;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px 20px;
+}
+/* The page is a standalone scrollable document; the chat body's fixed-height,
+   overflow-hidden flex layout doesn't apply here, so restore normal scrolling. */
+body.chat-message-window-standalone {
+  height: auto;
+  min-height: 100vh;
+  overflow: auto;
+  display: block;
 }
 
 /* ── In-webview camera capture overlay (vscode-shell only) ──────────

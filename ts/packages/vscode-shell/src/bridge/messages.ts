@@ -307,8 +307,8 @@ export type BridgeFromWebviewMessage =
     // Double-Esc gesture: cancel every queued + running entry on the session.
     | { type: "cancelAllQueuedAndRunning" }
     | { type: "openExternal"; href: string }
-    // Open a message's content in a separate editor panel (a movable window).
-    | { type: "expandMessage"; html: string; title?: string }
+    // Open a message's content in a new editor panel (a movable window).
+    | { type: "openMessageWindow"; html: string; title?: string }
     // Request a fresh Azure Speech authorization token from the server
     // (relayed via the bridge). Correlated by `id`.
     | { type: "getSpeechToken"; id: number }

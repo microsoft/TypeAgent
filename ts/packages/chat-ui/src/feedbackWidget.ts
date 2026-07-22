@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 /**
- * Feedback widget. Renders the per-message action row (copy / expand / rate)
- * plus the feedback popover. Shared by the Electron shell (via chat-ui's
+ * Feedback widget. Renders the per-message action row (copy / open-in-window /
+ * rate) plus the feedback popover. Shared by the Electron shell (via chat-ui's
  * ChatPanel) and the Chrome / vscode webview hosts, so keep the trigger DOM and
  * CSS class names stable when changing it.
  */
@@ -16,11 +16,10 @@ import type {
 import {
     iconCheck,
     iconCopy,
-    iconExpand,
+    iconOpenInWindow,
     iconMore,
     iconThumbsDown,
     iconThumbsUp,
-    iconX,
 } from "./icons.js";
 
 export type FeedbackUIVariant = "footer-always";
@@ -43,11 +42,14 @@ type FeedbackHost = {
     headerDiv: HTMLElement;
     messageDiv: HTMLElement;
     /**
-     * Optional host-native "expand" (e.g. open in a separate VS Code editor
-     * panel). Returns true if the host handled it; otherwise the widget falls
-     * back to the in-page overlay.
+     * Optional host-native "open in new window" (e.g. a movable VS Code editor
+     * panel). When provided, the widget shows the "Open in new window" action;
+     * hosts without it don't show the action at all. Returns true if the host
+     * handled it; a host may decline a specific message (false, e.g. iframe-
+     * backed content that can't be serialized into a window), in which case
+     * nothing happens (there's no in-page fallback).
      */
-    expandMessage?: () => boolean;
+    openInWindow?: () => boolean;
 };
 
 type ActionRow = {
@@ -120,19 +122,25 @@ export class FeedbackWidget {
             );
             root.appendChild(copyBtn);
 
-            const expandBtn = makeIconButton(
-                "expand",
-                "Expand message",
-                iconExpand(),
-                () => {
-                    // Prefer a host-native window (e.g. a VS Code editor
-                    // panel); fall back to the in-page overlay.
-                    if (!this.host.expandMessage?.()) {
-                        openMessageExpand(this.host.messageDiv);
-                    }
-                },
-            );
-            root.appendChild(expandBtn);
+            // "Open in new window" is an opt-in, host-native capability: only
+            // render it when the host provides openInWindow (e.g. the VS Code
+            // shell, which opens a movable editor panel). Hosts without it (the
+            // Electron shell, web) show no button. The host may decline a
+            // specific message (returns false, e.g. iframe-backed content that
+            // can't be serialized into a window); there's no in-page fallback,
+            // so the click is simply a no-op in that case.
+            const openInWindow = this.host.openInWindow;
+            if (openInWindow) {
+                const openWindowBtn = makeIconButton(
+                    "open-window",
+                    "Open in new window",
+                    iconOpenInWindow(),
+                    () => {
+                        openInWindow();
+                    },
+                );
+                root.appendChild(openWindowBtn);
+            }
         }
 
         const thumbsUp = makeIconButton(
@@ -331,67 +339,6 @@ function makeIconButton(
     btn.appendChild(glyph);
     btn.addEventListener("click", onClick);
     return btn;
-}
-
-// The single expand overlay currently open (its disposer), so a second click
-// replaces rather than stacks overlays.
-let activeExpand: (() => void) | undefined;
-
-// Open a message's rendered content in a full-window overlay for easier reading
-// of long responses. The live content nodes are moved into the overlay (not
-// cloned) so links, tables and other interactivity keep working, then moved
-// back when it closes. Dismissed by the close button, Escape, or a backdrop
-// click.
-function openMessageExpand(sourceEl: HTMLElement) {
-    activeExpand?.();
-    const previousFocus = document.activeElement as HTMLElement | null;
-
-    const overlay = document.createElement("div");
-    overlay.className = "chat-expand-overlay";
-    overlay.tabIndex = -1;
-
-    const body = document.createElement("div");
-    body.className = "chat-expand-body chat-message-content";
-    body.append(...Array.from(sourceEl.childNodes));
-
-    const close = () => {
-        document.removeEventListener("keydown", onKey, true);
-        // Return the content to its bubble before removing the overlay.
-        sourceEl.append(...Array.from(body.childNodes));
-        overlay.remove();
-        activeExpand = undefined;
-        previousFocus?.focus?.();
-    };
-    const onKey = (e: KeyboardEvent) => {
-        if (e.key === "Escape") {
-            e.preventDefault();
-            close();
-        }
-    };
-
-    const panel = document.createElement("div");
-    panel.className = "chat-expand-panel";
-    panel.setAttribute("role", "dialog");
-    panel.setAttribute("aria-modal", "true");
-    panel.setAttribute("aria-label", "Expanded message");
-
-    const header = document.createElement("div");
-    header.className = "chat-expand-header";
-    const title = document.createElement("span");
-    title.textContent = "Message";
-    const closeBtn = makeIconButton("close", "Close", iconX(), close);
-    header.append(title, closeBtn);
-
-    panel.append(header, body);
-    overlay.appendChild(panel);
-    overlay.addEventListener("click", (e) => {
-        if (e.target === overlay) close();
-    });
-
-    document.addEventListener("keydown", onKey, true);
-    document.body.appendChild(overlay);
-    activeExpand = close;
-    closeBtn.focus();
 }
 
 function formatCategory(c: UserFeedbackCategory): string {

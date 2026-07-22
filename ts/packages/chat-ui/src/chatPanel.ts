@@ -5417,8 +5417,8 @@ class AgentMessageContainer {
                 bodyDiv: this.messageDiv,
                 headerDiv: this.timestampDiv,
                 messageDiv: this.messageDiv,
-                expandMessage: this.platformAdapter.expandMessage
-                    ? () => this.expandInHost()
+                openInWindow: this.platformAdapter.openMessageInWindow
+                    ? () => this.openMessageInWindow()
                     : undefined,
             },
             controller,
@@ -5426,16 +5426,16 @@ class AgentMessageContainer {
         );
     }
 
-    // Ask the host to open this message in a separate window. Messages backed
-    // by an <iframe> (script-driven image/video/settings displays) don't
-    // survive re-sanitization in a separate panel, so decline and let the
-    // feedback widget fall back to the in-page overlay.
-    private expandInHost(): boolean {
+    // Ask the host to open this message in a new window. Messages backed by an
+    // <iframe> (script-driven image/video/settings displays) don't survive
+    // re-sanitization in a separate panel, so decline them; there's no in-page
+    // fallback, so the button is simply inert for those.
+    private openMessageInWindow(): boolean {
         if (this.messageDiv.querySelector("iframe")) {
             return false;
         }
         return (
-            this.platformAdapter.expandMessage?.(
+            this.platformAdapter.openMessageInWindow?.(
                 this.messageDiv.innerHTML,
                 this.nameSpan.textContent ?? undefined,
             ) ?? false

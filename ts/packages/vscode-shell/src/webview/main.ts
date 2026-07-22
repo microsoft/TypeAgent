@@ -184,11 +184,11 @@ const chatPanel = new ChatPanel(rootEl, {
         handleLinkClick: (href: string, _target: string | null) => {
             vscode.postMessage({ type: "openExternal", href });
         },
-        // Open the message in a separate VS Code editor panel (movable /
-        // snappable) rather than the in-page overlay. The extension host owns
-        // the panel; it re-sanitizes the content before rendering.
-        expandMessage: (html: string, title?: string) => {
-            vscode.postMessage({ type: "expandMessage", html, title });
+        // Open the message in a new VS Code editor panel (movable / snappable)
+        // rather than an in-page overlay. The extension host owns the panel; it
+        // re-sanitizes the content before rendering.
+        openMessageInWindow: (html: string, title?: string) => {
+            vscode.postMessage({ type: "openMessageWindow", html, title });
             return true;
         },
     },

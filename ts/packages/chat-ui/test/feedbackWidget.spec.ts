@@ -5,12 +5,12 @@ import { describe, it, expect, afterEach, jest } from "@jest/globals";
 import { FeedbackWidget } from "../src/feedbackWidget.js";
 import type { FeedbackController } from "../src/feedbackWidget.js";
 
-// FeedbackWidget renders the per-message action row (copy / expand / rate).
-// These tests run under jsdom (see jest.config.cjs).
+// FeedbackWidget renders the per-message action row (copy / open-in-window /
+// rate). These tests run under jsdom (see jest.config.cjs).
 
 function makeWidget(
     messageHtml = "<p>hello</p>",
-    expandMessage?: () => boolean,
+    openInWindow?: () => boolean,
 ) {
     const container = document.createElement("div");
     const messageDiv = document.createElement("div");
@@ -26,7 +26,7 @@ function makeWidget(
             bodyDiv: document.createElement("div"),
             headerDiv: document.createElement("div"),
             messageDiv,
-            expandMessage,
+            openInWindow,
         },
         controller,
         "footer-always",
@@ -38,124 +38,46 @@ afterEach(() => {
     document.body.replaceChildren();
 });
 
-describe("FeedbackWidget expand", () => {
-    it("places the expand button after copy and before thumbs-up", () => {
+describe("FeedbackWidget open-in-window", () => {
+    it("omits the open-in-window button when the host has no native window", () => {
         const { container } = makeWidget();
+        const actions = Array.from(
+            container.querySelectorAll<HTMLElement>(".chat-action-button"),
+        ).map((b) => b.dataset.action);
+        expect(actions).toEqual(["copy", "thumbs-up", "thumbs-down", "more"]);
+    });
+
+    it("places the open-in-window button after copy when the host supports it", () => {
+        const { container } = makeWidget("<p>x</p>", () => true);
         const actions = Array.from(
             container.querySelectorAll<HTMLElement>(".chat-action-button"),
         ).map((b) => b.dataset.action);
         expect(actions).toEqual([
             "copy",
-            "expand",
+            "open-window",
             "thumbs-up",
             "thumbs-down",
             "more",
         ]);
     });
 
-    it("delegates to a host expand callback instead of the overlay", () => {
-        const expandMessage = jest.fn(() => true);
-        const { container } = makeWidget("<p>x</p>", expandMessage);
+    it("invokes the host callback when the button is clicked", () => {
+        const openInWindow = jest.fn(() => true);
+        const { container } = makeWidget("<p>x</p>", openInWindow);
         container
-            .querySelector<HTMLButtonElement>('[data-action="expand"]')!
+            .querySelector<HTMLButtonElement>('[data-action="open-window"]')!
             .click();
-        expect(expandMessage).toHaveBeenCalledTimes(1);
-        expect(document.querySelector(".chat-expand-overlay")).toBeNull();
+        expect(openInWindow).toHaveBeenCalledTimes(1);
     });
 
-    it("falls back to the overlay when the host callback returns false", () => {
-        const expandMessage = jest.fn(() => false);
-        const { container } = makeWidget("<p>x</p>", expandMessage);
+    it("does nothing when the host declines the message (no fallback)", () => {
+        const openInWindow = jest.fn(() => false);
+        const { container } = makeWidget("<p>x</p>", openInWindow);
         container
-            .querySelector<HTMLButtonElement>('[data-action="expand"]')!
+            .querySelector<HTMLButtonElement>('[data-action="open-window"]')!
             .click();
-        expect(expandMessage).toHaveBeenCalledTimes(1);
-        expect(document.querySelector(".chat-expand-overlay")).not.toBeNull();
-        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    });
-
-    it("moves the message content into the overlay and back when closed", () => {
-        const { container, messageDiv } = makeWidget("<p>expanded content</p>");
-        container
-            .querySelector<HTMLButtonElement>('[data-action="expand"]')!
-            .click();
-
-        const overlay = document.querySelector(".chat-expand-overlay");
-        expect(overlay?.textContent).toContain("expanded content");
-        // Content is moved out of the bubble while expanded...
-        expect(messageDiv.textContent).toBe("");
-
-        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-        expect(document.querySelector(".chat-expand-overlay")).toBeNull();
-        // ...and returned to it on close.
-        expect(messageDiv.textContent).toContain("expanded content");
-    });
-
-    it("closes on a backdrop click but stays open on a panel click", () => {
-        const { container } = makeWidget();
-        container
-            .querySelector<HTMLButtonElement>('[data-action="expand"]')!
-            .click();
-        const overlay = document.querySelector<HTMLElement>(
-            ".chat-expand-overlay",
-        )!;
-        // Click inside the panel: stays open.
-        overlay
-            .querySelector(".chat-expand-panel")!
-            .dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        expect(document.querySelector(".chat-expand-overlay")).not.toBeNull();
-        // Click the backdrop (the overlay itself): closes.
-        overlay.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        expect(document.querySelector(".chat-expand-overlay")).toBeNull();
-    });
-
-    it("closes on the close button", () => {
-        const { container } = makeWidget();
-        container
-            .querySelector<HTMLButtonElement>('[data-action="expand"]')!
-            .click();
-        document
-            .querySelector<HTMLButtonElement>(
-                '.chat-expand-overlay [data-action="close"]',
-            )!
-            .click();
-        expect(document.querySelector(".chat-expand-overlay")).toBeNull();
-    });
-
-    it("replaces rather than stacks a second overlay", () => {
-        const { container } = makeWidget();
-        const btn = container.querySelector<HTMLButtonElement>(
-            '[data-action="expand"]',
-        )!;
-        btn.click();
-        btn.click();
-        expect(document.querySelectorAll(".chat-expand-overlay").length).toBe(
-            1,
-        );
-    });
-
-    it("preserves interactivity by moving (not cloning) the content", () => {
-        const clicked = jest.fn();
-        const { container, messageDiv } = makeWidget("");
-        const action = document.createElement("button");
-        action.textContent = "action";
-        action.addEventListener("click", () => clicked());
-        messageDiv.appendChild(action);
-
-        container
-            .querySelector<HTMLButtonElement>('[data-action="expand"]')!
-            .click();
-        const overlay = document.querySelector<HTMLElement>(
-            ".chat-expand-overlay",
-        )!;
-        const moved = Array.from(overlay.querySelectorAll("button")).find(
-            (b) => b.textContent === "action",
-        )!;
-        // Same node moved in (not a clone), so its listener still fires.
-        expect(moved).toBe(action);
-        moved.click();
-        expect(clicked).toHaveBeenCalledTimes(1);
-
-        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+        expect(openInWindow).toHaveBeenCalledTimes(1);
+        // The click is a no-op: no modal/dialog fallback surface appears.
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
     });
 });
