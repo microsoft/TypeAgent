@@ -10,6 +10,7 @@ import {
 import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 import {
     ActionContext,
+    ActionResult,
     AppAction,
     DisplayAppendMode,
     Entity,
@@ -51,6 +52,8 @@ import {
     formatParams as sharedFormatParams,
     formatThinkingDisplay as sharedFormatThinkingDisplay,
     formatToolResultDisplay as sharedFormatToolResultDisplay,
+    buildReasoningActionResult,
+    estimateReasoningTokens,
     reasoningTokenUsage,
 } from "./reasoningLoopBase.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
@@ -497,9 +500,10 @@ function getClaudeOptions(
                 },
             };
             systemContext.isInsideReasoningLoop = true;
+            let actionResult: ActionResult | undefined;
             try {
                 systemContext.clientIO = capturingClientIO;
-                await executeAction(
+                actionResult = await executeAction(
                     {
                         action: {
                             schemaName: args.schemaName,
@@ -513,8 +517,16 @@ function getClaudeOptions(
                 systemContext.clientIO = savedClientIO;
                 systemContext.isInsideReasoningLoop = false;
             }
+            // Surface the action's history text (its full, model-facing output
+            // - e.g. the page text webFetch/webSearch carry there) to the
+            // model, not just the brief display summary the capture collects.
+            const { text, isError } = buildReasoningActionResult(
+                actionResult,
+                result,
+            );
             return {
-                content: [{ type: "text", text: JSON.stringify(result) }],
+                content: [{ type: "text", text }],
+                ...(isError && { isError: true }),
             };
         },
     };
@@ -1339,6 +1351,9 @@ async function executeReasoningWithoutPlanning(
     // show an approximate per-block "Thinking Tokens" breakdown.
     const usageThinkingTokens: number[] = [];
     let currentThinkingEstimate = 0;
+    // Fallback: reasoning text per thinking block, used to estimate thinking
+    // tokens when the SDK does not stream a per-block estimate.
+    const reasoningBlockTexts: string[] = [];
 
     // Process streaming response
     for await (const message of queryInstance) {
@@ -1409,10 +1424,14 @@ async function executeReasoningWithoutPlanning(
                 } else if ((content as any).type === "thinking") {
                     const thinkingContent = (content as any).thinking;
                     if (thinkingContent) {
+                        reasoningBlockTexts.push(thinkingContent);
                         context.actionIO.appendDisplay(
                             {
                                 type: "html",
-                                content: formatThinkingDisplay(thinkingContent),
+                                content: formatThinkingDisplay(
+                                    thinkingContent,
+                                    estimateReasoningTokens(thinkingContent),
+                                ),
                                 kind: "status",
                             },
                             displayMode,
@@ -1514,13 +1533,20 @@ async function executeReasoningWithoutPlanning(
         return undefined;
     }
     const result = createActionResultNoDisplay(finalResult);
-    // Claude's thinking tokens are an approximate per-block estimate (Anthropic
-    // does not bill them separately), so flag them as estimated.
+    // Claude's thinking tokens are an approximate per-block figure (Anthropic
+    // does not bill them separately): prefer the SDK's streamed estimate, else
+    // estimate from the reasoning text. Either way, flag as estimated.
+    const thinkingTokens =
+        usageThinkingTokens.length > 0
+            ? usageThinkingTokens
+            : reasoningBlockTexts
+                  .map(estimateReasoningTokens)
+                  .filter((n) => n > 0);
     result.tokenUsage = reasoningTokenUsage(
         usageInputTokens,
         usageOutputTokens,
         usageCachedTokens,
-        usageThinkingTokens,
+        thinkingTokens,
         true,
     );
     return result;
@@ -1597,6 +1623,9 @@ async function executeReasoningWithTracing(
         // show an approximate per-block "Thinking Tokens" breakdown.
         const usageThinkingTokens: number[] = [];
         let currentThinkingEstimate = 0;
+        // Fallback: reasoning text per thinking block, used to estimate thinking
+        // tokens when the SDK does not stream a per-block estimate.
+        const reasoningBlockTexts: string[] = [];
 
         // Process streaming response with tracing
         for await (const message of queryInstance) {
@@ -1679,11 +1708,16 @@ async function executeReasoningWithTracing(
                     } else if ((content as any).type === "thinking") {
                         const thinkingContent = (content as any).thinking;
                         if (thinkingContent) {
+                            reasoningBlockTexts.push(thinkingContent);
                             context.actionIO.appendDisplay(
                                 {
                                     type: "html",
-                                    content:
-                                        formatThinkingDisplay(thinkingContent),
+                                    content: formatThinkingDisplay(
+                                        thinkingContent,
+                                        estimateReasoningTokens(
+                                            thinkingContent,
+                                        ),
+                                    ),
                                     kind: "status",
                                 },
                                 displayMode,
@@ -1873,13 +1907,20 @@ async function executeReasoningWithTracing(
             return undefined;
         }
         const result = createActionResultNoDisplay(finalResult);
-        // Claude's thinking tokens are an approximate per-block estimate
-        // (Anthropic does not bill them separately), so flag them as estimated.
+        // Claude's thinking tokens are an approximate per-block figure (Anthropic
+        // does not bill them separately): prefer the SDK's streamed estimate,
+        // else estimate from the reasoning text. Either way, flag as estimated.
+        const thinkingTokens =
+            usageThinkingTokens.length > 0
+                ? usageThinkingTokens
+                : reasoningBlockTexts
+                      .map(estimateReasoningTokens)
+                      .filter((n) => n > 0);
         result.tokenUsage = reasoningTokenUsage(
             usageInputTokens,
             usageOutputTokens,
             usageCachedTokens,
-            usageThinkingTokens,
+            thinkingTokens,
             true,
         );
         return result;

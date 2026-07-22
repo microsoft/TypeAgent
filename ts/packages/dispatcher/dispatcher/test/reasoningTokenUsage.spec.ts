@@ -8,7 +8,12 @@
  * "Thinking Tokens" figure in the UI.
  */
 
-import { reasoningTokenUsage } from "../src/reasoning/reasoningLoopBase.js";
+import {
+    buildReasoningActionResult,
+    estimateReasoningTokens,
+    formatThinkingDisplay,
+    reasoningTokenUsage,
+} from "../src/reasoning/reasoningLoopBase.js";
 
 describe("reasoningTokenUsage", () => {
     it("returns undefined when no tokens were counted", () => {
@@ -76,5 +81,105 @@ describe("reasoningTokenUsage", () => {
         expect(reasoningTokenUsage(100, 20, 0, [0, 0])).not.toHaveProperty(
             "thinking_tokens",
         );
+    });
+});
+
+describe("estimateReasoningTokens", () => {
+    it("returns 0 for empty or whitespace-only text", () => {
+        expect(estimateReasoningTokens("")).toBe(0);
+        expect(estimateReasoningTokens("   \n\t ")).toBe(0);
+    });
+
+    it("estimates ~4 characters per token, rounding up", () => {
+        // 8 trimmed chars => 2 tokens.
+        expect(estimateReasoningTokens("abcdefgh")).toBe(2);
+        // 9 chars => ceil(9/4) = 3.
+        expect(estimateReasoningTokens("abcdefghi")).toBe(3);
+        // Leading/trailing whitespace is ignored before counting.
+        expect(estimateReasoningTokens("  abcd  ")).toBe(1);
+    });
+});
+
+describe("formatThinkingDisplay", () => {
+    it("renders a plain Thinking header with no token attribute when none given", () => {
+        const html = formatThinkingDisplay("some reasoning");
+        expect(html).toContain("<summary>Thinking</summary>");
+        expect(html).not.toContain("data-thinking-tokens");
+    });
+
+    it("carries the per-block token estimate as a data attribute, not in the header", () => {
+        const html = formatThinkingDisplay("some reasoning", 216);
+        // The count rides on the <details> so the client can render it in the
+        // metrics row; the header text stays a plain "Thinking".
+        expect(html).toContain('data-thinking-tokens="216"');
+        expect(html).toContain("<summary>Thinking</summary>");
+        expect(html).not.toContain("tokens</");
+    });
+
+    it("omits the attribute for a zero/undefined estimate", () => {
+        expect(formatThinkingDisplay("x", 0)).toContain(
+            "<summary>Thinking</summary>",
+        );
+        expect(formatThinkingDisplay("x", 0)).not.toContain(
+            "data-thinking-tokens",
+        );
+        expect(formatThinkingDisplay("x")).not.toContain(
+            "data-thinking-tokens",
+        );
+    });
+
+    it("escapes HTML in the reasoning text", () => {
+        const html = formatThinkingDisplay("<b>a & b</b>", 5);
+        expect(html).toContain("&lt;b&gt;a &amp; b&lt;/b&gt;");
+    });
+});
+
+describe("buildReasoningActionResult", () => {
+    const display = [{ type: "text", content: "Fetched 42 chars" }];
+
+    it("prefers the action's historyText (the full model-facing output)", () => {
+        const result = buildReasoningActionResult(
+            {
+                historyText: "Content from example.com:\n\nfull page text",
+                entities: [],
+            },
+            display,
+        );
+        expect(result).toEqual({
+            text: "Content from example.com:\n\nfull page text",
+            isError: false,
+        });
+    });
+
+    it("falls back to captured display when there is no historyText", () => {
+        const result = buildReasoningActionResult({ entities: [] }, display);
+        expect(result.isError).toBe(false);
+        expect(result.text).toBe(JSON.stringify(display));
+    });
+
+    it("treats empty/whitespace historyText as absent", () => {
+        const result = buildReasoningActionResult(
+            { historyText: "   \n", entities: [] },
+            display,
+        );
+        expect(result.text).toBe(JSON.stringify(display));
+    });
+
+    it("surfaces an error result as an error", () => {
+        const result = buildReasoningActionResult(
+            { error: "Utility action failed: API key not found" },
+            display,
+        );
+        expect(result).toEqual({
+            text: "Error: Utility action failed: API key not found",
+            isError: true,
+        });
+    });
+
+    it("falls back to display for an undefined result", () => {
+        expect(buildReasoningActionResult(undefined, display)).toEqual({
+            text: JSON.stringify(display),
+            isError: false,
+        });
     });
 });

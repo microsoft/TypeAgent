@@ -672,3 +672,76 @@ describe("blocking prompt ordering (reasoning ask_user)", () => {
         await expect(answered).resolves.toBe(0);
     });
 });
+
+// The reasoning engine renders each "Thinking" block as a <details> that
+// carries a per-block token estimate in a `data-thinking-tokens` attribute.
+// The panel moves that into the step bubble's metrics row (where the other
+// token metrics live), not the block header. Verify the attribute survives the
+// markdown -> markdown-it -> DOMPurify pipeline and lands in the metrics row in
+// both the streaming ("temporary") and finalized ("step") render modes.
+describe("reasoning thinking-block token metric", () => {
+    const source = "dispatcher.reasoningAction.copilot";
+    const thinkingHtml = (tokens: number) =>
+        `<details class="reasoning-thinking" data-thinking-tokens="${tokens}" open>` +
+        "<summary>Thinking</summary>" +
+        "<pre>I'm going to recreate the table.</pre></details>";
+
+    function metricsText(root: HTMLElement): string {
+        return (
+            root.querySelector(".chat-message-metrics-agent")?.textContent ?? ""
+        );
+    }
+
+    it("renders the estimate in a finalized step bubble's metrics row", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            { type: "markdown", content: thinkingHtml(14) },
+            source,
+            undefined,
+            "step",
+            "req-1",
+        );
+        expect(metricsText(root)).toContain("Thinking Tokens:");
+        expect(metricsText(root)).toContain("~14");
+        // The block header stays a plain "Thinking" - count is NOT inline.
+        expect(root.querySelector("summary")?.textContent?.trim()).toBe(
+            "Thinking",
+        );
+    });
+
+    it("renders the estimate in a temporary streaming bubble's metrics row", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            { type: "markdown", content: thinkingHtml(14) },
+            source,
+            undefined,
+            "temporary",
+            "req-1",
+        );
+        expect(metricsText(root)).toContain("Thinking Tokens:");
+        expect(metricsText(root)).toContain("~14");
+    });
+
+    it("adds no thinking metric when the block has no estimate", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            {
+                type: "markdown",
+                content:
+                    '<details class="reasoning-thinking" open>' +
+                    "<summary>Thinking</summary><pre>x</pre></details>",
+            },
+            source,
+            undefined,
+            "step",
+            "req-1",
+        );
+        expect(metricsText(root)).not.toContain("Thinking Tokens:");
+    });
+});

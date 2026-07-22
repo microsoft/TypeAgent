@@ -40,7 +40,12 @@ import { createLimiter } from "@typeagent/common-utils";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 import { formatUserContextForPrompt } from "./userContextPrompt.js";
-import { reasoningTokenUsage } from "./reasoningLoopBase.js";
+import {
+    buildReasoningActionResult,
+    estimateReasoningTokens,
+    formatThinkingDisplay,
+    reasoningTokenUsage,
+} from "./reasoningLoopBase.js";
 import {
     buildReasoningForm,
     formatReasoningFormResponse,
@@ -461,24 +466,6 @@ function buildPromptWithContext(
     return parts.join("\n\n");
 }
 
-/**
- * Format thinking block display with collapsible details
- * (Matches Claude implementation styling exactly)
- */
-function formatThinkingDisplay(thinking: string): string {
-    const escaped = thinking
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-
-    return [
-        `<details class="reasoning-thinking" open>`,
-        `<summary>Thinking</summary>`,
-        `<pre>${escaped}</pre>`,
-        `</details>`,
-    ].join("");
-}
-
 type ToolInput = Record<string, unknown>;
 
 function asToolInput(value: unknown): ToolInput | undefined {
@@ -732,7 +719,7 @@ function getCopilotSessionConfig(
                 const savedClientIO = systemContext.clientIO;
                 try {
                     systemContext.clientIO = capturingClientIO;
-                    await executeAction(
+                    const actionResult = await executeAction(
                         {
                             action: {
                                 schemaName,
@@ -744,10 +731,20 @@ function getCopilotSessionConfig(
                     );
                     systemContext.clientIO = savedClientIO;
 
-                    // Return result in Copilot SDK format
+                    // Surface the action's history text (its full, model-facing
+                    // output - e.g. the page text webFetch/webSearch carry
+                    // there) to the reasoning model, not just the brief display
+                    // summary the capture above collects.
+                    const { text, isError } = buildReasoningActionResult(
+                        actionResult,
+                        result,
+                    );
                     return {
-                        textResultForLlm: JSON.stringify(result),
-                        resultType: "success" as const,
+                        textResultForLlm: text,
+                        resultType: isError
+                            ? ("failure" as const)
+                            : ("success" as const),
+                        ...(isError && { error: text }),
                     };
                 } catch (error) {
                     systemContext.clientIO = savedClientIO;
@@ -1288,6 +1285,10 @@ async function executeReasoningWithoutPlanning(
     // turn that reported any, so the UI can show a per-block "Thinking Tokens"
     // breakdown. These are a subset of usageOutputTokens (not added again).
     const usageThinkingTokens: number[] = [];
+    // Reasoning text per thinking block. Used to estimate thinking tokens when
+    // the provider reports no billed reasoningTokens (Anthropic-backed sessions
+    // fold thinking into output_tokens), so the UI still shows an approximation.
+    const reasoningBlockTexts: string[] = [];
 
     // Subscribe to reasoning events (thinking blocks)
     const unsubscribeReasoningDelta = session.on(
@@ -1298,7 +1299,10 @@ async function executeReasoningWithoutPlanning(
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
-                        content: formatThinkingDisplay(currentReasoning),
+                        content: formatThinkingDisplay(
+                            currentReasoning,
+                            estimateReasoningTokens(currentReasoning),
+                        ),
                     },
                     "temporary",
                 );
@@ -1315,10 +1319,14 @@ async function executeReasoningWithoutPlanning(
             ) {
                 // Final reasoning content - display as permanent thinking block
                 lastReasoningContent = event.data.content;
+                reasoningBlockTexts.push(event.data.content);
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
-                        content: formatThinkingDisplay(event.data.content),
+                        content: formatThinkingDisplay(
+                            event.data.content,
+                            estimateReasoningTokens(event.data.content),
+                        ),
                     },
                     displayMode,
                 );
@@ -1400,6 +1408,14 @@ async function executeReasoningWithoutPlanning(
     // subset of outputTokens) is tabulated per turn so the UI can show a
     // distinct "Thinking Tokens" figure.
     const unsubscribeUsage = session.on("assistant.usage", (event: any) => {
+        debug(
+            "assistant.usage in=%d out=%d cacheR=%d cacheW=%d reasoning=%s",
+            event.data?.inputTokens ?? 0,
+            event.data?.outputTokens ?? 0,
+            event.data?.cacheReadTokens ?? 0,
+            event.data?.cacheWriteTokens ?? 0,
+            event.data?.reasoningTokens ?? "absent",
+        );
         usageInputTokens += event.data?.inputTokens ?? 0;
         usageOutputTokens += event.data?.outputTokens ?? 0;
         usageCachedTokens +=
@@ -1454,11 +1470,23 @@ async function executeReasoningWithoutPlanning(
             return undefined;
         }
         const result = createActionResultNoDisplay(finalResult);
+        // Prefer the provider's billed reasoning-token count; when it is not
+        // reported (Anthropic-backed sessions fold thinking into output_tokens),
+        // fall back to a rough per-block estimate from the reasoning text so the
+        // UI can still show an approximate figure.
+        const thinkingEstimated =
+            usageThinkingTokens.length === 0 && reasoningBlockTexts.length > 0;
+        const thinkingTokens = thinkingEstimated
+            ? reasoningBlockTexts
+                  .map(estimateReasoningTokens)
+                  .filter((n) => n > 0)
+            : usageThinkingTokens;
         result.tokenUsage = reasoningTokenUsage(
             usageInputTokens,
             usageOutputTokens,
             usageCachedTokens,
-            usageThinkingTokens,
+            thinkingTokens,
+            thinkingEstimated,
         );
         return result;
     } catch (error) {
@@ -1576,6 +1604,11 @@ async function executeReasoningWithTracing(
         // Tokens" breakdown. These are a subset of usageOutputTokens (not added
         // again).
         const usageThinkingTokens: number[] = [];
+        // Reasoning text per thinking block. Used to estimate thinking tokens
+        // when the provider reports no billed reasoningTokens (Anthropic-backed
+        // sessions fold thinking into output_tokens), so the UI still shows an
+        // approximation.
+        const reasoningBlockTexts: string[] = [];
 
         // Subscribe to reasoning events and record thinking
         const unsubscribeReasoningDelta = session.on(
@@ -1586,7 +1619,10 @@ async function executeReasoningWithTracing(
                     context.actionIO.appendDisplay(
                         {
                             type: "markdown",
-                            content: formatThinkingDisplay(currentReasoning),
+                            content: formatThinkingDisplay(
+                                currentReasoning,
+                                estimateReasoningTokens(currentReasoning),
+                            ),
                         },
                         "temporary",
                     );
@@ -1602,6 +1638,7 @@ async function executeReasoningWithTracing(
                     event.data.content !== lastReasoningContent
                 ) {
                     lastReasoningContent = event.data.content;
+                    reasoningBlockTexts.push(event.data.content);
                     // Record thinking for trace
                     tracer.recordThinking({
                         content: [
@@ -1612,7 +1649,10 @@ async function executeReasoningWithTracing(
                     context.actionIO.appendDisplay(
                         {
                             type: "markdown",
-                            content: formatThinkingDisplay(event.data.content),
+                            content: formatThinkingDisplay(
+                                event.data.content,
+                                estimateReasoningTokens(event.data.content),
+                            ),
                         },
                         displayMode,
                     );
@@ -1698,6 +1738,14 @@ async function executeReasoningWithTracing(
         // (a subset of outputTokens) is tabulated per turn so the UI can show a
         // distinct "Thinking Tokens" figure.
         const unsubscribeUsage = session.on("assistant.usage", (event: any) => {
+            debug(
+                "assistant.usage in=%d out=%d cacheR=%d cacheW=%d reasoning=%s",
+                event.data?.inputTokens ?? 0,
+                event.data?.outputTokens ?? 0,
+                event.data?.cacheReadTokens ?? 0,
+                event.data?.cacheWriteTokens ?? 0,
+                event.data?.reasoningTokens ?? "absent",
+            );
             usageInputTokens += event.data?.inputTokens ?? 0;
             usageOutputTokens += event.data?.outputTokens ?? 0;
             usageCachedTokens +=
@@ -1785,11 +1833,24 @@ async function executeReasoningWithTracing(
                 return undefined;
             }
             const result = createActionResultNoDisplay(finalResult);
+            // Prefer the provider's billed reasoning-token count; when it is not
+            // reported (Anthropic-backed sessions fold thinking into
+            // output_tokens), fall back to a rough per-block estimate from the
+            // reasoning text so the UI can still show an approximate figure.
+            const thinkingEstimated =
+                usageThinkingTokens.length === 0 &&
+                reasoningBlockTexts.length > 0;
+            const thinkingTokens = thinkingEstimated
+                ? reasoningBlockTexts
+                      .map(estimateReasoningTokens)
+                      .filter((n) => n > 0)
+                : usageThinkingTokens;
             result.tokenUsage = reasoningTokenUsage(
                 usageInputTokens,
                 usageOutputTokens,
                 usageCachedTokens,
-                usageThinkingTokens,
+                thinkingTokens,
+                thinkingEstimated,
             );
             return result;
         } finally {

@@ -2347,6 +2347,7 @@ export class ChatPanel {
                 requestId,
             );
             tempContainer.setMessage(content, source, "temporary");
+            tempContainer.renderReasoningThinkingMetric();
             this.scrollToBottom();
             return;
         }
@@ -2411,6 +2412,10 @@ export class ChatPanel {
             // setMessage("block") flushes the streamed "temporary" content, so
             // the reused bubble shows the finalized phase exactly once.
             stepContainer.setMessage(content, source, "block");
+            // Reasoning "Thinking" step bubbles report their per-block token
+            // estimate in the metrics row (like the other token metrics),
+            // not in the block header.
+            stepContainer.renderReasoningThinkingMetric();
             // Keep the "working" rail on the CURRENT step bubble (the request
             // is still in progress) while clearing it from any PRIOR step
             // bubbles for this thread, so only the latest phase reads as
@@ -5551,6 +5556,35 @@ class AgentMessageContainer {
         } else {
             this.div.classList.remove("chat-message-has-metrics");
         }
+    }
+
+    /**
+     * When this bubble's content is a reasoning "Thinking" block that carries a
+     * per-block token estimate (a `data-thinking-tokens` attribute on the
+     * `<details>`), surface it in the metrics row as "Thinking Tokens: ~N" -
+     * the same place the aggregate token metrics appear - rather than in the
+     * block header. Reasoning step bubbles otherwise have an empty metrics row.
+     * The value is an approximation derived from the reasoning text, hence "~".
+     */
+    public renderReasoningThinkingMetric() {
+        const details = this.messageDiv.querySelector<HTMLElement>(
+            ".reasoning-thinking[data-thinking-tokens]",
+        );
+        if (details === null) {
+            return;
+        }
+        const raw = details.dataset.thinkingTokens;
+        const tokens = raw !== undefined ? parseInt(raw, 10) : NaN;
+        if (!Number.isFinite(tokens) || tokens <= 0) {
+            return;
+        }
+        this.metricsDiv.innerHTML = sanitize(
+            `<div class="metrics-details">` +
+                `<div>Thinking Tokens: <b>~${tokens}</b></div>` +
+                `<div></div><div></div>` +
+                `</div>`,
+        );
+        this.div.classList.add("chat-message-has-metrics");
     }
 
     /**
