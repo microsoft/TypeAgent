@@ -1100,6 +1100,40 @@ class HistoryLimitCommandHandler implements CommandHandler {
     }
 }
 
+class RecentActionsLimitCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set the max number of recently executed actions included in translation history (0-100, 0 = off)";
+    public readonly parameters = {
+        args: {
+            limit: {
+                description: "Number of actions (0-100, 0 = off)",
+                type: "number",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const limit = params.args.limit;
+        if (limit < 0 || limit > 100) {
+            throw new Error("Limit must be an integer between 0 and 100");
+        }
+        await changeContextConfig(
+            {
+                translation: {
+                    promptConfig: { recentActionsLimit: limit },
+                },
+            },
+            context,
+        );
+        displayResult(
+            `Recently executed actions included in translation is set to ${limit}`,
+            context,
+        );
+    }
+}
+
 class GrammarSystemCommandHandler implements CommandHandler {
     public readonly description = "Set grammar system (completionBased or nfa)";
     public readonly parameters = {
@@ -1313,6 +1347,27 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                     },
                 ),
                 limit: new HistoryLimitCommandHandler(),
+            },
+        },
+
+        recentActions: {
+            description:
+                "Include recently executed actions in translation history",
+            commands: {
+                ...getToggleCommandHandlers(
+                    "recently executed actions in translation",
+                    async (context, enable: boolean) => {
+                        await changeContextConfig(
+                            {
+                                translation: {
+                                    promptConfig: { recentActions: enable },
+                                },
+                            },
+                            context,
+                        );
+                    },
+                ),
+                limit: new RecentActionsLimitCommandHandler(),
             },
         },
 

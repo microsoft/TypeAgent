@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionResultActivityContext, Entity } from "@typeagent/agent-sdk";
+import {
+    ActionResultActivityContext,
+    AppAction,
+    Entity,
+} from "@typeagent/agent-sdk";
 import {
     CachedImageWithDetails,
     extractRelevantExifTags,
@@ -24,6 +28,10 @@ type AssistantEntry = {
     entities?: Entity[] | undefined;
     additionalInstructions?: string[] | undefined;
     activityContext?: ActionResultActivityContext | undefined;
+    // The action that was executed to produce this result, if any. Rendered
+    // into the translation prompt (behind promptConfig.recentActions) so the
+    // model can see that the request was already carried out.
+    action?: AppAction | undefined;
 };
 
 type ChatHistoryEntry = UserEntry | AssistantEntry;
@@ -34,6 +42,7 @@ export type ChatHistoryInputAssistant = {
     entities?: Entity[];
     additionalInstructions?: string[];
     activityContext?: ActionResultActivityContext;
+    action?: AppAction;
 };
 
 export type ChatHistoryInputEntry = {
@@ -52,6 +61,7 @@ function convertAssistantMessage(
         entities: message.entities,
         additionalInstructions: message.additionalInstructions,
         activityContext: message.activityContext,
+        action: message.action,
     });
 }
 
@@ -94,8 +104,14 @@ export interface ChatHistory {
         entities?: Entity[],
         additionalInstructions?: string[],
         activityContext?: ActionResultActivityContext,
+        action?: AppAction,
     ): void;
     getCurrentInstructions(): string[] | undefined;
+    // The action(s) executed for the assistant turns within the recent chat
+    // history window (the same turns shown via getPromptSections), oldest
+    // first, capped to the most recent `limit`. Lets the model see which
+    // requests were already carried out so it doesn't re-issue them.
+    getRecentActions(limit: number): AppAction[] | undefined;
     getPromptSections(): PromptSection[];
     getLastActivityContextInfo():
         | {
@@ -134,29 +150,31 @@ export interface ChatHistory {
 export function createChatHistory(init: boolean): ChatHistory {
     let enabled = init;
     const entries: ChatHistoryEntry[] = [];
+    // Index of the oldest entry whose trailing run fits within maxChars of
+    // text. Shared by getPromptSections and getRecentActions so the executed-
+    // action list covers exactly the turns shown as recent chat history.
+    const recentStartIndex = (maxChars: number): number => {
+        let totalLength = 0;
+        let i = entries.length - 1;
+        while (i >= 0) {
+            const nextLength = entries[i].text.length;
+            if (nextLength + totalLength > maxChars) {
+                ++i;
+                break;
+            }
+            totalLength += nextLength;
+            --i;
+        }
+        return i < 0 ? 0 : i;
+    };
     return {
         enable(value: boolean) {
             enabled = value;
         },
         getPromptSections(maxChars = 2000) {
             const sections: PromptSection[] = [];
-            // Find the last N that can fit the character quota
-            let totalLength = 0;
-            let i: number = entries.length - 1;
-            // Get the range of sections that could be pushed on, NEWEST first
-            while (i >= 0) {
-                const nextLength = entries[i].text.length;
-                if (nextLength + totalLength > maxChars) {
-                    ++i;
-                    break;
-                }
-                totalLength += nextLength;
-                --i;
-            }
-            if (i < 0) {
-                i = 0;
-            }
-            for (; i < entries.length; ++i) {
+            // Find the last N entries that fit the character quota.
+            for (let i = recentStartIndex(maxChars); i < entries.length; ++i) {
                 const entry = entries[i];
 
                 if (entry.text.length > 0) {
@@ -225,6 +243,31 @@ export function createChatHistory(init: boolean): ChatHistory {
             }
             return instructions.length > 0 ? instructions : undefined;
         },
+        getRecentActions(
+            limit: number,
+            maxChars = 2000,
+        ): AppAction[] | undefined {
+            // Executed action(s) for the assistant turns within the same recent
+            // window shown as chat history, oldest first, so the model can see
+            // which requests were already carried out and not re-issue them.
+            // Capped to the most recent `limit` actions.
+            if (limit <= 0) {
+                return undefined;
+            }
+            const actions: AppAction[] = [];
+            for (let i = recentStartIndex(maxChars); i < entries.length; ++i) {
+                const entry = entries[i];
+                if (entry.role === "assistant" && entry.action) {
+                    actions.push(entry.action);
+                }
+            }
+            if (actions.length === 0) {
+                return undefined;
+            }
+            return actions.length > limit
+                ? actions.slice(actions.length - limit)
+                : actions;
+        },
         getLastActivityContextInfo() {
             if (entries.length === 0) {
                 return undefined;
@@ -256,6 +299,7 @@ export function createChatHistory(init: boolean): ChatHistory {
             entities?: Entity[],
             additionalInstructions?: string[],
             activityContext?: ActionResultActivityContext,
+            action?: AppAction,
         ): void {
             if (enabled) {
                 entries.push({
@@ -265,6 +309,7 @@ export function createChatHistory(init: boolean): ChatHistory {
                     entities: structuredClone(entities), // make a copy so that it doesn't get modified by others later.
                     additionalInstructions,
                     activityContext: structuredClone(activityContext),
+                    action: structuredClone(action),
                 });
             }
         },
@@ -460,6 +505,9 @@ export function createChatHistory(init: boolean): ChatHistory {
                     if (entry.activityContext) {
                         assistantEntry.activityContext = entry.activityContext;
                     }
+                    if (entry.action) {
+                        assistantEntry.action = structuredClone(entry.action);
+                    }
                     (currInput.assistant as any).push(assistantEntry);
                 }
             }
@@ -506,6 +554,13 @@ const assistantInputSchema = sc.obj({
             openLocalView: sc.optional(sc.boolean()),
             state: sc.optional(sc.any()),
             activityEndAction: sc.optional(sc.any()),
+        }),
+    ),
+    action: sc.optional(
+        sc.obj({
+            actionName: sc.string(),
+            schemaName: sc.optional(sc.string()),
+            parameters: sc.optional(sc.any()),
         }),
     ),
 });

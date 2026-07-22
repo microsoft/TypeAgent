@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=484dce4ebdf6f63df3234940da50994f36d89bf826a20ad09e14dc9ca28d44b4 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b4fe216fb0ab98157efb5b355bbbde9f85ae494ff7a85aef7774bf4c83a9c522 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-api — AI-generated documentation
@@ -12,16 +12,17 @@
 
 ## Overview
 
-The `agent-api` package is a TypeScript library that provides an HTTP and WebSocket API server for the TypeAgent sample code. It is part of the TypeAgent ecosystem, which explores architectures for distributed interactive agents with natural language interfaces. This package enables developers to extend the functionality of agents to web-enabled devices, such as browsers, mobile devices, and IoT-connected systems, by leveraging structured prompting and large language models (LLMs).
+The `agent-api` package is a TypeScript library that provides an HTTP and WebSocket API server for the TypeAgent ecosystem. It is designed to enable distributed interactive agents with natural language interfaces, extending their functionality to web-enabled devices such as browsers, mobile devices, and IoT systems. This package is a key component of the TypeAgent architecture, facilitating communication, storage, and configuration for agent-based applications.
 
 ## What it does
 
-The `agent-api` package offers several key features:
+The `agent-api` package offers the following capabilities:
 
-- **HTTP and WebSocket API Server**: Provides a server that supports both HTTP and WebSocket protocols, enabling real-time communication with agents.
-- **Storage Provider Integration**: Supports multiple storage backends, including AWS S3 and Azure Blob Storage, for managing remote files. Actions such as `listRemoteFiles`, `downloadFile`, and `uploadFile` are implemented to interact with these storage systems.
-- **Web Dispatcher**: Handles actions and commands sent to agents via WebSocket connections, enabling dynamic interaction with agents.
-- **Configuration Management**: Uses environment variables to configure the server and storage providers, allowing flexibility across different deployment environments.
+- **HTTP and WebSocket API Server**: Serves as the main interface for interacting with agents, supporting both HTTP and WebSocket protocols for real-time communication.
+- **Storage Provider Integration**: Includes support for multiple storage backends, such as AWS S3 and Azure Blob Storage, enabling actions like `listRemoteFiles`, `downloadFile`, and `uploadFile`.
+- **Web Dispatcher**: Manages WebSocket connections and processes actions sent to agents, allowing dynamic interaction and command execution.
+- **Configuration Management**: Uses environment variables to configure the server and storage providers, ensuring flexibility across different deployment environments.
+- **Static File Hosting**: Serves static files, such as the Shell interface (`chatView.html`), for browser-based interaction with agents.
 
 The package integrates with other components in the TypeAgent ecosystem, such as `agent-cache`, `agent-dispatcher`, and `telemetry`, to provide a cohesive framework for building and managing interactive agents.
 
@@ -122,6 +123,6 @@ _4 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `463e6bf5c6f8eeaf9cc7512e33f3976761eece62` on `2026-07-10T09:05:05.791Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-api docs:verify-links` to spot-check._
+_Auto-generated against commit `10c156699bb8436ffeeb5042da164ea166f9eb74` on `2026-07-22T11:31:33.221Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-api docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
