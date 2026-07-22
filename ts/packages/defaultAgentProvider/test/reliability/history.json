@@ -34,5 +34,14 @@
     "failures": 0,
     "variations": 8,
     "tokens": 6786251
+  },
+  {
+    "generated": "2026-07-22T04:27:25.000Z",
+    "model": "gpt-4.1 (repeat=5, post-fix)",
+    "suites": 9,
+    "attempts": 390,
+    "failures": 0,
+    "variations": 1,
+    "tokens": 1696140
   }
 ]
