@@ -20,8 +20,12 @@ export interface ClarifyMultiplePossibleActionName {
     };
 }
 
-// The user request is for an action, but some of the parameter is not specified or cannot be infer from the context.
-// Ask the user for clarification for the missing parameter of an known action. Don't clarify unknown action.
+// The user request is for a known action, but a required parameter is missing
+// entirely: the user gave no value for it, and no pronoun, reference, or memory
+// points at one. Ask the user to supply the missing parameter. Don't clarify
+// "unknown" action. If the value IS referred to but can't be resolved (e.g.
+// "the one we talked about", "it", "that file", "the one from before"), use 
+// ClarifyUnresolvedReference instead.
 export interface ClarifyMissingParameter {
     actionName: "clarifyMissingParameter";
     parameters: {
@@ -34,7 +38,10 @@ export interface ClarifyMissingParameter {
     };
 }
 
-// The user request is for an action but parameters are referring to unresolved pronouns, memories, or references that are not available in the request or chat history.
+// The user request is for a known action and does not refer to the parameter's
+// value directly, but rather through a pronoun, reference, or memory that can't be resolved
+// directly from the request or chat history (e.g. "from the movie we talked about
+// yesterday", "print that file", "it"). Ask the user what the reference points to.
 export interface ClarifyUnresolvedReference {
     actionName: "clarifyUnresolvedReference";
     parameters: {
