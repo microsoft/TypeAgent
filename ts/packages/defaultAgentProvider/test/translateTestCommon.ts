@@ -178,6 +178,41 @@ function isTransientRequestError(error: string | undefined): boolean {
     );
 }
 
+// Suite-wide reliability accounting helper (opt-in via TRANSLATION_RELIABILITY_DIR).
+// Writes one JSON tally per suite that reliability/report.ts aggregates into the
+// mean-translation-tokens-between-flaky-failures doc. A "variation" is an attempt
+// whose action signature differs from the most common (modal) signature for the
+// same request - run-to-run model non-determinism, whether or not the assertion
+// tolerated it.
+function writeReliabilityTally(
+    dir: string,
+    name: string,
+    attempts: number,
+    failures: number,
+    outcomes: Map<string, string[]>,
+    tokens: number,
+) {
+    let variations = 0;
+    for (const signatures of outcomes.values()) {
+        const counts = new Map<string, number>();
+        for (const signature of signatures) {
+            counts.set(signature, (counts.get(signature) ?? 0) + 1);
+        }
+        const modal = Math.max(...counts.values());
+        variations += signatures.length - modal;
+    }
+    fs.mkdirSync(dir, { recursive: true });
+    const safeName = name.replace(/[^a-z0-9]+/gi, "_");
+    fs.writeFileSync(
+        path.join(dir, `${safeName}.json`),
+        JSON.stringify(
+            { name, attempts, failures, variations, tokens },
+            null,
+            2,
+        ),
+    );
+}
+
 export async function defineTranslateTest(
     name: string,
     dataFiles: string[],
@@ -205,6 +240,18 @@ export async function defineTranslateTest(
                 i,
             ] as const,
     );
+
+    // Opt-in suite-wide reliability accounting. When TRANSLATION_RELIABILITY_DIR
+    // is set, tally attempts / test failures / translation tokens (and per-request
+    // outcome variations) for this suite and write a JSON at afterAll;
+    // reliability/report.ts aggregates all suites into the reliability doc
+    // (mean translation tokens between flaky failures across the whole suite).
+    const reliabilityDir = process.env.TRANSLATION_RELIABILITY_DIR;
+    let relAttempts = 0;
+    let relFailures = 0;
+    let relTokens = 0;
+    const relOutcomes = new Map<string, string[]>();
+
     describe(`${name} action stability`, () => {
         let dispatchers: Dispatcher[] = [];
         let dispatcherP: Promise<void> | undefined;
@@ -306,7 +353,31 @@ export async function defineTranslateTest(
                         }
                         try {
                             const result = await runOneStep(step, dispatcher);
-                            validateCommandResult(step, result);
+                            if (reliabilityDir !== undefined) {
+                                relAttempts++;
+                                relTokens +=
+                                    result?.tokenUsage?.total_tokens ?? 0;
+                                const signature = (result?.actions ?? [])
+                                    .map(
+                                        (a) =>
+                                            `${a.schemaName}.${a.actionName}`,
+                                    )
+                                    .join("+");
+                                const seen = relOutcomes.get(step.request);
+                                if (seen === undefined) {
+                                    relOutcomes.set(step.request, [signature]);
+                                } else {
+                                    seen.push(signature);
+                                }
+                            }
+                            try {
+                                validateCommandResult(step, result);
+                            } catch (e) {
+                                if (reliabilityDir !== undefined) {
+                                    relFailures++;
+                                }
+                                throw e;
+                            }
                         } finally {
                             if (step.skipGrammar) {
                                 await awaitCommand(
@@ -325,6 +396,16 @@ export async function defineTranslateTest(
             );
         });
         afterAll(async () => {
+            if (reliabilityDir !== undefined) {
+                writeReliabilityTally(
+                    reliabilityDir,
+                    name,
+                    relAttempts,
+                    relFailures,
+                    relOutcomes,
+                    relTokens,
+                );
+            }
             const p = dispatchers.map((d) => d.close());
             await Promise.allSettled(p);
             dispatchers = [];
@@ -440,10 +521,7 @@ function validateCommandResult(
 // trailing action is an exact duplicate of the action immediately preceding it.
 // Both actions are normalized (and their run-to-run `entities` metadata dropped,
 // as in checkPossibleMatch) before the equality check.
-function checkDuplicateOfPreviousAction(
-    actions: TypeAgentAction[],
-    i: number,
-) {
+function checkDuplicateOfPreviousAction(actions: TypeAgentAction[], i: number) {
     const normalizeForCompare = (a: TypeAgentAction) => {
         const n = structuredClone(a);
         normalizeAction(n);
