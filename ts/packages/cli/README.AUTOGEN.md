@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=97bd3b93c5b7c24baa622b664e98d638018451c1336e57fb459b10d342a30b75 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=1cbd6c9314a298299dae5b7c20926f1a0c5b0f14d7392d4315a9250bf320e8c2 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-cli — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `agent-cli` package is a command-line interface (CLI) tool for interacting with the TypeAgent system. It provides a variety of commands to facilitate the development, testing, and debugging of interactive agents that use natural language interfaces. The CLI acts as a front-end to the TypeAgent Dispatcher, enabling users to send requests, manage conversations, and test agent behaviors. It supports both interactive and non-interactive workflows, making it a versatile tool for developers working with the TypeAgent ecosystem.
+The `agent-cli` package is a command-line interface (CLI) tool for interacting with the TypeAgent system. It serves as a front-end to the TypeAgent Dispatcher, enabling developers to test, debug, and manage interactive agents that use natural language interfaces. The CLI supports both interactive and non-interactive workflows, making it a versatile tool for working with the TypeAgent ecosystem.
 
 ## What it does
 
-The `agent-cli` package provides several subcommands, each tailored to specific use cases:
+The `agent-cli` package provides several subcommands, each designed for specific use cases:
 
 - **`connect`**: The default subcommand, which starts an interactive session with the TypeAgent Dispatcher. Users can send natural language requests, receive responses, and manage conversations in real time. This mode is ideal for testing and debugging agent behavior.
 - **`run`**: Executes dispatcher commands non-interactively. This includes:
@@ -150,6 +150,6 @@ External: `@oclif/core`, `@oclif/plugin-help`, `chalk`, `debug`, `dotenv`, `html
 
 ---
 
-_Auto-generated against commit `d9ee555d43867e97462e8fa147f7ef73b8da05ec` on `2026-07-19T20:27:13.071Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

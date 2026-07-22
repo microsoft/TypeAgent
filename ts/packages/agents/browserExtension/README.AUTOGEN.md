@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=3846c3ab0fbb0da60b9177daab779a1dd5667e6ecb0c5630531542065b3ad512 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7360c8a69162ca29adfae283a00b78251c11ef4237c974de49e8a00ccf33e9a2 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/browser-extension — AI-generated documentation
@@ -12,47 +12,84 @@
 
 ## Overview
 
-The `@typeagent/browser-extension` package provides the browser extension implementation for the TypeAgent system, supporting both Chrome and Electron environments. It enables automation of browser actions, interaction with web content, and integration with the broader TypeAgent ecosystem. This package is a key component for enabling browser-based agents to perform tasks such as content discovery, indexing, and interaction.
+The `@typeagent/browser-extension` package provides the browser extension for the TypeAgent system, supporting both Chrome/Edge and Electron environments. It enables browser-based agents to perform tasks such as content discovery, indexing, and interaction with web elements. This package is a critical component for integrating browser automation into the broader TypeAgent ecosystem.
 
 ## What it does
 
-This package implements a browser extension that integrates with the TypeAgent framework. It supports the following capabilities:
+This package implements a browser extension that integrates with the TypeAgent framework to provide the following capabilities:
 
-- **Content Discovery and Indexing**: The extension includes features for automatic discovery (`autoDiscovery`) and indexing (`autoIndexing`) of web content. These features can be configured to exclude sensitive sites, adjust indexing quality, and focus on specific content types.
-- **Content Interaction**: The extension provides utilities for interacting with web elements, such as retrieving bounding boxes of interactive elements, matching elements against patterns, and checking visibility.
-- **Agent Activation**: The extension manages the activation and deactivation of site-specific agents, ensuring that the appropriate agent is enabled for the current context.
-- **Cross-Environment Support**: The extension is designed to work in both Chrome and Electron environments, with mechanisms to handle environment-specific differences, such as tab management and API availability.
-- **Integration with TypeAgent Ecosystem**: The extension communicates with other TypeAgent components, such as the dispatcher and agent server, to coordinate actions and share data.
+- **Content Discovery and Indexing**: Automates the discovery (`autoDiscovery`) and indexing (`autoIndexing`) of web content. These features can be configured to exclude sensitive sites, adjust indexing quality, and focus on specific content types.
+- **Web Element Interaction**: Includes utilities for interacting with web elements, such as retrieving bounding boxes of interactive elements, matching elements against patterns, and checking visibility.
+- **Agent Activation**: Manages the activation and deactivation of site-specific agents, ensuring the appropriate agent is enabled for the current context.
+- **Cross-Environment Compatibility**: Supports both Chrome/Edge and Electron environments, with mechanisms to handle environment-specific differences, such as tab management and API availability.
+- **Integration with TypeAgent Ecosystem**: Communicates with other TypeAgent components, such as the dispatcher and agent server, to coordinate actions and share data.
 
 The extension supports a variety of actions, including `autoDiscovery`, `autoIndexing`, and `getInteractiveElementsBoundingBoxes`. These actions are implemented in the content scripts and are triggered based on user interaction or predefined rules.
 
 ## Setup
 
-To use this package, ensure the following setup steps are completed:
+To use this package, follow these steps:
 
-1. **Environment Variables**: No specific environment variables are required for this package.
-2. **Browser Extension Installation**: The extension must be built and installed in the target browser (e.g., Chrome or Electron). Refer to the build and installation instructions in the hand-written README for details.
-3. **Dependencies**: The package relies on several internal and external dependencies, such as `@typeagent/agent-sdk`, `@mozilla/readability`, and `dompurify`. These dependencies are managed automatically during the build process.
+1. **Build the Extension**:
+
+   - Run `pnpm run build` in the package directory to build the extension. The output will be located in the `dist/extension/` folder for Chrome/Edge and `dist/electron/` for Electron.
+   - For development purposes, you can use `pnpm run dev` to build the extension in development mode.
+
+2. **Install the Extension in Chrome/Edge**:
+
+   - Enable developer mode in your browser:
+     - Open the browser and navigate to the extensions page (e.g., "Manage extensions" in Chrome/Edge).
+     - Enable the "Developer mode" toggle.
+   - Load the unpacked extension:
+     - Click "Load unpacked" on the extensions page.
+     - Select the `dist/extension` folder from the package directory.
+
+3. **Run the Extension**:
+   - Launch the browser where the extension is installed.
+   - Start the TypeAgent shell or CLI, which integrates with the extension to send commands such as opening tabs, navigating to specific pages, and interacting with web content.
+
+For more detailed instructions, refer to the hand-written README.
 
 ## Key Files
 
-The package's source code is organized into several key areas:
+The source code for this package is organized into several key areas:
 
-- **Content Scripts**:
+### Content Scripts
 
-  - [`autoDiscovery.ts`](./src/extension/contentScript/autoDiscovery.ts): Manages automatic discovery of web content, including settings management and navigation listeners.
-  - [`autoIndexing.ts`](./src/extension/contentScript/autoIndexing.ts): Handles automatic indexing of web content, with configurable settings for quality and scope.
-  - [`continuationHandler.ts`](./src/extension/contentScript/continuationHandler.ts): Manages continuation states and tab-specific data for both Chrome and Electron environments.
-  - [`domUtils.ts`](./src/extension/contentScript/domUtils.ts): Provides utility functions for DOM interaction, such as visibility checks and string matching.
-  - [`elementInteraction.ts`](./src/extension/contentScript/elementInteraction.ts): Retrieves bounding boxes of interactive elements and facilitates interaction with web content.
+1. **[autoDiscovery.ts](./src/extension/contentScript/autoDiscovery.ts)**:
 
-- **Electron-Specific Files**:
+   - Manages automatic discovery of web content.
+   - Includes settings for discovery mode, sensitive site exclusion, and navigation listeners.
 
-  - [`agentActivation.ts`](./src/electron/agentActivation.ts): Handles the activation and deactivation of site agents in the Electron environment.
-  - [`manifest.json`](./src/electron/manifest.json): Defines the extension's manifest for Electron, including content scripts and permissions.
+2. **[autoIndexing.ts](./src/extension/contentScript/autoIndexing.ts)**:
 
-- **Configuration**:
-  - [`tsconfig.json`](./src/electron/tsconfig.json): TypeScript configuration for the Electron-specific code.
+   - Handles automatic indexing of web content.
+   - Provides configurable settings for indexing quality and scope.
+
+3. **[continuationHandler.ts](./src/extension/contentScript/continuationHandler.ts)**:
+
+   - Manages continuation states and tab-specific data for both Chrome and Electron environments.
+
+4. **[domUtils.ts](./src/extension/contentScript/domUtils.ts)**:
+
+   - Provides utility functions for DOM interaction, such as visibility checks and string matching.
+
+5. **[elementInteraction.ts](./src/extension/contentScript/elementInteraction.ts)**:
+   - Retrieves bounding boxes of interactive elements and facilitates interaction with web content.
+
+### Electron-Specific Files
+
+1. **[agentActivation.ts](./src/electron/agentActivation.ts)**:
+
+   - Handles the activation and deactivation of site agents in the Electron environment.
+
+2. **[manifest.json](./src/electron/manifest.json)**:
+   - Defines the extension's manifest for Electron, including content scripts and permissions.
+
+### Configuration
+
+1. **[tsconfig.json](./src/electron/tsconfig.json)**:
+   - TypeScript configuration for the Electron-specific code.
 
 ## How to extend
 
@@ -71,7 +108,7 @@ To extend the functionality of this package, follow these steps:
 3. **Test Your Changes**:
 
    - Add unit tests for new functionality where applicable.
-   - Test the extension in both Chrome and Electron environments to ensure compatibility.
+   - Test the extension in both Chrome/Edge and Electron environments to ensure compatibility.
 
 4. **Update Documentation**:
    - Document any new actions or features in the hand-written README or other relevant documentation files.
@@ -113,6 +150,6 @@ External: `@mozilla/readability`, `@popperjs/core`, `bootstrap`, `cytoscape`, `c
 
 ---
 
-_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/browser-extension docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/browser-extension docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
