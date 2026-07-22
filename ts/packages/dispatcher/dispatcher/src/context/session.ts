@@ -97,6 +97,13 @@ export type DispatcherConfig = {
         stream: boolean;
         promptConfig: {
             additionalInstructions: boolean;
+            // Include the structured action(s) recently executed in the chat
+            // history in the translation prompt, so the model can see which
+            // requests were already carried out and avoid re-issuing them.
+            recentActions: boolean;
+            // Max number of recently executed actions to include (most recent
+            // ones), 0-100 (0 disables the feature).
+            recentActionsLimit: number;
         };
         switch: {
             fixed: string; // fixed first schema to use, ignore embedding if set
@@ -381,10 +388,16 @@ const defaultSessionConfig: SessionConfig = {
     request: DispatcherName,
     translation: {
         enabled: true,
-        model: "",
+        // Default translation model. "GPT_4_1" resolves to the gpt-4.1
+        // deployment in both config.local.yaml and the CI build-pipeline-kv
+        // config, keeping local dev and CI on the same model. Override per
+        // session with `@config translation model <name>`.
+        model: "GPT_4_1",
         stream: true,
         promptConfig: {
             additionalInstructions: true,
+            recentActions: true,
+            recentActionsLimit: 3,
         },
         switch: {
             fixed: "",

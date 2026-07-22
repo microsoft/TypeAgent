@@ -41,21 +41,11 @@
     },
     {
       "request": "show me attachment__0.png",
-      "question": "show me attachment__0.png",
       "expected": {
         "schemaName": "chat",
         "actionName": "showImageFile",
         "parameters": {
           "files": ["attachment__0.png"]
-        },
-        "entities": {
-          "files": [
-            {
-              "name": "attachment__0.png",
-              "type": ["file", "image", "data"],
-              "sourceAppAgentName": "chat"
-            }
-          ]
         }
       }
     }

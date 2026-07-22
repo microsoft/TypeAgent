@@ -2,7 +2,7 @@
   "emojiChar": "🎧",
   "description": "Agent to play music",
   "schema": {
-    "description": "Music Player agent that lets you search for, play and control music.",
+    "description": "Music Player agent to play and control music. Use it to play, start, put on, queue, or listen to a specific song, artist, album, genre, or playlist (named or described by mood, e.g. 'chill music for studying'); control playback (pause, resume, skip/next, previous, shuffle, repeat, volume); choose the playback device; and browse, search, or manage playlists and favorites.",
     "originalSchemaFile": "./playerSchema.ts",
     "schemaFile": "../../dist/agent/playerSchema.pas.json",
     "grammarFile": "../../dist/agent/playerSchema.ag.json",
