@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=cdde40bd7812a7315b84d1a8217623e31504146cd8e2831dc52f1cee3b2fdcc5 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6a4d71a1c1615e3e46ffa890b4f5709cb10d4bdebf113480e2f93c8375f3e4a8 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # browser-typeagent — AI-generated documentation
@@ -16,7 +16,7 @@ The `browser-typeagent` package is a TypeAgent application agent designed for br
 
 ## What it does
 
-The `browser-typeagent` package provides a comprehensive set of browser automation capabilities, enabling users to interact with web pages and manage browser sessions programmatically. Key functionalities include:
+The `browser-typeagent` package provides a wide range of browser automation capabilities, enabling users to interact with web pages and manage browser sessions programmatically. Key functionalities include:
 
 - **Web Navigation**: Actions such as `openWebPage`, `goBack`, `goForward`, and `reloadPage` allow users to navigate between web pages and control browser tabs.
 - **User Interaction**: Users can interact with web content using actions like `clickOn`, `followLinkByText`, `scrollDown`, and `scrollUp`.
@@ -87,8 +87,8 @@ The `browser-typeagent` package is organized into several key files, each respon
   - [src/agent/browserSchema.agr](./src/agent/browserSchema.agr): Contains the action grammar for the browser agent.
 
 - **Extension Components**:
-  - [src/extension/contentScript/index.ts](./src/extension/contentScript/index.ts): Entry point for the browser extension's content script.
-  - [src/extension/serviceWorker/index.ts](./src/extension/serviceWorker/index.ts): Manages the service worker for the browser extension.
+  - src/extension/contentScript/index.ts: Entry point for the browser extension's content script.
+  - src/extension/serviceWorker/index.ts: Manages the service worker for the browser extension.
 
 ## How to extend
 
@@ -123,11 +123,7 @@ By following these steps, you can enhance the `browser-typeagent` package to sup
 
 - `./agent/manifest` → [./src/agent/manifest.json](./src/agent/manifest.json)
 - `./agent/handlers` → [./dist/agent/browserActionHandler.mjs](./dist/agent/browserActionHandler.mjs)
-- `./agent/types` → [./dist/common/browserControl.mjs](./dist/common/browserControl.mjs)
 - `./agent/indexing` → [./dist/agent/indexing/browserIndexingService.js](./dist/agent/indexing/browserIndexingService.js)
-- `./contentScriptRpc/types` → [./dist/common/contentScriptRpc/types.mjs](./dist/common/contentScriptRpc/types.mjs)
-- `./contentScriptRpc/client` → [./dist/common/contentScriptRpc/client.mjs](./dist/common/contentScriptRpc/client.mjs)
-- `./htmlReducer` → [./dist/common/crossContextHtmlReducer.js](./dist/common/crossContextHtmlReducer.js)
 
 ### Dependencies
 
@@ -142,6 +138,7 @@ Workspace:
 - [@typeagent/agent-server-client](../../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../../packages/agentServer/protocol/README.md)
 - [@typeagent/aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/browser-control-rpc](../../../packages/agents/browserControlRpc/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
 - [@typeagent/config](../../../packages/config/README.md)
 - [@typeagent/dispatcher-rpc](../../../packages/dispatcher/rpc/README.md)
@@ -158,15 +155,14 @@ Workspace:
 - [website-memory](../../../packages/memory/website/README.md)
 - [websocket-channel-server](../../../packages/utils/webSocketChannelServer/README.md)
 
-External: `@anthropic-ai/claude-agent-sdk`, `@modelcontextprotocol/sdk`, `@mozilla/readability`, `@popperjs/core`, `bootstrap`, `chalk`, `cheerio`, `cytoscape`, `cytoscape-dagre`, `dagre`, `debug`, `dompurify`, `express`, `express-rate-limit`, `graphology`, `graphology-communities-louvain`, `graphology-layout`, `graphology-layout-forceatlas2`, `graphology-layout-noverlap`, `graphology-types`
+External: `@anthropic-ai/claude-agent-sdk`, `@modelcontextprotocol/sdk`, `chalk`, `cheerio`, `debug`, `dompurify`, `express`, `express-rate-limit`, `graphology`, `graphology-communities-louvain`, `graphology-layout`, `graphology-layout-forceatlas2`, `graphology-layout-noverlap`, `graphology-types`, `html-to-text`, `jsdom`, `jsonpath`, `pdfjs-dist`, `puppeteer`, `puppeteer-extra`
 
-_…and 18 more not shown._
+_…and 10 more not shown._
 
 ### Used by
 
 - [agent-shell](../../../packages/shell/README.md)
 - [default-agent-provider](../../../packages/defaultAgentProvider/README.md)
-- utility-typeagent
 
 ### Files of interest
 
@@ -175,12 +171,12 @@ _…and 18 more not shown._
 - [./src/agent/browserSchema.agr](./src/agent/browserSchema.agr)
 - [./src/agent/indexing/index.mts](./src/agent/indexing/index.mts)
 - [./src/agent/webFlows/index.mts](./src/agent/webFlows/index.mts)
-- [./src/extension/contentScript/continuationHandler.ts](./src/extension/contentScript/continuationHandler.ts)
-- [./src/extension/contentScript/index.ts](./src/extension/contentScript/index.ts)
-- [./src/extension/contentScript/recording/index.ts](./src/extension/contentScript/recording/index.ts)
-- [./src/extension/serviceWorker/index.ts](./src/extension/serviceWorker/index.ts)
-- [./src/extension/webagent/crossword/crosswordSchema.agr](./src/extension/webagent/crossword/crosswordSchema.agr)
-- _…and 294 more under `./src/`._
+- [./src/puppeteer/index.mts](./src/puppeteer/index.mts)
+- [./src/agent/agentServiceHandlers.mts](./src/agent/agentServiceHandlers.mts)
+- [./src/agent/agentWebSocketServer.mts](./src/agent/agentWebSocketServer.mts)
+- [./src/agent/browserActionHandler.mts](./src/agent/browserActionHandler.mts)
+- [./src/agent/browserActions.mts](./src/agent/browserActions.mts)
+- _…and 161 more under `./src/`._
 
 ### Environment variables
 
@@ -191,6 +187,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `d9ee555d43867e97462e8fa147f7ef73b8da05ec` on `2026-07-19T20:27:13.071Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

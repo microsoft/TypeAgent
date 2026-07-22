@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7553eb832fec82464301785691d6822d248e5ac63cf2c00bb6e9e03627b7d0d0 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=58b27be8563c63c5d4cc97d6b8b26866506d2f2085d8be3b983fe5df1705f70e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent-studio — AI-generated documentation
@@ -12,25 +12,25 @@
 
 ## Overview
 
-The `typeagent-studio` package is a TypeScript library that provides the developer experience for working with TypeAgent agents within Visual Studio Code. It offers tools for authoring, debugging, and optimizing agents, with features such as schema and grammar tuning, compare-and-replay regression detection, trace investigation, and live observation. This package is designed to support developers in creating and refining TypeAgent agents efficiently.
+The `typeagent-studio` package is a TypeScript library that powers the Visual Studio Code extension for working with TypeAgent agents. It provides a developer experience tailored to agent authoring, schema and grammar tuning, regression testing through compare-and-replay, trace investigation, and live observation. This package is a critical tool for developers building and refining TypeAgent agents, offering both command-based workflows and rich visual interfaces.
 
 ## What it does
 
-The `typeagent-studio` package integrates with Visual Studio Code to deliver a comprehensive set of tools for managing and debugging TypeAgent agents. These tools are accessible through commands and views, enabling developers to perform tasks such as onboarding, sandbox management, corpus replay, and collision detection.
+The `typeagent-studio` package integrates deeply with Visual Studio Code to provide a suite of tools for managing and debugging TypeAgent agents. Its functionality is organized into commands, views, and status indicators, enabling developers to efficiently onboard, test, and optimize agents.
 
 ### Commands
 
-The package provides a wide range of commands accessible via the VS Code command palette. These commands are grouped into several categories:
+The package exposes a comprehensive set of commands through the VS Code command palette. These commands are grouped into several categories:
 
 - **Onboarding and Sandbox Management**:
 
   - Commands like `TypeAgent Studio: Start onboarding session`, `TypeAgent Studio: Run onboarding phase`, and `TypeAgent Studio: Advance onboarding phase` guide developers through the onboarding process for new agents.
-  - Sandbox-related commands such as `TypeAgent Studio: Start sandbox`, `TypeAgent Studio: Stop sandbox`, and `TypeAgent Studio: Refresh sandboxes` allow developers to manage and interact with sandboxes for testing and debugging.
+  - Sandbox-related commands such as `TypeAgent Studio: Start sandbox`, `TypeAgent Studio: Stop sandbox`, and `TypeAgent Studio: Refresh sandboxes` allow developers to manage isolated environments for testing and debugging.
 
 - **Agent and Corpus Management**:
 
   - Commands like `TypeAgent Studio: Install latest onboarding session to sandbox` and `TypeAgent Studio: Refresh corpora` help manage agents and their associated corpora.
-  - The `TypeAgent Studio: Replay corpus` command enables developers to replay a corpus through the `replayCorpus()` engine, facilitating regression testing and comparison of agent behavior across versions.
+  - The `TypeAgent Studio: Replay corpus` command enables regression testing by replaying a corpus through the `replayCorpus()` engine, comparing agent behavior across versions.
 
 - **Health and Diagnostics**:
   - Commands such as `TypeAgent Studio: Check packaging health gate` and `TypeAgent Studio: Enforce packaging health gate` provide insights into the health and readiness of agents.
@@ -62,6 +62,10 @@ The package introduces several specialized views within the **TypeAgent Studio**
 5. **Health Status Bar**:
    - Summarizes the health of all agents loaded into running sandboxes.
    - Offers a quick visual indicator of the overall system health.
+
+### Replay and Compare
+
+The package supports regression testing through its replay and compare functionality. Developers can replay a corpus through the `replayCorpus()` engine, which evaluates each utterance against two versions of an agent and produces a detailed comparison report. This feature is accessible via the Corpora view and provides actionable insights into changes in agent behavior.
 
 ## Setup
 
@@ -172,6 +176,6 @@ External: `debug`, `ws`
 
 ---
 
-_Auto-generated against commit `38f6b8e5cb0688da34e930559899bb2ea7bb0aca` on `2026-07-21T01:16:36.018Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent-studio docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent-studio docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

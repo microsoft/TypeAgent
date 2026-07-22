@@ -45,7 +45,7 @@
     "cytoscape-dagre": "^2.5.0",
     "dagre": "^0.8.5",
     "debug": "^4.4.0",
-    "dompurify": "^3.4.11",
+    "dompurify": "^3.4.12",
     "html-to-text": "^9.0.5",
     "markdown-it": "^14.2.0",
     "prismjs": "^1.30.0"
