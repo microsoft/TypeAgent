@@ -510,6 +510,50 @@ export async function createSharedDispatcher(
         }
     };
 
+    // A request stalled waiting on a client interaction (e.g. the reasoning
+    // loop's ask_user / ask_user_form, blocked for an answer the user never
+    // gave) holds the command lock and keeps the reasoning session from going
+    // idle, so nothing else in the queue can run until the interaction /
+    // reasoning-loop timeout (up to 20 min). Reject its pending interaction(s)
+    // with an AbortError (which command.ts classifies as "cancelled"), tell
+    // clients to drop the now-stale prompt card, then cancel + abort the
+    // request so it unwinds immediately. Returns true if a blocked running
+    // request was superseded.
+    const supersedeStalledInteraction = (
+        reason: QueueCancelReason,
+        message: string,
+    ): boolean => {
+        const head = context.requestQueue.getSnapshot().running;
+        if (!head || head.blockedOn !== "interaction") {
+            return false;
+        }
+        const rid = head.requestId;
+        const abortErr = new Error(message);
+        abortErr.name = "AbortError";
+        try {
+            for (const pend of pendingInteractions
+                .getPending()
+                .filter((r) => r.requestId?.requestId === rid)) {
+                if (pendingInteractions.cancel(pend.interactionId, abortErr)) {
+                    broadcast("interactionCancelled", undefined, (cio) =>
+                        cio.interactionCancelled(pend.interactionId),
+                    );
+                    context.displayLog.logInteractionCancelled(
+                        pend.interactionId,
+                    );
+                }
+            }
+            context.displayLog.saveQueued();
+        } catch (e) {
+            debugCommand(
+                `supersedeStalledInteraction: failed to cancel pending interactions: ${e}`,
+            );
+        }
+        context.requestQueue.cancelRunning(rid, reason);
+        context.activeRequests.get(rid)?.abort();
+        return true;
+    };
+
     const shared: SharedDispatcher = {
         get clientCount() {
             return clients.size;
@@ -565,41 +609,14 @@ export async function createSharedDispatcher(
                                     "no_clients",
                                 );
                             }
-                            const head = snap.running;
-                            if (head && head.blockedOn === "interaction") {
-                                const rid = head.requestId;
-                                // Cancel pending interactions for this rid so
-                                // the awaiting deferred rejects with AbortError
-                                // (which command.ts classifies as cancelled).
-                                const abortErr = new Error(
-                                    "Cancelled by server: no clients connected",
-                                );
-                                abortErr.name = "AbortError";
-                                try {
-                                    for (const pend of pendingInteractions
-                                        .getPending()
-                                        .filter(
-                                            (r) =>
-                                                r.requestId?.requestId === rid,
-                                        )) {
-                                        pendingInteractions.cancel(
-                                            pend.interactionId,
-                                            abortErr,
-                                        );
-                                    }
-                                } catch (e) {
-                                    debugCommand(
-                                        `no_clients: failed to cancel pending interactions: ${e}`,
-                                    );
-                                }
-                                context.requestQueue.cancelRunning(
-                                    rid,
-                                    "no_clients",
-                                );
-                                const controller =
-                                    context.activeRequests.get(rid);
-                                controller?.abort();
-                            }
+                            // Unwind a running request blocked on a clientIO
+                            // interaction (it would otherwise stall until the
+                            // interaction / reasoning-loop timeout waiting for
+                            // a non-existent client).
+                            supersedeStalledInteraction(
+                                "no_clients",
+                                "Cancelled by server: no clients connected",
+                            );
                         }, noClientsGraceMs);
                         noClientsGraceTimer.unref?.();
                     }
@@ -627,6 +644,21 @@ export async function createSharedDispatcher(
                 interactionId: string,
             ): void => {
                 shared.cancelInteraction(interactionId);
+            };
+
+            // A new request supersedes a request that is stalled waiting on a
+            // client interaction: the user chose to move on instead of
+            // answering the pending prompt, so cancel the stalled request and
+            // its interaction before enqueuing the new one. Without this the
+            // new request queues behind a request that only unblocks on the
+            // (up to 20 min) interaction / reasoning-loop timeout.
+            const baseSubmitCommand = dispatcher.submitCommand.bind(dispatcher);
+            dispatcher.submitCommand = async (...args) => {
+                supersedeStalledInteraction(
+                    "user",
+                    "Superseded by a new request",
+                );
+                return baseSubmitCommand(...args);
             };
 
             return dispatcher;
