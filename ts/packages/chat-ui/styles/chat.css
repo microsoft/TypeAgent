@@ -1753,16 +1753,20 @@ table.sc-kv-table.sc-card-fields {
 }
 
 /* Logged tool calls inside a reasoning step. Every tool call (single or a folded
-   run "Tool: <name> xN") renders as a clickable line (no disclosure widget) whose
-   tool name is inline code; clicking it reveals only that call's own JSON (same
-   look as the clickable action JSON view), independent of the enclosing action's
-   JSON. */
+   run "Tool: <name> xN") renders as a native <details> whose <summary> is a
+   clickable line with the tool name as inline code; expanding it reveals only
+   that call's own JSON (same look as the clickable action JSON view), independent
+   of the enclosing action's JSON. The disclosure marker is hidden so it reads as
+   a plain line. */
 .reasoning-tool-call {
   margin: 2px 0;
 }
 .reasoning-tool-call-summary {
   cursor: pointer;
-  display: inline-block;
+  list-style: none;
+}
+.reasoning-tool-call-summary::-webkit-details-marker {
+  display: none;
 }
 .reasoning-tool-call-summary strong {
   font-weight: 600;
@@ -1791,9 +1795,6 @@ table.sc-kv-table.sc-card-fields {
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
   line-height: 1.4;
-}
-.reasoning-tool-call-json[hidden] {
-  display: none;
 }
 
 /* =========================================================================

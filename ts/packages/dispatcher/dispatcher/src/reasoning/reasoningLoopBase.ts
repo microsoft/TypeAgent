@@ -163,11 +163,18 @@ export function formatToolResultDisplay(
     return `${label} \`${preview || "(empty)"}\``;
 }
 
-export function formatThinkingDisplay(thinkingText: string): string {
-    const escaped = thinkingText
+// Escape the three HTML-significant characters so text renders literally inside
+// our generated markup. Shared by the thinking, tool-call summary, and tool-call
+// JSON builders below.
+function escapeHtmlText(text: string): string {
+    return text
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
+}
+
+export function formatThinkingDisplay(thinkingText: string): string {
+    const escaped = escapeHtmlText(thinkingText);
     return [
         `<details class="reasoning-thinking" open>`,
         `<summary>Thinking</summary>`,
@@ -189,30 +196,21 @@ export interface ToolCallDetail {
 // comes from formatToolCallDisplay (our own strings, not raw user text), so
 // escaping first and then applying these two rules is safe.
 function inlineMarkdownToHtml(text: string): string {
-    const escaped = text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    return escaped
+    return escapeHtmlText(text)
         .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
         .replace(/`(.+?)`/g, "<code>$1</code>");
 }
 
-function escapeHtmlText(text: string): string {
-    return text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-}
-
 /**
- * Render a logged tool call (single or folded) as a click-to-expand block. The
- * summary shows the display line (tool name as inline code, plus "xN" when
- * folded); clicking it reveals only that call's own JSON - a single object for
- * one call, an array for a folded run. The <pre> starts hidden and is toggled by
- * chat-ui's delegated click handler (shared by the Electron and VS Code shells),
- * so there is no native <details> disclosure widget and the JSON is never hoisted
- * into the enclosing action's JSON view.
+ * Render a logged tool call (single or folded) as a native <details> block that
+ * starts collapsed. The <summary> shows the display line (tool name as inline
+ * code, plus "xN" when folded); expanding it reveals only that call's own JSON -
+ * a single object for one call, an array for a folded run. Using <details> gives
+ * click and keyboard toggling for free and matches the sibling "Thinking" block;
+ * chat-ui only syntax-highlights the JSON the first time the block is opened, and
+ * the disclosure marker is hidden in CSS. Because the block is self-contained
+ * HTML starting with "<", splitActionContent leaves it intact, so the JSON stays
+ * inline and is never hoisted into the enclosing action's JSON view.
  */
 export function formatToolRun(
     displayLine: string,
@@ -235,14 +233,14 @@ export function formatToolRun(
         );
     }
     return [
-        `<div class="reasoning-tool-call">`,
-        `<span class="reasoning-tool-call-summary">${inlineMarkdownToHtml(
+        `<details class="reasoning-tool-call">`,
+        `<summary class="reasoning-tool-call-summary">${inlineMarkdownToHtml(
             displayLine,
-        )}</span>`,
-        `<pre class="chat-json reasoning-tool-call-json" hidden>${escapeHtmlText(
+        )}</summary>`,
+        `<pre class="chat-json reasoning-tool-call-json">${escapeHtmlText(
             json,
         )}</pre>`,
-        `</div>`,
+        `</details>`,
     ].join("");
 }
 

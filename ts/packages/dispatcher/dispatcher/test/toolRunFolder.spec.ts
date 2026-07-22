@@ -21,26 +21,26 @@ function makeFolder(
     return { folder, emitted };
 }
 
-// Every tool call (single or folded) renders as a <div class="reasoning-tool-call">
-// with a clickable summary and a hidden <pre> holding that call's own JSON (an
-// object for one call, an array for a folded run). Parse both out for assertions.
+// Every tool call (single or folded) renders as a native
+// <details class="reasoning-tool-call"> with a <summary> and a <pre> holding that
+// call's own JSON (an object for one call, an array for a folded run). Parse both
+// out for assertions.
 function parseToolRun(content: string): {
     summary: string;
     json: unknown;
     tools: string[];
 } {
-    expect(content).toContain('<div class="reasoning-tool-call">');
-    expect(content).toContain('<span class="reasoning-tool-call-summary">');
+    expect(content).toContain('<details class="reasoning-tool-call">');
+    expect(content).toContain('<summary class="reasoning-tool-call-summary">');
     expect(content).toContain(
-        '<pre class="chat-json reasoning-tool-call-json" hidden>',
+        '<pre class="chat-json reasoning-tool-call-json">',
     );
     const summary =
-        content.match(/reasoning-tool-call-summary">([\s\S]*?)<\/span>/)?.[1] ??
-        "";
-    const raw =
         content.match(
-            /reasoning-tool-call-json" hidden>([\s\S]*?)<\/pre>/,
+            /reasoning-tool-call-summary">([\s\S]*?)<\/summary>/,
         )?.[1] ?? "";
+    const raw =
+        content.match(/reasoning-tool-call-json">([\s\S]*?)<\/pre>/)?.[1] ?? "";
     const json = JSON.parse(
         raw.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"),
     );
@@ -177,15 +177,15 @@ describe("formatToolRun", () => {
         const html = formatToolRun("**Tool:** `get_conversation_info`", [
             { tool: "get_conversation_info", args: { limit: 1 } },
         ]);
-        expect(html).toContain('<div class="reasoning-tool-call">');
+        expect(html).toContain('<details class="reasoning-tool-call">');
         // Tool name becomes inline <code> (highlighted chip); no "xN" for one call.
         expect(html).toContain(
-            '<span class="reasoning-tool-call-summary"><strong>Tool:</strong>',
+            '<summary class="reasoning-tool-call-summary"><strong>Tool:</strong>',
         );
         expect(html).toContain("<code>get_conversation_info</code>");
         expect(html).not.toContain(" x1");
         expect(html).toContain(
-            '<pre class="chat-json reasoning-tool-call-json" hidden>',
+            '<pre class="chat-json reasoning-tool-call-json">',
         );
         // Only the relevant JSON for this one call — a lone object.
         expect(parseToolRun(html).json).toEqual({

@@ -973,43 +973,39 @@ export class ChatPanel {
     }
 
     /**
-     * Wire a delegated click handler for logged tool-call blocks. The reasoning
-     * engine renders every tool call (single or folded) as a
-     * <div class="reasoning-tool-call"> with a clickable summary and a hidden
-     * <pre> holding only that call's own JSON (an object for one call, an array
-     * for a folded run). Clicking the summary toggles that <pre>; the JSON is
-     * syntax-highlighted the first time it is shown so it reads like the clickable
-     * action JSON view (same highlightJson tokens). Each block owns its JSON
-     * inline, independent of the enclosing action's JSON view. Shared by the
-     * Electron and VS Code shells (both host ChatPanel).
+     * Lazily syntax-highlight a logged tool-call block the first time it opens.
+     * The reasoning engine renders every tool call (single or folded) as a native
+     * <details class="reasoning-tool-call"> holding only that call's own JSON (an
+     * object for one call, an array for a folded run). The <details>/<summary>
+     * handles show/hide plus keyboard toggling on its own; we only highlight the
+     * <pre> once, when it first becomes visible, so it reads like the clickable
+     * action JSON view (same highlightJson tokens). The `toggle` event does not
+     * bubble, so we listen in the capture phase to keep a single delegated
+     * listener. Each block owns its JSON inline, independent of the enclosing
+     * action's JSON view. Shared by the Electron and VS Code shells.
      */
     private setupReasoningToolCall() {
-        this.messageDiv.addEventListener("click", (e) => {
-            const summary = (e.target as HTMLElement)?.closest?.(
-                ".reasoning-tool-call-summary",
-            );
-            if (!summary) return;
-            const pre = summary.parentElement?.querySelector<HTMLElement>(
-                "pre.reasoning-tool-call-json",
-            );
-            if (!pre) return;
-            if (pre.hasAttribute("hidden")) {
-                pre.removeAttribute("hidden");
-                summary.setAttribute("aria-expanded", "true");
-                // Highlight once: the <pre> starts as raw (escaped) JSON text;
-                // its textContent is the un-escaped JSON, which highlightJson
-                // re-escapes.
-                if (pre.dataset.highlighted !== "true") {
-                    pre.innerHTML = sanitize(
-                        highlightJson(pre.textContent ?? ""),
-                    );
-                    pre.dataset.highlighted = "true";
+        this.messageDiv.addEventListener(
+            "toggle",
+            (e) => {
+                const details = e.target as HTMLElement | null;
+                if (
+                    !details?.classList?.contains("reasoning-tool-call") ||
+                    !(details as HTMLDetailsElement).open
+                ) {
+                    return;
                 }
-            } else {
-                pre.setAttribute("hidden", "");
-                summary.setAttribute("aria-expanded", "false");
-            }
-        });
+                const pre = details.querySelector<HTMLElement>(
+                    "pre.reasoning-tool-call-json",
+                );
+                if (!pre || pre.dataset.highlighted === "true") return;
+                // The <pre> starts as raw (escaped) JSON text; its textContent is
+                // the un-escaped JSON, which highlightJson re-escapes.
+                pre.innerHTML = sanitize(highlightJson(pre.textContent ?? ""));
+                pre.dataset.highlighted = "true";
+            },
+            true,
+        );
     }
 
     /**

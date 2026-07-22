@@ -836,17 +836,22 @@ details.reasoning-thinking pre {
 }
 
 /* Logged tool calls in a reasoning step. Every tool call (single or a folded
-   run) renders as a clickable "Tool: <name> xN" line (no disclosure widget); the
-   tool name renders as an inline-code chip and clicking the line reveals only
-   that call's own JSON (like the action JSON view). */
+   run) renders as a native <details> whose <summary> is a clickable
+   "Tool: <name> xN" line; the tool name renders as an inline-code chip and
+   expanding the line reveals only that call's own JSON (like the action JSON
+   view). The disclosure marker is hidden so it reads as a plain line. */
 .reasoning-tool-call {
   margin: 4px 0;
 }
 
 .reasoning-tool-call-summary {
   cursor: pointer;
-  display: inline-block;
+  list-style: none;
   user-select: none;
+}
+
+.reasoning-tool-call-summary::-webkit-details-marker {
+  display: none;
 }
 
 .reasoning-tool-call-summary code {
@@ -870,10 +875,6 @@ details.reasoning-thinking pre {
   overflow-y: auto;
   font-family: monospace;
   font-size: 0.9em;
-}
-
-.reasoning-tool-call-json[hidden] {
-  display: none;
 }
 
 // Panel below an agent message that shows the action JSON when the
