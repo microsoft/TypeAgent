@@ -741,6 +741,23 @@ async function fetchWithPool(
             continue;
         }
 
+        // callFetch can resolve to `undefined` (not only throw) on a dropped
+        // connection; the single-endpoint fetchWithRetry path guards this
+        // explicitly (throwing "fetch: No response"). Without the same guard
+        // here, `response.status` below would throw a raw TypeError ("Cannot
+        // read properties of undefined (reading 'status')") that
+        // isTransientRequestError does NOT match, so it would surface as a hard
+        // failure instead of rotating to the next pool member.
+        // NOTE: this is the suspected (not yet stack-confirmed) source of a rare
+        // intermittent "reading 'status'" failure seen in the translation
+        // reliability tests. If that error recurs, log `response`/`.stack` here
+        // to confirm this is the site.
+        if (response === undefined) {
+            markTransientFailure(member);
+            lastError = error("fetch error: No response");
+            continue;
+        }
+
         if (response.status === 200 || response.status === 201) {
             markSuccess(member);
             return success(response);
