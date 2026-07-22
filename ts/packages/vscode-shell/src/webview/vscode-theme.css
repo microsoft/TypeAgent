@@ -342,28 +342,20 @@
   overflow-y: auto;
 }
 
-/* 5. Reasoning "Thinking" is prose, not code. The engine emits it as
-      <details class="reasoning-thinking"><summary>Thinking</summary>
-      <pre>...</pre></details> (dispatcher reasoning/copilot.ts) and the
-      base leaves the <pre> at the UA `white-space: pre` default, so long
-      lines scroll. Group it into a subtle box and wrap the text (more
-      specific than rule 4, so wrapping wins over the code-scroll rule). */
+/* 5. Reasoning "Thinking" box: the shared chat-ui base (chat.css) owns the
+      box, padding and prose wrapping (so the Electron shell gets them too).
+      Here we (a) theme the border/summary/font to match VS Code, and
+      (b) re-assert the prose wrapping on the <pre> at a higher specificity
+      than rule 4 above, so the reasoning text wraps instead of inheriting the
+      code-block horizontal scroll. */
 .chat-message-content .reasoning-thinking {
-  margin: 2px 0;
-  border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.25));
-  border-radius: 6px;
-  overflow: hidden;
+  border-color: var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.25));
 }
 .chat-message-content .reasoning-thinking > summary {
-  padding: 3px 8px;
-  cursor: pointer;
-  font-size: 12px;
   color: var(--vscode-descriptionForeground, gray);
   background-color: rgba(127, 127, 127, 0.06);
 }
 .chat-message-content .reasoning-thinking > pre {
-  margin: 0;
-  padding: 8px;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-x: hidden;
@@ -374,8 +366,6 @@
     "Courier New",
     monospace
   );
-  font-size: 12px;
-  line-height: 1.4;
 }
 
 /* 5b. Logged tool calls in a reasoning step. Every tool call (single or a folded
@@ -424,6 +414,27 @@
 .chat-message-content pre::-webkit-scrollbar-track,
 .chat-message-details pre::-webkit-scrollbar-track {
   background-color: transparent;
+}
+
+/* Standalone "open in new window" page (a movable VS Code editor panel; see
+   webview/messageWindow.ts). This host is the only one that renders the page,
+   so its layout lives here rather than in chat-ui's shared stylesheet. Reuses
+   .chat-message-content typography but flattens the bubble chrome (shadow +
+   rounding) into a centered, readable column. */
+.chat-message-window-page {
+  box-shadow: none;
+  border-radius: 0;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px 20px;
+}
+/* The page is a standalone scrollable document; the chat body's fixed-height,
+   overflow-hidden flex layout doesn't apply here, so restore normal scrolling. */
+body.chat-message-window-standalone {
+  height: auto;
+  min-height: 100vh;
+  overflow: auto;
+  display: block;
 }
 
 /* ── In-webview camera capture overlay (vscode-shell only) ──────────

@@ -1032,6 +1032,44 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+/* Markdown typography inside a message. Some hosts (the vscode-shell) reset
+   element margins/padding globally (media/chat.css `* {}`), which strips the
+   UA list indent and heading spacing, so set them here (shared, so the
+   Electron shell stays consistent too). Markers sit at the paragraph's left
+   edge (list-style-position: inside) so bullets/numbers line up with the text
+   rather than hanging into - and getting clipped by - the bubble padding.
+   Scoped to classless (Markdown) lists so structured-content lists (.sc-list,
+   which owns its own indent) are left alone. */
+.chat-message-content ul:not([class]),
+.chat-message-content ol:not([class]) {
+  margin: 0.4em 0;
+  padding-left: 0;
+  list-style-position: inside;
+}
+.chat-message-content ul:not([class]) > li,
+.chat-message-content ol:not([class]) > li {
+  margin: 0.15em 0;
+}
+/* Loose lists wrap each item's text in a <p>; keep it on the marker's line. */
+.chat-message-content ul:not([class]) > li > p,
+.chat-message-content ol:not([class]) > li > p {
+  display: inline;
+  margin: 0;
+}
+.chat-message-content h1,
+.chat-message-content h2,
+.chat-message-content h3,
+.chat-message-content h4,
+.chat-message-content h5,
+.chat-message-content h6 {
+  margin: 0.9em 0 0.3em;
+  line-height: 1.3;
+}
+/* No leading gap when a heading opens the message. */
+.chat-message-content > :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+
 .chat-message-kind-status {
   font-style: italic;
   color: grey;
@@ -1684,6 +1722,45 @@ table.sc-kv-table.sc-card-fields {
   margin-left: 6px;
 }
 
+/* Reasoning "Thinking" block (shared). The reasoning engine emits
+   <details class="reasoning-thinking" open><summary>Thinking</summary>
+   <pre>...</pre></details> (dispatcher reasoning/*.ts). Group it into a
+   subtle box and wrap the prose (it is prose, not code) with room so wrapped
+   bullet/list lines are not clipped against the border. chat-ui owns this
+   default structure + padding; hosts (the VS Code theme overlay, the Electron
+   shell) override the colors/font. Completed blocks are collapsed in JS
+   (AgentMessageContainer.collapseReasoning drops the `open` attribute). */
+.reasoning-thinking {
+  margin: 4px 0;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.reasoning-thinking > summary {
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #7a7a7a;
+  background-color: rgba(127, 127, 127, 0.08);
+  user-select: none;
+}
+.reasoning-thinking > pre {
+  margin: 0;
+  padding: 10px 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: hidden;
+  max-height: none;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Gap (a blank line) that separates a reasoning answer (prose) from the
+   "Thinking"/tool trail above it. */
+.chat-reasoning-answer {
+  margin-top: 18px;
+}
+
 /* Clickable timestamp to toggle action details */
 .chat-timestamp-toggle {
   cursor: pointer;
@@ -1907,6 +1984,11 @@ table.sc-kv-table.sc-card-fields {
    lighter mid-tones. */
 .chat-message-status-rail[data-status="running"] {
   background: #70b0e0;
+}
+/* Reasoning requests read as reasoning (light purple) rather than a generic
+   running request (blue). */
+.chat-message-status-rail[data-status="running"][data-variant="reasoning"] {
+  background: #b39ddb;
 }
 .chat-message-status-rail[data-status="queued"] {
   background: #eabf63;

@@ -41,16 +41,29 @@ const webviewConfig = {
     },
 };
 
+/** @type {import('esbuild').BuildOptions} */
+const messageWindowConfig = {
+    ...webviewConfig,
+    entryPoints: ["src/webview/messageWindow.ts"],
+    outfile: "dist/messageWindow.js",
+};
+
 async function build() {
     if (watch) {
         const extCtx = await esbuild.context(extensionConfig);
         const webCtx = await esbuild.context(webviewConfig);
-        await Promise.all([extCtx.watch(), webCtx.watch()]);
+        const messageWindowCtx = await esbuild.context(messageWindowConfig);
+        await Promise.all([
+            extCtx.watch(),
+            webCtx.watch(),
+            messageWindowCtx.watch(),
+        ]);
         console.log("Watching for changes...");
     } else {
         await Promise.all([
             esbuild.build(extensionConfig),
             esbuild.build(webviewConfig),
+            esbuild.build(messageWindowConfig),
         ]);
         console.log("Build complete");
     }
