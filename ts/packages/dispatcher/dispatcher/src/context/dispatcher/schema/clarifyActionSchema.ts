@@ -24,7 +24,7 @@ export interface ClarifyMultiplePossibleActionName {
 // entirely: the user gave no value for it, and no pronoun, reference, or memory
 // points at one. Ask the user to supply the missing parameter. Don't clarify
 // "unknown" action. If the value IS referred to but can't be resolved (e.g.
-// "the one we talked about", "it", "that file", "the one from before"), use 
+// "the one we talked about", "it", "that file", "the one from before"), use
 // ClarifyUnresolvedReference instead.
 export interface ClarifyMissingParameter {
     actionName: "clarifyMissingParameter";

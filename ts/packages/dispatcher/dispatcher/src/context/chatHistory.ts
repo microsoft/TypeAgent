@@ -174,11 +174,7 @@ export function createChatHistory(init: boolean): ChatHistory {
         getPromptSections(maxChars = 2000) {
             const sections: PromptSection[] = [];
             // Find the last N entries that fit the character quota.
-            for (
-                let i = recentStartIndex(maxChars);
-                i < entries.length;
-                ++i
-            ) {
+            for (let i = recentStartIndex(maxChars); i < entries.length; ++i) {
                 const entry = entries[i];
 
                 if (entry.text.length > 0) {
