@@ -55,7 +55,7 @@
     "dispatcher-node-providers": "workspace:*",
     "dotenv": "^16.3.1",
     "websocket-channel-server": "workspace:*",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

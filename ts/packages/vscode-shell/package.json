@@ -213,11 +213,11 @@
     "ansi_up": "^6.0.6",
     "chat-ui": "workspace:*",
     "debug": "^4.4.0",
-    "dompurify": "^3.4.11",
+    "dompurify": "^3.4.12",
     "isomorphic-ws": "^5.0.0",
     "markdown-it": "^14.2.0",
     "microsoft-cognitiveservices-speech-sdk": "1.43.1",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.0",

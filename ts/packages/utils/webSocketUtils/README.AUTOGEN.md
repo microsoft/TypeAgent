@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=8402df16061a6ad79b9066a4a9be5cdf088e79a1ad39a8e147ed252482550f13 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6d24f96a52fe0007674f483649e286581451bcfa1fa5fe5bd4cea09acb49034b -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/websocket-utils — AI-generated documentation
@@ -12,58 +12,91 @@
 
 ## Overview
 
-The `websocket-utils` package provides utility functions for working with WebSockets in the TypeAgent project. It facilitates the creation and management of WebSocket connections, enabling communication between different components of the system.
+The `@typeagent/websocket-utils` package provides a set of utility functions and modules for managing WebSocket connections within the TypeAgent project. It simplifies the creation, configuration, and maintenance of WebSocket connections, enabling efficient communication between system components.
+
+This library is designed to handle WebSocket-specific tasks such as connection setup, origin validation, heartbeat monitoring, and retry logic. It is used by multiple agents and services across the TypeAgent ecosystem.
 
 ## What it does
 
-The package primarily handles the creation of WebSocket connections through the `createWebSocket` function. This function allows you to specify the channel, role, client ID, port, and session ID for the WebSocket connection. It reads the WebSocket host from the environment variable `WEBSOCKET_HOST` or from a `.env` file if the environment variable is not set. The package also defines the `WebSocketMessageV2` type, which structures the messages sent over the WebSocket.
+The package offers several key features for working with WebSockets:
 
-Additionally, the package includes functionality for managing origin allowlists through the `originAllowlist` module. This module helps in setting up security measures by defining which origins are allowed to connect to the WebSocket server. The `heartbeat` module provides functionality to attach RFC 6455 ping/pong liveness checks to WebSocket clients, ensuring that dead peers are detected and terminated promptly.
+- **WebSocket Connection Management**: The `createWebSocket` function in [webSockets.ts](./src/webSockets.ts) facilitates the creation of WebSocket connections. It constructs the WebSocket endpoint using parameters such as channel, role, client ID, port, and session ID. The WebSocket host is determined by the `WEBSOCKET_HOST` environment variable.
+- **Message Structure**: The `WebSocketMessageV2` type defines the structure of messages exchanged over WebSocket connections, including fields for method, parameters, results, and errors.
+
+- **Origin Allowlist**: The [originAllowlist.ts](./src/originAllowlist.ts) module provides functionality to define and enforce an allowlist of origins that are permitted to connect to the WebSocket server. This is useful for enhancing security by restricting access to trusted origins.
+
+- **Heartbeat Monitoring**: The [heartbeat.ts](./src/heartbeat.ts) module implements RFC 6455 ping/pong liveness checks. It ensures that inactive or unresponsive WebSocket clients are detected and terminated, maintaining the health of the connection pool.
+
+- **Exponential Backoff**: The [backoff.ts](./src/backoff.ts) module provides a mechanism for retrying failed WebSocket connections with exponential delays. This helps manage reconnection attempts in a controlled manner.
+
+- **RPC Channel Integration**: The [rpcChannel.ts](./src/rpcChannel.ts) module adapts WebSocket connections to the `agent-rpc` `RpcChannel` interface, enabling JSON-based message exchange and integration with the broader TypeAgent RPC system.
+
+These features collectively support reliable WebSocket communication and are used by various agents and services in the TypeAgent project.
 
 ## Setup
 
-To use the `websocket-utils` package, you need to set the `WEBSOCKET_HOST` environment variable. This variable specifies the host for the WebSocket connection. You can set it directly in your environment or in a `.env` file located in your project directory.
+To use the `@typeagent/websocket-utils` package, you need to configure the `WEBSOCKET_HOST` environment variable. This variable specifies the host for WebSocket connections.
 
 1. Set the `WEBSOCKET_HOST` environment variable:
    - Directly in your shell:
      ```sh
      export WEBSOCKET_HOST="ws://your-websocket-host"
      ```
-   - Or in a `.env` file:
+   - Or in a `.env` file in your project directory:
      ```text
      WEBSOCKET_HOST=ws://your-websocket-host
      ```
 
-For detailed setup instructions, see the hand-written README.
+For additional setup details, refer to the hand-written README.
 
 ## Key Files
 
-The package consists of the following key files:
+The package is organized into several key files, each responsible for specific functionality:
 
-- [index.ts](./src/index.ts): Exports the functions and types from `webSockets.ts`.
-- [webSockets.ts](./src/webSockets.ts): Contains the main logic for creating WebSocket connections and defines the `WebSocketMessageV2` type.
-- [originAllowlist.ts](./src/originAllowlist.ts): Manages the origin allowlist for WebSocket connections, ensuring that only allowed origins can connect.
-- [heartbeat.ts](./src/heartbeat.ts): Implements the heartbeat functionality to maintain WebSocket connection liveness.
-- [tsconfig.json](./src/tsconfig.json): TypeScript configuration file that extends the base configuration and specifies compiler options.
+- **[index.ts](./src/index.ts)**: Serves as the entry point for the package, re-exporting functions and types from [webSockets.ts](./src/webSockets.ts).
 
-The `createWebSocket` function in [webSockets.ts](./src/webSockets.ts) is the core of the package. It constructs the WebSocket endpoint using the provided parameters and environment variables, and returns a promise that resolves to a WebSocket instance.
+- **[webSockets.ts](./src/webSockets.ts)**: Contains the `createWebSocket` function, which is the primary method for establishing WebSocket connections. It also defines the `WebSocketMessageV2` type for structuring WebSocket messages.
+
+- **[originAllowlist.ts](./src/originAllowlist.ts)**: Implements logic for managing an origin allowlist, ensuring that only trusted origins can connect to the WebSocket server.
+
+- **[heartbeat.ts](./src/heartbeat.ts)**: Provides functionality for monitoring WebSocket connection liveness using ping/pong messages. It detects and terminates unresponsive clients.
+
+- **[rpcChannel.ts](./src/rpcChannel.ts)**: Adapts WebSocket connections to the `agent-rpc` `RpcChannel` interface, enabling JSON-based communication and integration with the TypeAgent RPC system.
+
+- **[backoff.ts](./src/backoff.ts)**: Implements an exponential backoff mechanism for retrying failed WebSocket connections. It provides configurable options for base delay and maximum delay.
+
+- **[tsconfig.json](./src/tsconfig.json)**: TypeScript configuration file that extends the base configuration and specifies compiler options for the package.
 
 ## How to extend
 
-To extend the `websocket-utils` package, follow these steps:
+To extend the functionality of the `@typeagent/websocket-utils` package, follow these steps:
 
-1. Open [webSockets.ts](./src/webSockets.ts) to understand the existing implementation of the `createWebSocket` function.
-2. Add new functions or modify existing ones to support additional WebSocket features or configurations.
-3. Ensure that any new environment variables or configurations are documented and handled appropriately.
-4. Write tests for your new or modified functions to ensure they work as expected.
+1. **Understand the Existing Code**:
 
-To run tests, use the following command:
+   - Start by reviewing the [webSockets.ts](./src/webSockets.ts) file to understand how WebSocket connections are created and managed.
+   - Explore other modules such as [originAllowlist.ts](./src/originAllowlist.ts) and [heartbeat.ts](./src/heartbeat.ts) to see how they contribute to the overall functionality.
 
-```sh
-pnpm test
-```
+2. **Add New Features**:
 
-By following these steps, you can extend the functionality of the `websocket-utils` package to meet your specific requirements.
+   - Introduce new functions or modify existing ones to support additional WebSocket features or configurations.
+   - For example, you could add support for custom authentication headers or implement new message types.
+
+3. **Handle New Configurations**:
+
+   - If your changes require new environment variables or configuration options, ensure they are documented and integrated into the existing setup process.
+
+4. **Write Tests**:
+
+   - Add unit tests for your new or modified functions to verify their correctness and compatibility with the existing codebase.
+   - Use the following command to run tests:
+     ```sh
+     pnpm test
+     ```
+
+5. **Follow Project Standards**:
+   - Adhere to the coding and documentation standards used in the TypeAgent project. Review similar modules for guidance on naming conventions and patterns.
+
+By following these steps, you can extend the `@typeagent/websocket-utils` package to meet your specific requirements while maintaining compatibility with the rest of the TypeAgent ecosystem.
 
 ## Reference
 
@@ -73,12 +106,15 @@ By following these steps, you can extend the functionality of the `websocket-uti
 
 - default → [./dist/index.js](./dist/index.js)
 - `./originAllowlist` → [./dist/originAllowlist.js](./dist/originAllowlist.js)
-- `./heartbeat` → `./dist/heartbeat.js` _(not found on disk)_
+- `./heartbeat` → [./dist/heartbeat.js](./dist/heartbeat.js)
+- `./rpcChannel` → [./dist/rpcChannel.js](./dist/rpcChannel.js)
+- `./backoff` → [./dist/backoff.js](./dist/backoff.js)
 
 ### Dependencies
 
 Workspace:
 
+- [@typeagent/agent-rpc](../../../packages/agentRpc/README.md)
 - [@typeagent/config](../../../packages/config/README.md)
 
 External: `debug`, `dotenv`, `find-config`, `isomorphic-ws`, `ws`
@@ -94,13 +130,16 @@ External: `debug`, `dotenv`, `find-config`, `isomorphic-ws`, `ws`
 - [studio-service](../../../packages/studio-service/README.md)
 - [typeagent-studio](../../../packages/typeagent-studio/README.md)
 - [visualstudio-agent](../../../packages/agents/visualStudio/README.md)
-- [websocket-channel-server](../../../packages/utils/webSocketChannelServer/README.md)
+- [vscode-shell](../../../packages/vscode-shell/README.md)
+- _…and 1 more workspace consumers._
 
 ### Files of interest
 
 - [./src/index.ts](./src/index.ts)
+- [./src/backoff.ts](./src/backoff.ts)
 - [./src/heartbeat.ts](./src/heartbeat.ts)
 - [./src/originAllowlist.ts](./src/originAllowlist.ts)
+- [./src/rpcChannel.ts](./src/rpcChannel.ts)
 - [./src/tsconfig.json](./src/tsconfig.json)
 - [./src/webSockets.ts](./src/webSockets.ts)
 
@@ -112,6 +151,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/websocket-utils docs:verify-links` to spot-check._
+_Auto-generated against commit `10c156699bb8436ffeeb5042da164ea166f9eb74` on `2026-07-22T11:31:33.221Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/websocket-utils docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
