@@ -77,6 +77,41 @@ describe("buildReasoningForm", () => {
         expect("paged" in form).toBe(false);
     });
 
+    it("forces the paged wizard for multi-question forms", () => {
+        const form = expectForm(
+            buildReasoningForm({
+                questions: [
+                    { id: "a", kind: "yesNo", prompt: "A?" },
+                    {
+                        id: "b",
+                        kind: "pick",
+                        prompt: "B?",
+                        choices: ["x", "y"],
+                    },
+                ],
+            }),
+        );
+        // More than one question always renders as a paged wizard, even when
+        // the model didn't ask for it.
+        expect(form.paged).toBe(true);
+    });
+
+    it("keeps a single-question form inline (not paged)", () => {
+        const form = expectForm(
+            buildReasoningForm({
+                questions: [
+                    {
+                        id: "a",
+                        kind: "pick",
+                        prompt: "A?",
+                        choices: ["x", "y"],
+                    },
+                ],
+            }),
+        );
+        expect("paged" in form).toBe(false);
+    });
+
     it("auto-assigns ids when missing", () => {
         const form = expectForm(
             buildReasoningForm({

@@ -28,6 +28,7 @@ import {
     prewarmReasoning as prewarmDispatcherReasoning,
 } from "agent-dispatcher/internal";
 import { PendingInteractionManager } from "agent-dispatcher/internal";
+import { supersedeStalledInteraction as supersedeStalledInteractionCore } from "./supersedeInteraction.js";
 
 import registerDebug from "debug";
 const debugConnect = registerDebug("agent-server:connect");
@@ -518,41 +519,30 @@ export async function createSharedDispatcher(
     // with an AbortError (which command.ts classifies as "cancelled"), tell
     // clients to drop the now-stale prompt card, then cancel + abort the
     // request so it unwinds immediately. Returns true if a blocked running
-    // request was superseded.
+    // request was superseded. The core policy lives in supersedeInteraction.ts
+    // so it can be unit-tested without a full agent-execution stack.
     const supersedeStalledInteraction = (
         reason: QueueCancelReason,
         message: string,
-    ): boolean => {
-        const head = context.requestQueue.getSnapshot().running;
-        if (!head || head.blockedOn !== "interaction") {
-            return false;
-        }
-        const rid = head.requestId;
-        const abortErr = new Error(message);
-        abortErr.name = "AbortError";
-        try {
-            for (const pend of pendingInteractions
-                .getPending()
-                .filter((r) => r.requestId?.requestId === rid)) {
-                if (pendingInteractions.cancel(pend.interactionId, abortErr)) {
+    ): boolean =>
+        supersedeStalledInteractionCore(
+            {
+                runningEntry: context.requestQueue.getSnapshot().running,
+                pendingInteractions,
+                abortRequest: (rid) => context.activeRequests.get(rid)?.abort(),
+                cancelRunning: (rid) =>
+                    context.requestQueue.cancelRunning(rid, reason),
+                onInteractionCancelled: (interactionId) => {
                     broadcast("interactionCancelled", undefined, (cio) =>
-                        cio.interactionCancelled(pend.interactionId),
+                        cio.interactionCancelled(interactionId),
                     );
-                    context.displayLog.logInteractionCancelled(
-                        pend.interactionId,
-                    );
-                }
-            }
-            context.displayLog.saveQueued();
-        } catch (e) {
-            debugCommand(
-                `supersedeStalledInteraction: failed to cancel pending interactions: ${e}`,
-            );
-        }
-        context.requestQueue.cancelRunning(rid, reason);
-        context.activeRequests.get(rid)?.abort();
-        return true;
-    };
+                    context.displayLog.logInteractionCancelled(interactionId);
+                    context.displayLog.saveQueued();
+                },
+                debug: (msg) => debugCommand(msg),
+            },
+            message,
+        );
 
     const shared: SharedDispatcher = {
         get clientCount() {

@@ -489,6 +489,27 @@ describe("question form wizard (paged)", () => {
         const response = await done;
         expect(response.cancelled).toBe(true);
     });
+
+    it("removes the whole card (heading included) when aborted externally", async () => {
+        const { root, panel } = makePanel();
+        const ac = new AbortController();
+        const done = panel.addQuestionForm(
+            {
+                message: "Here's a true/false question:",
+                fields: [{ id: "ok", kind: "yesNo", prompt: "OK?" }],
+            },
+            { signal: ac.signal },
+        );
+        // The heading rendered as a fresh system card.
+        expect(root.textContent).toContain("Here's a true/false question:");
+
+        // The server cancelled / superseded the interaction.
+        ac.abort();
+        await expect(done).rejects.toBeDefined();
+
+        // The whole card is gone - no stale heading left behind.
+        expect(root.textContent).not.toContain("Here's a true/false question:");
+    });
 });
 
 // Regression: a blocking prompt (ClientIO.question via requestInteraction, e.g.

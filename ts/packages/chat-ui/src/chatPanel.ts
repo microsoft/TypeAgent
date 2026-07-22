@@ -3575,7 +3575,9 @@ export class ChatPanel {
             // request's existing agent bubble (the one already showing the
             // agent's displayContent / prompt) so the message and the choice
             // buttons render as a single card instead of two stacked boxes.
-            const container = this.choicePromptContainer(opts?.requestId);
+            const { container, created } = this.choicePromptContainer(
+                opts?.requestId,
+            );
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -3602,6 +3604,12 @@ export class ChatPanel {
             // answered, or the server cancelled/timed out the interaction).
             const onAbort = () => {
                 cleanup();
+                // Drop the whole card (heading included) when we minted a fresh
+                // system container, so a cancelled / superseded prompt leaves
+                // no stale heading behind.
+                if (created) {
+                    container.div.remove();
+                }
                 reject(
                     signal?.reason ?? new DOMException("Aborted", "AbortError"),
                 );
@@ -3671,7 +3679,9 @@ export class ChatPanel {
             // See addChoicePrompt: a requestId anchors the panel onto the
             // request's existing agent bubble so the prompt and the pick /
             // remember controls share one card.
-            const container = this.choicePromptContainer(opts?.requestId);
+            const { container, created } = this.choicePromptContainer(
+                opts?.requestId,
+            );
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -3741,6 +3751,9 @@ export class ChatPanel {
             // answered, or the server cancelled/timed out the interaction).
             const onAbort = () => {
                 cleanup();
+                if (created) {
+                    container.div.remove();
+                }
                 reject(
                     signal?.reason ?? new DOMException("Aborted", "AbortError"),
                 );
@@ -3818,7 +3831,9 @@ export class ChatPanel {
                 return;
             }
 
-            const container = this.choicePromptContainer(opts?.requestId);
+            const { container, created } = this.choicePromptContainer(
+                opts?.requestId,
+            );
             if (opts?.showMessage !== false && form.message) {
                 container.setMessage(
                     { type: "text", content: form.message },
@@ -4057,6 +4072,12 @@ export class ChatPanel {
             // answered, or the server cancelled/timed out the interaction).
             const onAbort = () => {
                 cleanup();
+                // Drop the whole card (heading included) when we minted a fresh
+                // system container, so a cancelled / superseded form leaves no
+                // stale heading behind.
+                if (created) {
+                    container.div.remove();
+                }
                 reject(
                     signal?.reason ?? new DOMException("Aborted", "AbortError"),
                 );
@@ -4225,7 +4246,7 @@ export class ChatPanel {
             // See addChoicePrompt: a requestId anchors the Yes/No buttons onto
             // the request's existing agent bubble so the prompt message and
             // the buttons render as a single card.
-            const container = this.choicePromptContainer(opts?.requestId);
+            const { container } = this.choicePromptContainer(opts?.requestId);
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -5066,7 +5087,14 @@ export class ChatPanel {
      * fresh system container when there is no requestId or no bubble yet
      * (e.g. a bare `ClientIO.question` with no preceding displayContent).
      */
-    private choicePromptContainer(requestId?: string): AgentMessageContainer {
+    // Resolve the container a prompt card should render into. `created` is true
+    // when a fresh system card was minted (so an abort can remove the whole
+    // card, heading included) and false when an existing agent bubble is reused
+    // (leave it in place - only the controls are removed).
+    private choicePromptContainer(requestId?: string): {
+        container: AgentMessageContainer;
+        created: boolean;
+    } {
         const threadId = this.resolveThreadId(requestId);
         // Reuse the request's open agent bubble when one exists (non-blocking
         // requestChoice/requestForm append their buttons onto the agent's
@@ -5075,7 +5103,7 @@ export class ChatPanel {
         if (requestId !== undefined) {
             const existing = this.threadContainers.get(threadId);
             if (existing) {
-                return existing;
+                return { container: existing, created: false };
             }
         }
         // No open bubble. If this thread has committed reasoning-step bubbles
@@ -5094,9 +5122,12 @@ export class ChatPanel {
                 lastStep,
             );
             this.lastStepAnchorByThread.set(threadId, container.div);
-            return container;
+            return { container, created: true };
         }
-        return this.createAgentContainer("system", "");
+        return {
+            container: this.createAgentContainer("system", ""),
+            created: true,
+        };
     }
 
     private createAgentContainer(

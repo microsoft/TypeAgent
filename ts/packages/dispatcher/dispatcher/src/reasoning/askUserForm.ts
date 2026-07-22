@@ -109,7 +109,10 @@ export function buildReasoningForm(
     if (message.length > 0) {
         form.message = message;
     }
-    if (args.paged === true) {
+    // Multi-question forms always render as a paged wizard (one question at a
+    // time with Back/Next) rather than a long all-at-once card. A single
+    // question stays inline - paging one question adds nothing.
+    if (fields.length > 1 || args.paged === true) {
         form.paged = true;
     }
     return { form };
