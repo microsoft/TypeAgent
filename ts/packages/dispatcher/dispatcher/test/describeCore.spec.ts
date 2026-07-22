@@ -13,6 +13,8 @@ import {
     renderActionNotFoundMessage,
     polishAgentView,
     polishActionView,
+    isCapabilityDiscoveryAlias,
+    renderCapabilitiesDiscoveryFallback,
 } from "../src/context/system/describe/describeCore.js";
 
 function makeAction(name: string, description: string) {
@@ -369,6 +371,79 @@ describe("describeCore deterministic rendering", () => {
         expect(renderActionNotFoundMessage(actionResult)).toContain(
             "Did you mean 'pause'?",
         );
+    });
+
+    it("detects generic capability-discovery aliases", () => {
+        expect(isCapabilityDiscoveryAlias("assistant")).toBe(true);
+        expect(isCapabilityDiscoveryAlias("the assistant")).toBe(true);
+        expect(isCapabilityDiscoveryAlias("typeagent")).toBe(true);
+        expect(isCapabilityDiscoveryAlias("spotify")).toBe(false);
+    });
+
+    it("renders a capabilities fallback with available agents and command hints", () => {
+        const markdown = renderCapabilitiesDiscoveryFallback([
+            makeSpotifyAgent(3),
+            makeBrowserAgent(),
+        ]);
+        expect(markdown).toContain("agent capabilities");
+        expect(markdown).toContain("Showing 2 of 2 agents");
+        expect(markdown).toContain("🎵 `spotify`");
+        expect(markdown).toContain("🌐 `browser`");
+        expect(markdown).toContain("@help --all");
+        expect(markdown).toContain("@describe <agent>");
+    });
+
+    it("limits capabilities fallback to top 5 agents with remaining count", () => {
+        const markdown = renderCapabilitiesDiscoveryFallback([
+            makeSpotifyAgent(3),
+            makeBrowserAgent(),
+            makeJukeboxAgent(),
+            {
+                name: "calendar",
+                emoji: "📅",
+                description: "manage calendar events",
+                subSchemas: [
+                    {
+                        schemaName: "calendar",
+                        description: "Calendar management",
+                        schemaText: undefined,
+                        actions: [
+                            makeAction("addEvent", "Add a calendar event"),
+                        ],
+                    },
+                ],
+            },
+            {
+                name: "email",
+                emoji: "📧",
+                description: "manage email tasks",
+                subSchemas: [
+                    {
+                        schemaName: "email",
+                        description: "Email management",
+                        schemaText: undefined,
+                        actions: [makeAction("sendMail", "Send an email")],
+                    },
+                ],
+            },
+            {
+                name: "weather",
+                emoji: "⛅",
+                description: "get weather forecasts",
+                subSchemas: [
+                    {
+                        schemaName: "weather",
+                        description: "Weather lookup",
+                        schemaText: undefined,
+                        actions: [
+                            makeAction("getForecast", "Get a weather forecast"),
+                        ],
+                    },
+                ],
+            },
+        ]);
+        expect(markdown).toContain("Showing 5 of 6 agents");
+        expect(markdown).toContain("...and 1 more agents available");
     });
 });
 
