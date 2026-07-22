@@ -35,6 +35,7 @@ import {
     type ConnectionActionHandler,
 } from "./connectionStatus.js";
 import { type StatusNotice, type StatusNoticeLevel } from "./statusNotice.js";
+import { createBellIconSvg } from "./icons.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
 // passed in is built from values that, while in practice come from
@@ -504,7 +505,35 @@ export interface ChatPanelOptions {
         target: "user" | "agent",
         permanent: boolean,
     ) => void;
+    /**
+     * Optional hook letting the host render the collapsed status-notice
+     * affordance in its own chrome (e.g. a bell next to the connection
+     * indicator in the conversation bar) instead of ChatPanel's floating
+     * bell. Called whenever the set of collapsed notices changes, with a
+     * badge describing the count + highest severity, or `undefined` when
+     * nothing is collapsed. Return `true` to signal the host displayed it;
+     * when it returns anything else, ChatPanel falls back to its own bell.
+     */
+    onStatusNoticeBadgeChange?: (
+        badge: StatusNoticeBadge | undefined,
+    ) => boolean | void;
 }
+
+/**
+ * Describes the set of currently-collapsed status notices for hosts that
+ * render the collapsed affordance themselves (see
+ * `ChatPanelOptions.onStatusNoticeBadgeChange`).
+ */
+export interface StatusNoticeBadge {
+    count: number;
+    level: StatusNoticeLevel;
+}
+
+/**
+ * A caret position inside a contentEditable, as accepted by
+ * Selection.setBaseAndExtent / Range boundary APIs.
+ */
+type CaretPoint = { node: Node; offset: number };
 
 /**
  * A lightweight chat panel that renders user and agent messages.
@@ -541,6 +570,20 @@ export class ChatPanel {
      * the underlying OS notification leaves the action center (osDismiss).
      */
     private notificationContainers = new Map<string, AgentMessageContainer>();
+    /** Upper bound on {@link notifications}; oldest entries drop past this. */
+    private static readonly MAX_BUFFERED_NOTIFICATIONS = 500;
+    /**
+     * Buffered `@notify` entries surfaced via `@notify show` / `@notify info`.
+     * Populated by {@link recordNotification}; read, marked-read, or emptied by
+     * {@link showNotifications}. The chat `@clear` ({@link clear}) leaves it
+     * intact; only `@notify clear` empties it.
+     */
+    private notifications: Array<{
+        event: string;
+        source: string;
+        data: unknown;
+        read: boolean;
+    }> = [];
     /**
      * For reasoning "step" bubbles: the div of the most recently committed
      * step bubble per thread. New step/temporary bubbles anchor on it so
@@ -606,13 +649,18 @@ export class ChatPanel {
      */
     private toastStack: HTMLDivElement | undefined;
     /**
-     * Bottom-right overlay hosting persistent status notices (see
-     * showStatusNotice). Lazily created on first notice; distinct from the
-     * transient toastStack so the two never fight for the same corner.
+     * Overlay hosting persistent status notices (see showStatusNotice).
+     * Lazily created on first notice; distinct from the transient toastStack
+     * so the two never fight for the same corner. Anchored bottom-right.
      */
     private statusNoticeLayer: HTMLDivElement | undefined;
     /** Active status notices keyed by id -> their root element. */
     private statusNotices = new Map<string, HTMLElement>();
+    /**
+     * Top-right bell that collapsed status notices minimize into. Lazily
+     * created on first minimize; hidden whenever nothing is collapsed.
+     */
+    private statusNoticeBell: HTMLButtonElement | undefined;
     private commandHistory: string[] = [];
     private historyIndex = -1;
     /** Local user's display name + initial used in user-bubble headers. */
@@ -755,6 +803,15 @@ export class ChatPanel {
         target: "user" | "agent",
         permanent: boolean,
     ) => void;
+    /**
+     * Host hook to render the collapsed status-notice badge in its own chrome.
+     * Settable post-construction (e.g. by the Electron host once it has both
+     * the ChatPanel and the ConversationBar in scope). See
+     * ChatPanelOptions.onStatusNoticeBadgeChange.
+     */
+    public onStatusNoticeBadgeChange?: (
+        badge: StatusNoticeBadge | undefined,
+    ) => boolean | void;
     private developerMode = false;
     // Input-bar affordances created only when the matching provider exists.
     private micButton?: HTMLButtonElement;
@@ -787,6 +844,7 @@ export class ChatPanel {
         this.settingsPanel = options.settingsPanel;
         this.helpPanel = options.helpPanel;
         this.onDeleteMessage = options.onDeleteMessage;
+        this.onStatusNoticeBadgeChange = options.onStatusNoticeBadgeChange;
 
         // Web-native default: when the host doesn't inject a speech provider,
         // fall back to the browser's Web Speech API so the mic button works
@@ -879,25 +937,7 @@ export class ChatPanel {
         textWrapper.className = "chat-input-text-wrapper";
         textWrapper.appendChild(this.textInput);
         textWrapper.appendChild(this.ghostSpan);
-        // The contentEditable .user-textarea has display:inline and
-        // min-width:1px, so when empty its native click target is a
-        // 1px stripe at the top-left of the wrapper. Clicking
-        // elsewhere in the wrapper would land on the flex container
-        // and never focus the input — leaving no caret. Forward those
-        // clicks to focus the input and place the caret at the end.
-        textWrapper.addEventListener("mousedown", (event) => {
-            const target = event.target as Node | null;
-            if (target === this.textInput) return;
-            if (target && this.textInput.contains(target)) return;
-            event.preventDefault();
-            this.textInput.focus();
-            const range = document.createRange();
-            range.selectNodeContents(this.textInput);
-            range.collapse(false);
-            const sel = window.getSelection();
-            sel?.removeAllRanges();
-            sel?.addRange(range);
-        });
+        this.setupInputPaddingSelection(textWrapper);
 
         this.inputArea.appendChild(textWrapper);
         this.inputArea.appendChild(this.sendButton);
@@ -1291,6 +1331,112 @@ export class ChatPanel {
         menu.attach(this.textInput, { editable: true });
         // Read-only message stream: Copy / Select All.
         menu.attach(this.messageDiv, { editable: false });
+    }
+
+    // The contentEditable .user-textarea is display:inline with min-width:1px,
+    // so the input box (its flex wrapper) is wider than the text run. A press
+    // in that empty padding lands on the wrapper, not the editable, so the
+    // browser can't start a text selection there - the user could only select
+    // by starting the drag on the text itself. Forward presses in the padding
+    // to the editable: focus it, anchor a caret at the position nearest the
+    // pointer, and extend the selection as the pointer moves, so the whole box
+    // (up to the buttons) is click-to-focus and drag-selectable.
+    private setupInputPaddingSelection(textWrapper: HTMLElement) {
+        // Anchor of an in-progress padding drag; null when not dragging.
+        let anchor: CaretPoint | null = null;
+        textWrapper.addEventListener("pointerdown", (event) => {
+            const target = event.target as Node | null;
+            // Presses on the text run: let the browser select natively.
+            if (
+                target === this.textInput ||
+                (target && this.textInput.contains(target))
+            ) {
+                return;
+            }
+            // Only a primary-button press drives caret placement / selection.
+            if (event.button !== 0) {
+                return;
+            }
+            event.preventDefault();
+            this.textInput.focus();
+            anchor = this.caretPointInInput(event.clientX, event.clientY);
+            this.applyInputSelection(anchor, anchor);
+            // Capture the pointer so move/up still reach us when the drag
+            // leaves the box, and so the listeners can't leak on a lost
+            // mouseup (capture is released automatically on up/cancel).
+            textWrapper.setPointerCapture(event.pointerId);
+        });
+        textWrapper.addEventListener("pointermove", (event) => {
+            if (anchor === null) {
+                return;
+            }
+            this.applyInputSelection(
+                anchor,
+                this.caretPointInInput(event.clientX, event.clientY),
+            );
+        });
+        const endDrag = () => {
+            anchor = null;
+        };
+        textWrapper.addEventListener("pointerup", endDrag);
+        textWrapper.addEventListener("pointercancel", endDrag);
+    }
+
+    private applyInputSelection(anchor: CaretPoint, focus: CaretPoint) {
+        window
+            .getSelection()
+            ?.setBaseAndExtent(
+                anchor.node,
+                anchor.offset,
+                focus.node,
+                focus.offset,
+            );
+    }
+
+    // Map a viewport point to a caret position (node + offset) inside the
+    // editable. When the point falls outside the editable (empty padding, the
+    // ghost preview, or off the input mid-drag), clamp to the nearest text
+    // edge by geometry - so dragging left/above the text selects toward the
+    // start and right/below toward the end - returning a text-node boundary
+    // that matches a real caret rather than an element-index boundary.
+    private caretPointInInput(clientX: number, clientY: number): CaretPoint {
+        const doc = document as Document & {
+            caretRangeFromPoint?(x: number, y: number): Range | null;
+            caretPositionFromPoint?(
+                x: number,
+                y: number,
+            ): { offsetNode: Node; offset: number } | null;
+        };
+        let node: Node | null = null;
+        let offset = 0;
+        const range = doc.caretRangeFromPoint?.(clientX, clientY);
+        if (range) {
+            node = range.startContainer;
+            offset = range.startOffset;
+        } else {
+            const pos = doc.caretPositionFromPoint?.(clientX, clientY);
+            if (pos) {
+                node = pos.offsetNode;
+                offset = pos.offset;
+            }
+        }
+        if (node && this.textInput.contains(node)) {
+            return { node, offset };
+        }
+        const rect = this.textInput.getBoundingClientRect();
+        const atEnd =
+            clientY > rect.bottom ||
+            (clientY >= rect.top && clientX >= rect.left);
+        const edge = atEnd
+            ? this.textInput.lastChild
+            : this.textInput.firstChild;
+        if (edge && edge.nodeType === Node.TEXT_NODE) {
+            return { node: edge, offset: atEnd ? (edge as Text).length : 0 };
+        }
+        return {
+            node: this.textInput,
+            offset: atEnd ? this.textInput.childNodes.length : 0,
+        };
     }
 
     private setupInputHandlers() {
@@ -2654,12 +2800,11 @@ export class ChatPanel {
 
     /**
      * Show a persistent status notice: a bottom-right toast that stays until
-     * dismissed (unlike showToast's 5s auto-hide). The dismiss (×) collapses
-     * it to a small pinned pill in the same corner; clicking the pill
-     * re-expands it. Re-calling with the same `id` replaces the notice (e.g. a
-     * reconnect re-sending it). An optional action button runs `actionCommand`
-     * through the chat input, so the affordance works identically in every
-     * host with no extra wiring.
+     * dismissed. The minimize (×) collapses it into the top-right bell as an
+     * unread item; clicking the bell re-opens every collapsed notice. Calling
+     * with an existing `id` replaces that notice. An optional action button
+     * runs `actionCommand` through the chat input, so the affordance works
+     * identically in every host with no extra wiring.
      */
     public showStatusNotice(notice: StatusNotice): void {
         if (!notice || !notice.id) {
@@ -2747,29 +2892,116 @@ export class ChatPanel {
             toast.appendChild(actions);
         }
 
-        // Collapsed pill (hidden until minimized via the .collapsed class).
-        const pill = document.createElement("button");
-        pill.type = "button";
-        pill.className = "csn-pill";
-        pill.title = `${notice.title} — click to expand`;
-        pill.setAttribute("aria-label", `${notice.title} — click to expand`);
-        const dot = document.createElement("span");
-        dot.className = "csn-dot";
-        pill.appendChild(dot);
-        const pillLabel = document.createElement("span");
-        pillLabel.className = "csn-pill-label";
-        pillLabel.textContent = notice.title;
-        pill.appendChild(pillLabel);
-
-        minBtn.addEventListener("click", () => root.classList.add("collapsed"));
-        pill.addEventListener("click", () =>
-            root.classList.remove("collapsed"),
+        // Minimize collapses the toast into the top-right bell.
+        minBtn.addEventListener("click", () =>
+            this.collapseStatusNoticeToBell(root),
         );
 
         root.appendChild(toast);
-        root.appendChild(pill);
         layer.appendChild(root);
         this.statusNotices.set(notice.id, root);
+        // The notice shows expanded; refresh the bell's unread count.
+        this.updateStatusNoticeBell();
+    }
+
+    // Bell glyph. Static, non-user SVG literal — safe to assign as innerHTML.
+    private ensureStatusNoticeBell(): HTMLButtonElement {
+        if (!this.statusNoticeBell) {
+            const bell = document.createElement("button");
+            bell.type = "button";
+            bell.className = "chat-status-bell";
+            bell.style.display = "none";
+            const icon = createBellIconSvg();
+            icon.setAttribute("width", "16");
+            icon.setAttribute("height", "16");
+            icon.setAttribute("aria-hidden", "true");
+            bell.appendChild(icon);
+            const badge = document.createElement("span");
+            badge.className = "chat-status-bell-badge";
+            bell.appendChild(badge);
+            bell.addEventListener("click", () => this.expandAllStatusNotices());
+            (this.messageDiv.parentElement ?? this.rootElement).appendChild(
+                bell,
+            );
+            this.statusNoticeBell = bell;
+        }
+        return this.statusNoticeBell;
+    }
+
+    // Collapse a notice into the bell (hides the toast, bumps the unread count).
+    private collapseStatusNoticeToBell(root: HTMLElement): void {
+        root.classList.add("collapsed");
+        this.updateStatusNoticeBell();
+    }
+
+    // Re-open every collapsed notice and clear the bell.
+    public expandAllStatusNotices(): void {
+        for (const root of this.statusNotices.values()) {
+            root.classList.remove("collapsed");
+        }
+        this.updateStatusNoticeBell();
+    }
+
+    // Sync the collapsed-notice affordance (host badge or, failing that, the
+    // floating bell) with the set of currently-collapsed notices.
+    private updateStatusNoticeBell(): void {
+        const collapsed = [...this.statusNotices.values()].filter((r) =>
+            r.classList.contains("collapsed"),
+        );
+        const badge: StatusNoticeBadge | undefined =
+            collapsed.length === 0
+                ? undefined
+                : {
+                      count: collapsed.length,
+                      level: collapsed.some((r) =>
+                          r.classList.contains("level-error"),
+                      )
+                          ? "error"
+                          : collapsed.some((r) =>
+                                  r.classList.contains("level-warning"),
+                              )
+                            ? "warning"
+                            : "info",
+                  };
+
+        // Prefer a host-rendered badge (e.g. a bell next to the connection
+        // indicator). If the host handles it, keep the floating bell hidden.
+        let handled = false;
+        if (this.onStatusNoticeBadgeChange) {
+            try {
+                handled = this.onStatusNoticeBadgeChange(badge) === true;
+            } catch (e) {
+                console.error("onStatusNoticeBadgeChange callback failed", e);
+            }
+        }
+        if (handled) {
+            if (this.statusNoticeBell) {
+                this.statusNoticeBell.style.display = "none";
+            }
+            return;
+        }
+
+        // Fallback: ChatPanel's own floating bell.
+        if (!badge) {
+            if (this.statusNoticeBell) {
+                this.statusNoticeBell.style.display = "none";
+            }
+            return;
+        }
+        const bell = this.ensureStatusNoticeBell();
+        bell.classList.remove("level-info", "level-warning", "level-error");
+        bell.classList.add(`level-${badge.level}`);
+        const badgeEl = bell.querySelector(".chat-status-bell-badge");
+        if (badgeEl) {
+            badgeEl.textContent = String(badge.count);
+        }
+        const label =
+            badge.count === 1
+                ? "1 status notification — click to open"
+                : `${badge.count} status notifications — click to open`;
+        bell.title = label;
+        bell.setAttribute("aria-label", label);
+        bell.style.display = "inline-flex";
     }
 
     /** Remove a status notice by id, or all of them when `id` is omitted. */
@@ -2783,9 +3015,18 @@ export class ChatPanel {
             this.statusNotices.get(id)?.remove();
             this.statusNotices.delete(id);
         }
-        if (this.statusNotices.size === 0 && this.statusNoticeLayer) {
-            this.statusNoticeLayer.remove();
-            this.statusNoticeLayer = undefined;
+        if (this.statusNotices.size === 0) {
+            if (this.statusNoticeLayer) {
+                this.statusNoticeLayer.remove();
+                this.statusNoticeLayer = undefined;
+            }
+            if (this.statusNoticeBell) {
+                this.statusNoticeBell.remove();
+                this.statusNoticeBell = undefined;
+            }
+        } else {
+            // A removed notice may have been the only collapsed one.
+            this.updateStatusNoticeBell();
         }
     }
 
@@ -2880,6 +3121,71 @@ export class ChatPanel {
         container.remove();
         this.notificationContainers.delete(notificationId);
         return true;
+    }
+
+    /**
+     * Buffer a notification for later retrieval via {@link showNotifications}.
+     * Hosts call this from their notify-event adapter for
+     * toast/inline/info/warning/error events so the notification center has
+     * content to summarize. Purely UI state — no host dependency. The buffer
+     * is capped at {@link ChatPanel.MAX_BUFFERED_NOTIFICATIONS}; once full the
+     * oldest entry is dropped so it can't grow without bound.
+     */
+    public recordNotification(
+        event: string,
+        source: string,
+        data: unknown,
+    ): void {
+        this.notifications.push({ event, source, data, read: false });
+        if (this.notifications.length > ChatPanel.MAX_BUFFERED_NOTIFICATIONS) {
+            this.notifications.splice(
+                0,
+                this.notifications.length -
+                    ChatPanel.MAX_BUFFERED_NOTIFICATIONS,
+            );
+        }
+    }
+
+    /**
+     * Render the buffered notification center inline in response to `@notify`
+     * commands. `command` is the dispatcher NotifyCommands value, which arrives
+     * as a bare string: "summarize" | "clear" | "unread" | "all". Kept as
+     * literals here so chat-ui needn't depend on the dispatcher (node) package.
+     */
+    public showNotifications(command: unknown): void {
+        switch (command) {
+            case "clear":
+                this.notifications.length = 0;
+                break;
+            case "all":
+            case "unread": {
+                const showAll = command === "all";
+                const items = this.notifications.filter(
+                    (n) => showAll || !n.read,
+                );
+                const content = items.length
+                    ? `<ul style="margin: 0; padding-left: 1.2em; list-style-position: inside;">${items
+                          .map((n) => {
+                              n.read = true;
+                              const event = escapeHtml(n.event);
+                              return `<li class="notification-${event}">${event} ${escapeHtml(String(n.data))}</li>`;
+                          })
+                          .join("")}</ul>`
+                    : "No notifications.";
+                this.showInline({ type: "html", content });
+                break;
+            }
+            case "summarize": {
+                const unread = this.notifications.filter((n) => !n.read).length;
+                this.showInline({
+                    type: "html",
+                    content: `There are <b>${unread}</b> unread and <b>${this.notifications.length}</b> total notifications.`,
+                });
+                break;
+            }
+            default:
+                break;
+        }
     }
 
     /**

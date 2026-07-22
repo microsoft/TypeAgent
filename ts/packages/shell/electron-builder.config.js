@@ -3,19 +3,18 @@
 
 // Configuration used for 'electron-builder build' step, and not 'install-app-deps' step.
 
-import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 
-// The Electron browser extension ships as a resource. Its source
-// (browser-typeagent/dist/electron) is resolved from the shell package's own
-// node_modules rather than the deploy tree: browser-typeagent is a
-// devDependency (build/package-time only), so it is intentionally excluded
-// from `pnpm deploy --prod` and its (large) runtime closure never lands in the
-// packaged app. Only the prebuilt extension assets are copied.
-const shellDir = path.dirname(fileURLToPath(import.meta.url));
-const browserExtensionDir = path.join(
-    shellDir,
-    "node_modules/browser-typeagent/dist/electron",
+const configDir = dirname(fileURLToPath(import.meta.url));
+
+// The browser extension is shipped as an unpacked resource. @typeagent/browser-extension
+// is only a devDependency of the shell (it is not needed at runtime beyond these
+// prebuilt extension assets), so it is not in deploy/node_modules. Source the
+// extension directly from the browser-extension package's build output in the workspace.
+const browserExtensionDir = resolve(
+    configDir,
+    "../agents/browserExtension/dist/electron",
 );
 
 const name = "typeagentshell";

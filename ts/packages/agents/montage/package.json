@@ -35,7 +35,7 @@
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
-    "body-parser": "1.20.3",
+    "body-parser": "1.20.6",
     "d3": "^7.9.0",
     "d3-cloud": "^1.2.7",
     "debug": "^4.4.0",
@@ -64,7 +64,7 @@
     "typescript": "~5.4.5",
     "webpack": "^5.104.1",
     "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^5.2.5"
+    "webpack-dev-server": "^5.2.6"
   },
   "typeagent": {
     "defaultAgentName": "montage"
