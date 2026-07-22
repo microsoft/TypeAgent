@@ -147,7 +147,7 @@ class NotifyTestCommandHandler implements CommandHandler {
 
 class NotifyStatusTestCommandHandler implements CommandHandler {
     public readonly description =
-        "Fire a persistent status notice (a toast that collapses to a pinned pill) to verify the chat-ui affordance without a stale server";
+        "Fire a persistent status notice (a toast that collapses to the notification bell) to verify the chat-ui affordance without a stale server";
     public readonly parameters = {
         args: {
             message: {
@@ -195,7 +195,7 @@ class NotifyStatusTestCommandHandler implements CommandHandler {
             title: "Test status notice",
             message:
                 params.args.message ??
-                "Dismissing this collapses it to a pinned pill; click the pill to re-expand.",
+                "Dismissing this collapses it to the notification bell; click the bell to re-expand.",
         };
         if (params.flags.restart) {
             notice.actionLabel = "Restart server";
@@ -204,7 +204,7 @@ class NotifyStatusTestCommandHandler implements CommandHandler {
         // "statusNotice" is chat-ui's STATUS_NOTICE_EVENT, kept as a literal so
         // the dispatcher needn't depend on the chat-ui (DOM) package. Broadcast
         // (notificationId undefined) so every connected client renders it: the
-        // shells show the toast/pill, the CLI prints a yellow line.
+        // shells show the toast/bell, the CLI prints a yellow line.
         systemContext.clientIO.notify(
             undefined,
             "statusNotice",

@@ -21,3 +21,10 @@ declare module "@typeagent/completion-ui/styles.css" {
     const css: string;
     export default css;
 }
+
+// The VS Code webview API, injected into every webview at runtime.
+declare function acquireVsCodeApi(): {
+    postMessage(message: unknown): void;
+    getState(): unknown;
+    setState(state: unknown): void;
+};

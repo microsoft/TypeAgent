@@ -35,6 +35,7 @@ import {
     type ConnectionActionHandler,
 } from "./connectionStatus.js";
 import { type StatusNotice, type StatusNoticeLevel } from "./statusNotice.js";
+import { createBellIconSvg } from "./icons.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
 // passed in is built from values that, while in practice come from
@@ -504,6 +505,28 @@ export interface ChatPanelOptions {
         target: "user" | "agent",
         permanent: boolean,
     ) => void;
+    /**
+     * Optional hook letting the host render the collapsed status-notice
+     * affordance in its own chrome (e.g. a bell next to the connection
+     * indicator in the conversation bar) instead of ChatPanel's floating
+     * bell. Called whenever the set of collapsed notices changes, with a
+     * badge describing the count + highest severity, or `undefined` when
+     * nothing is collapsed. Return `true` to signal the host displayed it;
+     * when it returns anything else, ChatPanel falls back to its own bell.
+     */
+    onStatusNoticeBadgeChange?: (
+        badge: StatusNoticeBadge | undefined,
+    ) => boolean | void;
+}
+
+/**
+ * Describes the set of currently-collapsed status notices for hosts that
+ * render the collapsed affordance themselves (see
+ * `ChatPanelOptions.onStatusNoticeBadgeChange`).
+ */
+export interface StatusNoticeBadge {
+    count: number;
+    level: StatusNoticeLevel;
 }
 
 /**
@@ -547,6 +570,20 @@ export class ChatPanel {
      * the underlying OS notification leaves the action center (osDismiss).
      */
     private notificationContainers = new Map<string, AgentMessageContainer>();
+    /** Upper bound on {@link notifications}; oldest entries drop past this. */
+    private static readonly MAX_BUFFERED_NOTIFICATIONS = 500;
+    /**
+     * Buffered `@notify` entries surfaced via `@notify show` / `@notify info`.
+     * Populated by {@link recordNotification}; read, marked-read, or emptied by
+     * {@link showNotifications}. The chat `@clear` ({@link clear}) leaves it
+     * intact; only `@notify clear` empties it.
+     */
+    private notifications: Array<{
+        event: string;
+        source: string;
+        data: unknown;
+        read: boolean;
+    }> = [];
     /**
      * For reasoning "step" bubbles: the div of the most recently committed
      * step bubble per thread. New step/temporary bubbles anchor on it so
@@ -612,13 +649,18 @@ export class ChatPanel {
      */
     private toastStack: HTMLDivElement | undefined;
     /**
-     * Bottom-right overlay hosting persistent status notices (see
-     * showStatusNotice). Lazily created on first notice; distinct from the
-     * transient toastStack so the two never fight for the same corner.
+     * Overlay hosting persistent status notices (see showStatusNotice).
+     * Lazily created on first notice; distinct from the transient toastStack
+     * so the two never fight for the same corner. Anchored bottom-right.
      */
     private statusNoticeLayer: HTMLDivElement | undefined;
     /** Active status notices keyed by id -> their root element. */
     private statusNotices = new Map<string, HTMLElement>();
+    /**
+     * Top-right bell that collapsed status notices minimize into. Lazily
+     * created on first minimize; hidden whenever nothing is collapsed.
+     */
+    private statusNoticeBell: HTMLButtonElement | undefined;
     private commandHistory: string[] = [];
     private historyIndex = -1;
     /** Local user's display name + initial used in user-bubble headers. */
@@ -761,6 +803,15 @@ export class ChatPanel {
         target: "user" | "agent",
         permanent: boolean,
     ) => void;
+    /**
+     * Host hook to render the collapsed status-notice badge in its own chrome.
+     * Settable post-construction (e.g. by the Electron host once it has both
+     * the ChatPanel and the ConversationBar in scope). See
+     * ChatPanelOptions.onStatusNoticeBadgeChange.
+     */
+    public onStatusNoticeBadgeChange?: (
+        badge: StatusNoticeBadge | undefined,
+    ) => boolean | void;
     private developerMode = false;
     // Input-bar affordances created only when the matching provider exists.
     private micButton?: HTMLButtonElement;
@@ -793,6 +844,7 @@ export class ChatPanel {
         this.settingsPanel = options.settingsPanel;
         this.helpPanel = options.helpPanel;
         this.onDeleteMessage = options.onDeleteMessage;
+        this.onStatusNoticeBadgeChange = options.onStatusNoticeBadgeChange;
 
         // Web-native default: when the host doesn't inject a speech provider,
         // fall back to the browser's Web Speech API so the mic button works
@@ -1822,11 +1874,17 @@ export class ChatPanel {
      */
     private clearAgentRunning(threadId: string): void {
         this.agentRunningRequestIds.delete(threadId);
-        this.threadContainers.get(threadId)?.clearRunning();
+        // The request finished: collapse every step's reasoning "Thinking"
+        // block (including the last, still-expanded one) so completed reasoning
+        // minimizes.
+        const current = this.threadContainers.get(threadId);
+        current?.clearRunning();
+        current?.collapseReasoning();
         const all = this.requestAgentContainers.get(threadId);
         if (all) {
             for (const container of all) {
                 container.clearRunning();
+                container.collapseReasoning();
             }
         }
     }
@@ -2489,6 +2547,10 @@ export class ChatPanel {
                 source.startsWith("dispatcher.reasoningAction")
             ) {
                 stepContainer.overrideSource(source, sourceIcon);
+                // Also covers a reused existing bubble (e.g. a generic
+                // "Executing action" temporary) that never passed through the
+                // reasoning detection in getOrCreateAgentContainer.
+                stepContainer.markReasoning();
             }
             if (requestId) {
                 const start = this.requestStartByRequestId.get(requestId);
@@ -2508,6 +2570,7 @@ export class ChatPanel {
                 for (const prior of priorSteps) {
                     if (prior !== stepContainer) {
                         prior.clearRunning();
+                        prior.collapseReasoning();
                     }
                 }
             }
@@ -2578,8 +2641,17 @@ export class ChatPanel {
         requestId: string | undefined,
     ): AgentMessageContainer {
         const threadId = this.resolveThreadId(requestId);
+        // A reasoning display carries a "dispatcher.reasoningAction.*" source;
+        // mark the bubble so its working rail reads as reasoning (purple)
+        // whether the content streams (temporary), commits as a step, or
+        // arrives as a block.
+        const isReasoning =
+            source?.startsWith("dispatcher.reasoningAction") ?? false;
         const existing = this.threadContainers.get(threadId);
         if (existing) {
+            if (isReasoning) {
+                existing.markReasoning();
+            }
             return existing;
         }
         // sourceIcon="🤖"). Without this, the bubble would be created with
@@ -2618,6 +2690,9 @@ export class ChatPanel {
             anchor,
         );
         this.threadContainers.set(threadId, container);
+        if (isReasoning) {
+            container.markReasoning();
+        }
         container.div.dataset.requestId = threadId;
         if (this.developerMode) {
             this.attachDeleteControl(container.div, threadId, "agent");
@@ -2748,12 +2823,11 @@ export class ChatPanel {
 
     /**
      * Show a persistent status notice: a bottom-right toast that stays until
-     * dismissed (unlike showToast's 5s auto-hide). The dismiss (×) collapses
-     * it to a small pinned pill in the same corner; clicking the pill
-     * re-expands it. Re-calling with the same `id` replaces the notice (e.g. a
-     * reconnect re-sending it). An optional action button runs `actionCommand`
-     * through the chat input, so the affordance works identically in every
-     * host with no extra wiring.
+     * dismissed. The minimize (×) collapses it into the top-right bell as an
+     * unread item; clicking the bell re-opens every collapsed notice. Calling
+     * with an existing `id` replaces that notice. An optional action button
+     * runs `actionCommand` through the chat input, so the affordance works
+     * identically in every host with no extra wiring.
      */
     public showStatusNotice(notice: StatusNotice): void {
         if (!notice || !notice.id) {
@@ -2841,29 +2915,116 @@ export class ChatPanel {
             toast.appendChild(actions);
         }
 
-        // Collapsed pill (hidden until minimized via the .collapsed class).
-        const pill = document.createElement("button");
-        pill.type = "button";
-        pill.className = "csn-pill";
-        pill.title = `${notice.title} — click to expand`;
-        pill.setAttribute("aria-label", `${notice.title} — click to expand`);
-        const dot = document.createElement("span");
-        dot.className = "csn-dot";
-        pill.appendChild(dot);
-        const pillLabel = document.createElement("span");
-        pillLabel.className = "csn-pill-label";
-        pillLabel.textContent = notice.title;
-        pill.appendChild(pillLabel);
-
-        minBtn.addEventListener("click", () => root.classList.add("collapsed"));
-        pill.addEventListener("click", () =>
-            root.classList.remove("collapsed"),
+        // Minimize collapses the toast into the top-right bell.
+        minBtn.addEventListener("click", () =>
+            this.collapseStatusNoticeToBell(root),
         );
 
         root.appendChild(toast);
-        root.appendChild(pill);
         layer.appendChild(root);
         this.statusNotices.set(notice.id, root);
+        // The notice shows expanded; refresh the bell's unread count.
+        this.updateStatusNoticeBell();
+    }
+
+    // Bell glyph. Static, non-user SVG literal — safe to assign as innerHTML.
+    private ensureStatusNoticeBell(): HTMLButtonElement {
+        if (!this.statusNoticeBell) {
+            const bell = document.createElement("button");
+            bell.type = "button";
+            bell.className = "chat-status-bell";
+            bell.style.display = "none";
+            const icon = createBellIconSvg();
+            icon.setAttribute("width", "16");
+            icon.setAttribute("height", "16");
+            icon.setAttribute("aria-hidden", "true");
+            bell.appendChild(icon);
+            const badge = document.createElement("span");
+            badge.className = "chat-status-bell-badge";
+            bell.appendChild(badge);
+            bell.addEventListener("click", () => this.expandAllStatusNotices());
+            (this.messageDiv.parentElement ?? this.rootElement).appendChild(
+                bell,
+            );
+            this.statusNoticeBell = bell;
+        }
+        return this.statusNoticeBell;
+    }
+
+    // Collapse a notice into the bell (hides the toast, bumps the unread count).
+    private collapseStatusNoticeToBell(root: HTMLElement): void {
+        root.classList.add("collapsed");
+        this.updateStatusNoticeBell();
+    }
+
+    // Re-open every collapsed notice and clear the bell.
+    public expandAllStatusNotices(): void {
+        for (const root of this.statusNotices.values()) {
+            root.classList.remove("collapsed");
+        }
+        this.updateStatusNoticeBell();
+    }
+
+    // Sync the collapsed-notice affordance (host badge or, failing that, the
+    // floating bell) with the set of currently-collapsed notices.
+    private updateStatusNoticeBell(): void {
+        const collapsed = [...this.statusNotices.values()].filter((r) =>
+            r.classList.contains("collapsed"),
+        );
+        const badge: StatusNoticeBadge | undefined =
+            collapsed.length === 0
+                ? undefined
+                : {
+                      count: collapsed.length,
+                      level: collapsed.some((r) =>
+                          r.classList.contains("level-error"),
+                      )
+                          ? "error"
+                          : collapsed.some((r) =>
+                                  r.classList.contains("level-warning"),
+                              )
+                            ? "warning"
+                            : "info",
+                  };
+
+        // Prefer a host-rendered badge (e.g. a bell next to the connection
+        // indicator). If the host handles it, keep the floating bell hidden.
+        let handled = false;
+        if (this.onStatusNoticeBadgeChange) {
+            try {
+                handled = this.onStatusNoticeBadgeChange(badge) === true;
+            } catch (e) {
+                console.error("onStatusNoticeBadgeChange callback failed", e);
+            }
+        }
+        if (handled) {
+            if (this.statusNoticeBell) {
+                this.statusNoticeBell.style.display = "none";
+            }
+            return;
+        }
+
+        // Fallback: ChatPanel's own floating bell.
+        if (!badge) {
+            if (this.statusNoticeBell) {
+                this.statusNoticeBell.style.display = "none";
+            }
+            return;
+        }
+        const bell = this.ensureStatusNoticeBell();
+        bell.classList.remove("level-info", "level-warning", "level-error");
+        bell.classList.add(`level-${badge.level}`);
+        const badgeEl = bell.querySelector(".chat-status-bell-badge");
+        if (badgeEl) {
+            badgeEl.textContent = String(badge.count);
+        }
+        const label =
+            badge.count === 1
+                ? "1 status notification — click to open"
+                : `${badge.count} status notifications — click to open`;
+        bell.title = label;
+        bell.setAttribute("aria-label", label);
+        bell.style.display = "inline-flex";
     }
 
     /** Remove a status notice by id, or all of them when `id` is omitted. */
@@ -2877,9 +3038,18 @@ export class ChatPanel {
             this.statusNotices.get(id)?.remove();
             this.statusNotices.delete(id);
         }
-        if (this.statusNotices.size === 0 && this.statusNoticeLayer) {
-            this.statusNoticeLayer.remove();
-            this.statusNoticeLayer = undefined;
+        if (this.statusNotices.size === 0) {
+            if (this.statusNoticeLayer) {
+                this.statusNoticeLayer.remove();
+                this.statusNoticeLayer = undefined;
+            }
+            if (this.statusNoticeBell) {
+                this.statusNoticeBell.remove();
+                this.statusNoticeBell = undefined;
+            }
+        } else {
+            // A removed notice may have been the only collapsed one.
+            this.updateStatusNoticeBell();
         }
     }
 
@@ -2974,6 +3144,71 @@ export class ChatPanel {
         container.remove();
         this.notificationContainers.delete(notificationId);
         return true;
+    }
+
+    /**
+     * Buffer a notification for later retrieval via {@link showNotifications}.
+     * Hosts call this from their notify-event adapter for
+     * toast/inline/info/warning/error events so the notification center has
+     * content to summarize. Purely UI state — no host dependency. The buffer
+     * is capped at {@link ChatPanel.MAX_BUFFERED_NOTIFICATIONS}; once full the
+     * oldest entry is dropped so it can't grow without bound.
+     */
+    public recordNotification(
+        event: string,
+        source: string,
+        data: unknown,
+    ): void {
+        this.notifications.push({ event, source, data, read: false });
+        if (this.notifications.length > ChatPanel.MAX_BUFFERED_NOTIFICATIONS) {
+            this.notifications.splice(
+                0,
+                this.notifications.length -
+                    ChatPanel.MAX_BUFFERED_NOTIFICATIONS,
+            );
+        }
+    }
+
+    /**
+     * Render the buffered notification center inline in response to `@notify`
+     * commands. `command` is the dispatcher NotifyCommands value, which arrives
+     * as a bare string: "summarize" | "clear" | "unread" | "all". Kept as
+     * literals here so chat-ui needn't depend on the dispatcher (node) package.
+     */
+    public showNotifications(command: unknown): void {
+        switch (command) {
+            case "clear":
+                this.notifications.length = 0;
+                break;
+            case "all":
+            case "unread": {
+                const showAll = command === "all";
+                const items = this.notifications.filter(
+                    (n) => showAll || !n.read,
+                );
+                const content = items.length
+                    ? `<ul style="margin: 0; padding-left: 1.2em; list-style-position: inside;">${items
+                          .map((n) => {
+                              n.read = true;
+                              const event = escapeHtml(n.event);
+                              return `<li class="notification-${event}">${event} ${escapeHtml(String(n.data))}</li>`;
+                          })
+                          .join("")}</ul>`
+                    : "No notifications.";
+                this.showInline({ type: "html", content });
+                break;
+            }
+            case "summarize": {
+                const unread = this.notifications.filter((n) => !n.read).length;
+                this.showInline({
+                    type: "html",
+                    content: `There are <b>${unread}</b> unread and <b>${this.notifications.length}</b> total notifications.`,
+                });
+                break;
+            }
+            default:
+                break;
+        }
     }
 
     /**
@@ -3510,6 +3745,17 @@ export class ChatPanel {
             (requestContainers.length > 0
                 ? requestContainers[requestContainers.length - 1]
                 : undefined);
+        // For a reasoning thread with a trail of "Thinking"/tool steps, give
+        // the final answer step a gap separating it from the reasoning above.
+        // Target the last committed STEP (the answer), not the newest
+        // container, which can be a post-answer status block (e.g. copilot's
+        // "Task flow registered").
+        const answerStep = requestContainers.find(
+            (c) => c.div === this.lastStepAnchorByThread.get(threadId),
+        );
+        if (requestContainers.length > 1 && answerStep?.isReasoning()) {
+            answerStep.setReasoningAnswer(true);
+        }
         const firstMessageMs = this.firstMessageMsByRequestId.get(threadId);
         if (result?.cancelled) {
             // Mirror Electron's "⚠ Cancelled" status, anchored to the
@@ -4976,6 +5222,8 @@ class AgentMessageContainer {
     private readonly timestampDiv: HTMLDivElement;
     private feedbackWidget?: FeedbackWidget;
     private statusRail?: HTMLDivElement;
+    private reasoning = false;
+    private readonly collapsedReasoning = new WeakSet<HTMLDetailsElement>();
     private lastAppendMode?: DisplayAppendMode;
     // Mirrors the shell's swapContent pattern: when action JSON is set,
     // clicking the agent name toggles the message body between the
@@ -5381,9 +5629,28 @@ class AgentMessageContainer {
                 bodyDiv: this.messageDiv,
                 headerDiv: this.timestampDiv,
                 messageDiv: this.messageDiv,
+                openInWindow: this.platformAdapter.openMessageInWindow
+                    ? () => this.openMessageInWindow()
+                    : undefined,
             },
             controller,
             variant,
+        );
+    }
+
+    // Ask the host to open this message in a new window. Messages backed by an
+    // <iframe> (script-driven image/video/settings displays) don't survive
+    // re-sanitization in a separate panel, so decline them; there's no in-page
+    // fallback, so the button is simply inert for those.
+    private openMessageInWindow(): boolean {
+        if (this.messageDiv.querySelector("iframe")) {
+            return false;
+        }
+        return (
+            this.platformAdapter.openMessageInWindow?.(
+                this.messageDiv.innerHTML,
+                this.nameSpan.textContent ?? undefined,
+            ) ?? false
         );
     }
 
@@ -5422,6 +5689,11 @@ class AgentMessageContainer {
         // Ensure the rail reads as "running" even if it was previously showing
         // the muted "unknown" state (setUnknown reuses this same rail element).
         rail.dataset.status = "running";
+        if (this.reasoning) {
+            rail.dataset.variant = "reasoning";
+        } else {
+            delete rail.dataset.variant;
+        }
         const stateZone = rail.querySelector<HTMLElement>(
             ":scope > .chat-status-state-zone",
         )!;
@@ -5461,6 +5733,55 @@ class AgentMessageContainer {
     public clearRunning() {
         this.statusRail?.remove();
         this.statusRail = undefined;
+    }
+
+    /**
+     * Mark this bubble as part of a reasoning ("Thinking") flow so its working
+     * rail reads as reasoning (light purple) rather than a generic running
+     * request (blue). Updates an already-rendered rail immediately, since the
+     * rail is stamped before the reasoning source is known.
+     */
+    public markReasoning() {
+        this.reasoning = true;
+        if (this.statusRail) {
+            this.statusRail.dataset.variant = "reasoning";
+        }
+    }
+
+    /** Whether this bubble belongs to a reasoning ("Thinking") flow. */
+    public isReasoning(): boolean {
+        return this.reasoning;
+    }
+
+    /**
+     * Collapse this step's reasoning "Thinking" blocks once it is no longer
+     * active (superseded by the next step, or the request completed) so
+     * finished reasoning minimizes while the active step stays expanded. Each
+     * block is collapsed at most once - tracked per element - so a block the
+     * user manually re-opens is not re-collapsed by a later pass, while a block
+     * added after an earlier collapse still minimizes.
+     */
+    public collapseReasoning() {
+        this.bodyDiv
+            .querySelectorAll<HTMLDetailsElement>(
+                "details.reasoning-thinking[open]",
+            )
+            .forEach((details) => {
+                if (this.collapsedReasoning.has(details)) {
+                    return;
+                }
+                this.collapsedReasoning.add(details);
+                details.removeAttribute("open");
+            });
+    }
+
+    /**
+     * Tag this reasoning step as the final prose answer rather than a
+     * "Thinking"/tool trail step, so it renders with a gap separating it from
+     * the reasoning above it.
+     */
+    public setReasoningAnswer(isAnswer: boolean) {
+        this.div.classList.toggle("chat-reasoning-answer", isAnswer);
     }
 
     /**

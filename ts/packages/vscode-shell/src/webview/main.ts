@@ -24,6 +24,7 @@ import type {
 } from "chat-ui";
 import { VsCodeAzureSpeechProvider } from "./azureSpeechProvider.js";
 import { CameraView } from "./cameraView.js";
+import { injectStyle } from "./injectStyle.js";
 import type { SpeechToken } from "@typeagent/agent-server-protocol";
 import chatPanelStyles from "chat-ui/styles";
 import completionUiStyles from "@typeagent/completion-ui/styles.css";
@@ -39,20 +40,9 @@ import type {
 // Inject the chat-ui base styles first, then the completion-ui dropdown
 // styles, then the VS Code theme overlay so it can override defaults via
 // --vscode-* CSS variables.
-function injectStyles(css: string): void {
-    const styleEl = document.createElement("style");
-    styleEl.textContent = css;
-    document.head.appendChild(styleEl);
-}
-injectStyles(chatPanelStyles as unknown as string);
-injectStyles(completionUiStyles as unknown as string);
-injectStyles(vscodeThemeStyles as unknown as string);
-
-declare function acquireVsCodeApi(): {
-    postMessage(message: unknown): void;
-    getState(): unknown;
-    setState(state: unknown): void;
-};
+injectStyle(chatPanelStyles as unknown as string);
+injectStyle(completionUiStyles as unknown as string);
+injectStyle(vscodeThemeStyles as unknown as string);
 
 const vscode = acquireVsCodeApi();
 
@@ -194,6 +184,13 @@ const chatPanel = new ChatPanel(rootEl, {
         handleLinkClick: (href: string, _target: string | null) => {
             vscode.postMessage({ type: "openExternal", href });
         },
+        // Open the message in a new VS Code editor panel (movable / snappable)
+        // rather than an in-page overlay. The extension host owns the panel; it
+        // re-sanitizes the content before rendering.
+        openMessageInWindow: (html: string, title?: string) => {
+            vscode.postMessage({ type: "openMessageWindow", html, title });
+            return true;
+        },
     },
     // Mic + camera providers (see WEBVIEW_MEDIA_CAPTURE_SUPPORTED). Both are
     // undefined while getUserMedia is blocked in VS Code webviews, so neither
@@ -249,6 +246,22 @@ const chatPanel = new ChatPanel(rootEl, {
 // (not part of ChatPanelOptions), so wire it after construction.
 chatPanel.onDemoAction = (action: "continue" | "cancel") => {
     vscode.postMessage({ type: "demoCommand", action });
+};
+
+// Render the collapsed status-notice affordance as a bell next to the
+// connection indicator in the conversation bar. Returning true tells ChatPanel
+// the host displayed the badge.
+chatPanel.onStatusNoticeBadgeChange = (badge) => {
+    conversationBar.setNotificationBadge(
+        badge
+            ? {
+                  count: badge.count,
+                  level: badge.level,
+                  onClick: () => chatPanel.expandAllStatusNotices(),
+              }
+            : undefined,
+    );
+    return true;
 };
 
 // Mount inline + dropdown command-completion driven by the host
@@ -961,13 +974,35 @@ window.addEventListener("message", (event) => {
                     chatPanel.addNotification(msg.data, msg.source, rid);
                 } else {
                     chatPanel.showInline(msg.data, msg.source);
+                    chatPanel.recordNotification(
+                        msg.event,
+                        msg.source,
+                        msg.data,
+                    );
                 }
             } else if (msg.event === "toast") {
                 if (msg.source === "osNotifications" && rid) {
                     chatPanel.addNotification(msg.data, msg.source, rid);
                 } else {
                     chatPanel.showToast(msg.data, msg.source);
+                    chatPanel.recordNotification(
+                        msg.event,
+                        msg.source,
+                        msg.data,
+                    );
                 }
+            } else if (msg.event === "showNotifications") {
+                // `@notify` / `@notify clear` / `@notify show [unread|all]`
+                // read back the buffered notification center.
+                chatPanel.showNotifications(msg.data);
+            } else if (
+                msg.event === "info" ||
+                msg.event === "warning" ||
+                msg.event === "error"
+            ) {
+                // Agent status events: buffer silently for the notification
+                // center, surfaced later via `@notify show` / `@notify info`.
+                chatPanel.recordNotification(msg.event, msg.source, msg.data);
             } else if (msg.event === "osDismiss") {
                 // The OS notification left the action center — drop the
                 // matching persistent bubble. data.id is the "os:<id>"
