@@ -60,7 +60,7 @@
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

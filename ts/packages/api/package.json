@@ -47,7 +47,7 @@
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat-utils": "workspace:*",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

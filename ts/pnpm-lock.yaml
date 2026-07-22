@@ -880,7 +880,7 @@ importers:
     dependencies:
       '@azure/ai-projects':
         specifier: ^2.2.0
-        version: 2.2.0(ws@8.21.0)(zod@3.25.76)
+        version: 2.2.0(ws@8.21.1)(zod@3.25.76)
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
@@ -1558,7 +1558,7 @@ importers:
         version: 1.43.1(supports-color@8.1.1)
       openai:
         specifier: ^4.73.0
-        version: 4.103.0(encoding@0.1.13)(ws@8.21.0)(zod@4.3.6)
+        version: 4.103.0(encoding@0.1.13)(ws@8.21.1)(zod@4.3.6)
       zod:
         specifier: ^4.1.13
         version: 4.3.6
@@ -1595,7 +1595,7 @@ importers:
         version: 4.4.3(supports-color@8.1.1)
       isomorphic-ws:
         specifier: ^5.0.0
-        version: 5.0.0(ws@8.21.0)
+        version: 5.0.0(ws@8.21.1)
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
@@ -1625,8 +1625,8 @@ importers:
         specifier: workspace:*
         version: link:../../utils/webSocketChannelServer
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
 
   packages/agentServer/protocol:
     dependencies:
@@ -1704,8 +1704,8 @@ importers:
         specifier: workspace:*
         version: link:../../utils/webSocketChannelServer
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
@@ -1905,8 +1905,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       express:
         specifier: ^4.22.0
         version: 4.22.1
@@ -1989,8 +1989,8 @@ importers:
         specifier: workspace:*
         version: link:../../utils/webSocketChannelServer
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
       xss:
         specifier: ^1.0.15
         version: 1.0.15
@@ -2059,8 +2059,8 @@ importers:
         specifier: workspace:*
         version: link:../../agentRpc
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
     devDependencies:
       prettier:
         specifier: ^3.5.3
@@ -2120,8 +2120,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
@@ -2327,8 +2327,8 @@ importers:
         specifier: workspace:*
         version: link:../../utils/webSocketChannelServer
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
@@ -2403,8 +2403,8 @@ importers:
         specifier: workspace:*
         version: link:../../utils/typechatUtils
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
@@ -2732,8 +2732,8 @@ importers:
         specifier: ^4.3.4
         version: 4.4.1(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       express:
         specifier: ^4.22.0
         version: 4.22.1
@@ -2777,8 +2777,8 @@ importers:
         specifier: ^4.1.2
         version: 4.1.2
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
       y-prosemirror:
         specifier: ^1.2.3
         version: 1.3.5(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0)(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27)
@@ -2996,8 +2996,8 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
 
   packages/agents/osNotifications:
     dependencies:
@@ -3321,8 +3321,8 @@ importers:
         specifier: workspace:*
         version: link:../../studio-service
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
@@ -3596,8 +3596,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
@@ -3818,8 +3818,8 @@ importers:
         specifier: workspace:*
         version: link:../utils/typechatUtils
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -3850,7 +3850,7 @@ importers:
     dependencies:
       '@azure/ai-projects':
         specifier: ^2.2.0
-        version: 2.2.0(ws@8.21.0)(zod@3.25.76)
+        version: 2.2.0(ws@8.21.1)(zod@3.25.76)
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
@@ -3871,7 +3871,7 @@ importers:
         version: 4.4.1(supports-color@8.1.1)
       openai:
         specifier: ^6.16.0
-        version: 6.41.0(ws@8.21.0)(zod@3.25.76)
+        version: 6.41.0(ws@8.21.1)(zod@3.25.76)
       telemetry:
         specifier: workspace:*
         version: link:../telemetry
@@ -4038,8 +4038,8 @@ importers:
         specifier: ^6.0.2
         version: 6.0.5
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       markdown-it:
         specifier: ^14.2.0
         version: 14.2.0
@@ -4190,8 +4190,8 @@ importers:
         specifier: ^16.3.1
         version: 16.5.0
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@types/body-parser':
         specifier: ^1.19.5
@@ -4317,7 +4317,7 @@ importers:
         version: 9.0.5
       isomorphic-ws:
         specifier: ^5.0.0
-        version: 5.0.0(ws@8.21.0)
+        version: 5.0.0(ws@8.21.1)
       weather-agent:
         specifier: workspace:*
         version: link:../agents/weather
@@ -4619,8 +4619,8 @@ importers:
         specifier: workspace:*
         version: link:../../examples/workflow/adapter
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
       zod:
         specifier: ^4.1.13
         version: 4.1.13
@@ -5483,8 +5483,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       get-folder-size:
         specifier: ^5.0.0
         version: 5.0.0
@@ -5688,8 +5688,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -5721,8 +5721,8 @@ importers:
         specifier: workspace:*
         version: link:../utils/webSocketChannelServer
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@electron-toolkit/tsconfig':
         specifier: ^1.0.1
@@ -5818,8 +5818,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -6049,8 +6049,8 @@ importers:
         specifier: workspace:*
         version: link:../defaultAgentProvider
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@types/debug':
         specifier: ^4.1.0
@@ -6203,8 +6203,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
@@ -6250,10 +6250,10 @@ importers:
         version: 1.0.0
       isomorphic-ws:
         specifier: ^5.0.0
-        version: 5.0.0(ws@8.21.0)
+        version: 5.0.0(ws@8.21.1)
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -6362,11 +6362,11 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       isomorphic-ws:
         specifier: ^5.0.0
-        version: 5.0.0(ws@8.21.0)
+        version: 5.0.0(ws@8.21.1)
       markdown-it:
         specifier: ^14.2.0
         version: 14.2.0
@@ -6374,8 +6374,8 @@ importers:
         specifier: 1.43.1
         version: 1.43.1(supports-color@8.1.1)
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@types/debug':
         specifier: ^4.1.0
@@ -12876,8 +12876,8 @@ packages:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
 
-  dompurify@3.4.11:
-    resolution: {integrity: sha512-zhlUV12GsaRzMsf9q5M254YhA4+VuF0fG+QFqu6aYpoGlKtz+w8//jBcGVYBgQkR5GHjUomejY84AV+/uPbWdw==}
+  dompurify@3.4.12:
+    resolution: {integrity: sha512-zQvGet8Z2sWbQhCmfFz/T5QWH2oBmjnqK3qvOjaqaNLrLEF912WamU+ohnTp0TCep/MFVHpdJuCZEdFOdTnEFg==}
 
   domutils@2.8.0:
     resolution: {integrity: sha512-w96Cjofp72M5IIhpjgobBimYEfoPjx1Vx0BSX9P30WBdZW2WIKU0T1Bd0kz2eNZ9ikjKgHbEyKx8BB6H1L3h3A==}
@@ -12939,8 +12939,8 @@ packages:
   electron-publish@26.8.1:
     resolution: {integrity: sha512-q+jrSTIh/Cv4eGZa7oVR+grEJo/FoLMYBAnSL5GCtqwUpr1T+VgKB/dn1pnzxIxqD8S/jP1yilT9VrwCqINR4w==}
 
-  electron-to-chromium@1.5.389:
-    resolution: {integrity: sha512-cEto7aeOqBfU1D+c5py5pE+ooscKE75JifxLBdFUZsqAxRS6y7kebtxAZvICszSl05gPjYHDTjY+lXpyGvpJbg==}
+  electron-to-chromium@1.5.392:
+    resolution: {integrity: sha512-1yQq3VQCZRwsnYc67Oc+1fge6Lwtn0hzi6zmEVkB61Zx21kTbwJAW4dFLadl5Rc1tKhG/kSpYXnfiAhu0f0a1g==}
 
   electron-updater@6.6.2:
     resolution: {integrity: sha512-Cr4GDOkbAUqRHP5/oeOmH/L2Bn6+FQPxVLZtPbcmKZC63a1F3uu5EefYOssgZXG3u/zBlubbJ5PJdITdMVggbw==}
@@ -13334,9 +13334,6 @@ packages:
 
   fast-levenshtein@3.0.0:
     resolution: {integrity: sha512-hKKNajm46uNmTlhHSyZkmToAc56uZJwYq7yrciZjqOxnlfQwERDQJmHPUp7m1m9wx8vgOe8IaCKZ5Kv2k1DdCQ==}
-
-  fast-uri@3.1.2:
-    resolution: {integrity: sha512-rVjf7ArG3LTk+FS6Yw81V1DLuZl1bRbNrev6Tmd/9RaroeeRRJhAt7jg/6YFxbvAQXUCavSoZhPPj6oOx+5KjQ==}
 
   fast-uri@3.1.3:
     resolution: {integrity: sha512-i70LwGWUduXqzicKXWshooq+sWL1K3WUU5rKZNG/0i3a1OSoX3HqhH5WbWwTmqWfor4urUakGPiRQcleRZTwOg==}
@@ -18446,8 +18443,8 @@ packages:
     resolution: {integrity: sha512-7KxauUdBmSdWnmpaGFg+ppNjKF8uNLry8LyzjauQDOVONfFLNKrKvQOxZ/VuTIcS/gge/YNahf5RIIQWTSarlg==}
     engines: {node: ^12.13.0 || ^14.15.0 || >=16.0.0}
 
-  ws@7.5.11:
-    resolution: {integrity: sha512-zS54Oen9bITtp7kp2XM3AydrCIq1D+HwJOuH+c+e4LfpL/lotP5osijd+UoMnxwAam1GN8R4KtLAyIrIcBNpiA==}
+  ws@7.5.12:
+    resolution: {integrity: sha512-1xGnbYN3zbog9CwuNDQULNRrTCLIn46/WmpR1f0w6PsCYQHkylZr5vkd6kfMZYV6pRnQkcPNRyiA8LsrNKyhpg==}
     engines: {node: '>=8.3.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -18458,8 +18455,8 @@ packages:
       utf-8-validate:
         optional: true
 
-  ws@8.21.0:
-    resolution: {integrity: sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==}
+  ws@8.21.1:
+    resolution: {integrity: sha512-+0NTnW77fFN/DjQi6k/Sq/Yvk4Sgajw7urW8V+asjXnRgDs9gyGkdb7EzgfhA4goXsRIZKE28fzIXBHEzhuiWw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -19332,7 +19329,7 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@azure/ai-projects@2.2.0(ws@8.21.0)(zod@3.25.76)':
+  '@azure/ai-projects@2.2.0(ws@8.21.1)(zod@3.25.76)':
     dependencies:
       '@azure-rest/core-client': 2.4.0
       '@azure/abort-controller': 2.1.2
@@ -19346,7 +19343,7 @@ snapshots:
       '@azure/identity': 4.13.1
       '@azure/logger': 1.3.0
       '@azure/storage-blob': 12.27.0
-      openai: 6.41.0(ws@8.21.0)(zod@3.25.76)
+      openai: 6.41.0(ws@8.21.1)(zod@3.25.76)
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -20418,7 +20415,7 @@ snapshots:
       fs-extra: 10.1.0
       isbinaryfile: 4.0.10
       minimist: 1.2.8
-      plist: 3.1.1
+      plist: 3.1.0
     transitivePeerDependencies:
       - supports-color
 
@@ -20441,7 +20438,7 @@ snapshots:
       dir-compare: 4.2.0
       fs-extra: 11.3.6
       minimatch: 9.0.9
-      plist: 3.1.1
+      plist: 3.1.0
     transitivePeerDependencies:
       - supports-color
 
@@ -22112,7 +22109,7 @@ snapshots:
       '@types/lodash.debounce': 4.0.9
       '@types/lodash.throttle': 4.1.9
       clsx: 2.1.1
-      dompurify: 3.4.11
+      dompurify: 3.4.12
       lodash.debounce: 4.0.8
       lodash.throttle: 4.1.1
       nanoid: 5.1.5
@@ -24873,7 +24870,7 @@ snapshots:
       mime-types: 2.1.35
       parse5: 6.0.1
       picomatch: 2.3.2
-      ws: 7.5.11
+      ws: 7.5.12
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -25126,7 +25123,8 @@ snapshots:
 
   '@xmldom/xmldom@0.8.13': {}
 
-  '@xmldom/xmldom@0.9.10': {}
+  '@xmldom/xmldom@0.9.10':
+    optional: true
 
   '@xtuc/ieee754@1.2.0': {}
 
@@ -25225,7 +25223,7 @@ snapshots:
   ajv@8.18.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.2
+      fast-uri: 3.1.3
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
@@ -25725,7 +25723,7 @@ snapshots:
     dependencies:
       baseline-browser-mapping: 2.10.43
       caniuse-lite: 1.0.30001805
-      electron-to-chromium: 1.5.389
+      electron-to-chromium: 1.5.392
       node-releases: 2.0.51
       update-browserslist-db: 1.2.3(browserslist@4.28.6)
 
@@ -27029,7 +27027,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.4.11:
+  dompurify@3.4.12:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -27124,7 +27122,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-to-chromium@1.5.389: {}
+  electron-to-chromium@1.5.392: {}
 
   electron-updater@6.6.2(supports-color@8.1.1):
     dependencies:
@@ -27861,8 +27859,6 @@ snapshots:
   fast-levenshtein@3.0.0:
     dependencies:
       fastest-levenshtein: 1.0.16
-
-  fast-uri@3.1.2: {}
 
   fast-uri@3.1.3: {}
 
@@ -28806,7 +28802,7 @@ snapshots:
       type-fest: 4.41.0
       widest-line: 5.0.0
       wrap-ansi: 9.0.2
-      ws: 8.21.0
+      ws: 8.21.1
       yoga-wasm-web: 0.3.3
     optionalDependencies:
       '@types/react': 18.3.18
@@ -29078,9 +29074,9 @@ snapshots:
 
   isobject@3.0.1: {}
 
-  isomorphic-ws@5.0.0(ws@8.21.0):
+  isomorphic-ws@5.0.0(ws@8.21.1):
     dependencies:
-      ws: 8.21.0
+      ws: 8.21.1
 
   isomorphic.js@0.2.5: {}
 
@@ -29759,7 +29755,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 26.1.1
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
@@ -29897,7 +29893,7 @@ snapshots:
       whatwg-encoding: 2.0.0
       whatwg-mimetype: 3.0.0
       whatwg-url: 11.0.0
-      ws: 8.21.0
+      ws: 8.21.1
       xml-name-validator: 4.0.0
     transitivePeerDependencies:
       - bufferutil
@@ -30673,7 +30669,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
       dayjs: 1.11.20
-      dompurify: 3.4.11
+      dompurify: 3.4.12
       es-toolkit: 1.46.1
       katex: 0.16.47
       khroma: 2.1.0
@@ -30900,7 +30896,7 @@ snapshots:
       bent: 7.3.12
       https-proxy-agent: 4.0.0(supports-color@8.1.1)
       uuid: 9.0.1
-      ws: 7.5.11
+      ws: 7.5.12
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -31133,7 +31129,7 @@ snapshots:
 
   node-abi@4.33.0:
     dependencies:
-      semver: 7.8.5
+      semver: 7.7.4
 
   node-addon-api@1.7.2:
     optional: true
@@ -31144,7 +31140,7 @@ snapshots:
 
   node-api-version@0.2.1:
     dependencies:
-      semver: 7.8.5
+      semver: 7.7.4
 
   node-domexception@1.0.0: {}
 
@@ -31173,7 +31169,7 @@ snapshots:
       graceful-fs: 4.2.11
       nopt: 9.0.0
       proc-log: 6.1.0
-      semver: 7.8.5
+      semver: 7.7.4
       tar: 7.5.20
       tinyglobby: 0.2.17
       undici: 6.27.0
@@ -31333,7 +31329,7 @@ snapshots:
       is-docker: 2.2.1
       is-wsl: 2.2.0
 
-  openai@4.103.0(encoding@0.1.13)(ws@8.21.0)(zod@4.3.6):
+  openai@4.103.0(encoding@0.1.13)(ws@8.21.1)(zod@4.3.6):
     dependencies:
       '@types/node': 18.19.130
       '@types/node-fetch': 2.6.12
@@ -31343,14 +31339,14 @@ snapshots:
       formdata-node: 4.4.1
       node-fetch: 2.7.0(encoding@0.1.13)
     optionalDependencies:
-      ws: 8.21.0
+      ws: 8.21.1
       zod: 4.3.6
     transitivePeerDependencies:
       - encoding
 
-  openai@6.41.0(ws@8.21.0)(zod@3.25.76):
+  openai@6.41.0(ws@8.21.1)(zod@3.25.76):
     optionalDependencies:
-      ws: 8.21.0
+      ws: 8.21.1
       zod: 3.25.76
 
   optionator@0.9.4:
@@ -31712,6 +31708,7 @@ snapshots:
       '@xmldom/xmldom': 0.9.10
       base64-js: 1.5.1
       xmlbuilder: 15.1.1
+    optional: true
 
   pluralize@2.0.0: {}
 
@@ -32065,7 +32062,7 @@ snapshots:
       debug: 4.4.3(supports-color@8.1.1)
       devtools-protocol: 0.0.1367902
       typed-query-selector: 2.12.2
-      ws: 8.21.0
+      ws: 8.21.1
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -32082,7 +32079,7 @@ snapshots:
       devtools-protocol: 0.0.1566079
       typed-query-selector: 2.12.2
       webdriver-bidi-protocol: 0.4.1
-      ws: 8.21.0
+      ws: 8.21.1
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -34448,7 +34445,7 @@ snapshots:
       sockjs: 0.3.24
       spdy: 4.0.2(supports-color@8.1.1)
       webpack-dev-middleware: 7.4.5(tslib@2.8.1)(webpack@5.105.0)
-      ws: 8.21.0
+      ws: 8.21.1
     optionalDependencies:
       webpack: 5.105.0(postcss@8.5.19)(webpack-cli@5.1.4)
       webpack-cli: 5.1.4(webpack-dev-server@5.2.6)(webpack@5.105.0)
@@ -34720,9 +34717,9 @@ snapshots:
       imurmurhash: 0.1.4
       signal-exit: 3.0.7
 
-  ws@7.5.11: {}
+  ws@7.5.12: {}
 
-  ws@8.21.0: {}
+  ws@8.21.1: {}
 
   wsl-utils@0.1.0:
     dependencies:
