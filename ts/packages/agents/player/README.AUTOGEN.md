@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=bdedf2df4ae25635fa55eb520cefcac37c2603ae4d134c5d8efa2167146c9bfd -->
+<!-- AUTOGEN:DOCS:HASH:sha256=5db751d517695472ac1d263ab300fa96a23d48f59cbf1aec3f58eeab6d05b7d4 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # music — AI-generated documentation
@@ -16,11 +16,11 @@ The `music` package, located in `ts/packages/agents/player/`, is a TypeAgent app
 
 ## What it does
 
-The `music` package provides a wide range of actions for interacting with Spotify. These actions are organized into several functional categories:
+The `music` package provides a comprehensive set of actions for interacting with Spotify. These actions are grouped into several functional categories:
 
 ### Playback Control
 
-The agent allows users to control playback on active Spotify devices. Key actions include:
+The agent supports controlling playback on active Spotify devices. Key actions include:
 
 - `playTrack`, `pause`, `resume`, `next`, `previous`: Basic playback controls.
 - `setVolume`, `changeVolume`: Adjust playback volume.
@@ -36,7 +36,7 @@ Users can manage their playlists with actions such as:
 
 ### Search and Discovery
 
-The agent supports searching Spotify's music catalog with actions like:
+The agent allows users to search Spotify's music catalog with actions like:
 
 - `searchTracks`, `searchForPlaylists`, `searchArtists`, `searchAlbums`, `searchGenres`: Search for tracks, playlists, artists, albums, or genres.
 
@@ -164,6 +164,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `493ac5696974a3cab9c5528399a245063e7eb727` on `2026-07-18T23:55:00.731Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music docs:verify-links` to spot-check._
+_Auto-generated against commit `8192acc149ab6f52296dcc71202b20253b6a3089` on `2026-07-22T05:16:33.340Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

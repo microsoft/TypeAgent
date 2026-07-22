@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Lists the active grammar rules for the supplied agent.
 export type ListRulesAction = {
     actionName: "listRules";
     parameters?: {

@@ -78,7 +78,8 @@
     "expected": [
       "browser.lookupAndAnswer.lookupAndAnswerInternet",
       "dispatcher.pendingRequestAction"
-    ]
+    ],
+    "extraActions": [{ "duplicateOfPrevious": true }]
   },
   [
     {

@@ -53,10 +53,16 @@ export function createHistoryContext(
         .additionalInstructions
         ? context.chatHistory.getCurrentInstructions()
         : undefined;
+    const actions = translateConfig.promptConfig.recentActions
+        ? context.chatHistory.getRecentActions(
+              translateConfig.promptConfig.recentActionsLimit,
+          )
+        : undefined;
     return {
         promptSections,
         entities,
         additionalInstructions,
+        actions,
         activityContext: context.activityContext,
     };
 }
