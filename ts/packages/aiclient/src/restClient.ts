@@ -600,6 +600,7 @@ export type PoolCallOptions = {
     signal?: AbortSignal | undefined;
 };
 
+// code-complexity-allow: endpoint-pool retry/cooldown flow needs explicit per-status handling.
 async function fetchWithPool(
     pool: EndpointPool,
     method: "POST" | "GET",
