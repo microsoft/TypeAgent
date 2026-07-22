@@ -5067,13 +5067,34 @@ export class ChatPanel {
      * (e.g. a bare `ClientIO.question` with no preceding displayContent).
      */
     private choicePromptContainer(requestId?: string): AgentMessageContainer {
+        const threadId = this.resolveThreadId(requestId);
+        // Reuse the request's open agent bubble when one exists (non-blocking
+        // requestChoice/requestForm append their buttons onto the agent's
+        // prompt bubble). Gated on an explicit requestId to preserve prior
+        // behavior for anonymous prompts.
         if (requestId !== undefined) {
-            const existing = this.threadContainers.get(
-                this.resolveThreadId(requestId),
-            );
+            const existing = this.threadContainers.get(threadId);
             if (existing) {
                 return existing;
             }
+        }
+        // No open bubble. If this thread has committed reasoning-step bubbles
+        // (chained via lastStepAnchorByThread - populated only by "step" mode),
+        // anchor the prompt card right after the last step and advance the
+        // anchor so the reasoning's follow-up step chains BELOW the card.
+        // Without this a blocking interaction card (e.g. reasoning's ask_user)
+        // falls to the default insertion anchor and the follow-up step renders
+        // above it, so the question appears after its own answer.
+        const lastStep = this.lastStepAnchorByThread.get(threadId);
+        if (lastStep?.parentElement === this.messageDiv) {
+            const container = this.createAgentContainer(
+                "system",
+                "",
+                undefined,
+                lastStep,
+            );
+            this.lastStepAnchorByThread.set(threadId, container.div);
+            return container;
         }
         return this.createAgentContainer("system", "");
     }

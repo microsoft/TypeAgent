@@ -490,3 +490,77 @@ describe("question form wizard (paged)", () => {
         expect(response.cancelled).toBe(true);
     });
 });
+
+// Regression: a blocking prompt (ClientIO.question via requestInteraction, e.g.
+// reasoning's ask_user) is rendered mid-turn while the agent holds the request.
+// It must appear chronologically between the prior reasoning step and the
+// follow-up step. Previously the prompt card was created at the default
+// insertion anchor and the follow-up "step" bubble chained onto the earlier
+// step, so the card sank BELOW its own answer.
+describe("blocking prompt ordering (reasoning ask_user)", () => {
+    const source = "dispatcher.reasoningAction.copilot";
+
+    function stepOf(root: HTMLElement, text: string): HTMLElement {
+        const el = Array.from(
+            root.querySelectorAll<HTMLElement>(".chat-message-agent"),
+        ).find((e) => e.textContent?.includes(text));
+        if (!el) throw new Error(`no step bubble containing "${text}"`);
+        return el;
+    }
+
+    it("renders the prompt card between the prior step and the follow-up step", async () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("ask me a yes/no question", "req-1");
+        panel.setProcessing("req-1");
+
+        panel.addAgentMessage("Thinking", source, undefined, "step", "req-1");
+        panel.addAgentMessage(
+            "Tool: ask_user",
+            source,
+            undefined,
+            "step",
+            "req-1",
+        );
+
+        // Blocking prompt: no requestId, mirroring handleRequestInteraction.
+        const answered = panel.addChoicePrompt<number>(
+            "Do you enjoy using TypeAgent?",
+            [
+                { label: "Yes", value: 0 },
+                { label: "No", value: 1 },
+            ],
+        );
+
+        // The follow-up reasoning step arrives only after the user answers.
+        panel.addAgentMessage(
+            "You answered Yes",
+            source,
+            undefined,
+            "step",
+            "req-1",
+        );
+
+        const tool = stepOf(root, "Tool: ask_user");
+        const answer = stepOf(root, "You answered Yes");
+        const card = root
+            .querySelector<HTMLElement>(".choice-panel")!
+            .closest<HTMLElement>(".chat-message-agent")!;
+        expect(card).not.toBeNull();
+
+        // Chat is column-reverse: document order is bottom-to-top, so correct
+        // visual order (tool above card above answer) means, in the DOM, the
+        // answer precedes the card which precedes the tool.
+        expect(
+            card.compareDocumentPosition(answer) &
+                Node.DOCUMENT_POSITION_PRECEDING,
+        ).toBeTruthy();
+        expect(
+            card.compareDocumentPosition(tool) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+
+        // Resolve the prompt so no timer/promise dangles.
+        root.querySelector<HTMLButtonElement>(".choice-button")!.click();
+        await expect(answered).resolves.toBe(0);
+    });
+});
