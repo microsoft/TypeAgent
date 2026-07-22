@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7344d6fb9f826f6f6d2223226d5a8e917929c544cbc089f4e3aa6e26c0a13372 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=e8d3ae3208d6e72dbfc73b40036923060e4a18350a5e57fc396f8bc2160c61d6 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-shell — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, enabling users to interact with TypeAgent conversations directly within the editor. It provides a chat interface accessible via a side panel and editor tabs, allowing for efficient conversation management and interaction.
+The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, allowing users to interact with TypeAgent conversations directly within the editor. It provides a chat interface accessible via a side panel and editor tabs, enabling efficient conversation management and interaction.
 
 ## What it does
 
-The `vscode-shell` package offers a comprehensive chat interface within Visual Studio Code, designed to work with the TypeAgent ecosystem. Key features include:
+The `vscode-shell` package provides a rich chat interface within Visual Studio Code, designed to work with the TypeAgent ecosystem. Its key features include:
 
 - **Chat Interface**:
 
@@ -174,6 +174,6 @@ External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `micr
 
 ---
 
-_Auto-generated against commit `8ec451103180b2a383dfb4e1c7f80c1ad50e9d35` on `2026-07-22T00:05:15.961Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `0b06d6a1cc9d93888e91e217057d9c148b3cc49f` on `2026-07-22T04:45:01.388Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
