@@ -515,7 +515,7 @@ function formatExecuteActionDisplay(input: unknown): string {
     // actionName out directly so the label shows the real action, not "?".
     const action = parseActionInput(toolInput?.action);
     const actionName = getStringProp(action, "actionName") ?? "?";
-    return `**Tool:** execute_action — \`${schema}.${actionName}\``;
+    return `**Tool:** \`execute_action\` — \`${schema}.${actionName}\``;
 }
 
 function getPrimaryToolArg(input: unknown): string | undefined {
@@ -537,27 +537,29 @@ function formatToolCallDisplay(toolName: string, input: unknown): string {
         case "discover_actions": {
             const schema =
                 getStringProp(toolInput, "schemaName") ?? JSON.stringify(input);
-            return `**Tool:** discover_actions — schema: \`${schema}\``;
+            return `**Tool:** \`discover_actions\` — schema: \`${schema}\``;
         }
         case "execute_action":
             return formatExecuteActionDisplay(input);
         case "search_memory": {
             const question =
                 getStringProp(toolInput, "question") ?? JSON.stringify(input);
-            return `**Tool:** search_memory — \`${question}\``;
+            return `**Tool:** \`search_memory\` — \`${question}\``;
         }
         case "remember":
-            return `**Tool:** remember`;
+            return `**Tool:** \`remember\``;
     }
 
     // Built-in tools (shell, github/fs/*, github/search/*, ...): show the
     // primary argument so parallel or similar calls are distinguishable
-    // instead of rendering as identical "Tool: <name>" bubbles.
+    // instead of rendering as identical "Tool: <name>" bubbles. The tool name
+    // is rendered as inline code so it reads as a highlighted chip (matching a
+    // single tool call and the folded-batch summary).
     const primaryArg = getPrimaryToolArg(input);
     if (primaryArg) {
-        return `**Tool:** ${toolName} — \`${primaryArg}\``;
+        return `**Tool:** \`${toolName}\` — \`${primaryArg}\``;
     }
-    return `**Tool:** ${toolName}`;
+    return `**Tool:** \`${toolName}\``;
 }
 
 /**
@@ -1096,11 +1098,13 @@ async function executeReasoningWithoutPlanning(
     context.actionIO.appendDisplay("Thinking...", "temporary");
     const displayMode = resolveReasoningDisplayMode(context);
     // Fold runs of identical, back-to-back tool-call lines into one "xN" line.
-    const toolFolder = new ToolRunFolder((content) =>
-        context.actionIO.appendDisplay(
-            { type: "markdown", content, kind: "info" },
-            displayMode,
-        ),
+    const toolFolder = new ToolRunFolder(
+        (content) =>
+            context.actionIO.appendDisplay(
+                { type: "markdown", content, kind: "info" },
+                displayMode,
+            ),
+        formatToolCallDisplay,
     );
 
     const client = await getCopilotClient(context.sessionContext.agentContext);
@@ -1233,7 +1237,7 @@ async function executeReasoningWithoutPlanning(
                 event.data?.parameters ||
                 {};
             debug(`Tool execution started: ${toolName}`);
-            toolFolder.tool(formatToolCallDisplay(toolName, parameters));
+            toolFolder.tool(toolName, parameters);
         },
     );
 
@@ -1375,11 +1379,13 @@ async function executeReasoningWithTracing(
         context.actionIO.appendDisplay("Thinking...", "temporary");
         const displayMode = resolveReasoningDisplayMode(context);
         // Fold runs of identical, back-to-back tool-call lines into one "xN" line.
-        const toolFolder = new ToolRunFolder((content) =>
-            context.actionIO.appendDisplay(
-                { type: "markdown", content, kind: "info" },
-                displayMode,
-            ),
+        const toolFolder = new ToolRunFolder(
+            (content) =>
+                context.actionIO.appendDisplay(
+                    { type: "markdown", content, kind: "info" },
+                    displayMode,
+                ),
+            formatToolCallDisplay,
         );
 
         const client = await getCopilotClient(
@@ -1524,7 +1530,7 @@ async function executeReasoningWithTracing(
                 // Record tool call for trace
                 tracer.recordToolCall(toolName, parameters);
 
-                toolFolder.tool(formatToolCallDisplay(toolName, parameters));
+                toolFolder.tool(toolName, parameters);
             },
         );
 

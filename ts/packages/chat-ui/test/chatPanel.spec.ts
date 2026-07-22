@@ -405,3 +405,127 @@ describe("notifications (persistent, dismissable)", () => {
         expect(remaining[0].textContent).toContain("two");
     });
 });
+
+describe("reasoning tool calls (single + folded)", () => {
+    // Mirrors what the reasoning engine emits for a logged tool call: a
+    // <div class="reasoning-tool-call"> with a clickable summary (tool name as
+    // inline code) and a hidden <pre> holding only that call's own JSON. Sent as
+    // a markdown display message (MarkdownIt passes the block-level HTML through
+    // verbatim). Folded runs carry a JSON array; single calls a lone object.
+    const foldedHtml =
+        '<div class="reasoning-tool-call">' +
+        '<span class="reasoning-tool-call-summary"><strong>Tool:</strong> ' +
+        "<code>read_conversation</code> x2</span>" +
+        '<pre class="chat-json reasoning-tool-call-json" hidden>[\n' +
+        '  {\n    "tool": "read_conversation",\n    "arguments": {\n      "offset": 0\n    }\n  },\n' +
+        '  {\n    "tool": "read_conversation",\n    "arguments": {\n      "offset": 6\n    }\n  }\n' +
+        "]</pre></div>";
+
+    const singleHtml =
+        '<div class="reasoning-tool-call">' +
+        '<span class="reasoning-tool-call-summary"><strong>Tool:</strong> ' +
+        "<code>get_conversation_info</code></span>" +
+        '<pre class="chat-json reasoning-tool-call-json" hidden>{\n' +
+        '  "tool": "get_conversation_info",\n  "arguments": {\n    "limit": 1\n  }\n' +
+        "}</pre></div>";
+
+    function addRun(panel: ChatPanel, html: string) {
+        panel.addUserMessage("run a tool", "req-1");
+        panel.addAgentMessage(
+            { type: "markdown", content: html, kind: "info" },
+            "dispatcher.reasoningAction.copilot",
+            undefined,
+            "step",
+            "req-1",
+        );
+    }
+
+    it("renders a folded run's clickable summary and hidden JSON array", () => {
+        const { root, panel } = makePanel();
+        addRun(panel, foldedHtml);
+
+        const summary = root.querySelector<HTMLElement>(
+            ".reasoning-tool-call-summary",
+        );
+        expect(summary).not.toBeNull();
+        // Tool name is inline code, not split apart by the action-JSON splitter.
+        expect(summary!.querySelector("code")!.textContent).toBe(
+            "read_conversation",
+        );
+        expect(summary!.textContent).toContain("x2");
+        const pre = root.querySelector<HTMLElement>(
+            "pre.reasoning-tool-call-json",
+        );
+        expect(pre).not.toBeNull();
+        expect(pre!.hasAttribute("hidden")).toBe(true);
+        const parsed = JSON.parse(pre!.textContent ?? "");
+        expect(parsed).toHaveLength(2);
+        expect(parsed[1].arguments.offset).toBe(6);
+    });
+
+    it("renders a single tool call as its own clickable block with object JSON", () => {
+        const { root, panel } = makePanel();
+        addRun(panel, singleHtml);
+
+        const summary = root.querySelector<HTMLElement>(
+            ".reasoning-tool-call-summary",
+        )!;
+        expect(summary.querySelector("code")!.textContent).toBe(
+            "get_conversation_info",
+        );
+        expect(summary.textContent).not.toContain("x");
+        const pre = root.querySelector<HTMLElement>(
+            "pre.reasoning-tool-call-json",
+        )!;
+        expect(pre.hasAttribute("hidden")).toBe(true);
+        // Only the relevant JSON for this one call — a lone object.
+        expect(JSON.parse(pre.textContent ?? "")).toEqual({
+            tool: "get_conversation_info",
+            arguments: { limit: 1 },
+        });
+    });
+
+    it("keeps each call's JSON inline, not in the action-data details panel", () => {
+        const { root, panel } = makePanel();
+        addRun(panel, singleHtml);
+
+        const pre = root.querySelector<HTMLElement>(
+            "pre.reasoning-tool-call-json",
+        )!;
+        // The JSON lives in the message content, decoupled from the clickable
+        // action JSON view (.chat-message-details) of the reasoningAction bubble.
+        expect(pre.closest(".chat-message-content")).not.toBeNull();
+        expect(pre.closest(".chat-message-details")).toBeNull();
+    });
+
+    it("toggles + syntax-highlights the JSON on click, highlighting once", () => {
+        const { root, panel } = makePanel();
+        addRun(panel, foldedHtml);
+
+        const summary = root.querySelector<HTMLElement>(
+            ".reasoning-tool-call-summary",
+        )!;
+        const pre = root.querySelector<HTMLElement>(
+            "pre.reasoning-tool-call-json",
+        )!;
+        expect(pre.querySelector(".json-key")).toBeNull();
+
+        // First click reveals + highlights the JSON.
+        summary.click();
+        expect(pre.hasAttribute("hidden")).toBe(false);
+        expect(pre.dataset.highlighted).toBe("true");
+        expect(pre.querySelector(".json-key")).not.toBeNull();
+        expect(pre.querySelector(".json-string")).not.toBeNull();
+
+        // Second click hides it again without re-highlighting / duplicating.
+        const highlightedHtml = pre.innerHTML;
+        summary.click();
+        expect(pre.hasAttribute("hidden")).toBe(true);
+        expect(pre.innerHTML).toBe(highlightedHtml);
+
+        // Third click re-reveals the already-highlighted body.
+        summary.click();
+        expect(pre.hasAttribute("hidden")).toBe(false);
+        expect(pre.innerHTML).toBe(highlightedHtml);
+    });
+});

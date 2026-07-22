@@ -1724,27 +1724,76 @@ table.sc-kv-table.sc-card-fields {
    `!important` because the host theme (e.g. vscode-shell's overlay)
    applies `color: ... !important` to the parent bubble; without it
    inheritance makes the spans render as the bubble's foreground color. */
-.chat-message-details pre.chat-json .json-key {
+.chat-message-details pre.chat-json .json-key,
+.reasoning-tool-call pre.chat-json .json-key {
   color: #9c27b0 !important;
   font-weight: 600;
 }
-.chat-message-details pre.chat-json .json-string {
+.chat-message-details pre.chat-json .json-string,
+.reasoning-tool-call pre.chat-json .json-string {
   color: #0a8043 !important;
 }
-.chat-message-details pre.chat-json .json-number {
+.chat-message-details pre.chat-json .json-number,
+.reasoning-tool-call pre.chat-json .json-number {
   color: #1976d2 !important;
 }
-.chat-message-details pre.chat-json .json-bool {
+.chat-message-details pre.chat-json .json-bool,
+.reasoning-tool-call pre.chat-json .json-bool {
   color: #b85c00 !important;
   font-weight: 600;
 }
-.chat-message-details pre.chat-json .json-null {
+.chat-message-details pre.chat-json .json-null,
+.reasoning-tool-call pre.chat-json .json-null {
   color: #888 !important;
   font-style: italic;
 }
 
 .chat-message-details.chat-details-visible {
   display: block;
+}
+
+/* Logged tool calls inside a reasoning step. Every tool call (single or a folded
+   run "Tool: <name> xN") renders as a clickable line (no disclosure widget) whose
+   tool name is inline code; clicking it reveals only that call's own JSON (same
+   look as the clickable action JSON view), independent of the enclosing action's
+   JSON. */
+.reasoning-tool-call {
+  margin: 2px 0;
+}
+.reasoning-tool-call-summary {
+  cursor: pointer;
+  display: inline-block;
+}
+.reasoning-tool-call-summary strong {
+  font-weight: 600;
+}
+/* Tool name chip — light-gray background, yellow/gold text (matches how inline
+   code renders in the reasoning text and how a single tool call looks). */
+.reasoning-tool-call-summary code {
+  background: rgba(127, 127, 127, 0.18);
+  color: #9a7d0a;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.95em;
+}
+.reasoning-tool-call-json {
+  margin: 4px 0 0 0;
+  padding: 8px;
+  background: rgba(127, 127, 127, 0.1);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  max-width: 100%;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.reasoning-tool-call-json[hidden] {
+  display: none;
 }
 
 /* =========================================================================
