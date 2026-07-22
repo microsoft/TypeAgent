@@ -23,7 +23,16 @@ function copySchemaPlugin() {
 
 export default defineConfig({
     main: {
-        plugins: [externalizeDepsPlugin(), copySchemaPlugin()],
+        plugins: [
+            externalizeDepsPlugin({
+                include: [
+                    "agent-server",
+                    "default-agent-provider",
+                    "dispatcher-node-providers",
+                ],
+            }),
+            copySchemaPlugin(),
+        ],
         build: {
             sourcemap: true,
         },

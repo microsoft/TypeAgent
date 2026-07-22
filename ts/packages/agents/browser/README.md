@@ -1,41 +1,24 @@
-# Browser automation extension
+# Browser TypeAgent (core agent)
+
+`browser-typeagent` is the core browser **agent** (`AppAgent`): it handles
+browser-related actions, knowledge extraction/indexing, search and answer
+generation, WebFlows, and the PDF viewer. It runs inside the dispatcher /
+agent-server process and controls a browser through the shared
+`BrowserControl` interface, implemented by either the Chrome/Edge extension
+(`@typeagent/browser-extension`) or the Electron shell's inline browser.
+
+Related packages:
+
+- **`@typeagent/browser-control-rpc`** (`../browserControlRpc`) — shared
+  browser types + content-script RPC client this agent depends on.
+- **`@typeagent/browser-extension`** (`../browserExtension`) — the
+  Chrome/Electron extension. See that package's README to build, install, and
+  run the extension.
 
 ## Build
 
-To build the browser extension, run `pnpm run build` in this folder. For debug support, you can run `pnpm run dev`
-
-## Install
-
-1. Enable developer mode in your browser. For chrome and edge, the steps are:
-
-   - Launch browser
-   - Click on the extensions icon next to the address bar. Select "Manage extensions" at the bottom of the menu.
-   - This launches the extensions page. Enable the developer mode toggle on this page.
-
-2. Build the extension
-3. Load the unpackaged extension
-   - Go to the "manage extensions page" from step #1
-   - Click on "load unpackaged extension". Navigate to the `dist/extension` folder of the browser extension package.
-
-## Running the extension
-
-1. Launch the browser where you installed the extension
-2. Launch the typeagent shell or the typeagent cli. These are integrated with the extension and can send commands. You can issue commands from this interface such as:
-   - open new tab
-   - go to new york times
-   - follow news link
-   - scroll down
-   - go back
-   - etc.
-
-## Chat panel
-
-The extension's chat panel supports the same `@conversation` slash
-commands and natural-language conversation management as the Shell and
-CLI (`new`, `list`, `info`, `switch`, `prev`, `next`, `rename`,
-`delete`). Switching, creating, or moving between conversations clears
-the panel and replays the new conversation's history, so peer activity
-from a Shell or CLI joined to the same conversation is also visible.
+Run `pnpm run build` in this folder (builds the agent, PDF views, and
+puppeteer helpers).
 
 ## Architecture
 
@@ -101,6 +84,80 @@ Both channels share a single WebSocket connection per client. The `sessionId` pr
 #### Client storage model
 
 Internally, the server stores connected clients in a nested `Map<sessionId, Map<clientId, BrowserClient>>`. This means the same `clientId` (e.g. `inlineBrowser`, or a shared extension ID) can exist simultaneously in multiple sessions without collision. Duplicate-connection detection and forced-disconnect logic are scoped to `(sessionId, clientId)` pairs, so a reconnect in one session never affects clients in other sessions.
+
+## Internet lookup (`lookupAndAnswerInternet`)
+
+The `browser.lookupAndAnswer.lookupAndAnswerInternet` action answers general
+"look it up on the web" questions (stock prices, sports scores, news, etc.).
+There are two ways to satisfy a query, selected by a single **global** setting
+that the browser agent reads server-side in `lookup()`:
+
+- **Browser** — drive a real browser (the shell's inline browser or a
+  connected Chrome/Edge extension): run a search, read the results page text
+  (`getPageTextContent()`), and synthesize an answer. Requires a connected
+  browser.
+- **Azure AI Search (Foundry IQ)** — call a knowledge base backed by a **web
+  knowledge source**, which does the web search + fetch + LLM summarization
+  server-side and returns a cited answer. Needs **no browser**, so it works in
+  browser-less clients (vscode-shell, CLI, headless).
+
+### Which path runs
+
+The path is chosen by `azureAISearch.mode` (env `AZURE_AI_SEARCH_LOOKUP_MODE`):
+
+| `mode`                  | Path                                               | Needs a browser? |
+| ----------------------- | -------------------------------------------------- | ---------------- |
+| `off` / unset (default) | Browser search → read page → generate answer       | Yes              |
+| `api`                   | Azure AI Search REST `retrieve`                    | No               |
+| `mcp`                   | Azure AI Search MCP `knowledge_base_retrieve` tool | No               |
+
+The **code default is `off`** (browser); the shipped `config.sample.yaml` sets
+`api` as the recommended value once you've provisioned a knowledge base.
+`api`/`mcp` additionally require `azureAISearch.endpoint` and `knowledgeBase` —
+if either is missing the agent falls back to the browser path. The switch is
+**global** (one setting for the browser agent, shared by every client) and is
+read at agent-server startup. Auth defaults to identity
+(`DefaultAzureCredential`); see the `azureAISearch` section in
+`config.sample.yaml`.
+
+When the effective mode is the browser but **no browser is connected**, the
+agent automatically falls back to the `api` path if Azure AI Search is
+configured — so a browser-less client (e.g. vscode-shell without the extension)
+still gets an answer.
+
+```mermaid
+flowchart TD
+    A["lookupAndAnswerInternet"] --> B["browser agent lookup()"]
+    B --> C{"mode = api or mcp?<br/>(and endpoint and knowledgeBase set)"}
+    C -- "api" --> E["Azure AI Search REST retrieve"]
+    C -- "mcp" --> F["Azure AI Search MCP<br/>knowledge_base_retrieve"]
+    C -- "no (off / unset)" --> J{"browser connected?"}
+    J -- "yes" --> D["Browser: search() → getPageTextContent()<br/>→ generateAnswer()"]
+    J -- "no" --> K{"api configured?"}
+    K -- "yes" --> E
+    K -- "no" --> L["error: no browser available"]
+    E --> G["Web knowledge source (Grounding with Bing)<br/>+ LLM summarization → cited answer"]
+    F --> G
+    D --> H["Answer"]
+    G --> H
+```
+
+### Change the mode at runtime
+
+`@browser lookup` switches the backend on the fly (no restart), overriding
+`azureAISearch.mode` for the running agent-server:
+
+- `@browser lookup status` — show the configured mode, any runtime override, and the effective path.
+- `@browser lookup mode <off|api|mcp>` — set the backend (`off` = browser); the value tab-completes.
+
+The override is in-memory only; it reverts to the configured `azureAISearch.mode`
+when the agent-server restarts. Implemented in
+`src/agent/lookup/lookupCommandHandlers.mts`.
+
+To provision the Azure AI Search web knowledge source + knowledge base, run
+`pnpm --filter browser-typeagent setup:aisearch` (see
+`src/agent/lookup/aiSearchSetup.mts`). The runtime client is in
+`src/agent/lookup/aiSearchLookup.mts`.
 
 ## Trademarks
 

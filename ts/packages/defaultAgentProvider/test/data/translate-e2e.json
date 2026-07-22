@@ -57,13 +57,14 @@
     }
   },
   {
-    "request": "get my top 50 favorite songs, filter the current list to Bach pieces, and create a playlist call test",
-    "extraActions": ["dispatcher.pendingRequestAction"],
+    "request": "get my top 50 favorite songs and create a playlist call test",
     "expected": [
       "player.getFavorites",
-      "dispatcher.pendingRequestAction",
-      "player.createPlaylist"
-    ]
+      {
+        "anyof": ["player.createPlaylist", "dispatcher.pendingRequestAction"]
+      }
+    ],
+    "extraActions": ["dispatcher.pendingRequestAction"]
   },
   {
     "request": "look up information about Oregon and write a poem using what you found",
@@ -77,7 +78,8 @@
     "expected": [
       "browser.lookupAndAnswer.lookupAndAnswerInternet",
       "dispatcher.pendingRequestAction"
-    ]
+    ],
+    "extraActions": [{ "duplicateOfPrevious": true }]
   },
   [
     {

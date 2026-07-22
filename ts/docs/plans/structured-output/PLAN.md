@@ -370,6 +370,23 @@ derived fallback (no throw, no regression):
 Client-side sort / filter on `TableBlock` in `chat-ui`, honoring
 `readonly` / `sortable` / `filterable`. chat-ui clients only.
 
+**Phase 4b — client-side pagination (done).** Optional
+`TableBlock.pageSize`: when set (and `rows.length > pageSize`), `chat-ui`
+renders the first `pageSize` rows and reveals the rest in batches via a
+"Show more" control. All rows still ship in one payload — this is a pure
+rendering concern, so replay/DisplayLog stay unchanged and the
+markdown/text fallbacks render every row. Pagination composes with sort
+(re-caps after reorder) and filter (a live query suspends the cap and
+shows all matches). No agent-driven/server-side paging: fetching more
+rows on demand needs the same round-trip channel as row-actions and is
+deferred with open question #3.
+
+**Pinned columns — reserved, not built.** `TableColumn.pinned?: "left" |
+"right"` is carried in the type for forward-compat (like `cell.href` /
+`block.action`) but no client wires up sticky rendering yet. Sticky
+columns only pay off for wide, horizontally-scrolling tables, which no
+adopter emits today; wire the `position: sticky` CSS when one does.
+
 ### Phase 5 — First adopter: `github-cli` _(after 1; visually validated by 3)_
 
 Rewrite `formatListResults` and the list/view actions in
@@ -384,6 +401,27 @@ Example — the `prList` table: an `#id` **link** column → `url`, a
 **text** title column, a **badge** state column (`DRAFT`/`OPEN` colored
 by tone), a **code** branch column; `sortable: true`.
 
+**Status: complete.** All display-producing paths now emit
+`StructuredContent`:
+
+- List actions (`prList`, `issueList`, `myAssignedIssues`, `searchRepos`)
+  → `buildStructuredListResult` (heading + interactive table).
+- `repoView` → `buildStructuredRepoView` (heading + `keyValue`).
+- Dependabot alerts → `buildStructuredDependabotResult` (badge severity
+  table).
+- Contributors → `buildStructuredContributorsResult` (ranked table).
+- Single `prView` / `issueView` → `buildStructuredPrView` /
+  `buildStructuredIssueView` (heading + `keyValue` metadata + optional
+  body text block).
+- Focused field answers (stars / forks / language / watchers /
+  description) → `buildStructuredField` (heading + single `keyValue`
+  pair + natural-language summary; `rawData` carries `{ repo, field,
+value }`).
+
+Remaining markdown/text paths are intentional: mutation/create success
+messages, `statusPrint`, and the raw-output fallback carry no structured
+data. `githubCliStructuredResults.spec.ts` covers all builders.
+
 ### Phase 6 — Programmatic "or otherwise" _(after 1 + 5)_
 
 - `packages/commandExecutor/src/commandServer.ts` forwards `rawData` as
@@ -392,6 +430,140 @@ by tone), a **code** branch column; `sortable: true`.
 - Optionally update `packages/agents/taskflow/src/script/taskFlowScriptApi.mts`
   to read `rawData` directly, dropping the `extractText` + `tryParseJson`
   workaround.
+
+### Phase 7 — Broader agent rollout _(after 5; per-agent, parallelizable)_
+
+`github-cli` is the reference adopter, but every list-, table-, or
+record-shaped agent result throws away structure today. Convert the rest
+in the order below. The order is driven by (a) how naturally the output
+maps to blocks, (b) user-facing value, and (c) conversion cost. Each
+agent follows the `github-cli` template: emit `StructuredContent` via
+`createStructuredContent` / `createTable` / `fromRecords` with `rawData`,
+keep the derived markdown/text fallback at parity, and update the
+handler's unit tests.
+
+Agents already committed to custom HTML/iframe or a WebSocket/RPC bridge
+(`image`, `video`, `settings`, `chat`, `code`, `visualStudio`,
+`browser`, `markdown`, `montage`, `turtle`, `player`, `playerLocal`) are
+**out of scope** for v1 — they render their own UI and don't flow through
+the block-document fallback path. Short status/confirmation agents
+(`timer`, `windowsClock`, `greeting`, `desktop`, `vampire`,
+`androidMobile`, `powershell`, `utility`, `studio`) are **low value** and
+deferred until a clear need appears.
+
+**Wave A — high fit (clear list/table/record output):**
+
+| #   | Agent      | Shape today                        | Target blocks                                                   |
+| --- | ---------- | ---------------------------------- | --------------------------------------------------------------- |
+| 1   | `list`     | markdown bullet lists              | `heading` + `list`                                              |
+| 2   | `calendar` | HTML event views (`appendDisplay`) | `heading` + `table` (agenda) + `card`/`keyValue` (event detail) |
+| 3   | `email`    | HTML message lists + threads       | `heading` + `table` (inbox/list) + `keyValue` (message detail)  |
+| 4   | `weather`  | text forecast                      | `keyValue` (current) + `table` (multi-day forecast)             |
+| 5   | `ipconfig` | markdown key/values                | `heading` + `keyValue` (per-adapter sections)                   |
+
+**Wave B — medium fit (structured data mixed with text):**
+
+| #   | Agent           | Shape today                | Target blocks                         |
+| --- | --------------- | -------------------------- | ------------------------------------- |
+| 6   | `discord`       | text channel/message lists | `heading` + `list`/`table`            |
+| 7   | `taskflow`      | text task listings         | `table` (name / description / usage)  |
+| 8   | `onboarding`    | markdown wizard status     | `heading` + `keyValue` (phase status) |
+| 9   | `screencapture` | image + markdown metadata  | `image` + `heading`/`keyValue`        |
+
+`osNotifications` was initially a Wave B candidate but is **out of scope**:
+each notification is an individual toast/inline event pushed via
+`context.notify` (single-line, intentionally plain text for clean CLI
+rendering), not a list-shaped action result. Its action results are
+short status confirmations.
+
+**Out of scope (v1):** `image`, `video`, `settings`, `chat`, `code`,
+`visualStudio`, `browser`, `markdown`, `montage`, `turtle`, `player`,
+`playerLocal` (custom UI / RPC bridge).
+
+**Deferred (low value):** `timer`, `windowsClock`, `greeting`,
+`desktop`, `vampire`, `androidMobile`, `powershell`, `utility`, `studio`
+(short text/status confirmations).
+
+### Phase 8 — RPC / custom-UI agents _(after 7; mostly out of scope)_
+
+These are the twelve agents Wave A/B set aside as "custom UI / RPC
+bridge." The distinguishing property is **where the display is produced**:
+their user-facing output does not flow through
+`ActionResult.displayContent` as flattened list/record text, so the
+block-document model has nothing to convert. Three architectures:
+
+- **WebSocket/RPC bridge to an external process** — the agent forwards a
+  command and the _external_ client renders the result; the
+  `displayContent` path carries only status/error text.
+  - `code` → Coda VS Code extension (`codeAgentWebSocketServer.ts`;
+    display goes straight to the socket via
+    `actionIO.setDisplay(data.result)`).
+  - `visualStudio` → VS C# extension (`VisualStudioBridge`); only bridge
+    error text uses `createActionResultFromTextDisplay`.
+  - `player` (Spotify) / `playerLocal` — imperative playback commands;
+    results are errors + HTML player widgets, no list results on the
+    `displayContent` path.
+- **Custom webapp (forked view process + Yjs/HTTP)** — a separate web
+  app owns rendering; agent results are "opening / updated" status text.
+  - `markdown`, `montage`, `turtle` (each forks a `site/` viewer).
+- **Bespoke interactive HTML/JS** via
+  `createActionResultFromHtmlDisplayWithScript` / iframe — the payload is
+  a _pre-rendered_ stateful widget (forms, carousels, players), not
+  structured data + fallback.
+  - `image` (carousel), `video` (polling player), `settings` (forms),
+    `chat` (freeform LLM text + HTML-embedded images).
+
+**Verdict: only `browser` has a genuinely convertible result.** Its web
+**search results** are produced by `generateWebSearchMarkdown()` and
+returned through the normal `createActionResultFromMarkdownDisplay` path
+(`browserActionHandler.mts` ~L1771) — a list of `{ title, url, domain,
+snippet, relevanceScore }`. The browser's page-interaction actions
+(navigate, screenshot, follow-link) stay on the extension-RPC path.
+
+#### Phase 8a — `browser` web-search → structured _(the one adopter)_
+
+Convert `generateWebSearchMarkdown()`'s output to a `StructuredContent`
+document: a heading (`Found N results for "query"`) + a **table** (or
+`list`) with a link title column, domain, snippet, and a right-aligned
+relevance column; `sortable: true`, `pageSize: 10`; carry the raw
+`websites` array as `rawData`. Keep the existing entity creation
+untouched. The knowledge-preview path
+(`generateLiveKnowledgePreview`, ~L1521) emits HTML into the extension
+and is **not** in scope here.
+
+- **Client caveat:** `browser` search results can surface in the Chrome/
+  Edge extension, which has its **own** renderer and does not understand
+  `type: "structured"`. The SDK-derived markdown `alternates` (via
+  `getStructuredFallback`) cover it, but this must be **visually
+  verified in the extension** before shipping — if the extension renders
+  raw JSON instead of the markdown alternate, either update the
+  extension to prefer the alternate or keep this conversion behind the
+  shell/vscode surfaces only.
+
+#### Phase 8b — the rest: prerequisites, not work items
+
+The remaining eleven agents are **out of scope until their external
+renderer understands `StructuredContent` (or reliably falls back to the
+markdown/text alternate).** No agent-side change is worthwhile before
+then, because the block document would either never reach a
+block-capable renderer or would replace a richer bespoke widget with a
+plain table. Concretely, a future effort would need:
+
+- **Extension/bridge renderers** (`code`, `visualStudio`, `browser`
+  extension) to consume `DisplayContent` and call `getContentForType` /
+  `getStructuredFallback` like `chat-ui` and `vscode-chat` do today.
+- **Webapp viewers** (`markdown`, `montage`, `turtle`) — no change; their
+  content is documents/graphics, not tabular data. Leave as-is
+  permanently.
+- **Widget agents** (`image`, `video`, `settings`, `chat`, `playerLocal`,
+  `player`) — would each need a redesign to separate _data_ from
+  _pre-rendered widget_ (e.g. `image` emitting `ImageBlock[]` instead of
+  a carousel iframe). Only pursue per-agent if a concrete UX need
+  arises; not a batch conversion.
+
+**Recommendation:** do **Phase 8a** (browser search) as an isolated,
+visually-validated change; treat **8b** as documentation of
+prerequisites, not a backlog to burn down.
 
 ## Verification
 
@@ -433,6 +605,73 @@ by tone), a **code** branch column; `sortable: true`.
    break.
 4. **Naming** — `StructuredContent` / `type: "structured"` vs
    `RichContent` / `"rich"`. Current lean: `structured`.
+
+## Future enhancements (backlog)
+
+Ideas beyond the shipped scope (block document + sort/filter/pagination +
+`rawData`). Not scheduled; pull into a phase when a concrete agent needs
+it. Ordered roughly by value-to-effort within each group.
+
+### Interactivity (largest remaining feature)
+
+- **Row actions** (open question #3) — wire the reserved `cell.href` /
+  `block.action` fields so a row click can trigger an agent action
+  (merge a PR, reply to an email, delete a calendar event). Requires a
+  **client → agent transport** (a response channel back into the agent,
+  the same prerequisite as agent-driven paging). This is the natural
+  "v2" and unlocks a whole class of interactive agents.
+- **Column visibility / reorder** — let the user hide or reorder columns
+  on wide tables (chat-ui only; pure client state).
+- **Pinned columns** — `TableColumn.pinned` is already reserved; wire the
+  `position: sticky` CSS when a wide, horizontally-scrolling table
+  actually ships.
+
+### New block / cell types
+
+- **`progress` block** — determinate bar or spinner for long-running
+  agents (screencapture build, onboarding phases, calendar sign-in),
+  replacing today's streamed `kind: "status"` text.
+- **`chart` block** — minimal bar/line/sparkline derived from `rawData`
+  (weather forecast, github contributor counts, dependabot severity).
+  Currently the iframe escape hatch is the only option (explicit v1
+  non-goal).
+- **Richer cell types** — `boolean` (checkmark), `duration`,
+  `relative-date` ("3 days ago"), `percent` (inline bar), `currency`.
+- **Nested / expandable rows** — a row expands to a detail block (email →
+  body, PR → description); hooks into the reserved `block.action`.
+
+### Consistency & developer experience
+
+- **Extract remaining inline builders** — `email`, `discord`, `taskflow`,
+  `onboarding`, `screencapture` still build blocks inline. Pull them into
+  pure exported functions + unit tests, matching the
+  github-cli / calendar / weather / ipconfig / list pattern. Closes the
+  last test-coverage gap.
+- **Shared column-spec DSL** — a typed `{ field, header, type, format }`
+  spec on top of `fromRecords` to cut per-adopter cell-mapping
+  boilerplate and standardize date/badge/number rendering.
+- **`validateStructuredContent(blocks)` helper** — catch malformed tables
+  (ragged rows, unknown column ids, bad cell shapes) at build/test time.
+
+### Client / rendering reach
+
+- **CLI table rendering** — `enhancedConsole.ts` gets the plain-text
+  fallback today; a box-drawing table would improve the terminal.
+- **MCP `outputSchema`** — Phase 6 carries `rawData` but not
+  `dataSchema`; derive JSON Schema from the block document so MCP /
+  Claude clients can validate typed output.
+- **Browser-extension fallback** — teach the Chrome/Edge extension to
+  prefer the markdown alternate (`getStructuredFallback`); this is the
+  prerequisite that unblocks Phase 8a (browser search results).
+- **Accessibility pass** — ARIA sort states, `scope`, and live-region
+  announcements for sort / filter / pagination in `setContent.ts`.
+
+### Data-scale
+
+- **Virtualized tables** — render-on-scroll for very large `rawData`
+  tables instead of pagination (chat-ui only).
+- **Agent-driven / server-side paging** — fetch page N on demand; shares
+  the client → agent transport prerequisite with row actions.
 
 ## Key files
 

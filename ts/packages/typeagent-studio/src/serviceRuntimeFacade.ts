@@ -5,6 +5,8 @@ import type {
     RepoRootResolution,
     StudioReplayRequest,
     StudioReplayResult,
+    ReplayResolutionTraceRequest,
+    ReplayResolutionTraceResult,
     StudioCorpusImportRequest,
     StudioCorpusImportResult,
 } from "@typeagent/core/runtime";
@@ -103,5 +105,11 @@ export class StudioServiceRuntimeFacade implements CorpusSource, HealthSource {
         request: StudioReplayRequest,
     ): Promise<StudioReplayResult> {
         return this.require().replayCorpus(request);
+    }
+
+    async replayResolutionTrace(
+        request: ReplayResolutionTraceRequest,
+    ): Promise<ReplayResolutionTraceResult> {
+        return this.require().replayResolutionTrace(request);
     }
 }

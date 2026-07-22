@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=578d806e77aca9db610efea718fe695ac18498bf2972c45344db69e47f8fe641 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=23b73a5bebd0f45ba6f02a94e51c46abbdb69dafd972187a0fb1762513475079 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/config — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The `@typeagent/config` package is a TypeScript library that provides a layered YAML configuration loader for the TypeAgent ecosystem. It supports loading configuration from multiple sources, merging them in a defined order of precedence, and flattening nested structures into flat key-value pairs compatible with existing `process.env` consumers. The package also includes schema validation, CLI utilities, and integration with Azure Key Vault for secure configuration management.
+The `@typeagent/config` package is a TypeScript library designed to manage configuration for the TypeAgent ecosystem. It provides a layered YAML configuration loader that merges settings from multiple sources, validates them against schemas, and ensures compatibility with existing `process.env` consumers. The package also supports advanced features like Azure Key Vault integration, sensitive data redaction, and CLI utilities for configuration management.
 
 ## What it does
 
-The `@typeagent/config` package offers the following capabilities:
+The `@typeagent/config` package provides the following key features:
 
 1. **Layered Configuration Loading**:
 
-   - Reads configuration from multiple sources, including:
+   - Loads configuration from multiple sources, including:
      - `ts/config.defaults.yaml`: A committed default configuration file.
      - `ts/config.local.yaml`: A local, gitignored file for overrides.
      - `.env`: A legacy fallback for backward compatibility.
@@ -47,7 +47,7 @@ The `@typeagent/config` package offers the following capabilities:
    Uses `zod` to validate configuration settings, ensuring they conform to expected schemas.
 
 5. **CLI Utilities**:
-   Includes commands for importing `.env` files into YAML format and displaying the merged configuration.
+   Provides commands for importing `.env` files into YAML format and displaying the merged configuration.
 
 6. **Sensitive Data Redaction**:
    Identifies and redacts sensitive values (e.g., API keys, secrets) in configuration data.
@@ -57,7 +57,7 @@ The `@typeagent/config` package offers the following capabilities:
 
 ## Setup
 
-To use the `@typeagent/config` package, ensure the following environment variables are set:
+To use the `@typeagent/config` package, you need to configure the following environment variables:
 
 - `AZURE_OPENAI_`: Used for Azure OpenAI configuration.
 - `JEST_WORKER_ID`: Utilized during Jest testing.
@@ -168,6 +168,6 @@ _10 environment variables referenced from `./src/` (set in `ts/.env` or your she
 
 ---
 
-_Auto-generated against commit `15ef5aa0362e3296bd9d6bd2f001fab704375d27` on `2026-07-06T09:20:03.630Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/config docs:verify-links` to spot-check._
+_Auto-generated against commit `d9ee555d43867e97462e8fa147f7ef73b8da05ec` on `2026-07-19T20:27:13.071Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/config docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=932ab325e5be7f17ba37a1de3ae3b7fd209b76a643b1a6a7b42d7bc951f17850 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b0edd0cf02b0ff295e1d62494c69fd8c65e83047650c402ac565f0538824eb5e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-server — AI-generated documentation
@@ -12,18 +12,20 @@
 
 ## Overview
 
-The `agent-server` package is a TypeScript library that provides a long-running WebSocket server for hosting TypeAgent dispatchers. It manages client connections, facilitates communication between clients and agents, and handles conversation management. The server supports multiple clients and conversations simultaneously, with features such as conversation persistence, idle timeouts, and graceful shutdown.
+The `agent-server` package is a TypeScript library that implements a long-running WebSocket server for hosting TypeAgent dispatchers. It serves as the central hub for managing client connections, orchestrating conversations, and facilitating communication between clients and agents. The server supports multiple clients and conversations simultaneously, with features like conversation persistence, idle timeouts, and ephemeral conversation cleanup.
 
 ## What it does
 
-The `agent-server` package is a core component of the TypeAgent ecosystem, enabling communication between clients and agents through a WebSocket server. Its primary responsibilities include:
+The `agent-server` provides the following core functionalities:
 
-- **Conversation Management**: The server supports actions such as `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation`. These actions allow clients to manage and interact with conversations.
-- **Server Control**: The `shutdown` action provides a mechanism for controlled server termination.
-- **Idle Timeout**: The server can be configured to shut down automatically after a specified period of inactivity using the `--idle-timeout` flag.
-- **Ephemeral Conversation Cleanup**: On startup, the server removes temporary conversations (e.g., those created by CLI processes) to free up resources.
+- **WebSocket Server**: Hosts a WebSocket server to manage client connections and enable communication between clients and agents.
+- **Conversation Management**: Supports actions such as `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation`. These actions allow clients to manage and interact with conversations.
+- **Server Control**: Includes a `shutdown` action for graceful server termination.
+- **Idle Timeout**: Configurable idle timeout to automatically shut down the server after a specified period of inactivity.
+- **Ephemeral Conversation Cleanup**: Automatically removes temporary conversations (e.g., those created by CLI processes) during server startup to free up resources.
+- **Copilot Session Integration**: Provides tools for importing and replaying GitHub Copilot sessions into the conversation UI.
 
-The server listens on a WebSocket endpoint and processes these actions by interacting with its core components, such as the `ConversationManager` and `SharedDispatcher`. It integrates with other TypeAgent packages, including `@typeagent/agent-server-client` and `@typeagent/agent-server-protocol`, to provide a consistent framework for agent-based communication.
+The server integrates with other TypeAgent packages, such as `@typeagent/agent-server-client` and `@typeagent/agent-server-protocol`, to provide a cohesive framework for agent-based communication.
 
 ## Setup
 
@@ -34,10 +36,11 @@ To set up the `agent-server`, you need to configure the following environment va
 - `SPEECH_SDK_KEY`: The API key for the speech SDK. Refer to the hand-written README for details on obtaining this value.
 - `SPEECH_SDK_REGION`: The region for the speech SDK. Refer to the hand-written README for details on obtaining this value.
 - `TYPEAGENT_DEV`: A flag to enable development mode. Set this to `true` for development purposes.
+- `TYPEAGENT_SUPERVISED`: A flag to enable supervised mode for the server.
 - `TYPEAGENT_USER_NAME`: The username for the TypeAgent user. This can override the default OS user name.
 - `XDG_CONFIG_HOME`: Specifies the base directory for configuration files. If not set, the default is typically `~/.config`.
 
-You can set these variables in your environment or define them in a `.env` file in the `ts/` directory. For additional details, refer to the hand-written README.
+These variables can be set in your environment or defined in a `.env` file in the `ts/` directory. For further details, refer to the hand-written README.
 
 ## Key Files
 
@@ -45,47 +48,46 @@ The `agent-server` package is organized into several key files, each responsible
 
 ### [server.ts](./src/server.ts) — WebSocket Listener
 
-This file initializes the WebSocket server and manages client connections. It performs the following tasks:
-
-1. Creates a `ConversationManager` instance to handle conversation-related operations.
-2. Sets up the WebSocket server using `createWebSocketChannelServer`.
-3. Exposes RPC functions over the `agent-server` channel, including:
-   - `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation` for conversation management.
-   - `shutdown` for graceful server termination.
+- Initializes the WebSocket server using `createWebSocketChannelServer`.
+- Creates a `ConversationManager` instance to handle conversation-related operations.
+- Exposes RPC functions over the `agent-server` channel, including conversation management actions (`joinConversation`, `leaveConversation`, etc.) and server control (`shutdown`).
 
 ### [conversationManager.ts](./src/conversationManager.ts) — Conversation Pool
 
-This file manages the lifecycle of conversations and their associated dispatchers. Key responsibilities include:
-
-- **Persistence**: Stores conversation metadata and data in the user's configuration directory.
-- **Lazy Initialization**: Creates `SharedDispatcher` instances only when a conversation is accessed.
-- **Default Conversations**: Automatically creates a default conversation if none exists.
-- **Ephemeral Cleanup**: Deletes temporary conversations (e.g., `cli-ephemeral-*`) on server startup.
-- **Idle Shutdown**: Monitors client activity and shuts down the server after a period of inactivity if the `--idle-timeout` flag is set.
+- Manages the lifecycle of conversations and their associated dispatchers.
+- Stores conversation metadata and data in the user's configuration directory.
+- Implements lazy initialization for `SharedDispatcher` instances, creating them only when a conversation is accessed.
+- Automatically creates a default conversation if none exists.
+- Cleans up ephemeral conversations (e.g., `cli-ephemeral-*`) on server startup.
+- Monitors client activity and shuts down the server after a period of inactivity if the `--idle-timeout` flag is set.
 
 ### [sharedDispatcher.ts](./src/sharedDispatcher.ts) — Routing Layer
 
-This file manages multiple client connections within a single conversation. It provides the following functionality:
-
+- Manages multiple client connections within a single conversation.
 - Assigns unique `connectionId`s to clients and maintains a routing table.
 - Routes client IO methods (e.g., `setDisplay`, `askYesNo`) to the appropriate client based on their `connectionId`.
 - Ensures that each client's interactions are isolated while sharing the same dispatcher and conversation context.
 
 ### [connectionHandler.ts](./src/connectionHandler.ts) — Connection Management
 
-This file defines the logic for handling individual client connections. It sets up the necessary RPC channels and integrates with the `ConversationManager` to manage conversations for each connected client.
+- Defines the logic for handling individual client connections.
+- Sets up the necessary RPC channels and integrates with the `ConversationManager` to manage conversations for each connected client.
 
 ### [copilot/displayLogSynthesis.ts](./src/copilot/displayLogSynthesis.ts) — Display Log Synthesis
 
-This file synthesizes display logs from Copilot session data, enabling imported sessions to be replayed in the conversation UI. It ensures that the synthesized logs are deterministic and idempotent, allowing for consistent re-imports.
+- Synthesizes display logs from Copilot session data, enabling imported sessions to be replayed in the conversation UI.
+- Ensures that the synthesized logs are deterministic and idempotent, allowing for consistent re-imports.
 
 ### [copilot/mirrorImporter.ts](./src/copilot/mirrorImporter.ts) — Copilot Session Importer
 
-This file provides functionality to import Copilot sessions into the `agent-server`. It supports filtering sessions by repository, timestamp, and session ID, and integrates with the `ConversationManager` to create or update conversations based on the imported data.
+- Provides functionality to import Copilot sessions into the `agent-server`.
+- Supports filtering sessions by repository, timestamp, and session ID.
+- Integrates with the `ConversationManager` to create or update conversations based on the imported data.
 
 ### [inProcessAgentServer.ts](./src/inProcessAgentServer.ts) — In-Process Server
 
-This file provides an in-process implementation of the agent server, allowing it to be embedded within other applications. It includes options for user identity resolution, idle timeout, and shutdown handling.
+- Provides an in-process implementation of the agent server, allowing it to be embedded within other applications.
+- Includes options for user identity resolution, idle timeout, and shutdown handling.
 
 ## How to extend
 
@@ -130,6 +132,7 @@ By following these guidelines, you can effectively extend the `agent-server` pac
 Workspace:
 
 - [@typeagent/agent-rpc](../../../packages/agentRpc/README.md)
+- [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-client](../../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../../packages/agentServer/protocol/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
@@ -149,22 +152,23 @@ External: `@azure/identity`, `better-sqlite3`, `debug`, `dotenv`, `ws`
 
 ### Files of interest
 
-`./src/connectionHandler.ts`, `./src/conversationManager.ts`, `./src/copilot/displayLogSynthesis.ts`, …and 11 more under `./src/`.
+`./src/connectionHandler.ts`, `./src/banner.ts`, `./src/conversationManager.ts`, …and 13 more under `./src/`.
 
 ### Environment variables
 
-_7 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_8 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `AGENT_SERVER_PORT`
 - `SPEECH_SDK_ENDPOINT`
 - `SPEECH_SDK_KEY`
 - `SPEECH_SDK_REGION`
 - `TYPEAGENT_DEV`
+- `TYPEAGENT_SUPERVISED`
 - `TYPEAGENT_USER_NAME`
 - `XDG_CONFIG_HOME`
 
 ---
 
-_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

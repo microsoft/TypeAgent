@@ -1262,6 +1262,14 @@ export async function handleCall(
                     type: ["track-list"],
                     uniqueId: id,
                 };
+                // Concrete value for inline result-chaining: a later action
+                // (e.g. createPlaylist) can reference these songs via
+                // { "$result": "<id>" } and receive them directly.
+                result.resultValue = tracks.map((track) => ({
+                    trackName: track.name,
+                    artist: track.artists?.[0]?.name,
+                    albumName: track.album?.name,
+                })) satisfies SongSpecification[];
                 return result;
             }
             return createErrorActionResult("No favorites found");

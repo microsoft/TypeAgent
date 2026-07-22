@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@typeagent/agent-rpc": "workspace:*",
+    "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "debug": "^4.4.0",
@@ -47,6 +48,6 @@
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5",
     "websocket-channel-server": "workspace:*",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   }
 }

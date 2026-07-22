@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=73dadfbf600f2af147e827f64b864d0c9c5f044de094acd81822fea54f1cf82a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=24aed57a01ebd30ed688595550100934919851509b5d15c7b930a66c1c7957d1 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # websocket-channel-server — AI-generated documentation
@@ -12,65 +12,73 @@
 
 ## Overview
 
-The `websocket-channel-server` package provides a WebSocket server implementation for RpcChannel communication within the TypeAgent monorepo. It is designed to facilitate real-time communication between different parts of the system using WebSockets, enabling efficient and reliable RPC (Remote Procedure Call) channels.
+The `websocket-channel-server` package provides a WebSocket server implementation for managing RpcChannel communication within the TypeAgent monorepo. It serves as a foundational utility for enabling real-time, bidirectional communication between various components of the system using WebSockets. This package is widely used across the monorepo to facilitate Remote Procedure Call (RPC) interactions.
 
 ## What it does
 
-The `websocket-channel-server` package enables the creation and management of a WebSocket server that handles RPC channels. It provides functionalities to:
+The `websocket-channel-server` package is responsible for creating and managing a WebSocket server that supports RPC communication. Its key capabilities include:
 
-- Set up the WebSocket server.
-- Manage WebSocket connections.
-- Enforce origin policies.
-- Handle RPC messages.
+- **WebSocket Server Setup**: Initializes and configures a WebSocket server using the `ws` library.
+- **Connection Management**: Handles WebSocket connections, including opening, closing, and maintaining active sessions.
+- **Origin Policy Enforcement**: Provides an optional mechanism to restrict connections based on the `Origin` header, ensuring only trusted clients can connect.
+- **RPC Message Handling**: Integrates with `@typeagent/agent-rpc` to process RPC messages over WebSocket channels.
+- **Heartbeat Support**: Re-exports heartbeat utilities from `@typeagent/websocket-utils` for liveness checks, ensuring connections remain active and responsive.
 
-This package integrates with other TypeAgent packages such as `@typeagent/agent-rpc`, `@typeagent/common-utils`, and `@typeagent/websocket-utils` to provide a comprehensive solution for RPC communication over WebSockets. It is used by several other packages within the TypeAgent monorepo, including `@typeagent/agent-server-client`, `agent-server`, and `agent-shell`.
+This package integrates with other utilities in the TypeAgent ecosystem, such as `@typeagent/agent-rpc`, `@typeagent/common-utils`, and `@typeagent/websocket-utils`, to provide a cohesive solution for WebSocket-based RPC communication. It is a critical dependency for several other packages, including `@typeagent/agent-server-client`, `agent-server`, and `agent-shell`.
 
 ## Setup
 
-To set up the `websocket-channel-server` package, follow these steps:
+To use the `websocket-channel-server` package, follow these steps:
 
-1. Install the necessary dependencies:
+1. **Install Dependencies**: Ensure the required dependencies are installed in your project. Run the following command:
 
    ```sh
    pnpm install @typeagent/agent-rpc @typeagent/common-utils @typeagent/websocket-utils debug ws
    ```
 
-2. Ensure that the environment variables and configuration options are set up as required. Refer to the hand-written README for detailed setup instructions.
+2. **Configuration**: No additional environment variables are required for this package. However, you may need to configure the `WebSocketChannelServerOptions` interface to suit your application's needs, such as specifying an `isOriginAllowed` function for origin policy enforcement.
 
-No additional environment variables are required for this package beyond the standard configuration for WebSocket servers.
+For more detailed setup instructions, refer to the hand-written README.
 
 ## Key Files
 
-The package's architecture is centered around the WebSocket server implementation. Key files include:
+The package's implementation is organized into several key files, each responsible for specific aspects of the WebSocket server:
 
-- [index.ts](./src/index.ts): This file exports the main functionalities of the package, primarily the server implementation.
-- [server.ts](./src/server.ts): Contains the core logic for setting up and managing the WebSocket server, including handling connections and RPC channels.
-- [heartbeat.ts](./src/heartbeat.ts): Re-exports heartbeat primitives from `@typeagent/websocket-utils` for liveness checks.
-- [tsconfig.json](./src/tsconfig.json): TypeScript configuration file that sets up the compiler options and project structure.
+- **[index.ts](./src/index.ts)**: The main entry point of the package. It re-exports functionalities from other files, including the server implementation and heartbeat utilities.
+- **[server.ts](./src/server.ts)**: Contains the core logic for the WebSocket server, including connection management, origin policy enforcement, and RPC message handling.
+- **[heartbeat.ts](./src/heartbeat.ts)**: Re-exports heartbeat utilities from `@typeagent/websocket-utils`, providing liveness check primitives for both server and client contexts.
+- **[tsconfig.json](./src/tsconfig.json)**: Configures TypeScript compiler options for the package, ensuring proper build and type-checking behavior.
 
-### Key Components
+### Core Components
 
-- **WebSocketChannelServer**: Defined in [server.ts](./src/server.ts), this type represents the WebSocket server and includes methods for managing connections and handling RPC messages.
-- **WebSocketChannelServerOptions**: An interface that extends `ws.ServerOptions` with additional options for origin allowlist, allowing for more granular control over which origins are permitted to connect.
+1. **WebSocketChannelServer**: Defined in [server.ts](./src/server.ts), this type represents the WebSocket server instance. It includes methods for managing connections and handling RPC messages.
+2. **WebSocketChannelServerOptions**: An interface extending `ws.ServerOptions` with additional options, such as `isOriginAllowed`, for customizing server behavior.
+3. **Heartbeat Utilities**: Re-exported from `@typeagent/websocket-utils`, these utilities enable liveness checks to ensure active and responsive WebSocket connections.
 
-### Core Logic
+### Key Functions
 
-The core logic for the WebSocket server is implemented in [server.ts](./src/server.ts). This file includes functions for:
-
-- Creating and managing WebSocket connections.
-- Enforcing origin policies based on the `originAllowlist` option.
-- Handling RPC messages using the `ChannelProvider` and `createChannelProviderAdapter` from `@typeagent/agent-rpc`.
+- **`createWebSocketChannelServer`**: The primary function for initializing a WebSocket server. It accepts `WebSocketChannelServerOptions` and a connection handler callback, which processes incoming connections and establishes RPC channels.
+- **`attachHeartbeat`**: A utility for adding heartbeat functionality to WebSocket connections, ensuring they remain active and responsive.
 
 ## How to extend
 
-To extend the `websocket-channel-server` package, follow these steps:
+To extend the functionality of the `websocket-channel-server` package, follow these steps:
 
-1. Open the [server.ts](./src/server.ts) file. This is where the core logic for the WebSocket server is implemented.
-2. Add new functionalities or modify existing ones by extending the `WebSocketChannelServer` type or the `WebSocketChannelServerOptions` interface.
-3. Implement additional handlers or utilities as needed to support new features or improve existing ones.
-4. Write tests to ensure your changes work as expected. You can add test cases in the appropriate test files within the package.
+1. **Understand the Core Logic**: Start by reviewing the [server.ts](./src/server.ts) file, which contains the main implementation of the WebSocket server. Familiarize yourself with the `createWebSocketChannelServer` function and its options.
 
-By following these steps, you can effectively extend the capabilities of the `websocket-channel-server` package to meet your specific requirements.
+2. **Add New Features**:
+
+   - Extend the `WebSocketChannelServerOptions` interface to include additional configuration options.
+   - Implement new connection handlers or message processing logic to support custom use cases.
+   - Modify the `isOriginAllowed` function to enforce more complex origin policies if needed.
+
+3. **Leverage Heartbeat Utilities**: Use the re-exported heartbeat utilities from [heartbeat.ts](./src/heartbeat.ts) to add liveness checks or customize existing ones.
+
+4. **Write Tests**: Ensure your changes are thoroughly tested. Add test cases to validate new features or modifications. Place your tests in the appropriate test files within the package.
+
+5. **Follow Existing Patterns**: Maintain consistency with the existing codebase by adhering to the patterns and conventions used in the package.
+
+By following these steps, you can effectively extend the `websocket-channel-server` package to meet your specific requirements while maintaining compatibility with the broader TypeAgent ecosystem.
 
 ## Reference
 
@@ -104,6 +112,6 @@ External: `debug`, `ws`
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter websocket-channel-server docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter websocket-channel-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

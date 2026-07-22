@@ -45,6 +45,7 @@ import {
     HelperNotBuiltError,
     buildWindowsHelper,
     isWindowsHelperBuilt,
+    isSparsePackageRegistered,
 } from "./watchers/windowsWatcher.js";
 
 const debug = registerDebug("typeagent:osNotifications");
@@ -91,20 +92,35 @@ export type AgentContext = {
 export function evaluateReadiness(
     platform: NodeJS.Platform,
     helperBuilt: boolean,
+    sparsePackageRegistered: boolean,
 ): ReadinessReport {
     if (platform !== "win32") {
         return { state: "ready" };
     }
-    if (helperBuilt) {
-        return { state: "ready" };
+    if (!helperBuilt) {
+        return {
+            state: "setup-required",
+            message:
+                "OS notification helper exe (OsNotificationListener.exe) hasn't been built yet.",
+            details:
+                "Setup runs `dotnet publish` + signs + registers a sparse WinAppSDK package; ~30–60 seconds first time.",
+        };
     }
-    return {
-        state: "setup-required",
-        message:
-            "OS notification helper exe (OsNotificationListener.exe) hasn't been built yet.",
-        details:
-            "Setup runs `dotnet publish` + signs + registers a sparse WinAppSDK package; ~30–60 seconds first time.",
-    };
+    // Exe presence alone is NOT enough: without the sparse identity package
+    // registered, the exe launches but its UserNotificationListener
+    // subscription fails at runtime (COMException 0x80070490). Surface this as
+    // setup-required so `@config agent setup` re-runs the register step instead
+    // of short-circuiting on "already ready".
+    if (!sparsePackageRegistered) {
+        return {
+            state: "setup-required",
+            message:
+                "OS notification helper is built but its identity package isn't registered.",
+            details:
+                "Setup registers a signed sparse WinAppSDK package (one elevation prompt to trust the dev cert) so the helper can subscribe to notification events.",
+        };
+    }
+    return { state: "ready" };
 }
 
 // ============================================================================
@@ -428,7 +444,11 @@ export function instantiate(): AppAgent {
         // calls this right after the agent is enabled, after setup, and
         // on @config agent refresh. The result is cached.
         async checkReadiness(): Promise<ReadinessReport> {
-            return evaluateReadiness(process.platform, isWindowsHelperBuilt());
+            return evaluateReadiness(
+                process.platform,
+                isWindowsHelperBuilt(),
+                isSparsePackageRegistered(),
+            );
         },
 
         // Returns the same yes/no card the agent used to offer when

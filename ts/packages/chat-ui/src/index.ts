@@ -26,6 +26,7 @@ export {
     NotifyExplainedData,
     HistoryEntry,
     formatHistorySeparatorLabel,
+    type StatusNoticeBadge,
 } from "./chatPanel.js";
 
 export {
@@ -44,6 +45,7 @@ export {
     type ConversationBarIcons,
     type ConversationBarOptions,
     type ConversationBarStatus,
+    type ConversationNotificationBadge,
 } from "./conversationBar.js";
 
 export {
@@ -54,7 +56,18 @@ export {
     type ConnectionActionHandler,
 } from "./connectionStatus.js";
 
-export { ChatContextMenu, ContextMenuTargetOptions } from "./contextMenu.js";
+export {
+    STATUS_NOTICE_EVENT,
+    parseStatusNotice,
+    type StatusNotice,
+    type StatusNoticeLevel,
+} from "./statusNotice.js";
+
+export {
+    ChatContextMenu,
+    ContextMenuTargetOptions,
+    handleClipboardShortcut,
+} from "./contextMenu.js";
 
 export type {
     SpeechState,

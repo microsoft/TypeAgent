@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { BrowserControl } from "../../common/browserControl.mjs";
+import type { BrowserControl } from "@typeagent/browser-control-rpc/types";
 import { AgentWebSocketServer } from "../agentWebSocketServer.mjs";
 
 export interface ExternalBrowserClient {
@@ -14,10 +14,7 @@ export function createExternalBrowserClient(
     sessionId: string,
 ): ExternalBrowserClient {
     function getActiveRpc() {
-        const client = agentWebSocketServer.getActiveClient(
-            sessionId,
-            "extension",
-        );
+        const client = agentWebSocketServer.getActiveClient(sessionId);
         if (!client?.browserControlRpc) {
             throw new Error("No browser control connection available");
         }
@@ -47,8 +44,7 @@ export function createExternalBrowserClient(
         followLinkByPosition: (...args) =>
             getActiveRpc().invoke("followLinkByPosition", ...args),
         closeWindow: async () => getActiveRpc().invoke("closeWindow"),
-        search: async (query?: string) =>
-            getActiveRpc().invoke("search", query),
+        search: async (...args) => getActiveRpc().invoke("search", ...args),
         readPageContent: async () => getActiveRpc().invoke("readPageContent"),
         stopReadPageContent: async () =>
             getActiveRpc().invoke("stopReadPageContent"),

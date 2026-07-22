@@ -1,0 +1,42 @@
+{
+  "name": "@typeagent/browser-control-rpc",
+  "version": "0.0.1",
+  "description": "Browser control types and content script RPC client for TypeAgent",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/browserControlRpc"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./types": "./dist/browserControl.js",
+    "./webAgentMessageTypes": "./dist/webAgentMessageTypes.js",
+    "./serviceTypes": "./dist/serviceTypes.js",
+    "./extensionEvents": "./dist/extensionEvents.js",
+    "./platformServices": "./dist/platformServices.js",
+    "./htmlReducer": "./dist/crossContextHtmlReducer.js",
+    "./pdfTypes": "./dist/pdfTypes.js",
+    "./answerEnhancement": "./dist/answerEnhancement.js",
+    "./contentScriptRpc/types": "./dist/contentScriptRpc/types.js",
+    "./contentScriptRpc/client": "./dist/contentScriptRpc/client.js"
+  },
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/agent-rpc": "workspace:*",
+    "dompurify": "^3.4.12"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}

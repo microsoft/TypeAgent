@@ -52,6 +52,19 @@ function isAnyOfActionMatch(a: ActionMatch): a is AnyOfActionMatch {
     return typeof a === "object" && "anyof" in a;
 }
 
+// Sentinel usable only in `extraActions`: the trailing action passes only when
+// it is an exact duplicate of the action immediately preceding it. Scopes the
+// tolerance tightly to the known flake where the model repeats its final action
+// (e.g. a duplicated dispatcher.pendingRequestAction), instead of accepting an
+// arbitrary extra action of a given type.
+type DuplicateOfPreviousMatch = { duplicateOfPrevious: true };
+type ExtraActionMatch = ActionMatch | DuplicateOfPreviousMatch;
+function isDuplicateOfPreviousMatch(
+    a: ExtraActionMatch,
+): a is DuplicateOfPreviousMatch {
+    return typeof a === "object" && a !== null && "duplicateOfPrevious" in a;
+}
+
 function toActionMatchWithAlternates(
     match: OneActionMatch,
 ): ActionMatchWithAlternates {
@@ -97,8 +110,11 @@ export type TranslateTestStep = {
     // 0..extraActions.length additional actions, each validated in order against
     // the corresponding entry here. Use for multi-action requests with variable
     // tails (e.g. an extra pendingRequestAction that defers "add the filtered
-    // tracks to the playlist").
-    extraActions?: ActionMatch | ActionMatch[];
+    // tracks to the playlist"). A `{ duplicateOfPrevious: true }` entry passes
+    // only when the trailing action is an exact duplicate of the action right
+    // before it - tolerating the model repeating its final action without
+    // accepting an arbitrary extra one.
+    extraActions?: ExtraActionMatch | ExtraActionMatch[];
 };
 
 export type TranslateTestEntry = TranslateTestStep | TranslateTestStep[];
@@ -108,12 +124,13 @@ const repeat = 5;
 const concurrency = 1;
 const embeddingCacheDir = path.join(os.tmpdir(), ".typeagent", "cache");
 
-// Agents that exist for compiled task flows (invoked explicitly by a flow),
-// not for direct request routing. Disable their schemas in the translate tests
-// so their generic actions (e.g. utility.webSearch / readFile) don't
-// out-compete the agents under test (browser.lookupAndAnswer, mcpfilesystem,
-// etc.). The product manifests are intentionally left untouched.
-const flowOnlySchemas = ["utility"];
+// Flow-only agent schemas turned off in these translation-stability tests via
+// `@config schema --off` (product manifests are left untouched): "utility"'s
+// generic actions (webSearch / readFile) otherwise out-compete the agents under
+// test (browser.lookupAndAnswer, mcpfilesystem). The reasoning escape hatch is
+// handled by execution.reasoning:"none" (below), NOT by disabling its schema —
+// disabling dispatcher.reasoning regressed unrelated player/mcpfs routing.
+const disabledSchemas = ["utility"];
 
 // Per-attempt Jest timeout budget for a single request translation.
 const perAttemptTimeoutMs = 30000;
@@ -161,6 +178,41 @@ function isTransientRequestError(error: string | undefined): boolean {
     );
 }
 
+// Suite-wide reliability accounting helper (opt-in via TRANSLATION_RELIABILITY_DIR).
+// Writes one JSON tally per suite that reliability/report.ts aggregates into the
+// mean-translation-tokens-between-flaky-failures doc. A "variation" is an attempt
+// whose action signature differs from the most common (modal) signature for the
+// same request - run-to-run model non-determinism, whether or not the assertion
+// tolerated it.
+function writeReliabilityTally(
+    dir: string,
+    name: string,
+    attempts: number,
+    failures: number,
+    outcomes: Map<string, string[]>,
+    tokens: number,
+) {
+    let variations = 0;
+    for (const signatures of outcomes.values()) {
+        const counts = new Map<string, number>();
+        for (const signature of signatures) {
+            counts.set(signature, (counts.get(signature) ?? 0) + 1);
+        }
+        const modal = Math.max(...counts.values());
+        variations += signatures.length - modal;
+    }
+    fs.mkdirSync(dir, { recursive: true });
+    const safeName = name.replace(/[^a-z0-9]+/gi, "_");
+    fs.writeFileSync(
+        path.join(dir, `${safeName}.json`),
+        JSON.stringify(
+            { name, attempts, failures, variations, tokens },
+            null,
+            2,
+        ),
+    );
+}
+
 export async function defineTranslateTest(
     name: string,
     dataFiles: string[],
@@ -188,6 +240,18 @@ export async function defineTranslateTest(
                 i,
             ] as const,
     );
+
+    // Opt-in suite-wide reliability accounting. When TRANSLATION_RELIABILITY_DIR
+    // is set, tally attempts / test failures / translation tokens (and per-request
+    // outcome variations) for this suite and write a JSON at afterAll;
+    // reliability/report.ts aggregates all suites into the reliability doc
+    // (mean translation tokens between flaky failures across the whole suite).
+    const reliabilityDir = process.env.TRANSLATION_RELIABILITY_DIR;
+    let relAttempts = 0;
+    let relFailures = 0;
+    let relTokens = 0;
+    const relOutcomes = new Map<string, string[]>();
+
     describe(`${name} action stability`, () => {
         let dispatchers: Dispatcher[] = [];
         let dispatcherP: Promise<void> | undefined;
@@ -243,16 +307,22 @@ export async function defineTranslateTest(
                             actions: false,
                             commands: ["dispatcher"],
                         },
-                        execution: { history: false }, // don't generate chat history, the test manually imports them
+                        // history: false - the test manually imports history.
+                        // reasoning: "none" - this is a translation-stability
+                        // test; the execution-time reasoning fallback otherwise
+                        // diverts dispatcher.clarify / unknown actions away from
+                        // executeActions, leaving commandResult.actions empty so
+                        // clarify expectations can never match.
+                        execution: { history: false, reasoning: "none" },
                         explainer: { enabled: false },
                         cache: { enabled: false },
                         embeddingCacheDir, // Cache the embedding to avoid recomputation.
                         collectCommandResult: true,
                     },
                 );
-                // Take flow-only agents out of the translation candidate set
-                // so they don't out-compete the agents under test.
-                for (const schema of flowOnlySchemas) {
+                // Take the flow-only schemas out of the translation candidate
+                // set (see disabledSchemas above).
+                for (const schema of disabledSchemas) {
                     checkResultError(
                         await awaitCommand(
                             dispatcher,
@@ -283,7 +353,31 @@ export async function defineTranslateTest(
                         }
                         try {
                             const result = await runOneStep(step, dispatcher);
-                            validateCommandResult(step, result);
+                            if (reliabilityDir !== undefined) {
+                                relAttempts++;
+                                relTokens +=
+                                    result?.tokenUsage?.total_tokens ?? 0;
+                                const signature = (result?.actions ?? [])
+                                    .map(
+                                        (a) =>
+                                            `${a.schemaName}.${a.actionName}`,
+                                    )
+                                    .join("+");
+                                const seen = relOutcomes.get(step.request);
+                                if (seen === undefined) {
+                                    relOutcomes.set(step.request, [signature]);
+                                } else {
+                                    seen.push(signature);
+                                }
+                            }
+                            try {
+                                validateCommandResult(step, result);
+                            } catch (e) {
+                                if (reliabilityDir !== undefined) {
+                                    relFailures++;
+                                }
+                                throw e;
+                            }
                         } finally {
                             if (step.skipGrammar) {
                                 await awaitCommand(
@@ -302,6 +396,16 @@ export async function defineTranslateTest(
             );
         });
         afterAll(async () => {
+            if (reliabilityDir !== undefined) {
+                writeReliabilityTally(
+                    reliabilityDir,
+                    name,
+                    relAttempts,
+                    relFailures,
+                    relOutcomes,
+                    relTokens,
+                );
+            }
             const p = dispatchers.map((d) => d.close());
             await Promise.allSettled(p);
             dispatchers = [];
@@ -381,21 +485,53 @@ function validateCommandResult(
         // `expected` is required and validated as the leading prefix.
         // `extraActions` are optional trailing actions: the result may contain
         // 0..extraActions.length of them, each validated in order against the
-        // corresponding entry.
-        const extraMatches =
-            step.extraActions !== undefined
-                ? normalizeActionMatches(step.extraActions)
-                : [];
+        // corresponding entry. A `{ duplicateOfPrevious: true }` entry passes
+        // only when the trailing action is an exact duplicate of the action
+        // immediately before it.
+        const extraSpecs: ExtraActionMatch[] =
+            step.extraActions === undefined
+                ? []
+                : Array.isArray(step.extraActions)
+                  ? step.extraActions
+                  : [step.extraActions];
         expect(actions.length).toBeGreaterThanOrEqual(actionMatches.length);
         expect(actions.length).toBeLessThanOrEqual(
-            actionMatches.length + extraMatches.length,
+            actionMatches.length + extraSpecs.length,
         );
 
-        const allMatches = [...actionMatches, ...extraMatches];
         for (let i = 0; i < actions.length; i++) {
-            validateExpectedAction(allMatches[i], actions[i]);
+            if (i < actionMatches.length) {
+                validateExpectedAction(actionMatches[i], actions[i]);
+                continue;
+            }
+            const extra = extraSpecs[i - actionMatches.length];
+            if (isDuplicateOfPreviousMatch(extra)) {
+                checkDuplicateOfPreviousAction(actions, i);
+            } else {
+                validateExpectedAction(
+                    normalizeActionMatches(extra)[0],
+                    actions[i],
+                );
+            }
         }
     }
+}
+
+// A `{ duplicateOfPrevious: true }` extraActions slot passes only when the
+// trailing action is an exact duplicate of the action immediately preceding it.
+// Both actions are normalized (and their run-to-run `entities` metadata dropped,
+// as in checkPossibleMatch) before the equality check.
+function checkDuplicateOfPreviousAction(actions: TypeAgentAction[], i: number) {
+    const normalizeForCompare = (a: TypeAgentAction) => {
+        const n = structuredClone(a);
+        normalizeAction(n);
+        normalizeUrlParams(n);
+        delete n.entities;
+        return n;
+    };
+    expect(normalizeForCompare(actions[i])).toEqual(
+        normalizeForCompare(actions[i - 1]),
+    );
 }
 
 type PossibleMatch = {
@@ -467,10 +603,20 @@ function checkPossibleMatch(
     action: TypeAgentAction,
     possibleMatch: PossibleMatch,
 ) {
+    // Drop action.entities before comparing. It is resolved-reference metadata
+    // that entity resolution may or may not attach run-to-run (e.g. a
+    // history-dependent "grocery" list entity), not part of the translated
+    // action shape, and no expected action asserts it. Ignoring it avoids
+    // spurious toEqual mismatches.
+    let actual = action;
+    if (action.entities) {
+        actual = { ...action };
+        delete actual.entities;
+    }
     if (possibleMatch.partial) {
-        expect(action).toMatchObject(possibleMatch.action);
+        expect(actual).toMatchObject(possibleMatch.action);
     } else {
-        expect(action).toEqual(possibleMatch.action);
+        expect(actual).toEqual(possibleMatch.action);
     }
 }
 

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=e40da81617f01e289d24d38660962071fc13208f297861ac1b40443c861dd85e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6a4d71a1c1615e3e46ffa890b4f5709cb10d4bdebf113480e2f93c8375f3e4a8 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # browser-typeagent — AI-generated documentation
@@ -12,17 +12,18 @@
 
 ## Overview
 
-The `browser-typeagent` package is a TypeAgent application agent designed for browser automation and control. It enables programmatic interaction with browser windows, tabs, and web pages through a defined set of actions. This package integrates with the TypeAgent shell and CLI, allowing users to perform browser-related tasks using commands or natural language.
+The `browser-typeagent` package is a TypeAgent application agent designed for browser automation and control. It enables programmatic interaction with browser windows, tabs, and web pages through a defined set of actions. This package integrates with the TypeAgent shell and CLI, allowing users to perform browser-related tasks using commands or natural language. It also includes a browser extension for enhanced functionality and interaction.
 
 ## What it does
 
-The `browser-typeagent` package provides a comprehensive set of browser automation capabilities, including:
+The `browser-typeagent` package provides a wide range of browser automation capabilities, enabling users to interact with web pages and manage browser sessions programmatically. Key functionalities include:
 
-- **Navigation**: Actions such as `openWebPage`, `goBack`, `goForward`, and `reloadPage` allow users to navigate between web pages and control browser tabs.
-- **Interaction**: Users can interact with web content using actions like `clickOn`, `followLinkByText`, `scrollDown`, and `scrollUp`.
-- **Content Capture and Extraction**: Actions such as `captureScreenshot`, `getHtmlFragments`, and `indexPage` enable users to extract and analyze web content.
+- **Web Navigation**: Actions such as `openWebPage`, `goBack`, `goForward`, and `reloadPage` allow users to navigate between web pages and control browser tabs.
+- **User Interaction**: Users can interact with web content using actions like `clickOn`, `followLinkByText`, `scrollDown`, and `scrollUp`.
+- **Content Capture and Analysis**: Actions such as `captureScreenshot`, `getHtmlFragments`, and `indexPage` enable users to extract and analyze web content.
 - **Tab Management**: Actions like `changeTabs`, `closeWebPage`, and `closeAllWebPages` provide control over browser tabs.
-- **Advanced Features**: The package supports executing custom scripts (`executeAdHocScript`) and managing search providers (`changeSearchProvider`).
+- **Custom Scripts and Search**: Execute custom scripts with `executeAdHocScript` and manage search providers with `changeSearchProvider`.
+- **Internet Lookup**: The `lookupAndAnswerInternet` action allows users to answer general "look it up on the web" questions by either driving a real browser or using Azure AI Search for server-side knowledge retrieval.
 
 The package operates through a WebSocket server (`AgentWebSocketServer`) that facilitates communication between the browser agent and its clients. Supported clients include a Chrome extension and the Electron-based TypeAgent shell. These clients can send commands to the browser agent, which executes the requested actions and returns results.
 
@@ -64,30 +65,30 @@ The `browser-typeagent` package is organized into several key files, each respon
 
 - **WebSocket Server**:
 
-  - [agentWebSocketServer.mts](./src/agent/agentWebSocketServer.mts): Manages WebSocket connections and routes commands between clients and the browser agent. It supports session-based routing and multiplexing of logical channels (`agentService` and `browserControl`).
+  - [src/agent/agentWebSocketServer.mts](./src/agent/agentWebSocketServer.mts): Manages WebSocket connections and routes commands between clients and the browser agent. It supports session-based routing and multiplexing of logical channels (`agentService` and `browserControl`).
 
 - **Action Handlers**:
 
-  - [browserActionHandler.mts](./src/agent/browserActionHandler.mts): Implements the logic for browser actions such as `openWebPage`, `captureScreenshot`, and `indexPage`.
-  - [agentServiceHandlers.mts](./src/agent/agentServiceHandlers.mts): Registers RPC handlers for client connections, enabling the execution of browser actions.
+  - [src/agent/browserActionHandler.mts](./src/agent/browserActionHandler.mts): Implements the logic for browser actions such as `openWebPage`, `captureScreenshot`, and `indexPage`.
+  - [src/agent/agentServiceHandlers.mts](./src/agent/agentServiceHandlers.mts): Registers RPC handlers for client connections, enabling the execution of browser actions.
 
 - **Session Management**:
 
-  - [browserActions.mts](./src/agent/browserActions.mts): Manages session-specific configurations, such as `sessionId` and client preferences.
+  - [src/agent/browserActions.mts](./src/agent/browserActions.mts): Manages session-specific configurations, such as `sessionId` and client preferences.
 
 - **Indexing and Content Extraction**:
 
-  - [browserIndexingService.ts](./src/agent/indexing/browserIndexingService.ts): Provides AI-enhanced indexing capabilities, including content summarization and quality assessment.
-  - [browserContentExtractor.mts](./src/agent/browserContentExtractor.mts): Extends content extraction functionality with browser-based downloading.
+  - [src/agent/indexing/browserIndexingService.ts](./src/agent/indexing/browserIndexingService.ts): Provides AI-enhanced indexing capabilities, including content summarization and quality assessment.
+  - [src/agent/browserContentExtractor.mts](./src/agent/browserContentExtractor.mts): Extends content extraction functionality with browser-based downloading.
 
 - **Schemas**:
 
-  - [browserActionSchema.mts](./src/agent/browserActionSchema.mts): Defines the schema for browser actions and their parameters.
-  - [browserSchema.agr](./src/agent/browserSchema.agr): Contains the action grammar for the browser agent.
+  - [src/agent/browserActionSchema.mts](./src/agent/browserActionSchema.mts): Defines the schema for browser actions and their parameters.
+  - [src/agent/browserSchema.agr](./src/agent/browserSchema.agr): Contains the action grammar for the browser agent.
 
 - **Extension Components**:
-  - [contentScript/index.ts](./src/extension/contentScript/index.ts): Entry point for the browser extension's content script.
-  - [serviceWorker/index.ts](./src/extension/serviceWorker/index.ts): Manages the service worker for the browser extension.
+  - src/extension/contentScript/index.ts: Entry point for the browser extension's content script.
+  - src/extension/serviceWorker/index.ts: Manages the service worker for the browser extension.
 
 ## How to extend
 
@@ -121,12 +122,8 @@ By following these steps, you can enhance the `browser-typeagent` package to sup
 ### Entry points
 
 - `./agent/manifest` → [./src/agent/manifest.json](./src/agent/manifest.json)
-- `./agent/handlers` → `./dist/agent/browserActionHandler.mjs` _(not found on disk)_
-- `./agent/types` → `./dist/common/browserControl.mjs` _(not found on disk)_
-- `./agent/indexing` → `./dist/agent/indexing/browserIndexingService.js` _(not found on disk)_
-- `./contentScriptRpc/types` → `./dist/common/contentScriptRpc/types.mjs` _(not found on disk)_
-- `./contentScriptRpc/client` → `./dist/common/contentScriptRpc/client.mjs` _(not found on disk)_
-- `./htmlReducer` → `./dist/common/crossContextHtmlReducer.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/agent/browserActionHandler.mjs](./dist/agent/browserActionHandler.mjs)
+- `./agent/indexing` → [./dist/agent/indexing/browserIndexingService.js](./dist/agent/indexing/browserIndexingService.js)
 
 ### Dependencies
 
@@ -141,6 +138,7 @@ Workspace:
 - [@typeagent/agent-server-client](../../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../../packages/agentServer/protocol/README.md)
 - [@typeagent/aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/browser-control-rpc](../../../packages/agents/browserControlRpc/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
 - [@typeagent/config](../../../packages/config/README.md)
 - [@typeagent/dispatcher-rpc](../../../packages/dispatcher/rpc/README.md)
@@ -157,15 +155,14 @@ Workspace:
 - [website-memory](../../../packages/memory/website/README.md)
 - [websocket-channel-server](../../../packages/utils/webSocketChannelServer/README.md)
 
-External: `@anthropic-ai/claude-agent-sdk`, `@mozilla/readability`, `@popperjs/core`, `bootstrap`, `chalk`, `cheerio`, `cytoscape`, `cytoscape-dagre`, `dagre`, `debug`, `dompurify`, `express`, `express-rate-limit`, `graphology`, `graphology-communities-louvain`, `graphology-layout`, `graphology-layout-forceatlas2`, `graphology-layout-noverlap`, `graphology-types`, `html-to-text`
+External: `@anthropic-ai/claude-agent-sdk`, `@modelcontextprotocol/sdk`, `chalk`, `cheerio`, `debug`, `dompurify`, `express`, `express-rate-limit`, `graphology`, `graphology-communities-louvain`, `graphology-layout`, `graphology-layout-forceatlas2`, `graphology-layout-noverlap`, `graphology-types`, `html-to-text`, `jsdom`, `jsonpath`, `pdfjs-dist`, `puppeteer`, `puppeteer-extra`
 
-_…and 17 more not shown._
+_…and 10 more not shown._
 
 ### Used by
 
 - [agent-shell](../../../packages/shell/README.md)
 - [default-agent-provider](../../../packages/defaultAgentProvider/README.md)
-- utility-typeagent
 
 ### Files of interest
 
@@ -174,12 +171,12 @@ _…and 17 more not shown._
 - [./src/agent/browserSchema.agr](./src/agent/browserSchema.agr)
 - [./src/agent/indexing/index.mts](./src/agent/indexing/index.mts)
 - [./src/agent/webFlows/index.mts](./src/agent/webFlows/index.mts)
-- [./src/extension/contentScript/continuationHandler.ts](./src/extension/contentScript/continuationHandler.ts)
-- [./src/extension/contentScript/index.ts](./src/extension/contentScript/index.ts)
-- [./src/extension/contentScript/recording/index.ts](./src/extension/contentScript/recording/index.ts)
-- [./src/extension/serviceWorker/index.ts](./src/extension/serviceWorker/index.ts)
-- [./src/extension/webagent/crossword/crosswordSchema.agr](./src/extension/webagent/crossword/crosswordSchema.agr)
-- _…and 289 more under `./src/`._
+- [./src/puppeteer/index.mts](./src/puppeteer/index.mts)
+- [./src/agent/agentServiceHandlers.mts](./src/agent/agentServiceHandlers.mts)
+- [./src/agent/agentWebSocketServer.mts](./src/agent/agentWebSocketServer.mts)
+- [./src/agent/browserActionHandler.mts](./src/agent/browserActionHandler.mts)
+- [./src/agent/browserActions.mts](./src/agent/browserActions.mts)
+- _…and 161 more under `./src/`._
 
 ### Environment variables
 
@@ -190,6 +187,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

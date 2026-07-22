@@ -25,26 +25,40 @@ import type { ActionContext } from "@typeagent/agent-sdk";
 
 describe("evaluateReadiness", () => {
     test("ready on linux regardless of helperBuilt flag", () => {
-        expect(evaluateReadiness("linux", false)).toEqual({ state: "ready" });
-        expect(evaluateReadiness("linux", true)).toEqual({ state: "ready" });
+        expect(evaluateReadiness("linux", false, false)).toEqual({
+            state: "ready",
+        });
+        expect(evaluateReadiness("linux", true, false)).toEqual({
+            state: "ready",
+        });
     });
 
     test("ready on darwin (helper is Windows-only)", () => {
-        expect(evaluateReadiness("darwin", false)).toEqual({ state: "ready" });
+        expect(evaluateReadiness("darwin", false, false)).toEqual({
+            state: "ready",
+        });
     });
 
-    test("ready on win32 when the helper exe is present", () => {
-        expect(evaluateReadiness("win32", true)).toEqual({ state: "ready" });
+    test("ready on win32 when the helper exe is present and registered", () => {
+        expect(evaluateReadiness("win32", true, true)).toEqual({
+            state: "ready",
+        });
     });
 
     test("setup-required on win32 when the helper exe is missing", () => {
-        const r = evaluateReadiness("win32", false);
+        const r = evaluateReadiness("win32", false, false);
         expect(r.state).toBe("setup-required");
         expect(r.message).toMatch(/OsNotificationListener\.exe/);
     });
 
+    test("setup-required on win32 when built but identity package not registered", () => {
+        const r = evaluateReadiness("win32", true, false);
+        expect(r.state).toBe("setup-required");
+        expect(r.message).toMatch(/identity package isn't registered/);
+    });
+
     test("setup-required report includes 'details' explaining what setup runs", () => {
-        const r = evaluateReadiness("win32", false);
+        const r = evaluateReadiness("win32", false, false);
         expect(r.state).toBe("setup-required");
         expect(r.details).toMatch(/dotnet publish/);
         expect(r.details).toMatch(/sparse WinAppSDK package/);

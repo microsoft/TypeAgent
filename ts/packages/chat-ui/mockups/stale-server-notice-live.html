@@ -1,0 +1,178 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<!--
+  DESIGN REFERENCE (kept) - not shipped.
+
+  Live preview of the persistent status-notice affordance (design option D),
+  rendered with the REAL stylesheet (../styles/chat.css) and the exact DOM that
+  ChatPanel.showStatusNotice() builds. Because it links the real CSS, it stays
+  accurate as the styles evolve - open it in a browser to see the current look.
+
+  Implementation: packages/chat-ui/src/chatPanel.ts (showStatusNotice) +
+  packages/chat-ui/src/statusNotice.ts. Fire one in-app with `@notify status`.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>stale-server notice - live preview (real chat.css)</title>
+    <link rel="stylesheet" href="../styles/chat.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: #f3f3f3;
+        color: #1f1f1f;
+      }
+      body[data-bg="dark"] {
+        background: #181818;
+        color: #e6e6e6;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 4px;
+      }
+      .sub {
+        color: #888;
+        margin: 0 0 18px;
+        font-size: 13px;
+      }
+      button.toolbar {
+        border: 1px solid #999;
+        background: transparent;
+        color: inherit;
+        border-radius: 6px;
+        padding: 6px 12px;
+        cursor: pointer;
+        font: inherit;
+        margin-bottom: 20px;
+      }
+      .grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+      }
+      figure {
+        margin: 0;
+      }
+      figcaption {
+        color: #888;
+        font-size: 12px;
+        margin-bottom: 6px;
+      }
+      /* Stand-in for the real .chat-panel-wrapper (the positioned anchor the
+         status-notice layer is absolutely placed within). */
+      .chat-panel-wrapper {
+        position: relative;
+        width: 360px;
+        height: 200px;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+      }
+      .frame-dark {
+        background: #1e1e1e;
+      }
+      .frame-light {
+        background: #f6f6f6;
+      }
+      /* The real layer sits at bottom:70px (above the chat input); these
+         previews have no input area, so nudge it down for framing only. */
+      .chat-panel-wrapper .chat-status-notice-layer {
+        bottom: 16px;
+      }
+    </style>
+  </head>
+  <body data-bg="light">
+    <h1>Status notice - live preview</h1>
+    <p class="sub">
+      Rendered with the real <code>packages/chat-ui/styles/chat.css</code>. The
+      &times; on the interactive card minimizes to the pinned pill; click the
+      pill to re-expand.
+    </p>
+    <button class="toolbar" id="bgBtn">Toggle page background</button>
+
+    <div class="grid" id="grid"></div>
+
+    <script>
+      const WARN_ICON =
+        '<span class="csn-icon-wrap"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V8h2v5z"/></svg></span>';
+      const INFO_ICON =
+        '<span class="csn-icon-wrap"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg></span>';
+
+      function notice(level, opts = {}) {
+        const icon = level === "info" ? INFO_ICON : WARN_ICON;
+        const collapsed = opts.collapsed ? " collapsed" : "";
+        const action = opts.action
+          ? '<div class="csn-actions"><button class="csn-action">Restart server</button></div>'
+          : "";
+        return `
+          <div class="chat-status-notice level-${level}${collapsed}">
+            <div class="csn-toast">
+              <div class="csn-head">
+                ${icon}
+                <span class="csn-title">${opts.title ?? "Server out of date"}</span>
+                <button class="csn-min" title="Minimize" aria-label="Minimize">&times;</button>
+              </div>
+              <div class="csn-body">${opts.body ?? "This agent server was rebuilt on disk after it started, so it's running the old code."}</div>
+              ${action}
+            </div>
+            <button class="csn-pill" title="expand"><span class="csn-dot"></span><span class="csn-pill-label">${opts.title ?? "Server out of date"}</span></button>
+          </div>`;
+      }
+
+      function frame(caption, bgClass, inner) {
+        return `<figure><figcaption>${caption}</figcaption>
+          <div class="chat-panel-wrapper ${bgClass}">
+            <div class="chat-status-notice-layer">${inner}</div>
+          </div></figure>`;
+      }
+
+      document.getElementById("grid").innerHTML = [
+        frame(
+          "warning · interactive (× / pill) · with action",
+          "frame-dark",
+          notice("warning", { action: true }),
+        ),
+        frame(
+          "warning · collapsed pill",
+          "frame-light",
+          notice("warning", { collapsed: true }),
+        ),
+        frame(
+          "info",
+          "frame-dark",
+          notice("info", {
+            title: "Heads up",
+            body: "An informational status notice.",
+          }),
+        ),
+        frame(
+          "error",
+          "frame-light",
+          notice("error", {
+            title: "Something went wrong",
+            body: "An error-level status notice.",
+          }),
+        ),
+      ].join("");
+
+      // Wire minimize / expand on every rendered notice.
+      document.getElementById("grid").addEventListener("click", (e) => {
+        const root = e.target.closest(".chat-status-notice");
+        if (!root) return;
+        if (e.target.closest(".csn-min")) root.classList.add("collapsed");
+        else if (e.target.closest(".csn-pill"))
+          root.classList.remove("collapsed");
+      });
+
+      document.getElementById("bgBtn").addEventListener("click", () => {
+        const b = document.body;
+        b.dataset.bg = b.dataset.bg === "dark" ? "light" : "dark";
+      });
+    </script>
+  </body>
+</html>

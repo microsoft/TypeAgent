@@ -11,6 +11,8 @@ import type {
     StudioClientCallFunctions,
     StudioReplayRequest,
     StudioReplayResult,
+    ReplayResolutionTraceRequest,
+    ReplayResolutionTraceResult,
     StudioCollisionScanRequest,
     StudioCollisionScanResult,
     StudioCorpusImportRequest,
@@ -269,6 +271,13 @@ export class StudioServiceClient {
     /** Replay an agent's corpus comparing two versions (Impact Report data). */
     replayCorpus(request: StudioReplayRequest): Promise<StudioReplayResult> {
         return this.rpc.invoke("replayCorpus", this.repoRoot, request);
+    }
+
+    /** Recompute one utterance's resolution trace from a stored run descriptor. */
+    replayResolutionTrace(
+        request: ReplayResolutionTraceRequest,
+    ): Promise<ReplayResolutionTraceResult> {
+        return this.rpc.invoke("replayResolutionTrace", this.repoRoot, request);
     }
 
     /** Start receiving live `studioEvent` pushes for this connection's repo. */

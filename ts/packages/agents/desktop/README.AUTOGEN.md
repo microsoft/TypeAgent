@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=ce3ceb51c5671c6ffe38b212cd5b2eab88aa7d2d0749fb683d97d961673023bb -->
+<!-- AUTOGEN:DOCS:HASH:sha256=62aeb6a269910a273ebbe0cfcdf3428c3ec051123ac9d2b7b75b54085469b63a -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # desktop-automation — AI-generated documentation
@@ -47,7 +47,7 @@ The `desktop-automation` package provides a wide range of actions for automating
    - `ChangeThemeMode` and `ApplyTheme`: Modify desktop themes.
    - `SetTextSize`: Adjust text scaling.
 
-These actions allow users to automate repetitive tasks, customize their desktop environment, and manage system settings efficiently.
+These actions allow users to automate repetitive tasks, customize their desktop environment, and manage system settings effectively.
 
 ## Setup
 
@@ -123,7 +123,7 @@ By following these steps, you can extend the `desktop-automation` package to sup
 ### Entry points
 
 - `./agent/manifest` → [./src/manifest.json](./src/manifest.json)
-- `./agent/handlers` → `./dist/actionHandler.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/actionHandler.js](./dist/actionHandler.js)
 
 ### Dependencies
 
@@ -166,6 +166,6 @@ _32 actions declared in the schema, none yet implemented in [`./src/actionHandle
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter desktop-automation docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter desktop-automation docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

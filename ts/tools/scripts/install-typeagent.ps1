@@ -21,7 +21,9 @@
        typeagent-serve.mjs. Config provisioning depends on -Provider:
          aisystems (default) - getKeys + browser login (AI Systems Key Vault).
          ollama / copilot     - synthesize config.local.yaml locally (no Key Vault).
-    6. (Optional, -DevTunnel) sets up a Microsoft Dev Tunnel and hosts it so a
+    6. Registers a per-user Scheduled Task (logon trigger) so the agent-server
+       starts again after logout/reboot. Skip with -NoAutoStart.
+    7. (Optional, -DevTunnel) sets up a Microsoft Dev Tunnel and hosts it so a
        client on another device can reach the service.
 
   Azure CLI (with az login) is used to download from the feed. This is the
@@ -59,6 +61,9 @@ param(
     [string]$PluginMarketplaceName = "typeagent-local",
     [string]$PluginMarketplaceDir = "$env:USERPROFILE\.copilot\marketplaces\typeagent-local",
     [switch]$NoStart,
+    # Opt-out: by default the installer registers a per-user Scheduled Task so the
+    # agent-server starts again at logon. Pass -NoAutoStart to skip registration.
+    [switch]$NoAutoStart,
     # Opt-in: run setup-typeagent-prereqs.ps1 first to install missing base
     # prerequisites (Node/Azure CLI and optional extras for selected switches).
     [switch]$BootstrapPrereqs,
@@ -747,12 +752,21 @@ if (-not $NoStart) {
     }
 }
 
+if (-not $NoAutoStart) {
+    Write-Step "Registering agent-server autostart (per-user Scheduled Task)"
+    & node $serve autostart enable
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  WARNING: autostart registration failed; the server will not start automatically after logon/reboot." -ForegroundColor Yellow
+    }
+}
+
 Write-Host ""
 Write-Host "TypeAgent agent-server installed at $InstallDir" -ForegroundColor Green
 Write-Host "  Start:    node `"$serve`" start"
 Write-Host "  Status:   node `"$serve`" status"
 Write-Host "  Logs:     node `"$serve`" logs"
 Write-Host "  Stop:     node `"$serve`" stop"
+Write-Host "  Autostart: node `"$serve`" autostart status"
 if ($DevTunnel) {
     Write-Host "  Tunnel:   node `"$serve`" tunnel status   (list-tunnels.mjs shows the client URL + token)"
 }

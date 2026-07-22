@@ -36,11 +36,10 @@ export type ShellContext = {
     shellWindow: ShellWindow;
 };
 
-const config: AppAgentManifest = {
+const baseManifest = {
     emojiChar: "🐚",
     description: "Shell",
-    localView: true,
-};
+} as const;
 
 class ShellShowSettingsCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show shell settings";
@@ -416,18 +415,44 @@ const handlers: CommandHandlerTable = {
     },
 };
 
-export function createShellAgentProvider(shellWindow: ShellWindow) {
+export type ShellAgentOptions = {
+    // When false, the agent does not serve a local chat view: the manifest
+    // omits `localView` and initializeAgentContext does not start the local
+    // chat server. Used in connect mode, where the agent runs in the shell
+    // process over agent-rpc and the chat view is not served by the agent.
+    // Default is true (in-process/standalone shell).
+    serveLocalView?: boolean;
+};
+
+// Build the shell's own AppAgent and manifest. Shared by the in-process
+// provider (standalone) and the connect-mode registration so the two paths
+// can't drift.
+export function createShellAgent(
+    shellWindow: ShellWindow,
+    options?: ShellAgentOptions,
+): { manifest: AppAgentManifest; agent: AppAgent } {
+    const serveLocalView = options?.serveLocalView ?? true;
+    const manifest: AppAgentManifest = serveLocalView
+        ? { ...baseManifest, localView: true }
+        : { ...baseManifest };
     const agent: AppAgent = {
         async initializeAgentContext(
-            settings: AppAgentInitSettings,
+            settings?: AppAgentInitSettings,
         ): Promise<ShellContext> {
-            shellWindow.startChatServer(settings.localHostPort ?? -1);
+            if (serveLocalView) {
+                shellWindow.startChatServer(settings?.localHostPort ?? -1);
+            }
             return {
                 shellWindow,
             };
         },
         ...getCommandInterface(handlers),
     };
+    return { manifest, agent };
+}
+
+export function createShellAgentProvider(shellWindow: ShellWindow) {
+    const { manifest, agent } = createShellAgent(shellWindow);
 
     const shellAgentProvider: AppAgentProvider = {
         getAppAgentNames: () => {
@@ -437,7 +462,7 @@ export function createShellAgentProvider(shellWindow: ShellWindow) {
             if (appAgentName !== "shell") {
                 throw new Error(`Unknown app agent: ${appAgentName}`);
             }
-            return config;
+            return manifest;
         },
         loadAppAgent: async (appAgentName: string) => {
             if (appAgentName !== "shell") {

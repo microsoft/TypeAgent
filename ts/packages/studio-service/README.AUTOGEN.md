@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c6bac416a9391a63917e322b563aa8bb5d3da94732de8f49207eca0968bd94cc -->
+<!-- AUTOGEN:DOCS:HASH:sha256=1552dbfec1180e9144d1e55033638d934dec7593615ad7643d171d6bebb56fea -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # studio-service — AI-generated documentation
@@ -18,21 +18,21 @@ The `studio-service` package is a standalone, per-workspace host for the TypeAge
 
 The `studio-service` package provides the following core functionalities:
 
-- **Hosting the Studio Runtime**: It runs the Studio runtime, which manages workspace state and executes actions within the developer's workspace.
-- **Typed Service Channel**: The package establishes a typed `agent-rpc` service channel, enabling communication between the Studio runtime and its clients, such as the `studio` agent and the `typeagent-studio` extension.
-- **Workspace State Management**: The service uses a durable, file-backed `StudioWorkspaceState` to persist runtime state across service restarts, ensuring continuity.
-- **Service Discovery and Registration**: The service includes mechanisms for announcing its availability, discovering its port and token, and enabling clients to connect securely.
-- **Proxy Client**: A minimal client is provided for the `studio` agent to forward read-only actions to the standalone Studio service.
+- **Studio Runtime Hosting**: It runs the Studio runtime, which manages the state of the developer's workspace and executes actions within it.
+- **Typed Service Channel**: Establishes a typed `agent-rpc` service channel for structured communication between the Studio runtime and its clients, such as the `studio` agent and the `typeagent-studio` extension.
+- **Workspace State Management**: Implements a file-backed `StudioWorkspaceState` to persist runtime state across service restarts, ensuring continuity and durability.
+- **Service Discovery and Registration**: Includes mechanisms for announcing the service's availability, discovering its port and token, and enabling secure client connections.
+- **Proxy Client**: Provides a lightweight proxy client for the `studio` agent to forward read-only actions to the standalone Studio service.
 
-The package supports a range of actions, including workspace state management and communication with the Studio runtime. These actions are exposed through typed `agent-rpc` handlers, which are defined in [studioRpcHandlers.ts](./src/studioRpcHandlers.ts).
+The service supports a range of actions related to workspace state management and runtime communication. These actions are exposed through typed `agent-rpc` handlers defined in [studioRpcHandlers.ts](./src/studioRpcHandlers.ts).
 
 ## Setup
 
 To configure and run the `studio-service` package, you need to set the following environment variable:
 
-- `TYPEAGENT_STUDIO_REPO_ROOT`: Specifies the root directory of the repository that the Studio service should inspect. If this variable is not set, the service defaults to using the current working directory. You can set this variable in your shell or `.env` file.
+- `TYPEAGENT_STUDIO_REPO_ROOT`: Specifies the root directory of the repository that the Studio service should inspect. If this variable is not set, the service defaults to using the current working directory. You can set this variable in your shell or in a `.env` file located in the `ts/` directory.
 
-Ensure that this environment variable is correctly configured before launching the service. The service can be started using the `typeagent-studio serve` CLI or programmatically via its API.
+Once the environment variable is set, you can launch the service using the `typeagent-studio serve` CLI or programmatically via its API. For more details, refer to the hand-written README.
 
 ## Key Files
 
@@ -68,7 +68,7 @@ After making changes, ensure that you run the package's tests to verify the func
 
 ### Entry points
 
-- default → `./dist/index.js` _(not found on disk)_
+- default → [./dist/index.js](./dist/index.js)
 
 ### Dependencies
 
@@ -87,7 +87,7 @@ External: `debug`, `ws`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/main.ts`, `./src/fileWorkspaceState.ts`, …and 7 more under `./src/`.
+`./src/index.ts`, `./src/main.ts`, `./src/fileWorkspaceState.ts`, …and 8 more under `./src/`.
 
 ### Environment variables
 
@@ -97,6 +97,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter studio-service docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter studio-service docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -317,6 +317,169 @@ describe("agent running rail", () => {
     });
 });
 
+describe("reasoning UI", () => {
+    const REASONING = "dispatcher.reasoningAction.copilot";
+    const thinking = (text = "reasoning") => ({
+        type: "html" as const,
+        content:
+            `<details class="reasoning-thinking" open><summary>Thinking</summary>` +
+            `<pre>${text}</pre></details>`,
+    });
+
+    function reasoningBubbles(root: HTMLElement): HTMLElement[] {
+        return Array.from(
+            root.querySelectorAll<HTMLElement>(
+                '.chat-message-container-agent[data-request-id="req-1"]',
+            ),
+        );
+    }
+
+    function thinkingByText(
+        root: HTMLElement,
+    ): Map<string, HTMLDetailsElement> {
+        const map = new Map<string, HTMLDetailsElement>();
+        root.querySelectorAll<HTMLDetailsElement>(
+            "details.reasoning-thinking",
+        ).forEach((d) => map.set(d.querySelector("pre")?.textContent ?? "", d));
+        return map;
+    }
+
+    it("marks the reasoning working rail as reasoning (purple), not a plain one", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            thinking(),
+            REASONING,
+            undefined,
+            "step",
+            "req-1",
+        );
+        expect(
+            root.querySelector(
+                '.chat-message-status-rail[data-status="running"][data-variant="reasoning"]',
+            ),
+        ).not.toBeNull();
+
+        const plain = makePanel({ onCancel: jest.fn() });
+        plain.panel.addUserMessage("hi", "req-1");
+        plain.panel.setProcessing("req-1");
+        plain.panel.addAgentMessage("hi", "agent", undefined, "step", "req-1");
+        expect(
+            plain.root.querySelector(".chat-message-status-rail[data-variant]"),
+        ).toBeNull();
+    });
+
+    it("collapses a superseded Thinking block but keeps the active one open", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            thinking("first"),
+            REASONING,
+            undefined,
+            "step",
+            "req-1",
+        );
+        panel.addAgentMessage(
+            thinking("second"),
+            REASONING,
+            undefined,
+            "step",
+            "req-1",
+        );
+
+        const details = thinkingByText(root);
+        expect(details.get("first")?.hasAttribute("open")).toBe(false);
+        expect(details.get("second")?.hasAttribute("open")).toBe(true);
+    });
+
+    it("collapses all Thinking blocks and gaps the answer on completion", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            thinking(),
+            REASONING,
+            undefined,
+            "step",
+            "req-1",
+        );
+        panel.addAgentMessage(
+            "the answer",
+            REASONING,
+            undefined,
+            "step",
+            "req-1",
+        );
+        panel.completeRequest("req-1");
+
+        for (const d of root.querySelectorAll<HTMLDetailsElement>(
+            "details.reasoning-thinking",
+        )) {
+            expect(d.hasAttribute("open")).toBe(false);
+        }
+        // The answer bubble (prose) gets the separating gap; the "Thinking"
+        // trail bubble does not.
+        const bubbles = reasoningBubbles(root);
+        const answer = bubbles.find((b) =>
+            b.textContent?.includes("the answer"),
+        );
+        const trail = bubbles.find((b) =>
+            b.querySelector("details.reasoning-thinking"),
+        );
+        expect(answer?.classList.contains("chat-reasoning-answer")).toBe(true);
+        expect(trail?.classList.contains("chat-reasoning-answer")).toBe(false);
+    });
+
+    it("collapses a still-active Thinking block on completion", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        // A single step is never superseded, so completion is the only thing
+        // that can collapse it.
+        panel.addAgentMessage(
+            thinking(),
+            REASONING,
+            undefined,
+            "step",
+            "req-1",
+        );
+        const details = root.querySelector<HTMLDetailsElement>(
+            "details.reasoning-thinking",
+        );
+        expect(details?.hasAttribute("open")).toBe(true);
+
+        panel.completeRequest("req-1");
+        expect(details?.hasAttribute("open")).toBe(false);
+    });
+
+    it("keeps Thinking expanded when a request is marked/cleared unknown", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            thinking(),
+            REASONING,
+            undefined,
+            "step",
+            "req-1",
+        );
+        expect(
+            root
+                .querySelector<HTMLDetailsElement>("details.reasoning-thinking")
+                ?.hasAttribute("open"),
+        ).toBe(true);
+        panel.setRequestUnknown("req-1");
+        panel.clearRequestUnknown("req-1");
+        expect(
+            root
+                .querySelector<HTMLDetailsElement>("details.reasoning-thinking")
+                ?.hasAttribute("open"),
+        ).toBe(true);
+    });
+});
+
 describe("roadrunner (explained) placement", () => {
     it("anchors the icon inside the content and tooltip on the bubble body", () => {
         const { root, panel } = makePanel();
@@ -354,5 +517,54 @@ describe("icons", () => {
             expect(el.tagName).toBe("I");
             expect(el.querySelector("svg")).not.toBeNull();
         }
+    });
+});
+
+describe("notifications (persistent, dismissable)", () => {
+    function agentBubbles(root: HTMLElement): HTMLElement[] {
+        return Array.from(
+            root.querySelectorAll<HTMLElement>(".chat-message-agent"),
+        );
+    }
+
+    it("addNotification renders a persistent agent bubble", () => {
+        const { root, panel } = makePanel();
+        panel.addNotification("Build finished", "osNotifications", "os:1");
+        const bubbles = agentBubbles(root);
+        expect(bubbles.length).toBe(1);
+        expect(bubbles[0].textContent).toContain("Build finished");
+    });
+
+    it("reusing an id updates the same bubble in place (no duplicate)", () => {
+        const { root, panel } = makePanel();
+        panel.addNotification("first", "osNotifications", "os:1");
+        panel.addNotification("second", "osNotifications", "os:1");
+        const bubbles = agentBubbles(root);
+        expect(bubbles.length).toBe(1);
+        expect(bubbles[0].textContent).toContain("second");
+        expect(bubbles[0].textContent).not.toContain("first");
+    });
+
+    it("removeNotification drops the matching bubble and returns true", () => {
+        const { root, panel } = makePanel();
+        panel.addNotification("Build finished", "osNotifications", "os:1");
+        expect(panel.removeNotification("os:1")).toBe(true);
+        expect(agentBubbles(root).length).toBe(0);
+    });
+
+    it("removeNotification is a no-op for unknown ids", () => {
+        const { panel } = makePanel();
+        expect(panel.removeNotification("os:unknown")).toBe(false);
+    });
+
+    it("distinct ids produce distinct bubbles removable independently", () => {
+        const { root, panel } = makePanel();
+        panel.addNotification("one", "osNotifications", "os:1");
+        panel.addNotification("two", "osNotifications", "os:2");
+        expect(agentBubbles(root).length).toBe(2);
+        panel.removeNotification("os:1");
+        const remaining = agentBubbles(root);
+        expect(remaining.length).toBe(1);
+        expect(remaining[0].textContent).toContain("two");
     });
 });

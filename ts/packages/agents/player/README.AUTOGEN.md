@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d24fef7081b0073f229cef02becbf398382f82a97e80b520d43163397dd79bdb -->
+<!-- AUTOGEN:DOCS:HASH:sha256=5db751d517695472ac1d263ab300fa96a23d48f59cbf1aec3f58eeab6d05b7d4 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # music — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The `music` package, located in `ts/packages/agents/player/`, is a TypeAgent application agent that integrates with the Spotify API. It enables users to control Spotify playback, manage playlists, and explore music through a variety of actions. This agent interacts with Spotify's Web API and requires a one-time setup for authentication and authorization. Once configured, it can control playback on any active Spotify client, such as the desktop app, mobile app, or a browser tab on `open.spotify.com`.
+The `music` package, located in `ts/packages/agents/player/`, is a TypeAgent application agent that integrates with the Spotify API. It enables users to control Spotify playback, manage playlists, search for music, and retrieve information about tracks, albums, and playlists. This agent interacts with Spotify's Web API and requires a one-time setup for authentication and authorization. Once configured, it can control playback on any active Spotify client, such as the desktop app, mobile app, or a browser tab on `open.spotify.com`.
 
 ## What it does
 
-The `music` package provides a comprehensive set of actions for interacting with Spotify. These actions are grouped into the following categories:
+The `music` package provides a comprehensive set of actions for interacting with Spotify. These actions are grouped into several functional categories:
 
 ### Playback Control
 
-The agent allows users to control playback on active Spotify devices. Key actions include:
+The agent supports controlling playback on active Spotify devices. Key actions include:
 
 - `playTrack`, `pause`, `resume`, `next`, `previous`: Basic playback controls.
 - `setVolume`, `changeVolume`: Adjust playback volume.
@@ -36,7 +36,7 @@ Users can manage their playlists with actions such as:
 
 ### Search and Discovery
 
-The agent supports searching Spotify's music catalog with actions like:
+The agent allows users to search Spotify's music catalog with actions like:
 
 - `searchTracks`, `searchForPlaylists`, `searchArtists`, `searchAlbums`, `searchGenres`: Search for tracks, playlists, artists, albums, or genres.
 
@@ -86,13 +86,13 @@ For more detailed instructions, refer to the hand-written README.
 
 ## Key Files
 
-The `music` package is structured into several key files, each serving a specific purpose:
+The `music` package is organized into several key files, each with a specific role in the agent's functionality:
 
-- [playerManifest.json](./src/agent/playerManifest.json): Metadata about the agent, including its schema and description.
+- [playerManifest.json](./src/agent/playerManifest.json): Contains metadata about the agent, including its schema and description.
 - [playerSchema.agr](./src/agent/playerSchema.agr): Defines the grammar for parsing user commands related to music playback and control.
-- [playerSchema.ts](./src/agent/playerSchema.ts): Contains TypeScript definitions for the actions and entities used by the agent.
+- [playerSchema.ts](./src/agent/playerSchema.ts): Provides TypeScript definitions for the actions and entities used by the agent.
 - [playerHandlers.ts](./src/agent/playerHandlers.ts): Implements the logic for handling actions such as playback control, playlist management, and search.
-- [playerCommands.ts](./src/agent/playerCommands.ts): Provides command interfaces for enabling/disabling Spotify integration, authenticating users, and loading user data.
+- [playerCommands.ts](./src/agent/playerCommands.ts): Defines command interfaces for enabling/disabling Spotify integration, authenticating users, and loading user data.
 - [client.ts](./src/client.ts): Manages communication with the Spotify API, including authentication, token management, and API requests.
 - [playback.ts](./src/playback.ts): Handles playback-related functionality, such as managing active devices and playback status.
 
@@ -102,7 +102,7 @@ To extend the `music` package, follow these steps:
 
 1. **Understand the Current Implementation**:
 
-   - Start by reviewing [playerHandlers.ts](./src/agent/playerHandlers.ts) to understand how existing actions are implemented.
+   - Review [playerHandlers.ts](./src/agent/playerHandlers.ts) to understand how existing actions are implemented.
    - Familiarize yourself with [playerSchema.ts](./src/agent/playerSchema.ts), which defines the TypeScript types for actions and entities.
 
 2. **Define New Actions**:
@@ -164,6 +164,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `2a8c6e65a1638c435219fd5b8688faeeec78d4c7` on `2026-07-16T01:20:16.260Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music docs:verify-links` to spot-check._
+_Auto-generated against commit `8192acc149ab6f52296dcc71202b20253b6a3089` on `2026-07-22T05:16:33.340Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter music docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

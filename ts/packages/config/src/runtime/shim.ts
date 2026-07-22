@@ -251,6 +251,36 @@ export function configToEnv(config: Config): EnvOutput {
                 f.httpEndpointLogicAppConnectionId;
     }
 
+    // Azure AI Search (Foundry IQ) browser-less lookup.
+    if (config.azureAISearch) {
+        const s = config.azureAISearch;
+        if (s.mode !== undefined) out.AZURE_AI_SEARCH_LOOKUP_MODE = s.mode;
+        if (s.endpoint !== undefined) out.AZURE_AI_SEARCH_ENDPOINT = s.endpoint;
+        if (s.knowledgeBase !== undefined)
+            out.AZURE_AI_SEARCH_KNOWLEDGE_BASE = s.knowledgeBase;
+        if (s.apiKey !== undefined) out.AZURE_AI_SEARCH_API_KEY = s.apiKey;
+        if (s.bearerToken !== undefined)
+            out.AZURE_AI_SEARCH_BEARER_TOKEN = s.bearerToken;
+        if (s.apiVersion !== undefined)
+            out.AZURE_AI_SEARCH_API_VERSION = s.apiVersion;
+        if (s.outputMode !== undefined)
+            out.AZURE_AI_SEARCH_OUTPUT_MODE = s.outputMode;
+        if (s.reasoningEffort !== undefined)
+            out.AZURE_AI_SEARCH_REASONING_EFFORT = s.reasoningEffort;
+        if (s.aoaiEndpoint !== undefined)
+            out.AZURE_AI_SEARCH_AOAI_ENDPOINT = s.aoaiEndpoint;
+        if (s.aoaiDeployment !== undefined)
+            out.AZURE_AI_SEARCH_AOAI_DEPLOYMENT = s.aoaiDeployment;
+        if (s.aoaiModel !== undefined)
+            out.AZURE_AI_SEARCH_AOAI_MODEL = s.aoaiModel;
+        if (s.aoaiApiKey !== undefined)
+            out.AZURE_AI_SEARCH_AOAI_API_KEY = s.aoaiApiKey;
+        if (s.webKnowledgeSource !== undefined)
+            out.AZURE_AI_SEARCH_WEB_KS_NAME = s.webKnowledgeSource;
+        if (s.webKnowledgeSourceDomains !== undefined)
+            out.AZURE_AI_SEARCH_WEB_KS_DOMAINS = s.webKnowledgeSourceDomains;
+    }
+
     // Embedding provider selection.
     if (config.embedding) {
         if (config.embedding.provider !== undefined)

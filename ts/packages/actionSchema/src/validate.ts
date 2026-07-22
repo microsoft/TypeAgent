@@ -17,6 +17,27 @@ function indentMessage(message: string) {
     return `${message.replace(/\n/g, "\n    ")}`;
 }
 
+// A result-reference placeholder: { "$result": "<id>" }. It stands in for a
+// value produced by an earlier action in a MultipleAction and is replaced with
+// that value (of any type) at execution time, so it satisfies any expected type.
+export function isResultReference(
+    actual: unknown,
+): actual is { $result: string } {
+    if (
+        typeof actual !== "object" ||
+        actual === null ||
+        Array.isArray(actual)
+    ) {
+        return false;
+    }
+    const keys = Object.keys(actual);
+    return (
+        keys.length === 1 &&
+        keys[0] === "$result" &&
+        typeof (actual as Record<string, unknown>).$result === "string"
+    );
+}
+
 export function validateSchema(
     name: string,
     expected: SchemaType,
@@ -26,6 +47,11 @@ export function validateSchema(
     if (actual === null) {
         throw new Error(`${errorName(name)} should not be null`);
     }
+    // A result-reference placeholder ({ "$result": "<id>" }) is resolved to its
+    // real value at execution time, so accept it against any expected type.
+    if (isResultReference(actual)) {
+        return;
+    }
     switch (expected.type) {
         case "any":
             break; // any type, no validation needed
@@ -33,8 +59,7 @@ export function validateSchema(
             const errors: [SchemaType, Error][] = [];
             for (const type of expected.types) {
                 try {
-                    validateSchema(name, type, actual, coerce);
-                    return;
+                    return validateSchema(name, type, actual, coerce);
                 } catch (e: any) {
                     errors.push([type, e]);
                 }
@@ -52,7 +77,12 @@ export function validateSchema(
         }
         case "type-reference":
             if (expected.definition !== undefined) {
-                validateSchema(name, expected.definition.type, actual, coerce);
+                return validateSchema(
+                    name,
+                    expected.definition.type,
+                    actual,
+                    coerce,
+                );
             }
             break;
         case "object":

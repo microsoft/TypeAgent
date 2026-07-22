@@ -54,7 +54,7 @@
     "debug": "^4.4.0",
     "telemetry": "workspace:*",
     "websocket-channel-server": "workspace:*",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@typeagent/action-grammar-compiler": "workspace:*",

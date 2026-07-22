@@ -61,6 +61,23 @@ export {
     TypedDisplayContent,
     DisplayAppendMode,
     DisplayMessageKind,
+    BadgeTone,
+    TableCellType,
+    TableColumn,
+    TableCell,
+    TableBlock,
+    HeadingBlock,
+    TextBlock,
+    ListItem,
+    ListBlock,
+    KeyValuePair,
+    KeyValueBlock,
+    CardBlock,
+    ImageBlock,
+    CodeBlock,
+    DividerBlock,
+    StructuredBlock,
+    StructuredContent,
 } from "./display.js";
 
 export {

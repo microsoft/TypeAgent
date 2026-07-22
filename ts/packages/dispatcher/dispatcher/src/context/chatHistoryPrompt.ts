@@ -160,6 +160,15 @@ export function createTypeAgentRequestPrompt(
                     prompts.push(...additionalInstructions);
                 }
 
+                const recentActions = history?.actions;
+                if (recentActions !== undefined && recentActions.length > 0) {
+                    prompts.push("###");
+                    prompts.push(
+                        "The following action(s) were already executed in the recent chat history, oldest first. Do NOT re-issue them unless the current user request explicitly asks to repeat them:",
+                    );
+                    prompts.push(JSON.stringify(recentActions, undefined, 2));
+                }
+
                 prompts.push("###");
                 prompts.push("The latest assistant response:");
                 prompts.push(

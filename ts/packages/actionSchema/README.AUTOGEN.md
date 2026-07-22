@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=07ac322ec82bbe9c21c73cdecb98e532472e23bc01f53fa844d042c0c79acf9f -->
+<!-- AUTOGEN:DOCS:HASH:sha256=d494b35f1afeca79ee3f94044319e5eed00e3b7fbe511f65a2b7e551290f102d -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/action-schema — AI-generated documentation
@@ -12,23 +12,23 @@
 
 ## Overview
 
-The `@typeagent/action-schema` package is a TypeScript library that provides tools for parsing, generating, and validating action schemas within the TypeAgent framework. Action schemas are used to define the structure, types, and constraints of actions, ensuring consistency and correctness across the system. This package is a core utility in the TypeAgent ecosystem and is widely used by other packages in the monorepo.
+The `@typeagent/action-schema` package is a TypeScript library that provides tools for parsing, generating, and validating action schemas within the TypeAgent framework. Action schemas are used to define the structure, types, and constraints of actions, ensuring consistency and type safety across the system. This package is a core utility in the TypeAgent ecosystem and is widely used by other packages in the monorepo.
 
 ## What it does
 
-The `@typeagent/action-schema` package offers a range of functionalities to support the creation and management of action schemas:
+The primary purpose of the `@typeagent/action-schema` package is to facilitate the creation, management, and validation of action schemas. Its key capabilities include:
 
 - **Parsing Action Schemas**: Extract schema definitions from TypeScript source files using functions like `parseActionSchemaSource` and `parseSchemaSource`.
 - **Schema Generation**: Generate schema definitions from TypeScript types with utilities such as `generateActionSchema` and `generateSchemaTypeDefinition`.
-- **JSON Schema Integration**: Convert TypeScript schemas to JSON schemas and vice versa using functions like `generateActionJsonSchema` and `parseToolsJsonSchema`.
-- **Validation**: Validate actions against their defined schemas using the `validateAction` function.
+- **JSON Schema Support**: Convert TypeScript schemas to JSON schemas and vice versa using tools like `generateActionJsonSchema` and `parseToolsJsonSchema`.
+- **Validation**: Validate actions against their schemas using the `validateAction` function to ensure they conform to the defined structure and constraints.
 - **Serialization**: Serialize and deserialize parsed action schemas with `toJSONParsedActionSchema` and `fromJSONParsedActionSchema`.
 
-These capabilities make the package essential for defining and enforcing structured action schemas, which are used extensively across the TypeAgent ecosystem. It is a dependency for numerous other packages, including `@typeagent/action-grammar`, `@typeagent/action-grammar-compiler`, and `@typeagent/core`.
+These features make the package essential for defining and enforcing structured action schemas, which are critical for interoperability and reliability in the TypeAgent framework. It is used by other packages such as `@typeagent/action-grammar`, `@typeagent/action-grammar-compiler`, and `@typeagent/core`.
 
 ## Setup
 
-To use the `@typeagent/action-schema` package, install it along with its external dependencies by running the following command:
+To use the `@typeagent/action-schema` package, install it along with its external dependencies:
 
 ```sh
 pnpm install @typeagent/action-schema debug typescript
@@ -38,12 +38,12 @@ No additional setup, such as environment variables or external services, is requ
 
 ## Key Files
 
-The package is structured into several key modules, each responsible for specific functionality:
+The `@typeagent/action-schema` package is organized into several key modules, each responsible for specific aspects of schema management:
 
 - **[index.ts](./src/index.ts)**: The main entry point of the package. It exports core types and functions for schema parsing, generation, validation, and serialization.
-- **[creator.ts](./src/creator.ts)**: Provides utilities for creating schema types, such as `string`, `number`, `boolean`, and more complex types like `array` and `object`. This is the starting point for defining new schema types.
-- **[generator.ts](./src/generator.ts)**: Implements logic for generating schema definitions from TypeScript types. It also supports generating JSON schemas.
-- **[jsonSchemaGenerator.ts](./src/jsonSchemaGenerator.ts)**: Focuses on converting TypeScript schema definitions into JSON schemas. Includes utilities like `wrapTypeWithJsonSchema` for integrating JSON schema structures.
+- **[creator.ts](./src/creator.ts)**: Provides utilities for defining schema types, such as `string`, `number`, `boolean`, and more complex types like `array` and `object`. This is the primary module for creating new schema types.
+- **[generator.ts](./src/generator.ts)**: Implements logic for generating schema definitions from TypeScript types. It also includes support for generating JSON schemas.
+- **[jsonSchemaGenerator.ts](./src/jsonSchemaGenerator.ts)**: Focuses on converting TypeScript schema definitions into JSON schemas. It includes utilities like `wrapTypeWithJsonSchema` for integrating JSON schema structures.
 - **[jsonSchemaParser.ts](./src/jsonSchemaParser.ts)**: Handles the reverse process of parsing JSON schemas and converting them into TypeScript schema definitions.
 - **[parser.ts](./src/parser.ts)**: Contains functions to parse TypeScript source files and extract schema definitions. This module is essential for integrating TypeScript-based schemas into the TypeAgent framework.
 - **[schemaConfig.ts](./src/schemaConfig.ts)**: Defines configuration types for schema parsing and generation, such as `ParamSpec` and `SchemaConfig`.
@@ -111,6 +111,6 @@ External: `debug`, `typescript`
 
 ---
 
-_Auto-generated against commit `2a8c6e65a1638c435219fd5b8688faeeec78d4c7` on `2026-07-16T01:20:16.260Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-schema docs:verify-links` to spot-check._
+_Auto-generated against commit `ddfb77106202f41382a9a5df525ac5b296c74a4b` on `2026-07-21T05:29:53.699Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-schema docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c40fd16300446292fe0355348bb9e4295b00411ea4f3fc1bedfccad745531c33 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7f986fd02c90cbcde410d2aea6c675827d1bd4e27739435d5d428495fee42fdb -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -12,27 +12,27 @@
 
 ## Overview
 
-The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) entry point for the TypeAgent ecosystem. It provides a personal agent interface for processing user requests, performing actions, answering questions, and managing conversations. Built on Electron, it integrates with other TypeAgent components, such as the dispatcher and agent server, to deliver an interactive and extensible experience. The shell supports both text and voice input, multi-conversation management, and local or remote operation modes.
+The `agent-shell` package is a TypeScript library that provides the graphical user interface (GUI) for the TypeAgent ecosystem. Built on Electron, it acts as a personal agent interface, enabling users to interact with an extensible set of agents to perform actions, answer questions, and manage conversations. The shell supports both text and voice input, integrates with other TypeAgent components like the dispatcher and agent server, and operates in both local and remote modes.
 
 ## What it does
 
-The `agent-shell` package provides a rich set of features to enable interactive and conversational agent experiences:
+The `agent-shell` package offers the following key features:
 
 ### Conversation Management
 
-- **Multi-Conversation Support**: Users can create, switch, rename, and delete conversations. Conversations persist across sessions, and history is replayed on reconnect.
-- **Default Conversation**: Automatically joins a default conversation named `"Shell"` when connected to the agent server. This conversation is persistent and serves as the starting point for interactions.
+- **Multi-Conversation Support**: Users can create, switch, rename, and delete conversations. Conversations persist across sessions, with history replayed on reconnect.
+- **Default Conversation**: Automatically joins a persistent default conversation named `"Shell"` when connected to the agent server.
 - **Commands for Conversation Management**: Users can manage conversations using commands like `/conversation list`, `/conversation new [name]`, `/conversation switch <id|name>`, and more. These commands can also be executed via natural language inputs.
 - **Request Queue Management**: Visual indicators for queued and running requests allow users to manage and cancel requests directly from the chat interface.
 
 ### Speech Input
 
-- **Azure Speech Services**: Enables speech-to-text functionality using Azure's cloud-based service.
-- **Local Whisper Service**: Provides an alternative for speech-to-text processing using a local service.
+- **Azure Speech Services**: Provides cloud-based speech-to-text functionality.
+- **Local Whisper Service**: Offers an alternative for speech-to-text processing using a local service.
 
 ### Multi-Client Notifications
 
-- The shell notifies users when other clients join or leave the same conversation, facilitating collaborative interactions.
+- Notifies users when other clients join or leave the same conversation, enabling collaborative interactions.
 
 ### Local Mode
 
@@ -57,6 +57,7 @@ To set up and run the `agent-shell` package, follow these steps:
      - `SPEECH_SDK_ENDPOINT`: The service URL or speech API resource ID for Azure Speech Services.
      - `SPEECH_SDK_KEY`: The API key for Azure Speech Services.
      - `SPEECH_SDK_REGION`: The region of the Azure Speech Services (e.g., `westus2`).
+     - `TYPEAGENT_MODEL_PROVIDER`: Specifies the model provider for TypeAgent.
      - `WEBSOCKET_HOST`: The host for WebSocket connections.
 
 3. **Run the Shell**:
@@ -138,6 +139,8 @@ Workspace:
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
 - [@typeagent/aiclient](../../packages/aiclient/README.md)
+- [@typeagent/browser-control-rpc](../../packages/agents/browserControlRpc/README.md)
+- [@typeagent/browser-extension](../../packages/agents/browserExtension/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/completion-ui](../../packages/completionUI/README.md)
 - [@typeagent/config](../../packages/config/README.md)
@@ -162,16 +165,17 @@ External: `@azure/identity`, `@azure/msal-node-extensions`, `@electron-toolkit/p
 
 ### Environment variables
 
-_5 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_6 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `ELECTRON_RENDERER_URL`
 - `SPEECH_SDK_ENDPOINT`
 - `SPEECH_SDK_KEY`
 - `SPEECH_SDK_REGION`
+- `TYPEAGENT_MODEL_PROVIDER`
 - `WEBSOCKET_HOST`
 
 ---
 
-_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

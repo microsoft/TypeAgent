@@ -674,6 +674,10 @@ stages:
         displayName: "Publish shell to Azure Storage"
         condition: eq('${{ parameters.publishShell }}', 'true')
         environment: typeagent-shell-$(resolvedChannel)
+        # stageDependencies is not available in step conditions, so map the
+        # optional mac build result to a job variable the steps can read.
+        variables:
+          macBuildResult: $[ stageDependencies.Build.build_shell_mac.result ]
         pool:
           # AzureFileCopy requires Windows.
           vmImage: windows-latest
@@ -703,12 +707,12 @@ stages:
                   artifact: shell-mac
                   displayName: "Download shell-mac (optional)"
                   condition: |
-                    in(stageDependencies.Build.build_shell_mac.result, 'Succeeded', 'SucceededWithIssues')
+                    in(variables.macBuildResult, 'Succeeded', 'SucceededWithIssues')
 
                 - task: AzureFileCopy@6
                   displayName: "Upload Azure Storage - mac"
                   condition: |
-                    in(stageDependencies.Build.build_shell_mac.result, 'Succeeded', 'SucceededWithIssues')
+                    in(variables.macBuildResult, 'Succeeded', 'SucceededWithIssues')
                   inputs:
                     SourcePath: $(Pipeline.Workspace)\shell-mac\**
                     Destination: AzureBlob

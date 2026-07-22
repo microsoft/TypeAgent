@@ -19,17 +19,18 @@ read [browserAgent.md](../../../../docs/architecture/browser/browserAgent.md) fi
 
 ## Building the Extension
 
-The extension has its own build pipeline: TypeScript type-checking + Vite
-bundling with esbuild.
+The extension lives in the `@typeagent/browser-extension` package
+(`packages/agents/browserExtension`) and has its own build pipeline:
+TypeScript type-checking + Vite bundling with esbuild.
 
 ```bash
-cd packages/agents/browser
+cd packages/agents/browserExtension
 
 # Production build (minified, no sourcemaps)
 npm run build:extension
 
 # Development build (sourcemaps, no minification)
-npm run build:extension:dev
+npm run build:dev
 ```
 
 ### What the build produces
@@ -56,8 +57,8 @@ dist/extension/
 
 The build is orchestrated by Fluid Build with these steps:
 
-1. **TypeScript type-checking** — `tsc` checks extension and common code
-   (no emit; esbuild handles transpilation)
+1. **TypeScript type-checking** — `tsc` type-checks the Chrome and Electron
+   extension code (no emit; esbuild handles transpilation)
 2. **Vite/esbuild bundling** — `scripts/buildExtension.mjs` builds both
    Chrome and Electron variants:
    - Service worker: bundled as ESM (`format: 'es'`) — required by MV3
@@ -68,11 +69,16 @@ The build is orchestrated by Fluid Build with these steps:
 ### Component-specific builds
 
 ```bash
+# In packages/agents/browserExtension (extension):
+npm run tsc:extension:chrome:typecheck    # Type-check Chrome extension
+npm run tsc:extension:electron:typecheck  # Type-check Electron extension
+npm run agc:crossword                     # Compile crossword action grammar
+npm run package                           # Package extension as .crx/.zip for distribution
+
+# In packages/agents/browser (core agent):
 npm run tsc:agent        # Agent business logic only
-npm run tsc:common       # Shared utilities only
-npm run agc              # Compile action grammar
+npm run agc              # Compile core action grammar
 npm run build:views      # Build web views (PDF viewer, knowledge library UI)
-npm run package          # Package extension as .crx/.zip for distribution
 ```
 
 ---
@@ -82,7 +88,7 @@ npm run package          # Package extension as .crx/.zip for distribution
 1. Navigate to `chrome://extensions`
 2. Enable **Developer mode** (toggle in top-right)
 3. Click **Load unpacked**
-4. Select `TypeAgent/ts/packages/agents/browser/dist/extension/`
+4. Select `TypeAgent/ts/packages/agents/browserExtension/dist/extension/`
 
 The extension icon appears in the toolbar. A red badge indicates the
 WebSocket connection to the agent is not established.
@@ -90,8 +96,8 @@ WebSocket connection to the agent is not established.
 ### After code changes
 
 ```bash
-# Rebuild the extension
-npm run build:extension:dev
+# Rebuild the extension (from packages/agents/browserExtension)
+npm run build:dev
 
 # Then in Chrome:
 # - Go to chrome://extensions
@@ -205,17 +211,17 @@ DEBUG=typeagent:browser:* pnpm run cli:dev
 
 ### Adding a new RPC method (agent → extension)
 
-1. **Add to interface** in `src/common/browserControl.mts` (`BrowserControlInvokeFunctions`)
+1. **Add to interface** in `browserControlRpc/src/browserControl.ts` (`BrowserControlInvokeFunctions`)
 2. **Implement in extension** — add handler in `externalBrowserControlServer.ts`
 3. **Add the proxy** in `externalBrowserControlClient.mts`
 4. **Rebuild both** agent and extension
 
 ### Adding a new content script RPC method
 
-1. **Add to type** in `contentScriptRpc/types.mts`
-2. **Add client call** in `contentScriptRpc/client.mts`
+1. **Add to type** in `browserControlRpc/src/contentScriptRpc/types.ts`
+2. **Add client call** in `browserControlRpc/src/contentScriptRpc/client.ts`
 3. **Add handler** in content script's RPC server (`contentScript/eventHandlers.ts`)
-4. **Rebuild extension**: `npm run build:extension:dev`
+4. **Rebuild extension**: `npm run build:dev`
 
 ### Creating a new WebAgent
 
@@ -233,23 +239,28 @@ See [webagent-development.md](webagent-development.md) for a step-by-step guide.
 
 ## Key File Map
 
-| What you're looking for        | Where to find it                                              |
-| ------------------------------ | ------------------------------------------------------------- |
-| Action types and schemas       | `src/agent/browserActionSchema.mts`                           |
-| Grammar rules (NL patterns)    | `src/agent/browserSchema.agr`                                 |
-| Main action handler/router     | `src/agent/browserActionHandler.mts`                          |
-| BrowserControl interface       | `src/common/browserControl.mts`                               |
-| RPC type definitions           | `src/common/serviceTypes.mts`                                 |
-| WebSocket server (agent side)  | `src/agent/agentWebSocketServer.mts`                          |
-| RPC proxy to extension         | `src/agent/rpc/externalBrowserControlClient.mts`              |
-| Extension service worker entry | `src/extension/serviceWorker/index.ts`                        |
-| WebSocket client (extension)   | `src/extension/serviceWorker/websocket.ts`                    |
-| Extension RPC handlers         | `src/extension/serviceWorker/serviceWorkerRpcHandlers.ts`     |
-| Browser control server (ext)   | `src/extension/serviceWorker/externalBrowserControlServer.ts` |
-| Content script entry           | `src/extension/contentScript/index.ts`                        |
-| DOM interaction                | `src/extension/contentScript/elementInteraction.ts`           |
-| Recording system               | `src/extension/contentScript/recording/`                      |
-| Knowledge extraction           | `src/agent/knowledge/`                                        |
-| WebFlow system                 | `src/agent/webFlows/`                                         |
-| WebAgent framework             | `src/extension/webagent/`                                     |
-| Electron tab manager           | `packages/shell/src/main/browserViewManager.ts`               |
+Paths are relative to `ts/` and grouped by package: `browser-typeagent`
+(`packages/agents/browser`), `@typeagent/browser-control-rpc`
+(`packages/agents/browserControlRpc`), and `@typeagent/browser-extension`
+(`packages/agents/browserExtension`).
+
+| What you're looking for        | Where to find it                                                                               |
+| ------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Action types and schemas       | `packages/agents/browser/src/agent/browserActionSchema.mts`                                    |
+| Grammar rules (NL patterns)    | `packages/agents/browser/src/agent/browserSchema.agr`                                          |
+| Main action handler/router     | `packages/agents/browser/src/agent/browserActionHandler.mts`                                   |
+| BrowserControl interface       | `packages/agents/browserControlRpc/src/browserControl.ts`                                      |
+| RPC type definitions           | `packages/agents/browserControlRpc/src/serviceTypes.ts`                                        |
+| WebSocket server (agent side)  | `packages/agents/browser/src/agent/agentWebSocketServer.mts`                                   |
+| RPC proxy to extension         | `packages/agents/browser/src/agent/rpc/externalBrowserControlClient.mts`                       |
+| Extension service worker entry | `packages/agents/browserExtension/src/extension/serviceWorker/index.ts`                        |
+| WebSocket client (extension)   | `packages/agents/browserExtension/src/extension/serviceWorker/websocket.ts`                    |
+| Extension RPC handlers         | `packages/agents/browserExtension/src/extension/serviceWorker/serviceWorkerRpcHandlers.ts`     |
+| Browser control server (ext)   | `packages/agents/browserExtension/src/extension/serviceWorker/externalBrowserControlServer.ts` |
+| Content script entry           | `packages/agents/browserExtension/src/extension/contentScript/index.ts`                        |
+| DOM interaction                | `packages/agents/browserExtension/src/extension/contentScript/elementInteraction.ts`           |
+| Recording system               | `packages/agents/browserExtension/src/extension/contentScript/recording/`                      |
+| Knowledge extraction           | `packages/agents/browser/src/agent/knowledge/`                                                 |
+| WebFlow system                 | `packages/agents/browser/src/agent/webFlows/`                                                  |
+| WebAgent framework             | `packages/agents/browserExtension/src/extension/webagent/`                                     |
+| Electron tab manager           | `packages/shell/src/main/browserViewManager.ts`                                                |
