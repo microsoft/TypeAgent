@@ -39,7 +39,7 @@
     "@typeagent/config": "workspace:*",
     "debug": "^4.4.0",
     "exifreader": "^4.39.0",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.0",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*"

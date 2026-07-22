@@ -45,7 +45,7 @@
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
     "koffi": "^2.10.1",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.0",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "winreg": "^1.2.5"
