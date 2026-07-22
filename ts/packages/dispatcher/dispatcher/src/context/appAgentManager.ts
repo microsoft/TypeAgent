@@ -1715,44 +1715,58 @@ export class AppAgentManager implements ActionConfigProvider {
             }
             return sessionContext;
         } catch (e) {
-            // A newer initialization may already have replaced this attempt.
-            // Clear shared state only while this lifetime still owns it.
-            if (record.sessionContextId === sessionContextId) {
-                record.sessionContext = undefined;
-                if (sessionContext !== undefined) {
-                    record.sessionContextP = undefined;
-                }
-                record.sessionContextId = undefined;
+            await this.rollbackSessionContextInitialization(
+                record,
+                appAgent,
+                sessionContext,
+                sessionContextId,
+            );
+            throw e;
+        }
+    }
+
+    private async rollbackSessionContextInitialization(
+        record: AppAgentRecord,
+        appAgent: AppAgent | undefined,
+        sessionContext: SessionContext | undefined,
+        sessionContextId: string,
+    ): Promise<void> {
+        // A newer initialization may already have replaced this attempt.
+        // Clear shared state only while this lifetime still owns it.
+        if (record.sessionContextId === sessionContextId) {
+            record.sessionContext = undefined;
+            if (sessionContext !== undefined) {
+                record.sessionContextP = undefined;
             }
-            if (sessionContext !== undefined && appAgent !== undefined) {
-                if (appAgent.stopBackgroundTasks !== undefined) {
-                    try {
-                        await appAgent.stopBackgroundTasks(sessionContext);
-                    } catch (rollbackError) {
-                        debugError(
-                            `stopBackgroundTasks failed while rolling back ${record.name}. Error ignored`,
-                            rollbackError,
-                        );
-                    }
-                }
+            record.sessionContextId = undefined;
+        }
+        if (sessionContext !== undefined && appAgent !== undefined) {
+            if (appAgent.stopBackgroundTasks !== undefined) {
                 try {
-                    await appAgent.closeAgentContext?.(sessionContext);
+                    await appAgent.stopBackgroundTasks(sessionContext);
                 } catch (rollbackError) {
                     debugError(
-                        `closeAgentContext failed while rolling back ${record.name}. Error ignored`,
+                        `stopBackgroundTasks failed while rolling back ${record.name}. Error ignored`,
                         rollbackError,
                     );
                 }
             }
             try {
-                this.portRegistrar.releaseAllForSession(sessionContextId);
+                await appAgent.closeAgentContext?.(sessionContext);
             } catch (rollbackError) {
                 debugError(
-                    `Port cleanup failed while rolling back ${record.name}. Error ignored`,
+                    `closeAgentContext failed while rolling back ${record.name}. Error ignored`,
                     rollbackError,
                 );
             }
-            throw e;
+        }
+        try {
+            this.portRegistrar.releaseAllForSession(sessionContextId);
+        } catch (rollbackError) {
+            debugError(
+                `Port cleanup failed while rolling back ${record.name}. Error ignored`,
+                rollbackError,
+            );
         }
     }
 
