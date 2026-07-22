@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=026d709332729abb211c7561af8f0c780b85073abe621b806027b4824824f25b -->
+<!-- AUTOGEN:DOCS:HASH:sha256=1148c7524cfe271d07d32f8b882330b8fd6b3e2f2212a2ef50ec4e9d72b54423 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/action-grammar — AI-generated documentation
@@ -12,13 +12,13 @@
 
 ## Overview
 
-The `@typeagent/action-grammar` package is a TypeScript library that serves as the grammar engine for the TypeAgent framework. It provides tools for parsing, compiling, and matching natural language input against grammar rules defined in `.agr` files. These rules enable the conversion of user utterances into structured JSON action objects, which can be processed by other components in the TypeAgent ecosystem.
+The `@typeagent/action-grammar` package is a TypeScript library that provides a grammar engine for the TypeAgent framework. It enables the parsing, compilation, and matching of natural language input against grammar rules defined in `.agr` files. These rules allow user utterances to be converted into structured JSON action objects, which can then be processed by other components in the TypeAgent ecosystem.
 
-This package is a foundational dependency for many other TypeAgent packages, including `@typeagent/core`, `@typeagent/action-grammar-compiler`, and `agent-cli`. It supports both rule-based and machine learning-assisted approaches to grammar generation and matching.
+This package is a core dependency for several other TypeAgent packages, such as `@typeagent/core`, `@typeagent/action-grammar-compiler`, and `agent-cli`. It supports both rule-based and machine learning-assisted approaches to grammar generation and matching, making it a versatile tool for natural language understanding.
 
 ## What it does
 
-The primary function of this package is to interpret natural language input and match it against predefined grammar rules to produce structured actions. These actions are represented as JSON objects, such as:
+The primary purpose of `@typeagent/action-grammar` is to process natural language input and match it against predefined grammar rules to generate structured actions. These actions are represented as JSON objects, such as:
 
 ```json
 {
@@ -34,8 +34,8 @@ The primary function of this package is to interpret natural language input and 
 
 1. **Grammar Parsing**:
 
-   - Parses `.agr` files written in a custom DSL for defining natural language grammar rules.
-   - The DSL supports constructs like literals, wildcards, alternation, optionals, repetition, rule references, imports, and entity declarations.
+   - Parses `.agr` files written in a custom domain-specific language (DSL) for defining natural language grammar rules.
+   - The DSL supports constructs such as literals, wildcards, alternation, optionals, repetition, rule references, imports, and entity declarations.
    - The `parseGrammarRules` function converts `.agr` files into an Abstract Syntax Tree (AST).
 
 2. **Grammar Compilation**:
@@ -202,6 +202,6 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`, `dotenv`, `regexp.escape`
 
 ---
 
-_Auto-generated against commit `7073fc7afbe92c1ed8df57f71835ffa337f9bb08` on `2026-07-22T08:35:04.479Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-grammar docs:verify-links` to spot-check._
+_Auto-generated against commit `d71a4baa2697f70bb62c315e67827ecc1ef19e9f` on `2026-07-22T16:16:20.408Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-grammar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
