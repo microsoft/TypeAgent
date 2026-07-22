@@ -1645,13 +1645,10 @@ export class AppAgentManager implements ActionConfigProvider {
         // registered so we don't leak.
         const sessionContextId = randomUUID();
         record.sessionContextId = sessionContextId;
-        let appAgent: AppAgent | undefined;
-        let sessionContext: SessionContext | undefined;
         try {
-            const loadedAppAgent = await this.ensureAppAgent(record);
-            appAgent = loadedAppAgent;
+            const appAgent = await this.ensureAppAgent(record);
             let agentContext: unknown | undefined;
-            if (loadedAppAgent.initializeAgentContext !== undefined) {
+            if (appAgent.initializeAgentContext !== undefined) {
                 const options = this.agentInitOptions?.[record.name];
                 let settings: AppAgentInitSettings | undefined = record.manifest
                     .localView
@@ -1671,23 +1668,22 @@ export class AppAgentManager implements ActionConfigProvider {
                     settings.options = options;
                 }
                 agentContext = await callEnsureError(() =>
-                    loadedAppAgent.initializeAgentContext!(settings),
+                    appAgent.initializeAgentContext!(settings),
                 );
             }
-            sessionContext = createSessionContext(
+            record.sessionContext = createSessionContext(
                 record.name,
                 agentContext,
                 context,
                 record.manifest.allowDynamicAgents === true,
                 sessionContextId,
             );
-            record.sessionContext = sessionContext;
 
             debug(`Session context created for ${record.name}`);
 
-            if (loadedAppAgent.startBackgroundTasks !== undefined) {
+            if (appAgent.startBackgroundTasks !== undefined) {
                 await callEnsureError(() =>
-                    loadedAppAgent.startBackgroundTasks!(sessionContext!),
+                    appAgent.startBackgroundTasks!(record.sessionContext!),
                 );
                 debug(`Background tasks started for ${record.name}`);
             }
@@ -1696,11 +1692,12 @@ export class AppAgentManager implements ActionConfigProvider {
             // Errors become a "setup-required" entry rather than crashing
             // the agent — a misbehaving checkReadiness shouldn't deny the
             // user the agent.
-            if (loadedAppAgent.checkReadiness !== undefined) {
+            if (appAgent.checkReadiness !== undefined) {
                 this.readinessImplementers.add(record.name);
                 try {
-                    const report =
-                        await loadedAppAgent.checkReadiness(sessionContext);
+                    const report = await appAgent.checkReadiness(
+                        record.sessionContext!,
+                    );
                     this.readiness.set(record.name, report);
                     debug(
                         `Readiness for ${record.name}: ${report.state}` +
@@ -1713,60 +1710,14 @@ export class AppAgentManager implements ActionConfigProvider {
                     });
                 }
             }
-            return sessionContext;
+            return record.sessionContext;
         } catch (e) {
-            await this.rollbackSessionContextInitialization(
-                record,
-                appAgent,
-                sessionContext,
-                sessionContextId,
-            );
-            throw e;
-        }
-    }
-
-    private async rollbackSessionContextInitialization(
-        record: AppAgentRecord,
-        appAgent: AppAgent | undefined,
-        sessionContext: SessionContext | undefined,
-        sessionContextId: string,
-    ): Promise<void> {
-        // A newer initialization may already have replaced this attempt.
-        // Clear shared state only while this lifetime still owns it.
-        if (record.sessionContextId === sessionContextId) {
-            record.sessionContext = undefined;
-            if (sessionContext !== undefined) {
-                record.sessionContextP = undefined;
-            }
-            record.sessionContextId = undefined;
-        }
-        if (sessionContext !== undefined && appAgent !== undefined) {
-            if (appAgent.stopBackgroundTasks !== undefined) {
-                try {
-                    await appAgent.stopBackgroundTasks(sessionContext);
-                } catch (rollbackError) {
-                    debugError(
-                        `stopBackgroundTasks failed while rolling back ${record.name}. Error ignored`,
-                        rollbackError,
-                    );
-                }
-            }
-            try {
-                await appAgent.closeAgentContext?.(sessionContext);
-            } catch (rollbackError) {
-                debugError(
-                    `closeAgentContext failed while rolling back ${record.name}. Error ignored`,
-                    rollbackError,
-                );
-            }
-        }
-        try {
+            // Init failed. Release any ports the partially-initialized
+            // agent managed to register before the failure, then clear
+            // the id so the next ensureSessionContext gets a fresh one.
             this.portRegistrar.releaseAllForSession(sessionContextId);
-        } catch (rollbackError) {
-            debugError(
-                `Port cleanup failed while rolling back ${record.name}. Error ignored`,
-                rollbackError,
-            );
+            record.sessionContextId = undefined;
+            throw e;
         }
     }
 
