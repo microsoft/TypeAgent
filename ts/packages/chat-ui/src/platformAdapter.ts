@@ -10,6 +10,17 @@
 export interface PlatformAdapter {
     /** Handle a click on an <a> link in rendered content. */
     handleLinkClick(href: string, target: string | null): void;
+
+    /**
+     * Open a message's content (an HTML string, plus an optional title) in a
+     * host-native new window, e.g. a movable VS Code editor panel. Return true
+     * if handled. This is an opt-in capability: chat-ui only shows the "open in
+     * new window" action when a host provides it. A host may decline a specific
+     * message (return false, e.g. iframe-backed content that can't be
+     * serialized into a window); there's no in-page fallback, so the click is
+     * simply a no-op in that case.
+     */
+    openMessageInWindow?(html: string, title?: string): boolean;
 }
 
 /**

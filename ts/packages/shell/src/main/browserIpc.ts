@@ -16,7 +16,7 @@ import { createRpc } from "@typeagent/agent-rpc/rpc";
 import type {
     BrowserControlInvokeFunctions,
     BrowserControlCallFunctions,
-} from "browser-typeagent/agent/types";
+} from "@typeagent/browser-control-rpc/types";
 import registerDebug from "debug";
 const debugBrowserIPC = registerDebug("typeagent:browser:ipc");
 const debugBrowserIPCError = registerDebug("typeagent:browser:ipc:error");
@@ -345,8 +345,8 @@ export class BrowserAgentIpc {
  * Build the inline-browser → agent-server WebSocket URL by discovering the
  * browser agent's port via the agent-server discovery channel, then opening
  * the connection. Mirrors the chrome extension's resolveBrowserEndpoint /
- * createWebSocket flow (see ts/packages/agents/browser/src/extension/
- * serviceWorker/websocket.ts) so both clients of the browser agent reach
+ * createWebSocket flow (see ts/packages/agents/browserExtension/src/
+ * extension/serviceWorker/websocket.ts) so both clients of the browser agent reach
  * the same dynamic port.
  *
  * The agent-server discovery URL defaults to ws://localhost:8999/ but can

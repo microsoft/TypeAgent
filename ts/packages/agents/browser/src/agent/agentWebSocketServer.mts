@@ -14,11 +14,11 @@ import { attachHeartbeat } from "websocket-channel-server";
 import type {
     BrowserAgentInvokeFunctions,
     BrowserAgentCallFunctions,
-} from "../common/serviceTypes.mjs";
+} from "@typeagent/browser-control-rpc/serviceTypes";
 import type {
     BrowserControlInvokeFunctions,
     BrowserControlCallFunctions,
-} from "../common/browserControl.mjs";
+} from "@typeagent/browser-control-rpc/types";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:agent-ws");

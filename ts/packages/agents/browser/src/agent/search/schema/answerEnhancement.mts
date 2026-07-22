@@ -5,6 +5,11 @@
  * Answer enhancement schema for LLM-based dynamic summaries and follow-ups.
  * The LLM should generate comprehensive answer enhancements that help users
  * understand and explore their search results more effectively.
+ *
+ * NOTE: This file is read verbatim as LLM prompt text (see AnswerGenerator).
+ * The shared TypeScript contract for these types is duplicated at
+ * @typeagent/browser-control-rpc/answerEnhancement and MUST be kept
+ * structurally in sync with the interfaces below.
  */
 
 /**

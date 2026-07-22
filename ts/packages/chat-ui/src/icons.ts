@@ -6,12 +6,43 @@
  * no icon-library dependency — mirrors the shell's icon.ts.
  */
 
+export const SVG_NS = "http://www.w3.org/2000/svg";
+
 function fromSvg(svg: string): HTMLElement {
     const wrapper = document.createElement("i");
-    const empty = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const empty = document.createElementNS(SVG_NS, "svg");
     wrapper.appendChild(empty);
     empty.outerHTML = svg;
     return wrapper;
+}
+
+/**
+ * Build a 24x24 stroke-outline SVG from a list of path `d` strings. Strokes
+ * use `currentColor` so the glyph follows the color set in CSS. Built via the
+ * DOM (no innerHTML) so the markup stays trusted and host-neutral.
+ */
+export function createStrokeIconSvg(paths: string[]): SVGSVGElement {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    for (const d of paths) {
+        const path = document.createElementNS(SVG_NS, "path");
+        path.setAttribute("d", d);
+        svg.appendChild(path);
+    }
+    return svg;
+}
+
+/** Notification bell glyph shared by the conversation bar and the chat panel. */
+export function createBellIconSvg(): SVGSVGElement {
+    return createStrokeIconSvg([
+        "M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9",
+        "M13.73 21a2 2 0 0 1-3.46 0",
+    ]);
 }
 
 // When `filled` is true the interior is tinted with the current color at
@@ -84,5 +115,13 @@ export function iconStop() {
     // Filled rounded square — the standard "stop / cancel in-flight" glyph.
     return fromSvg(
         `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>`,
+    );
+}
+
+export function iconOpenInWindow() {
+    // "maximize" window: four corner brackets forming a frame; reads as
+    // "open in a new window".
+    return fromSvg(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 9 4 4 9 4"></polyline><polyline points="15 4 20 4 20 9"></polyline><polyline points="20 15 20 20 15 20"></polyline><polyline points="9 20 4 20 4 15"></polyline></svg>`,
     );
 }

@@ -34,7 +34,7 @@
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.4.0",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

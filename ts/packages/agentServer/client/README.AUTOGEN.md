@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=5c99a2d89344c3b0b4474211b3862a2ff4ddc20c529ddd4a18379c5b7ccb6acb -->
+<!-- AUTOGEN:DOCS:HASH:sha256=04fbfb30a474f5ce625eba7bf97ac4448ffa83d1f1f1cd231891ceb5f3609946 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-server-client — AI-generated documentation
@@ -12,17 +12,17 @@
 
 ## Overview
 
-The `@typeagent/agent-server-client` package is a TypeScript library that provides tools for interacting with a running `agentServer`. It enables clients to manage server connections, handle conversations, and ensure the server's availability. This package is a core component of the TypeAgent ecosystem and is utilized by various clients, including the Shell, CLI, and other integrations.
+The `@typeagent/agent-server-client` package is a TypeScript library designed to facilitate interaction with a running `agentServer`. It provides tools for managing server connections, handling conversations, and ensuring the server's availability. This package is a foundational component of the TypeAgent ecosystem and is used by various clients, including the Shell, CLI, and other integrations.
 
 ## What it does
 
-The `@typeagent/agent-server-client` package offers the following key functionalities:
+The package offers a comprehensive set of features for interacting with the `agentServer`:
 
 - **Server Connection Management**:
 
-  - The `connectAgentServer` function establishes a WebSocket connection to an `agentServer` and returns an `AgentServerConnection` object. This object provides methods for managing conversations and interacting with the server.
-  - The `isServerRunning` function checks if an `agentServer` is already running at a specified WebSocket URL.
-  - The `ensureAgentServer` function ensures that the `agentServer` is running, spawning it if necessary.
+  - `connectAgentServer`: Establishes a WebSocket connection to an `agentServer` and returns an `AgentServerConnection` object. This object provides methods for managing conversations and interacting with the server.
+  - `isServerRunning`: Checks if an `agentServer` is already running at a specified WebSocket URL.
+  - `ensureAgentServer`: Ensures that the `agentServer` is running, spawning it if necessary. This includes options for hidden mode and idle timeout.
 
 - **Conversation Management**:
 
@@ -31,7 +31,7 @@ The `@typeagent/agent-server-client` package offers the following key functional
 
 - **Convenience Wrappers**:
 
-  - The `ensureAndConnectConversation` function combines multiple steps into a single operation, including ensuring the server is running, connecting to it, and joining a conversation.
+  - `ensureAndConnectConversation`: Combines multiple steps into a single operation, including ensuring the server is running, connecting to it, and joining a conversation.
 
 - **Discovery**:
   - The `discovery` module helps external clients locate the dynamically assigned port of an in-process agent, which is useful for browser extensions, IDE plugins, and other external integrations.
@@ -50,11 +50,16 @@ To use this package, follow these steps:
    ```
 
 2. **Set up environment variables**:
+   The following environment variables are required for the package to function correctly:
 
-   - `TYPEAGENT_TUNNEL_TOKEN`: This environment variable is required for certain server interactions. Refer to the hand-written README for instructions on obtaining and setting this value.
+   - `TYPEAGENT_SERVER_PATH`: Specifies the path to the `agentServer`. Ensure this is set to the correct location of the server binary or executable.
+   - `TYPEAGENT_TUNNEL_TOKEN`: Required for certain server interactions. Refer to the hand-written README for instructions on obtaining and setting this value.
+   - `XDG_DATA_HOME`: Used for locating user-specific data files. Ensure this is set to a valid directory path.
 
-3. **Configure your environment**:
-   Ensure that the `TYPEAGENT_TUNNEL_TOKEN` environment variable is set in your shell or `.env` file before running any code that interacts with the `agentServer`.
+   These variables can be set in your shell or a `.env` file.
+
+3. **Verify the environment**:
+   Ensure that the required environment variables are correctly configured before running any code that interacts with the `agentServer`.
 
 ## Key Files
 
@@ -111,6 +116,7 @@ By following these steps, you can effectively extend the capabilities of the `@t
 Workspace:
 
 - [@typeagent/agent-rpc](../../../packages/agentRpc/README.md)
+- [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-protocol](../../../packages/agentServer/protocol/README.md)
 - [@typeagent/dispatcher-rpc](../../../packages/dispatcher/rpc/README.md)
 - [websocket-channel-server](../../../packages/utils/webSocketChannelServer/README.md)
@@ -119,6 +125,7 @@ External: `debug`, `isomorphic-ws`
 
 ### Used by
 
+- [@typeagent/browser-extension](../../../packages/agents/browserExtension/README.md)
 - [@typeagent/copilot-plugin](../../../packages/copilot-plugin/README.md)
 - [agent-cli](../../../packages/cli/README.md)
 - [agent-coda](../../../packages/coda/README.md)
@@ -128,8 +135,7 @@ External: `debug`, `isomorphic-ws`
 - [coder-wrapper](../../../packages/coderWrapper/README.md)
 - [command-executor-mcp](../../../packages/commandExecutor/README.md)
 - [remote-client-example](../../../examples/remoteClient/README.md)
-- [studio-service](../../../packages/studio-service/README.md)
-- _…and 5 more workspace consumers._
+- _…and 6 more workspace consumers._
 
 ### Files of interest
 
@@ -144,12 +150,14 @@ External: `debug`, `isomorphic-ws`
 
 ### Environment variables
 
-_1 environment variable referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_3 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
+- `TYPEAGENT_SERVER_PATH`
 - `TYPEAGENT_TUNNEL_TOKEN`
+- `XDG_DATA_HOME`
 
 ---
 
-_Auto-generated against commit `b1b5bcafdde8ba2387d669eec198eb70e8fa5986` on `2026-07-17T23:52:55.795Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

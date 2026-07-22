@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=0c37621a504b976bdd00eaa10c57335b47309f60fefbe77bd97f80517226ac60 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7886c22df3b9fe23fc9cd4d01b73e32fb3d59cbdc561715cf66b8ef646894d7e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -236,6 +236,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `493ac5696974a3cab9c5528399a245063e7eb727` on `2026-07-18T23:55:00.731Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `8192acc149ab6f52296dcc71202b20253b6a3089` on `2026-07-22T05:16:33.340Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

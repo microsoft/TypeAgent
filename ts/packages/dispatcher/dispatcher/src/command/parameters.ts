@@ -85,8 +85,8 @@ function invalidValueToken(valueToken: string) {
     if (
         valueToken.length === 2 &&
         valueToken[0] === "-" &&
-        valueToken.charCodeAt(1) < 48 /* "0" */ &&
-        valueToken.charCodeAt(1) > 57 /* "9" */
+        (valueToken.charCodeAt(1) < 48 /* "0" */ ||
+            valueToken.charCodeAt(1) > 57) /* "9" */
     ) {
         return true;
     }

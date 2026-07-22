@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { SessionContext } from "@typeagent/agent-sdk";
-import type { BrowserAgentInvokeFunctions } from "../common/serviceTypes.mjs";
+import type { BrowserAgentInvokeFunctions } from "@typeagent/browser-control-rpc/serviceTypes";
 import type { BrowserActionContext } from "./browserActions.mjs";
 import { handleKnowledgeAction } from "./knowledge/actions/knowledgeActionRouter.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";

@@ -16,29 +16,46 @@ const bundlePath = path.join(
     "impactReport.js",
 );
 
+const traceViewerBundlePath = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    "dist",
+    "webview",
+    "traceViewer.js",
+);
+
 // The webview client bundle is produced by `pnpm build` (esbuild browser
 // target). Skip gracefully if tests run before a build.
 const hasBundle = existsSync(bundlePath);
+
+function assertBrowserSafe(src: string): void {
+    // No CommonJS requires of node/host-only modules leaking into the iframe.
+    assert.ok(!/require\(["']ws["']\)/.test(src), "must not bundle ws");
+    assert.ok(!/require\(["']vscode["']\)/.test(src), "must not bundle vscode");
+    assert.ok(
+        !/require\(["']node:/.test(src),
+        "must not bundle node: built-ins",
+    );
+    assert.ok(
+        !/require\(["'](?:crypto|fs|os|path|net|http)["']\)/.test(src),
+        "must not bundle bare node built-ins",
+    );
+}
 
 test(
     "webview bundle excludes node/vscode/ws (browser-safe)",
     { skip: !hasBundle },
     () => {
-        const src = readFileSync(bundlePath, "utf8");
-        // No CommonJS requires of node/host-only modules leaking into the iframe.
-        assert.ok(!/require\(["']ws["']\)/.test(src), "must not bundle ws");
-        assert.ok(
-            !/require\(["']vscode["']\)/.test(src),
-            "must not bundle vscode",
-        );
-        assert.ok(
-            !/require\(["']node:/.test(src),
-            "must not bundle node: built-ins",
-        );
-        assert.ok(
-            !/require\(["'](?:crypto|fs|os|path|net|http)["']\)/.test(src),
-            "must not bundle bare node built-ins",
-        );
+        assertBrowserSafe(readFileSync(bundlePath, "utf8"));
+    },
+);
+
+test(
+    "trace viewer bundle excludes node/vscode/ws (browser-safe)",
+    { skip: !existsSync(traceViewerBundlePath) },
+    () => {
+        assertBrowserSafe(readFileSync(traceViewerBundlePath, "utf8"));
     },
 );
 

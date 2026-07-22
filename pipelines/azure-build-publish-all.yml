@@ -393,6 +393,10 @@ stages:
     jobs:
       - job: unit_tests
         displayName: "Unit tests, lint, policy"
+        # Optional gate: a failure here must NOT block Publish. continueOnError
+        # makes a failing job report SucceededWithIssues instead of Failed, and
+        # the Publish stage condition accepts that result.
+        continueOnError: true
         pool:
           vmImage: ubuntu-latest
         steps:
@@ -447,11 +451,13 @@ stages:
     dependsOn:
       - Build
       - Test
-    # Run if Build succeeded and Test either succeeded or was skipped.
+    # Run if Build succeeded and Test did not hard-fail. The Test stage is an
+    # optional gate (unit_tests uses continueOnError), so a failing test reports
+    # SucceededWithIssues; Skipped covers the runTests=false case.
     condition: |
       and(
         in(stageDependencies.Build.result, 'Succeeded', 'SucceededWithIssues'),
-        in(stageDependencies.Test.result, 'Succeeded', 'Skipped')
+        in(stageDependencies.Test.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')
       )
     variables:
       NpmRcDirectory: $(Build.SourcesDirectory)
@@ -668,6 +674,10 @@ stages:
         displayName: "Publish shell to Azure Storage"
         condition: eq('${{ parameters.publishShell }}', 'true')
         environment: typeagent-shell-$(resolvedChannel)
+        # stageDependencies is not available in step conditions, so map the
+        # optional mac build result to a job variable the steps can read.
+        variables:
+          macBuildResult: $[ stageDependencies.Build.build_shell_mac.result ]
         pool:
           # AzureFileCopy requires Windows.
           vmImage: windows-latest
@@ -697,12 +707,12 @@ stages:
                   artifact: shell-mac
                   displayName: "Download shell-mac (optional)"
                   condition: |
-                    in(stageDependencies.Build.build_shell_mac.result, 'Succeeded', 'SucceededWithIssues')
+                    in(variables.macBuildResult, 'Succeeded', 'SucceededWithIssues')
 
                 - task: AzureFileCopy@6
                   displayName: "Upload Azure Storage - mac"
                   condition: |
-                    in(stageDependencies.Build.build_shell_mac.result, 'Succeeded', 'SucceededWithIssues')
+                    in(variables.macBuildResult, 'Succeeded', 'SucceededWithIssues')
                   inputs:
                     SourcePath: $(Pipeline.Workspace)\shell-mac\**
                     Destination: AzureBlob

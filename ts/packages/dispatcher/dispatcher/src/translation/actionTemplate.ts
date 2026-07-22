@@ -103,14 +103,24 @@ function toTemplateType(
             return toTemplateTypeObject(type, visited);
         case "array":
             return toTemplateTypeArray(type, visited);
-        case "undefined":
-            return undefined;
+        case "string-union":
+            return type as TemplateFieldStringUnion;
         case "string":
         case "number":
         case "boolean":
             return type as TemplateFieldPrimitive;
-        default:
-            throw new Error(`Unknown type ${type.type}`);
+        case "undefined":
+        case "any":
+        case "true":
+        case "false":
+            // These have no editable template representation, so skip the field.
+            return undefined;
+        default: {
+            const invalid: never = type;
+            throw new Error(
+                `Unknown type ${(invalid as ActionParamType).type}`,
+            );
+        }
     }
 }
 function toTemplate(
