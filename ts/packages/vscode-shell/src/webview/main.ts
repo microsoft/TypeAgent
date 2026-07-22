@@ -346,6 +346,18 @@ function handleRequestInteraction(
                     type: "question",
                     value,
                 };
+            } else if (interaction.type === "form") {
+                const value = await chatPanel.addQuestionForm(
+                    interaction.form,
+                    {
+                        signal: ac.signal,
+                    },
+                );
+                response = {
+                    interactionId: interaction.interactionId,
+                    type: "form",
+                    value,
+                };
             } else {
                 const value = await chatPanel.proposeActionEdit(
                     interaction.actionTemplates,

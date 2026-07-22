@@ -1,13 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { QuestionForm, QuestionFormResponse } from "@typeagent/agent-sdk";
 import type { RequestId } from "./dispatcher.js";
 import type { TemplateEditConfig } from "./clientIO.js";
 
 /**
  * The type of a pending interaction awaiting a client response.
  */
-export type PendingInteractionType = "question" | "proposeAction";
+export type PendingInteractionType = "question" | "proposeAction" | "form";
 
 /**
  * A request sent to the client for a pending interaction.
@@ -35,6 +36,10 @@ export type PendingInteractionRequest = {
           type: "proposeAction";
           actionTemplates: TemplateEditConfig;
       }
+    | {
+          type: "form";
+          form: QuestionForm;
+      }
 );
 
 /**
@@ -42,4 +47,5 @@ export type PendingInteractionRequest = {
  */
 export type PendingInteractionResponse =
     | { interactionId: string; type: "question"; value: number }
-    | { interactionId: string; type: "proposeAction"; value: unknown };
+    | { interactionId: string; type: "proposeAction"; value: unknown }
+    | { interactionId: string; type: "form"; value: QuestionFormResponse };

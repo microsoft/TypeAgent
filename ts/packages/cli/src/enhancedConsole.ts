@@ -1454,6 +1454,14 @@ export function createEnhancedClientIO(
                     return;
                 }
 
+                if (interaction.type === "form") {
+                    // TODO: render the multi-question form sequentially in the
+                    // console. Not supported in the CLI yet; when other clients
+                    // (e.g. the shell) are joined they answer via the shared
+                    // interaction broadcast, otherwise this blocks to timeout.
+                    return;
+                }
+
                 const ac = new AbortController();
                 activeInteractions.set(interaction.interactionId, ac);
 

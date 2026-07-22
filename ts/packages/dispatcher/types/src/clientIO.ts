@@ -6,6 +6,7 @@ import {
     DisplayAppendMode,
     DisplayContent,
     QuestionForm,
+    QuestionFormResponse,
     TemplateSchema,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
@@ -112,6 +113,25 @@ export interface ClientIO {
         actionTemplates: TemplateEditConfig,
         source: string,
     ): Promise<unknown>;
+
+    /**
+     * Blocking multi-question form interaction. Presents a full
+     * {@link QuestionForm} (one or more pick / multiChoice / yesNo questions,
+     * optionally with free-text escapes, optionally paged) and resolves with
+     * the user's {@link QuestionFormResponse} once submitted or cancelled.
+     *
+     * Unlike {@link requestForm} (a non-blocking choice card answered via
+     * {@link Dispatcher.respondToChoice}), this uses the async deferred
+     * interaction pattern (requestInteraction / respondToInteraction) so it is
+     * safe to await from code holding the command lock - e.g. the reasoning
+     * loop. Optional: only interactive hosts implement it; callers must fall
+     * back to {@link question} when it is absent.
+     */
+    askForm?(
+        requestId: RequestId | undefined,
+        form: QuestionForm,
+        source: string,
+    ): Promise<QuestionFormResponse>;
 
     /**
      * Return a fresh, coarse snapshot of the host editor state (no file or

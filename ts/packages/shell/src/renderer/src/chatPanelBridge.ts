@@ -889,6 +889,12 @@ export function createChatPanelClient(
                 templateServices,
             );
         },
+        askForm: async (_requestId, form, _source) => {
+            // In-process (standalone shell) blocking form interaction. In
+            // connected mode the SharedDispatcher intercepts askForm and drives
+            // this via requestInteraction instead.
+            return chatPanel.addQuestionForm(form);
+        },
         notify: (requestId, event, data, source) => {
             switch (event) {
                 case "explained":
@@ -1071,6 +1077,16 @@ export function createChatPanelClient(
                         response = {
                             interactionId: interaction.interactionId,
                             type: "question",
+                            value,
+                        };
+                    } else if (interaction.type === "form") {
+                        const value = await chatPanel.addQuestionForm(
+                            interaction.form,
+                            { signal: ac.signal },
+                        );
+                        response = {
+                            interactionId: interaction.interactionId,
+                            type: "form",
                             value,
                         };
                     } else {

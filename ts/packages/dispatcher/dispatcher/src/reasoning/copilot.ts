@@ -40,6 +40,11 @@ import { createLimiter } from "@typeagent/common-utils";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 import { formatUserContextForPrompt } from "./userContextPrompt.js";
+import {
+    buildReasoningForm,
+    formatReasoningFormResponse,
+    presentReasoningForm,
+} from "./askUserForm.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -960,6 +965,149 @@ function getCopilotSessionConfig(
         },
     });
 
+    const askUserTool = defineTool("ask_user", {
+        description: [
+            "Ask the user ONE multiple-choice question and block until they answer.",
+            "Use ONLY when you are genuinely blocked on a decision that only the user",
+            "can make - an ambiguous choice among concrete options, or a confirmation",
+            "before a destructive or irreversible action. Put the exact options in",
+            '`choices` (for a yes/no question use ["Yes", "No"]). Returns the option the',
+            "user picked. Prefer acting autonomously; do not ask when a reasonable safe",
+            "default exists.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                question: {
+                    type: "string",
+                    description: "The question to ask the user.",
+                },
+                choices: {
+                    type: "array",
+                    items: { type: "string" },
+                    description:
+                        'The options to choose from (at least 2). For a yes/no question use ["Yes", "No"].',
+                },
+            },
+            required: ["question", "choices"],
+        },
+        handler: async (args: any) => {
+            const question =
+                typeof args?.question === "string" ? args.question : "";
+            const choices = Array.isArray(args?.choices)
+                ? args.choices.map((c: unknown) => String(c))
+                : [];
+            if (choices.length < 2) {
+                return {
+                    textResultForLlm:
+                        'ask_user requires at least 2 choices (e.g. ["Yes", "No"]).',
+                    resultType: "failure" as const,
+                };
+            }
+            // Use the stable clientIO ref (execute_action transiently swaps
+            // systemContext.clientIO). question() blocks on the answer via the
+            // async-interaction path (respondToInteraction), which does not take
+            // the command lock, so it is safe while reasoning holds it.
+            const selected = await baseClientIO.question(
+                originatorRequestId,
+                question,
+                choices,
+                undefined,
+                "reasoning",
+            );
+            const answer = choices[selected] ?? choices[0] ?? "";
+            return {
+                textResultForLlm: `The user selected: "${answer}" (choice index ${selected}).`,
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const askUserFormTool = defineTool("ask_user_form", {
+        description: [
+            "Ask the user SEVERAL questions at once in a single form and block",
+            "until they submit. Prefer this over multiple `ask_user` calls when you",
+            "need more than one answer. Each question has an `id`, a `kind`",
+            '("pick" = choose one, "multiChoice" = choose any, "yesNo"), a `prompt`,',
+            "and (for pick/multiChoice) at least 2 `choices`. Set `allowFreeText`",
+            'to let the user type an "Other" value. Returns every answer keyed to its',
+            "question. Use ONLY when genuinely blocked on decisions only the user can",
+            "make; prefer acting autonomously when a safe default exists.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                message: {
+                    type: "string",
+                    description: "Optional heading shown above the questions.",
+                },
+                questions: {
+                    type: "array",
+                    description: "One or more questions to present together.",
+                    items: {
+                        type: "object",
+                        properties: {
+                            id: {
+                                type: "string",
+                                description:
+                                    "Unique id for this question; answers are keyed by it.",
+                            },
+                            kind: {
+                                type: "string",
+                                enum: ["pick", "multiChoice", "yesNo"],
+                                description:
+                                    '"pick" = choose one, "multiChoice" = choose any, "yesNo" = yes/no.',
+                            },
+                            prompt: {
+                                type: "string",
+                                description: "The question text.",
+                            },
+                            choices: {
+                                type: "array",
+                                items: { type: "string" },
+                                description:
+                                    "Options for pick/multiChoice (at least 2). Omit for yesNo.",
+                            },
+                            allowFreeText: {
+                                type: "boolean",
+                                description:
+                                    'Allow an "Other: ___" free-text option (pick/multiChoice).',
+                            },
+                        },
+                        required: ["id", "kind", "prompt"],
+                    },
+                },
+                paged: {
+                    type: "boolean",
+                    description:
+                        "Present the questions as a step-by-step wizard instead of all at once.",
+                },
+            },
+            required: ["questions"],
+        },
+        handler: async (args: any) => {
+            const built = buildReasoningForm(args ?? {});
+            if ("error" in built) {
+                return {
+                    textResultForLlm: built.error,
+                    resultType: "failure" as const,
+                };
+            }
+            const response = await presentReasoningForm(
+                baseClientIO,
+                originatorRequestId,
+                built.form,
+            );
+            return {
+                textResultForLlm: formatReasoningFormResponse(
+                    built.form,
+                    response,
+                ),
+                resultType: "success" as const,
+            };
+        },
+    });
+
     const model = resolveModel(context);
     const reasoningEffort = resolveReasoningEffort(context);
 
@@ -976,6 +1124,8 @@ function getCopilotSessionConfig(
             getConversationInfoTool,
             readConversationTool,
             getUserContextTool,
+            askUserTool,
+            askUserFormTool,
         ],
         availableTools: [
             "discover_actions",
@@ -985,6 +1135,8 @@ function getCopilotSessionConfig(
             "get_conversation_info",
             "read_conversation",
             "get_user_context",
+            "ask_user",
+            "ask_user_form",
             "github/fs/*",
             "github/search/*",
             "shell",
@@ -1019,6 +1171,10 @@ function getCopilotSessionConfig(
                 "## Editor Context Tools",
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file path, language, cursor/selection ranges, workspace, diagnostic counts). Contains NO file or selection text.",
                 "- For actual file/selection **text**, use the code agent's read actions (getActiveEditor, getSelection, getFileContent, getDiagnostics) via discover_actions/execute_action.",
+                "",
+                "## User Interaction",
+                '- `ask_user`: Ask the user ONE multiple-choice question and block for their answer. Strongly prefer to act autonomously with a safe default; use this ONLY when genuinely blocked on a decision only the user can make (an ambiguous choice among concrete options, or confirmation before a destructive/irreversible action). Provide the exact options (for yes/no use ["Yes", "No"]), and ask at most one such question.',
+                "- `ask_user_form`: Ask SEVERAL questions at once (pick / multiChoice / yesNo, optional free-text) in one form and block for all answers. Prefer this over multiple `ask_user` calls when a single blocking moment needs more than one answer.",
                 "",
                 "## Guidelines",
                 '- **For follow-up questions** that refer to earlier turns (e.g. "those", "it", "mine"), consult the [Recent conversation context] block first; use `search_memory` only for older history not shown there',

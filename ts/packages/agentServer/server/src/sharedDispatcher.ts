@@ -14,6 +14,7 @@ import {
     RequestId,
 } from "agent-dispatcher";
 import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
+import type { QuestionFormResponse } from "@typeagent/agent-sdk";
 import type {
     PendingInteractionRequest,
     PendingInteractionResponse,
@@ -57,6 +58,7 @@ export async function createSharedDispatcher(
     const INTERACTION_TIMEOUT_MS = {
         question: 10 * 60 * 1000,
         proposeAction: 10 * 60 * 1000,
+        form: 10 * 60 * 1000,
     };
 
     // Grace period before the queue cancels its contents after the last client
@@ -246,6 +248,43 @@ export async function createSharedDispatcher(
                 return await pendingInteractions.create<unknown>(
                     request,
                     INTERACTION_TIMEOUT_MS.proposeAction,
+                );
+            } finally {
+                if (rid !== undefined) context.requestQueue.markUnblocked(rid);
+            }
+        },
+
+        askForm: async (requestId, form, source) => {
+            const interactionId = randomUUID();
+            const request: PendingInteractionRequest = {
+                interactionId,
+                type: "form",
+                ...(requestId !== undefined ? { requestId } : {}),
+                source: source ?? requestId?.connectionId ?? "unknown",
+                timestamp: Date.now(),
+                form,
+            };
+
+            debugInteraction(
+                `askForm created: ${interactionId} source="${request.source}" fields=${form.fields.length}`,
+            );
+
+            // Log + queue unconditionally so the interaction survives in
+            // DisplayLog and is included in JoinSessionResult on next join.
+            context.displayLog.logPendingInteraction(request);
+            context.displayLog.saveQueued();
+
+            broadcast("requestInteraction", requestId, (cio) =>
+                cio.requestInteraction(request),
+            );
+
+            const rid = requestId?.requestId;
+            if (rid !== undefined)
+                context.requestQueue.markBlocked(rid, "interaction");
+            try {
+                return await pendingInteractions.create<QuestionFormResponse>(
+                    request,
+                    INTERACTION_TIMEOUT_MS.form,
                 );
             } finally {
                 if (rid !== undefined) context.requestQueue.markUnblocked(rid);
