@@ -316,6 +316,93 @@ describe("agent running rail", () => {
         expect(root.textContent).toContain("Action Tokens:");
         expect(root.textContent).toContain("12");
     });
+
+    it("renders per-block thinking tokens as a Thinking Tokens line", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            "reasoning",
+            "dispatcher",
+            undefined,
+            "step",
+            "req-1",
+        );
+
+        panel.completeRequest("req-1", {
+            totalDuration: 1500,
+            actionTokenUsage: {
+                prompt_tokens: 1000,
+                completion_tokens: 200,
+                total_tokens: 1200,
+                thinking_tokens: [50, 30, 25],
+            },
+        });
+
+        // Distinct "Thinking Tokens" line: the per-block total (105) with a
+        // per-block breakdown, alongside the aggregate Action Tokens line.
+        expect(root.textContent).toContain("Action Tokens:");
+        expect(root.textContent).toContain("Thinking Tokens:");
+        expect(root.textContent).toContain("105");
+        expect(root.textContent).toContain("(50+30+25)");
+    });
+
+    it("omits the per-block breakdown for a single thinking block", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            "reasoning",
+            "dispatcher",
+            undefined,
+            "step",
+            "req-1",
+        );
+
+        panel.completeRequest("req-1", {
+            totalDuration: 1500,
+            actionTokenUsage: {
+                prompt_tokens: 1000,
+                completion_tokens: 200,
+                total_tokens: 1200,
+                thinking_tokens: [42],
+            },
+        });
+
+        expect(root.textContent).toContain("Thinking Tokens:");
+        expect(root.textContent).toContain("42");
+        // A single block has nothing to break down.
+        expect(root.textContent).not.toContain("(42)");
+    });
+
+    it("marks estimated thinking tokens with a ~ prefix", () => {
+        const { root, panel } = makePanel({ onCancel: jest.fn() });
+        panel.addUserMessage("hi", "req-1");
+        panel.setProcessing("req-1");
+        panel.addAgentMessage(
+            "reasoning",
+            "dispatcher",
+            undefined,
+            "step",
+            "req-1",
+        );
+
+        panel.completeRequest("req-1", {
+            totalDuration: 1500,
+            actionTokenUsage: {
+                prompt_tokens: 1000,
+                completion_tokens: 200,
+                total_tokens: 1200,
+                thinking_tokens: [60, 40],
+                thinking_tokens_estimated: true,
+            },
+        });
+
+        // Approximate figure (e.g. Claude's streamed estimate) gets a ~ marker.
+        expect(root.textContent).toContain("Thinking Tokens:");
+        expect(root.textContent).toContain("~100");
+        expect(root.textContent).toContain("(60+40)");
+    });
 });
 
 describe("roadrunner (explained) placement", () => {

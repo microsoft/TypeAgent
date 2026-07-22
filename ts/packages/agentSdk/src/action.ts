@@ -30,6 +30,19 @@ export type ActionTokenUsage = {
     // cache), reported separately from `prompt_tokens`. Optional; `undefined`
     // => the provider/agent does not expose cache metrics.
     cached_tokens?: number;
+    // Per-block reasoning ("thinking") token counts - the subset of
+    // `completion_tokens` the model spent on chain-of-thought, one entry per
+    // reasoning block/turn. Already included in `completion_tokens`, so these
+    // are reported separately (not added to `total_tokens` again) to surface a
+    // distinct "Thinking Tokens" figure. Optional; `undefined` => the
+    // provider/agent does not expose reasoning-token metrics.
+    thinking_tokens?: number[];
+    // True when `thinking_tokens` are an approximate estimate rather than a
+    // billed count - e.g. the Claude SDK streams a per-block thinking-token
+    // estimate while Anthropic bills reasoning inside `completion_tokens`
+    // without a separate figure. Lets the UI mark the number as approximate.
+    // Optional; absent/false => billed.
+    thinking_tokens_estimated?: boolean;
 };
 
 export type ActionResultActivityContext = Omit<

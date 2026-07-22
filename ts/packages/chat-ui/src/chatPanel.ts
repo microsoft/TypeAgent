@@ -5505,6 +5505,26 @@ class AgentMessageContainer {
         } else {
             leftLines.push(`${actionLabel} Tokens: <b>not reported</b>`);
         }
+        // Thinking (reasoning) tokens: the subset of completion tokens the
+        // model spent on chain-of-thought, tabulated per reasoning block. Shown
+        // as a total, with a per-block breakdown when there is more than one
+        // block. Only reasoning engines that expose it report this; when absent
+        // the line is omitted entirely.
+        if (
+            tokenUsage?.thinking_tokens !== undefined &&
+            tokenUsage.thinking_tokens.length > 0
+        ) {
+            const blocks = tokenUsage.thinking_tokens;
+            const thinkingTotal = blocks.reduce((sum, n) => sum + n, 0);
+            const breakdown = blocks.length > 1 ? ` (${blocks.join("+")})` : "";
+            // A leading "~" marks an approximate figure: some engines (e.g.
+            // Claude) only expose a streamed per-block estimate, not a billed
+            // reasoning-token count.
+            const approx = tokenUsage.thinking_tokens_estimated ? "~" : "";
+            leftLines.push(
+                `Thinking Tokens: <b>${approx}${thinkingTotal}</b>${breakdown}`,
+            );
+        }
         if (phase?.marks) {
             for (const [key, value] of Object.entries(phase.marks)) {
                 const avg = value.duration / Math.max(value.count, 1);

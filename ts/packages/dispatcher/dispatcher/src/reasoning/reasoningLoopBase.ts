@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { ActionTokenUsage } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
 
 export const loopBaseDebug = registerDebug("typeagent:reasoning:loopBase");
@@ -174,6 +175,44 @@ export function formatThinkingDisplay(thinkingText: string): string {
         `<pre>${escaped}</pre>`,
         `</details>`,
     ].join("");
+}
+
+/**
+ * Build the reasoning token-usage record reported to the dispatcher (surfaced
+ * as "Action Tokens" in the UI). Returns undefined when no tokens were counted
+ * so the UI shows "not reported" rather than a misleading zero.
+ *
+ * `thinkingTokens` carries the per-turn reasoning ("thinking") token counts -
+ * the subset of completion tokens the model spent on chain-of-thought, one
+ * entry per turn that reported any. They are already included in `outputTokens`,
+ * so they are reported separately (as a per-block breakdown) rather than added
+ * to the total again, letting the UI show a distinct "Thinking Tokens" figure.
+ *
+ * `thinkingTokensEstimated` marks those counts as an approximate estimate rather
+ * than a billed figure (e.g. the Claude SDK only streams a per-block estimate),
+ * so the UI can flag them as approximate.
+ */
+export function reasoningTokenUsage(
+    inputTokens: number,
+    outputTokens: number,
+    cachedTokens: number,
+    thinkingTokens?: number[],
+    thinkingTokensEstimated?: boolean,
+): ActionTokenUsage | undefined {
+    const total = inputTokens + outputTokens + cachedTokens;
+    if (total <= 0) {
+        return undefined;
+    }
+    const perBlock = thinkingTokens?.filter((t) => t > 0) ?? [];
+    return {
+        prompt_tokens: inputTokens,
+        completion_tokens: outputTokens,
+        total_tokens: total,
+        ...(cachedTokens > 0 && { cached_tokens: cachedTokens }),
+        ...(perBlock.length > 0 && { thinking_tokens: perBlock }),
+        ...(perBlock.length > 0 &&
+            thinkingTokensEstimated && { thinking_tokens_estimated: true }),
+    };
 }
 
 /**

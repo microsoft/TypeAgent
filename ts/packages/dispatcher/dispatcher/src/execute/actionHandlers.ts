@@ -343,6 +343,15 @@ export function emitActionResult(
             acc.cached_tokens =
                 (acc.cached_tokens ?? 0) + result.tokenUsage.cached_tokens;
         }
+        if (result.tokenUsage.thinking_tokens !== undefined) {
+            acc.thinking_tokens = [
+                ...(acc.thinking_tokens ?? []),
+                ...result.tokenUsage.thinking_tokens,
+            ];
+        }
+        if (result.tokenUsage.thinking_tokens_estimated) {
+            acc.thinking_tokens_estimated = true;
+        }
         commandResult.actionTokenUsage = acc;
     }
     if (result.displayContent !== undefined) {

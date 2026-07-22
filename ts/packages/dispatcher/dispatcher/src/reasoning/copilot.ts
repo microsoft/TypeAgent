@@ -40,6 +40,7 @@ import { createLimiter } from "@typeagent/common-utils";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 import { formatUserContextForPrompt } from "./userContextPrompt.js";
+import { reasoningTokenUsage } from "./reasoningLoopBase.js";
 import {
     buildReasoningForm,
     formatReasoningFormResponse,
@@ -1219,27 +1220,6 @@ async function createCopilotSession(
 }
 
 /**
- * Build the reasoning token-usage record reported to the dispatcher (surfaced
- * as "Action Tokens" in the UI). Returns undefined when no tokens were counted
- * so the UI shows "not reported" rather than a misleading zero.
- */
-function reasoningTokenUsage(
-    inputTokens: number,
-    outputTokens: number,
-    cachedTokens: number,
-) {
-    const total = inputTokens + outputTokens + cachedTokens;
-    return total > 0
-        ? {
-              prompt_tokens: inputTokens,
-              completion_tokens: outputTokens,
-              total_tokens: total,
-              ...(cachedTokens > 0 && { cached_tokens: cachedTokens }),
-          }
-        : undefined;
-}
-
-/**
  * Execute reasoning action without planning
  * Uses session ID resumption for multi-turn conversations
  */
@@ -1304,6 +1284,10 @@ async function executeReasoningWithoutPlanning(
     let usageInputTokens = 0;
     let usageOutputTokens = 0;
     let usageCachedTokens = 0;
+    // Per-turn reasoning ("thinking") token counts, tabulated one entry per
+    // turn that reported any, so the UI can show a per-block "Thinking Tokens"
+    // breakdown. These are a subset of usageOutputTokens (not added again).
+    const usageThinkingTokens: number[] = [];
 
     // Subscribe to reasoning events (thinking blocks)
     const unsubscribeReasoningDelta = session.on(
@@ -1412,13 +1396,19 @@ async function executeReasoningWithoutPlanning(
     );
 
     // Track cache read/write tokens separately from fresh input tokens so the
-    // UI can report them as a distinct "cached" figure.
+    // UI can report them as a distinct "cached" figure. reasoningTokens (a
+    // subset of outputTokens) is tabulated per turn so the UI can show a
+    // distinct "Thinking Tokens" figure.
     const unsubscribeUsage = session.on("assistant.usage", (event: any) => {
         usageInputTokens += event.data?.inputTokens ?? 0;
         usageOutputTokens += event.data?.outputTokens ?? 0;
         usageCachedTokens +=
             (event.data?.cacheReadTokens ?? 0) +
             (event.data?.cacheWriteTokens ?? 0);
+        const reasoningTokens = event.data?.reasoningTokens ?? 0;
+        if (reasoningTokens > 0) {
+            usageThinkingTokens.push(reasoningTokens);
+        }
     });
 
     try {
@@ -1468,6 +1458,7 @@ async function executeReasoningWithoutPlanning(
             usageInputTokens,
             usageOutputTokens,
             usageCachedTokens,
+            usageThinkingTokens,
         );
         return result;
     } catch (error) {
@@ -1580,6 +1571,11 @@ async function executeReasoningWithTracing(
         let usageInputTokens = 0;
         let usageOutputTokens = 0;
         let usageCachedTokens = 0;
+        // Per-turn reasoning ("thinking") token counts, tabulated one entry per
+        // turn that reported any, so the UI can show a per-block "Thinking
+        // Tokens" breakdown. These are a subset of usageOutputTokens (not added
+        // again).
+        const usageThinkingTokens: number[] = [];
 
         // Subscribe to reasoning events and record thinking
         const unsubscribeReasoningDelta = session.on(
@@ -1698,13 +1694,19 @@ async function executeReasoningWithTracing(
         );
 
         // Track cache read/write tokens separately from fresh input tokens so
-        // the UI can report them as a distinct "cached" figure.
+        // the UI can report them as a distinct "cached" figure. reasoningTokens
+        // (a subset of outputTokens) is tabulated per turn so the UI can show a
+        // distinct "Thinking Tokens" figure.
         const unsubscribeUsage = session.on("assistant.usage", (event: any) => {
             usageInputTokens += event.data?.inputTokens ?? 0;
             usageOutputTokens += event.data?.outputTokens ?? 0;
             usageCachedTokens +=
                 (event.data?.cacheReadTokens ?? 0) +
                 (event.data?.cacheWriteTokens ?? 0);
+            const reasoningTokens = event.data?.reasoningTokens ?? 0;
+            if (reasoningTokens > 0) {
+                usageThinkingTokens.push(reasoningTokens);
+            }
         });
 
         try {
@@ -1787,6 +1789,7 @@ async function executeReasoningWithTracing(
                 usageInputTokens,
                 usageOutputTokens,
                 usageCachedTokens,
+                usageThinkingTokens,
             );
             return result;
         } finally {

@@ -51,6 +51,7 @@ import {
     formatParams as sharedFormatParams,
     formatThinkingDisplay as sharedFormatThinkingDisplay,
     formatToolResultDisplay as sharedFormatToolResultDisplay,
+    reasoningTokenUsage,
 } from "./reasoningLoopBase.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 import { ScriptRecipeGenerator } from "./scriptRecipeGenerator.js";
@@ -1301,27 +1302,6 @@ function extractActionInfo(
 }
 
 /**
- * Build the reasoning token-usage record reported to the dispatcher (surfaced
- * as "Action Tokens" in the UI). Returns undefined when no tokens were counted
- * so the UI shows "not reported" rather than a misleading zero.
- */
-function reasoningTokenUsage(
-    inputTokens: number,
-    outputTokens: number,
-    cachedTokens: number,
-) {
-    const total = inputTokens + outputTokens + cachedTokens;
-    return total > 0
-        ? {
-              prompt_tokens: inputTokens,
-              completion_tokens: outputTokens,
-              total_tokens: total,
-              ...(cachedTokens > 0 && { cached_tokens: cachedTokens }),
-          }
-        : undefined;
-}
-
-/**
  * Execute reasoning action without planning (standard mode)
  */
 async function executeReasoningWithoutPlanning(
@@ -1353,6 +1333,12 @@ async function executeReasoningWithoutPlanning(
     let usageInputTokens = 0;
     let usageOutputTokens = 0;
     let usageCachedTokens = 0;
+    // Anthropic bills thinking inside output_tokens without a separate count,
+    // but the SDK streams an approximate per-block estimate (system/
+    // thinking_tokens). Tabulate one entry per thinking block so the UI can
+    // show an approximate per-block "Thinking Tokens" breakdown.
+    const usageThinkingTokens: number[] = [];
+    let currentThinkingEstimate = 0;
 
     // Process streaming response
     for await (const message of queryInstance) {
@@ -1361,6 +1347,16 @@ async function executeReasoningWithoutPlanning(
         // Capture session ID from first message for future resume
         if ("session_id" in message && !getSessionId(context)) {
             setSessionId(context, (message as any).session_id);
+        }
+        // Anthropic bills thinking inside output_tokens without a separate
+        // count, but the SDK streams an approximate running total per thinking
+        // block (system/thinking_tokens). Keep the latest; it's recorded when
+        // the block's thinking content arrives below.
+        if (
+            message.type === "system" &&
+            (message as any).subtype === "thinking_tokens"
+        ) {
+            currentThinkingEstimate = (message as any).estimated_tokens ?? 0;
         }
         if (message.type === "assistant") {
             for (const content of message.message.content) {
@@ -1421,6 +1417,13 @@ async function executeReasoningWithoutPlanning(
                             },
                             displayMode,
                         );
+                    }
+                    // Record the SDK's per-block thinking-token estimate (the
+                    // running total streamed as system/thinking_tokens above)
+                    // and reset for the next block.
+                    if (currentThinkingEstimate > 0) {
+                        usageThinkingTokens.push(currentThinkingEstimate);
+                        currentThinkingEstimate = 0;
                     }
                 }
             }
@@ -1511,10 +1514,14 @@ async function executeReasoningWithoutPlanning(
         return undefined;
     }
     const result = createActionResultNoDisplay(finalResult);
+    // Claude's thinking tokens are an approximate per-block estimate (Anthropic
+    // does not bill them separately), so flag them as estimated.
     result.tokenUsage = reasoningTokenUsage(
         usageInputTokens,
         usageOutputTokens,
         usageCachedTokens,
+        usageThinkingTokens,
+        true,
     );
     return result;
 }
@@ -1584,6 +1591,12 @@ async function executeReasoningWithTracing(
         let usageInputTokens = 0;
         let usageOutputTokens = 0;
         let usageCachedTokens = 0;
+        // Anthropic bills thinking inside output_tokens without a separate
+        // count, but the SDK streams an approximate per-block estimate (system/
+        // thinking_tokens). Tabulate one entry per thinking block so the UI can
+        // show an approximate per-block "Thinking Tokens" breakdown.
+        const usageThinkingTokens: number[] = [];
+        let currentThinkingEstimate = 0;
 
         // Process streaming response with tracing
         for await (const message of queryInstance) {
@@ -1592,6 +1605,17 @@ async function executeReasoningWithTracing(
             // Capture session ID from first message for future resume
             if ("session_id" in message && !getSessionId(context)) {
                 setSessionId(context, (message as any).session_id);
+            }
+            // Anthropic bills thinking inside output_tokens without a separate
+            // count, but the SDK streams an approximate running total per
+            // thinking block (system/thinking_tokens). Keep the latest; it's
+            // recorded when the block's thinking content arrives below.
+            if (
+                message.type === "system" &&
+                (message as any).subtype === "thinking_tokens"
+            ) {
+                currentThinkingEstimate =
+                    (message as any).estimated_tokens ?? 0;
             }
 
             if (message.type === "assistant") {
@@ -1664,6 +1688,13 @@ async function executeReasoningWithTracing(
                                 },
                                 displayMode,
                             );
+                        }
+                        // Record the SDK's per-block thinking-token estimate
+                        // (the running total streamed as system/thinking_tokens
+                        // above) and reset for the next block.
+                        if (currentThinkingEstimate > 0) {
+                            usageThinkingTokens.push(currentThinkingEstimate);
+                            currentThinkingEstimate = 0;
                         }
                     }
                 }
@@ -1842,10 +1873,14 @@ async function executeReasoningWithTracing(
             return undefined;
         }
         const result = createActionResultNoDisplay(finalResult);
+        // Claude's thinking tokens are an approximate per-block estimate
+        // (Anthropic does not bill them separately), so flag them as estimated.
         result.tokenUsage = reasoningTokenUsage(
             usageInputTokens,
             usageOutputTokens,
             usageCachedTokens,
+            usageThinkingTokens,
+            true,
         );
         return result;
     } catch (error) {
