@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=8d3b6e3d5af4248bf59e4803b139bd402c4e89d6fdbe64c701984579e364a7b4 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=37d02b8205f37c23cf1b94837a2d5e7210910bd29b16c5dc9c9632161b6c53c0 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) for the TypeAgent ecosystem. Built on Electron, it provides a personal agent interface for interacting with an extensible set of agents. Users can perform actions, manage conversations, and interact via text or voice input. The shell integrates with other TypeAgent components, such as the dispatcher and agent server, and supports both local and remote operation modes.
+The `agent-shell` package is a TypeScript library that provides the graphical user interface (GUI) for the TypeAgent ecosystem. Built on Electron, it serves as a personal agent interface, enabling users to interact with an extensible set of agents through natural language, perform actions, and manage conversations. The shell supports both local and remote operation modes and integrates with other TypeAgent components, such as the dispatcher and agent server.
 
 ## What it does
 
-The `agent-shell` package offers the following capabilities:
+The `agent-shell` package offers the following key features:
 
 ### Conversation Management
 
@@ -176,6 +176,6 @@ _6 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `274f0c51c3f1dca4e627c5311084db01d02fe1e9` on `2026-07-23T15:09:16.468Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

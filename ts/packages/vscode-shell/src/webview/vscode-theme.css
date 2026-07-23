@@ -368,6 +368,33 @@
   );
 }
 
+/* 5b. Logged tool calls in a reasoning step. Every tool call (single or a folded
+       run) renders as <div class="reasoning-tool-call"> with a clickable
+       "Tool: <name> xN" summary and a hidden JSON <pre> body. The tool name is
+       inline code (VS Code themes it gold-on-gray, matching a single tool call);
+       the body is styled like the collapsible action JSON. */
+.chat-message-content .reasoning-tool-call-summary code {
+  color: var(
+    --vscode-textPreformat-foreground,
+    var(--vscode-terminal-ansiYellow, #d7ba7d)
+  ) !important;
+  background-color: var(
+    --vscode-textPreformat-background,
+    var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.15))
+  );
+}
+.chat-message-content .reasoning-tool-call-json {
+  background-color: rgba(127, 127, 127, 0.1);
+  color: var(--vscode-foreground);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(
+    --vscode-editor-font-family,
+    Consolas,
+    "Courier New",
+    monospace
+  );
+}
 /* 6. Slim, theme-colored scrollbars for the remaining scroll areas: code
       blocks and the collapsible JSON action details. */
 .chat-message-content pre::-webkit-scrollbar,

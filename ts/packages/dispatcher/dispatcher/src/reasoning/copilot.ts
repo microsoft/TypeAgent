@@ -40,6 +40,7 @@ import { createLimiter } from "@typeagent/common-utils";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 import { formatUserContextForPrompt } from "./userContextPrompt.js";
+import { ToolRunFolder } from "./reasoningLoopBase.js";
 import {
     buildReasoningActionResult,
     estimateReasoningTokens,
@@ -508,7 +509,7 @@ function formatExecuteActionDisplay(input: unknown): string {
     // actionName out directly so the label shows the real action, not "?".
     const action = parseActionInput(toolInput?.action);
     const actionName = getStringProp(action, "actionName") ?? "?";
-    return `**Tool:** execute_action — \`${schema}.${actionName}\``;
+    return `**Tool:** \`execute_action\` — \`${schema}.${actionName}\``;
 }
 
 function getPrimaryToolArg(input: unknown): string | undefined {
@@ -530,27 +531,29 @@ function formatToolCallDisplay(toolName: string, input: unknown): string {
         case "discover_actions": {
             const schema =
                 getStringProp(toolInput, "schemaName") ?? JSON.stringify(input);
-            return `**Tool:** discover_actions — schema: \`${schema}\``;
+            return `**Tool:** \`discover_actions\` — schema: \`${schema}\``;
         }
         case "execute_action":
             return formatExecuteActionDisplay(input);
         case "search_memory": {
             const question =
                 getStringProp(toolInput, "question") ?? JSON.stringify(input);
-            return `**Tool:** search_memory — \`${question}\``;
+            return `**Tool:** \`search_memory\` — \`${question}\``;
         }
         case "remember":
-            return `**Tool:** remember`;
+            return `**Tool:** \`remember\``;
     }
 
     // Built-in tools (shell, github/fs/*, github/search/*, ...): show the
     // primary argument so parallel or similar calls are distinguishable
-    // instead of rendering as identical "Tool: <name>" bubbles.
+    // instead of rendering as identical "Tool: <name>" bubbles. The tool name
+    // is rendered as inline code so it reads as a highlighted chip (matching a
+    // single tool call and the folded-batch summary).
     const primaryArg = getPrimaryToolArg(input);
     if (primaryArg) {
-        return `**Tool:** ${toolName} — \`${primaryArg}\``;
+        return `**Tool:** \`${toolName}\` — \`${primaryArg}\``;
     }
-    return `**Tool:** ${toolName}`;
+    return `**Tool:** \`${toolName}\``;
 }
 
 /**
@@ -1228,6 +1231,15 @@ async function executeReasoningWithoutPlanning(
     debug(`Executing reasoning request: ${originalRequest}`);
     context.actionIO.appendDisplay("Thinking...", "temporary");
     const displayMode = resolveReasoningDisplayMode(context);
+    // Fold runs of identical, back-to-back tool-call lines into one "xN" line.
+    const toolFolder = new ToolRunFolder(
+        (content) =>
+            context.actionIO.appendDisplay(
+                { type: "markdown", content, kind: "info" },
+                displayMode,
+            ),
+        formatToolCallDisplay,
+    );
 
     const client = await getCopilotClient(context.sessionContext.agentContext);
     const config = getCopilotSessionConfig(context);
@@ -1296,6 +1308,7 @@ async function executeReasoningWithoutPlanning(
         "assistant.reasoning_delta",
         (event: any) => {
             if (event.data?.deltaContent) {
+                toolFolder.flush();
                 currentReasoning += event.data.deltaContent;
                 context.actionIO.appendDisplay(
                     {
@@ -1319,6 +1332,7 @@ async function executeReasoningWithoutPlanning(
                 event.data.content !== lastReasoningContent
             ) {
                 // Final reasoning content - display as permanent thinking block
+                toolFolder.flush();
                 lastReasoningContent = event.data.content;
                 reasoningBlockTexts.push(event.data.content);
                 context.actionIO.appendDisplay(
@@ -1341,6 +1355,7 @@ async function executeReasoningWithoutPlanning(
         "assistant.message_delta",
         (event: any) => {
             if (event.data?.deltaContent) {
+                toolFolder.flush();
                 currentContent += event.data.deltaContent;
                 context.actionIO.appendDisplay(
                     {
@@ -1371,14 +1386,7 @@ async function executeReasoningWithoutPlanning(
                 event.data?.parameters ||
                 {};
             debug(`Tool execution started: ${toolName}`);
-            context.actionIO.appendDisplay(
-                {
-                    type: "markdown",
-                    content: formatToolCallDisplay(toolName, parameters),
-                    kind: "info",
-                },
-                displayMode,
-            );
+            toolFolder.tool(toolName, parameters);
         },
     );
 
@@ -1454,6 +1462,7 @@ async function executeReasoningWithoutPlanning(
         // streaming display). Prefer the authoritative final message over the
         // streamed accumulation, which can be stale/truncated when the model
         // interleaves tool calls mid-turn (which produced an "unfinished" answer).
+        toolFolder.flush();
         const displayContent = finalResult || currentContent;
         if (displayContent) {
             context.actionIO.appendDisplay(
@@ -1492,6 +1501,7 @@ async function executeReasoningWithoutPlanning(
         return result;
     } catch (error) {
         debug("Error during reasoning:", error);
+        toolFolder.flush();
         context.actionIO.appendDisplay(
             {
                 type: "text",
@@ -1545,6 +1555,15 @@ async function executeReasoningWithTracing(
         debug(`Executing reasoning with tracing: ${originalRequest}`);
         context.actionIO.appendDisplay("Thinking...", "temporary");
         const displayMode = resolveReasoningDisplayMode(context);
+        // Fold runs of identical, back-to-back tool-call lines into one "xN" line.
+        const toolFolder = new ToolRunFolder(
+            (content) =>
+                context.actionIO.appendDisplay(
+                    { type: "markdown", content, kind: "info" },
+                    displayMode,
+                ),
+            formatToolCallDisplay,
+        );
 
         const client = await getCopilotClient(
             context.sessionContext.agentContext,
@@ -1617,6 +1636,7 @@ async function executeReasoningWithTracing(
             "assistant.reasoning_delta",
             (event: any) => {
                 if (event.data?.deltaContent) {
+                    toolFolder.flush();
                     currentReasoning += event.data.deltaContent;
                     context.actionIO.appendDisplay(
                         {
@@ -1648,6 +1668,7 @@ async function executeReasoningWithTracing(
                         ],
                     });
 
+                    toolFolder.flush();
                     context.actionIO.appendDisplay(
                         {
                             type: "markdown",
@@ -1667,6 +1688,7 @@ async function executeReasoningWithTracing(
             "assistant.message_delta",
             (event: any) => {
                 if (event.data?.deltaContent) {
+                    toolFolder.flush();
                     currentContent += event.data.deltaContent;
                     context.actionIO.appendDisplay(
                         {
@@ -1702,14 +1724,7 @@ async function executeReasoningWithTracing(
                 // Record tool call for trace
                 tracer.recordToolCall(toolName, parameters);
 
-                context.actionIO.appendDisplay(
-                    {
-                        type: "markdown",
-                        content: formatToolCallDisplay(toolName, parameters),
-                        kind: "info",
-                    },
-                    displayMode,
-                );
+                toolFolder.tool(toolName, parameters);
             },
         );
 
@@ -1778,6 +1793,7 @@ async function executeReasoningWithTracing(
             // streaming display). Prefer the authoritative final message over
             // the streamed accumulation, which can be stale/truncated when the
             // model interleaves tool calls mid-turn.
+            toolFolder.flush();
             const displayContent = finalResult || currentContent;
             if (displayContent) {
                 context.actionIO.appendDisplay(
@@ -1856,6 +1872,12 @@ async function executeReasoningWithTracing(
             );
             return result;
         } finally {
+            // Emit any tool run still buffered when the inner try exits. On
+            // success the final-content flush above already drained it (no-op
+            // here); on an error thrown before that point (e.g. sendAndWait),
+            // this is the last chance to render it, since the outer catch is a
+            // separate scope and cannot see toolFolder.
+            toolFolder.flush();
             unsubscribeReasoningDelta();
             unsubscribeReasoning();
             unsubscribeMessageDelta();

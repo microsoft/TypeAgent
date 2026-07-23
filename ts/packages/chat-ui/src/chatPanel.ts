@@ -956,6 +956,7 @@ export class ChatPanel {
         this.setupContextMenu();
         this.setupProviderAffordances();
         this.setupImageLightbox();
+        this.setupReasoningToolCall();
     }
 
     /**
@@ -975,6 +976,42 @@ export class ChatPanel {
             if (rect.width < 32 && rect.height < 32) return;
             this.openImageLightbox(img.currentSrc || img.src);
         });
+    }
+
+    /**
+     * Lazily syntax-highlight a logged tool-call block the first time it opens.
+     * The reasoning engine renders every tool call (single or folded) as a native
+     * <details class="reasoning-tool-call"> holding only that call's own JSON (an
+     * object for one call, an array for a folded run). The <details>/<summary>
+     * handles show/hide plus keyboard toggling on its own; we only highlight the
+     * <pre> once, when it first becomes visible, so it reads like the clickable
+     * action JSON view (same highlightJson tokens). The `toggle` event does not
+     * bubble, so we listen in the capture phase to keep a single delegated
+     * listener. Each block owns its JSON inline, independent of the enclosing
+     * action's JSON view. Shared by the Electron and VS Code shells.
+     */
+    private setupReasoningToolCall() {
+        this.messageDiv.addEventListener(
+            "toggle",
+            (e) => {
+                const details = e.target as HTMLElement | null;
+                if (
+                    !details?.classList?.contains("reasoning-tool-call") ||
+                    !(details as HTMLDetailsElement).open
+                ) {
+                    return;
+                }
+                const pre = details.querySelector<HTMLElement>(
+                    "pre.reasoning-tool-call-json",
+                );
+                if (!pre || pre.dataset.highlighted === "true") return;
+                // The <pre> starts as raw (escaped) JSON text; its textContent is
+                // the un-escaped JSON, which highlightJson re-escapes.
+                pre.innerHTML = sanitize(highlightJson(pre.textContent ?? ""));
+                pre.dataset.highlighted = "true";
+            },
+            true,
+        );
     }
 
     /**
@@ -6393,6 +6430,13 @@ class AgentMessageContainer {
             text = (content.content as string[]).join("\n");
         }
         if (!text) return undefined;
+
+        // Content that is already a self-contained HTML block (the reasoning
+        // engine's <details> thinking and batched-tool blocks) is
+        // pre-structured: any JSON inside is intentional markup, not a trailing
+        // action payload to hoist into the details panel. Splitting it at a
+        // "{"/"[" line would tear the <details>/<pre> apart mid-element.
+        if (text.trimStart().startsWith("<")) return undefined;
 
         // Strip ANSI to find the JSON boundary
         const stripped = text.replace(/\x1b\[[0-9;]*m/g, "");
