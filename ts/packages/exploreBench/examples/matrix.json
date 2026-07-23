@@ -1,0 +1,16 @@
+{
+  "runs": [
+    {
+      "name": "azure/gpt-5.6-luna",
+      "model": "azure/gpt-5.6-luna"
+    },
+    {
+      "name": "azure/gpt-5.6-terra",
+      "model": "azure/gpt-5.6-terra"
+    },
+    {
+      "name": "azure/gpt-5.6-sol",
+      "model": "azure/gpt-5.6-sol"
+    }
+  ]
+}

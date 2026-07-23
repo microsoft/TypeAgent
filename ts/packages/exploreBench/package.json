@@ -1,0 +1,30 @@
+{
+  "name": "@typeagent/explore-bench",
+  "version": "0.0.1",
+  "private": true,
+  "description": "GitHub Copilot CLI and TypeAgent MCP SWE-bench localization benchmark",
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "bin": {
+    "typeagent-explore-bench": "./dist/src/cli.js"
+  },
+  "dependencies": {
+    "@github/copilot": "1.0.67",
+    "@github/copilot-sdk": "1.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "prettier": "^3.5.3",
+    "typescript": "~5.4.5"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prettier": "prettier --check README.md package.json tsconfig.json examples scripts src test --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write README.md package.json tsconfig.json examples scripts src test --ignore-path ../../.prettierignore",
+    "test": "npm run build && node --test dist/test/*.spec.js scripts/*.test.mjs",
+    "test:local": "npm run test",
+    "tsc": "tsc -b"
+  }
+}
