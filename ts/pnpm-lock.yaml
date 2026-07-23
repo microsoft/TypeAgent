@@ -155,7 +155,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.9.3)(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5))
+        version: 29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2397,6 +2397,49 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/agents/explorer:
+    dependencies:
+      '@typeagent/agent-flows':
+        specifier: workspace:*
+        version: link:../../agent-flows
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../../dispatcher/dispatcher
+      glob:
+        specifier: ^13.0.0
+        version: 13.0.6
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+      typescript-language-server:
+        specifier: 5.3.0
+        version: 5.3.0
+      vscode-jsonrpc:
+        specifier: 8.2.1
+        version: 8.2.1
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.14
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+
   packages/agents/github-cli:
     dependencies:
       '@typeagent/agent-sdk':
@@ -3596,7 +3639,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.9.3)(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -4746,6 +4789,25 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/exploreBench:
+    dependencies:
+      '@github/copilot':
+        specifier: 1.0.67
+        version: 1.0.67
+      '@github/copilot-sdk':
+        specifier: 1.0.4
+        version: 1.0.4
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/grammarTools/cli:
     dependencies:
       '@typeagent/action-grammar':
@@ -5072,6 +5134,40 @@ importers:
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/mcp/explore:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.26.0
+        version: 1.29.0(zod@4.3.6)
+      explorer-typeagent:
+        specifier: workspace:*
+        version: link:../../agents/explorer
+      zod:
+        specifier: ^4.1.13
+        version: 4.3.6
+    devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
+      '@types/jest':
+        specifier: ^29.5.12
+        version: 29.5.14
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.21
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -7860,14 +7956,33 @@ packages:
     os: [darwin]
     hasBin: true
 
+  '@github/copilot-darwin-arm64@1.0.67':
+    resolution: {integrity: sha512-CO3mpgFXcN6e7ZsSmjMkt1AKxMfb1+mjdn3yrf2DRnnWIURSK9kGvw+E+E1+YE37D1MBiUn/VOBmhRad5+vl0A==}
+    cpu: [arm64]
+    os: [darwin]
+    hasBin: true
+
   '@github/copilot-darwin-x64@1.0.54':
     resolution: {integrity: sha512-DGqs8x5r4y+SebMco890lNsPrqe6L4v2hCmV1IQ1pvYPvD1o1NMVSZPAQhkdvUeR5bqusOg8+0ugIZOQGTFpFQ==}
     cpu: [x64]
     os: [darwin]
     hasBin: true
 
+  '@github/copilot-darwin-x64@1.0.67':
+    resolution: {integrity: sha512-M20Hpn3bOJRkVwAIVRK4ZlX66AqtmGfXZRxZBRFQC045QIwcfmVUP45sTSgXDb4uHWeK0cZgdTdniHwKGtMplw==}
+    cpu: [x64]
+    os: [darwin]
+    hasBin: true
+
   '@github/copilot-linux-arm64@1.0.54':
     resolution: {integrity: sha512-waVKu6RuG8YBvCoGrOgtsOxmnfLaUywvbqZXRgvMya1m4akRkMi5r9B2UDr3+egjChp+FIUJVbGIoXN6ZST0rQ==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+    hasBin: true
+
+  '@github/copilot-linux-arm64@1.0.67':
+    resolution: {integrity: sha512-b4ePtFBow+Ior+aVLKA1hHxhR5wF+ql5CD7TSg/NHGYgc1kwD+3a9uKSENy05J5Lit/G/DZ9C6JwowvvdMWSKg==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
@@ -7880,6 +7995,13 @@ packages:
     libc: [glibc]
     hasBin: true
 
+  '@github/copilot-linux-x64@1.0.67':
+    resolution: {integrity: sha512-4ynZyfKnWAdvEPAFDDBIz1wpFttcOTJu4Y8Mlz5oXCBA0NM/rwr8K4l7Adp8UzwbfmdrMJ9y+zivqRBMDbPInA==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+    hasBin: true
+
   '@github/copilot-linuxmusl-arm64@1.0.54':
     resolution: {integrity: sha512-21LLjoQnD57Y1fvO56G1FGVbkt/ffZNDpHqVe2NW7C4r78Gn0hOTqwp+xWRUMpdmxrGZyKeFjX8jK6qox2uF5w==}
     cpu: [arm64]
@@ -7887,8 +8009,22 @@ packages:
     libc: [musl]
     hasBin: true
 
+  '@github/copilot-linuxmusl-arm64@1.0.67':
+    resolution: {integrity: sha512-IjezxBU8fYUr/b5hEiniXqzwoOrJ4egrQSBbG96M+roLTqd9txP0MgxZtcRtKV7phRIdIGE109wwrn4H6hSqmA==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+    hasBin: true
+
   '@github/copilot-linuxmusl-x64@1.0.54':
     resolution: {integrity: sha512-sbeATKa9vaIetsY1vhQJO0PN/5FgoK48wkGBWCy4BpO8ER/kGYczT22qv6n96gBYrVmC2IZuTFTM4GFpC3bbBw==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+    hasBin: true
+
+  '@github/copilot-linuxmusl-x64@1.0.67':
+    resolution: {integrity: sha512-Zy/rbja1lnhzDoNfn051H0EybCseCvjvH7WmbcHCayjXUjzXeKF6OmAt4hvqFZH87ttT3KbKtQ8/6oDUhhM2YQ==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
@@ -7902,8 +8038,18 @@ packages:
     resolution: {integrity: sha512-SUo35k56pzzgYgwmDPHcu7kZxPrzXbH66IWXaEf6pmb94DlA709F82HrrDeja087TL4djJ9OuvRFWWOKCosAsg==}
     engines: {node: '>=20.0.0'}
 
+  '@github/copilot-sdk@1.0.4':
+    resolution: {integrity: sha512-c6/gpatP7LAuP9stlc2uXXOrB+TJMFSs3Jrzu9FG8lJJYFGmdzbBvGz2UdL1jww84fp6D7cohEZa4UGq1+iuyA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+
   '@github/copilot-win32-arm64@1.0.54':
     resolution: {integrity: sha512-muOX8qrJSi56BWQejkH0TgXpZYRO8Y9k1qIfMuRojZyLyATn1P4lIKb67ZqDCXJLkcPfVJ5eJYsSAeGwU3Qpww==}
+    cpu: [arm64]
+    os: [win32]
+    hasBin: true
+
+  '@github/copilot-win32-arm64@1.0.67':
+    resolution: {integrity: sha512-O3VFRS5v9NXRP8o+N1SvcFbBqECDzZP7XQBeBj2Vcrma80gdJc5GQub/w2mwmr1w5UbwgzJkRasm0Ec/jxbcoA==}
     cpu: [arm64]
     os: [win32]
     hasBin: true
@@ -7914,8 +8060,18 @@ packages:
     os: [win32]
     hasBin: true
 
+  '@github/copilot-win32-x64@1.0.67':
+    resolution: {integrity: sha512-td5tQ/nve5dB7RPvNglBZwa/6DJqiOBgacXXa1GpYcohqpCzoI8gONNkeaeyr6oF4iu5wXJ9krUNr6QXL4yB5Q==}
+    cpu: [x64]
+    os: [win32]
+    hasBin: true
+
   '@github/copilot@1.0.54':
     resolution: {integrity: sha512-gxiWEQFWxJ3J2Rh67CxKEfER/zayB1z2qaSBUz3RZ0u1iDNJdGPry/1vOQ72X/yHmpGNm+9egucN5VMzyedsIg==}
+    hasBin: true
+
+  '@github/copilot@1.0.67':
+    resolution: {integrity: sha512-5YEY9LNXBT9Q8uShjCdYcornJJJhGtdIzSYla2+pjfXYpHsDVibqYubzYjfgffOUKFChyzOpH7n/868+t56iIg==}
     hasBin: true
 
   '@hapi/bourne@3.0.0':
@@ -16336,6 +16492,11 @@ packages:
   typed-rest-client@1.8.11:
     resolution: {integrity: sha512-5UvfMpd1oelmUPRbbaVnq+rHP7ng2cE4qoQkQeAqxRL6PklkxsM0g32/HL0yfvruK6ojQ5x8EE+HF4YV6DtuCA==}
 
+  typescript-language-server@5.3.0:
+    resolution: {integrity: sha512-5puofxZHgFdAYtfNpmwCAvgtaYgg8wrUnH30m7Ze3QuguId5RNRadKASpOpyDxTyUdAF51FjhTdjntLw/EuWcQ==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   typescript@5.4.5:
     resolution: {integrity: sha512-vcI4UpRgg81oIRUFwR0WSIHKt11nJ7SAVlYNIu+QpqeyXP+gpQJy/Z4+F0aGxSE4MqwjyXvW/TzgkLAx2AGHwQ==}
     engines: {node: '>=14.17'}
@@ -16603,6 +16764,10 @@ packages:
         optional: true
       yaml:
         optional: true
+
+  vscode-jsonrpc@5.0.1:
+    resolution: {integrity: sha512-JvONPptw3GAQGXlVV2utDcHx0BiY34FupW/kI6mZ5x06ER5DdPG/tXWMVHjTNULF5uKPOUUD0SaXg5QaubJL0A==}
+    engines: {node: '>=8.0.0 || >=10.0.0'}
 
   vscode-jsonrpc@8.2.0:
     resolution: {integrity: sha512-C+r0eKJUIfiDIfwJhria30+TYWPtuHJXHtI7J0YlOmKAo7ogxP20T0zxB7HZQIFhIyvoBPwWskjxrvAtfjyZfA==}
@@ -19159,19 +19324,37 @@ snapshots:
   '@github/copilot-darwin-arm64@1.0.54':
     optional: true
 
+  '@github/copilot-darwin-arm64@1.0.67':
+    optional: true
+
   '@github/copilot-darwin-x64@1.0.54':
+    optional: true
+
+  '@github/copilot-darwin-x64@1.0.67':
     optional: true
 
   '@github/copilot-linux-arm64@1.0.54':
     optional: true
 
+  '@github/copilot-linux-arm64@1.0.67':
+    optional: true
+
   '@github/copilot-linux-x64@1.0.54':
+    optional: true
+
+  '@github/copilot-linux-x64@1.0.67':
     optional: true
 
   '@github/copilot-linuxmusl-arm64@1.0.54':
     optional: true
 
+  '@github/copilot-linuxmusl-arm64@1.0.67':
+    optional: true
+
   '@github/copilot-linuxmusl-x64@1.0.54':
+    optional: true
+
+  '@github/copilot-linuxmusl-x64@1.0.67':
     optional: true
 
   '@github/copilot-sdk@0.2.0':
@@ -19186,10 +19369,22 @@ snapshots:
       vscode-jsonrpc: 8.2.1
       zod: 4.3.6
 
+  '@github/copilot-sdk@1.0.4':
+    dependencies:
+      '@github/copilot': 1.0.67
+      vscode-jsonrpc: 8.2.1
+      zod: 4.3.6
+
   '@github/copilot-win32-arm64@1.0.54':
     optional: true
 
+  '@github/copilot-win32-arm64@1.0.67':
+    optional: true
+
   '@github/copilot-win32-x64@1.0.54':
+    optional: true
+
+  '@github/copilot-win32-x64@1.0.67':
     optional: true
 
   '@github/copilot@1.0.54':
@@ -19204,6 +19399,19 @@ snapshots:
       '@github/copilot-linuxmusl-x64': 1.0.54
       '@github/copilot-win32-arm64': 1.0.54
       '@github/copilot-win32-x64': 1.0.54
+
+  '@github/copilot@1.0.67':
+    dependencies:
+      detect-libc: 2.1.2
+    optionalDependencies:
+      '@github/copilot-darwin-arm64': 1.0.67
+      '@github/copilot-darwin-x64': 1.0.67
+      '@github/copilot-linux-arm64': 1.0.67
+      '@github/copilot-linux-x64': 1.0.67
+      '@github/copilot-linuxmusl-arm64': 1.0.67
+      '@github/copilot-linuxmusl-x64': 1.0.67
+      '@github/copilot-win32-arm64': 1.0.67
+      '@github/copilot-win32-x64': 1.0.67
 
   '@hapi/bourne@3.0.0': {}
 
@@ -19561,14 +19769,14 @@ snapshots:
       '@jest/test-result': 29.7.0
       '@jest/transform': 29.7.0
       '@jest/types': 29.6.3
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
       ansi-escapes: 4.3.2
       chalk: 4.1.2
       ci-info: 3.9.0
       exit: 0.1.2
       graceful-fs: 4.2.11
       jest-changed-files: 29.7.0
-      jest-config: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+      jest-config: 29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
       jest-haste-map: 29.7.0
       jest-message-util: 29.7.0
       jest-regex-util: 29.6.3
@@ -19596,14 +19804,49 @@ snapshots:
       '@jest/test-result': 29.7.0
       '@jest/transform': 29.7.0
       '@jest/types': 29.6.3
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
       ansi-escapes: 4.3.2
       chalk: 4.1.2
       ci-info: 3.9.0
       exit: 0.1.2
       graceful-fs: 4.2.11
       jest-changed-files: 29.7.0
-      jest-config: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+      jest-config: 29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+      jest-haste-map: 29.7.0
+      jest-message-util: 29.7.0
+      jest-regex-util: 29.6.3
+      jest-resolve: 29.7.0
+      jest-resolve-dependencies: 29.7.0
+      jest-runner: 29.7.0
+      jest-runtime: 29.7.0
+      jest-snapshot: 29.7.0
+      jest-util: 29.7.0
+      jest-validate: 29.7.0
+      jest-watcher: 29.7.0
+      micromatch: 4.0.8
+      pretty-format: 29.7.0
+      slash: 3.0.0
+      strip-ansi: 6.0.1
+    transitivePeerDependencies:
+      - babel-plugin-macros
+      - supports-color
+      - ts-node
+
+  '@jest/core@29.7.0(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5))':
+    dependencies:
+      '@jest/console': 29.7.0
+      '@jest/reporters': 29.7.0
+      '@jest/test-result': 29.7.0
+      '@jest/transform': 29.7.0
+      '@jest/types': 29.6.3
+      '@types/node': 22.19.21
+      ansi-escapes: 4.3.2
+      chalk: 4.1.2
+      ci-info: 3.9.0
+      exit: 0.1.2
+      graceful-fs: 4.2.11
+      jest-changed-files: 29.7.0
+      jest-config: 29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5))
       jest-haste-map: 29.7.0
       jest-message-util: 29.7.0
       jest-regex-util: 29.6.3
@@ -19631,14 +19874,14 @@ snapshots:
       '@jest/test-result': 29.7.0
       '@jest/transform': 29.7.0
       '@jest/types': 29.6.3
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
       ansi-escapes: 4.3.2
       chalk: 4.1.2
       ci-info: 3.9.0
       exit: 0.1.2
       graceful-fs: 4.2.11
       jest-changed-files: 29.7.0
-      jest-config: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5))
+      jest-config: 29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5))
       jest-haste-map: 29.7.0
       jest-message-util: 29.7.0
       jest-regex-util: 29.6.3
@@ -19663,7 +19906,7 @@ snapshots:
     dependencies:
       '@jest/fake-timers': 29.7.0
       '@jest/types': 29.6.3
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
       jest-mock: 29.7.0
 
   '@jest/expect-utils@29.7.0':
@@ -19681,7 +19924,7 @@ snapshots:
     dependencies:
       '@jest/types': 29.6.3
       '@sinonjs/fake-timers': 10.3.0
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
       jest-message-util: 29.7.0
       jest-mock: 29.7.0
       jest-util: 29.7.0
@@ -19773,7 +20016,7 @@ snapshots:
       '@jest/schemas': 29.6.3
       '@types/istanbul-lib-coverage': 2.0.6
       '@types/istanbul-reports': 3.0.3
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
       '@types/yargs': 17.0.29
       chalk: 4.1.2
 
@@ -21514,7 +21757,7 @@ snapshots:
 
   '@types/better-sqlite3@7.6.11':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
 
   '@types/better-sqlite3@7.6.13':
     dependencies:
@@ -21578,7 +21821,7 @@ snapshots:
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
 
   '@types/content-disposition@0.5.9': {}
 
@@ -21742,7 +21985,7 @@ snapshots:
 
   '@types/express-serve-static-core@4.17.41':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
       '@types/qs': 6.15.0
       '@types/range-parser': 1.2.7
       '@types/send': 0.17.4
@@ -21858,7 +22101,7 @@ snapshots:
 
   '@types/jsdom@20.0.1':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
       '@types/tough-cookie': 4.0.5
       parse5: 7.3.0
 
@@ -21873,7 +22116,7 @@ snapshots:
 
   '@types/jsonfile@6.1.4':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
 
   '@types/jsonpath@0.2.4': {}
 
@@ -21918,7 +22161,7 @@ snapshots:
 
   '@types/mailparser@3.4.6':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
       iconv-lite: 0.6.3
 
   '@types/markdown-it@14.1.2':
@@ -22046,7 +22289,7 @@ snapshots:
     dependencies:
       '@types/http-errors': 2.0.4
       '@types/mime': 3.0.4
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
 
   '@types/sinon-chai@3.2.12':
     dependencies:
@@ -23744,6 +23987,21 @@ snapshots:
       exit: 0.1.2
       graceful-fs: 4.2.11
       jest-config: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+      jest-util: 29.7.0
+      prompts: 2.4.2
+    transitivePeerDependencies:
+      - '@types/node'
+      - babel-plugin-macros
+      - supports-color
+      - ts-node
+
+  create-jest@29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5)):
+    dependencies:
+      '@jest/types': 29.6.3
+      chalk: 4.1.2
+      exit: 0.1.2
+      graceful-fs: 4.2.11
+      jest-config: 29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5))
       jest-util: 29.7.0
       prompts: 2.4.2
     transitivePeerDependencies:
@@ -26245,6 +26503,25 @@ snapshots:
       - supports-color
       - ts-node
 
+  jest-cli@29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5)):
+    dependencies:
+      '@jest/core': 29.7.0(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5))
+      '@jest/test-result': 29.7.0
+      '@jest/types': 29.6.3
+      chalk: 4.1.2
+      create-jest: 29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5))
+      exit: 0.1.2
+      import-local: 3.2.0
+      jest-config: 29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5))
+      jest-util: 29.7.0
+      jest-validate: 29.7.0
+      yargs: 17.7.2
+    transitivePeerDependencies:
+      - '@types/node'
+      - babel-plugin-macros
+      - supports-color
+      - ts-node
+
   jest-cli@29.7.0(@types/node@25.9.3)(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5)):
     dependencies:
       '@jest/core': 29.7.0(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5))
@@ -26295,37 +26572,6 @@ snapshots:
       - babel-plugin-macros
       - supports-color
 
-  jest-config@29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5)):
-    dependencies:
-      '@babel/core': 7.29.7
-      '@jest/test-sequencer': 29.7.0
-      '@jest/types': 29.6.3
-      babel-jest: 29.7.0(@babel/core@7.29.7)
-      chalk: 4.1.2
-      ci-info: 3.9.0
-      deepmerge: 4.3.1
-      glob: 7.2.3
-      graceful-fs: 4.2.11
-      jest-circus: 29.7.0
-      jest-environment-node: 29.7.0
-      jest-get-type: 29.6.3
-      jest-regex-util: 29.6.3
-      jest-resolve: 29.7.0
-      jest-runner: 29.7.0
-      jest-util: 29.7.0
-      jest-validate: 29.7.0
-      micromatch: 4.0.8
-      parse-json: 5.2.0
-      pretty-format: 29.7.0
-      slash: 3.0.0
-      strip-json-comments: 3.1.1
-    optionalDependencies:
-      '@types/node': 22.19.19
-      ts-node: 10.9.2(@types/node@22.15.18)(typescript@5.4.5)
-    transitivePeerDependencies:
-      - babel-plugin-macros
-      - supports-color
-
   jest-config@29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5)):
     dependencies:
       '@babel/core': 7.29.7
@@ -26357,7 +26603,7 @@ snapshots:
       - babel-plugin-macros
       - supports-color
 
-  jest-config@29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5)):
+  jest-config@29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5)):
     dependencies:
       '@babel/core': 7.29.7
       '@jest/test-sequencer': 29.7.0
@@ -26382,7 +26628,100 @@ snapshots:
       slash: 3.0.0
       strip-json-comments: 3.1.1
     optionalDependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
+      ts-node: 10.9.2(@types/node@22.15.18)(typescript@5.4.5)
+    transitivePeerDependencies:
+      - babel-plugin-macros
+      - supports-color
+
+  jest-config@29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5)):
+    dependencies:
+      '@babel/core': 7.29.7
+      '@jest/test-sequencer': 29.7.0
+      '@jest/types': 29.6.3
+      babel-jest: 29.7.0(@babel/core@7.29.7)
+      chalk: 4.1.2
+      ci-info: 3.9.0
+      deepmerge: 4.3.1
+      glob: 7.2.3
+      graceful-fs: 4.2.11
+      jest-circus: 29.7.0
+      jest-environment-node: 29.7.0
+      jest-get-type: 29.6.3
+      jest-regex-util: 29.6.3
+      jest-resolve: 29.7.0
+      jest-runner: 29.7.0
+      jest-util: 29.7.0
+      jest-validate: 29.7.0
+      micromatch: 4.0.8
+      parse-json: 5.2.0
+      pretty-format: 29.7.0
+      slash: 3.0.0
+      strip-json-comments: 3.1.1
+    optionalDependencies:
+      '@types/node': 22.19.21
+      ts-node: 10.9.2(@types/node@22.19.19)(typescript@5.4.5)
+    transitivePeerDependencies:
+      - babel-plugin-macros
+      - supports-color
+
+  jest-config@29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5)):
+    dependencies:
+      '@babel/core': 7.29.7
+      '@jest/test-sequencer': 29.7.0
+      '@jest/types': 29.6.3
+      babel-jest: 29.7.0(@babel/core@7.29.7)
+      chalk: 4.1.2
+      ci-info: 3.9.0
+      deepmerge: 4.3.1
+      glob: 7.2.3
+      graceful-fs: 4.2.11
+      jest-circus: 29.7.0
+      jest-environment-node: 29.7.0
+      jest-get-type: 29.6.3
+      jest-regex-util: 29.6.3
+      jest-resolve: 29.7.0
+      jest-runner: 29.7.0
+      jest-util: 29.7.0
+      jest-validate: 29.7.0
+      micromatch: 4.0.8
+      parse-json: 5.2.0
+      pretty-format: 29.7.0
+      slash: 3.0.0
+      strip-json-comments: 3.1.1
+    optionalDependencies:
+      '@types/node': 22.19.21
+      ts-node: 10.9.2(@types/node@22.19.21)(typescript@5.4.5)
+    transitivePeerDependencies:
+      - babel-plugin-macros
+      - supports-color
+
+  jest-config@29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5)):
+    dependencies:
+      '@babel/core': 7.29.7
+      '@jest/test-sequencer': 29.7.0
+      '@jest/types': 29.6.3
+      babel-jest: 29.7.0(@babel/core@7.29.7)
+      chalk: 4.1.2
+      ci-info: 3.9.0
+      deepmerge: 4.3.1
+      glob: 7.2.3
+      graceful-fs: 4.2.11
+      jest-circus: 29.7.0
+      jest-environment-node: 29.7.0
+      jest-get-type: 29.6.3
+      jest-regex-util: 29.6.3
+      jest-resolve: 29.7.0
+      jest-runner: 29.7.0
+      jest-util: 29.7.0
+      jest-validate: 29.7.0
+      micromatch: 4.0.8
+      parse-json: 5.2.0
+      pretty-format: 29.7.0
+      slash: 3.0.0
+      strip-json-comments: 3.1.1
+    optionalDependencies:
+      '@types/node': 22.19.21
       ts-node: 10.9.2(@types/node@25.9.3)(typescript@5.4.5)
     transitivePeerDependencies:
       - babel-plugin-macros
@@ -26507,7 +26846,7 @@ snapshots:
   jest-mock@29.7.0:
     dependencies:
       '@jest/types': 29.6.3
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
       jest-util: 29.7.0
 
   jest-pnp-resolver@1.2.3(jest-resolve@29.7.0):
@@ -26616,7 +26955,7 @@ snapshots:
   jest-util@29.7.0:
     dependencies:
       '@jest/types': 29.6.3
-      '@types/node': 22.19.19
+      '@types/node': 22.19.21
       chalk: 4.1.2
       ci-info: 3.9.0
       graceful-fs: 4.2.11
@@ -26673,6 +27012,18 @@ snapshots:
       '@jest/types': 29.6.3
       import-local: 3.2.0
       jest-cli: 29.7.0(@types/node@22.19.19)(ts-node@10.9.2(@types/node@22.19.19)(typescript@5.4.5))
+    transitivePeerDependencies:
+      - '@types/node'
+      - babel-plugin-macros
+      - supports-color
+      - ts-node
+
+  jest@29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5)):
+    dependencies:
+      '@jest/core': 29.7.0(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5))
+      '@jest/types': 29.6.3
+      import-local: 3.2.0
+      jest-cli: 29.7.0(@types/node@22.19.21)(ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5))
     transitivePeerDependencies:
       - '@types/node'
       - babel-plugin-macros
@@ -30204,6 +30555,25 @@ snapshots:
       yn: 3.1.1
     optional: true
 
+  ts-node@10.9.2(@types/node@22.19.21)(typescript@5.4.5):
+    dependencies:
+      '@cspotcode/source-map-support': 0.8.1
+      '@tsconfig/node10': 1.0.9
+      '@tsconfig/node12': 1.0.11
+      '@tsconfig/node14': 1.0.3
+      '@tsconfig/node16': 1.0.4
+      '@types/node': 22.19.21
+      acorn: 8.15.0
+      acorn-walk: 8.3.0
+      arg: 4.1.3
+      create-require: 1.1.1
+      diff: 4.0.4
+      make-error: 1.3.6
+      typescript: 5.4.5
+      v8-compile-cache-lib: 3.0.1
+      yn: 3.1.1
+    optional: true
+
   ts-node@10.9.2(@types/node@25.9.3)(typescript@5.4.5):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
@@ -30325,6 +30695,11 @@ snapshots:
       qs: 6.15.3
       tunnel: 0.0.6
       underscore: 1.13.8
+
+  typescript-language-server@5.3.0:
+    dependencies:
+      vscode-jsonrpc: 5.0.1
+      vscode-languageserver-protocol: 3.17.5
 
   typescript@5.4.5: {}
 
@@ -30555,6 +30930,8 @@ snapshots:
       terser: 5.39.2
       tsx: 4.21.0
       yaml: 2.8.3
+
+  vscode-jsonrpc@5.0.1: {}
 
   vscode-jsonrpc@8.2.0: {}
 
