@@ -17,6 +17,7 @@ import {
     ClientAction,
     AppAgentManifest,
     AppAction,
+    QuestionFormResponse,
     TypeAgentAction,
     StorageEncoding,
     AppAgentInitSettings,
@@ -761,7 +762,8 @@ export async function createAgentRpcClient(
             response:
                 | boolean
                 | number[]
-                | { selected: number; remember: boolean },
+                | { selected: number; remember: boolean }
+                | QuestionFormResponse,
             context: ActionContext<ShimContext>,
         ) {
             return withActionContextAsync(context, (contextParams) =>

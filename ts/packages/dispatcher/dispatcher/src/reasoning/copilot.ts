@@ -40,6 +40,18 @@ import { createLimiter } from "@typeagent/common-utils";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 import { formatUserContextForPrompt } from "./userContextPrompt.js";
+import {
+    buildReasoningActionResult,
+    estimateReasoningTokens,
+    formatThinkingDisplay,
+    reasoningTokenUsage,
+} from "./reasoningLoopBase.js";
+import {
+    buildReasoningForm,
+    formatReasoningFormResponse,
+    presentReasoningForm,
+    type ReasoningFormArgs,
+} from "./askUserForm.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -455,24 +467,6 @@ function buildPromptWithContext(
     return parts.join("\n\n");
 }
 
-/**
- * Format thinking block display with collapsible details
- * (Matches Claude implementation styling exactly)
- */
-function formatThinkingDisplay(thinking: string): string {
-    const escaped = thinking
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-
-    return [
-        `<details class="reasoning-thinking" open>`,
-        `<summary>Thinking</summary>`,
-        `<pre>${escaped}</pre>`,
-        `</details>`,
-    ].join("");
-}
-
 type ToolInput = Record<string, unknown>;
 
 function asToolInput(value: unknown): ToolInput | undefined {
@@ -726,7 +720,7 @@ function getCopilotSessionConfig(
                 const savedClientIO = systemContext.clientIO;
                 try {
                     systemContext.clientIO = capturingClientIO;
-                    await executeAction(
+                    const actionResult = await executeAction(
                         {
                             action: {
                                 schemaName,
@@ -738,10 +732,20 @@ function getCopilotSessionConfig(
                     );
                     systemContext.clientIO = savedClientIO;
 
-                    // Return result in Copilot SDK format
+                    // Surface the action's history text (its full, model-facing
+                    // output - e.g. the page text webFetch/webSearch carry
+                    // there) to the reasoning model, not just the brief display
+                    // summary the capture above collects.
+                    const { text, isError } = buildReasoningActionResult(
+                        actionResult,
+                        result,
+                    );
                     return {
-                        textResultForLlm: JSON.stringify(result),
-                        resultType: "success" as const,
+                        textResultForLlm: text,
+                        resultType: isError
+                            ? ("failure" as const)
+                            : ("success" as const),
+                        ...(isError && { error: text }),
                     };
                 } catch (error) {
                     systemContext.clientIO = savedClientIO;
@@ -960,6 +964,149 @@ function getCopilotSessionConfig(
         },
     });
 
+    const askUserTool = defineTool("ask_user", {
+        description: [
+            "Ask the user ONE multiple-choice question and block until they answer.",
+            "Use ONLY when you are genuinely blocked on a decision that only the user",
+            "can make - an ambiguous choice among concrete options, or a confirmation",
+            "before a destructive or irreversible action. Put the exact options in",
+            '`choices` (for a yes/no question use ["Yes", "No"]). Returns the option the',
+            "user picked. Prefer acting autonomously; do not ask when a reasonable safe",
+            "default exists.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                question: {
+                    type: "string",
+                    description: "The question to ask the user.",
+                },
+                choices: {
+                    type: "array",
+                    items: { type: "string" },
+                    description:
+                        'The options to choose from (at least 2). For a yes/no question use ["Yes", "No"].',
+                },
+            },
+            required: ["question", "choices"],
+        },
+        handler: async (args: Record<string, unknown>) => {
+            const question =
+                typeof args?.question === "string" ? args.question : "";
+            const choices = Array.isArray(args?.choices)
+                ? args.choices.map((c: unknown) => String(c))
+                : [];
+            if (choices.length < 2) {
+                return {
+                    textResultForLlm:
+                        'ask_user requires at least 2 choices (e.g. ["Yes", "No"]).',
+                    resultType: "failure" as const,
+                };
+            }
+            // Use the stable clientIO ref (execute_action transiently swaps
+            // systemContext.clientIO). question() blocks on the answer via the
+            // async-interaction path (respondToInteraction), which does not take
+            // the command lock, so it is safe while reasoning holds it.
+            const selected = await baseClientIO.question(
+                originatorRequestId,
+                question,
+                choices,
+                undefined,
+                "reasoning",
+            );
+            const answer = choices[selected] ?? choices[0] ?? "";
+            return {
+                textResultForLlm: `The user selected: "${answer}" (choice index ${selected}).`,
+                resultType: "success" as const,
+            };
+        },
+    });
+
+    const askUserFormTool = defineTool("ask_user_form", {
+        description: [
+            "Ask the user SEVERAL questions at once in a single form and block",
+            "until they submit. Prefer this over multiple `ask_user` calls when you",
+            "need more than one answer. Each question has an `id`, a `kind`",
+            '("pick" = choose one, "multiChoice" = choose any, "yesNo"), a `prompt`,',
+            "and (for pick/multiChoice) at least 2 `choices`. Set `allowFreeText`",
+            'to let the user type an "Other" value. Returns every answer keyed to its',
+            "question. Use ONLY when genuinely blocked on decisions only the user can",
+            "make; prefer acting autonomously when a safe default exists.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {
+                message: {
+                    type: "string",
+                    description: "Optional heading shown above the questions.",
+                },
+                questions: {
+                    type: "array",
+                    description: "One or more questions to present together.",
+                    items: {
+                        type: "object",
+                        properties: {
+                            id: {
+                                type: "string",
+                                description:
+                                    "Unique id for this question; answers are keyed by it.",
+                            },
+                            kind: {
+                                type: "string",
+                                enum: ["pick", "multiChoice", "yesNo"],
+                                description:
+                                    '"pick" = choose one, "multiChoice" = choose any, "yesNo" = yes/no.',
+                            },
+                            prompt: {
+                                type: "string",
+                                description: "The question text.",
+                            },
+                            choices: {
+                                type: "array",
+                                items: { type: "string" },
+                                description:
+                                    "Options for pick/multiChoice (at least 2). Omit for yesNo.",
+                            },
+                            allowFreeText: {
+                                type: "boolean",
+                                description:
+                                    'Allow an "Other: ___" free-text option (pick/multiChoice).',
+                            },
+                        },
+                        required: ["id", "kind", "prompt"],
+                    },
+                },
+                paged: {
+                    type: "boolean",
+                    description:
+                        "Present the questions as a step-by-step wizard instead of all at once.",
+                },
+            },
+            required: ["questions"],
+        },
+        handler: async (args: ReasoningFormArgs) => {
+            const built = buildReasoningForm(args);
+            if ("error" in built) {
+                return {
+                    textResultForLlm: built.error,
+                    resultType: "failure" as const,
+                };
+            }
+            const response = await presentReasoningForm(
+                baseClientIO,
+                originatorRequestId,
+                built.form,
+            );
+            return {
+                textResultForLlm: formatReasoningFormResponse(
+                    built.form,
+                    response,
+                ),
+                resultType: "success" as const,
+            };
+        },
+    });
+
     const model = resolveModel(context);
     const reasoningEffort = resolveReasoningEffort(context);
 
@@ -976,6 +1123,8 @@ function getCopilotSessionConfig(
             getConversationInfoTool,
             readConversationTool,
             getUserContextTool,
+            askUserTool,
+            askUserFormTool,
         ],
         availableTools: [
             "discover_actions",
@@ -985,6 +1134,8 @@ function getCopilotSessionConfig(
             "get_conversation_info",
             "read_conversation",
             "get_user_context",
+            "ask_user",
+            "ask_user_form",
             "github/fs/*",
             "github/search/*",
             "shell",
@@ -1019,6 +1170,10 @@ function getCopilotSessionConfig(
                 "## Editor Context Tools",
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file path, language, cursor/selection ranges, workspace, diagnostic counts). Contains NO file or selection text.",
                 "- For actual file/selection **text**, use the code agent's read actions (getActiveEditor, getSelection, getFileContent, getDiagnostics) via discover_actions/execute_action.",
+                "",
+                "## User Interaction",
+                '- `ask_user`: Ask the user ONE multiple-choice question and block for their answer. Strongly prefer to act autonomously with a safe default; use this ONLY when genuinely blocked on a decision only the user can make (an ambiguous choice among concrete options, or confirmation before a destructive/irreversible action). Provide the exact options (for yes/no use ["Yes", "No"]), and ask at most one such question.',
+                "- `ask_user_form`: Ask SEVERAL questions at once (pick / multiChoice / yesNo, optional free-text) in one form and block for all answers. Prefer this over multiple `ask_user` calls when a single blocking moment needs more than one answer.",
                 "",
                 "## Guidelines",
                 '- **For follow-up questions** that refer to earlier turns (e.g. "those", "it", "mine"), consult the [Recent conversation context] block first; use `search_memory` only for older history not shown there',
@@ -1060,27 +1215,6 @@ async function createCopilotSession(
         }
         throw err;
     }
-}
-
-/**
- * Build the reasoning token-usage record reported to the dispatcher (surfaced
- * as "Action Tokens" in the UI). Returns undefined when no tokens were counted
- * so the UI shows "not reported" rather than a misleading zero.
- */
-function reasoningTokenUsage(
-    inputTokens: number,
-    outputTokens: number,
-    cachedTokens: number,
-) {
-    const total = inputTokens + outputTokens + cachedTokens;
-    return total > 0
-        ? {
-              prompt_tokens: inputTokens,
-              completion_tokens: outputTokens,
-              total_tokens: total,
-              ...(cachedTokens > 0 && { cached_tokens: cachedTokens }),
-          }
-        : undefined;
 }
 
 /**
@@ -1148,6 +1282,14 @@ async function executeReasoningWithoutPlanning(
     let usageInputTokens = 0;
     let usageOutputTokens = 0;
     let usageCachedTokens = 0;
+    // Per-turn reasoning ("thinking") token counts, tabulated one entry per
+    // turn that reported any, so the UI can show a per-block "Thinking Tokens"
+    // breakdown. These are a subset of usageOutputTokens (not added again).
+    const usageThinkingTokens: number[] = [];
+    // Reasoning text per thinking block. Used to estimate thinking tokens when
+    // the provider reports no billed reasoningTokens (Anthropic-backed sessions
+    // fold thinking into output_tokens), so the UI still shows an approximation.
+    const reasoningBlockTexts: string[] = [];
 
     // Subscribe to reasoning events (thinking blocks)
     const unsubscribeReasoningDelta = session.on(
@@ -1158,7 +1300,10 @@ async function executeReasoningWithoutPlanning(
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
-                        content: formatThinkingDisplay(currentReasoning),
+                        content: formatThinkingDisplay(
+                            currentReasoning,
+                            estimateReasoningTokens(currentReasoning),
+                        ),
                     },
                     "temporary",
                 );
@@ -1175,10 +1320,14 @@ async function executeReasoningWithoutPlanning(
             ) {
                 // Final reasoning content - display as permanent thinking block
                 lastReasoningContent = event.data.content;
+                reasoningBlockTexts.push(event.data.content);
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
-                        content: formatThinkingDisplay(event.data.content),
+                        content: formatThinkingDisplay(
+                            event.data.content,
+                            estimateReasoningTokens(event.data.content),
+                        ),
                     },
                     displayMode,
                 );
@@ -1256,13 +1405,27 @@ async function executeReasoningWithoutPlanning(
     );
 
     // Track cache read/write tokens separately from fresh input tokens so the
-    // UI can report them as a distinct "cached" figure.
+    // UI can report them as a distinct "cached" figure. reasoningTokens (a
+    // subset of outputTokens) is tabulated per turn so the UI can show a
+    // distinct "Thinking Tokens" figure.
     const unsubscribeUsage = session.on("assistant.usage", (event: any) => {
+        debug(
+            "assistant.usage in=%d out=%d cacheR=%d cacheW=%d reasoning=%s",
+            event.data?.inputTokens ?? 0,
+            event.data?.outputTokens ?? 0,
+            event.data?.cacheReadTokens ?? 0,
+            event.data?.cacheWriteTokens ?? 0,
+            event.data?.reasoningTokens ?? "absent",
+        );
         usageInputTokens += event.data?.inputTokens ?? 0;
         usageOutputTokens += event.data?.outputTokens ?? 0;
         usageCachedTokens +=
             (event.data?.cacheReadTokens ?? 0) +
             (event.data?.cacheWriteTokens ?? 0);
+        const reasoningTokens = event.data?.reasoningTokens ?? 0;
+        if (reasoningTokens > 0) {
+            usageThinkingTokens.push(reasoningTokens);
+        }
     });
 
     try {
@@ -1308,10 +1471,23 @@ async function executeReasoningWithoutPlanning(
             return undefined;
         }
         const result = createActionResultNoDisplay(finalResult);
+        // Prefer the provider's billed reasoning-token count; when it is not
+        // reported (Anthropic-backed sessions fold thinking into output_tokens),
+        // fall back to a rough per-block estimate from the reasoning text so the
+        // UI can still show an approximate figure.
+        const thinkingEstimated =
+            usageThinkingTokens.length === 0 && reasoningBlockTexts.length > 0;
+        const thinkingTokens = thinkingEstimated
+            ? reasoningBlockTexts
+                  .map(estimateReasoningTokens)
+                  .filter((n) => n > 0)
+            : usageThinkingTokens;
         result.tokenUsage = reasoningTokenUsage(
             usageInputTokens,
             usageOutputTokens,
             usageCachedTokens,
+            thinkingTokens,
+            thinkingEstimated,
         );
         return result;
     } catch (error) {
@@ -1340,6 +1516,7 @@ async function executeReasoningWithoutPlanning(
  * Execute reasoning action with trace capture
  * Captures execution traces for plan generation
  */
+// code-complexity-allow: reasoning-session orchestration with event subscriptions and per-turn token tracking
 async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
@@ -1424,6 +1601,16 @@ async function executeReasoningWithTracing(
         let usageInputTokens = 0;
         let usageOutputTokens = 0;
         let usageCachedTokens = 0;
+        // Per-turn reasoning ("thinking") token counts, tabulated one entry per
+        // turn that reported any, so the UI can show a per-block "Thinking
+        // Tokens" breakdown. These are a subset of usageOutputTokens (not added
+        // again).
+        const usageThinkingTokens: number[] = [];
+        // Reasoning text per thinking block. Used to estimate thinking tokens
+        // when the provider reports no billed reasoningTokens (Anthropic-backed
+        // sessions fold thinking into output_tokens), so the UI still shows an
+        // approximation.
+        const reasoningBlockTexts: string[] = [];
 
         // Subscribe to reasoning events and record thinking
         const unsubscribeReasoningDelta = session.on(
@@ -1434,7 +1621,10 @@ async function executeReasoningWithTracing(
                     context.actionIO.appendDisplay(
                         {
                             type: "markdown",
-                            content: formatThinkingDisplay(currentReasoning),
+                            content: formatThinkingDisplay(
+                                currentReasoning,
+                                estimateReasoningTokens(currentReasoning),
+                            ),
                         },
                         "temporary",
                     );
@@ -1450,6 +1640,7 @@ async function executeReasoningWithTracing(
                     event.data.content !== lastReasoningContent
                 ) {
                     lastReasoningContent = event.data.content;
+                    reasoningBlockTexts.push(event.data.content);
                     // Record thinking for trace
                     tracer.recordThinking({
                         content: [
@@ -1460,7 +1651,10 @@ async function executeReasoningWithTracing(
                     context.actionIO.appendDisplay(
                         {
                             type: "markdown",
-                            content: formatThinkingDisplay(event.data.content),
+                            content: formatThinkingDisplay(
+                                event.data.content,
+                                estimateReasoningTokens(event.data.content),
+                            ),
                         },
                         displayMode,
                     );
@@ -1542,13 +1736,27 @@ async function executeReasoningWithTracing(
         );
 
         // Track cache read/write tokens separately from fresh input tokens so
-        // the UI can report them as a distinct "cached" figure.
+        // the UI can report them as a distinct "cached" figure. reasoningTokens
+        // (a subset of outputTokens) is tabulated per turn so the UI can show a
+        // distinct "Thinking Tokens" figure.
         const unsubscribeUsage = session.on("assistant.usage", (event: any) => {
+            debug(
+                "assistant.usage in=%d out=%d cacheR=%d cacheW=%d reasoning=%s",
+                event.data?.inputTokens ?? 0,
+                event.data?.outputTokens ?? 0,
+                event.data?.cacheReadTokens ?? 0,
+                event.data?.cacheWriteTokens ?? 0,
+                event.data?.reasoningTokens ?? "absent",
+            );
             usageInputTokens += event.data?.inputTokens ?? 0;
             usageOutputTokens += event.data?.outputTokens ?? 0;
             usageCachedTokens +=
                 (event.data?.cacheReadTokens ?? 0) +
                 (event.data?.cacheWriteTokens ?? 0);
+            const reasoningTokens = event.data?.reasoningTokens ?? 0;
+            if (reasoningTokens > 0) {
+                usageThinkingTokens.push(reasoningTokens);
+            }
         });
 
         try {
@@ -1627,10 +1835,24 @@ async function executeReasoningWithTracing(
                 return undefined;
             }
             const result = createActionResultNoDisplay(finalResult);
+            // Prefer the provider's billed reasoning-token count; when it is not
+            // reported (Anthropic-backed sessions fold thinking into
+            // output_tokens), fall back to a rough per-block estimate from the
+            // reasoning text so the UI can still show an approximate figure.
+            const thinkingEstimated =
+                usageThinkingTokens.length === 0 &&
+                reasoningBlockTexts.length > 0;
+            const thinkingTokens = thinkingEstimated
+                ? reasoningBlockTexts
+                      .map(estimateReasoningTokens)
+                      .filter((n) => n > 0)
+                : usageThinkingTokens;
             result.tokenUsage = reasoningTokenUsage(
                 usageInputTokens,
                 usageOutputTokens,
                 usageCachedTokens,
+                thinkingTokens,
+                thinkingEstimated,
             );
             return result;
         } finally {
