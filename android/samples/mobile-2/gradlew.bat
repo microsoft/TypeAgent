@@ -1,3 +1,6 @@
+:: Copyright (c) Microsoft Corporation.
+:: Licensed under the MIT License.
+
 @rem
 @rem Copyright 2015 the original author or authors.
 @rem
