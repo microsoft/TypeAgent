@@ -14,6 +14,8 @@ export interface ReasoningToolDefinition {
     description: string;
     inputSchema: object;
     handler: (args: Record<string, unknown>) => Promise<ToolResult>;
+    /** Stop the loop immediately; an error result ends the session as failed. */
+    isTerminal?: (args: Record<string, unknown>, result: ToolResult) => boolean;
 }
 
 export interface ToolResult {

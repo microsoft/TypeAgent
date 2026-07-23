@@ -21,6 +21,7 @@
     "./helpers/status": "./dist/helpers/status.js",
     "./helpers/command": "./dist/helpers/command.js",
     "./helpers/completion": "./dist/helpers/completion/index.js",
+    "./reasoning": "./dist/reasoning.js",
     "./internal": "./dist/internal.js",
     "./explorer": "./dist/explorer.js"
   },
