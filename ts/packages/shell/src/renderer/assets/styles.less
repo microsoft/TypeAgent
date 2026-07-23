@@ -973,6 +973,48 @@ details.reasoning-thinking pre {
   overflow-y: auto;
 }
 
+/* Logged tool calls in a reasoning step. Every tool call (single or a folded
+   run) renders as a native <details> whose <summary> is a clickable
+   "Tool: <name> xN" line; the tool name renders as an inline-code chip and
+   expanding the line reveals only that call's own JSON (like the action JSON
+   view). The disclosure marker is hidden so it reads as a plain line. */
+.reasoning-tool-call {
+  margin: 4px 0;
+}
+
+.reasoning-tool-call-summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.reasoning-tool-call-summary::-webkit-details-marker {
+  display: none;
+}
+
+.reasoning-tool-call-summary code {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d7ba7d;
+  font-family: monospace;
+  font-size: 0.95em;
+}
+
+.reasoning-tool-call-json {
+  margin: 4px 0 0 0;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.03);
+  max-width: 100%;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
 // Panel below an agent message that shows the action JSON when the
 // user clicks the agent name. Mirrors the chat-ui details-row pattern
 // so the JSON expands beneath the response instead of overlaying it.
