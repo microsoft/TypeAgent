@@ -49,6 +49,18 @@ for (const stream of [process.stdout, process.stderr]) {
     });
 }
 
+// Clear the terminal (screen + scrollback) so a relaunched worker starts with a
+// clean console. Without this, each in-place restart stacks its startup banners
+// on top of the previous worker's output - including now-stale notices like a
+// prior CONFIG DRIFT warning - which is confusing. Only clear a real TTY:
+// writing escape codes to a pipe or file would just inject garbage. \x1b[2J
+// clears the screen, \x1b[3J drops the scrollback, \x1b[H homes the cursor.
+function clearConsoleForRestart() {
+    if (process.stdout.isTTY) {
+        process.stdout.write("\x1b[2J\x1b[3J\x1b[H");
+    }
+}
+
 // Supervisor bootstrap. The first invocation (no TYPEAGENT_SUPERVISED marker)
 // stays alive as a thin supervisor and spawn-loops a worker copy of itself,
 // sharing this process's stdio. Because the supervisor never exits, the
@@ -58,7 +70,13 @@ for (const stream of [process.stdout, process.stderr]) {
 // other exit ends the supervisor with that same code.
 if (process.env.TYPEAGENT_SUPERVISED !== "1") {
     let code: number | null = RESTART_EXIT_CODE;
+    let relaunching = false;
     while (code === RESTART_EXIT_CODE) {
+        // On an in-place restart (every iteration after the first), wipe the
+        // console first so stale output from the exited worker doesn't linger.
+        if (relaunching) {
+            clearConsoleForRestart();
+        }
         const result = spawnSync(
             process.execPath,
             [...process.execArgv, ...process.argv.slice(1)],
@@ -76,6 +94,7 @@ if (process.env.TYPEAGENT_SUPERVISED !== "1") {
             process.exit(1);
         }
         code = result.status;
+        relaunching = true;
     }
     process.exit(code ?? 0);
 }

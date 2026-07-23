@@ -45,6 +45,7 @@ export function createClientIORpcServer(
         setDynamicDisplay: (...args) => clientIO.setDynamicDisplay(...args),
         notify: (...args) => clientIO.notify(...args),
         requestChoice: (...args) => clientIO.requestChoice(...args),
+        requestForm: (...args) => clientIO.requestForm(...args),
         requestInteraction: (...args) => clientIO.requestInteraction(...args),
         interactionResolved: (...args) => clientIO.interactionResolved(...args),
         interactionCancelled: (...args) =>

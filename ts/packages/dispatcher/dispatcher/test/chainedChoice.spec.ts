@@ -94,6 +94,7 @@ function makeClientIO(captured: CapturedChoice[]): ClientIO {
         requestChoice: (_requestId, choiceId, _type, message) => {
             captured.push({ choiceId, message });
         },
+        requestForm: () => {},
         requestInteraction: () => {},
         interactionResolved: () => {},
         interactionCancelled: () => {},

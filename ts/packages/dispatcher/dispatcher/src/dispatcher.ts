@@ -4,6 +4,7 @@
 import {
     DisplayType,
     DynamicDisplay,
+    QuestionFormResponse,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
 import type { CommandResult } from "@typeagent/dispatcher-types";
@@ -538,7 +539,8 @@ export function createDispatcherFromContext(
             response:
                 | boolean
                 | number[]
-                | { selected: number; remember: boolean },
+                | { selected: number; remember: boolean }
+                | QuestionFormResponse,
         ) {
             return context.commandLock(async () => {
                 const pending = context.pendingChoiceRoutes.get(choiceId);

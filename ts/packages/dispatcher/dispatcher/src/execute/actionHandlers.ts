@@ -343,6 +343,15 @@ export function emitActionResult(
             acc.cached_tokens =
                 (acc.cached_tokens ?? 0) + result.tokenUsage.cached_tokens;
         }
+        if (result.tokenUsage.thinking_tokens !== undefined) {
+            acc.thinking_tokens = [
+                ...(acc.thinking_tokens ?? []),
+                ...result.tokenUsage.thinking_tokens,
+            ];
+        }
+        if (result.tokenUsage.thinking_tokens_estimated) {
+            acc.thinking_tokens_estimated = true;
+        }
         commandResult.actionTokenUsage = acc;
     }
     if (result.displayContent !== undefined) {
@@ -364,15 +373,32 @@ export function emitActionResult(
             requestId,
             actionIndex,
         });
-        systemContext.clientIO.requestChoice(
-            requestId,
-            pc.choiceId,
-            pc.type,
-            pc.message,
-            pc.type === "yesNo" ? [] : pc.choices,
-            schemaName,
-            pc.type === "pickRemember" ? pc.checkboxLabel : undefined,
-        );
+        if (pc.type === "form") {
+            // Only include optionals when set - exactOptionalPropertyTypes
+            // forbids assigning `undefined` to QuestionForm's optional props.
+            systemContext.clientIO.requestForm(
+                requestId,
+                pc.choiceId,
+                {
+                    fields: pc.fields,
+                    ...(pc.message !== undefined
+                        ? { message: pc.message }
+                        : {}),
+                    ...(pc.paged !== undefined ? { paged: pc.paged } : {}),
+                },
+                schemaName,
+            );
+        } else {
+            systemContext.clientIO.requestChoice(
+                requestId,
+                pc.choiceId,
+                pc.type,
+                pc.message,
+                pc.type === "yesNo" ? [] : pc.choices,
+                schemaName,
+                pc.type === "pickRemember" ? pc.checkboxLabel : undefined,
+            );
+        }
     }
 }
 

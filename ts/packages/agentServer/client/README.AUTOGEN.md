@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=04fbfb30a474f5ce625eba7bf97ac4448ffa83d1f1f1cd231891ceb5f3609946 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=ac666c56240da8bdd30324f4c777c7eb743862cea02da6438bc1b4dd491c6deb -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-server-client — AI-generated documentation
@@ -12,29 +12,37 @@
 
 ## Overview
 
-The `@typeagent/agent-server-client` package is a TypeScript library designed to facilitate interaction with a running `agentServer`. It provides tools for managing server connections, handling conversations, and ensuring the server's availability. This package is a foundational component of the TypeAgent ecosystem and is used by various clients, including the Shell, CLI, and other integrations.
+The `@typeagent/agent-server-client` package is a TypeScript library that provides tools for interacting with a running `agentServer`. It is a core component of the TypeAgent ecosystem, enabling clients such as the Shell, CLI, and browser extensions to manage server connections, handle conversations, and ensure the server is running when needed.
 
 ## What it does
 
-The package offers a comprehensive set of features for interacting with the `agentServer`:
+This package offers a range of features to facilitate interaction with the `agentServer`:
 
-- **Server Connection Management**:
+### Server Connection Management
 
-  - `connectAgentServer`: Establishes a WebSocket connection to an `agentServer` and returns an `AgentServerConnection` object. This object provides methods for managing conversations and interacting with the server.
-  - `isServerRunning`: Checks if an `agentServer` is already running at a specified WebSocket URL.
-  - `ensureAgentServer`: Ensures that the `agentServer` is running, spawning it if necessary. This includes options for hidden mode and idle timeout.
+- **`connectAgentServer`**: Establishes a WebSocket connection to an `agentServer` and returns an `AgentServerConnection` object. This object provides methods for managing conversations and interacting with the server.
+- **`isServerRunning`**: Checks if an `agentServer` is already running at a specified WebSocket URL.
+- **`ensureAgentServer`**: Ensures that the `agentServer` is running, spawning it if necessary. Options include running the server in hidden mode and setting an idle timeout.
 
-- **Conversation Management**:
+### Conversation Management
 
-  - The `AgentServerConnection` object includes methods for creating, listing, renaming, and deleting conversations. It also allows clients to join and leave conversations.
-  - The `conversation` module provides additional utilities for managing conversation lifecycles, such as finding or creating conversations, switching between conversations, and handling conversation names.
+The `AgentServerConnection` object provides methods for managing conversations:
 
-- **Convenience Wrappers**:
+- **Create, list, rename, and delete conversations**: Use methods like `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation`.
+- **Join and leave conversations**: Use `joinConversation` and `leaveConversation` to manage participation in conversations.
 
-  - `ensureAndConnectConversation`: Combines multiple steps into a single operation, including ensuring the server is running, connecting to it, and joining a conversation.
+Additionally, the `conversation` module includes utilities for:
 
-- **Discovery**:
-  - The `discovery` module helps external clients locate the dynamically assigned port of an in-process agent, which is useful for browser extensions, IDE plugins, and other external integrations.
+- Managing conversation lifecycles, such as finding or creating conversations and switching between them.
+- Handling conversation names, including normalization and uniqueness checks.
+
+### Convenience Wrappers
+
+- **`ensureAndConnectConversation`**: Combines multiple steps into a single operation, including ensuring the server is running, connecting to it, and joining a conversation.
+
+### Discovery
+
+The `discovery` module helps external clients locate the dynamically assigned port of an in-process agent. This is particularly useful for browser extensions, IDE plugins, and other external integrations.
 
 These features make the package essential for applications that need to interact with the `agentServer` for conversation and server lifecycle management.
 
@@ -158,6 +166,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-server-client docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

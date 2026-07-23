@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=3e29c686ee854d937cbe61d9c7bdb6690e06b84b891aa56f924d5b52077036b4 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=f6f64c22a6b9021b678070b4a803e0ea5418f3e2b9cc2db91263b3d8041930cf -->
 <!-- AUTOGEN:DOCS:SOURCE: (no hand-written ./README.md found at last regen) -->
 
 # visualstudio-extension-webview — AI-generated documentation
@@ -12,60 +12,85 @@
 
 ## Overview
 
-The `visualstudio-extension-webview` package provides the WebView2 chat panel content for the Visual Studio TypeAgent extension. It integrates with the Visual Studio environment to offer a chat interface that interacts with TypeAgent services, enabling real-time communication and interaction within the IDE.
+The `visualstudio-extension-webview` package provides the WebView2-based chat panel content for the Visual Studio TypeAgent extension. It integrates with the Visual Studio IDE to enable a chat interface that interacts with TypeAgent services, facilitating real-time communication and dynamic content display within the development environment.
+
+This package is a TypeAgent application agent and relies on several TypeAgent components, including `@typeagent/agent-rpc`, `@typeagent/agent-sdk`, and `chat-ui`, to deliver its functionality.
 
 ## What it does
 
-This package enables a chat panel within Visual Studio using WebView2 technology. It connects to TypeAgent services to facilitate real-time communication and interaction. The main functionalities include:
+The `visualstudio-extension-webview` package powers the chat panel embedded in Visual Studio. It uses WebView2 to render the interface and connects to TypeAgent services to handle real-time interactions. Key capabilities include:
 
-- Displaying chat messages and dynamic content.
-- Handling user input and sending messages (`handleUserMessage`).
-- Fetching completions and dynamic display content from the dispatcher (`getCompletions`, `getDynamicDisplay`).
-- Managing connection status and reconnection logic.
+- **Displaying chat messages and dynamic content**: The chat panel renders messages and other content dynamically, using the `chat-ui` package for its interface.
+- **Handling user input**: User messages are processed and sent to the dispatcher via the `handleUserMessage` function.
+- **Fetching completions and dynamic display content**: The package supports actions like `getCompletions` and `getDynamicDisplay`, which retrieve suggestions and content updates from the dispatcher.
+- **Connection management**: It manages the connection to the dispatcher, including reconnection logic and status updates.
 
-The package interacts with several other TypeAgent components, including `@typeagent/agent-rpc`, `@typeagent/agent-sdk`, `@typeagent/agent-server-protocol`, `@typeagent/dispatcher-rpc`, and `chat-ui`.
+The package interacts with other TypeAgent components to enable these features. For example, it uses `@typeagent/dispatcher-rpc` to communicate with the dispatcher and `@typeagent/agent-server-protocol` for server interactions.
 
 ## Setup
 
-To set up the `visualstudio-extension-webview` package, ensure you have the necessary environment variables and dependencies configured. The key environment variable is:
+To use the `visualstudio-extension-webview` package, ensure the following environment variable is configured:
 
-- `AGENT_SERVER_DEFAULT_URL`: The default URL for the agent server.
+- `AGENT_SERVER_DEFAULT_URL`: This specifies the default URL for the agent server. The value should point to the server instance that the chat panel will connect to.
 
-For detailed setup instructions, including how to obtain and configure this environment variable, refer to the hand-written README.
+For detailed instructions on obtaining and configuring this variable, refer to the hand-written README.
 
 ## Key Files
 
-The package's architecture is centered around three main files:
+The package's functionality is implemented across three primary files:
 
-- [main.ts](./src/main.ts): Initializes the chat panel and manages the connection to the dispatcher. It sets up the UI elements and handles user interactions.
-- [dispatcherConnection.ts](./src/dispatcherConnection.ts): Manages the connection to the dispatcher, including creating RPC servers and clients, and handling connection changes.
-- [platformAdapter.ts](./src/platformAdapter.ts): Provides platform-specific adaptations for WebView2, such as handling link clicks and posting messages to the host.
+### [main.ts](./src/main.ts)
 
-### main.ts
+This is the entry point of the package. It initializes the chat panel and sets up the connection to the dispatcher. Key responsibilities include:
 
-The [main.ts](./src/main.ts) file is the entry point for the package. It initializes the chat panel using the `ChatPanel` class from the `chat-ui` package and sets up the connection to the dispatcher. It also handles user interactions, such as sending messages and fetching completions.
+- Creating the chat panel UI using the `ChatPanel` class from the `chat-ui` package.
+- Handling user interactions, such as sending messages and fetching completions.
+- Managing the connection banner to indicate the connection status.
 
-### dispatcherConnection.ts
+The `initialize` function in this file sets up the chat panel and its event handlers. It also manages the lifecycle of the dispatcher connection through the `dispatcherHandle` object.
 
-The [dispatcherConnection.ts](./src/dispatcherConnection.ts) file manages the connection to the dispatcher. It creates RPC servers and clients using the `@typeagent/agent-rpc` and `@typeagent/dispatcher-rpc` packages. It also handles connection changes and reconnection logic.
+### [dispatcherConnection.ts](./src/dispatcherConnection.ts)
 
-### platformAdapter.ts
+This file manages the connection to the dispatcher. It is responsible for:
 
-The [platformAdapter.ts](./src/platformAdapter.ts) file provides platform-specific adaptations for WebView2. It handles link clicks and posts messages to the host using `window.chrome.webview.postMessage`. This allows the chat panel to interact with the Visual Studio environment.
+- Establishing and maintaining the connection to the dispatcher using `@typeagent/dispatcher-rpc`.
+- Creating RPC servers and clients for communication.
+- Handling connection changes and implementing reconnection logic.
+
+The `connectDispatcher` function is the main entry point for setting up the dispatcher connection. It uses the `createDispatcherRpcClient` and `createClientIORpcServer` utilities to establish communication channels.
+
+### [platformAdapter.ts](./src/platformAdapter.ts)
+
+This file provides platform-specific adaptations for the WebView2 environment. Its primary role is to bridge the gap between the web-based chat panel and the Visual Studio host. Key functionalities include:
+
+- Handling link clicks within the chat panel. Links are posted to the host using `window.chrome.webview.postMessage`, which allows the Visual Studio environment to open them in the default browser.
+- Providing a fallback mechanism for development environments where WebView2 is not available.
+
+The `vsPlatformAdapter` object implements the `PlatformAdapter` interface from the `chat-ui` package.
 
 ## How to extend
 
-To extend the functionality of the `visualstudio-extension-webview` package, follow these steps:
+To extend the `visualstudio-extension-webview` package, follow these steps:
 
-1. **Start with `main.ts`**: This file is the entry point for initializing the chat panel. You can add new features or modify existing ones by updating the initialization logic and event handlers.
+1. **Start with `main.ts`**:
 
-2. **Modify `dispatcherConnection.ts`**: If you need to change how the package interacts with the dispatcher, this is the file to edit. You can add new RPC methods or modify the connection handling logic.
+   - This file is the entry point for the package. To add new features, modify the initialization logic or extend the event handlers in this file.
+   - For example, you can add new UI elements to the chat panel or implement additional user interaction handlers.
 
-3. **Update `platformAdapter.ts`**: For platform-specific changes, such as handling new types of messages or interactions, update the platform adapter.
+2. **Modify `dispatcherConnection.ts`**:
 
-4. **Test your changes**: Ensure that your modifications are working correctly by running the package in the Visual Studio environment. You can use the built-in testing tools to verify functionality.
+   - If your changes involve new interactions with the dispatcher, update this file. You can add new RPC methods or modify the existing connection logic.
+   - For instance, you might implement a new action that retrieves additional data from the dispatcher.
 
-By following these steps, you can effectively extend and customize the `visualstudio-extension-webview` package to meet your needs.
+3. **Update `platformAdapter.ts`**:
+
+   - For platform-specific changes, such as handling new types of messages or interactions, update the `vsPlatformAdapter` object.
+   - This is particularly useful if you need to extend the communication between the WebView2 panel and the Visual Studio host.
+
+4. **Test your changes**:
+   - Run the package in the Visual Studio environment to verify your modifications. Use the built-in testing tools to ensure that the new functionality works as expected.
+
+By following these steps, you can effectively extend and customize the `visualstudio-extension-webview` package to meet specific requirements.
 
 ## Reference
 
@@ -94,6 +119,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `127a36a95a15e918be533d6eaaf08adebe9070d9` on `2026-06-26T03:01:52.873Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-extension-webview docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-extension-webview docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

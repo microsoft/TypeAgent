@@ -306,7 +306,27 @@ export function createAgentServerConnection(
             currentChannel.deleteChannel(
                 getClientIOChannelName(conversationId),
             );
-            await rpc.invoke("leaveConversation", conversationId);
+            try {
+                await rpc.invoke("leaveConversation", conversationId);
+            } catch (e) {
+                // The local channels are already torn down above, so from the
+                // client's side we've left. The rpc call only notifies the
+                // server; when the control channel is already disconnected
+                // (e.g. the server dropped before the shell shuts down) that
+                // notification can't be delivered and is moot. Swallow only
+                // that case so close()/session-switch don't surface a spurious
+                // "Agent channel disconnected". Real failures still propagate.
+                if (
+                    !(e instanceof Error) ||
+                    !e.message.includes("Agent channel disconnected")
+                ) {
+                    throw e;
+                }
+                debug(
+                    "leaveConversation: control channel already disconnected; skipped server notification for %s",
+                    conversationId,
+                );
+            }
         },
 
         async createConversation(
