@@ -1,0 +1,8 @@
+[project]
+name = "typeagent-explore-python-lsp"
+version = "0.0.1"
+requires-python = ">=3.11"
+dependencies = ["python-lsp-server==1.14.0"]
+
+[tool.uv]
+package = false
