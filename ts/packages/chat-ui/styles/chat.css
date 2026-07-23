@@ -1268,7 +1268,9 @@ table.sc-table {
 
 table.sc-table th,
 table.sc-table td {
-  border: 1px solid var(--vscode-editorWidget-border, #ccc);
+  /* Final fallback (used where --vscode-* isn't defined, e.g. the Electron
+     shell) is a mid-gray alpha so borders read on both light and dark. */
+  border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.35));
   padding: 4px 10px;
   text-align: left;
   vertical-align: top;
@@ -1285,7 +1287,9 @@ table.sc-table thead th {
 }
 
 table.sc-table tbody tr:nth-child(even) {
-  background: var(--vscode-list-hoverBackground, rgba(0, 0, 0, 0.04));
+  /* Mid-gray alpha fallback so the zebra stripe stays visible on the Electron
+     shell's dark bubbles (where --vscode-list-hoverBackground is undefined). */
+  background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12));
 }
 
 .sc-cell-number {
@@ -1801,27 +1805,77 @@ table.sc-kv-table.sc-card-fields {
    `!important` because the host theme (e.g. vscode-shell's overlay)
    applies `color: ... !important` to the parent bubble; without it
    inheritance makes the spans render as the bubble's foreground color. */
-.chat-message-details pre.chat-json .json-key {
+.chat-message-details pre.chat-json .json-key,
+.reasoning-tool-call pre.chat-json .json-key {
   color: #9c27b0 !important;
   font-weight: 600;
 }
-.chat-message-details pre.chat-json .json-string {
+.chat-message-details pre.chat-json .json-string,
+.reasoning-tool-call pre.chat-json .json-string {
   color: #0a8043 !important;
 }
-.chat-message-details pre.chat-json .json-number {
+.chat-message-details pre.chat-json .json-number,
+.reasoning-tool-call pre.chat-json .json-number {
   color: #1976d2 !important;
 }
-.chat-message-details pre.chat-json .json-bool {
+.chat-message-details pre.chat-json .json-bool,
+.reasoning-tool-call pre.chat-json .json-bool {
   color: #b85c00 !important;
   font-weight: 600;
 }
-.chat-message-details pre.chat-json .json-null {
+.chat-message-details pre.chat-json .json-null,
+.reasoning-tool-call pre.chat-json .json-null {
   color: #888 !important;
   font-style: italic;
 }
 
 .chat-message-details.chat-details-visible {
   display: block;
+}
+
+/* Logged tool calls inside a reasoning step. Every tool call (single or a folded
+   run "Tool: <name> xN") renders as a native <details> whose <summary> is a
+   clickable line with the tool name as inline code; expanding it reveals only
+   that call's own JSON (same look as the clickable action JSON view), independent
+   of the enclosing action's JSON. The disclosure marker is hidden so it reads as
+   a plain line. */
+.reasoning-tool-call {
+  margin: 2px 0;
+}
+.reasoning-tool-call-summary {
+  cursor: pointer;
+  list-style: none;
+}
+.reasoning-tool-call-summary::-webkit-details-marker {
+  display: none;
+}
+.reasoning-tool-call-summary strong {
+  font-weight: 600;
+}
+/* Tool name chip — light-gray background, yellow/gold text (matches how inline
+   code renders in the reasoning text and how a single tool call looks). */
+.reasoning-tool-call-summary code {
+  background: rgba(127, 127, 127, 0.18);
+  color: #9a7d0a;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.95em;
+}
+.reasoning-tool-call-json {
+  margin: 4px 0 0 0;
+  padding: 8px;
+  background: rgba(127, 127, 127, 0.1);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  max-width: 100%;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 /* =========================================================================
@@ -1857,6 +1911,166 @@ table.sc-kv-table.sc-card-fields {
     0px 0.5px 1px rgba(0, 0, 0, 0.1),
     0px 0px 0px 3.5px rgba(58, 108, 217, 0.5);
   outline: 0;
+}
+
+/* =========================================================================
+   Pick + remember and multi-question form cards
+
+   These panels are built by chat-ui's ChatPanel (addPickRememberPrompt /
+   addQuestionForm). Without these rules the radios/checkboxes collapse to a
+   cramped inline row and the Confirm/Cancel buttons stack full width (they
+   inherit .choice-button's width:100%). Mirrors the Electron shell's
+   styles.less; colors use --vscode-* vars so they read in light and dark.
+   ========================================================================= */
+
+/* Confirm/Cancel (and Submit) button row for both card types. */
+.checkbox-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pick-remember-panel,
+.question-form-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--vscode-widget-border, #e0e0e0);
+  border-radius: 10px;
+  background: var(--vscode-editorWidget-background, #fafafa);
+}
+
+.pick-remember-choice,
+.question-form-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+}
+
+.pick-remember-choice:hover,
+.question-form-choice:hover {
+  background: var(--vscode-list-hoverBackground, #eef4ff);
+}
+
+.pick-remember-choice input,
+.question-form-choice input[type="radio"],
+.question-form-choice input[type="checkbox"] {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.pick-remember-choice span,
+.question-form-choice span {
+  font-size: 13px;
+}
+
+.pick-remember-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin-top: 6px;
+  padding: 6px 8px 0;
+  border-top: 1px solid var(--vscode-widget-border, #e8e8e8);
+  font-size: 12px;
+}
+
+.pick-remember-toggle input[type="checkbox"] {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.question-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+}
+
+.question-form-field + .question-form-field {
+  border-top: 1px solid var(--vscode-widget-border, #e8e8e8);
+  margin-top: 4px;
+}
+
+.question-form-prompt {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.question-form-other-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 13px;
+  border: 1px solid var(--vscode-input-border, #ccc);
+  border-radius: 5px;
+  background: var(--vscode-input-background, #fff);
+  color: var(--vscode-input-foreground, inherit);
+}
+
+/* Confirm/Cancel keep the base .choice-button width:100%; the flex
+   .checkbox-buttons row distributes them ~50/50 (matches the Electron shell). */
+.pick-remember-panel .choice-button,
+.question-form-panel .choice-button {
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Paged (wizard) form navigation: progress label + Back/Next/Cancel. */
+.question-form-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--vscode-widget-border, #e8e8e8);
+}
+
+.question-form-nav-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.question-form-nav-buttons .choice-button {
+  width: auto;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.question-form-nav-buttons .choice-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.question-form-progress {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+/* Primary buttons: all-at-once Submit / pick-remember Confirm (first in the
+   .checkbox-buttons row) and the wizard's Next/Finish. Scoped to
+   .checkbox-buttons so the wizard's first nav button (Back) stays secondary. */
+.pick-remember-panel .checkbox-buttons .choice-button:first-child,
+.question-form-panel .checkbox-buttons .choice-button:first-child,
+.question-form-nav-buttons .question-form-next {
+  border-color: #3a6cd9;
+  background-color: #3a6cd9;
+  color: #fff;
+}
+
+.pick-remember-panel .checkbox-buttons .choice-button:first-child:hover,
+.question-form-panel .checkbox-buttons .choice-button:first-child:hover,
+.question-form-nav-buttons .question-form-next:hover {
+  background-color: #2f59b5;
 }
 
 /* =========================================================================
@@ -2377,10 +2591,14 @@ span.ansi-bright-white-fg {
 
 /* Dropdown menu */
 .chat-feedback-menu {
-  background: #fff;
-  border: 1px solid #d0d7de;
+  background: var(
+    --chat-conversation-popover-background,
+    var(--chat-conversation-background, #fff)
+  );
+  border: 1px solid var(--chat-conversation-border, #d0d7de);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 16px
+    var(--chat-conversation-popover-shadow, rgba(0, 0, 0, 0.15));
   padding: 4px;
   min-width: 220px;
   font-size: 13px;
@@ -2395,10 +2613,10 @@ span.ansi-bright-white-fg {
   border-radius: 5px;
   cursor: pointer;
   font: inherit;
-  color: #222;
+  color: var(--chat-conversation-foreground, #222);
 }
 .chat-feedback-menu-item:hover {
-  background: #f3f5f7;
+  background: var(--chat-conversation-list-hover-background, #f3f5f7);
 }
 
 /* =========================================================================
@@ -2451,24 +2669,28 @@ span.ansi-bright-white-fg {
 
 /* Popover card */
 .chat-feedback-popover {
-  background: #fff;
-  border: 1px solid #d0d7de;
+  background: var(
+    --chat-conversation-popover-background,
+    var(--chat-conversation-background, #fff)
+  );
+  border: 1px solid var(--chat-conversation-border, #d0d7de);
   border-radius: 10px;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 22px
+    var(--chat-conversation-popover-shadow, rgba(0, 0, 0, 0.18));
   padding: 14px 16px;
   width: 340px;
   font-size: 13px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  color: #222;
+  color: var(--chat-conversation-foreground, #222);
 }
 .chat-feedback-popover-heading {
   font-weight: 600;
   font-size: 14px;
 }
 .chat-feedback-popover-subtitle {
-  color: #555;
+  color: var(--chat-conversation-muted-foreground, #555);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -2483,9 +2705,11 @@ span.ansi-bright-white-fg {
   resize: vertical;
   min-height: 60px;
   border-radius: 6px;
-  border: 1px solid #d0d7de;
+  border: 1px solid var(--chat-conversation-input-border, #d0d7de);
   padding: 6px 8px;
   font: inherit;
+  background: var(--chat-conversation-input-background, #fff);
+  color: var(--chat-conversation-input-foreground, inherit);
 }
 .chat-feedback-popover-fieldset {
   border: none;
@@ -2499,7 +2723,7 @@ span.ansi-bright-white-fg {
   font-weight: 500;
   font-size: 12px;
   padding: 0 0 4px 0;
-  color: #444;
+  color: var(--chat-conversation-muted-foreground, #444);
 }
 .chat-feedback-popover-radio {
   display: flex;
@@ -2513,7 +2737,7 @@ span.ansi-bright-white-fg {
   gap: 6px;
   align-items: flex-start;
   font-size: 12px;
-  color: #444;
+  color: var(--chat-conversation-muted-foreground, #444);
   line-height: 1.4;
 }
 .chat-feedback-popover-share input {
@@ -2526,16 +2750,16 @@ span.ansi-bright-white-fg {
   margin-top: 4px;
 }
 .chat-feedback-popover-button {
-  border: 1px solid #d0d7de;
-  background: #fff;
+  border: 1px solid var(--chat-conversation-border, #d0d7de);
+  background: var(--chat-conversation-button-background, #fff);
   border-radius: 6px;
   padding: 6px 12px;
   cursor: pointer;
   font: inherit;
-  color: #222;
+  color: var(--chat-conversation-button-foreground, #222);
 }
 .chat-feedback-popover-button:hover {
-  background: #f3f5f7;
+  background: var(--chat-conversation-button-hover-background, #f3f5f7);
 }
 .chat-feedback-popover-button.submit {
   background: #1f6feb;
@@ -2546,7 +2770,7 @@ span.ansi-bright-white-fg {
   background: #1860d3;
 }
 .chat-feedback-popover-button.clear {
-  color: #a23737;
+  color: var(--chat-conversation-error-foreground, #a23737);
   border-color: transparent;
 }
 
@@ -2557,14 +2781,18 @@ span.ansi-bright-white-fg {
   position: fixed;
   z-index: 10000;
   min-width: 140px;
-  background: #fff;
-  border: 1px solid #d0d7de;
+  background: var(
+    --chat-conversation-popover-background,
+    var(--chat-conversation-background, #fff)
+  );
+  border: 1px solid var(--chat-conversation-border, #d0d7de);
   border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 4px 16px
+    var(--chat-conversation-popover-shadow, rgba(0, 0, 0, 0.18));
   padding: 4px 0;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   font-size: 13px;
-  color: #1f2328;
+  color: var(--chat-conversation-foreground, #1f2328);
   user-select: none;
 }
 
@@ -2575,11 +2803,11 @@ span.ansi-bright-white-fg {
 }
 
 .chat-context-menu-item:hover {
-  background: #f3f4f6;
+  background: var(--chat-conversation-list-hover-background, #f3f4f6);
 }
 
 .chat-context-menu-item-disabled {
-  color: #9aa0a6;
+  color: var(--chat-conversation-muted-foreground, #9aa0a6);
   cursor: default;
 }
 
@@ -2861,37 +3089,40 @@ span.ansi-bright-white-fg {
   display: none;
 }
 
-/* Level palettes. The card surface (background / text / border) prefers the
-   host's native notification theme so it adapts to light/dark; the pastel
-   values are the fallback for non-VS Code hosts (e.g. the Electron shell).
-   The severity color rides on --csn-line, which drives the left accent bar and
-   the icon, and prefers VS Code's per-severity notification icon color. */
+/* Level palettes, shared by the on-canvas notice and the top bell. The card
+   surface (--csn-bg) is a translucent pastel that reads as frosted glass over
+   the chat via the backdrop blur on .csn-toast / .chat-status-bell; --csn-fg
+   is the matching text color. The severity color rides on --csn-line, which
+   drives the left accent bar and the icon, and prefers VS Code's per-severity
+   notification icon color with the pastel as fallback. */
 .chat-status-notice.level-warning,
 .chat-status-bell.level-warning {
-  --csn-bg: #ffe8a3;
+  --csn-bg: rgba(255, 244, 206, 0.8);
   --csn-fg: #5c3c00;
   --csn-line: var(--vscode-notificationsWarningIcon-foreground, #e0a010);
 }
 
 .chat-status-notice.level-error,
 .chat-status-bell.level-error {
-  --csn-bg: #fbccd0;
+  --csn-bg: rgba(253, 231, 233, 0.8);
   --csn-fg: #6f1720;
   --csn-line: var(--vscode-notificationsErrorIcon-foreground, #e5484d);
 }
 
 .chat-status-notice.level-info,
 .chat-status-bell.level-info {
-  --csn-bg: #cfe4ff;
+  --csn-bg: rgba(231, 242, 255, 0.8);
   --csn-fg: #0a3a66;
   --csn-line: var(--vscode-notificationsInfoIcon-foreground, #3b82f6);
 }
 
 .csn-toast {
-  background: var(--vscode-notifications-background, var(--csn-bg));
-  color: var(--vscode-notifications-foreground, var(--csn-fg));
-  border: 1px solid var(--vscode-notifications-border, var(--csn-line));
-  border-left: 4px solid var(--csn-line);
+  background: var(--csn-bg);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: var(--csn-fg);
+  border: 1px solid var(--csn-line);
+  border-left-width: 4px;
   border-radius: 8px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
   padding: 10px 12px;
@@ -2991,6 +3222,8 @@ span.ansi-bright-white-fg {
   border: 1px solid var(--csn-line);
   border-radius: 50%;
   background: var(--csn-bg);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   color: var(--csn-fg);
   cursor: pointer;
   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.32);

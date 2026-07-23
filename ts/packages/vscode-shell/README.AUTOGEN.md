@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=070aa0fa83de5c1706f23b642690d03b843e1cd9d13ae257863cf895d350ef3e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c74f6ccd555253fac9cb68218e041f05c6a8c450f3e285b4b733da09a53ee2da -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-shell — AI-generated documentation
@@ -16,7 +16,7 @@ The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studi
 
 ## What it does
 
-The `vscode-shell` package offers a feature-rich chat interface tailored for the TypeAgent ecosystem. Key capabilities include:
+The `vscode-shell` package provides a range of features for interacting with TypeAgent conversations in Visual Studio Code. Key capabilities include:
 
 - **Chat Interface**:
 
@@ -174,6 +174,6 @@ External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `micr
 
 ---
 
-_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `274f0c51c3f1dca4e627c5311084db01d02fe1e9` on `2026-07-23T15:09:16.468Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

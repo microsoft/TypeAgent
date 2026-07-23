@@ -68,6 +68,9 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         requestChoice(...args): void {
             return rpc.send("requestChoice", ...args);
         },
+        requestForm(...args): void {
+            return rpc.send("requestForm", ...args);
+        },
         requestInteraction(...args): void {
             return rpc.send("requestInteraction", ...args);
         },

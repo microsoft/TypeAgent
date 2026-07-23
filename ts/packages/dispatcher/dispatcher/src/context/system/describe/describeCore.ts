@@ -16,6 +16,14 @@ import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { getAgentSchemas } from "./agentSchemaInfo.js";
 
 const MAX_DEFAULT_ACTIONS = 10;
+const CAPABILITY_DISCOVERY_ALIASES = new Set([
+    "assistant",
+    "agent",
+    "typeagent",
+    "you",
+    "yourself",
+]);
+const MAX_CAPABILITY_PREVIEW_AGENTS = 5;
 
 // ---------------------------------------------------------------------------
 // Resolution
@@ -442,6 +450,50 @@ export function renderAgentNotFoundMessage(
     return `No agent named '${resolution.agentName}'.${didYouMean(resolution.suggestion)}`;
 }
 
+export function isCapabilityDiscoveryAlias(name: string): boolean {
+    const normalized = name
+        .trim()
+        .toLowerCase()
+        .replace(/^the\s+/, "");
+    return CAPABILITY_DISCOVERY_ALIASES.has(normalized);
+}
+
+export function renderCapabilitiesDiscoveryFallback(
+    schemas: AgentSchemaInfo[],
+): string {
+    const lines: string[] = [
+        "**I can help with these agent capabilities:**",
+        "",
+    ];
+    if (schemas.length === 0) {
+        lines.push(
+            "_No agents are currently loaded. Run `@help` for system commands, or enable/configure agent schemas first._",
+        );
+        return lines.join("\n");
+    }
+
+    const sorted = [...schemas].sort((a, b) => a.name.localeCompare(b.name));
+    const preview = sorted.slice(0, MAX_CAPABILITY_PREVIEW_AGENTS);
+    lines.push(
+        `Showing ${preview.length} of ${sorted.length} agents. Use \`@describe <agent>\` for details:`,
+        "",
+    );
+    for (const agent of preview) {
+        lines.push(`- ${agent.emoji} \`${agent.name}\` - ${agent.description}`);
+    }
+    const remaining = sorted.length - preview.length;
+    if (remaining > 0) {
+        lines.push("", `_...and ${remaining} more agents available._`);
+    }
+    lines.push(
+        "",
+        "**Try these commands next:**",
+        "- `@describe <agent>` - show what a specific agent can do.",
+        "- `@help --all` - show all available system + agent commands.",
+    );
+    return lines.join("\n");
+}
+
 // ---------------------------------------------------------------------------
 // LLM polish (always attempted when a model is configured; deterministic
 // rendering above is the fallback on missing/failed model — see G5).
@@ -612,6 +664,9 @@ export async function describeAgentOrAction(
         case "notFound":
             // Neither an agent nor an action: report against the agent name
             // (the more common intent for a single bare argument).
+            if (isCapabilityDiscoveryAlias(name)) {
+                return renderCapabilitiesDiscoveryFallback(schemas);
+            }
             return renderAgentNotFoundMessage(agentResolution);
     }
 }

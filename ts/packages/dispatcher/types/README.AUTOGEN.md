@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=1a5353ddadf11f9b148b75be1c186e8e846f732ce8acef107a83f9f85b1e067d -->
+<!-- AUTOGEN:DOCS:HASH:sha256=0bf32cbdb49e9336393bacb2cb2cb723d41c23bfdaf9e2842854efc73545a683 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/dispatcher-types — AI-generated documentation
@@ -12,19 +12,20 @@
 
 ## Overview
 
-The `@typeagent/dispatcher-types` package provides a set of TypeScript type definitions that are essential for the TypeAgent dispatcher and its related components. These types ensure consistent data structures and type safety across the TypeAgent ecosystem, facilitating communication between agents, clients, and dispatchers.
+The `@typeagent/dispatcher-types` package provides a comprehensive set of TypeScript type definitions that are foundational to the TypeAgent ecosystem. These types are used to define the structure of data exchanged between the dispatcher, agents, and clients, ensuring type safety and consistency across the system. This package is a core dependency for many other packages in the TypeAgent monorepo, including `@typeagent/agent-server-protocol`, `@typeagent/copilot-plugin`, and `agent-dispatcher`.
 
 ## What it does
 
-This package defines and exports TypeScript types that are widely used across the TypeAgent monorepo. These types are foundational for the operation of the dispatcher and its integration with other components. Key areas covered include:
+This package defines a wide range of types and utilities that support the functionality of the TypeAgent dispatcher and its interactions with other components. Key areas of functionality include:
 
-- **Dispatcher Requests and Responses**: Types such as `RequestId`, `PendingInteractionRequest`, and `PendingInteractionResponse` define the structure of requests and responses handled by the dispatcher.
-- **Client Input/Output Operations**: Types like `IAgentMessage`, `TemplateEditConfig`, and `NotifyExplainedData` support client interactions, including message formatting and data exchange.
-- **Dispatcher Status Management**: Includes types and helper functions (e.g., `getStatusSummary` in [status.ts](./src/helpers/status.ts)) to represent and summarize the state of the dispatcher.
-- **Queue Management**: Types such as `QueuedRequest`, `QueueCancelReason`, and `QueueRequestState` define the structure and lifecycle of server-side message queues.
-- **Logging and Display**: Types like `SetDisplayEntry` and `AppendDisplayEntry` in [displayLogEntry.ts](./src/displayLogEntry.ts) are used for managing and formatting log entries for display purposes.
+- **Dispatcher Communication**: Types such as `RequestId`, `DispatcherName`, and `DispatcherEmoji` define the identity and communication structure of the dispatcher.
+- **Client Input/Output**: Types like `IAgentMessage`, `TemplateEditConfig`, and `NotifyExplainedData` facilitate client interactions, including message formatting, template management, and data exchange.
+- **Pending Interactions**: Types such as `PendingInteractionRequest` and `PendingInteractionResponse` define the structure of interactions that require client input, such as questions, proposed actions, or forms.
+- **Queue Management**: Types like `QueuedRequest`, `QueueCancelReason`, and `QueueRequestState` define the lifecycle and management of server-side message queues.
+- **Logging and Display**: Types such as `SetDisplayEntry` and `AppendDisplayEntry` are used for managing and formatting log entries for display purposes.
+- **Dispatcher Status**: Helper functions like `getStatusSummary` in [status.ts](./src/helpers/status.ts) provide utilities for summarizing and representing the state of the dispatcher.
 
-These types are consumed by various packages in the TypeAgent ecosystem, including `@typeagent/agent-server-protocol`, `@typeagent/copilot-plugin`, and `agent-dispatcher`.
+These types are consumed by various packages in the TypeAgent ecosystem, enabling consistent and reliable communication between components.
 
 ## Setup
 
@@ -86,6 +87,7 @@ External: _None at runtime._
 ### Used by
 
 - [@typeagent/agent-server-protocol](../../../packages/agentServer/protocol/README.md)
+- [@typeagent/browser-extension](../../../packages/agents/browserExtension/README.md)
 - [@typeagent/copilot-plugin](../../../packages/copilot-plugin/README.md)
 - [@typeagent/dispatcher-rpc](../../../packages/dispatcher/rpc/README.md)
 - [agent-cli](../../../packages/cli/README.md)
@@ -94,8 +96,7 @@ External: _None at runtime._
 - [agent-shell](../../../packages/shell/README.md)
 - [browser-typeagent](../../../packages/agents/browser/README.md)
 - [chat-ui](../../../packages/chat-ui/README.md)
-- [coder-wrapper](../../../packages/coderWrapper/README.md)
-- _…and 7 more workspace consumers._
+- _…and 8 more workspace consumers._
 
 ### Files of interest
 
@@ -103,6 +104,6 @@ External: _None at runtime._
 
 ---
 
-_Auto-generated against commit `66ead8985b850f2775c9b1a96cb7de1d08e2aee1` on `2026-07-18T01:38:20.033Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-types docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/dispatcher-types docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

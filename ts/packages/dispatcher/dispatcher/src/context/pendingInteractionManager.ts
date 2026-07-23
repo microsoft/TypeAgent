@@ -106,6 +106,14 @@ export class PendingInteractionManager {
             return true;
         }
 
+        // For a form, resolve with an explicit cancelled response so the
+        // awaiting caller (e.g. the reasoning loop) can report the cancellation
+        // without a throw. There is no partial-answer to salvage.
+        if (entry.type === "form") {
+            entry.resolve({ answers: {}, cancelled: true });
+            return true;
+        }
+
         // For proposeAction, reject
         entry.reject(error);
         return true;

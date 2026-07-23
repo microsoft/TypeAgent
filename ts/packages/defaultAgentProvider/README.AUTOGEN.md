@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=78fccfbb9477403ea369fd061bc53347a0aa4cbcf1e8126009d3d4bf92e4a37a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=ad58f10a44a90de3124083596a36a94f5db722d039410c37b719de2a4a81b4d2 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # default-agent-provider — AI-generated documentation
@@ -12,13 +12,13 @@
 
 ## Overview
 
-The `default-agent-provider` package is a TypeScript library that acts as the default agent provider for the TypeAgent framework. It is a foundational component used by the shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents, configurations, and dispatcher settings are available to support the TypeAgent ecosystem.
+The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent framework. It is a core component used by the TypeAgent shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents, configurations, and dispatcher settings are available to support the TypeAgent ecosystem.
 
 ## What it does
 
-The `default-agent-provider` package provides a centralized mechanism for managing agents and their configurations. Its key responsibilities include:
+The `default-agent-provider` package provides a centralized mechanism for managing agents and their configurations. Its primary responsibilities include:
 
-- **Default Agent Providers**: Functions like `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` supply pre-configured agent providers and construction mechanisms for initializing agents.
+- **Default Agent Providers**: Functions such as `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` supply pre-configured agent providers and construction mechanisms for initializing agents.
 - **Agent Source Management**: The `getDefaultAppAgentSource` function manages the connected app-agent source, including the installed-agent record store and the host-owned `@package` agent.
 - **Dispatcher Configuration**: The `getDefaultDispatcherOptions` function provides default settings for the dispatcher, which routes actions to the appropriate agents.
 - **Indexing Service Registry**: The `getIndexingServiceRegistry` function organizes and retrieves agent-related data through an indexing service.
@@ -27,13 +27,13 @@ The `default-agent-provider` package provides a centralized mechanism for managi
 
 The package includes test agents, such as the `vampire` agent, which are used to evaluate dispatcher subsystems like action collision detection. These agents are disabled by default in production but can be enabled for testing purposes via session configuration.
 
+### Managing Non-Bundled Agents
+
+Some agents, such as `androidMobile` and `vampire`, are not included in the default provider profile. These agents can be installed on demand using the `@package` commands. Catalog source entries for these agents are defined in [../agents/agents.catalog.json](../agents/agents.catalog.json).
+
 ### Collision Testing
 
 The package includes operational scripts for testing dispatcher functionality and agent behavior under various scenarios, such as action collision detection and optimization pipelines. These scripts are located in the `collisions` directory and are primarily used for internal testing and debugging.
-
-### Managing Non-Bundled Agents
-
-Some agents, such as `androidMobile` and `vampire`, are not included in the default provider profile. These agents can be installed on demand using the `@package` commands. The catalog source entries for these agents are defined in [../agents/agents.catalog.json](../agents/agents.catalog.json).
 
 ## Setup
 
@@ -196,6 +196,6 @@ _4 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

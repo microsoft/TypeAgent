@@ -310,6 +310,7 @@ function createMcpClientIO(
             logger.log(`ClientIO: closeLocalView(port=${port})`);
         },
         requestChoice(): void {},
+        requestForm(): void {},
         requestInteraction(): void {},
         interactionResolved(): void {},
         interactionCancelled(): void {},

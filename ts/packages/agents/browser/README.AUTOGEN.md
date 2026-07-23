@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=6a4d71a1c1615e3e46ffa890b4f5709cb10d4bdebf113480e2f93c8375f3e4a8 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4ef4e951234553ff94ac76964297bae10ec20ec4b35c9f0d7ec8502f00dbea61 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # browser-typeagent — AI-generated documentation
@@ -12,22 +12,22 @@
 
 ## Overview
 
-The `browser-typeagent` package is a TypeAgent application agent designed for browser automation and control. It enables programmatic interaction with browser windows, tabs, and web pages through a defined set of actions. This package integrates with the TypeAgent shell and CLI, allowing users to perform browser-related tasks using commands or natural language. It also includes a browser extension for enhanced functionality and interaction.
+The `browser-typeagent` package is a TypeAgent application agent designed to enable browser automation, web content interaction, and knowledge extraction. It serves as the core browser agent in the TypeAgent ecosystem, facilitating tasks such as web navigation, content indexing, and search-based answer generation. The package integrates with the TypeAgent shell, CLI, and browser extensions, providing a unified interface for browser-related actions.
 
 ## What it does
 
-The `browser-typeagent` package provides a wide range of browser automation capabilities, enabling users to interact with web pages and manage browser sessions programmatically. Key functionalities include:
+The `browser-typeagent` package provides a comprehensive set of browser automation and interaction capabilities. These include:
 
-- **Web Navigation**: Actions such as `openWebPage`, `goBack`, `goForward`, and `reloadPage` allow users to navigate between web pages and control browser tabs.
-- **User Interaction**: Users can interact with web content using actions like `clickOn`, `followLinkByText`, `scrollDown`, and `scrollUp`.
-- **Content Capture and Analysis**: Actions such as `captureScreenshot`, `getHtmlFragments`, and `indexPage` enable users to extract and analyze web content.
-- **Tab Management**: Actions like `changeTabs`, `closeWebPage`, and `closeAllWebPages` provide control over browser tabs.
-- **Custom Scripts and Search**: Execute custom scripts with `executeAdHocScript` and manage search providers with `changeSearchProvider`.
-- **Internet Lookup**: The `lookupAndAnswerInternet` action allows users to answer general "look it up on the web" questions by either driving a real browser or using Azure AI Search for server-side knowledge retrieval.
+- **Web Navigation**: Actions like `openWebPage`, `goBack`, `goForward`, and `reloadPage` allow users to navigate web pages and control browser tabs.
+- **User Interaction**: Perform actions such as `clickOn`, `followLinkByText`, `scrollDown`, and `scrollUp` to interact with web content.
+- **Content Capture and Analysis**: Extract and analyze web content using actions like `captureScreenshot`, `getHtmlFragments`, and `indexPage`.
+- **Tab Management**: Manage browser tabs with actions such as `changeTabs`, `closeWebPage`, and `closeAllWebPages`.
+- **Custom Scripts and Search**: Execute custom scripts with `executeAdHocScript` and manage search providers using `changeSearchProvider`.
+- **Internet Lookup**: The `lookupAndAnswerInternet` action enables users to answer general web queries by either driving a real browser or leveraging Azure AI Search for server-side knowledge retrieval.
 
-The package operates through a WebSocket server (`AgentWebSocketServer`) that facilitates communication between the browser agent and its clients. Supported clients include a Chrome extension and the Electron-based TypeAgent shell. These clients can send commands to the browser agent, which executes the requested actions and returns results.
+The agent operates through a WebSocket server (`AgentWebSocketServer`) that facilitates communication between the browser agent and its clients. Supported clients include a Chrome/Edge extension and the Electron-based TypeAgent shell. These clients send commands to the browser agent, which executes the requested actions and returns results.
 
-Additionally, the package includes a chat panel for natural language interaction with the browser agent. This panel supports conversation management commands such as `new`, `list`, `info`, `switch`, and `delete`, enabling users to manage multiple conversations and view shared activity across connected clients.
+The package also supports natural language interaction through a chat panel, enabling users to manage conversations and perform browser-related tasks using conversational commands.
 
 ## Setup
 
@@ -38,30 +38,24 @@ To set up the `browser-typeagent` package, follow these steps:
    - `BROWSER_WEBSOCKET_PORT`: (Optional) Specify the WebSocket server port for debugging. If not set, the port will be assigned dynamically.
    - `TYPEAGENT_BROWSER_FILES`: Set this variable to the directory containing the browser files required for the agent's operation.
 
-2. **Enable Developer Mode in Your Browser**:
+2. **Build the Package**:
+
+   - Run `pnpm run build` in the package directory. This will build the agent, including the browser extension, Puppeteer helpers, and other components.
+
+3. **Browser Extension Setup**:
 
    - Open your browser (e.g., Chrome or Edge).
-   - Click on the extensions icon near the address bar and select "Manage extensions."
-   - Enable the "Developer mode" toggle on the extensions page.
+   - Enable "Developer mode" in the browser's extensions settings.
+   - Load the unpackaged extension by selecting the `dist/extension` folder in the package directory.
 
-3. **Build the Extension**:
+4. **Run the Agent**:
+   - Start the TypeAgent shell or CLI, which integrates with the browser agent to send commands.
 
-   - Run `pnpm run build` in the package directory to build the browser extension.
-
-4. **Load the Unpackaged Extension**:
-
-   - Navigate to the "Manage extensions" page in your browser.
-   - Click "Load unpackaged extension" and select the `dist/extension` folder in the package directory.
-
-5. **Run the Extension**:
-   - Launch the browser where the extension is installed.
-   - Start the TypeAgent shell or CLI, which integrates with the extension to send commands.
-
-For more detailed instructions, refer to the hand-written README.
+For additional details, refer to the hand-written README.
 
 ## Key Files
 
-The `browser-typeagent` package is organized into several key files, each responsible for specific functionality:
+The `browser-typeagent` package is organized into several key files, each responsible for specific functionalities:
 
 - **WebSocket Server**:
 
@@ -87,8 +81,8 @@ The `browser-typeagent` package is organized into several key files, each respon
   - [src/agent/browserSchema.agr](./src/agent/browserSchema.agr): Contains the action grammar for the browser agent.
 
 - **Extension Components**:
-  - src/extension/contentScript/index.ts: Entry point for the browser extension's content script.
-  - src/extension/serviceWorker/index.ts: Manages the service worker for the browser extension.
+  - `src/extension/contentScript/index.ts`: Entry point for the browser extension's content script.
+  - `src/extension/serviceWorker/index.ts`: Manages the service worker for the browser extension.
 
 ## How to extend
 
@@ -187,6 +181,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter browser-typeagent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
