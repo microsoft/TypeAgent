@@ -293,6 +293,7 @@ export interface RunManifest {
     split: "test";
     taskOffset?: number;
     taskSeed?: string;
+    taskIdsFile?: string;
     sourceTaskCount?: number;
     languageFilter?: RepositoryLanguage[];
     taskIds: string[];

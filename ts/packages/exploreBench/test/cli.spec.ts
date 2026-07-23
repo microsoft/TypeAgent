@@ -25,6 +25,7 @@ test("documents one-model and one-variant run selection", () => {
     assert.match(result.stdout, /report-three-arm/);
     assert.match(result.stdout, /--task-offset <n>/);
     assert.match(result.stdout, /--task-seed <seed>/);
+    assert.match(result.stdout, /--task-ids-file <file>/);
     assert.match(result.stdout, /--force-rerun/);
     assert.match(result.stdout, /cleanup-images/);
     assert.match(result.stdout, /--apply/);
@@ -106,5 +107,8 @@ test("rejects combining deterministic offset and seeded random selection", () =>
     );
 
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /either --task-seed or --task-offset/);
+    assert.match(
+        result.stderr,
+        /one of --task-seed, --task-offset, or --task-ids-file/,
+    );
 });

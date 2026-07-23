@@ -157,7 +157,22 @@ async function cleanupImagesCommand(
 }
 
 async function runCommand(args: Map<string, string[]>): Promise<void> {
-    const limit = positiveInteger(value(args, "limit") ?? "30", "limit");
+    const taskIdsFileValue = value(args, "task-ids-file");
+    const taskIdsFile = taskIdsFileValue
+        ? path.resolve(taskIdsFileValue)
+        : undefined;
+    const taskIds = taskIdsFile
+        ? await loadTaskIdsFile(taskIdsFile)
+        : undefined;
+    const limit = positiveInteger(
+        value(args, "limit") ?? String(taskIds?.length ?? 30),
+        "limit",
+    );
+    if (taskIds && limit !== taskIds.length) {
+        throw new Error(
+            `--limit must equal the ${taskIds.length} entries in --task-ids-file`,
+        );
+    }
     const taskOffset = nonNegativeInteger(
         value(args, "task-offset") ?? "0",
         "task-offset",
@@ -165,8 +180,15 @@ async function runCommand(args: Map<string, string[]>): Promise<void> {
     const taskSeed = args.has("task-seed")
         ? required(args, "task-seed")
         : undefined;
-    if (taskSeed !== undefined && args.has("task-offset")) {
-        throw new Error("Use either --task-seed or --task-offset, not both");
+    const taskSelectors = [
+        taskSeed !== undefined,
+        args.has("task-offset"),
+        taskIds !== undefined,
+    ].filter(Boolean).length;
+    if (taskSelectors > 1) {
+        throw new Error(
+            "Use only one of --task-seed, --task-offset, or --task-ids-file",
+        );
     }
     const forceRerun = booleanFlag(args, "force-rerun");
     if (limit < 30) {
@@ -226,6 +248,7 @@ async function runCommand(args: Map<string, string[]>): Promise<void> {
         limit,
         offset: taskOffset,
         ...(taskSeed === undefined ? {} : { seed: taskSeed }),
+        ...(taskIds === undefined ? {} : { taskIds }),
         ...(languageFilter ? { languages: languageFilter } : {}),
         dockerPlatform,
     });
@@ -242,7 +265,11 @@ async function runCommand(args: Map<string, string[]>): Promise<void> {
         createdAt: new Date().toISOString(),
         dataset: verifiedDataset,
         split: "test",
-        ...(taskSeed === undefined ? { taskOffset } : { taskSeed }),
+        ...(taskIdsFile
+            ? { taskIdsFile }
+            : taskSeed === undefined
+              ? { taskOffset }
+              : { taskSeed }),
         ...(languageFilter ? { sourceTaskCount: limit, languageFilter } : {}),
         taskIds: tasks.map((task) => task.id),
         matrix,
@@ -335,6 +362,24 @@ async function loadMatrix(matrixPath: string): Promise<MatrixEntry[]> {
         throw new Error(`Matrix names must be unique in ${matrixPath}`);
     }
     return runs;
+}
+
+async function loadTaskIdsFile(taskIdsPath: string): Promise<string[]> {
+    const parsed = await readJsonFile<unknown>(taskIdsPath);
+    if (
+        !Array.isArray(parsed) ||
+        parsed.length === 0 ||
+        parsed.some((taskId) => typeof taskId !== "string" || !taskId.trim())
+    ) {
+        throw new Error(
+            `${taskIdsPath} must contain a non-empty JSON array of task IDs`,
+        );
+    }
+    const taskIds = parsed as string[];
+    if (new Set(taskIds).size !== taskIds.length) {
+        throw new Error(`${taskIdsPath} task IDs must be unique`);
+    }
+    return taskIds;
 }
 
 function createMatrixEntry(model: string): MatrixEntry {
@@ -549,6 +594,7 @@ Run options:
   --limit <n>                   Default: 30; SWE-bench Verified supports at most 500
   --task-offset <n>             Skip this many tasks in the deterministic selection; default: 0
   --task-seed <seed>            Select a deterministic random sample; incompatible with --task-offset
+  --task-ids-file <file>        Exact retained cohort as a JSON string array; exclusive with offset/seed
   --force-rerun                 Ignore result caches and archive prior run reports/results
   --max-concurrency <n>         Sessions per model; default: 3 (up to 9 total)
   --max-attempts <n>            Default: 2; only failed rows retry
@@ -583,6 +629,7 @@ const runOptionNames = new Set([
     "limit",
     "task-offset",
     "task-seed",
+    "task-ids-file",
     "force-rerun",
     "max-concurrency",
     "max-attempts",

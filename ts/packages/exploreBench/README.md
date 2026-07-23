@@ -62,6 +62,11 @@ Thirty tasks × three routes × two variants produces 180 result rows. The selec
 
 Use `--task-offset 10 --limit 10` to select tasks 11–20 from that same deterministic order for a held-out check. The offset changes only task selection; both variants still receive the same tasks, repositories, prompts, limits, and scoring.
 
+Use `--task-ids-file /absolute/path/tasks.json` to reproduce an exact retained
+cohort from a JSON array of SWE-bench instance IDs. This is mutually exclusive
+with `--task-seed` and `--task-offset`; when `--limit` is supplied it must equal
+the array length.
+
 Use `--task-seed <seed> --limit 10` for a deterministic random sample without
 replacement from all SWE-bench Verified rows. The seed and selected task IDs are
 stored in the run manifest. `--task-seed` and `--task-offset` are mutually
