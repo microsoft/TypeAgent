@@ -49,6 +49,7 @@ export function createScriptExecutor(config: ScriptExecutorConfig): {
             options?: ScriptExecutionOptions,
         ): Promise<ScriptResult> {
             const executionLog: unknown[][] = [];
+            let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
             const sandboxedApi = Object.freeze(api);
             const sandboxedParams = Object.freeze({ ...params });
@@ -77,7 +78,7 @@ export function createScriptExecutor(config: ScriptExecutorConfig): {
 
                 const timeout = options?.timeout ?? defaultTimeout;
                 const timeoutPromise = new Promise<never>((_, reject) => {
-                    setTimeout(
+                    timeoutHandle = setTimeout(
                         () => reject(new Error("Script execution timeout")),
                         timeout,
                     );
@@ -112,6 +113,10 @@ export function createScriptExecutor(config: ScriptExecutorConfig): {
                     error: errorMessage,
                     message: `Script execution failed: ${errorMessage}`,
                 };
+            } finally {
+                if (timeoutHandle !== undefined) {
+                    clearTimeout(timeoutHandle);
+                }
             }
         },
     };
