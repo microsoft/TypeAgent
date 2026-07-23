@@ -54,6 +54,21 @@ test("writes a compatible three-arm report with presentation-only labels", async
         report.arms.map((arm) => arm.label),
         ["Copilot SDK (with explore agent)", "TypeAgent", "TypeAgent with LSP"],
     );
+    assert.deepEqual(
+        report.arms.map((arm) => arm.id),
+        ["baseline", "typeagent", "typeagent-lsp"],
+    );
+    assert.deepEqual(Object.keys(report.models[0].arms), [
+        "baseline",
+        "typeagent",
+        "typeagent-lsp",
+    ]);
+    assert.deepEqual(Object.keys(report.tasks[0].results["model-a"]), [
+        "baseline",
+        "typeagent",
+        "typeagent-lsp",
+    ]);
+    assert.doesNotMatch(JSON.stringify(report), /"copilot-sdk"/);
     assert.deepEqual(report.languageCoverage, {
         python: 1,
         typescript: 0,
@@ -64,6 +79,8 @@ test("writes a compatible three-arm report with presentation-only labels", async
     const markdown = await readFile(markdownPath, "utf8");
     assert.match(markdown, /Copilot SDK \(with explore agent\)/);
     assert.match(markdown, /TypeAgent with LSP/);
+    assert.match(markdown, /0\.500\/1\.000\/0\.667/);
+    assert.doesNotMatch(markdown, /0\.500\/1\.000\/0\.456/);
     assert.doesNotMatch(markdown, /Without MCP|With MCP/);
 });
 
@@ -108,7 +125,8 @@ function manifest(
 }
 
 function result(manifest: RunManifest, variant: BenchmarkVariant): RunResult {
-    const finalAnswer = "<final_answer>\npkg/a.py:1 reason\n</final_answer>";
+    const finalAnswer =
+        "<final_answer>\npkg/a.py:1 reason\npkg/other.py:2 extra\n</final_answer>";
     const lspTrace: TypeAgentToolTrace = {
         calls: [
             {

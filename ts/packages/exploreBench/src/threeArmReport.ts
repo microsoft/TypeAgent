@@ -21,7 +21,7 @@ import type {
     RunResult,
 } from "./types.js";
 
-type PublicArmId = "copilot-sdk" | "typeagent" | "typeagent-lsp";
+type ThreeArmId = BenchmarkVariant;
 
 interface ThreeArmSummary {
     label: string;
@@ -42,7 +42,7 @@ interface ThreeArmModelReport {
     requestedTasks: number;
     commonSuccessfulTasks: number;
     complete: boolean;
-    arms: Record<PublicArmId, ThreeArmSummary>;
+    arms: Record<ThreeArmId, ThreeArmSummary>;
 }
 
 export interface ThreeArmReport {
@@ -59,7 +59,7 @@ export interface ThreeArmReport {
     taskCount: number;
     languageFilter: RepositoryLanguage[];
     languageCoverage: Record<RepositoryLanguage, number>;
-    arms: Array<{ id: PublicArmId; label: string }>;
+    arms: Array<{ id: ThreeArmId; label: string }>;
     models: ThreeArmModelReport[];
     tasks: Array<{
         taskId: string;
@@ -68,7 +68,7 @@ export interface ThreeArmReport {
             string,
             Partial<
                 Record<
-                    PublicArmId,
+                    ThreeArmId,
                     {
                         ok: boolean;
                         overallRecall: number;
@@ -83,12 +83,6 @@ export interface ThreeArmReport {
     }>;
     notes: string[];
 }
-
-const armVariants: Record<PublicArmId, BenchmarkVariant> = {
-    "copilot-sdk": "baseline",
-    typeagent: "typeagent",
-    "typeagent-lsp": "typeagent-lsp",
-};
 
 export async function writeThreeArmReport(options: {
     pairedInput: string;
@@ -146,9 +140,9 @@ export async function writeThreeArmReport(options: {
         taskCount: taskIds.length,
         languageFilter: lspManifest.languageFilter ?? ["python", "typescript"],
         languageCoverage,
-        arms: publicArmIds().map((id) => ({
+        arms: armIds().map((id) => ({
             id,
-            label: benchmarkVariantLabel(armVariants[id]),
+            label: benchmarkVariantLabel(id),
         })),
         models,
         tasks: taskIds.map((taskId) => ({
@@ -165,10 +159,9 @@ export async function writeThreeArmReport(options: {
                     return [
                         matrixName,
                         Object.fromEntries(
-                            publicArmIds().flatMap((id) => {
+                            armIds().flatMap((id) => {
                                 const row = taskRows.find(
-                                    (candidate) =>
-                                        candidate.variant === armVariants[id],
+                                    (candidate) => candidate.variant === id,
                                 );
                                 return row
                                     ? [[id, compactTaskResult(row)]]
@@ -200,20 +193,20 @@ function buildModelReport(
     rows: RunResult[],
 ): ThreeArmModelReport {
     const byArm = Object.fromEntries(
-        publicArmIds().map((id) => [
+        armIds().map((id) => [
             id,
             new Map(
                 rows
-                    .filter((row) => row.variant === armVariants[id])
+                    .filter((row) => row.variant === id)
                     .map((row) => [row.taskId, row]),
             ),
         ]),
-    ) as Record<PublicArmId, Map<string, RunResult>>;
+    ) as Record<ThreeArmId, Map<string, RunResult>>;
     const commonTaskIds = taskIds.filter((taskId) =>
-        publicArmIds().every((id) => byArm[id].get(taskId)?.ok === true),
+        armIds().every((id) => byArm[id].get(taskId)?.ok === true),
     );
     const arms = Object.fromEntries(
-        publicArmIds().map((id) => {
+        armIds().map((id) => {
             const requestedRows = taskIds.flatMap((taskId) => {
                 const row = byArm[id].get(taskId);
                 return row ? [row] : [];
@@ -223,7 +216,7 @@ function buildModelReport(
             );
             return [id, armSummary(id, requestedRows, commonRows)];
         }),
-    ) as Record<PublicArmId, ThreeArmSummary>;
+    ) as Record<ThreeArmId, ThreeArmSummary>;
     return {
         matrixName,
         requestedTasks: taskIds.length,
@@ -234,13 +227,13 @@ function buildModelReport(
 }
 
 function armSummary(
-    id: PublicArmId,
+    id: ThreeArmId,
     requestedRows: RunResult[],
     commonRows: RunResult[],
 ): ThreeArmSummary {
     const summary: LeaderboardRow | undefined = summarizeRows(commonRows);
     return {
-        label: benchmarkVariantLabel(armVariants[id]),
+        label: benchmarkVariantLabel(id),
         completed: requestedRows.filter((row) => row.ok).length,
         commonSuccessfulRows: commonRows.length,
         overallRecall: summary?.overallRecall ?? null,
@@ -273,7 +266,7 @@ function compactTaskResult(row: RunResult) {
 
 function renderMarkdown(report: ThreeArmReport): string {
     const rows = report.models.map((model) => {
-        const copilot = model.arms["copilot-sdk"];
+        const copilot = model.arms.baseline;
         const typeagent = model.arms.typeagent;
         const lsp = model.arms["typeagent-lsp"];
         return `| ${model.matrixName} | ${model.commonSuccessfulTasks}/${model.requestedTasks} | ${copilot.completed}/${model.requestedTasks} | ${typeagent.completed}/${model.requestedTasks} | ${lsp.completed}/${model.requestedTasks} | ${formatNumber(copilot.overallRecall)} | ${formatNumber(typeagent.overallRecall)} | ${formatNumber(lsp.overallRecall)} | ${formatMetric(copilot.file)} | ${formatMetric(typeagent.file)} | ${formatMetric(lsp.file)} | ${formatMetric(copilot.line)} | ${formatMetric(typeagent.line)} | ${formatMetric(lsp.line)} | ${formatInteger(copilot.finalAttemptTokens)} | ${formatInteger(typeagent.finalAttemptTokens)} | ${formatInteger(lsp.finalAttemptTokens)} | ${lsp.lspAdoptionCount}/${model.requestedTasks} | ${lsp.lspCallCount} | ${lsp.lspResultCount} |`;
@@ -369,13 +362,13 @@ function countLanguage(
     ).length;
 }
 
-function publicArmIds(): PublicArmId[] {
-    return ["copilot-sdk", "typeagent", "typeagent-lsp"];
+function armIds(): ThreeArmId[] {
+    return ["baseline", "typeagent", "typeagent-lsp"];
 }
 
 function formatMetric(metric: MetricSummary | null): string {
     return metric
-        ? `${formatNumber(metric.precision)}/${formatNumber(metric.recall)}/${formatNumber(metric.score)}`
+        ? `${formatNumber(metric.precision)}/${formatNumber(metric.recall)}/${formatNumber(metric.f1)}`
         : "n/a";
 }
 
