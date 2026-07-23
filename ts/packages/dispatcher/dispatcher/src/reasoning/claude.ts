@@ -1367,11 +1367,14 @@ async function executeReasoningWithoutPlanning(
         // count, but the SDK streams an approximate running total per thinking
         // block (system/thinking_tokens). Keep the latest; it's recorded when
         // the block's thinking content arrives below.
-        if (
-            message.type === "system" &&
-            (message as any).subtype === "thinking_tokens"
-        ) {
-            currentThinkingEstimate = (message as any).estimated_tokens ?? 0;
+        if (message.type === "system") {
+            const sysMsg = message as {
+                subtype?: string;
+                estimated_tokens?: number;
+            };
+            if (sysMsg.subtype === "thinking_tokens") {
+                currentThinkingEstimate = sysMsg.estimated_tokens ?? 0;
+            }
         }
         if (message.type === "assistant") {
             for (const content of message.message.content) {
@@ -1639,12 +1642,14 @@ async function executeReasoningWithTracing(
             // count, but the SDK streams an approximate running total per
             // thinking block (system/thinking_tokens). Keep the latest; it's
             // recorded when the block's thinking content arrives below.
-            if (
-                message.type === "system" &&
-                (message as any).subtype === "thinking_tokens"
-            ) {
-                currentThinkingEstimate =
-                    (message as any).estimated_tokens ?? 0;
+            if (message.type === "system") {
+                const sysMsg = message as {
+                    subtype?: string;
+                    estimated_tokens?: number;
+                };
+                if (sysMsg.subtype === "thinking_tokens") {
+                    currentThinkingEstimate = sysMsg.estimated_tokens ?? 0;
+                }
             }
 
             if (message.type === "assistant") {

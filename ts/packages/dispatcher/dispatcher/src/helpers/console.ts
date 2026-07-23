@@ -349,12 +349,14 @@ function createConsoleClientIO(
             // code-complexity-allow: multi-field form UI handler; branches over field kind and free-text option
             (async () => {
                 if (form.message) {
-                    console.log(`${chalk.cyan(`[${source}]`)} ${form.message}`);
+                    displayContent(
+                        `${chalk.cyan(`[${source}]`)} ${form.message}`,
+                    );
                 }
                 const answers: Record<string, QuestionFormFieldAnswer> = {};
                 for (const field of form.fields) {
                     if (field.prompt) {
-                        console.log(chalk.bold(field.prompt));
+                        displayContent(chalk.bold(field.prompt));
                     }
                     if (field.kind === "yesNo") {
                         const input = await question(`(y/n) `, rl);
@@ -369,13 +371,15 @@ function createConsoleClientIO(
                     // pick / multiChoice — numbered list, plus an "Other" entry
                     // when the field offers a free-text escape.
                     for (let i = 0; i < field.choices.length; i++) {
-                        console.log(`  ${i + 1}. ${field.choices[i]}`);
+                        displayContent(`  ${i + 1}. ${field.choices[i]}`);
                     }
                     const otherNumber = field.allowFreeText
                         ? field.choices.length + 1
                         : -1;
                     if (field.allowFreeText) {
-                        console.log(`  ${otherNumber}. Other (type a value)`);
+                        displayContent(
+                            `  ${otherNumber}. Other (type a value)`,
+                        );
                     }
                     if (field.kind === "pick") {
                         const input = await question(

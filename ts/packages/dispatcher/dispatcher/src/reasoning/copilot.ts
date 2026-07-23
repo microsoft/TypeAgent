@@ -50,6 +50,7 @@ import {
     buildReasoningForm,
     formatReasoningFormResponse,
     presentReasoningForm,
+    type ReasoningFormArgs,
 } from "./askUserForm.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
@@ -989,7 +990,7 @@ function getCopilotSessionConfig(
             },
             required: ["question", "choices"],
         },
-        handler: async (args: any) => {
+        handler: async (args: Record<string, unknown>) => {
             const question =
                 typeof args?.question === "string" ? args.question : "";
             const choices = Array.isArray(args?.choices)
@@ -1083,8 +1084,8 @@ function getCopilotSessionConfig(
             },
             required: ["questions"],
         },
-        handler: async (args: any) => {
-            const built = buildReasoningForm(args ?? {});
+        handler: async (args: ReasoningFormArgs) => {
+            const built = buildReasoningForm(args);
             if ("error" in built) {
                 return {
                     textResultForLlm: built.error,
