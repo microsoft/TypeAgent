@@ -49,6 +49,7 @@ import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
 import { getConversationCommandHandlers } from "./handlers/conversationCommandHandlers.js";
 import { getCopilotCommandHandlers } from "./handlers/copilotCommandHandlers.js";
+import { getDemoCommandHandlers } from "./handlers/demoCommandHandlers.js";
 import { getCollisionCommandHandlers } from "./handlers/collisionCommandHandlers.js";
 import { getGrammarCommandHandlers } from "./handlers/grammarCommandHandlers.js";
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
@@ -97,6 +98,7 @@ export const systemHandlers: CommandHandlerTable = {
     commands: {
         action: new ActionCommandHandler(),
         describe: new DescribeCommandHandler(),
+        demo: getDemoCommandHandlers(),
         session: getSessionCommandHandlers(),
         conversation: getConversationCommandHandlers(),
         copilot: getCopilotCommandHandlers(),
@@ -298,10 +300,29 @@ export const systemManifest: AppAgentManifest = {
 
 const commandInterface = getCommandInterface(systemHandlers);
 
+// Route responses from the system agent's interactive choice/form cards (today
+// the `@demo` walkthrough) back to the shared per-context ChoiceManager, which
+// invokes the callback that registered the card. Mirrors the dispatcher
+// AppAgent's handleChoice for its collision-clarify card.
+const handleSystemChoice: NonNullable<AppAgent["handleChoice"]> = async (
+    choiceId,
+    response,
+    context,
+) => {
+    const systemContext = (context as ActionContext<CommandHandlerContext>)
+        .sessionContext.agentContext;
+    return systemContext.choiceManager.handleChoice(
+        choiceId,
+        response,
+        context,
+    );
+};
+
 export const systemAgent: AppAgent = {
     getTemplateSchema: getSystemTemplateSchema,
     getTemplateCompletion: getSystemTemplateCompletion,
     executeAction: executeSystemAction as unknown as AppAgent["executeAction"],
+    handleChoice: handleSystemChoice,
     getCommands: commandInterface.getCommands,
     getCommandCompletion: commandInterface.getCommandCompletion,
     executeCommand: commandInterface.executeCommand,

@@ -12,6 +12,12 @@
 import DOMPurify from "dompurify";
 import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 import type {
+    QuestionForm,
+    QuestionFormField,
+    QuestionFormFieldAnswer,
+    QuestionFormResponse,
+} from "@typeagent/agent-sdk";
+import type {
     PhaseTiming,
     CompletionUsageStats,
     NotifyExplainedData,
@@ -2530,6 +2536,7 @@ export class ChatPanel {
                 requestId,
             );
             tempContainer.setMessage(content, source, "temporary");
+            tempContainer.renderReasoningThinkingMetric();
             this.scrollToBottom();
             return;
         }
@@ -2598,6 +2605,10 @@ export class ChatPanel {
             // setMessage("block") flushes the streamed "temporary" content, so
             // the reused bubble shows the finalized phase exactly once.
             stepContainer.setMessage(content, source, "block");
+            // Reasoning "Thinking" step bubbles report their per-block token
+            // estimate in the metrics row (like the other token metrics),
+            // not in the block header.
+            stepContainer.renderReasoningThinkingMetric();
             // Keep the "working" rail on the CURRENT step bubble (the request
             // is still in progress) while clearing it from any PRIOR step
             // bubbles for this thread, so only the latest phase reads as
@@ -3946,7 +3957,9 @@ export class ChatPanel {
             // request's existing agent bubble (the one already showing the
             // agent's displayContent / prompt) so the message and the choice
             // buttons render as a single card instead of two stacked boxes.
-            const container = this.choicePromptContainer(opts?.requestId);
+            const { container, created } = this.choicePromptContainer(
+                opts?.requestId,
+            );
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -3973,6 +3986,12 @@ export class ChatPanel {
             // answered, or the server cancelled/timed out the interaction).
             const onAbort = () => {
                 cleanup();
+                // Drop the whole card (heading included) when we minted a fresh
+                // system container, so a cancelled / superseded prompt leaves
+                // no stale heading behind.
+                if (created) {
+                    container.div.remove();
+                }
                 reject(
                     signal?.reason ?? new DOMException("Aborted", "AbortError"),
                 );
@@ -4042,7 +4061,9 @@ export class ChatPanel {
             // See addChoicePrompt: a requestId anchors the panel onto the
             // request's existing agent bubble so the prompt and the pick /
             // remember controls share one card.
-            const container = this.choicePromptContainer(opts?.requestId);
+            const { container, created } = this.choicePromptContainer(
+                opts?.requestId,
+            );
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -4112,6 +4133,9 @@ export class ChatPanel {
             // answered, or the server cancelled/timed out the interaction).
             const onAbort = () => {
                 cleanup();
+                if (created) {
+                    container.div.remove();
+                }
                 reject(
                     signal?.reason ?? new DOMException("Aborted", "AbortError"),
                 );
@@ -4152,6 +4176,441 @@ export class ChatPanel {
     }
 
     /**
+     * Render a multi-question form card: one or more questions (single-select
+     * radios, multi-select checkboxes, or yes/no), each optionally offering a
+     * free-text "Other: ___" escape. Resolves with a `QuestionFormResponse`
+     * keyed by field id (or `{ cancelled: true }` when dismissed). Maps from
+     * ClientIO.requestForm.
+     *
+     * When `form.paged` is set the fields render as a wizard - one question at
+     * a time with Back / Next navigation and a "Question X of N" progress
+     * label - and the response is returned only when the user clicks Finish on
+     * the last step. Answers persist across navigation, so going Back
+     * re-hydrates a previously entered value. Otherwise every field renders on
+     * one card with a single Submit.
+     *
+     * Set `opts.showMessage = false` to render only the form controls without
+     * the heading - used by hosts that already display the agent's
+     * `displayContent` separately (the shell renders it before requesting the
+     * form, so repeating `form.message` here would duplicate it).
+     */
+    public addQuestionForm(
+        form: QuestionForm,
+        opts?: {
+            signal?: AbortSignal;
+            showMessage?: boolean;
+            requestId?: string;
+        },
+    ): Promise<QuestionFormResponse> {
+        return new Promise<QuestionFormResponse>((resolve, reject) => {
+            const signal = opts?.signal;
+            // The host may abort before we even render (e.g. another connected
+            // client answered the broadcast interaction first).
+            if (signal?.aborted) {
+                reject(
+                    signal.reason ?? new DOMException("Aborted", "AbortError"),
+                );
+                return;
+            }
+
+            const { container, created } = this.choicePromptContainer(
+                opts?.requestId,
+            );
+            if (opts?.showMessage !== false && form.message) {
+                container.setMessage(
+                    { type: "text", content: form.message },
+                    undefined,
+                    undefined,
+                );
+            }
+
+            const panelDiv = document.createElement("div");
+            panelDiv.className = "question-form-panel";
+
+            const makeOption = (
+                type: "radio" | "checkbox",
+                name: string,
+                text: string,
+                checked: boolean,
+            ) => {
+                const label = document.createElement("label");
+                label.className = "question-form-choice";
+                const input = document.createElement("input");
+                input.type = type;
+                if (type === "radio") {
+                    input.name = name;
+                }
+                input.checked = checked;
+                label.appendChild(input);
+                const span = document.createElement("span");
+                span.textContent = text;
+                label.appendChild(span);
+                return { label, input };
+            };
+
+            // An "Other: ___" row: a radio/checkbox paired with a text box.
+            // Touching the text box selects the control so a typed value counts.
+            const makeOther = (
+                type: "radio" | "checkbox",
+                name: string,
+                placeholder?: string,
+            ) => {
+                const label = document.createElement("label");
+                label.className = "question-form-choice question-form-other";
+                const control = document.createElement("input");
+                control.type = type;
+                if (type === "radio") {
+                    control.name = name;
+                }
+                label.appendChild(control);
+                const span = document.createElement("span");
+                span.textContent = "Other:";
+                label.appendChild(span);
+                const text = document.createElement("input");
+                text.type = "text";
+                text.className = "question-form-other-input";
+                if (placeholder) {
+                    text.placeholder = placeholder;
+                }
+                const select = () => {
+                    control.checked = true;
+                };
+                text.addEventListener("focus", select);
+                text.addEventListener("input", select);
+                label.appendChild(text);
+                return { label, control, text };
+            };
+
+            // Build one field's DOM, restoring `saved` if provided, and return
+            // a collector that reads its current answer. Shared by the
+            // all-at-once layout and the paged wizard (which re-hydrates each
+            // field from saved answers when navigating Back/Next).
+            const buildField = (
+                field: QuestionFormField,
+                fieldIndex: number,
+                saved: QuestionFormFieldAnswer | undefined,
+            ): {
+                node: HTMLElement;
+                collect: () => QuestionFormFieldAnswer;
+            } => {
+                const fieldDiv = document.createElement("div");
+                fieldDiv.className = "question-form-field";
+                if (field.prompt) {
+                    const promptEl = document.createElement("div");
+                    promptEl.className = "question-form-prompt";
+                    promptEl.textContent = field.prompt;
+                    fieldDiv.appendChild(promptEl);
+                }
+                const groupName = `qf-${fieldIndex}-${Date.now()}`;
+
+                if (field.kind === "yesNo") {
+                    const savedYes =
+                        saved?.kind === "yesNo"
+                            ? saved.value
+                            : field.defaultValue === true;
+                    const yes = makeOption("radio", groupName, "Yes", savedYes);
+                    const no = makeOption("radio", groupName, "No", !savedYes);
+                    fieldDiv.appendChild(yes.label);
+                    fieldDiv.appendChild(no.label);
+                    return {
+                        node: fieldDiv,
+                        collect: () => ({
+                            kind: "yesNo",
+                            value: yes.input.checked,
+                        }),
+                    };
+                }
+
+                if (field.kind === "pick") {
+                    const savedPick =
+                        saved?.kind === "pick" ? saved : undefined;
+                    const radios: HTMLInputElement[] = [];
+                    field.choices.forEach((choice, i) => {
+                        const checked =
+                            savedPick !== undefined
+                                ? savedPick.selected === i
+                                : field.defaultId !== undefined
+                                  ? field.defaultId === i
+                                  : i === 0;
+                        const { label, input } = makeOption(
+                            "radio",
+                            groupName,
+                            choice,
+                            checked,
+                        );
+                        input.dataset.index = String(i);
+                        radios.push(input);
+                        fieldDiv.appendChild(label);
+                    });
+                    let other:
+                        | { control: HTMLInputElement; text: HTMLInputElement }
+                        | undefined;
+                    if (field.allowFreeText) {
+                        const o = makeOther(
+                            "radio",
+                            groupName,
+                            field.freeTextPlaceholder,
+                        );
+                        other = { control: o.control, text: o.text };
+                        if (
+                            savedPick?.selected === -1 &&
+                            savedPick.text !== undefined
+                        ) {
+                            o.control.checked = true;
+                            o.text.value = savedPick.text;
+                        }
+                        fieldDiv.appendChild(o.label);
+                    }
+                    return {
+                        node: fieldDiv,
+                        collect: () => {
+                            if (other?.control.checked) {
+                                return {
+                                    kind: "pick",
+                                    selected: -1,
+                                    text: other.text.value,
+                                };
+                            }
+                            const picked = radios.find((r) => r.checked);
+                            return {
+                                kind: "pick",
+                                selected: picked
+                                    ? parseInt(picked.dataset.index!, 10)
+                                    : -1,
+                            };
+                        },
+                    };
+                }
+
+                // multiChoice
+                const savedMulti =
+                    saved?.kind === "multiChoice" ? saved : undefined;
+                const boxes: HTMLInputElement[] = [];
+                field.choices.forEach((choice, i) => {
+                    const checked =
+                        savedMulti !== undefined
+                            ? savedMulti.selected.includes(i)
+                            : (field.defaultIds?.includes(i) ?? false);
+                    const { label, input } = makeOption(
+                        "checkbox",
+                        groupName,
+                        choice,
+                        checked,
+                    );
+                    input.dataset.index = String(i);
+                    boxes.push(input);
+                    fieldDiv.appendChild(label);
+                });
+                let other:
+                    | { control: HTMLInputElement; text: HTMLInputElement }
+                    | undefined;
+                if (field.allowFreeText) {
+                    const o = makeOther(
+                        "checkbox",
+                        groupName,
+                        field.freeTextPlaceholder,
+                    );
+                    other = { control: o.control, text: o.text };
+                    if (
+                        savedMulti?.text !== undefined &&
+                        savedMulti.text.length > 0
+                    ) {
+                        o.control.checked = true;
+                        o.text.value = savedMulti.text;
+                    }
+                    fieldDiv.appendChild(o.label);
+                }
+                return {
+                    node: fieldDiv,
+                    collect: () => {
+                        const selected = boxes
+                            .filter((b) => b.checked)
+                            .map((b) => parseInt(b.dataset.index!, 10));
+                        const typed =
+                            other?.control.checked && other.text.value
+                                ? other.text.value
+                                : undefined;
+                        return typed !== undefined
+                            ? { kind: "multiChoice", selected, text: typed }
+                            : { kind: "multiChoice", selected };
+                    },
+                };
+            };
+
+            let keyHandler: (e: KeyboardEvent) => void;
+
+            const cleanup = () => {
+                panelDiv.remove();
+                document.removeEventListener("keydown", keyHandler);
+                signal?.removeEventListener("abort", onAbort);
+            };
+
+            const cancel = () => {
+                cleanup();
+                resolve({ answers: {}, cancelled: true });
+            };
+
+            // Allow the host to dismiss the form externally (another client
+            // answered, or the server cancelled/timed out the interaction).
+            const onAbort = () => {
+                cleanup();
+                // Drop the whole card (heading included) when we minted a fresh
+                // system container, so a cancelled / superseded form leaves no
+                // stale heading behind.
+                if (created) {
+                    container.div.remove();
+                }
+                reject(
+                    signal?.reason ?? new DOMException("Aborted", "AbortError"),
+                );
+            };
+
+            if (form.paged) {
+                // Wizard: one question at a time with Back / Next navigation.
+                // Answers persist in `answers` so navigating Back re-hydrates a
+                // previously entered value; the whole set is returned on Finish.
+                const answers: Record<string, QuestionFormFieldAnswer> = {};
+                let step = 0;
+                let collectCurrent: (() => QuestionFormFieldAnswer) | undefined;
+
+                const saveCurrent = () => {
+                    if (collectCurrent) {
+                        answers[form.fields[step].id] = collectCurrent();
+                    }
+                };
+
+                const bodyDiv = document.createElement("div");
+                panelDiv.appendChild(bodyDiv);
+
+                const navDiv = document.createElement("div");
+                navDiv.className = "question-form-nav";
+                const progressEl = document.createElement("span");
+                progressEl.className = "question-form-progress";
+
+                const navButtons = document.createElement("div");
+                navButtons.className = "question-form-nav-buttons";
+                const backBtn = document.createElement("button");
+                backBtn.className = "choice-button";
+                backBtn.textContent = "Back";
+                const nextBtn = document.createElement("button");
+                nextBtn.className = "choice-button question-form-next";
+                const cancelBtn = document.createElement("button");
+                cancelBtn.className = "choice-button";
+                cancelBtn.textContent = "Cancel (Del)";
+                cancelBtn.addEventListener("click", () => cancel());
+                navButtons.appendChild(backBtn);
+                navButtons.appendChild(nextBtn);
+                navButtons.appendChild(cancelBtn);
+
+                navDiv.appendChild(progressEl);
+                navDiv.appendChild(navButtons);
+                panelDiv.appendChild(navDiv);
+
+                const renderStep = () => {
+                    bodyDiv.replaceChildren();
+                    const field = form.fields[step];
+                    const built = buildField(field, step, answers[field.id]);
+                    collectCurrent = built.collect;
+                    bodyDiv.appendChild(built.node);
+                    progressEl.textContent = `Question ${step + 1} of ${
+                        form.fields.length
+                    }`;
+                    backBtn.disabled = step === 0;
+                    nextBtn.textContent =
+                        step === form.fields.length - 1 ? "Finish" : "Next";
+                };
+
+                backBtn.addEventListener("click", () => {
+                    if (step === 0) {
+                        return;
+                    }
+                    saveCurrent();
+                    step--;
+                    renderStep();
+                });
+                nextBtn.addEventListener("click", () => {
+                    saveCurrent();
+                    if (step === form.fields.length - 1) {
+                        cleanup();
+                        resolve({ answers });
+                        return;
+                    }
+                    step++;
+                    renderStep();
+                });
+
+                keyHandler = (e: KeyboardEvent) => {
+                    // Don't hijack Enter/Delete while typing a free-text value.
+                    const inText =
+                        e.target instanceof HTMLInputElement &&
+                        e.target.type === "text";
+                    if (inText) {
+                        return;
+                    }
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        nextBtn.click();
+                    } else if (e.key === "Delete") {
+                        e.preventDefault();
+                        cancel();
+                    }
+                };
+
+                renderStep();
+            } else {
+                // All-at-once: every field on one card, single Submit.
+                const collectors: Array<() => QuestionFormFieldAnswer> = [];
+                form.fields.forEach((field, i) => {
+                    const built = buildField(field, i, undefined);
+                    collectors.push(built.collect);
+                    panelDiv.appendChild(built.node);
+                });
+
+                const submit = () => {
+                    const answers: Record<string, QuestionFormFieldAnswer> = {};
+                    form.fields.forEach((field, i) => {
+                        answers[field.id] = collectors[i]();
+                    });
+                    cleanup();
+                    resolve({ answers });
+                };
+
+                keyHandler = (e: KeyboardEvent) => {
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        submit();
+                    } else if (e.key === "Delete") {
+                        e.preventDefault();
+                        cancel();
+                    }
+                };
+
+                const buttonDiv = document.createElement("div");
+                buttonDiv.className = "checkbox-buttons";
+
+                const submitBtn = document.createElement("button");
+                submitBtn.className = "choice-button";
+                submitBtn.textContent = "Submit (Enter)";
+                submitBtn.addEventListener("click", () => submit());
+
+                const cancelBtn = document.createElement("button");
+                cancelBtn.className = "choice-button";
+                cancelBtn.textContent = "Cancel (Del)";
+                cancelBtn.addEventListener("click", () => cancel());
+
+                buttonDiv.appendChild(submitBtn);
+                buttonDiv.appendChild(cancelBtn);
+                panelDiv.appendChild(buttonDiv);
+            }
+
+            signal?.addEventListener("abort", onAbort, { once: true });
+            document.addEventListener("keydown", keyHandler);
+            container.appendElement(panelDiv);
+            this.scrollToBottom();
+        });
+    }
+
+    /**
      * Show a Yes/No prompt and return the user's choice.
      *
      * Set `opts.showMessage = false` to render only the Yes/No buttons
@@ -4169,7 +4628,7 @@ export class ChatPanel {
             // See addChoicePrompt: a requestId anchors the Yes/No buttons onto
             // the request's existing agent bubble so the prompt message and
             // the buttons render as a single card.
-            const container = this.choicePromptContainer(opts?.requestId);
+            const { container } = this.choicePromptContainer(opts?.requestId);
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -5010,16 +5469,47 @@ export class ChatPanel {
      * fresh system container when there is no requestId or no bubble yet
      * (e.g. a bare `ClientIO.question` with no preceding displayContent).
      */
-    private choicePromptContainer(requestId?: string): AgentMessageContainer {
+    // Resolve the container a prompt card should render into. `created` is true
+    // when a fresh system card was minted (so an abort can remove the whole
+    // card, heading included) and false when an existing agent bubble is reused
+    // (leave it in place - only the controls are removed).
+    private choicePromptContainer(requestId?: string): {
+        container: AgentMessageContainer;
+        created: boolean;
+    } {
+        const threadId = this.resolveThreadId(requestId);
+        // Reuse the request's open agent bubble when one exists (non-blocking
+        // requestChoice/requestForm append their buttons onto the agent's
+        // prompt bubble). Gated on an explicit requestId to preserve prior
+        // behavior for anonymous prompts.
         if (requestId !== undefined) {
-            const existing = this.threadContainers.get(
-                this.resolveThreadId(requestId),
-            );
+            const existing = this.threadContainers.get(threadId);
             if (existing) {
-                return existing;
+                return { container: existing, created: false };
             }
         }
-        return this.createAgentContainer("system", "");
+        // No open bubble. If this thread has committed reasoning-step bubbles
+        // (chained via lastStepAnchorByThread - populated only by "step" mode),
+        // anchor the prompt card right after the last step and advance the
+        // anchor so the reasoning's follow-up step chains BELOW the card.
+        // Without this a blocking interaction card (e.g. reasoning's ask_user)
+        // falls to the default insertion anchor and the follow-up step renders
+        // above it, so the question appears after its own answer.
+        const lastStep = this.lastStepAnchorByThread.get(threadId);
+        if (lastStep?.parentElement === this.messageDiv) {
+            const container = this.createAgentContainer(
+                "system",
+                "",
+                undefined,
+                lastStep,
+            );
+            this.lastStepAnchorByThread.set(threadId, container.div);
+            return { container, created: true };
+        }
+        return {
+            container: this.createAgentContainer("system", ""),
+            created: true,
+        };
     }
 
     private createAgentContainer(
@@ -5399,6 +5889,26 @@ class AgentMessageContainer {
         } else {
             leftLines.push(`${actionLabel} Tokens: <b>not reported</b>`);
         }
+        // Thinking (reasoning) tokens: the subset of completion tokens the
+        // model spent on chain-of-thought, tabulated per reasoning block. Shown
+        // as a total, with a per-block breakdown when there is more than one
+        // block. Only reasoning engines that expose it report this; when absent
+        // the line is omitted entirely.
+        if (
+            tokenUsage?.thinking_tokens !== undefined &&
+            tokenUsage.thinking_tokens.length > 0
+        ) {
+            const blocks = tokenUsage.thinking_tokens;
+            const thinkingTotal = blocks.reduce((sum, n) => sum + n, 0);
+            const breakdown = blocks.length > 1 ? ` (${blocks.join("+")})` : "";
+            // A leading "~" marks an approximate figure: some engines (e.g.
+            // Claude) only expose a streamed per-block estimate, not a billed
+            // reasoning-token count.
+            const approx = tokenUsage.thinking_tokens_estimated ? "~" : "";
+            leftLines.push(
+                `Thinking Tokens: <b>${approx}${thinkingTotal}</b>${breakdown}`,
+            );
+        }
         if (phase?.marks) {
             for (const [key, value] of Object.entries(phase.marks)) {
                 const avg = value.duration / Math.max(value.count, 1);
@@ -5425,6 +5935,35 @@ class AgentMessageContainer {
         } else {
             this.div.classList.remove("chat-message-has-metrics");
         }
+    }
+
+    /**
+     * When this bubble's content is a reasoning "Thinking" block that carries a
+     * per-block token estimate (a `data-thinking-tokens` attribute on the
+     * `<details>`), surface it in the metrics row as "Thinking Tokens: ~N" -
+     * the same place the aggregate token metrics appear - rather than in the
+     * block header. Reasoning step bubbles otherwise have an empty metrics row.
+     * The value is an approximation derived from the reasoning text, hence "~".
+     */
+    public renderReasoningThinkingMetric() {
+        const details = this.messageDiv.querySelector<HTMLElement>(
+            ".reasoning-thinking[data-thinking-tokens]",
+        );
+        if (details === null) {
+            return;
+        }
+        const raw = details.dataset.thinkingTokens;
+        const tokens = raw !== undefined ? parseInt(raw, 10) : NaN;
+        if (!Number.isFinite(tokens) || tokens <= 0) {
+            return;
+        }
+        this.metricsDiv.innerHTML = sanitize(
+            `<div class="metrics-details">` +
+                `<div>Thinking Tokens: <b>~${tokens}</b></div>` +
+                `<div></div><div></div>` +
+                `</div>`,
+        );
+        this.div.classList.add("chat-message-has-metrics");
     }
 
     /**

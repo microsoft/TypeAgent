@@ -17,6 +17,7 @@ import {
     DynamicDisplay,
     ParameterDefinitions,
     ParsedCommandParams,
+    QuestionFormResponse,
     StorageEncoding,
     StorageListOptions,
     TemplateSchema,
@@ -271,7 +272,8 @@ export type AgentInvokeFunctions = {
             response:
                 | boolean
                 | number[]
-                | { selected: number; remember: boolean };
+                | { selected: number; remember: boolean }
+                | QuestionFormResponse;
         },
     ): Promise<ActionResult | undefined>;
     getDynamicSchema(

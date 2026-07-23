@@ -205,6 +205,7 @@ class SessionState {
             openLocalView: async () => {},
             closeLocalView: async () => {},
             requestChoice: noop,
+            requestForm: noop,
             requestInteraction: noop,
             interactionResolved: noop,
             interactionCancelled: noop,

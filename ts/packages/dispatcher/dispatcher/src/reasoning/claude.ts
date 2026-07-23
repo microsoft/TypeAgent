@@ -10,6 +10,7 @@ import {
 import { claudeExecutableOption } from "@typeagent/agent-sdk/node";
 import {
     ActionContext,
+    ActionResult,
     AppAction,
     DisplayAppendMode,
     Entity,
@@ -36,6 +37,11 @@ import {
 } from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
 import { nullClientIO } from "../context/interactiveIO.js";
+import {
+    buildReasoningForm,
+    formatReasoningFormResponse,
+    presentReasoningForm,
+} from "./askUserForm.js";
 import { executeAction } from "../execute/actionHandlers.js";
 import {
     composeActionSchema,
@@ -46,6 +52,9 @@ import {
     formatParams as sharedFormatParams,
     formatThinkingDisplay as sharedFormatThinkingDisplay,
     formatToolResultDisplay as sharedFormatToolResultDisplay,
+    buildReasoningActionResult,
+    estimateReasoningTokens,
+    reasoningTokenUsage,
 } from "./reasoningLoopBase.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 import { ScriptRecipeGenerator } from "./scriptRecipeGenerator.js";
@@ -491,9 +500,10 @@ function getClaudeOptions(
                 },
             };
             systemContext.isInsideReasoningLoop = true;
+            let actionResult: ActionResult | undefined;
             try {
                 systemContext.clientIO = capturingClientIO;
-                await executeAction(
+                actionResult = await executeAction(
                     {
                         action: {
                             schemaName: args.schemaName,
@@ -507,8 +517,16 @@ function getClaudeOptions(
                 systemContext.clientIO = savedClientIO;
                 systemContext.isInsideReasoningLoop = false;
             }
+            // Surface the action's history text (its full, model-facing output
+            // - e.g. the page text webFetch/webSearch carry there) to the
+            // model, not just the brief display summary the capture collects.
+            const { text, isError } = buildReasoningActionResult(
+                actionResult,
+                result,
+            );
             return {
-                content: [{ type: "text", text: JSON.stringify(result) }],
+                content: [{ type: "text", text }],
+                ...(isError && { isError: true }),
             };
         },
     };
@@ -705,6 +723,97 @@ function getClaudeOptions(
         },
     };
 
+    const askUserSchema = {
+        question: z.string(),
+        choices: z.array(z.string()).min(2),
+    };
+    const askUserTool: SdkMcpToolDefinition<typeof askUserSchema> = {
+        name: "ask_user",
+        description: [
+            "Ask the user ONE multiple-choice question and block until they answer.",
+            "Use ONLY when you are genuinely blocked on a decision that only the",
+            "user can make - an ambiguous choice among concrete options, or a",
+            "confirmation before a destructive or irreversible action. Put the exact",
+            'options in `choices` (for a yes/no question use ["Yes", "No"]). Returns',
+            "the option the user picked. Prefer acting autonomously; do not ask when",
+            "a reasonable safe default exists.",
+        ].join("\n"),
+        inputSchema: askUserSchema,
+        handler: async (args) => {
+            // Use the stable clientIO ref (not systemContext.clientIO, which
+            // execute_action transiently swaps for display capture). question()
+            // blocks on the user's answer via the async-interaction path
+            // (respondToInteraction), which does not take the command lock, so
+            // this is safe even though reasoning holds it.
+            const choices = args.choices;
+            const selected = await baseClientIO.question(
+                originatorRequestId,
+                args.question,
+                choices,
+                undefined,
+                "reasoning",
+            );
+            const answer = choices[selected] ?? choices[0] ?? "";
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `The user selected: "${answer}" (choice index ${selected}).`,
+                    },
+                ],
+            };
+        },
+    };
+
+    const askUserFormSchema = {
+        message: z.string().optional(),
+        questions: z
+            .array(
+                z.object({
+                    id: z.string(),
+                    kind: z.enum(["pick", "multiChoice", "yesNo"]),
+                    prompt: z.string(),
+                    choices: z.array(z.string()).optional(),
+                    allowFreeText: z.boolean().optional(),
+                }),
+            )
+            .min(1),
+        paged: z.boolean().optional(),
+    };
+    const askUserFormTool: SdkMcpToolDefinition<typeof askUserFormSchema> = {
+        name: "ask_user_form",
+        description: [
+            "Ask the user SEVERAL questions at once in a single form and block",
+            "until they submit. Prefer this over multiple `ask_user` calls when you",
+            "need more than one answer. Each question has an `id`, a `kind`",
+            '("pick" = choose one, "multiChoice" = choose any, "yesNo"), a `prompt`,',
+            "and (for pick/multiChoice) at least 2 `choices`. Set `allowFreeText`",
+            'to let the user type an "Other" value. Returns every answer keyed to its',
+            "question. Use ONLY when genuinely blocked on decisions only the user can",
+            "make; prefer acting autonomously when a safe default exists.",
+        ].join("\n"),
+        inputSchema: askUserFormSchema,
+        handler: async (args) => {
+            const built = buildReasoningForm(args);
+            if ("error" in built) {
+                return { content: [{ type: "text", text: built.error }] };
+            }
+            const response = await presentReasoningForm(
+                baseClientIO,
+                originatorRequestId,
+                built.form,
+            );
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: formatReasoningFormResponse(built.form, response),
+                    },
+                ],
+            };
+        },
+    };
+
     const sessionId = getSessionId(context);
 
     // Experimental override: if CLAUDE_CUSTOM_PROMPT_FILE is set, read that file
@@ -760,6 +869,8 @@ function getClaudeOptions(
                 "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
                 "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file, language, cursor/selection ranges, workspace, open editors, the active file's diagnostic messages) and the user's selected text (bounded) when present; use the code agent's read actions for full file contents",
+                "- `ask_user`: Ask the user ONE multiple-choice question and block for their answer - only when genuinely blocked on a decision only they can make (see Autonomous Execution Policy)",
+                "- `ask_user_form`: Ask the user SEVERAL questions at once (pick / multiChoice / yesNo, optional free-text) in one form and block for their answers - prefer over repeated `ask_user` when you need more than one answer",
                 "",
                 'For follow-up requests that refer to earlier turns (e.g. "those", "it", "mine"), first consult the [Recent conversation context] block included with the request; call search_memory only when you need older history not shown there.',
                 "",
@@ -795,11 +906,12 @@ function getClaudeOptions(
                     : []),
                 "# Autonomous Execution Policy",
                 "",
-                "NEVER ask the user clarifying questions mid-task.",
-                "This reasoning loop runs without an interactive user present.",
-                "When information is ambiguous or missing, make a reasonable safe default choice and proceed.",
-                "Prefer non-destructive defaults: add rather than replace, use conservative values.",
-                "Only stop if you are truly unable to proceed — in that case, emit a clear error message explaining what is missing.",
+                "Strongly prefer to act autonomously. When information is ambiguous or missing, make a reasonable safe default choice and proceed.",
+                "Prefer non-destructive defaults: add rather than replace, use conservative values. Do NOT ask routine clarifying questions you can reasonably resolve yourself.",
+                "",
+                'The `ask_user` tool is available for the rare cases where you are genuinely blocked on a decision only the user can make: an ambiguous choice among concrete options, or confirmation before a destructive or irreversible action. It blocks until the user answers and returns their choice. Provide the exact options (for yes/no use ["Yes", "No"]). Ask at most one such question, and only when a wrong default would be costly to undo.',
+                "When a single blocking moment genuinely needs more than one answer from the user, use `ask_user_form` to ask them together in one form rather than a sequence of `ask_user` prompts.",
+                "Only stop without a result if you are truly unable to proceed — in that case, emit a clear error message explaining what is missing.",
                 "",
                 "ACTIONS, NOT DESCRIPTIONS: a request to modify state is only complete when you have actually executed an action that modifies it. Writing code or pseudo-code in a markdown response is NOT execution. If an action exists that performs the change, call it — do not describe the change in text and stop. Never finish a turn with only a text-only explanation when the task required a modification.",
                 "",
@@ -1152,6 +1264,8 @@ function getClaudeOptions(
                     getConversationInfoTool,
                     readConversationTool,
                     getUserContextTool,
+                    askUserTool,
+                    askUserFormTool,
                 ],
             }),
         },
@@ -1200,27 +1314,6 @@ function extractActionInfo(
 }
 
 /**
- * Build the reasoning token-usage record reported to the dispatcher (surfaced
- * as "Action Tokens" in the UI). Returns undefined when no tokens were counted
- * so the UI shows "not reported" rather than a misleading zero.
- */
-function reasoningTokenUsage(
-    inputTokens: number,
-    outputTokens: number,
-    cachedTokens: number,
-) {
-    const total = inputTokens + outputTokens + cachedTokens;
-    return total > 0
-        ? {
-              prompt_tokens: inputTokens,
-              completion_tokens: outputTokens,
-              total_tokens: total,
-              ...(cachedTokens > 0 && { cached_tokens: cachedTokens }),
-          }
-        : undefined;
-}
-
-/**
  * Execute reasoning action without planning (standard mode)
  */
 async function executeReasoningWithoutPlanning(
@@ -1252,6 +1345,15 @@ async function executeReasoningWithoutPlanning(
     let usageInputTokens = 0;
     let usageOutputTokens = 0;
     let usageCachedTokens = 0;
+    // Anthropic bills thinking inside output_tokens without a separate count,
+    // but the SDK streams an approximate per-block estimate (system/
+    // thinking_tokens). Tabulate one entry per thinking block so the UI can
+    // show an approximate per-block "Thinking Tokens" breakdown.
+    const usageThinkingTokens: number[] = [];
+    let currentThinkingEstimate = 0;
+    // Fallback: reasoning text per thinking block, used to estimate thinking
+    // tokens when the SDK does not stream a per-block estimate.
+    const reasoningBlockTexts: string[] = [];
 
     // Process streaming response
     for await (const message of queryInstance) {
@@ -1260,6 +1362,19 @@ async function executeReasoningWithoutPlanning(
         // Capture session ID from first message for future resume
         if ("session_id" in message && !getSessionId(context)) {
             setSessionId(context, (message as any).session_id);
+        }
+        // Anthropic bills thinking inside output_tokens without a separate
+        // count, but the SDK streams an approximate running total per thinking
+        // block (system/thinking_tokens). Keep the latest; it's recorded when
+        // the block's thinking content arrives below.
+        if (message.type === "system") {
+            const sysMsg = message as {
+                subtype?: string;
+                estimated_tokens?: number;
+            };
+            if (sysMsg.subtype === "thinking_tokens") {
+                currentThinkingEstimate = sysMsg.estimated_tokens ?? 0;
+            }
         }
         if (message.type === "assistant") {
             for (const content of message.message.content) {
@@ -1312,14 +1427,25 @@ async function executeReasoningWithoutPlanning(
                 } else if ((content as any).type === "thinking") {
                     const thinkingContent = (content as any).thinking;
                     if (thinkingContent) {
+                        reasoningBlockTexts.push(thinkingContent);
                         context.actionIO.appendDisplay(
                             {
                                 type: "html",
-                                content: formatThinkingDisplay(thinkingContent),
+                                content: formatThinkingDisplay(
+                                    thinkingContent,
+                                    estimateReasoningTokens(thinkingContent),
+                                ),
                                 kind: "status",
                             },
                             displayMode,
                         );
+                    }
+                    // Record the SDK's per-block thinking-token estimate (the
+                    // running total streamed as system/thinking_tokens above)
+                    // and reset for the next block.
+                    if (currentThinkingEstimate > 0) {
+                        usageThinkingTokens.push(currentThinkingEstimate);
+                        currentThinkingEstimate = 0;
                     }
                 }
             }
@@ -1410,10 +1536,21 @@ async function executeReasoningWithoutPlanning(
         return undefined;
     }
     const result = createActionResultNoDisplay(finalResult);
+    // Claude's thinking tokens are an approximate per-block figure (Anthropic
+    // does not bill them separately): prefer the SDK's streamed estimate, else
+    // estimate from the reasoning text. Either way, flag as estimated.
+    const thinkingTokens =
+        usageThinkingTokens.length > 0
+            ? usageThinkingTokens
+            : reasoningBlockTexts
+                  .map(estimateReasoningTokens)
+                  .filter((n) => n > 0);
     result.tokenUsage = reasoningTokenUsage(
         usageInputTokens,
         usageOutputTokens,
         usageCachedTokens,
+        thinkingTokens,
+        true,
     );
     return result;
 }
@@ -1483,6 +1620,15 @@ async function executeReasoningWithTracing(
         let usageInputTokens = 0;
         let usageOutputTokens = 0;
         let usageCachedTokens = 0;
+        // Anthropic bills thinking inside output_tokens without a separate
+        // count, but the SDK streams an approximate per-block estimate (system/
+        // thinking_tokens). Tabulate one entry per thinking block so the UI can
+        // show an approximate per-block "Thinking Tokens" breakdown.
+        const usageThinkingTokens: number[] = [];
+        let currentThinkingEstimate = 0;
+        // Fallback: reasoning text per thinking block, used to estimate thinking
+        // tokens when the SDK does not stream a per-block estimate.
+        const reasoningBlockTexts: string[] = [];
 
         // Process streaming response with tracing
         for await (const message of queryInstance) {
@@ -1491,6 +1637,19 @@ async function executeReasoningWithTracing(
             // Capture session ID from first message for future resume
             if ("session_id" in message && !getSessionId(context)) {
                 setSessionId(context, (message as any).session_id);
+            }
+            // Anthropic bills thinking inside output_tokens without a separate
+            // count, but the SDK streams an approximate running total per
+            // thinking block (system/thinking_tokens). Keep the latest; it's
+            // recorded when the block's thinking content arrives below.
+            if (message.type === "system") {
+                const sysMsg = message as {
+                    subtype?: string;
+                    estimated_tokens?: number;
+                };
+                if (sysMsg.subtype === "thinking_tokens") {
+                    currentThinkingEstimate = sysMsg.estimated_tokens ?? 0;
+                }
             }
 
             if (message.type === "assistant") {
@@ -1554,15 +1713,27 @@ async function executeReasoningWithTracing(
                     } else if ((content as any).type === "thinking") {
                         const thinkingContent = (content as any).thinking;
                         if (thinkingContent) {
+                            reasoningBlockTexts.push(thinkingContent);
                             context.actionIO.appendDisplay(
                                 {
                                     type: "html",
-                                    content:
-                                        formatThinkingDisplay(thinkingContent),
+                                    content: formatThinkingDisplay(
+                                        thinkingContent,
+                                        estimateReasoningTokens(
+                                            thinkingContent,
+                                        ),
+                                    ),
                                     kind: "status",
                                 },
                                 displayMode,
                             );
+                        }
+                        // Record the SDK's per-block thinking-token estimate
+                        // (the running total streamed as system/thinking_tokens
+                        // above) and reset for the next block.
+                        if (currentThinkingEstimate > 0) {
+                            usageThinkingTokens.push(currentThinkingEstimate);
+                            currentThinkingEstimate = 0;
                         }
                     }
                 }
@@ -1741,10 +1912,21 @@ async function executeReasoningWithTracing(
             return undefined;
         }
         const result = createActionResultNoDisplay(finalResult);
+        // Claude's thinking tokens are an approximate per-block figure (Anthropic
+        // does not bill them separately): prefer the SDK's streamed estimate,
+        // else estimate from the reasoning text. Either way, flag as estimated.
+        const thinkingTokens =
+            usageThinkingTokens.length > 0
+                ? usageThinkingTokens
+                : reasoningBlockTexts
+                      .map(estimateReasoningTokens)
+                      .filter((n) => n > 0);
         result.tokenUsage = reasoningTokenUsage(
             usageInputTokens,
             usageOutputTokens,
             usageCachedTokens,
+            thinkingTokens,
+            true,
         );
         return result;
     } catch (error) {

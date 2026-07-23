@@ -353,7 +353,7 @@ function clarifyAgentMatchesAction(
     );
 
     return createPickRememberChoiceResult(
-        systemContext.collisionChoiceManager,
+        systemContext.choiceManager,
         question,
         choiceLabels,
         "Remember this choice for next time",
@@ -603,7 +603,7 @@ export const dispatcherAgent: AppAgent = {
     handleChoice: async (choiceId, response, context) => {
         const systemContext = (context as ActionContext<CommandHandlerContext>)
             .sessionContext.agentContext;
-        return systemContext.collisionChoiceManager.handleChoice(
+        return systemContext.choiceManager.handleChoice(
             choiceId,
             response,
             context,

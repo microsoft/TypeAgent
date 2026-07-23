@@ -17,6 +17,8 @@ import {
     DisplayAppendMode,
     DisplayContent,
     MessageContent,
+    QuestionForm,
+    QuestionFormFieldAnswer,
 } from "@typeagent/agent-sdk";
 import {
     getContentForType,
@@ -1301,6 +1303,145 @@ export function createEnhancedClientIO(
                 }
             })();
         },
+        // Multi-question form — prompt each field in turn, then respond with a
+        // QuestionFormResponse keyed by field id. Mirrors requestChoice's
+        // spinner/line handling and main-loop gating via pendingChoicePromise.
+        requestForm(
+            _requestId: RequestId,
+            choiceId: string,
+            form: QuestionForm,
+            source: string,
+        ): void {
+            let resolveChoice: () => void;
+            pendingChoicePromise = new Promise<void>((resolve) => {
+                resolveChoice = resolve;
+            });
+
+            // code-complexity-allow: multi-field form UI handler; branches over field kind and free-text option
+            (async () => {
+                try {
+                    if (currentSpinner) {
+                        currentSpinner.stop();
+                        currentSpinner = null;
+                    }
+
+                    const width = process.stdout.columns || 80;
+                    const line = ANSI.dim + "─".repeat(width) + ANSI.reset;
+                    process.stdout.write("\n");
+                    process.stdout.write(line + "\n");
+                    if (form.message) {
+                        process.stdout.write(
+                            `${chalk.dim(`[${source}]`)} ${form.message}\n`,
+                        );
+                    }
+
+                    const answers: Record<string, QuestionFormFieldAnswer> = {};
+                    for (const field of form.fields) {
+                        if (field.prompt) {
+                            process.stdout.write(
+                                `${chalk.bold(field.prompt)}\n`,
+                            );
+                        }
+                        if (field.kind === "yesNo") {
+                            const input = await question_internal(
+                                `${chalk.dim("(y/n)")} `,
+                                rl,
+                            );
+                            answers[field.id] = {
+                                kind: "yesNo",
+                                value:
+                                    input.toLowerCase() === "y" ||
+                                    input.toLowerCase() === "yes",
+                            };
+                            continue;
+                        }
+                        // pick / multiChoice — numbered list, plus an "Other"
+                        // entry when the field offers a free-text escape.
+                        for (let i = 0; i < field.choices.length; i++) {
+                            process.stdout.write(
+                                `  ${chalk.cyan(`${i + 1}.`)} ${field.choices[i]}\n`,
+                            );
+                        }
+                        const otherNumber = field.allowFreeText
+                            ? field.choices.length + 1
+                            : -1;
+                        if (field.allowFreeText) {
+                            process.stdout.write(
+                                `  ${chalk.cyan(`${otherNumber}.`)} Other (type a value)\n`,
+                            );
+                        }
+                        if (field.kind === "pick") {
+                            const input = await question_internal(
+                                `${chalk.dim("Enter choice number:")} `,
+                                rl,
+                            );
+                            const n = parseInt(input.trim(), 10);
+                            if (field.allowFreeText && n === otherNumber) {
+                                const text = await question_internal(
+                                    `${chalk.dim("Enter value:")} `,
+                                    rl,
+                                );
+                                answers[field.id] = {
+                                    kind: "pick",
+                                    selected: -1,
+                                    text,
+                                };
+                            } else {
+                                answers[field.id] = {
+                                    kind: "pick",
+                                    selected:
+                                        !isNaN(n) &&
+                                        n >= 1 &&
+                                        n <= field.choices.length
+                                            ? n - 1
+                                            : (field.defaultId ?? -1),
+                                };
+                            }
+                        } else {
+                            const input = await question_internal(
+                                `${chalk.dim("Enter choice numbers (comma-separated):")} `,
+                                rl,
+                            );
+                            const nums = input
+                                .split(",")
+                                .map((s) => parseInt(s.trim(), 10))
+                                .filter((v) => !isNaN(v));
+                            const selected = nums
+                                .filter(
+                                    (v) => v >= 1 && v <= field.choices.length,
+                                )
+                                .map((v) => v - 1);
+                            let text: string | undefined;
+                            if (
+                                field.allowFreeText &&
+                                nums.includes(otherNumber)
+                            ) {
+                                text = await question_internal(
+                                    `${chalk.dim("Enter value:")} `,
+                                    rl,
+                                );
+                            }
+                            answers[field.id] =
+                                text !== undefined
+                                    ? { kind: "multiChoice", selected, text }
+                                    : { kind: "multiChoice", selected };
+                        }
+                    }
+
+                    process.stdout.write(line + "\n");
+
+                    if (dispatcherRef?.current) {
+                        await dispatcherRef.current.respondToChoice(choiceId, {
+                            answers,
+                        });
+                    }
+                } catch (err) {
+                    console.error(chalk.red(`Form error: ${err}`));
+                } finally {
+                    resolveChoice!();
+                }
+            })();
+        },
         // Async deferred pattern — handle interactions pushed from the server
         requestInteraction(interaction: PendingInteractionRequest): void {
             interactionQueue = interactionQueue.then(async () => {
@@ -1311,6 +1452,14 @@ export function createEnhancedClientIO(
 
                 if (interaction.type === "proposeAction") {
                     // Not supported in CLI yet
+                    return;
+                }
+
+                if (interaction.type === "form") {
+                    // TODO: render the multi-question form sequentially in the
+                    // console. Not supported in the CLI yet; when other clients
+                    // (e.g. the shell) are joined they answer via the shared
+                    // interaction broadcast, otherwise this blocks to timeout.
                     return;
                 }
 

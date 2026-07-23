@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Adapted from packages/agents/browser/src/extension/serviceWorker/dispatcherConnection.ts
+// Adapted from packages/agents/browserExtension/src/extension/serviceWorker/dispatcherConnection.ts
 // for the Visual Studio WebView2 panel. WebView2 is a single browser context (no
 // service worker), so the ClientIO callbacks call into ChatPanel directly rather
 // than forwarding via chrome.runtime.
@@ -251,6 +251,9 @@ function createChatPanelClientIO(chatPanel: ChatPanel): ClientIO {
             /* not supported in VSIX */
         },
         requestChoice() {
+            /* not supported in VSIX */
+        },
+        requestForm() {
             /* not supported in VSIX */
         },
         requestInteraction() {

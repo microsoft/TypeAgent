@@ -1,11 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * Schema for generating suggested questions about web page content
- * Following TypeChat/TypeAgent pattern for structured LLM interactions
- */
-
 export type QuestionType =
     | "factual" // Direct questions about facts on the page
     | "analytical" // Questions that require analysis or interpretation
