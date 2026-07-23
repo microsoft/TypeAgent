@@ -56,6 +56,7 @@ async function main(): Promise<void> {
                             {
                                 ok: true,
                                 rules: g.identifiers.ruleIds.length,
+                                diagnostics: result.diagnostics,
                             },
                             null,
                             2,
@@ -65,6 +66,9 @@ async function main(): Promise<void> {
                     console.log(
                         `Loaded: ${g.identifiers.ruleIds.length} rules`,
                     );
+                    for (const diagnostic of result.diagnostics ?? []) {
+                        console.warn(diagnostic.message);
+                    }
                 }
             } else {
                 if (jsonFlag) {

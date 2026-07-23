@@ -31,6 +31,8 @@ describe("grammar-tools CLI", () => {
     let invalidFile: string;
     let corpusFile: string;
     let validFileB: string;
+    let warningFile: string;
+    let warningLibFile: string;
 
     beforeAll(() => {
         tmpDir = mkdtempSync(join(tmpdir(), "grammar-tools-test-"));
@@ -48,6 +50,16 @@ describe("grammar-tools CLI", () => {
             validFileB,
             `<Start> = play $(song:string) -> { action: "play", song };\n<Start> = stop -> { action: "stop" };\n`,
         );
+        warningLibFile = join(tmpDir, "warning-lib.agr");
+        writeFileSync(
+            warningLibFile,
+            `export <Used> = used -> "used";\nexport <Unused> = unused -> "unused";\n`,
+        );
+        warningFile = join(tmpDir, "warning.agr");
+        writeFileSync(
+            warningFile,
+            `import { Used, Unused } from "./warning-lib.agr";\n<Start> = <Used>;\n`,
+        );
     });
 
     afterAll(() => {
@@ -56,6 +68,8 @@ describe("grammar-tools CLI", () => {
             unlinkSync(invalidFile);
             unlinkSync(corpusFile);
             unlinkSync(validFileB);
+            unlinkSync(warningFile);
+            unlinkSync(warningLibFile);
         } catch {
             // ignore cleanup errors
         }
@@ -95,6 +109,27 @@ describe("grammar-tools CLI", () => {
         const result = JSON.parse(stdout);
         expect(result.ok).toBe(true);
         expect(result.rules).toBeGreaterThan(0);
+    });
+
+    it("load: reports warnings for a valid grammar", async () => {
+        const { stdout, stderr, code } = await run(["load", warningFile]);
+        expect(code).toBe(0);
+        expect(stdout).toContain("Loaded:");
+        expect(stderr).toContain("<Unused>");
+        expect(stderr).toContain("declared but never used");
+    });
+
+    it("load --json: includes warnings for a valid grammar", async () => {
+        const { stdout, code } = await run(["load", warningFile, "--json"]);
+        expect(code).toBe(0);
+        const result = JSON.parse(stdout);
+        expect(result.ok).toBe(true);
+        expect(result.diagnostics).toEqual([
+            expect.objectContaining({
+                severity: "warning",
+                message: expect.stringContaining("<Unused>"),
+            }),
+        ]);
     });
 
     it("load: fails on invalid grammar", async () => {
