@@ -3,11 +3,16 @@
 
 import { ActionResult } from "../action.js";
 import { ActionContext } from "../agentInterface.js";
+import { QuestionFormResponse } from "../action.js";
 import { randomUUID } from "node:crypto";
 
 export type PickRememberResponse = { selected: number; remember: boolean };
 
-export type ChoiceResponse = boolean | number[] | PickRememberResponse;
+export type ChoiceResponse =
+    | boolean
+    | number[]
+    | PickRememberResponse
+    | QuestionFormResponse;
 
 // Callback registered with createYesNoChoiceResult / createMultiChoiceResult.
 // `actionContext` is the LIVE ActionContext the dispatcher creates when

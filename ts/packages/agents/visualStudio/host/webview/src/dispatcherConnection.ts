@@ -253,6 +253,9 @@ function createChatPanelClientIO(chatPanel: ChatPanel): ClientIO {
         requestChoice() {
             /* not supported in VSIX */
         },
+        requestForm() {
+            /* not supported in VSIX */
+        },
         requestInteraction() {
             /* not supported in VSIX */
         },

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7f986fd02c90cbcde410d2aea6c675827d1bd4e27739435d5d428495fee42fdb -->
+<!-- AUTOGEN:DOCS:HASH:sha256=8d3b6e3d5af4248bf59e4803b139bd402c4e89d6fdbe64c701984579e364a7b4 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -12,17 +12,17 @@
 
 ## Overview
 
-The `agent-shell` package is a TypeScript library that provides the graphical user interface (GUI) for the TypeAgent ecosystem. Built on Electron, it acts as a personal agent interface, enabling users to interact with an extensible set of agents to perform actions, answer questions, and manage conversations. The shell supports both text and voice input, integrates with other TypeAgent components like the dispatcher and agent server, and operates in both local and remote modes.
+The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) for the TypeAgent ecosystem. Built on Electron, it provides a personal agent interface for interacting with an extensible set of agents. Users can perform actions, manage conversations, and interact via text or voice input. The shell integrates with other TypeAgent components, such as the dispatcher and agent server, and supports both local and remote operation modes.
 
 ## What it does
 
-The `agent-shell` package offers the following key features:
+The `agent-shell` package offers the following capabilities:
 
 ### Conversation Management
 
 - **Multi-Conversation Support**: Users can create, switch, rename, and delete conversations. Conversations persist across sessions, with history replayed on reconnect.
 - **Default Conversation**: Automatically joins a persistent default conversation named `"Shell"` when connected to the agent server.
-- **Commands for Conversation Management**: Users can manage conversations using commands like `/conversation list`, `/conversation new [name]`, `/conversation switch <id|name>`, and more. These commands can also be executed via natural language inputs.
+- **Command-Based Management**: Users can manage conversations using commands like `/conversation list`, `/conversation new [name]`, `/conversation switch <id|name>`, and more. These commands can also be executed via natural language inputs.
 - **Request Queue Management**: Visual indicators for queued and running requests allow users to manage and cancel requests directly from the chat interface.
 
 ### Speech Input
@@ -176,6 +176,6 @@ _6 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -3304,12 +3304,7 @@ class InferActionsHandler implements CommandHandlerNoParams {
             if (newActions.length > 0 && agentContext.choiceManager) {
                 // Register choice callback for number responses
                 const choiceId = agentContext.choiceManager.registerChoice(
-                    async (
-                        response:
-                            | boolean
-                            | number[]
-                            | { selected: number; remember: boolean },
-                    ) => {
+                    async (response) => {
                         const selectedIndices = response as number[];
                         if (selectedIndices.length === 0) {
                             return createActionResult(

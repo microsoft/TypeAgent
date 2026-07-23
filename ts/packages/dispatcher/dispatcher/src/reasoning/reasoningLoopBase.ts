@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { ActionResult, ActionTokenUsage } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
 
 export const loopBaseDebug = registerDebug("typeagent:reasoning:loopBase");
@@ -163,17 +164,109 @@ export function formatToolResultDisplay(
     return `${label} \`${preview || "(empty)"}\``;
 }
 
-export function formatThinkingDisplay(thinkingText: string): string {
+export function formatThinkingDisplay(
+    thinkingText: string,
+    thinkingTokens?: number,
+): string {
     const escaped = thinkingText
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
+    // Carry the per-block token estimate as a data attribute (not in the
+    // summary text). The client moves it into the reasoning step bubble's
+    // metrics row - alongside the other token metrics - rather than the block
+    // header. The value is an approximation (from the reasoning text length),
+    // so the UI marks it with "~".
+    const tokenAttr =
+        thinkingTokens !== undefined && thinkingTokens > 0
+            ? ` data-thinking-tokens="${thinkingTokens}"`
+            : "";
     return [
-        `<details class="reasoning-thinking" open>`,
+        `<details class="reasoning-thinking"${tokenAttr} open>`,
         `<summary>Thinking</summary>`,
         `<pre>${escaped}</pre>`,
         `</details>`,
     ].join("");
+}
+
+/**
+ * Build the reasoning token-usage record reported to the dispatcher (surfaced
+ * as "Action Tokens" in the UI). Returns undefined when no tokens were counted
+ * so the UI shows "not reported" rather than a misleading zero.
+ *
+ * `thinkingTokens` carries the per-turn reasoning ("thinking") token counts -
+ * the subset of completion tokens the model spent on chain-of-thought, one
+ * entry per turn that reported any. They are already included in `outputTokens`,
+ * so they are reported separately (as a per-block breakdown) rather than added
+ * to the total again, letting the UI show a distinct "Thinking Tokens" figure.
+ *
+ * `thinkingTokensEstimated` marks those counts as an approximate estimate rather
+ * than a billed figure (e.g. the Claude SDK only streams a per-block estimate),
+ * so the UI can flag them as approximate.
+ */
+export function reasoningTokenUsage(
+    inputTokens: number,
+    outputTokens: number,
+    cachedTokens: number,
+    thinkingTokens?: number[],
+    thinkingTokensEstimated?: boolean,
+): ActionTokenUsage | undefined {
+    const total = inputTokens + outputTokens + cachedTokens;
+    if (total <= 0) {
+        return undefined;
+    }
+    const perBlock = thinkingTokens?.filter((t) => t > 0) ?? [];
+    return {
+        prompt_tokens: inputTokens,
+        completion_tokens: outputTokens,
+        total_tokens: total,
+        ...(cachedTokens > 0 && { cached_tokens: cachedTokens }),
+        ...(perBlock.length > 0 && { thinking_tokens: perBlock }),
+        ...(perBlock.length > 0 &&
+            thinkingTokensEstimated && { thinking_tokens_estimated: true }),
+    };
+}
+
+/**
+ * Rough token estimate for a reasoning ("thinking") text block, used when the
+ * model provider does not report a billed reasoning-token count (e.g. Anthropic
+ * folds thinking into output_tokens, so Claude-backed sessions expose no
+ * separate figure). Uses the standard ~4-chars-per-token heuristic for English
+ * prose. Approximate only - callers MUST flag the result as an estimate.
+ * Returns 0 for empty/whitespace input.
+ */
+export function estimateReasoningTokens(text: string): number {
+    const trimmed = text?.trim() ?? "";
+    return trimmed.length === 0 ? 0 : Math.ceil(trimmed.length / 4);
+}
+
+/**
+ * Build the text an `execute_action` reasoning tool returns to the model from
+ * the executed action's result plus the display messages captured while it ran.
+ *
+ * Actions carry their substantive, model-facing output in `historyText` - e.g.
+ * webFetch / webSearch return a brief "Fetched N chars" line as displayContent
+ * but the actual page text as historyText. The reasoning loop captures only
+ * display content, so without preferring historyText the model sees the summary
+ * and never the data it asked for. Falls back to the serialized display messages
+ * for actions that set no history text, and surfaces the error text for a failed
+ * action so the caller can mark the tool result as an error.
+ */
+export function buildReasoningActionResult(
+    actionResult: ActionResult | undefined,
+    capturedDisplay: unknown[],
+): { text: string; isError: boolean } {
+    if (actionResult && "error" in actionResult && actionResult.error) {
+        return { text: `Error: ${actionResult.error}`, isError: true };
+    }
+    const historyText =
+        actionResult && "historyText" in actionResult
+            ? actionResult.historyText
+            : undefined;
+    if (typeof historyText === "string" && historyText.trim().length > 0) {
+        return { text: historyText, isError: false };
+    }
+    return { text: JSON.stringify(capturedDisplay), isError: false };
 }
 
 /**
@@ -198,7 +291,10 @@ export async function processReasoningSession(
                     });
                     config.onThinking?.(event.text);
                     display.appendStep(
-                        formatThinkingDisplay(event.text),
+                        formatThinkingDisplay(
+                            event.text,
+                            estimateReasoningTokens(event.text),
+                        ),
                         "html",
                     );
                     break;
