@@ -56,7 +56,6 @@ async function main(): Promise<void> {
                             {
                                 ok: true,
                                 rules: g.identifiers.ruleIds.length,
-                                diagnostics: result.diagnostics,
                             },
                             null,
                             2,

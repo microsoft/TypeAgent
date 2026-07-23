@@ -119,19 +119,6 @@ describe("grammar-tools CLI", () => {
         expect(stderr).toContain("declared but never used");
     });
 
-    it("load --json: includes warnings for a valid grammar", async () => {
-        const { stdout, code } = await run(["load", warningFile, "--json"]);
-        expect(code).toBe(0);
-        const result = JSON.parse(stdout);
-        expect(result.ok).toBe(true);
-        expect(result.diagnostics).toEqual([
-            expect.objectContaining({
-                severity: "warning",
-                message: expect.stringContaining("<Unused>"),
-            }),
-        ]);
-    });
-
     it("load: fails on invalid grammar", async () => {
         const { code } = await run(["load", invalidFile]);
         expect(code).not.toBe(0);
