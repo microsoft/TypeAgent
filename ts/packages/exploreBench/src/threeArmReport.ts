@@ -176,6 +176,7 @@ export async function writeThreeArmReport(options: {
             "Metrics compare only the three-way intersection of successful rows for the same task and model; completion counts cover the full requested cohort.",
             "The retained Copilot SDK and TypeAgent rows are read without issuing new model requests; only the TypeAgent with LSP input is new.",
             "LSP navigation is charged against the same eight-call repository budget, and every successful TypeAgent with LSP row must contain an error-free language-server call followed by repository-grounded reads before submission.",
+            "The LSP call total counts successful navigation calls; failed attempts remain available in raw TypeAgent tool telemetry.",
             "SWE-bench Verified is Python-only at the gold-patch level in this cohort, so TypeScript language-server benchmark coverage is reported explicitly and may be zero.",
         ],
     };
@@ -278,7 +279,7 @@ function renderMarkdown(report: ThreeArmReport): string {
         "",
         "Quality and token columns use only the successful three-way task intersection for each model. Completion and LSP adoption cover all requested tasks.",
         "",
-        "| Model | Three-way paired | Copilot SDK (with explore agent) completed | TypeAgent completed | TypeAgent with LSP completed | Copilot SDK recall | TypeAgent recall | TypeAgent with LSP recall | Copilot SDK file P/R/F1 | TypeAgent file P/R/F1 | TypeAgent with LSP file P/R/F1 | Copilot SDK line P/R/F1 | TypeAgent line P/R/F1 | TypeAgent with LSP line P/R/F1 | Copilot SDK tokens | TypeAgent tokens | TypeAgent with LSP tokens | LSP adopted | LSP calls | LSP locations |",
+        "| Model | Three-way paired | Copilot SDK (with explore agent) completed | TypeAgent completed | TypeAgent with LSP completed | Copilot SDK recall | TypeAgent recall | TypeAgent with LSP recall | Copilot SDK file P/R/F1 | TypeAgent file P/R/F1 | TypeAgent with LSP file P/R/F1 | Copilot SDK line P/R/F1 | TypeAgent line P/R/F1 | TypeAgent with LSP line P/R/F1 | Copilot SDK tokens | TypeAgent tokens | TypeAgent with LSP tokens | LSP adopted | Successful LSP calls | LSP locations |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ...rows,
         "",

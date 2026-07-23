@@ -65,8 +65,8 @@ interface ComparisonRow {
     complete: boolean;
     missingBaselineTaskIds: string[];
     missingTreatmentTaskIds: string[];
-    withoutMcp: PairedVariantSummary | null;
-    withMcp: PairedVariantSummary | null;
+    baseline: PairedVariantSummary | null;
+    typeagent: PairedVariantSummary | null;
     overallRecallDelta: number | null;
     fileScoreDelta: number | null;
     fileRecallDelta: number | null;
@@ -127,7 +127,7 @@ interface CompactTaskResult {
 }
 
 export interface EvalReport {
-    schemaVersion: 1;
+    schemaVersion: 2;
     generatedAt: string;
     input: string;
     runId: string;
@@ -188,7 +188,7 @@ export async function writeReports(input: string): Promise<{
     }
 
     const report: EvalReport = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         generatedAt: new Date().toISOString(),
         input: absoluteInput,
         runId: manifest.runId,
@@ -385,8 +385,8 @@ function buildComparisons(
             missingTreatmentTaskIds: taskIds.filter(
                 (taskId) => !treatment.has(taskId),
             ),
-            withoutMcp: pairedVariantSummary(baselineSummary),
-            withMcp: pairedVariantSummary(treatmentSummary),
+            baseline: pairedVariantSummary(baselineSummary),
+            typeagent: pairedVariantSummary(treatmentSummary),
             overallRecallDelta:
                 baselineSummary && treatmentSummary
                     ? treatmentSummary.overallRecall -
@@ -779,8 +779,8 @@ function average(values: number[]): number {
 function renderMarkdown(report: EvalReport): string {
     const sections = Object.values(report.prefixes).map((prefix) => {
         const comparisons = prefix.comparisons.map((row) => {
-            const withoutMcp = row.withoutMcp;
-            const withMcp = row.withMcp;
+            const baselineSummary = row.baseline;
+            const typeAgentSummary = row.typeagent;
             const baseline = prefix.leaderboard.find(
                 (entry) =>
                     entry.matrixName === row.matrixName &&
@@ -791,7 +791,7 @@ function renderMarkdown(report: EvalReport): string {
                     entry.matrixName === row.matrixName &&
                     entry.variant === "typeagent",
             );
-            return `| ${row.matrixName} | ${row.pairedPairs}/${row.expectedPairs} | ${completed(baseline)}/${row.expectedPairs} | ${completed(treatment)}/${row.expectedPairs} | ${formatInteger(withoutMcp?.finalAttemptTokens)} | ${formatInteger(withMcp?.finalAttemptTokens)} | ${formatInteger(row.finalAttemptTokensDelta === null ? null : -row.finalAttemptTokensDelta)} | ${formatNumber(withoutMcp?.overallRecall)} | ${formatNumber(withMcp?.overallRecall)} | ${formatMetric(withoutMcp?.file)} | ${formatMetric(withMcp?.file)} | ${formatMetric(withoutMcp?.line)} | ${formatMetric(withMcp?.line)} | ${baseline?.subagentAdoptionCount ?? 0}/${row.expectedPairs} | ${treatment?.mcpAdoptionCount ?? 0}/${row.expectedPairs} |`;
+            return `| ${row.matrixName} | ${row.pairedPairs}/${row.expectedPairs} | ${completed(baseline)}/${row.expectedPairs} | ${completed(treatment)}/${row.expectedPairs} | ${formatInteger(baselineSummary?.finalAttemptTokens)} | ${formatInteger(typeAgentSummary?.finalAttemptTokens)} | ${formatInteger(row.finalAttemptTokensDelta === null ? null : -row.finalAttemptTokensDelta)} | ${formatNumber(baselineSummary?.overallRecall)} | ${formatNumber(typeAgentSummary?.overallRecall)} | ${formatMetric(baselineSummary?.file)} | ${formatMetric(typeAgentSummary?.file)} | ${formatMetric(baselineSummary?.line)} | ${formatMetric(typeAgentSummary?.line)} | ${baseline?.subagentAdoptionCount ?? 0}/${row.expectedPairs} | ${treatment?.mcpAdoptionCount ?? 0}/${row.expectedPairs} |`;
         });
         return [
             `## Selected ${prefix.limit}-task prefix (${taskSelectionLabel(report.manifest)})`,
@@ -828,9 +828,11 @@ export function benchmarkVariantLabel(variant: BenchmarkVariant): string {
 
 function taskSelectionDescription(manifest: RunManifest): string {
     const selection =
-        manifest.taskSeed === undefined
-            ? `a deterministic repository-balanced window with offset ${manifest.taskOffset ?? 0}`
-            : `a deterministic seeded-random sample with seed ${JSON.stringify(manifest.taskSeed)}`;
+        manifest.taskIdsFile !== undefined
+            ? `an exact task-ID cohort from ${JSON.stringify(manifest.taskIdsFile)}`
+            : manifest.taskSeed === undefined
+              ? `a deterministic repository-balanced window with offset ${manifest.taskOffset ?? 0}`
+              : `a deterministic seeded-random sample with seed ${JSON.stringify(manifest.taskSeed)}`;
     return manifest.languageFilter?.length
         ? `${selection}, filtered from ${manifest.sourceTaskCount ?? manifest.taskIds.length} source tasks to patches using ${manifest.languageFilter.join(" or ")}`
         : selection;
@@ -838,9 +840,11 @@ function taskSelectionDescription(manifest: RunManifest): string {
 
 function taskSelectionLabel(manifest: RunManifest): string {
     const selection =
-        manifest.taskSeed === undefined
-            ? `deterministic offset ${manifest.taskOffset ?? 0}`
-            : `seeded random, seed ${JSON.stringify(manifest.taskSeed)}`;
+        manifest.taskIdsFile !== undefined
+            ? `exact task IDs file ${JSON.stringify(path.basename(manifest.taskIdsFile))}`
+            : manifest.taskSeed === undefined
+              ? `deterministic offset ${manifest.taskOffset ?? 0}`
+              : `seeded random, seed ${JSON.stringify(manifest.taskSeed)}`;
     return manifest.languageFilter?.length
         ? `${selection}; ${manifest.languageFilter.join("/")} patches`
         : selection;

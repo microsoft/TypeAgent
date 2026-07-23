@@ -79,6 +79,7 @@ test("writes a compatible three-arm report with presentation-only labels", async
     const markdown = await readFile(markdownPath, "utf8");
     assert.match(markdown, /Copilot SDK \(with explore agent\)/);
     assert.match(markdown, /TypeAgent with LSP/);
+    assert.match(markdown, /Successful LSP calls/);
     assert.match(markdown, /0\.500\/1\.000\/0\.667/);
     assert.doesNotMatch(markdown, /0\.500\/1\.000\/0\.456/);
     assert.doesNotMatch(markdown, /Without MCP|With MCP/);

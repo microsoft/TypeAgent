@@ -273,6 +273,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
             path.join(directory, "results.jsonl"),
         );
         assert.deepEqual(Object.keys(report.prefixes), ["1", "5", "10"]);
+        assert.equal(report.schemaVersion, 2);
         assert.equal(report.rawRows, 41);
         assert.equal(report.dedupedRows, 39);
         assert.deepEqual(
@@ -346,13 +347,20 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
         );
         assert.equal(report.prefixes["10"].comparisons[0].mcpAdoptionRate, 1);
         assert.equal(
-            report.prefixes["10"].comparisons[0].withoutMcp?.finalAttemptTokens,
+            report.prefixes["10"].comparisons[0].baseline?.finalAttemptTokens,
             990,
         );
         assert.equal(
-            report.prefixes["10"].comparisons[0].withMcp?.finalAttemptTokens,
+            report.prefixes["10"].comparisons[0].typeagent?.finalAttemptTokens,
             1_440,
         );
+        assert.deepEqual(
+            Object.keys(report.prefixes["10"].comparisons[0]).filter((key) =>
+                ["baseline", "typeagent"].includes(key),
+            ),
+            ["baseline", "typeagent"],
+        );
+        assert.doesNotMatch(JSON.stringify(report), /withoutMcp|withMcp/);
         assert.equal(path.basename(markdownPath), "report.md");
         const markdown = await readFile(markdownPath, "utf8");
         assert.match(
@@ -370,6 +378,26 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
         assert.match(
             markdown,
             /\| model-b \| 9\/10 \| 10\/10 \| 9\/10 \| 990 \| 1,440 \| -450 \| 1\.000 \| 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 10\/10 \| 10\/10 \|/,
+        );
+
+        const taskIdsFile = path.join(directory, "exact-task-ids.json");
+        await writeFile(
+            path.join(directory, "manifest.json"),
+            JSON.stringify({
+                ...manifest,
+                taskSeed: undefined,
+                taskIdsFile,
+            }),
+        );
+        const exact = await writeReports(path.join(directory, "results.jsonl"));
+        const exactMarkdown = await readFile(exact.markdownPath, "utf8");
+        assert.match(
+            exactMarkdown,
+            /Selected 10-task prefix \(exact task IDs file "exact-task-ids\.json"\)/,
+        );
+        assert.match(
+            exact.report.notes.join("\n"),
+            /an exact task-ID cohort from .*exact-task-ids\.json/,
         );
     } finally {
         await rm(directory, { recursive: true, force: true });
