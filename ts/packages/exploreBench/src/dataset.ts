@@ -40,14 +40,16 @@ export async function loadVerifiedTasks(options: {
     limit: number;
     offset: number;
     seed?: string;
+    taskIds?: readonly string[];
     languages?: readonly RepositoryLanguage[];
     dockerPlatform: string;
 }): Promise<BenchTask[]> {
     const rows = await loadRows(options.dataDir);
-    const selected =
-        options.seed === undefined
-            ? selectByRepo(rows, options.limit, options.offset)
-            : selectRandomBySeed(rows, options.limit, options.seed);
+    const selected = options.taskIds
+        ? selectByInstanceIds(rows, options.taskIds)
+        : options.seed === undefined
+          ? selectByRepo(rows, options.limit, options.offset)
+          : selectRandomBySeed(rows, options.limit, options.seed);
     if (selected.length < options.limit) {
         throw new Error(
             `SWE-bench Verified has only ${selected.length} selectable rows; requested ${options.limit}`,
@@ -58,11 +60,21 @@ export async function loadVerifiedTasks(options: {
         return tasks;
     }
     const languages = new Set(options.languages);
-    return tasks.filter((task) =>
+    const filtered = tasks.filter((task) =>
         patchLanguages(task.swebench.patch).some((language) =>
             languages.has(language),
         ),
     );
+    if (options.taskIds && filtered.length !== tasks.length) {
+        const retained = new Set(filtered.map((task) => task.id));
+        const excluded = tasks
+            .filter((task) => !retained.has(task.id))
+            .map((task) => task.id);
+        throw new Error(
+            `Explicit tasks do not match the requested language filter: ${excluded.join(", ")}`,
+        );
+    }
+    return filtered;
 }
 
 export function patchLanguages(patch: string): RepositoryLanguage[] {
@@ -117,6 +129,28 @@ export function selectByRepo<T extends DatasetServerRow>(
         }
     }
     return selected.slice(offset, selectionEnd);
+}
+
+export function selectByInstanceIds<T extends DatasetServerRow>(
+    rows: T[],
+    taskIds: readonly string[],
+): T[] {
+    if (taskIds.length === 0) {
+        throw new Error("Explicit task IDs must not be empty");
+    }
+    if (new Set(taskIds).size !== taskIds.length) {
+        throw new Error("Explicit task IDs must be unique");
+    }
+    const byId = new Map(rows.map((entry) => [entry.row.instance_id, entry]));
+    return taskIds.map((taskId) => {
+        const row = byId.get(taskId);
+        if (!row) {
+            throw new Error(
+                `Explicit SWE-bench task ${JSON.stringify(taskId)} was not found`,
+            );
+        }
+        return row;
+    });
 }
 
 export function selectRandomBySeed<T>(

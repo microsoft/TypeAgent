@@ -10,6 +10,7 @@ import {
     loadVerifiedTasks,
     patchLanguages,
     selectByRepo,
+    selectByInstanceIds,
     selectRandomBySeed,
     swebenchDockerImage,
     verifiedDataset,
@@ -60,6 +61,29 @@ test("selects a held-out window from the same deterministic order", () => {
     assert.deepEqual(
         selectByRepo(rows, 2, 2).map((entry) => entry.row.instance_id),
         ["sympy__sympy-1", "astropy__astropy-2"],
+    );
+});
+
+test("selects an explicit retained cohort in the requested order", () => {
+    const rows = [
+        row("repo__repo-1", "repo/repo", 1),
+        row("repo__repo-2", "repo/repo", 2),
+        row("repo__repo-3", "repo/repo", 3),
+    ];
+
+    assert.deepEqual(
+        selectByInstanceIds(rows, ["repo__repo-3", "repo__repo-1"]).map(
+            (entry) => entry.row.instance_id,
+        ),
+        ["repo__repo-3", "repo__repo-1"],
+    );
+    assert.throws(
+        () => selectByInstanceIds(rows, ["repo__repo-1", "repo__repo-1"]),
+        /must be unique/,
+    );
+    assert.throws(
+        () => selectByInstanceIds(rows, ["repo__missing"]),
+        /not found/,
     );
 });
 
