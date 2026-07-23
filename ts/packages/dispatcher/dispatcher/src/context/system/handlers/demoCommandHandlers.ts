@@ -19,7 +19,7 @@ import {
     createStructuredContent,
     createTable,
 } from "@typeagent/agent-sdk/helpers/display";
-import { CommandHandlerContext } from "../../commandHandlerContext.js";
+import type { CommandHandlerContext } from "../../commandHandlerContext.js";
 
 // The demo walks the question kinds as a paged wizard (one question at a time,
 // Back/Next), showcasing single-select radios, multi-select checkboxes, yes/no,
