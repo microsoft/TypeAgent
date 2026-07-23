@@ -56,7 +56,12 @@ export async function createSharedDispatcher(
 
     // Timeouts for pending interactions. All currently set to 10 minutes but
     // kept separate so they can be tuned independently.
-    const INTERACTION_TIMEOUT_MS = {
+    // Set a value to `undefined` to disable the timeout (never time out).
+    const INTERACTION_TIMEOUT_MS: {
+        question: number | undefined;
+        proposeAction: number | undefined;
+        form: number | undefined;
+    } = {
         question: 10 * 60 * 1000,
         proposeAction: 10 * 60 * 1000,
         form: 10 * 60 * 1000,
