@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
+import {
+    TextEmbeddingModel,
+    tryCreateEmbeddingModel,
+} from "@typeagent/aiclient";
 import { ScoredItem } from "../memory.js";
 import {
     VectorStore,
@@ -63,7 +66,10 @@ export function createSemanticIndex<ID = string>(
     store: VectorStore<ID>,
     model?: TextEmbeddingModel,
 ): SemanticIndex<ID> {
-    model ??= openai.createEmbeddingModel();
+    model ??= tryCreateEmbeddingModel();
+    if (model === undefined) {
+        throw new Error("Semantic index requires an embedding provider");
+    }
     return {
         store,
         getEmbedding,
