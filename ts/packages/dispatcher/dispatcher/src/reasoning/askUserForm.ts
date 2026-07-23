@@ -47,7 +47,12 @@ function buildChoiceField(
     }
     const allowFreeText = q?.allowFreeText === true;
     if (kind === "pick") {
-        const field: QuestionFormPickField = { id, kind: "pick", prompt, choices };
+        const field: QuestionFormPickField = {
+            id,
+            kind: "pick",
+            prompt,
+            choices,
+        };
         if (allowFreeText) {
             field.allowFreeText = true;
         }
