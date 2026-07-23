@@ -1,0 +1,10 @@
+{
+  "emojiChar": "🔎",
+  "description": "Read-only repository exploration",
+  "defaultEnabled": true,
+  "schema": {
+    "description": "Run bounded read-only Code Mode programs and submit repository-grounded locations.",
+    "schemaFile": "./src/schema/explorerActions.ts",
+    "schemaType": "ExplorerActions"
+  }
+}

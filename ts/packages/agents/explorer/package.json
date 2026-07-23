@@ -1,0 +1,54 @@
+{
+  "name": "explorer-typeagent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeAgent Code Mode repository explorer",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/explorer"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./agent/manifest": "./manifest.json",
+    "./agent/handlers": "./dist/actionHandler.js"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "manifest.json",
+    "src/schema/explorerActions.ts"
+  ],
+  "scripts": {
+    "build": "npm run tsc && npm run copy:sandbox",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "copy:sandbox": "node -e \"for (const file of ['repositorySandbox.d.ts','repositoryLspSandbox.d.ts']) require('node:fs').copyFileSync('src/script/'+file, 'dist/script/'+file)\"",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "test": "npm run test:local",
+    "test:local": "npm run jest-esm -- --testPathPattern=\".*[.]spec[.]js\"",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/agent-flows": "workspace:*",
+    "@typeagent/agent-sdk": "workspace:*",
+    "agent-dispatcher": "workspace:*",
+    "glob": "^13.0.0",
+    "typescript": "~5.4.5",
+    "typescript-language-server": "5.3.0",
+    "vscode-jsonrpc": "8.2.1"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^22.0.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1"
+  }
+}
