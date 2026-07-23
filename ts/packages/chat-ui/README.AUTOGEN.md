@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=2f3b8b92de1a4ddb7a82177f4ed1a24b86c144254b7d27160d720f4f48026841 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=5c3d3c1229b4d627ddfd459e6e435a3d96f566965e161d4eaf961070f111d1c4 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # chat-ui — AI-generated documentation
@@ -12,17 +12,17 @@
 
 ## Overview
 
-The `chat-ui` package provides a shared, framework-free chat user interface for TypeAgent applications. It is designed to ensure a consistent and interactive chat experience across various platforms, including the VS Code shell extension, the browser extension chat panel, and the Visual Studio extension webview. The package includes components for rendering user and agent messages, handling streaming updates, replaying chat history, managing connection status, and collecting user feedback.
+The `chat-ui` package provides a shared, framework-free chat user interface for TypeAgent applications. It is used across multiple platforms, including the VS Code shell extension, the browser extension, and the Visual Studio extension webview, to deliver a consistent and interactive chat experience. The package includes components for rendering chat messages, handling streaming updates, replaying chat history, managing connection status, and collecting user feedback.
 
 ## What it does
 
-The `chat-ui` package offers a set of tools and components to build and manage chat interfaces. Its primary features include:
+The `chat-ui` package offers a comprehensive set of tools and components for building and managing chat interfaces. Key features include:
 
-- **ChatPanel**: The core component for rendering the chat interface. It supports:
+- **ChatPanel**: The central component for rendering the chat interface. It supports:
 
-  - Adding user and agent messages via `addAgentMessage`.
-  - Updating display metadata with `setDisplayInfo`.
-  - Replaying historical chat entries using `replayHistory`.
+  - Adding user and agent messages with `addAgentMessage`.
+  - Updating display metadata using `setDisplayInfo`.
+  - Replaying historical chat entries via `replayHistory`.
   - Streaming updates for dynamic content display.
 
 - **FeedbackWidget**: A component for collecting user feedback, including thumbs-up/thumbs-down ratings, comments, and contextual information.
@@ -120,6 +120,6 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ---
 
-_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `274f0c51c3f1dca4e627c5311084db01d02fe1e9` on `2026-07-23T15:09:16.468Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
