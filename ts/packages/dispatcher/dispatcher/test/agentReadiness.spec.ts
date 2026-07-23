@@ -29,6 +29,18 @@ function makeManager(): AppAgentManager {
     return new AppAgentManager(undefined, new PortRegistrar());
 }
 
+test("AppAgentManager can disable action-schema semantic embeddings", () => {
+    const manager = new AppAgentManager(
+        undefined,
+        new PortRegistrar(),
+        undefined,
+        undefined,
+        false,
+    );
+
+    expect(manager.getActionEmbeddings()).toBeUndefined();
+});
+
 // Drop a synthetic agent record so getReadiness/runSetup/refresh see it.
 function seedAgent(
     mgr: AppAgentManager,

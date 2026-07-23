@@ -389,6 +389,9 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     // Use for tests so that embedding can be cached without 'persistDir'
     embeddingCacheDir?: string | undefined; // default to 'cache' under 'persistDir' if specified
 
+    // Disable for direct-command-only dispatchers that never perform semantic schema selection.
+    enableActionSchemaSemanticMap?: boolean;
+
     conversationMemorySettings?: {
         requestKnowledgeExtraction?: boolean;
         actionResultEntityStorage?: boolean;
@@ -718,6 +721,7 @@ export async function initializeCommandHandlerContext(
             portRegistrar,
             options?.allowSharedLocalView,
             options?.agentInitOptions,
+            options?.enableActionSchemaSemanticMap ?? true,
         );
         const constructionProvider = options?.constructionProvider;
         const context: CommandHandlerContext = {
