@@ -4,6 +4,7 @@
 export * from "./common.js";
 export * from "./models.js";
 export * as openai from "./openai.js";
+export * as responses from "./responses.js";
 export * as bing from "./bing.js";
 export * from "./restClient.js";
 export * from "./auth.js";
