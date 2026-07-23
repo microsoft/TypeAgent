@@ -383,6 +383,48 @@ stages:
             displayName: "Upload artifact: shell-mac"
             artifact: shell-mac
 
+      # Linux shell build — optional (continueOnError).
+      - job: build_shell_linux
+        displayName: "Build shell installer (Linux)"
+        continueOnError: true
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - template: include-prepare-repo.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              nodeVersion: $(nodeVersion)
+              registry: $(INSTALL_REGISTRY)
+
+          - template: include-update-package-version.yml
+            parameters:
+              buildDirectory: $(buildDirectory)
+              prerelease: $(resolvedChannel).$(Build.BuildNumber)
+
+          - script: |
+              pnpm run build:shell
+            displayName: "Build shell"
+            workingDirectory: $(buildDirectory)
+
+          - task: Cache@2
+            displayName: Cache Electron Builder
+            inputs:
+              key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(buildDirectory)/pnpm-lock.yaml
+              path: $(ELECTRON_CACHE_DIR)
+              restoreKeys: |
+                electron | $(Agent.OS) | $(Agent.OSArchitecture)
+
+          - script: |
+              pnpm run shell:package
+            displayName: "Package shell"
+            workingDirectory: $(buildDirectory)
+            env:
+              ELECTRON_BUILDER_CHANNEL: $(resolvedChannel)
+
+          - publish: $(shell_folder)/dist
+            displayName: "Upload artifact: shell-linux"
+            artifact: shell-linux
+
   # ════════════════════════════════════════════════════════════════════
   #  STAGE 2 — TEST (optional)
   # ════════════════════════════════════════════════════════════════════
@@ -675,9 +717,10 @@ stages:
         condition: eq('${{ parameters.publishShell }}', 'true')
         environment: typeagent-shell-$(resolvedChannel)
         # stageDependencies is not available in step conditions, so map the
-        # optional mac build result to a job variable the steps can read.
+        # optional mac/linux build results to job variables the steps can read.
         variables:
           macBuildResult: $[ stageDependencies.Build.build_shell_mac.result ]
+          linuxBuildResult: $[ stageDependencies.Build.build_shell_linux.result ]
         pool:
           # AzureFileCopy requires Windows.
           vmImage: windows-latest
@@ -702,19 +745,44 @@ stages:
                     storage: $(azureStorageAccountName)
                     ContainerName: $(azureStorageContainerName)
 
-                # macOS artifact — only upload if the optional build succeeded.
+                # macOS artifact — optional. The build uses continueOnError,
+                # so a failed mac build still reports SucceededWithIssues and
+                # produces no artifact; keep these steps non-fatal so a missing
+                # artifact does not fail the deployment job.
                 - download: current
                   artifact: shell-mac
                   displayName: "Download shell-mac (optional)"
                   condition: |
                     in(variables.macBuildResult, 'Succeeded', 'SucceededWithIssues')
+                  continueOnError: true
 
                 - task: AzureFileCopy@6
                   displayName: "Upload Azure Storage - mac"
                   condition: |
                     in(variables.macBuildResult, 'Succeeded', 'SucceededWithIssues')
+                  continueOnError: true
                   inputs:
                     SourcePath: $(Pipeline.Workspace)\shell-mac\**
+                    Destination: AzureBlob
+                    azureSubscription: $(azureSubscription)
+                    storage: $(azureStorageAccountName)
+                    ContainerName: $(azureStorageContainerName)
+
+                # Linux artifact — optional, same non-fatal handling as macOS.
+                - download: current
+                  artifact: shell-linux
+                  displayName: "Download shell-linux (optional)"
+                  condition: |
+                    in(variables.linuxBuildResult, 'Succeeded', 'SucceededWithIssues')
+                  continueOnError: true
+
+                - task: AzureFileCopy@6
+                  displayName: "Upload Azure Storage - linux"
+                  condition: |
+                    in(variables.linuxBuildResult, 'Succeeded', 'SucceededWithIssues')
+                  continueOnError: true
+                  inputs:
+                    SourcePath: $(Pipeline.Workspace)\shell-linux\**
                     Destination: AzureBlob
                     azureSubscription: $(azureSubscription)
                     storage: $(azureStorageAccountName)
