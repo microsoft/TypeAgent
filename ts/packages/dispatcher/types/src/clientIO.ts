@@ -5,6 +5,8 @@ import {
     AgentMessageKind,
     DisplayAppendMode,
     DisplayContent,
+    QuestionForm,
+    QuestionFormResponse,
     TemplateSchema,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
@@ -113,6 +115,25 @@ export interface ClientIO {
     ): Promise<unknown>;
 
     /**
+     * Blocking multi-question form interaction. Presents a full
+     * {@link QuestionForm} (one or more pick / multiChoice / yesNo questions,
+     * optionally with free-text escapes, optionally paged) and resolves with
+     * the user's {@link QuestionFormResponse} once submitted or cancelled.
+     *
+     * Unlike {@link requestForm} (a non-blocking choice card answered via
+     * {@link Dispatcher.respondToChoice}), this uses the async deferred
+     * interaction pattern (requestInteraction / respondToInteraction) so it is
+     * safe to await from code holding the command lock - e.g. the reasoning
+     * loop. Optional: only interactive hosts implement it; callers must fall
+     * back to {@link question} when it is absent.
+     */
+    askForm?(
+        requestId: RequestId | undefined,
+        form: QuestionForm,
+        source: string,
+    ): Promise<QuestionFormResponse>;
+
+    /**
      * Return a fresh, coarse snapshot of the host editor state (no file or
      * selection text). Optional: only editor-hosted clients (e.g. the VS Code
      * shell) implement it. Others omit it and the reasoning `get_user_context`
@@ -159,6 +180,18 @@ export interface ClientIO {
         choices: string[],
         source: string,
         checkboxLabel?: string,
+    ): void;
+
+    // Non-blocking multi-question form request. `form.fields` holds one or more
+    // questions (pick / multiChoice / yesNo, optionally with a free-text
+    // "Other" escape) answered together and submitted once. The response (a
+    // QuestionFormResponse) is delivered back via Dispatcher.respondToChoice,
+    // keyed by `choiceId` - the same return path as requestChoice.
+    requestForm(
+        requestId: RequestId,
+        choiceId: string,
+        form: QuestionForm,
+        source: string,
     ): void;
 
     // Non-blocking interaction requests (async deferred pattern)

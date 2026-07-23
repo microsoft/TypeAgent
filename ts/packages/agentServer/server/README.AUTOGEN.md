@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=b0edd0cf02b0ff295e1d62494c69fd8c65e83047650c402ac565f0538824eb5e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6aa3b5cd7693ebc569455f1397c9fcacbf3525b6576cecb29fb988eaecf2b190 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-server — AI-generated documentation
@@ -152,7 +152,7 @@ External: `@azure/identity`, `better-sqlite3`, `debug`, `dotenv`, `ws`
 
 ### Files of interest
 
-`./src/connectionHandler.ts`, `./src/banner.ts`, `./src/conversationManager.ts`, …and 13 more under `./src/`.
+`./src/connectionHandler.ts`, `./src/banner.ts`, `./src/conversationManager.ts`, …and 14 more under `./src/`.
 
 ### Environment variables
 
@@ -169,6 +169,6 @@ _8 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

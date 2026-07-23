@@ -15,6 +15,8 @@ import type {
 import type {
     CompletionDirection,
     DisplayAppendMode,
+    QuestionForm,
+    QuestionFormResponse,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import type { CompletionState } from "agent-dispatcher/helpers/completion";
@@ -236,6 +238,19 @@ export type BridgeToWebviewMessage =
           requestId?: string;
       }
     | {
+          // Non-blocking multi-question form card from an agent action
+          // (createQuestionFormResult / createSingleChoiceResult ->
+          // ClientIO.requestForm). Like requestChoice, the heading is already
+          // shown as the action's `displayContent`, so the webview renders
+          // ONLY the form controls, anchored to the request's agent bubble via
+          // `requestId`, and replies with a `choiceResponse`.
+          type: "requestForm";
+          choiceId: string;
+          form: QuestionForm;
+          source: string;
+          requestId?: string;
+      }
+    | {
           // Live-updating ("dynamic") display from an agent action that set
           // ActionResult.dynamicDisplayId (e.g. the player agent's "now
           // playing" status). The webview registers a refresh timer via
@@ -339,15 +354,16 @@ export type BridgeFromWebviewMessage =
     // Reply to a `requestChoice` card. Forwarded to the dispatcher via
     // respondToChoice, which resolves the pending choice route so the
     // agent's handleChoice callback runs. `response` is boolean (yesNo),
-    // number[] of selected indices (multiChoice), or { selected, remember }
-    // (pickRemember).
+    // number[] of selected indices (multiChoice), { selected, remember }
+    // (pickRemember), or a QuestionFormResponse (requestForm).
     | {
           type: "choiceResponse";
           choiceId: string;
           response:
               | boolean
               | number[]
-              | { selected: number; remember: boolean };
+              | { selected: number; remember: boolean }
+              | QuestionFormResponse;
       }
     | {
           // Submit a user feedback rating (thumbs up/down + optional category /

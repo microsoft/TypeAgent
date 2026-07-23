@@ -313,10 +313,13 @@ export type CommandHandlerContext = {
     // The registry path the loaded `collisionRegistry` was built from, so we
     // can detect config changes and reload.
     collisionRegistryPath: string;
-    // Drives the interactive `preference-clarify` card (candidate pick +
-    // "remember this" checkbox). The dispatcher AppAgent's handleChoice
-    // delegates back to this manager.
-    collisionChoiceManager: ChoiceManager;
+    // Shared per-context ChoiceManager for the built-in agents' interactive
+    // choice/form cards. The dispatcher AppAgent's handleChoice uses it for the
+    // collision `preference-clarify` card (candidate pick + "remember this"
+    // checkbox); the system AppAgent's handleChoice uses it for the `@demo`
+    // walkthrough. Callbacks are keyed by unique choiceId, so both agents can
+    // share one manager.
+    choiceManager: ChoiceManager;
     // One-shot resolution overrides as a set of chosen member ids
     // ("schema.action"). Set just before re-running the original request from
     // a clarify pick so the re-translation resolves deterministically to the
@@ -1131,7 +1134,7 @@ export async function initializeCommandHandlerContext(
             ),
             collisionRegistryPath:
                 session.getConfig().collision.preference.registryPath,
-            collisionChoiceManager: new ChoiceManager(),
+            choiceManager: new ChoiceManager(),
             collisionOneShotPicks: new Set(),
             pendingTopicalRoute: undefined,
             conversationSignal: new RingBufferSignalSource(

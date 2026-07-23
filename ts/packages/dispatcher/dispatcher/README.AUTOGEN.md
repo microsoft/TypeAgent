@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7886c22df3b9fe23fc9cd4d01b73e32fb3d59cbdc561715cf66b8ef646894d7e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2936f0f60995ac4d33d834840fececd2e3f472e349a87ccad9ebdae0ddff2f4e -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -218,7 +218,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-r
 - [./src/context/dispatcher/schema/clarifyActionSchema.ts](./src/context/dispatcher/schema/clarifyActionSchema.ts)
 - [./src/context/dispatcher/schema/dispatcherActionSchema.ts](./src/context/dispatcher/schema/dispatcherActionSchema.ts)
 - [./src/context/dispatcher/schema/lookupActionSchema.ts](./src/context/dispatcher/schema/lookupActionSchema.ts)
-- _…and 212 more under `./src/`._
+- _…and 214 more under `./src/`._
 
 ### Environment variables
 
@@ -236,6 +236,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `8192acc149ab6f52296dcc71202b20253b6a3089` on `2026-07-22T05:16:33.340Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `ff9101e00228c5d0ff34c8dd3f108f46af46b0a6` on `2026-07-23T00:41:03.476Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

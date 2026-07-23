@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=1d39c4a1fcee4e960ad464a8950a858acbd1e663d70e7ad624e5b615040da174 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=7c872fb7a3245052b2675202876c9e5d1055def38d108b0ff1d4e17fecc2d880 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # command-executor-mcp — AI-generated documentation
@@ -12,7 +12,9 @@
 
 ## Overview
 
-The `command-executor-mcp` package is an MCP (Model Context Protocol) server that facilitates the execution of user commands such as playing music, managing lists, and working with calendars. It acts as a bridge between MCP clients (e.g., Claude Code) and the TypeAgent system, translating natural language commands into structured actions that the TypeAgent dispatcher can process.
+The `command-executor-mcp` package is an MCP (Model Context Protocol) server designed to execute user commands such as playing music, managing lists, and interacting with calendars. It acts as a bridge between MCP clients (e.g., Claude Code) and the TypeAgent system, translating natural language commands into structured actions that the TypeAgent dispatcher can process.
+
+This server supports natural language execution, schema discovery, dynamic schema loading, and direct action invocation. It connects to the TypeAgent dispatcher via WebSocket and includes automatic reconnection capabilities to ensure reliability.
 
 ## What it does
 
@@ -142,6 +144,6 @@ _3 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `2c26e6d289e04ac54b08f8483b292693a8d4bb64` on `2026-07-18T00:58:44.432Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter command-executor-mcp docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter command-executor-mcp docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

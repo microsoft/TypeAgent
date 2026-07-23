@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=9c17c82ecbf933d7ef131ca06ff0b70964c66221b00cf6812cdc21ea69758f38 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=0f2ddce4680048309de9e8bb47fec0ce87c5e7557e3d84ce83aba04d56b767bc -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-chat — AI-generated documentation
@@ -12,34 +12,35 @@
 
 ## Overview
 
-The `vscode-chat` package integrates TypeAgent as a third-party agent within Visual Studio Code's native Chat view. It leverages the proposed `chatSessionsProvider` API to allow users to interact with TypeAgent sessions directly in VS Code. Conversations initiated through this extension, the Electron shell, the CLI, or `vscode-shell` are synchronized and appear as session items in the Chat sidebar. Prompts sent in these sessions are routed through a running TypeAgent agent server.
+The `vscode-chat` package integrates TypeAgent as a third-party agent into Visual Studio Code's native Chat view. It uses the proposed `chatSessionsProvider` API to enable users to interact with TypeAgent sessions directly within VS Code. Conversations initiated through this extension, the Electron shell, the CLI, or `vscode-shell` are synchronized and appear as session items in the Chat sidebar. Prompts sent in these sessions are routed through a running TypeAgent agent server.
+
+This extension is designed for use with the VS Code Insiders build and requires enabling proposed APIs. It is not eligible for the VS Code Marketplace while the `chatSessionsProvider` API remains in the proposed stage.
 
 ## What it does
 
-The `vscode-chat` package provides the following functionality:
+The `vscode-chat` package provides the following capabilities:
 
-- **Session Management**: Users can view, create, and manage TypeAgent sessions directly from the Chat sidebar. Existing sessions are selectable, and new sessions can be created using the `+` button in the Chat view.
-- **Prompt Processing**: Prompts entered in the Chat view are sent to the TypeAgent dispatcher via the agent server. Responses are streamed back and displayed in the chat panel.
+- **Session Management**: Users can view, create, and manage TypeAgent sessions directly from the Chat sidebar. Existing sessions are displayed in the session list, and new sessions can be created using the `+` button in the Chat view.
+- **Prompt Processing**: Prompts entered in the Chat view are sent to the TypeAgent dispatcher via the agent server. Responses are streamed back and displayed in the chat panel in markdown or plain text format.
 - **Agent Server Integration**: The extension connects to a running TypeAgent agent server, typically at `ws://localhost:8999`, to handle communication and processing of chat prompts.
-- **Display Rendering**: Chat responses are rendered in markdown or plain text formats, ensuring compatibility with VS Code's Chat view.
 - **Cross-Platform Session Visibility**: Conversations created in the VS Code Chat view are accessible from other TypeAgent interfaces, such as the CLI and Electron shell.
-
-This extension relies on VS Code's proposed `chatSessionsProvider` API, which requires enabling proposed APIs in an Insiders build of VS Code. It is not eligible for the VS Code Marketplace while the API remains in the proposed stage.
+- **Customizable Display**: Chat responses are rendered using markdown or plain text, with support for ANSI-to-HTML conversion for enhanced display.
 
 ## Setup
 
-To use the `vscode-chat` extension, follow these steps:
+To set up and use the `vscode-chat` extension, follow these steps:
 
 1. **Prerequisites**:
 
    - Install Visual Studio Code version 1.95 or newer. The Insiders build is recommended for access to proposed APIs.
-   - Ensure a TypeAgent agent server is running and reachable at `ws://localhost:8999`. Start the server from the TypeAgent monorepo:
+   - Ensure a TypeAgent agent server is running and accessible at `ws://localhost:8999`. You can start the server from the TypeAgent monorepo:
      ```sh
      cd ts/packages/agentServer/server
      pnpm run start
      ```
 
 2. **Installation**:
+
    - Install the extension dependencies and deploy it locally:
      ```sh
      npm install
@@ -49,15 +50,19 @@ To use the `vscode-chat` extension, follow these steps:
      ```sh
      code-insiders --enable-proposed-api typeagent.vscode-chat
      ```
-     Alternatively, you can configure the `enable-proposed-api` flag in your Insiders launch configuration.
+     Alternatively, configure the `enable-proposed-api` flag in your Insiders launch configuration.
+
+3. **Configuration**:
+   - The extension uses the `typeagentChat.serverUrl` setting to specify the WebSocket URL of the TypeAgent agent server. By default, this is set to `ws://localhost:8999`. Update this setting in your VS Code configuration if your agent server is running on a different URL.
 
 ## Key Files
 
 The `vscode-chat` package is organized into several key files, each responsible for specific functionality:
 
+- **[extension.ts](./src/extension.ts)**: The main entry point for the extension. It initializes the connection to the agent server, registers VS Code commands, and integrates with the `chatSessionsProvider` API.
+- **[sessionManager.ts](./src/sessionManager.ts)**: Manages the lifecycle of chat sessions, including creating, updating, and deleting sessions. It handles communication with the agent server to process prompts and receive responses.
 - **[displayRender.ts](./src/displayRender.ts)**: Handles the rendering of chat responses in markdown and plain text formats. It uses the `ansi_up` library to convert ANSI text to HTML for display in the Chat view.
-- **[extension.ts](./src/extension.ts)**: The main entry point for the extension. It initializes the connection to the agent server, registers VS Code commands, and manages the integration with the `chatSessionsProvider` API.
-- **[sessionManager.ts](./src/sessionManager.ts)**: Manages the lifecycle of chat sessions, including creating, updating, and deleting sessions. It interacts with the agent server to process prompts and receive responses.
+- **[connectionHolder.ts](./src/connectionHolder.ts)**: Manages the connection to the agent server, ensuring that prompts submitted while disconnected are queued and processed once a connection is re-established.
 - **[vscode.proposed.chatSessionsProvider.d.ts](./src/vscode.proposed.chatSessionsProvider.d.ts)**: Provides type definitions for the proposed `chatSessionsProvider` API, which is used to integrate TypeAgent with VS Code's Chat view.
 
 ## How to extend
@@ -76,11 +81,15 @@ To extend the functionality of the `vscode-chat` package, follow these steps:
 
    - If you need to change how chat responses are displayed, edit [displayRender.ts](./src/displayRender.ts). This file contains the logic for rendering responses in markdown and plain text formats.
 
-4. **Add new commands or features**:
+4. **Enhance connection handling**:
+
+   - To modify how the extension handles connections to the agent server, review [connectionHolder.ts](./src/connectionHolder.ts). This file ensures that prompts submitted while disconnected are queued and processed once a connection is re-established.
+
+5. **Add new commands or features**:
 
    - To add new commands or extend existing functionality, modify [extension.ts](./src/extension.ts). You can register additional VS Code commands or enhance the integration with the `chatSessionsProvider` API.
 
-5. **Test your changes**:
+6. **Test your changes**:
 
    - Use the following scripts to build and test your changes locally:
      ```sh
@@ -89,7 +98,7 @@ To extend the functionality of the `vscode-chat` package, follow these steps:
      ```
    - Launch VS Code with the proposed API enabled to verify your modifications.
 
-6. **Regenerate the icon font (if needed)**:
+7. **Regenerate the icon font (if needed)**:
    - If you modify the `typeagent.svg` icon, regenerate the `typeagent-icons.woff` font using the `fantasticon` tool:
      ```sh
      npx --yes fantasticon
@@ -123,6 +132,6 @@ External: `ansi_up`, `debug`
 
 ---
 
-_Auto-generated against commit `f928ce70269b7d0f8942977c29147b2c8832b722` on `2026-07-15T22:42:29.947Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-chat docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-chat docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
