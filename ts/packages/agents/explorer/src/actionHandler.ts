@@ -10,6 +10,7 @@ import type {
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import { validateAndFormatLocations } from "./citationFormatter.js";
 import {
     createRepositoryTools,
@@ -20,6 +21,7 @@ import type { LanguageServerOptions } from "./script/languageServer.js";
 import { generateSandboxDeclarations } from "./script/sandboxDeclarations.js";
 import { createExploreScriptExecutor } from "./script/scriptExecutor.js";
 import {
+    hasExploreRepositoryCall,
     transpileExploreScript,
     validateExploreScript,
 } from "./script/scriptValidator.js";
@@ -44,6 +46,7 @@ const MAX_ACTION_RESULT_CHARS = 40_000;
 const MAX_DISCOVERY_READ_LINES = 200;
 const MAX_RESULT_MESSAGE_CHARS = 1_000;
 const MAX_RESULT_PATH_CHARS = 1_000;
+const MAX_CALL_SUMMARY_STRING_CHARS = 1_000;
 const MAX_RESPONSE_GREP_OBSERVATIONS = 40;
 const MAX_DISCOVERY_RESPONSE_LINES = 120;
 const MAX_EXACT_RESPONSE_LINES = 400;
@@ -158,6 +161,9 @@ export class ExplorerActionSession {
     }
 
     public snapshot(): ExplorerSessionSnapshot {
+        const calls = this.repository.trace.calls.map(
+            ({ discarded: _discarded, ...call }) => ({ ...call }),
+        );
         return {
             submitted: this.submitted !== undefined,
             ...(this.submitted
@@ -169,9 +175,12 @@ export class ExplorerActionSession {
                 ...attempt,
             })),
             toolTrace: {
-                calls: this.repository.trace.calls.map((call) => ({ ...call })),
-                totalCalls: this.repository.trace.totalCalls,
-                totalOutputBytes: this.repository.trace.totalOutputBytes,
+                calls,
+                totalCalls: calls.length,
+                totalOutputBytes: calls.reduce(
+                    (total, call) => total + call.outputBytes,
+                    0,
+                ),
             },
             ...(this.submitted
                 ? {
@@ -227,6 +236,25 @@ export class ExplorerActionSession {
                 `Repository program validation failed: ${validation.errors.join("; ")}`,
             );
         }
+        if (
+            phase === "refine" &&
+            this.carriedRefinementReads.length === 0 &&
+            !hasExploreRepositoryCall(rawProgram, "read")
+        ) {
+            return errorResult(
+                "The refine program must call repo.read before execution; it must read exact candidate context before submission",
+            );
+        }
+        if (
+            phase === "refine" &&
+            this.options.lsp &&
+            !this.hasCompletedLspCall() &&
+            !hasExploreRepositoryCall(rawProgram, "lsp")
+        ) {
+            return errorResult(
+                "The refine program must call repo.lsp before execution",
+            );
+        }
         const callLimit =
             phase === "discover"
                 ? this.options.maxToolCalls - REFINEMENT_RESERVED_CALLS
@@ -263,8 +291,13 @@ export class ExplorerActionSession {
         );
         const observations =
             this.repository.observations.slice(observationStart);
-        const calls = this.repository.trace.calls.slice(callStart);
-        if (!execution.ok) {
+        const calls = this.repository.trace.calls
+            .slice(callStart)
+            .filter((call) => call.discarded !== true);
+        if (!execution.ok && execution.runtimeError) {
+            if (phase === "refine") {
+                this.refinementRecoveryPending = true;
+            }
             return errorResult(
                 execution.error ?? "Repository program execution failed",
             );
@@ -277,12 +310,18 @@ export class ExplorerActionSession {
             phase === "refine"
                 ? [...this.carriedRefinementReads, ...observations]
                 : observations;
+        if (!execution.ok && phaseObservations.length === 0) {
+            return errorResult(
+                execution.error ?? "Repository program execution failed",
+            );
+        }
         if (
             phase === "refine" &&
             !phaseObservations.some(
                 (observation) => observation.source === "read",
             )
         ) {
+            this.refinementRecoveryPending = true;
             this.prepareLspRecovery(phase, observations, calls);
             const diagnostic = zeroLineReadDiagnostic(calls);
             const message = `The ${phase} program must read exact candidate context before submission${diagnostic ? `; ${diagnostic}` : ""}`;
@@ -293,6 +332,7 @@ export class ExplorerActionSession {
             );
         }
         if (phase === "refine" && calls.length === 0) {
+            this.refinementRecoveryPending = true;
             return errorResult(
                 `The ${phase} program must inspect new repository evidence before submission`,
             );
@@ -311,26 +351,45 @@ export class ExplorerActionSession {
                     : `${message}; ${remainingRepositoryCalls} repository calls remain`,
             );
         }
-        this.programAttempts++;
+        const programResult = compactProgramResult(
+            execution.result,
+            this.options.maxResults,
+        );
         const responseObservations = compactObservations(
             phaseObservations,
             phase,
             this.repository.observations.slice(0, observationStart),
+            programResult.locations ?? [],
         );
         const remainingProgramExecutions =
-            MAX_PROGRAM_EXECUTIONS - this.programAttempts;
+            MAX_PROGRAM_EXECUTIONS - (this.programAttempts + 1);
         const payload = {
             phase,
-            programResult: compactProgramResult(
-                execution.result,
-                this.options.maxResults,
-            ),
+            programResult,
+            repositoryCallResults: calls.map(compactRepositoryCall),
             repositoryCalls: this.repository.trace.totalCalls,
             remainingRepositoryCalls,
             remainingProgramExecutions,
             nextAction: nextPhaseInstruction(phase),
         };
         const response = serializeActionPayload(payload, responseObservations);
+        if (
+            phase === "refine" &&
+            programResult.locations?.some(
+                (location) =>
+                    hasProgramLocationReadOverlap(
+                        location,
+                        phaseObservations,
+                    ) &&
+                    !isProgramLocationVisible(location, response.observations),
+            )
+        ) {
+            this.refinementRecoveryPending = true;
+            return errorResult(
+                "The refine program returned a candidate range that could not remain fully visible in the bounded action result; retry with smaller exact candidate ranges",
+            );
+        }
+        this.programAttempts++;
         this.groundingObservations.push(...response.observations);
         if (phase === "refine") {
             this.carriedRefinementReads = [];
@@ -391,18 +450,22 @@ export class ExplorerActionSession {
 
     private hasCompletedLspCall(): boolean {
         return this.repository.trace.calls.some(
-            (call) => call.tool === "lsp" && call.error === undefined,
+            (call) =>
+                call.discarded !== true &&
+                call.tool === "lsp" &&
+                call.error === undefined,
         );
     }
 
     private refinementCallLimit(): number {
         const defaultLimit =
             this.repository.trace.totalCalls + MAX_REFINEMENT_CALLS_PER_PROGRAM;
-        if (!this.options.lsp || this.hasCompletedLspCall()) {
-            return defaultLimit;
-        }
         const requiredRecoveryCalls =
-            this.carriedRefinementReads.length > 0 ? 1 : 2;
+            this.options.lsp && !this.hasCompletedLspCall()
+                ? this.carriedRefinementReads.length > 0
+                    ? 1
+                    : 2
+                : 1;
         return this.refinementRecoveryPending
             ? this.repository.trace.totalCalls + requiredRecoveryCalls
             : Math.min(
@@ -517,6 +580,7 @@ function compactObservations(
     observations: RepositoryObservation[],
     phase: RepositoryProgramPhase,
     priorObservations: RepositoryObservation[],
+    candidateLocations: readonly CompactProgramLocation[] = [],
 ): ReturnType<typeof compactObservation>[] {
     const retainedGreps = new Set(
         selectGrepObservations(
@@ -552,8 +616,53 @@ function compactObservations(
             relevantGreps,
             linesPerRead,
             phase === "refine" ? 32 : 8,
+            candidateLocations,
         );
     });
+}
+
+function compactRepositoryCall(
+    call: ExplorerSessionSnapshot["toolTrace"]["calls"][number],
+): {
+    tool: ExplorerSessionSnapshot["toolTrace"]["calls"][number]["tool"];
+    input: Record<string, unknown>;
+    resultCount: number;
+    truncated: boolean;
+    error?: string;
+    inputTruncated?: true;
+    errorTruncated?: true;
+} {
+    const compactedInput = compactRepositoryCallInput(call.input);
+    const error = call.error?.slice(0, MAX_CALL_SUMMARY_STRING_CHARS);
+    return {
+        tool: call.tool,
+        input: compactedInput.value,
+        resultCount: call.resultCount,
+        truncated: call.truncated,
+        ...(error ? { error } : {}),
+        ...(compactedInput.truncated ? { inputTruncated: true } : {}),
+        ...(call.error !== error ? { errorTruncated: true } : {}),
+    };
+}
+
+function compactRepositoryCallInput(input: Record<string, unknown>): {
+    value: Record<string, unknown>;
+    truncated: boolean;
+} {
+    let truncated = false;
+    const value = Object.fromEntries(
+        Object.entries(input).map(([key, entry]) => {
+            if (typeof entry !== "string") {
+                return [key, entry];
+            }
+            const compacted = entry.slice(0, MAX_CALL_SUMMARY_STRING_CHARS);
+            if (compacted !== entry) {
+                truncated = true;
+            }
+            return [key, compacted];
+        }),
+    );
+    return { value, truncated };
 }
 
 function selectGrepObservations(
@@ -602,6 +711,7 @@ function compactReadAroundGreps(
     priorGreps: RepositoryObservation[],
     maxLines: number,
     maxEdgeLines = 8,
+    candidateLocations: readonly CompactProgramLocation[] = [],
 ): ReturnType<typeof compactObservation>[] {
     if (observation.lines.length <= maxLines) {
         return [compactObservation(observation)];
@@ -614,6 +724,24 @@ function compactReadAroundGreps(
         maxEdgeLines,
         Math.max(2, Math.floor(maxLines / 4)),
     );
+    for (const candidate of candidateLocations) {
+        if (
+            candidate.path !== observation.path ||
+            candidate.endLine < observation.startLine ||
+            candidate.startLine > observation.endLine
+        ) {
+            continue;
+        }
+        addIndices(
+            selected,
+            Math.max(0, candidate.startLine - observation.startLine),
+            Math.min(
+                observation.lines.length - 1,
+                candidate.endLine - observation.startLine,
+            ),
+            maxLines,
+        );
+    }
     addIndices(
         selected,
         0,
@@ -731,10 +859,24 @@ function contiguousRanges(indices: number[]): Array<[number, number]> {
     return ranges;
 }
 
+interface CompactProgramLocation {
+    path: string;
+    startLine: number;
+    endLine: number;
+}
+
+interface CompactProgramResult {
+    success: boolean;
+    message?: string;
+    error?: string;
+    locations?: CompactProgramLocation[];
+    truncated?: true;
+}
+
 function compactProgramResult(
     value: unknown,
     maxResults: number,
-): Record<string, unknown> {
+): CompactProgramResult {
     if (!isRecord(value)) {
         return { success: true };
     }
@@ -755,7 +897,10 @@ function compactProgramResult(
     const locations = sourceLocations
         ? sourceLocations
               .map(compactProgramLocation)
-              .filter((location) => location !== undefined)
+              .filter(
+                  (location): location is CompactProgramLocation =>
+                      location !== undefined,
+              )
               .slice(0, maxResults)
         : undefined;
     return {
@@ -772,20 +917,19 @@ function compactProgramResult(
     };
 }
 
-function compactProgramLocation(value: unknown):
-    | {
-          path: string;
-          startLine: number;
-          endLine: number;
-      }
-    | undefined {
+function compactProgramLocation(
+    value: unknown,
+): CompactProgramLocation | undefined {
     if (!isRecord(value)) {
         return undefined;
     }
-    const { path: locationPath, startLine, endLine } = value;
+    const { path: rawPath, startLine, endLine } = value;
+    const locationPath =
+        typeof rawPath === "string"
+            ? normalizeProgramLocationPath(rawPath)
+            : undefined;
     if (
-        typeof locationPath !== "string" ||
-        locationPath.length === 0 ||
+        locationPath === undefined ||
         locationPath.length > MAX_RESULT_PATH_CHARS ||
         !Number.isSafeInteger(startLine) ||
         !Number.isSafeInteger(endLine) ||
@@ -800,6 +944,59 @@ function compactProgramLocation(value: unknown):
         startLine: Number(startLine),
         endLine: Number(endLine),
     };
+}
+
+function normalizeProgramLocationPath(value: string): string | undefined {
+    const rawPath = value.trim().replaceAll("\\", "/");
+    if (
+        !rawPath ||
+        path.posix.isAbsolute(rawPath) ||
+        rawPath.split("/").includes("..")
+    ) {
+        return undefined;
+    }
+    const normalized = path.posix.normalize(rawPath);
+    return normalized === "." ? undefined : normalized;
+}
+
+function isProgramLocationVisible(
+    location: CompactProgramLocation,
+    observations: ReturnType<typeof compactObservation>[],
+): boolean {
+    let nextLine = location.startLine;
+    const ranges = observations
+        .filter(
+            (observation) =>
+                observation.source === "read" &&
+                observation.path === location.path,
+        )
+        .sort((left, right) => left.startLine - right.startLine);
+    for (const range of ranges) {
+        if (range.endLine < nextLine) {
+            continue;
+        }
+        if (range.startLine > nextLine) {
+            return false;
+        }
+        if (range.endLine >= location.endLine) {
+            return true;
+        }
+        nextLine = range.endLine + 1;
+    }
+    return false;
+}
+
+function hasProgramLocationReadOverlap(
+    location: CompactProgramLocation,
+    observations: RepositoryObservation[],
+): boolean {
+    return observations.some(
+        (observation) =>
+            observation.source === "read" &&
+            observation.path === location.path &&
+            observation.endLine >= location.startLine &&
+            observation.startLine <= location.endLine,
+    );
 }
 
 function nextPhaseInstruction(phase: RepositoryProgramPhase): string {
@@ -835,6 +1032,12 @@ function serializeActionPayload(
             })),
             observationsTruncated: truncated,
         });
+
+    if (serialize([], true).length > MAX_ACTION_RESULT_CHARS) {
+        throw new Error(
+            `Explorer action metadata exceeds the ${MAX_ACTION_RESULT_CHARS}-character result limit`,
+        );
+    }
 
     for (const observation of observations) {
         if (
@@ -886,7 +1089,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function errorResult(error: string): ActionResult {
-    return { error };
+    return { error: error.slice(0, MAX_ACTION_RESULT_CHARS) };
 }
 
 function sessionFromInitSettings(
