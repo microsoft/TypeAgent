@@ -48,12 +48,12 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
+    "@typeagent/websocket-channel-server": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
     "better-sqlite3": "12.6.2",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
-    "telemetry": "workspace:*",
-    "websocket-channel-server": "workspace:*",
     "ws": "^8.21.1"
   },
   "devDependencies": {

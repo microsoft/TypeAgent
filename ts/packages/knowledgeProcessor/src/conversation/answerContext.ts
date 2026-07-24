@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { dateTime } from "typeagent";
+import { dateTime } from "@typeagent/agent-runtime";
 import { CompositeEntity } from "./entities.js";
 import { ActionGroup } from "./actions.js";
 import { splitLargeTextIntoChunks } from "../textChunker.js";

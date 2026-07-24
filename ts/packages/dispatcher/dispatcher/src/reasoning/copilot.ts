@@ -27,12 +27,12 @@ import {
     composeActionSchema,
     createActionSchemaJsonValidator,
 } from "../translation/actionSchemaJsonTranslator.js";
-import { TypeAgentJsonValidator } from "typechat-utils";
+import { TypeAgentJsonValidator } from "@typeagent/typechat-utils";
 import { executeAction } from "../execute/actionHandlers.js";
 import {
     ConversationMessage,
     ConversationMessageMeta,
-} from "conversation-memory";
+} from "@typeagent/conversation-memory";
 import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";

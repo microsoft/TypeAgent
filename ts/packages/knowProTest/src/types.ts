@@ -8,7 +8,7 @@ import {
     argNum,
     makeArg,
 } from "interactive-app";
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import { Result } from "typechat";
 import { argSourceFile } from "./common.js";
 

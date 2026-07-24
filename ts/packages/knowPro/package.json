@@ -1,7 +1,6 @@
 {
-  "name": "knowpro",
+  "name": "@typeagent/knowpro",
   "version": "0.0.1",
-  "private": true,
   "description": "Basic structured RAG implementation",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -34,12 +33,12 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/knowledge-processor": "workspace:*",
     "async": "^3.2.5",
     "debug": "^4.4.0",
     "fast-levenshtein": "^3.0.0",
-    "knowledge-processor": "workspace:*",
-    "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {

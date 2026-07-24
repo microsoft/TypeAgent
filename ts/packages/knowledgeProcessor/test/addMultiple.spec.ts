@@ -3,7 +3,7 @@
 
 import os from "node:os";
 import path from "path";
-import { cleanDir } from "typeagent";
+import { cleanDir } from "@typeagent/agent-runtime";
 import { createEntityIndexOnStorage } from "../src/conversation/entities.js";
 import { createActionIndexOnStorage } from "../src/conversation/actions.js";
 import {

@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kp from "knowpro";
-import * as cm from "conversation-memory";
+import * as kp from "@typeagent/knowpro";
+import * as cm from "@typeagent/conversation-memory";
 import { KnowproContext } from "./knowproContext.js";
 import { NamedArgs, parseTypedArguments } from "interactive-app";
 import {
@@ -16,7 +16,7 @@ import {
 } from "./types.js";
 import { shouldParseRequest } from "./common.js";
 import { error, Result, success } from "typechat";
-import { async } from "typeagent";
+import { async } from "@typeagent/agent-runtime";
 
 /**
  * Execute a natural language search request against the conversation

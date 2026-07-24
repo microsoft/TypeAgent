@@ -19,10 +19,10 @@ import {
     ContainerListBlobsOptions,
 } from "@azure/storage-blob";
 // import { DefaultAzureCredential } from "@azure/identity";
-import { StopWatch } from "telemetry";
+import { StopWatch } from "@typeagent/telemetry";
 import path from "node:path";
 import fs from "node:fs";
-import { isDirectoryPath } from "typeagent";
+import { isDirectoryPath } from "@typeagent/agent-runtime";
 import { TypeAgentStorageProvider } from "./storageProvider.js";
 import { AzureStorageProvider } from "./storageProviders/azureStorageProvider.js";
 import { AWSStorageProvider } from "./storageProviders/awsStorageProvider.js";

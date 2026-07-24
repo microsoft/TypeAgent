@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mathLib, ScoredItem } from "typeagent";
+import { mathLib, ScoredItem } from "@typeagent/agent-runtime";
 
 export enum SetOp {
     Union,

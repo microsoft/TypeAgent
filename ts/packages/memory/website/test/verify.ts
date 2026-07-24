@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IndexingResults, MessageOrdinal } from "knowpro";
+import { IndexingResults, MessageOrdinal } from "@typeagent/knowpro";
 import { WebsiteCollection } from "../src/websiteCollection.js";
 import { WebsiteDocPart } from "../src/websiteDocPart.js";
 

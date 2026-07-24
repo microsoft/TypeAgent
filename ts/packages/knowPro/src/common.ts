@@ -7,7 +7,7 @@
  * These should not be exposed via index.ts
  */
 
-import { conversation as kpLib } from "knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { ConversationSettings } from "./conversation.js";
 import { TermToSemanticRefIndex } from "./conversationIndex.js";
 import { DateTimeRange } from "./dateTimeSchema.js";

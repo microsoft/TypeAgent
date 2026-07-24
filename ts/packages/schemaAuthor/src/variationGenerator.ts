@@ -6,7 +6,7 @@ import {
     TypeSchema,
     VariationType,
     generateList,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { TypeChatLanguageModel } from "typechat";
 
 /**

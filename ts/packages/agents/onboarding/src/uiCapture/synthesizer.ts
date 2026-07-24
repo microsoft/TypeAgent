@@ -4,7 +4,7 @@
 import { ChatModel } from "@typeagent/aiclient";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { loadSchema } from "typeagent";
+import { loadSchema } from "@typeagent/agent-runtime";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 

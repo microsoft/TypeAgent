@@ -23,7 +23,7 @@ import {
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
-import type { ChatPanel } from "chat-ui";
+import type { ChatPanel } from "@typeagent/chat-ui";
 import type { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 
 const DEFAULT_AGENT_SERVER_URL = AGENT_SERVER_DEFAULT_URL;

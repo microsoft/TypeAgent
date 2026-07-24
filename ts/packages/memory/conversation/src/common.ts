@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kpLib from "knowledge-processor";
-import * as kp from "knowpro";
-import * as ms from "memory-storage";
+import * as kpLib from "@typeagent/knowledge-processor";
+import * as kp from "@typeagent/knowpro";
+import * as ms from "@typeagent/memory-storage";
 import { tryCreateEmbeddingModel } from "@typeagent/aiclient";
 import { IndexFileSettings, IndexingState } from "./memory.js";
 

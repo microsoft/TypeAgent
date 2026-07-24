@@ -24,7 +24,7 @@ import { promisify } from "util";
 import registerDebug from "debug";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { loadSchema } from "typeagent";
+import { loadSchema } from "@typeagent/agent-runtime";
 import { CliDiscoveryResult } from "./discoveryLlmSchema.js";
 
 const execFileAsync = promisify(execFile);

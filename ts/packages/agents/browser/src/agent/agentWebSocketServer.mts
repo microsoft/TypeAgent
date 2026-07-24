@@ -10,7 +10,7 @@ import {
     type ChannelProviderAdapter,
 } from "@typeagent/agent-rpc/channel";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
-import { attachHeartbeat } from "websocket-channel-server";
+import { attachHeartbeat } from "@typeagent/websocket-channel-server";
 import type {
     BrowserAgentInvokeFunctions,
     BrowserAgentCallFunctions,

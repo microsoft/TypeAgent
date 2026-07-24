@@ -7,7 +7,7 @@ import {
     getISODayStartTime,
     getISODayEndTime,
     parseFuzzyDateString,
-} from "typechat-utils";
+} from "@typeagent/typechat-utils";
 import {
     getCurrentWeekDates,
     getCurrentMonthDates,

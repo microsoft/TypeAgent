@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections, dateTime } from "typeagent";
+import { collections, dateTime } from "@typeagent/agent-runtime";
 import {
     DateRange,
     IConversation,

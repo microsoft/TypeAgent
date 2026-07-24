@@ -25,12 +25,12 @@ import {
     argSourceFileOrFolder,
     argSourceFolder,
 } from "../common.js";
-import { ensureDir, isDirectoryPath } from "typeagent";
+import { ensureDir, isDirectoryPath } from "@typeagent/agent-runtime";
 import fs from "node:fs";
-import * as knowLib from "knowledge-processor";
+import * as knowLib from "@typeagent/knowledge-processor";
 import path from "node:path";
 import { sqlite } from "memory-providers";
-import { isImageFileType } from "typechat-utils";
+import { isImageFileType } from "@typeagent/typechat-utils";
 import { TokenCounter, openai } from "@typeagent/aiclient";
 
 type CompletionUsageStats = openai.CompletionUsageStats;

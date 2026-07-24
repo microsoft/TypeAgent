@@ -5,7 +5,7 @@ import * as md from "marked";
 import {
     conversation as kpLib,
     splitIntoParagraphs,
-} from "knowledge-processor";
+} from "@typeagent/knowledge-processor";
 import { htmlSimplify, htmlToText } from "./html.js";
 
 /**

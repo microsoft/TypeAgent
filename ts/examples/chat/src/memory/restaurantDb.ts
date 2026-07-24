@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as sqlite from "better-sqlite3";
-import * as ms from "memory-storage";
+import * as ms from "@typeagent/memory-storage";
 
 export class RestaurantDb {
     private db: sqlite.Database;

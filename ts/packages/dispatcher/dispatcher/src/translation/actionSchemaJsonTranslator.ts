@@ -21,7 +21,7 @@ import {
     createJsonTranslatorWithValidator,
     JsonTranslatorOptions,
     TypeAgentJsonValidator,
-} from "typechat-utils";
+} from "@typeagent/typechat-utils";
 import {
     createChangeAssistantActionSchema,
     getCombinedActionSchemaTypeName,

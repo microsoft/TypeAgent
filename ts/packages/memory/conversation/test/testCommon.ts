@@ -5,7 +5,7 @@ import {
     createConversationSettings,
     createKnowledgeExtractor,
     MessageCollection,
-} from "knowpro";
+} from "@typeagent/knowpro";
 import {
     createTestChatModel,
     createTestEmbeddingModel,

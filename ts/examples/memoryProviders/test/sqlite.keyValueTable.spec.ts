@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as sqlite from "better-sqlite3";
-import * as knowLib from "knowledge-processor";
+import * as knowLib from "@typeagent/knowledge-processor";
 import { createDatabase } from "../src/sqlite/common.js";
 import { ensureTestDir, testFilePath } from "./testCore.js";
 import { createKeyValueTable } from "../src/sqlite/keyValueTable.js";

@@ -6,7 +6,7 @@ import {
     ProfileLogger,
     ProfileMeasure,
     ProfileReader,
-} from "telemetry";
+} from "@typeagent/telemetry";
 
 import { ProfileNames } from "./profileNames.js";
 import {

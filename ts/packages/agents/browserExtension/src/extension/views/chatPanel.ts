@@ -9,7 +9,7 @@
  * typed RPC channel.
  */
 
-import { ChatPanel, PlatformAdapter } from "chat-ui";
+import { ChatPanel, PlatformAdapter } from "@typeagent/chat-ui";
 import type { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 import { createChromeRpcClient } from "./chromeRpcClient.js";
 import type {

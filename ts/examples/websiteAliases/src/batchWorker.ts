@@ -5,7 +5,7 @@ import { parentPort, workerData } from "worker_threads";
 import chalk from "chalk";
 import { Result } from "typechat";
 import { domains } from "./generateOpenCommandPhrasesSchema.js";
-import { createTypeChat, loadSchema } from "typeagent";
+import { createTypeChat, loadSchema } from "@typeagent/agent-runtime";
 import {
     ChatModelWithStreaming,
     CompletionSettings,

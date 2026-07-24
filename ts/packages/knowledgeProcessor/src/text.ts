@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { dateTime } from "typeagent";
+import { dateTime } from "@typeagent/agent-runtime";
 import { unionArrays, uniqueFrom } from "./setOperations.js";
 import { TextStore } from "./textStore.js";
 

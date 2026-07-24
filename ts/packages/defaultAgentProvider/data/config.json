@@ -17,7 +17,7 @@
       "name": "list-agent"
     },
     "browser": {
-      "name": "browser-typeagent"
+      "name": "@typeagent/browser"
     },
     "desktop": {
       "name": "desktop-automation"
@@ -30,7 +30,7 @@
       "execMode": "dispatcher"
     },
     "photo": {
-      "name": "photo-agent",
+      "name": "@typeagent/photo-agent",
       "execMode": "separate"
     },
     "greeting": {
@@ -88,16 +88,16 @@
       "name": "timer-agent"
     },
     "github-cli": {
-      "name": "github-cli-agent"
+      "name": "@typeagent/github-cli-agent"
     },
     "windowsClock": {
       "name": "windowsclock-agent"
     },
     "visualStudio": {
-      "name": "visualstudio-agent"
+      "name": "@typeagent/visualstudio-agent"
     },
     "discord": {
-      "name": "discord-agent"
+      "name": "@typeagent/discord-agent"
     },
     "ipconfig": {
       "name": "ipconfig-agent"

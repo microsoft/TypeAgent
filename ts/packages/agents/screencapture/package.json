@@ -32,10 +32,10 @@
     "tsc": "tsc -b src test"
   },
   "dependencies": {
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
-    "debug": "^4.4.0",
-    "typeagent": "workspace:*"
+    "debug": "^4.4.0"
   },
   "devDependencies": {
     "@typeagent/action-grammar-compiler": "workspace:*",

@@ -4,7 +4,7 @@
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai as ai } from "@typeagent/aiclient";
-import { ExtractionMode } from "website-memory";
+import { ExtractionMode } from "@typeagent/website-memory";
 import registerDebug from "debug";
 import { PageSummary } from "./schema/summarization.mjs";
 import { fileURLToPath } from "url";

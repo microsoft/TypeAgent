@@ -4,7 +4,7 @@
 import * as bingWithGrounding from "./bingWithGrounding.js";
 import * as agents from "./agents.js";
 import { AIProjectClient } from "@azure/ai-projects";
-import { createTypeChat } from "typeagent";
+import { createTypeChat } from "@typeagent/agent-runtime";
 import registerDebug from "debug";
 import {
     ChatModelWithStreaming,

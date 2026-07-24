@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ensureDir } from "typeagent";
+import { ensureDir } from "@typeagent/agent-runtime";
 import { MemoryServer } from "./memoryServer.js";
 import { loadConfigSync } from "@typeagent/config";
 

@@ -2,12 +2,12 @@
 // Licensed under the MIT License.
 
 import { ChatModel, TextEmbeddingModel, openai } from "@typeagent/aiclient";
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import { createKnowledgeModel } from "./models.js";
-import * as cm from "conversation-memory";
+import * as cm from "@typeagent/conversation-memory";
 import { KnowproLog } from "./logging.js";
 import path from "path";
-import { createEmbeddingCache } from "knowledge-processor";
+import { createEmbeddingCache } from "@typeagent/knowledge-processor";
 import { PromptSection } from "typechat";
 
 export type KnowproContextOptions = {

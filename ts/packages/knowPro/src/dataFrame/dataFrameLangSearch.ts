@@ -14,7 +14,7 @@ import {
 } from "./dataFrameConversation.js";
 import { getDataFrameAndColumnName } from "./dataFrameQuery.js";
 import * as search from "../search.js";
-import { loadSchemaFiles } from "typeagent";
+import { loadSchemaFiles } from "@typeagent/agent-runtime";
 import { TypeChatLanguageModel, createJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { SearchQueryTranslator } from "../searchQueryTranslator.js";

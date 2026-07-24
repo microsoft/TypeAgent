@@ -3,8 +3,8 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../../browserActions.mjs";
-import * as website from "website-memory";
-import { ExtractionMode } from "website-memory";
+import * as website from "@typeagent/website-memory";
+import { ExtractionMode } from "@typeagent/website-memory";
 import { DetailedKnowledgeStats } from "../../browserKnowledgeSchema.js";
 import { AnalyticsDataResponse } from "../types/knowledgeTypes.mjs";
 

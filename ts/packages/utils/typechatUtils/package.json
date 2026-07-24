@@ -1,7 +1,6 @@
 {
-  "name": "typechat-utils",
+  "name": "@typeagent/typechat-utils",
   "version": "0.0.1",
-  "private": true,
   "description": "TypeChat utilities package for the TypeAgent project.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -34,11 +33,11 @@
     "@azure-rest/maps-search": "^2.0.0-beta.3",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
     "chalk": "^5.4.1",
     "date-fns": "^4.1.0",
     "debug": "^4.4.0",
     "exifreader": "^4.39.0",
-    "telemetry": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {

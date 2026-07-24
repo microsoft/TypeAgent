@@ -3,8 +3,8 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../../browserActions.mjs";
-import * as website from "website-memory";
-import { AIModelRequiredError } from "website-memory";
+import * as website from "@typeagent/website-memory";
+import { AIModelRequiredError } from "@typeagent/website-memory";
 import { BrowserKnowledgeExtractor } from "../browserKnowledgeExtractor.mjs";
 import {
     createExtractionInputsFromFragments,

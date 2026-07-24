@@ -17,7 +17,7 @@ import {
     createKnowledgeStore,
     KnowledgeStore,
 } from "../src/index.js";
-import { asyncArray, cleanDir } from "typeagent";
+import { asyncArray, cleanDir } from "@typeagent/agent-runtime";
 import path from "path";
 
 describe("KnowledgeExtractor", () => {

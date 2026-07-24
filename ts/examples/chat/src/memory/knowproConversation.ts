@@ -12,12 +12,12 @@ import {
     StopWatch,
 } from "interactive-app";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import * as kp from "knowpro";
-import * as cm from "conversation-memory";
+import * as kp from "@typeagent/knowpro";
+import * as cm from "@typeagent/conversation-memory";
 import path from "path";
 
 import { KnowproContext } from "./knowproMemory.js";
-import { ensureDir, getFileName } from "typeagent";
+import { ensureDir, getFileName } from "@typeagent/agent-runtime";
 import chalk from "chalk";
 
 export type KnowproConversationContext = {

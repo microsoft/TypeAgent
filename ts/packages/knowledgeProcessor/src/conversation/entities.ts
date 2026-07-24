@@ -8,7 +8,7 @@ import {
     asyncArray,
     collections,
     dateTime,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import {
     TermSet,
     TextIndex,

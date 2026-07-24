@@ -7,7 +7,7 @@ import {
     CosmosContainerClientFactory,
     createDatabaseLoggerSink,
     createDebugLoggerSink,
-} from "telemetry";
+} from "@typeagent/telemetry";
 import { CosmosPartitionKeyBuilderFactory } from "./cosmosDBLoggerSink.js";
 
 import registerDebug from "debug";

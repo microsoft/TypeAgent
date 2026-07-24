@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { loadConfigSync } from "@typeagent/config";
-import { bingWithGrounding } from "azure-ai-foundry";
+import { bingWithGrounding } from "@typeagent/azure-ai-foundry";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import { pageContentKeywordExtractor } from "./pageContentKeywords.js";

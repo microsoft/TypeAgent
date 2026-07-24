@@ -60,6 +60,8 @@
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "chalk": "^5.4.1",
@@ -71,9 +73,7 @@
     "marked": "^15.0.0",
     "marked-terminal": "^7.3.0",
     "open": "^10.1.0",
-    "telemetry": "workspace:*",
-    "ts-node": "^10.9.1",
-    "typechat-utils": "workspace:*"
+    "ts-node": "^10.9.1"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

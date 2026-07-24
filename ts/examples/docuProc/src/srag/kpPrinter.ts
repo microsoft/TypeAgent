@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kp from "knowpro";
-import * as knowLib from "knowledge-processor";
+import * as kp from "@typeagent/knowpro";
+import * as knowLib from "@typeagent/knowledge-processor";
 import { AppPrinter } from "../printer.js";
 import chalk from "chalk";
 import { StopWatch } from "interactive-app";
 //import { textLocationToString } from "./knowproCommon.js";
-//import * as cm from "conversation-memory";
+//import * as cm from "@typeagent/conversation-memory";
 
 export interface IMessageMetadata<TMeta = any> {
     metadata: TMeta;

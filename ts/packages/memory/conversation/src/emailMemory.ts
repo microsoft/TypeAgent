@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kp from "knowpro";
-import * as ms from "memory-storage";
+import * as kp from "@typeagent/knowpro";
+import * as ms from "@typeagent/memory-storage";
 import { EmailMessage, EmailMessageSerializer } from "./emailMessage.js";
 import {
     addSynonymsFileAsAliases,

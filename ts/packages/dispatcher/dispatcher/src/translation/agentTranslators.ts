@@ -10,7 +10,7 @@ import {
     TranslatorSchemaDef,
     composeTranslatorSchemas,
     IncrementalJsonValueCallBack,
-} from "typechat-utils";
+} from "@typeagent/typechat-utils";
 import { AppAction, SchemaTypeNames } from "@typeagent/agent-sdk";
 import { Result } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
@@ -41,7 +41,7 @@ import { ActionConfig, getSchemaContent } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { CompleteUsageStatsCallback } from "@typeagent/aiclient";
-import { PromptLogger } from "telemetry";
+import { PromptLogger } from "@typeagent/telemetry";
 import type { UserContext } from "./userContext.js";
 
 export function getAppAgentName(schemaName: string) {

@@ -12,7 +12,7 @@ import {
 } from "./testCore.js";
 import { createDatabase } from "../src/sqlite/common.js";
 import { createVectorTable } from "../src/sqlite/vectorTable.js";
-import { NormalizedEmbedding, SimilarityType } from "typeagent";
+import { NormalizedEmbedding, SimilarityType } from "@typeagent/agent-runtime";
 
 describe("sqlite.vectorTable", () => {
     const testTimeout = 1000 * 60 * 5;

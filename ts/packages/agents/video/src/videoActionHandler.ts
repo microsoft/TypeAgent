@@ -21,7 +21,7 @@ import {
 import { CreateVideoAction, VideoAction } from "./videoActionSchema.js";
 import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 import { randomBytes } from "crypto";
-import { getMimeType } from "typechat-utils";
+import { getMimeType } from "@typeagent/typechat-utils";
 
 export function instantiate(): AppAgent {
     return {

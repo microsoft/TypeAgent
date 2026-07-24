@@ -9,7 +9,7 @@ import {
     createAzureSearchIndexClient,
     embeddingToVector,
 } from "./azSearchCommon.js";
-import { NormalizedEmbedding } from "typeagent";
+import { NormalizedEmbedding } from "@typeagent/agent-runtime";
 
 export class AzSearchIndex<T extends object> {
     public searchClient: azSearch.SearchClient<T>;

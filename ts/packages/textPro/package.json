@@ -1,7 +1,6 @@
 {
-  "name": "textpro",
+  "name": "@typeagent/textpro",
   "version": "0.0.1",
-  "private": true,
   "description": "textpro contains sample library for manipulating text.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -28,8 +27,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/knowledge-processor": "workspace:*",
     "cheerio": "1.0.0-rc.12",
-    "knowledge-processor": "workspace:*",
     "marked": "16.0.0"
   },
   "devDependencies": {

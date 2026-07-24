@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kpLib from "knowledge-processor";
-import * as kp from "knowpro";
+import * as kpLib from "@typeagent/knowledge-processor";
+import * as kp from "@typeagent/knowpro";
 import {
     createMemorySettings,
     Memory,

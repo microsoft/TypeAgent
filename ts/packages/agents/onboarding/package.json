@@ -45,13 +45,13 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "debug": "^4.3.4",
     "dispatcher-node-providers": "workspace:*",
-    "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {

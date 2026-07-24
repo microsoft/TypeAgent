@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createSemanticList, cleanDir } from "typeagent";
+import { createSemanticList, cleanDir } from "@typeagent/agent-runtime";
 import { getRootDataPath, hasTestKeys, testIf } from "./testCore.js";
 import { openai, TextEmbeddingModel } from "@typeagent/aiclient";
 import { createEntitySearchOptions } from "../src/conversation/entities.js";

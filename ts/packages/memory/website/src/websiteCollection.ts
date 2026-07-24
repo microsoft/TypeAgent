@@ -13,14 +13,14 @@ import {
     dataFrame,
     MessageCollection,
     SemanticRefCollection,
-} from "knowpro";
+} from "@typeagent/knowpro";
 import {
     DocMemory,
     DocMemorySettings,
     createTextMemorySettings,
-} from "conversation-memory";
+} from "@typeagent/conversation-memory";
 import type sqlite from "better-sqlite3";
-import * as ms from "memory-storage";
+import * as ms from "@typeagent/memory-storage";
 import {
     VisitFrequencyTable,
     WebsiteCategoryTable,
@@ -930,7 +930,7 @@ export class WebsiteCollection
 
         if (data.semanticIndexData) {
             this.semanticRefIndex = new (
-                await import("knowpro")
+                await import("@typeagent/knowpro")
             ).TermToSemanticRefIndex(data.semanticIndexData);
         }
         if (data.relatedTermsIndexData) {
@@ -939,7 +939,7 @@ export class WebsiteCollection
             );
         }
         if (data.messageIndexData) {
-            const kp = await import("knowpro");
+            const kp = await import("@typeagent/knowpro");
             this.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
                 this.settings.conversationSettings.messageTextIndexSettings,
             );
@@ -1109,7 +1109,7 @@ export class WebsiteCollection
         when?: any,
     ): Promise<WebsiteDocPart[]> {
         const results: WebsiteDocPart[] = [];
-        const kp = await import("knowpro");
+        const kp = await import("@typeagent/knowpro");
 
         // Search for each entity using knowledge graph
         for (const entity of entities) {
@@ -1169,7 +1169,7 @@ export class WebsiteCollection
         when?: any,
         options?: any,
     ): Promise<WebsiteDocPart[]> {
-        const kp = await import("knowpro");
+        const kp = await import("@typeagent/knowpro");
         const searchTermGroup = kp.createTopicSearchTermGroup(topics);
 
         const whenFilter = {
@@ -1212,7 +1212,7 @@ export class WebsiteCollection
         actionTypes: string[],
         when?: any,
     ): Promise<WebsiteDocPart[]> {
-        const kp = await import("knowpro");
+        const kp = await import("@typeagent/knowpro");
         // Use topic search since actions are often categorized as topics
         const searchTermGroup = kp.createTopicSearchTermGroup(actionTypes);
 

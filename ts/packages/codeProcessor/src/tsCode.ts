@@ -5,7 +5,7 @@
  * Functions for working with typescript code
  */
 
-import { buildChunks, readAllText } from "typeagent";
+import { buildChunks, readAllText } from "@typeagent/agent-runtime";
 import ts, { CommentRange, SourceFile, Statement } from "typescript";
 import { Module } from "./code.js";
 

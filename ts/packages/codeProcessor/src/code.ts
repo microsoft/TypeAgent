@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { MessageSourceRole, readAllText } from "typeagent";
+import { MessageSourceRole, readAllText } from "@typeagent/agent-runtime";
 import { PromptSection } from "typechat";
 
 /**

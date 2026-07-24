@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Client } from "@elastic/elasticsearch";
-import { KeyValueIndex, ValueType } from "knowledge-processor";
+import { KeyValueIndex, ValueType } from "@typeagent/knowledge-processor";
 import { toValidIndexName } from "./common.js";
 
 export async function createKeyValueIndex<

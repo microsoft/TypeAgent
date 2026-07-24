@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { email } from "knowledge-processor";
-import * as kp from "knowpro";
+import { email } from "@typeagent/knowledge-processor";
+import * as kp from "@typeagent/knowpro";
 import * as tl from "test-lib";
-import { conversation as kpLib } from "knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { EmailMessage } from "../src/emailMessage.js";
 import { Message } from "../src/memory.js";
 

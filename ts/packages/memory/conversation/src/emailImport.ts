@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import { AddressObject, simpleParser } from "mailparser";
-import { email } from "knowledge-processor";
-import { readAllText } from "typeagent";
+import { email } from "@typeagent/knowledge-processor";
+import { readAllText } from "@typeagent/agent-runtime";
 
 /**
  * Load an email in MIME format

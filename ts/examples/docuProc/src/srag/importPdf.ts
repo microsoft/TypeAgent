@@ -28,7 +28,7 @@ import {
 } from "../pdfDownLoader.js";
 import { assert } from "node:console";
 import { AppPrinter } from "../printer.js";
-import { ensureDir } from "typeagent";
+import { ensureDir } from "@typeagent/agent-runtime";
 
 const execFilePromise = promisify(execFile);
 

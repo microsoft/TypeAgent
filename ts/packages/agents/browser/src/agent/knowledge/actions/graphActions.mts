@@ -3304,7 +3304,7 @@ export async function getEntityDetails(
         const timestamps: string[] = [];
         const processedMessages = new Set<number>();
 
-        const kp = await import("knowpro");
+        const kp = await import("@typeagent/knowpro");
         const searchTermGroup = kp.createEntitySearchTermGroup(
             parameters.entityName,
             undefined,

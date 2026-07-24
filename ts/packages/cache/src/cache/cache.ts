@@ -6,7 +6,7 @@ import { DeepPartialUndefined } from "@typeagent/common-utils";
 import { ParsedActionSchema } from "@typeagent/action-schema";
 
 const debug = registerDebug("typeagent:cache");
-import * as Telemetry from "telemetry";
+import * as Telemetry from "@typeagent/telemetry";
 import { ExplanationData } from "../explanation/explanationData.js";
 import {
     equalNormalizedObject,

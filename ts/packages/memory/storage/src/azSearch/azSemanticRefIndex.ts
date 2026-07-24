@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import * as azSearch from "@azure/search-documents";
-import * as kp from "knowpro";
-import { conversation as kpLib } from "knowledge-processor";
+import * as kp from "@typeagent/knowpro";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { AzSearchIndex } from "./azSearchIndex.js";
 import { AzSearchSettings, createSearchField } from "./azSearchCommon.js";
 import { AzSearchCompilerSettings, AzSearchQueryCompiler } from "./azQuery.js";

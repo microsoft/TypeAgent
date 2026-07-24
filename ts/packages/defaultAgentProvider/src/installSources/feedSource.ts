@@ -32,6 +32,16 @@ const debug = registerDebug("typeagent:dispatcher:installSource:feed");
 // The sentinel keyword an app agent declares in its package.json.
 export const AGENT_KEYWORD = "typeagent-agent";
 
+// The npm scopes the feed is enumerated for when neither the source config nor
+// TYPEAGENT_FEED_SCOPES specifies scopes. `@typeagent` holds the first-party
+// agents; `@secretagents` holds agents published from a separate ADO repo that
+// are not in the public GitHub source tree but are discoverable purely from the
+// feed. Bounding enumeration to these scopes also avoids scanning the feed's
+// full upstream-cache of public npm packages. Scopes are lowercase: npm
+// normalizes package names to lowercase, and the enumeration match is
+// case-insensitive (see listScopedPackages).
+export const DEFAULT_FEED_SCOPES = ["@typeagent", "@secretagents"];
+
 const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000; // ~1h
 
 function resolveFeedRegistry(config: FeedSourceConfig): string | undefined {
@@ -49,7 +59,7 @@ function resolveFeedScopes(config: FeedSourceConfig): string[] {
     }
     const raw = process.env.TYPEAGENT_FEED_SCOPES;
     if (!raw) {
-        return [];
+        return [...DEFAULT_FEED_SCOPES];
     }
     return raw
         .split(",")
@@ -281,7 +291,9 @@ function ensureInstallRoot(installDir: string): void {
 }
 
 // Walk the paged Azure DevOps Artifacts packages endpoint, filtered to the
-// configured scopes.
+// configured scopes. Scope matching is case-insensitive: npm normalizes package
+// names to lowercase, but a configured scope may carry other casing (e.g.
+// `@secretAgents` vs the published `@secretagents`).
 async function listScopedPackages(
     info: AzureFeedInfo,
     scopes: string[],
@@ -292,6 +304,7 @@ async function listScopedPackages(
     const top = 100;
     let skip = 0;
     const names: string[] = [];
+    const scopePrefixes = scopes.map((s) => `${s.toLowerCase()}/`);
     // Walk pages to completion.
     for (;;) {
         const url =
@@ -315,8 +328,8 @@ async function listScopedPackages(
             const name = typeof nameValue === "string" ? nameValue : undefined;
             if (
                 name &&
-                (scopes.length === 0 ||
-                    scopes.some((s) => name.startsWith(`${s}/`)))
+                (scopePrefixes.length === 0 ||
+                    scopePrefixes.some((p) => name.toLowerCase().startsWith(p)))
             ) {
                 names.push(name);
             }

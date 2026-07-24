@@ -13,7 +13,7 @@ import {
     similarity,
     SimilarityType,
     TopNCollection,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import {
     TextEmbeddingModel,
     tryCreateEmbeddingModel,

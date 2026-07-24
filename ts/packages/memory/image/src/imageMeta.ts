@@ -6,8 +6,8 @@ import {
     IKnowledgeSource,
     IMessage,
     IMessageMetadata,
-} from "knowpro";
-import { conversation as kpLib, image } from "knowledge-processor";
+} from "@typeagent/knowpro";
+import { conversation as kpLib, image } from "@typeagent/knowledge-processor";
 import path from "node:path";
 import { AddressOutput } from "@azure-rest/maps-search";
 //import registerDebug from "debug";

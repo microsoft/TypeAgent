@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { asyncArray, NameValue, ScoredItem } from "typeagent";
+import { asyncArray, NameValue, ScoredItem } from "@typeagent/agent-runtime";
 import {
     StorageProvider,
     ValueDataType,

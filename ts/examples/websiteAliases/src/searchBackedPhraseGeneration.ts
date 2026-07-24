@@ -12,7 +12,10 @@ import {
 import { Worker } from "worker_threads";
 import path from "path";
 import { fileURLToPath } from "url";
-import { openPhraseGeneratorAgent, urlResolverCache } from "azure-ai-foundry";
+import {
+    openPhraseGeneratorAgent,
+    urlResolverCache,
+} from "@typeagent/azure-ai-foundry";
 
 type cachedUrls_compact = {
     domains: {

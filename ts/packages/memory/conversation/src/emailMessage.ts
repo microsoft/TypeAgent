@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kp from "knowpro";
-import * as ms from "memory-storage";
-import { conversation as kpLib } from "knowledge-processor";
-import { email as email } from "knowledge-processor";
+import * as kp from "@typeagent/knowpro";
+import * as ms from "@typeagent/memory-storage";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
+import { email as email } from "@typeagent/knowledge-processor";
 import { Message, MessageMetadata } from "./memory.js";
 import path from "path";
 import { importEmlFile } from "./emailImport.js";

@@ -1,7 +1,6 @@
 {
-  "name": "visualstudio-agent",
+  "name": "@typeagent/visualstudio-agent",
   "version": "0.0.1",
-  "private": true,
   "description": "TypeAgent agent for Visual Studio (EnvDTE bridge)",
   "keywords": [
     "typeagent-agent"
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/visualStudioManifest.json",
     "./agent/handlers": "./dist/visualStudioActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/visualStudioSchema.agr -o ./dist/visualStudioSchema.ag.json",
     "asc": "asc -i ./src/visualStudioSchema.ts -o ./dist/visualStudioSchema.pas.json -t VisualStudioActions",

@@ -17,7 +17,7 @@ import {
     generateTextEmbeddingsWithRetry,
     getFileName,
     writeJsonFile,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { error, Result, Error, success } from "typechat";
 import { BatchCallback, ComparisonResult } from "./types.js";
 

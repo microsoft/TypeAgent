@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { readAllText } from "typeagent";
+import { readAllText } from "@typeagent/agent-runtime";
 import { CompositeEntity } from "../src/conversation/entities.js";
 import {
     AnswerContext,

@@ -37,7 +37,7 @@ import { PreferenceMember } from "../context/collisionPreferences.js";
 import {
     CachedImageWithDetails,
     IncrementalJsonValueCallBack,
-} from "typechat-utils";
+} from "@typeagent/typechat-utils";
 import {
     isMultipleAction,
     isPendingRequest,

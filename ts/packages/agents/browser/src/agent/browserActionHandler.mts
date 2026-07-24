@@ -61,7 +61,7 @@ import {
 
 import registerDebug from "debug";
 
-import * as website from "website-memory";
+import * as website from "@typeagent/website-memory";
 import { createGraphologyPersistenceManager } from "./knowledge/utils/graphologyPersistence.mjs";
 import { ExtractKnowledgeHandler } from "./knowledge/extractKnowledgeCommand.mjs";
 import {
@@ -134,7 +134,7 @@ import {
     generateAnswer,
     summarize,
     SummarizeResponse,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import {
     LookupAndAnswerActions,
     LookupAndAnswerInternet,
@@ -1405,7 +1405,9 @@ async function resolveWebPage(
                 context.agentContext.resolverSettings.keywordResolver ||
                 fastResolution
             ) {
-                const { urlResolver } = await import("azure-ai-foundry");
+                const { urlResolver } = await import(
+                    "@typeagent/azure-ai-foundry"
+                );
                 const cachehitUrls = urlResolver.resolveURLByKeyword(site);
                 if (cachehitUrls && cachehitUrls.length > 0) {
                     debug(`Resolved URLs from cache: ${cachehitUrls}`);

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type { PromptSection } from "typechat";
-import type { WebsiteCollection } from "website-memory";
+import type { WebsiteCollection } from "@typeagent/website-memory";
 
 export function getWebsiteSearchPromptPreamble(
     websiteCollection: WebsiteCollection,

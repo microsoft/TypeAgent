@@ -13,7 +13,7 @@ import {
     NamedArgs,
     parseNamedArguments,
 } from "interactive-app";
-import { dateTime } from "typeagent";
+import { dateTime } from "@typeagent/agent-runtime";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
