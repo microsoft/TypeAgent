@@ -48,7 +48,7 @@ const MAX_RESULTS = 6;
 const DEFAULT_MAX_TOOL_CALLS = 8;
 const DEFAULT_EXECUTION_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_OUTPUT_CHARS = 8_000;
-const MAX_REASONING_TOOL_CALLS = 5;
+const MAX_REASONING_TOOL_CALLS = 6;
 
 export function createCodeModeExplorer(
     options: CodeModeExplorerOptions,
