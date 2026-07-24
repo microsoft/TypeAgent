@@ -167,7 +167,7 @@ describe("agentic Code Mode explorer", () => {
         expect(result).toBe("src/alpha.ts:2");
         expect(result).not.toContain("Evidence");
         expect(adapter.configs).toHaveLength(1);
-        expect(adapter.configs[0]?.maxTurns).toBe(5);
+        expect(adapter.configs[0]?.maxTurns).toBe(6);
         const systemPrompt = String(adapter.configs[0]?.systemPrompt);
         expect(systemPrompt).toMatch(
             /exact lines? or line ranges? most likely needing changes/i,
@@ -204,6 +204,19 @@ describe("agentic Code Mode explorer", () => {
             "execute_action",
             "execute_action",
         ]);
+        expect(JSON.parse(adapter.results[0]?.text ?? "{}")).toMatchObject({
+            repositoryCallResults: [
+                {
+                    tool: "grep",
+                    input: expect.objectContaining({
+                        pattern: "needle",
+                        literal: true,
+                    }),
+                    resultCount: 1,
+                    truncated: true,
+                },
+            ],
+        });
         expect(String(adapter.configs[0]?.systemPrompt)).toContain(
             'actionName: "discoverRepository"',
         );
@@ -447,6 +460,50 @@ describe("agentic Code Mode explorer", () => {
         ).toMatchObject({ submissionAction: "submitExploration" });
     });
 
+    it("rejects a predictable refinement without repo.read before execution", async () => {
+        const { repoRoot, telemetryFile } = await makeFixture();
+        const adapter = scriptedAdapter([
+            [runProgram("discover", grepProgram())],
+            [runProgram("refine", refinementWithoutReadProgram())],
+            [runProgram("refine", aliasedReadProgram())],
+            [
+                submitExploration([
+                    {
+                        path: "src/alpha.ts",
+                        startLine: 1,
+                        endLine: 3,
+                    },
+                ]),
+            ],
+        ]);
+        const explorer = createCodeModeExplorer({
+            repoRoot,
+            reasoningAdapter: adapter,
+            modelName: "azure/gpt-5.6-luna",
+            telemetryFile,
+        });
+
+        await expect(
+            explorer.explore({ query: "Find the needle implementation" }),
+        ).resolves.toBe("src/alpha.ts:1-3");
+
+        expect(adapter.results[1]).toMatchObject({
+            isError: true,
+            text: expect.stringMatching(/repo[.]read|must read exact/i),
+        });
+        const invocation = latestInvocation(await readTelemetry(telemetryFile));
+        expect(invocation.toolTrace).toMatchObject({
+            totalCalls: 2,
+            calls: [{ tool: "grep" }, { tool: "read" }],
+        });
+        expect(invocation.actionAttempts).toMatchObject([
+            { actionName: "discoverRepository", status: "completed" },
+            { actionName: "refineRepository", status: "failed" },
+            { actionName: "refineRepository", status: "completed" },
+            { actionName: "submitExploration", status: "completed" },
+        ]);
+    });
+
     it("requires and records LSP navigation in the LSP treatment", async () => {
         const { repoRoot, telemetryFile } = await makeFixture();
         const adapter = scriptedAdapter([
@@ -600,6 +657,59 @@ describe("agentic Code Mode explorer", () => {
         ).toEqual([expect.stringMatching(/not present/i), undefined]);
     }, 30_000);
 
+    it("rejects a predictable LSP refinement without repo.lsp before execution", async () => {
+        const { repoRoot, telemetryFile } = await makeFixture();
+        const adapter = scriptedAdapter([
+            [runProgram("discover", grepProgram())],
+            [runProgram("refine", refinementWithoutLspProgram())],
+            [runProgram("refine", aliasedLspRetryRefinementProgram())],
+            [
+                submitExploration([
+                    {
+                        path: "src/lsp.ts",
+                        startLine: 1,
+                        endLine: 3,
+                    },
+                ]),
+            ],
+        ]);
+        const explorer = createCodeModeExplorer({
+            repoRoot,
+            reasoningAdapter: adapter,
+            modelName: "azure/gpt-5.6-luna",
+            telemetryFile,
+            lsp: {
+                servers: createDefaultLanguageServers({
+                    typescript: defaultTypeScriptLanguageServerCommand(),
+                    python: {
+                        command: process.execPath,
+                        args: ["-e", "process.exit(1)"],
+                    },
+                }),
+            },
+        });
+
+        await expect(
+            explorer.explore({ query: "Find lspTarget" }),
+        ).resolves.toBe("src/lsp.ts:1-3");
+
+        expect(adapter.results[1]).toMatchObject({
+            isError: true,
+            text: expect.stringMatching(/repo[.]lsp|language-server/i),
+        });
+        const invocation = latestInvocation(await readTelemetry(telemetryFile));
+        expect(invocation.toolTrace).toMatchObject({
+            totalCalls: 3,
+            calls: [{ tool: "grep" }, { tool: "lsp" }, { tool: "read" }],
+        });
+        expect(invocation.actionAttempts).toMatchObject([
+            { actionName: "discoverRepository", status: "completed" },
+            { actionName: "refineRepository", status: "failed" },
+            { actionName: "refineRepository", status: "completed" },
+            { actionName: "submitExploration", status: "completed" },
+        ]);
+    }, 30_000);
+
     it("shares observations and one repository-call budget across all phases", async () => {
         const { repoRoot, telemetryFile } = await makeFixture();
         const adapter = scriptedAdapter([
@@ -629,8 +739,8 @@ describe("agentic Code Mode explorer", () => {
         ).resolves.toMatch(/^src\/alpha[.]ts:1-3/m);
 
         const invocation = latestInvocation(await readTelemetry(telemetryFile));
-        expect(invocation.toolTrace.totalCalls).toBe(8);
-        expect(invocation.toolTrace.calls).toHaveLength(8);
+        expect(invocation.toolTrace.totalCalls).toBe(7);
+        expect(invocation.toolTrace.calls).toHaveLength(7);
         expect(invocation.toolTrace.calls.at(-1)?.tool).toBe("read");
         expect(
             JSON.parse(adapter.results[1]?.text ?? "{}").observations,
@@ -644,7 +754,7 @@ describe("agentic Code Mode explorer", () => {
             ]),
         );
         expect(adapter.results[1]?.text).toContain(
-            '"remainingRepositoryCalls":0',
+            '"remainingRepositoryCalls":1',
         );
         expect(
             JSON.parse(adapter.results[1]?.text ?? "{}").observations,
@@ -763,10 +873,61 @@ describe("agentic Code Mode explorer", () => {
         });
     });
 
+    it("permits a bounded sixth action to recover and correct submission", async () => {
+        const { repoRoot, telemetryFile } = await makeFixture();
+        const adapter = scriptedAdapter([
+            [runProgram("discover", grepProgram())],
+            [runProgram("refine", refinementWithoutReadProgram())],
+            [runProgram("refine", emptyReadProgram())],
+            [runProgram("refine", readProgram())],
+            [
+                submitExploration([
+                    {
+                        path: "src/alpha.ts",
+                        startLine: 1,
+                        endLine: 4,
+                    },
+                ]),
+            ],
+            [
+                submitExploration([
+                    {
+                        path: "src/alpha.ts",
+                        startLine: 1,
+                        endLine: 3,
+                    },
+                ]),
+            ],
+        ]);
+        const explorer = createCodeModeExplorer({
+            repoRoot,
+            reasoningAdapter: adapter,
+            modelName: "azure/gpt-5.6-luna",
+            telemetryFile,
+        });
+
+        await expect(
+            explorer.explore({ query: "recover and correct a localization" }),
+        ).resolves.toBe("src/alpha.ts:1-3");
+
+        expect(adapter.calls).toHaveLength(6);
+        expect(adapter.configs[0]?.maxTurns).toBe(6);
+        expect(
+            latestInvocation(await readTelemetry(telemetryFile)).reasoningTrace,
+        ).toMatchObject([
+            { actionName: "discoverRepository", status: "completed" },
+            { actionName: "refineRepository", status: "failed" },
+            { actionName: "refineRepository", status: "failed" },
+            { actionName: "refineRepository", status: "completed" },
+            { actionName: "submitExploration", status: "failed" },
+            { actionName: "submitExploration", status: "completed" },
+        ]);
+    });
+
     it("hard-stops reasoning after the bounded tool-call budget", async () => {
         const { repoRoot, telemetryFile } = await makeFixture();
         const adapter = scriptedAdapter([
-            Array.from({ length: 6 }, () =>
+            Array.from({ length: 7 }, () =>
                 runProgram("discover", grepProgram()),
             ),
         ]);
@@ -779,11 +940,11 @@ describe("agentic Code Mode explorer", () => {
 
         await expect(
             explorer.explore({ query: "repeat discovery forever" }),
-        ).rejects.toThrow(/at most 5 reasoning tool calls/i);
+        ).rejects.toThrow(/at most 6 reasoning tool calls/i);
 
         const invocation = latestInvocation(await readTelemetry(telemetryFile));
         expect(invocation.status).toBe("failed");
-        expect(invocation.reasoningTrace).toHaveLength(5);
+        expect(invocation.reasoningTrace).toHaveLength(6);
     });
 
     it("rejects invalid typed actions before the Explorer handler runs", async () => {
@@ -1057,7 +1218,7 @@ describe("agentic Code Mode explorer", () => {
         );
     });
 
-    it("stops after exact-read recovery exhausts the repository budget", async () => {
+    it("spends the reserved final call on exact-read recovery", async () => {
         const { repoRoot, telemetryFile } = await makeFixture();
         const adapter = scriptedAdapter(
             [
@@ -1086,17 +1247,20 @@ describe("agentic Code Mode explorer", () => {
 
         await expect(
             explorer.explore({ query: "recover an out-of-range read" }),
-        ).rejects.toThrow(/repository call budget exhausted/i);
+        ).resolves.toBe("src/alpha.ts:2");
 
-        expect(adapter.calls).toHaveLength(2);
+        expect(adapter.calls).toHaveLength(4);
         expect(adapter.results[1]).toMatchObject({
             isError: true,
-            text: expect.stringMatching(/repository call budget exhausted/i),
+            text: expect.stringMatching(
+                /read exact candidate context.*1 repository calls remain/i,
+            ),
         });
         expect(
             latestInvocation(await readTelemetry(telemetryFile)),
         ).toMatchObject({
-            status: "failed",
+            status: "completed",
+            toolTrace: { totalCalls: 2 },
             actionAttempts: [
                 expect.objectContaining({
                     actionName: "discoverRepository",
@@ -1106,8 +1270,16 @@ describe("agentic Code Mode explorer", () => {
                     actionName: "refineRepository",
                     status: "failed",
                     error: expect.stringMatching(
-                        /repository call budget exhausted/i,
+                        /read exact candidate context/i,
                     ),
+                }),
+                expect.objectContaining({
+                    actionName: "refineRepository",
+                    status: "completed",
+                }),
+                expect.objectContaining({
+                    actionName: "submitExploration",
+                    status: "completed",
                 }),
             ],
         });
@@ -1356,6 +1528,27 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
 }`;
 }
 
+function aliasedReadProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<RefinementProgramResult> {
+    const load = repo.read;
+    const read = await load("src/alpha.ts", { offset: 0, limit: 3 });
+    return {
+        success: true,
+        message: params.query,
+        locations: read.location ? [read.location] : [],
+    };
+}`;
+}
+
+function refinementWithoutReadProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<RefinementProgramResult> {
+    await repo.grep("needle", { literal: true, maxMatches: 1 });
+    return { success: true, message: params.query, locations: [] };
+}`;
+}
+
 function readZetaProgram(): string {
     return `
 async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
@@ -1477,6 +1670,34 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
     await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "lspTarget" });
     await repo.read("src/lsp.ts", { offset: 0, limit: 3 });
     return { success: true, message: params.query };
+}`;
+}
+
+function aliasedLspRetryRefinementProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<RefinementProgramResult> {
+    const navigate = repo.lsp;
+    const load = repo.read;
+    const definitions = await navigate({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "lspTarget" });
+    const definition = definitions[0];
+    const read = await load(definition.path, { offset: definition.startLine - 1, limit: 3 });
+    return {
+        success: true,
+        message: params.query,
+        locations: read.location ? [read.location] : [],
+    };
+}`;
+}
+
+function refinementWithoutLspProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<RefinementProgramResult> {
+    const read = await repo.read("src/lsp.ts", { offset: 0, limit: 3 });
+    return {
+        success: true,
+        message: params.query,
+        locations: read.location ? [read.location] : [],
+    };
 }`;
 }
 
