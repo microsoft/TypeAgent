@@ -31,6 +31,11 @@ interface GrepMatch {
     text: string;
 }
 
+interface GrepResult {
+    matches: GrepMatch[];
+    truncated: boolean;
+}
+
 interface ExploreLocation {
     path: string;
     startLine: number;
@@ -45,7 +50,7 @@ interface ReadResult {
 interface RepositoryApi {
     ls(relativePath?: string, options?: LsOptions): Promise<string[]>;
     glob(pattern: string, options?: GlobOptions): Promise<string[]>;
-    grep(pattern: string, options?: GrepOptions): Promise<GrepMatch[]>;
+    grep(pattern: string, options?: GrepOptions): Promise<GrepResult>;
     read(relativePath: string, options?: ReadOptions): Promise<ReadResult>;
 }
 

@@ -227,12 +227,14 @@ async function grepTool(
     repositoryTools: RepositoryTools,
     args: GrepArgs,
 ): Promise<string> {
-    const matches = await repositoryTools.api.grep(args.pattern, args);
-    return (
-        matches
+    const result = await repositoryTools.api.grep(args.pattern, args);
+    const matches =
+        result.matches
             .map((match) => `${match.path}:${match.line}:${match.text}`)
-            .join("\n") || "No matches"
-    );
+            .join("\n") || "No matches";
+    return result.truncated
+        ? `${matches}\n[Search results truncated; narrow the pattern or path.]`
+        : matches;
 }
 
 async function globTool(

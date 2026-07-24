@@ -44,6 +44,8 @@ const MAX_OUTPUT_LINE_LENGTH = 500;
 const MAX_TOTAL_OUTPUT_BYTES = 2 * 1024 * 1024;
 const MAX_GIT_OUTPUT_BYTES = 64 * 1024 * 1024;
 const MAX_RIPGREP_OUTPUT_BYTES = 8 * 1024 * 1024;
+const DEFAULT_RIPGREP_TIMEOUT_MS = 20_000;
+const RIPGREP_TIMEOUT_MARGIN_MS = 1_000;
 const TOOL_BUDGET_EXHAUSTED =
     "TOOL_BUDGET_EXHAUSTED: finish using evidence already gathered.";
 
@@ -140,6 +142,11 @@ export interface GrepMatch {
     text: string;
 }
 
+export interface GrepResult {
+    matches: GrepMatch[];
+    truncated: boolean;
+}
+
 export interface ReadResult {
     text: string;
     location?: {
@@ -152,7 +159,7 @@ export interface ReadResult {
 export interface RepositoryApi {
     ls(relativePath?: string, options?: LsOptions): Promise<string[]>;
     glob(pattern: string, options?: GlobOptions): Promise<string[]>;
-    grep(pattern: string, options?: GrepOptions): Promise<GrepMatch[]>;
+    grep(pattern: string, options?: GrepOptions): Promise<GrepResult>;
     read(relativePath: string, options?: ReadOptions): Promise<ReadResult>;
     lsp?(request: LspRequest): Promise<LspLocation[]>;
 }
@@ -191,6 +198,7 @@ export interface RepositoryToolsOptions {
     repoRoot: string;
     maxCalls?: number | undefined;
     ripgrepPath?: string | undefined;
+    executionTimeoutMs?: number | undefined;
     lsp?: LanguageServerOptions | undefined;
 }
 
@@ -245,6 +253,9 @@ export async function createRepositoryTools(
         1,
         1000,
         "maxCalls",
+    );
+    const ripgrepTimeoutMs = resolveRipgrepTimeoutMs(
+        options.executionTimeoutMs,
     );
     const snapshot = await createRepositorySnapshot(repoRoot);
     const files = snapshot.files;
@@ -410,12 +421,12 @@ export async function createRepositoryTools(
     async function grepRepository(
         pattern: string,
         callOptions: GrepOptions = {},
-    ): Promise<GrepMatch[]> {
+    ): Promise<GrepResult> {
         const requestedPath = callOptions.path;
         const requestedGlob = callOptions.glob;
         const requestedLiteral = callOptions.literal;
         const requestedMaxMatches = callOptions.maxMatches;
-        const matches = await runTool(
+        const grepResult = await runTool(
             "grep",
             {
                 pattern,
@@ -452,7 +463,7 @@ export async function createRepositoryTools(
                 );
                 if (eligibleFiles.length === 0) {
                     return {
-                        value: [],
+                        value: { matches: [], truncated: false },
                         resultCount: 0,
                         truncated: false,
                     };
@@ -467,11 +478,15 @@ export async function createRepositoryTools(
                     literal,
                     maxMatches,
                     includePattern,
+                    ripgrepTimeoutMs,
                 );
                 const matches = search.matches.slice(0, maxMatches);
 
                 return {
-                    value: matches,
+                    value: {
+                        matches,
+                        truncated: search.scanTruncated,
+                    },
                     resultCount: matches.length,
                     truncated: search.scanTruncated,
                     execution: {
@@ -480,14 +495,14 @@ export async function createRepositoryTools(
                     },
                 };
             },
-            [],
+            { matches: [], truncated: false },
         );
         const callIndex = trace.calls.length - 1;
         const exactFile = requestedPath
             ? filesByPath.get(normalizeRelativePath(requestedPath))
             : undefined;
         observations.push(
-            ...matches.map((match) => {
+            ...grepResult.matches.map((match) => {
                 if (
                     !exactFile ||
                     exactFile.relativePath !== match.path ||
@@ -522,7 +537,7 @@ export async function createRepositoryTools(
                 };
             }),
         );
-        return matches;
+        return grepResult;
     }
 
     async function readRepositoryFile(
@@ -752,6 +767,7 @@ async function searchSnapshotWithRipgrep(
     literal: boolean,
     maxMatches: number,
     globPattern?: string,
+    timeoutMs = DEFAULT_RIPGREP_TIMEOUT_MS,
 ): Promise<{
     matches: GrepMatch[];
     scanTruncated: boolean;
@@ -764,6 +780,7 @@ async function searchSnapshotWithRipgrep(
         target,
         maxMatches,
         globPattern,
+        timeoutMs,
     );
     const partialResult = isUsablePartialRipgrepResult(result);
     if (result.code !== 0 && result.code !== 1 && !partialResult) {
@@ -868,6 +885,7 @@ function runRipgrep(
     target: string,
     maxMatches: number,
     globPattern?: string,
+    timeoutMs = DEFAULT_RIPGREP_TIMEOUT_MS,
 ): Promise<RipgrepProcessResult> {
     return new Promise((resolve, reject) => {
         const args = [
@@ -910,9 +928,13 @@ function runRipgrep(
             handler();
         };
         const timer = setTimeout(() => {
-            terminalError ??= new Error("ripgrep timed out after 30 seconds");
+            const timeoutError = new Error(
+                `ripgrep timed out after ${formatTimeout(timeoutMs)}; retry with a narrower path or glob`,
+            );
+            terminalError ??= timeoutError;
             child.kill("SIGKILL");
-        }, 30_000);
+            finish(() => reject(timeoutError));
+        }, timeoutMs);
         child.stdout.on("data", (chunk: Buffer) => {
             if (terminalError || matchLimitReached) {
                 return;
@@ -970,6 +992,30 @@ function runRipgrep(
             }),
         );
     });
+}
+
+function resolveRipgrepTimeoutMs(executionTimeoutMs?: number): number {
+    if (executionTimeoutMs === undefined) {
+        return DEFAULT_RIPGREP_TIMEOUT_MS;
+    }
+    const outerTimeoutMs = boundedInteger(
+        executionTimeoutMs,
+        DEFAULT_RIPGREP_TIMEOUT_MS,
+        1,
+        2_147_483_647,
+        "executionTimeoutMs",
+    );
+    const marginMs = Math.min(
+        RIPGREP_TIMEOUT_MARGIN_MS,
+        Math.ceil(outerTimeoutMs / 2),
+    );
+    return Math.min(DEFAULT_RIPGREP_TIMEOUT_MS, outerTimeoutMs - marginMs);
+}
+
+function formatTimeout(timeoutMs: number): string {
+    return timeoutMs % 1000 === 0
+        ? `${timeoutMs / 1000} seconds`
+        : `${timeoutMs}ms`;
 }
 
 async function resolveRipgrepPath(explicitPath?: string): Promise<string> {
