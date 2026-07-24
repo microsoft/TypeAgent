@@ -7,19 +7,33 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { createRepositoryTools } from "../src/script/repositoryApi.js";
+import {
+    createRepositoryTools,
+    type RepositoryTools,
+    type RepositoryToolsOptions,
+} from "../src/script/repositoryApi.js";
 
 describe("repository tools", () => {
     const execFileAsync = promisify(execFile);
     const tempDirs: string[] = [];
+    const openTools: RepositoryTools[] = [];
 
     afterEach(async () => {
+        await Promise.all(openTools.splice(0).map((tools) => tools.close()));
         await Promise.all(
             tempDirs
                 .splice(0)
                 .map((dir) => rm(dir, { recursive: true, force: true })),
         );
     });
+
+    async function makeTools(
+        options: RepositoryToolsOptions,
+    ): Promise<RepositoryTools> {
+        const tools = await createRepositoryTools(options);
+        openTools.push(tools);
+        return tools;
+    }
 
     async function makeFixture(): Promise<string> {
         const root = await mkdtemp(
@@ -57,7 +71,7 @@ describe("repository tools", () => {
 
     it("lists, searches, and reads deterministic filtered repository content", async () => {
         const repoRoot = await makeFixture();
-        const { api, trace, observations } = await createRepositoryTools({
+        const { api, trace, observations } = await makeTools({
             repoRoot,
         });
 
@@ -87,6 +101,12 @@ describe("repository tools", () => {
             "grep",
             "read",
         ]);
+        expect(trace.calls[2].input).toMatchObject({
+            engine: "ripgrep",
+        });
+        expect(trace.calls[2].input.ripgrepPath).toMatch(
+            /(?:^|[/\\])rg(?:[.]exe)?$/,
+        );
         expect(trace.calls.every((call) => call.error === undefined)).toBe(
             true,
         );
@@ -114,7 +134,7 @@ describe("repository tools", () => {
 
     it("allows multiple concurrent searches without exceeding the call budget", async () => {
         const repoRoot = await makeFixture();
-        const { api, trace } = await createRepositoryTools({
+        const { api, trace } = await makeTools({
             repoRoot,
             maxCalls: 3,
         });
@@ -130,7 +150,7 @@ describe("repository tools", () => {
 
     it("supports standard brace-alternative globs used by Code Mode", async () => {
         const repoRoot = await makeFixture();
-        const { api } = await createRepositoryTools({ repoRoot });
+        const { api } = await makeTools({ repoRoot });
 
         await expect(
             api.grep("authenticate|fixture", {
@@ -152,7 +172,7 @@ describe("repository tools", () => {
 
     it("globs deterministic bounded repository-relative file paths", async () => {
         const repoRoot = await makeFixture();
-        const { api, trace } = await createRepositoryTools({ repoRoot });
+        const { api, trace } = await makeTools({ repoRoot });
 
         await expect(api.glob("*.ts")).resolves.toEqual([
             "src/auth.ts",
@@ -177,8 +197,8 @@ describe("repository tools", () => {
 
     it("rejects unsafe glob patterns and shares the repository-call budget", async () => {
         const repoRoot = await makeFixture();
-        const { api } = await createRepositoryTools({ repoRoot });
-        const limited = await createRepositoryTools({
+        const { api } = await makeTools({ repoRoot });
+        const limited = await makeTools({
             repoRoot,
             maxCalls: 1,
         });
@@ -217,7 +237,7 @@ describe("repository tools", () => {
         await symlink(outside, path.join(repoRoot, "outside-link.txt"));
         await execFileAsync("git", ["init"], { cwd: repoRoot });
 
-        const { api } = await createRepositoryTools({ repoRoot });
+        const { api } = await makeTools({ repoRoot });
         const files = await api.ls(undefined, { depth: 10, maxEntries: 100 });
 
         expect(files).toContain("src/auth.ts");
@@ -239,7 +259,7 @@ describe("repository tools", () => {
         const repoRoot = await makeFixture();
         const outside = path.join(path.dirname(repoRoot), "outside.txt");
         await writeFile(outside, "outside-secret\n");
-        const { api, trace } = await createRepositoryTools({ repoRoot });
+        const { api, trace } = await makeTools({ repoRoot });
 
         await expect(api.read("../outside.txt")).rejects.toThrow(/relative/i);
         await expect(api.read("  ../outside.txt  ")).rejects.toThrow(
@@ -268,7 +288,7 @@ describe("repository tools", () => {
             path.join(repoRoot, "src", "long.ts"),
             `${"x".repeat(700)} needle\n`,
         );
-        const { api, trace } = await createRepositoryTools({ repoRoot });
+        const { api, trace } = await makeTools({ repoRoot });
 
         await expect(api.grep("a.*b", { literal: true })).resolves.toEqual([
             {
@@ -288,15 +308,13 @@ describe("repository tools", () => {
         await expect(api.grep("valid", { glob: "src/*.ts" })).resolves.toEqual(
             [],
         );
-        await expect(api.grep("(a+)+$")).rejects.toThrow(
-            /unsafe regular expression/i,
-        );
+        await expect(api.grep("(a+)+$")).resolves.toEqual([]);
 
         await writeFile(
             path.join(repoRoot, "src", "literal-paren.ts"),
             "export const marker = 'needle(';\n",
         );
-        const literalFallback = await createRepositoryTools({ repoRoot });
+        const literalFallback = await makeTools({ repoRoot });
         await expect(literalFallback.api.grep("needle(")).resolves.toEqual([
             {
                 path: "src/literal-paren.ts",
@@ -330,7 +348,7 @@ describe("repository tools", () => {
             path.join(repoRoot, "src", "production.ts"),
             "shared-marker\n",
         );
-        const { api } = await createRepositoryTools({ repoRoot });
+        const { api } = await makeTools({ repoRoot });
 
         await expect(
             api.grep("shared-marker", { literal: true, maxMatches: 1 }),
@@ -347,13 +365,13 @@ describe("repository tools", () => {
         const repoRoot = await makeFixture();
         await writeFile(
             path.join(repoRoot, "src", "a-many.ts"),
-            Array.from({ length: 20 }, () => "common-marker").join("\n"),
+            Array.from({ length: 1500 }, () => "common-marker").join("\n"),
         );
         await writeFile(
             path.join(repoRoot, "src", "z-target.ts"),
             "common-marker\n",
         );
-        const { api } = await createRepositoryTools({ repoRoot });
+        const { api } = await makeTools({ repoRoot });
 
         await expect(
             api.grep("common-marker", { literal: true, maxMatches: 2 }),
@@ -361,6 +379,52 @@ describe("repository tools", () => {
             { path: "src/a-many.ts", line: 1, text: "common-marker" },
             { path: "src/z-target.ts", line: 1, text: "common-marker" },
         ]);
+    });
+
+    it("bounds broad ripgrep output before applying the result cap", async () => {
+        const repoRoot = await makeFixture();
+        await writeFile(
+            path.join(repoRoot, "src", "dense.ts"),
+            Array.from({ length: 5000 }, () => "common-marker").join("\n"),
+        );
+        const { api, trace } = await makeTools({ repoRoot });
+
+        await expect(
+            api.grep("common-marker", { literal: true, maxMatches: 1 }),
+        ).resolves.toEqual([
+            { path: "src/dense.ts", line: 1, text: "common-marker" },
+        ]);
+        expect(trace.calls[0]).toMatchObject({
+            tool: "grep",
+            resultCount: 1,
+            truncated: true,
+        });
+        expect(trace.calls[0].outputBytes).toBeLessThan(1024);
+    });
+
+    it("resolves ripgrep only when grep is used", async () => {
+        const previous = process.env.TYPEAGENT_RIPGREP_PATH;
+        process.env.TYPEAGENT_RIPGREP_PATH = path.join(
+            os.tmpdir(),
+            "missing-typeagent-rg",
+        );
+        try {
+            const repoRoot = await makeFixture();
+            const { api } = await makeTools({ repoRoot });
+
+            await expect(api.ls("src", { depth: 1 })).resolves.toContain(
+                "src/auth.ts",
+            );
+            await expect(api.grep("authenticate")).rejects.toThrow(
+                /ripgrep is required/i,
+            );
+        } finally {
+            if (previous === undefined) {
+                delete process.env.TYPEAGENT_RIPGREP_PATH;
+            } else {
+                process.env.TYPEAGENT_RIPGREP_PATH = previous;
+            }
+        }
     });
 
     it("prefers a symbol definition over an earlier reference in the same file", async () => {
@@ -376,7 +440,7 @@ describe("repository tools", () => {
                 "}",
             ].join("\n"),
         );
-        const { api } = await createRepositoryTools({ repoRoot });
+        const { api } = await makeTools({ repoRoot });
 
         await expect(api.grep("target", { maxMatches: 1 })).resolves.toEqual([
             {
@@ -398,7 +462,7 @@ describe("repository tools", () => {
                 "}",
             ].join("\n"),
         );
-        const { api } = await createRepositoryTools({ repoRoot });
+        const { api } = await makeTools({ repoRoot });
 
         await expect(
             api.grep("target|missing", { maxMatches: 1 }),
@@ -413,7 +477,7 @@ describe("repository tools", () => {
 
     it("enforces call and per-call result caps while tracing failures", async () => {
         const repoRoot = await makeFixture();
-        const { api, trace } = await createRepositoryTools({
+        const { api, trace } = await makeTools({
             repoRoot,
             maxCalls: 2,
         });
@@ -438,7 +502,7 @@ describe("repository tools", () => {
             path.join(repoRoot, "bulk.txt"),
             Array.from({ length: 1000 }, () => "x".repeat(500)).join("\n"),
         );
-        const { api, trace } = await createRepositoryTools({ repoRoot });
+        const { api, trace } = await makeTools({ repoRoot });
 
         for (let attempt = 0; attempt < 4; attempt++) {
             await expect(
