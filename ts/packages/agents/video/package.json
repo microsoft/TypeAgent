@@ -1,7 +1,6 @@
 {
   "name": "@typeagent/video-agent",
   "version": "0.0.1",
-  "private": false,
   "description": "Video dispatcher agent",
   "keywords": [
     "typeagent-agent"
@@ -15,15 +14,15 @@
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/videoManifest.json",
+    "./agent/handlers": "./dist/videoActionHandler.js"
+  },
   "files": [
     "dist",
     "src",
     "!dist/tsconfig.tsbuildinfo"
   ],
-  "exports": {
-    "./agent/manifest": "./src/videoManifest.json",
-    "./agent/handlers": "./dist/videoActionHandler.js"
-  },
   "scripts": {
     "asc": "asc -i ./src/videoActionSchema.ts -o ./dist/videoSchema.pas.json -t VideoAction",
     "build": "concurrently npm:tsc npm:asc",

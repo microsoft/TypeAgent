@@ -1,7 +1,6 @@
 {
   "name": "@typeagent/studio-agent",
   "version": "0.0.1",
-  "private": false,
   "description": "TypeAgent Studio agent — the AI / conversational presenter over the @typeagent/core Studio runtime (inspect, and later run/validate/author)",
   "keywords": [
     "typeagent-agent"
@@ -15,15 +14,15 @@
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/studioManifest.json",
+    "./agent/handlers": "./dist/studioActionHandler.js"
+  },
   "files": [
     "dist",
     "src",
     "!dist/tsconfig.tsbuildinfo"
   ],
-  "exports": {
-    "./agent/manifest": "./src/studioManifest.json",
-    "./agent/handlers": "./dist/studioActionHandler.js"
-  },
   "scripts": {
     "asc": "asc -i ./src/studioSchema.ts -o ./dist/studioSchema.pas.json -t StudioActions",
     "build": "concurrently npm:tsc npm:asc",
@@ -39,9 +38,9 @@
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/core": "workspace:*",
+    "@typeagent/studio-service": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.4.0",
-    "@typeagent/studio-service": "workspace:*",
     "ws": "^8.21.1"
   },
   "devDependencies": {

@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Codemod: rename internal libs to the @typeagent/* scope so they can be
 // published to the feed. Reversible via git. Run:
 //   node tools/scripts/scopeInternalLibs.mjs [--dry]
@@ -26,7 +29,15 @@ const RENAME = {
     "image-memory": "@typeagent/image-memory",
 };
 
-const CODE_EXT = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".mjs", ".cjs"]);
+const CODE_EXT = new Set([
+    ".ts",
+    ".tsx",
+    ".mts",
+    ".cts",
+    ".js",
+    ".mjs",
+    ".cjs",
+]);
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function walk(dir, out = []) {
@@ -61,7 +72,10 @@ const rules = Object.entries(RENAME).map(([from, to]) => {
         // package.json dependency KEY: "<name>": "<string-value>"  (string value excludes config object blocks)
         depRe: new RegExp(`(['"])${f}(['"])(\\s*:\\s*)(['"])`, "g"),
         // ambient declaration: declare module "<spec>"
-        declRe: new RegExp(`(declare\\s+module\\s*['"])${f}(/[^'"]*)?(['"])`, "g"),
+        declRe: new RegExp(
+            `(declare\\s+module\\s*['"])${f}(/[^'"]*)?(['"])`,
+            "g",
+        ),
     };
 });
 
@@ -121,7 +135,15 @@ for (const file of files) {
     }
 }
 
-console.log(`${DRY ? "[DRY] " : ""}package name/private updated: ${pkgNameChanges}`);
-console.log(`${DRY ? "[DRY] " : ""}dependency keys renamed:      ${depKeyChanges}`);
-console.log(`${DRY ? "[DRY] " : ""}import specifiers rewritten:  ${importChanges}`);
-console.log(`${DRY ? "[DRY] " : ""}files changed:                ${changedFiles.size}`);
+console.log(
+    `${DRY ? "[DRY] " : ""}package name/private updated: ${pkgNameChanges}`,
+);
+console.log(
+    `${DRY ? "[DRY] " : ""}dependency keys renamed:      ${depKeyChanges}`,
+);
+console.log(
+    `${DRY ? "[DRY] " : ""}import specifiers rewritten:  ${importChanges}`,
+);
+console.log(
+    `${DRY ? "[DRY] " : ""}files changed:                ${changedFiles.size}`,
+);

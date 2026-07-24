@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Post-tsc step for @typeagent/core.
 //
 // @typeagent/core depends on two packages that are NOT published to the feed:
@@ -39,7 +42,7 @@ const entries = walk(DIST).filter((f) =>
 );
 
 if (entries.length === 0) {
-    console.log("[bundle:private] nothing to inline.");
+    console.warn("[bundle:private] nothing to inline.");
     process.exit(0);
 }
 
@@ -84,7 +87,9 @@ for (const entry of entries) {
         logLevel: "warning",
         plugins: [keepRelativeAndPublishedExternal],
     });
-    console.log(`[bundle:private] inlined -> ${path.relative(PKG_ROOT, entry)}`);
+    console.warn(
+        `[bundle:private] inlined -> ${path.relative(PKG_ROOT, entry)}`,
+    );
 }
 
-console.log(`[bundle:private] done (${entries.length} file(s)).`);
+console.warn(`[bundle:private] done (${entries.length} file(s)).`);

@@ -1,7 +1,6 @@
 {
   "name": "@typeagent/image-agent",
   "version": "0.0.1",
-  "private": false,
   "description": "Image dispatcher agent",
   "keywords": [
     "typeagent-agent"
@@ -15,15 +14,15 @@
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/imageManifest.json",
+    "./agent/handlers": "./dist/imageActionHandler.js"
+  },
   "files": [
     "dist",
     "src",
     "!dist/tsconfig.tsbuildinfo"
   ],
-  "exports": {
-    "./agent/manifest": "./src/imageManifest.json",
-    "./agent/handlers": "./dist/imageActionHandler.js"
-  },
   "scripts": {
     "asc": "asc -i ./src/imageActionSchema.ts -o ./dist/imageSchema.pas.json -t ImageAction",
     "build": "concurrently npm:tsc npm:asc",
