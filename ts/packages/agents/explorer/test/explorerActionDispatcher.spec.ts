@@ -51,6 +51,7 @@ describe("Explorer action dispatcher", () => {
             );
             expect(program).toMatchObject({ isError: false });
             const discoveryPayload = JSON.parse(program.text);
+            expect(discoveryPayload.remainingProgramExecutions).toBe(1);
             expect(discoveryPayload).not.toHaveProperty("observationRanges");
             expect(discoveryPayload).not.toHaveProperty("citableRanges");
             expect(discoveryPayload).not.toHaveProperty("programResult.data");
@@ -62,6 +63,7 @@ describe("Explorer action dispatcher", () => {
             );
             expect(refinement).toMatchObject({ isError: false });
             const refinementPayload = JSON.parse(refinement.text) as {
+                remainingProgramExecutions: number;
                 observations: Array<{
                     source: "grep" | "read";
                     path: string;
@@ -69,6 +71,7 @@ describe("Explorer action dispatcher", () => {
                     endLine: number;
                 }>;
             };
+            expect(refinementPayload.remainingProgramExecutions).toBe(0);
             expect(refinementPayload.observations[0]).toMatchObject({
                 path: "src/alpha.ts",
                 startLine: 1,
@@ -225,12 +228,113 @@ describe("Explorer action dispatcher", () => {
             expect(result).toMatchObject({ isError: false });
             const payload = JSON.parse(result.text) as {
                 observations: Array<{ lines: string[] }>;
+                repositoryCallResults: Array<{
+                    tool: string;
+                    input: Record<string, unknown>;
+                    resultCount: number;
+                    truncated: boolean;
+                }>;
             };
             expect(
                 payload.observations
                     .flatMap((observation) => observation.lines)
                     .some((line) => line.includes("target-marker")),
             ).toBe(true);
+            expect(payload.repositoryCallResults).toEqual([
+                expect.objectContaining({
+                    tool: "grep",
+                    input: expect.objectContaining({
+                        pattern: "target-marker",
+                        path: "src/large.ts",
+                    }),
+                    resultCount: 1,
+                    truncated: true,
+                }),
+                expect.objectContaining({
+                    tool: "grep",
+                    input: expect.objectContaining({
+                        pattern: "line-",
+                        path: "src/large.ts",
+                        maxMatches: 40,
+                    }),
+                    resultCount: 40,
+                    truncated: true,
+                }),
+            ]);
+        } finally {
+            await runtime.close();
+        }
+    });
+
+    it("returns repository call errors with their bounded inputs", async () => {
+        const runtime = await createExplorerActionDispatcher(
+            await createSession(),
+        );
+        try {
+            const result = await runtime.executeAction(
+                "explorer",
+                "discoverRepository",
+                { program: caughtGrepErrorProgram() },
+            );
+            expect(result).toMatchObject({ isError: false });
+            expect(JSON.parse(result.text).repositoryCallResults).toEqual([
+                expect.objectContaining({
+                    tool: "grep",
+                    input: expect.objectContaining({
+                        pattern: "[",
+                        path: "src/large.ts",
+                    }),
+                    resultCount: 0,
+                    truncated: false,
+                    error: expect.any(String),
+                }),
+                expect.objectContaining({
+                    tool: "grep",
+                    input: expect.objectContaining({
+                        pattern: "target-marker",
+                        path: "src/large.ts",
+                    }),
+                    resultCount: 1,
+                    truncated: true,
+                }),
+            ]);
+        } finally {
+            await runtime.close();
+        }
+    });
+
+    it("bounds oversized repository call summaries inside the action result", async () => {
+        const runtime = await createExplorerActionDispatcher(
+            await createSession(),
+        );
+        try {
+            const result = await runtime.executeAction(
+                "explorer",
+                "discoverRepository",
+                { program: oversizedCaughtReadErrorProgram() },
+            );
+            expect(result).toMatchObject({ isError: false });
+            expect(result.text.length).toBeLessThanOrEqual(40_000);
+            const payload = JSON.parse(result.text) as {
+                repositoryCallResults: Array<{
+                    input: { path?: string };
+                    error?: string;
+                    inputTruncated?: boolean;
+                    errorTruncated?: boolean;
+                }>;
+            };
+            expect(payload.repositoryCallResults[0]).toMatchObject({
+                input: { path: expect.any(String) },
+                error: expect.any(String),
+                inputTruncated: true,
+                errorTruncated: true,
+            });
+            expect(
+                payload.repositoryCallResults[0].input.path?.length,
+            ).toBeLessThanOrEqual(1_000);
+            expect(
+                payload.repositoryCallResults[0].error?.length,
+            ).toBeLessThanOrEqual(1_000);
         } finally {
             await runtime.close();
         }
@@ -500,6 +604,137 @@ describe("Explorer action dispatcher", () => {
         }
     });
 
+    it("preserves returned candidate ranges inside compacted refinement reads", async () => {
+        const runtime = await createExplorerActionDispatcher(
+            await createSession(),
+        );
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: grepProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            const refinement = await runtime.executeAction(
+                "explorer",
+                "refineRepository",
+                { program: candidateCompactedReadsProgram() },
+            );
+            expect(refinement).toMatchObject({ isError: false });
+            const payload = JSON.parse(refinement.text) as {
+                observations: Array<{
+                    path: string;
+                    startLine: number;
+                    endLine: number;
+                }>;
+            };
+            expect(payload.observations).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        path: "src/wide.ts",
+                        startLine: 100,
+                        endLine: 110,
+                    }),
+                ]),
+            );
+            await expect(
+                runtime.executeAction("explorer", "submitExploration", {
+                    locations: [
+                        {
+                            path: "src/wide.ts",
+                            startLine: 100,
+                            endLine: 110,
+                        },
+                    ],
+                }),
+            ).resolves.toMatchObject({
+                isError: false,
+                text: "src/wide.ts:100-110",
+            });
+        } finally {
+            await runtime.close();
+        }
+    });
+
+    it("rejects partially visible candidates and normalizes a bounded retry", async () => {
+        const session = await createSession();
+        const runtime = await createExplorerActionDispatcher(session);
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: grepProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: oversizedCandidateCompactedReadsProgram(),
+                }),
+            ).resolves.toMatchObject({
+                isError: true,
+                text: expect.stringMatching(/fully visible.*smaller exact/i),
+            });
+            expect(session.snapshot().programAttempts).toBe(1);
+
+            const refinement = await runtime.executeAction(
+                "explorer",
+                "refineRepository",
+                { program: normalizedCandidateReadProgram() },
+            );
+            expect(refinement).toMatchObject({ isError: false });
+            expect(JSON.parse(refinement.text).programResult.locations).toEqual(
+                [{ path: "src/wide.ts", startLine: 100, endLine: 110 }],
+            );
+            await expect(
+                runtime.executeAction("explorer", "submitExploration", {
+                    locations: [
+                        {
+                            path: "src/wide.ts",
+                            startLine: 100,
+                            endLine: 110,
+                        },
+                    ],
+                }),
+            ).resolves.toMatchObject({
+                isError: false,
+                text: "src/wide.ts:100-110",
+            });
+        } finally {
+            await runtime.close();
+        }
+    });
+
+    it("reserves one repository call after a bounded candidate visibility failure", async () => {
+        const session = await createSession();
+        const runtime = await createExplorerActionDispatcher(session);
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: fourCallDiscoveryProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: fourReadOversizedCandidateProgram(),
+                }),
+            ).resolves.toMatchObject({
+                isError: true,
+                text: expect.stringMatching(/fully visible.*smaller exact/i),
+            });
+            expect(session.snapshot().toolTrace.totalCalls).toBe(7);
+
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: normalizedCandidateReadProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+            expect(session.snapshot().toolTrace.totalCalls).toBe(8);
+        } finally {
+            await runtime.close();
+        }
+    });
+
     it("rejects a refinement whose read returns no candidate context", async () => {
         const session = await createSession();
         const runtime = await createExplorerActionDispatcher(session);
@@ -566,7 +801,7 @@ describe("Explorer action dispatcher", () => {
         }
     });
 
-    it("reserves enough of the eight-call budget to recover missing LSP requirements", async () => {
+    it("preflights missing LSP requirements without consuming repository calls", async () => {
         const session = await createSession(8, true);
         const runtime = await createExplorerActionDispatcher(session);
         try {
@@ -582,7 +817,9 @@ describe("Explorer action dispatcher", () => {
                 }),
             ).resolves.toMatchObject({
                 isError: true,
-                text: expect.stringMatching(/2 repository calls remain/i),
+                text: expect.stringMatching(
+                    /must call repo[.]read before execution/i,
+                ),
             });
 
             const recovered = await runtime.executeAction(
@@ -602,14 +839,12 @@ describe("Explorer action dispatcher", () => {
                 ]),
             );
             expect(session.snapshot().toolTrace).toMatchObject({
-                totalCalls: 8,
+                totalCalls: 6,
                 calls: [
                     { tool: "grep" },
                     { tool: "grep" },
                     { tool: "glob" },
                     { tool: "ls" },
-                    { tool: "ls" },
-                    { tool: "glob" },
                     { tool: "read" },
                     { tool: "lsp", resultCount: 1 },
                 ],
@@ -684,6 +919,66 @@ describe("Explorer action dispatcher", () => {
         }
     }, 30_000);
 
+    it("preserves host-validated recovery evidence after an advisory program failure", async () => {
+        const session = await createSession(8, true);
+        const runtime = await createExplorerActionDispatcher(session);
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: fourCallDiscoveryProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: readAndMissLspProgram(),
+                }),
+            ).resolves.toMatchObject({
+                isError: true,
+                text: expect.stringMatching(
+                    /complete an error-free language-server call/i,
+                ),
+            });
+
+            const recovered = await runtime.executeAction(
+                "explorer",
+                "refineRepository",
+                { program: navigateLspThenReportFailureProgram() },
+            );
+            expect(recovered).toMatchObject({ isError: false });
+            expect(JSON.parse(recovered.text)).toMatchObject({
+                programResult: {
+                    success: false,
+                    error: "Unable to ground lspTarget source",
+                },
+                observations: [
+                    expect.objectContaining({
+                        source: "read",
+                        path: "src/lsp.ts",
+                        startLine: 1,
+                        endLine: 3,
+                    }),
+                ],
+            });
+            await expect(
+                runtime.executeAction("explorer", "submitExploration", {
+                    locations: [
+                        { path: "src/lsp.ts", startLine: 1, endLine: 3 },
+                    ],
+                }),
+            ).resolves.toMatchObject({
+                isError: false,
+                text: "src/lsp.ts:1-3",
+            });
+            expect(session.snapshot()).toMatchObject({
+                programAttempts: 2,
+                toolTrace: { totalCalls: 7 },
+            });
+        } finally {
+            await runtime.close();
+        }
+    }, 30_000);
+
     it("accepts an error-free empty LSP response without inventing locations", async () => {
         const session = await createSession(8, true);
         const runtime = await createExplorerActionDispatcher(session);
@@ -739,13 +1034,123 @@ describe("Explorer action dispatcher", () => {
             });
             await expect(
                 runtime.executeAction("explorer", "refineRepository", {
-                    program: navigateLspOnlyProgram(),
+                    program: readProgram(),
                 }),
             ).resolves.toMatchObject({
                 isError: true,
-                text: expect.stringMatching(/read exact candidate context/i),
+                text: expect.stringMatching(/must call repo[.]lsp/i),
+            });
+            expect(session.snapshot().toolTrace).toMatchObject({
+                totalCalls: 6,
+                calls: expect.arrayContaining([
+                    expect.objectContaining({
+                        tool: "lsp",
+                        error: expect.stringMatching(/discarded/i),
+                    }),
+                    expect.objectContaining({
+                        tool: "read",
+                        error: expect.stringMatching(/discarded/i),
+                    }),
+                ]),
+            });
+
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: readAndNavigateLspProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+            expect(session.snapshot().toolTrace).toMatchObject({
+                totalCalls: 8,
+                calls: expect.any(Array),
             });
         } finally {
+            await runtime.close();
+        }
+    }, 30_000);
+
+    it("does not accept a language-server call that completes after timeout", async () => {
+        const session = await createSession(
+            8,
+            true,
+            20,
+            delayedLanguageServerCommand(100),
+        );
+        const runtime = await createExplorerActionDispatcher(session);
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: lspOnlyDiscoveryProgram(),
+                }),
+            ).resolves.toMatchObject({
+                isError: true,
+                text: expect.stringMatching(/execution timeout/i),
+            });
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
+            const recovery = await runtime.executeAction(
+                "explorer",
+                "discoverRepository",
+                { program: emptyDiscoveryProgram() },
+            );
+            expect(recovery).toMatchObject({ isError: false });
+            expect(JSON.parse(recovery.text).repositoryCalls).toBe(1);
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: readProgram(),
+                }),
+            ).resolves.toMatchObject({
+                isError: true,
+                text: expect.stringMatching(/must call repo[.]lsp/i),
+            });
+            expect(session.snapshot().toolTrace).toMatchObject({
+                totalCalls: 1,
+                calls: [
+                    {
+                        tool: "lsp",
+                        error: expect.stringMatching(
+                            /completed after script execution ended/i,
+                        ),
+                    },
+                ],
+            });
+        } finally {
+            await runtime.close();
+        }
+    }, 30_000);
+
+    it("handles rejection from an unawaited call after execution ends", async () => {
+        const session = await createSession(
+            8,
+            true,
+            1_000,
+            delayedLanguageServerCommand(100),
+        );
+        const runtime = await createExplorerActionDispatcher(session);
+        const unhandled: unknown[] = [];
+        const recordUnhandled = (reason: unknown) => unhandled.push(reason);
+        process.on("unhandledRejection", recordUnhandled);
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: unawaitedLspDiscoveryProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
+            expect(unhandled).toEqual([]);
+            expect(session.snapshot().toolTrace).toMatchObject({
+                totalCalls: 1,
+                calls: [
+                    {
+                        tool: "lsp",
+                        error: expect.stringMatching(
+                            /completed after script execution ended/i,
+                        ),
+                    },
+                ],
+            });
+        } finally {
+            process.off("unhandledRejection", recordUnhandled);
             await runtime.close();
         }
     }, 30_000);
@@ -1124,6 +1529,8 @@ describe("Explorer action dispatcher", () => {
     async function createSession(
         maxToolCalls = 8,
         enableLsp = false,
+        executionTimeoutMs = 5_000,
+        typescriptLanguageServer = defaultTypeScriptLanguageServerCommand(),
     ): Promise<ExplorerActionSession> {
         const root = await mkdtemp(
             path.join(os.tmpdir(), "typeagent-explorer-dispatcher-test-"),
@@ -1196,13 +1603,12 @@ describe("Explorer action dispatcher", () => {
             maxResults: 6,
             maxToolCalls,
             maxOutputChars: 8_000,
-            executionTimeoutMs: 5_000,
+            executionTimeoutMs,
             ...(enableLsp
                 ? {
                       lsp: {
                           servers: createDefaultLanguageServers({
-                              typescript:
-                                  defaultTypeScriptLanguageServerCommand(),
+                              typescript: typescriptLanguageServer,
                               python: {
                                   command: process.execPath,
                                   args: ["-e", "process.exit(1)"],
@@ -1223,6 +1629,13 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
 }`;
 }
 
+function emptyDiscoveryProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    return { success: true, message: params.query, locations: [] };
+}`;
+}
+
 function fourCallDiscoveryProgram(): string {
     return `
 async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
@@ -1230,6 +1643,22 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
     await repo.grep("alpha", { literal: true, maxMatches: 1 });
     await repo.glob("**/*.ts", { maxMatches: 10 });
     await repo.ls("src", { depth: 1, maxEntries: 10 });
+    return { success: true, message: params.query };
+}`;
+}
+
+function lspOnlyDiscoveryProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "lspTarget" });
+    return { success: true, message: params.query };
+}`;
+}
+
+function unawaitedLspDiscoveryProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    void repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "lspTarget" });
     return { success: true, message: params.query };
 }`;
 }
@@ -1280,9 +1709,18 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
 }`;
 }
 
+function navigateLspThenReportFailureProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "lspTarget" });
+    return { success: false, error: "Unable to ground lspTarget source" };
+}`;
+}
+
 function readThenThrowProgram(): string {
     return `
 async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "lspTarget" });
     await repo.read("src/lsp.ts", { offset: 0, limit: 3 });
     throw new Error("runtime failure");
 }`;
@@ -1421,6 +1859,79 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
 }`;
 }
 
+function candidateCompactedReadsProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    const first = await repo.read("src/wide.ts", { offset: 0, limit: 200 });
+    await repo.read("src/wide.ts", { offset: 200, limit: 200 });
+    await repo.read("src/wide.ts", { offset: 400, limit: 200 });
+    return {
+        success: true,
+        locations: first.location ? [{ path: first.location.path, startLine: 100, endLine: 110 }] : [],
+    };
+}`;
+}
+
+function oversizedCandidateCompactedReadsProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    const first = await repo.read("src/wide.ts", { offset: 0, limit: 200 });
+    await repo.read("src/wide.ts", { offset: 200, limit: 200 });
+    await repo.read("src/wide.ts", { offset: 400, limit: 200 });
+    return {
+        success: true,
+        locations: first.location ? [{ path: first.location.path, startLine: 1, endLine: 200 }] : [],
+    };
+}`;
+}
+
+function fourReadOversizedCandidateProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    const first = await repo.read("src/wide.ts", { offset: 0, limit: 200 });
+    await repo.read("src/wide.ts", { offset: 200, limit: 200 });
+    await repo.read("src/wide.ts", { offset: 400, limit: 200 });
+    await repo.read("src/alpha.ts", { offset: 0, limit: 3 });
+    return {
+        success: true,
+        locations: first.location ? [{ path: first.location.path, startLine: 1, endLine: 200 }] : [],
+    };
+}`;
+}
+
+function normalizedCandidateReadProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.read("src/wide.ts", { offset: 99, limit: 11 });
+    return {
+        success: true,
+        locations: [{ path: "./src/wide.ts", startLine: 100, endLine: 110 }],
+    };
+}`;
+}
+
+function caughtGrepErrorProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    try {
+        await repo.grep("[", { path: "src/large.ts" });
+    } catch {}
+    await repo.grep("target-marker", { path: "src/large.ts", literal: true, maxMatches: 1 });
+    return { success: true, message: params.query, locations: [] };
+}`;
+}
+
+function oversizedCaughtReadErrorProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    try {
+        await repo.read("x".repeat(50000), { limit: 1 });
+    } catch {}
+    await repo.grep("target-marker", { path: "src/large.ts", literal: true, maxMatches: 1 });
+    return { success: true, message: params.query, locations: [] };
+}`;
+}
+
 function broadMutationReadProgram(): string {
     return `
 async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
@@ -1469,4 +1980,50 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
     await repo.grep("shared-candidate-marker", { literal: true, maxMatches: 30 });
     return { success: true, message: params.query };
 }`;
+}
+
+function delayedLanguageServerCommand(delayMs: number): {
+    command: string;
+    args: string[];
+} {
+    const source = String.raw`
+let buffer = Buffer.alloc(0);
+function send(value) {
+    const body = JSON.stringify(value);
+    process.stdout.write("Content-Length: " + Buffer.byteLength(body) + "\r\n\r\n" + body);
+}
+function respond(id, result) {
+    send({ jsonrpc: "2.0", id, result });
+}
+function handle(message) {
+    if (message.method === "initialize") {
+        respond(message.id, { capabilities: {} });
+    } else if (message.method === "textDocument/definition") {
+        setTimeout(() => respond(message.id, []), ${delayMs});
+    } else if (message.method === "shutdown") {
+        respond(message.id, null);
+    } else if (message.method === "exit") {
+        process.exit(0);
+    } else if (message.id !== undefined) {
+        respond(message.id, null);
+    }
+}
+process.stdin.on("data", (chunk) => {
+    buffer = Buffer.concat([buffer, chunk]);
+    while (true) {
+        const headerEnd = buffer.indexOf("\r\n\r\n");
+        if (headerEnd < 0) return;
+        const header = buffer.subarray(0, headerEnd).toString("utf8");
+        const match = /Content-Length:\s*(\d+)/i.exec(header);
+        if (!match) process.exit(2);
+        const length = Number(match[1]);
+        const bodyStart = headerEnd + 4;
+        const bodyEnd = bodyStart + length;
+        if (buffer.length < bodyEnd) return;
+        const message = JSON.parse(buffer.subarray(bodyStart, bodyEnd).toString("utf8"));
+        buffer = buffer.subarray(bodyEnd);
+        handle(message);
+    }
+});`;
+    return { command: process.execPath, args: ["-e", source] };
 }
