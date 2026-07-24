@@ -44,10 +44,31 @@ test("writes a compatible three-arm report with presentation-only labels", async
         failedAttempt(result(pairedManifest, "typeagent"), 400),
         result(pairedManifest, "typeagent"),
     ]);
+    const finalLsp = result(lspManifest, "typeagent-lsp");
+    finalLsp.typeAgentToolTrace!.calls.find(
+        (call) => call.tool === "lsp",
+    )!.resultCount = 0;
+    finalLsp.lspResultCount = 0;
+    finalLsp.typeAgentToolTrace!.calls.push({
+        tool: "lsp",
+        durationMs: 2,
+        input: {
+            method: "references",
+            path: "pkg/a.py",
+            line: 1,
+            symbol: "target",
+        },
+        resultCount: 0,
+        outputBytes: 0,
+        truncated: false,
+        error: "language server timeout",
+    });
+    finalLsp.typeAgentToolTrace!.totalCalls++;
+    finalLsp.lspCallCount = 2;
     await writeRun(lspDir, lspManifest, [
         failedAttempt(result(lspManifest, "typeagent-lsp"), 500),
         failedAttempt(result(lspManifest, "typeagent-lsp"), 700),
-        result(lspManifest, "typeagent-lsp"),
+        finalLsp,
     ]);
 
     const { report, markdownPath } = await writeThreeArmReport({
@@ -80,7 +101,8 @@ test("writes a compatible three-arm report with presentation-only labels", async
     });
     assert.equal(report.models[0].commonSuccessfulTasks, 1);
     assert.equal(report.models[0].arms["typeagent-lsp"].lspAdoptionCount, 1);
-    assert.equal(report.models[0].arms["typeagent-lsp"].lspResultCount, 1);
+    assert.equal(report.models[0].arms["typeagent-lsp"].lspCallCount, 1);
+    assert.equal(report.models[0].arms["typeagent-lsp"].lspResultCount, 0);
     assert.equal(report.schemaVersion, 2);
     assert.deepEqual(
         report.models[0].arms.baseline.successfulExecutionLatency,
@@ -116,6 +138,10 @@ test("writes a compatible three-arm report with presentation-only labels", async
     assert.match(
         markdown,
         /error-free language-server call and repository-grounded reads/,
+    );
+    assert.match(
+        markdown,
+        /error-free calls, including valid empty responses; LSP locations are reported separately and may be zero/,
     );
     assert.doesNotMatch(markdown, /call followed by repository-grounded reads/);
     assert.match(markdown, /latency mean\/p50\/p95/);
@@ -366,24 +392,24 @@ function result(
             totalTokens: 110,
         },
         combinedUsage: {
-            inputTokens: typeAgent ? 130 : 100,
+            inputTokens: typeAgent ? 30 : 100,
             cachedInputTokens: 0,
             cacheWriteTokens: 0,
-            outputTokens: typeAgent ? 20 : 10,
+            outputTokens: 10,
             reasoningOutputTokens: 0,
-            totalTokens: typeAgent ? 150 : 110,
+            totalTokens: typeAgent ? 40 : 110,
         },
         ...(typeAgent
             ? {
                   dispatcherUsage: {
-                      requestCount: 1,
+                      requestCount: 0,
                       usageComplete: true,
-                      inputTokens: 100,
+                      inputTokens: 0,
                       cachedInputTokens: 0,
                       cacheWriteTokens: 0,
-                      outputTokens: 10,
+                      outputTokens: 0,
                       reasoningOutputTokens: 0,
-                      totalTokens: 110,
+                      totalTokens: 0,
                   },
                   typeAgentUsage: {
                       requestCount: 1,
@@ -398,8 +424,9 @@ function result(
                   typeAgentDispatch: {
                       ingress: "natural-language" as const,
                       submittedRequest: `find bug ${taskId}`,
-                      translationInvoked: true,
-                      translationRequestCount: 1,
+                      dispatchMethod: "grammar" as const,
+                      translationInvoked: false,
+                      translationRequestCount: 0,
                       activeAgentNames: ["explorer"],
                       activeSchemaNames: ["explorer"],
                       translatedActions: [

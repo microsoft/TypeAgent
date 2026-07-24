@@ -155,7 +155,7 @@ test("keeps Copilot and TypeAgent grep results in the same ripgrep order", async
         });
         try {
             let characterClassMatches:
-                | ReturnType<typeof parseCopilotGrepOutput>
+                | ReturnType<typeof parseCopilotGrepOutput>["matches"]
                 | undefined;
             for (const args of [
                 { pattern: "needle", maxMatches: 3 },
@@ -179,13 +179,13 @@ test("keeps Copilot and TypeAgent grep results in the same ripgrep order", async
                 const copilot = parseCopilotGrepOutput(
                     String(await copilotGrep.handler!(args, invocation)),
                 );
-                const typeAgentMatches = await typeAgent.api.grep(
+                const typeAgentResult = await typeAgent.api.grep(
                     args.pattern,
                     args,
                 );
-                assert.deepEqual(typeAgentMatches, copilot);
+                assert.deepEqual(typeAgentResult, copilot);
                 if (args.glob === "**/[Dd]ense.ts") {
-                    characterClassMatches = copilot;
+                    characterClassMatches = copilot.matches;
                 }
             }
             assert.deepEqual(characterClassMatches, [
@@ -247,15 +247,23 @@ test("keeps baseline reads and listings on the immutable filtered snapshot", asy
     }
 });
 
-function parseCopilotGrepOutput(
-    output: string,
-): Array<{ path: string; line: number; text: string }> {
-    if (output === "No matches") return [];
-    return output.split("\n").map((line) => {
+function parseCopilotGrepOutput(output: string): {
+    matches: Array<{ path: string; line: number; text: string }>;
+    truncated: boolean;
+} {
+    const lines = output.split("\n");
+    const marker = "[Search results truncated; narrow the pattern or path.]";
+    const truncated = lines.at(-1) === marker;
+    if (truncated) lines.pop();
+    if (lines.length === 1 && lines[0] === "No matches") {
+        return { matches: [], truncated };
+    }
+    const matches = lines.map((line) => {
         const match = /^(.*?):(\d+):(.*)$/u.exec(line);
         assert.ok(match, `unexpected Copilot grep line: ${line}`);
         return { path: match[1], line: Number(match[2]), text: match[3] };
     });
+    return { matches, truncated };
 }
 
 test("keeps file access inside the repository, including through symlinks", async () => {
@@ -423,7 +431,8 @@ test("bounds read, grep, glob, and ls output", async () => {
                 invocation,
             ),
         ).split("\n");
-        assert.equal(grepLines.length, 200);
+        assert.equal(grepLines.length, 201);
+        assert.match(grepLines.at(-1) ?? "", /results truncated/i);
 
         const globLines = String(
             await glob.handler!(

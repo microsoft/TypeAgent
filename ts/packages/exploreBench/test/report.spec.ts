@@ -132,14 +132,14 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                             ...(variant === "typeagent"
                                 ? {
                                       dispatcherUsage: {
-                                          requestCount: 1,
+                                          requestCount: 0,
                                           usageComplete: true,
-                                          inputTokens: 20,
+                                          inputTokens: 0,
                                           cachedInputTokens: 0,
                                           cacheWriteTokens: 0,
-                                          outputTokens: 5,
+                                          outputTokens: 0,
                                           reasoningOutputTokens: 0,
-                                          totalTokens: 25,
+                                          totalTokens: 0,
                                       },
                                       typeAgentUsage: {
                                           requestCount: 2,
@@ -152,18 +152,19 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                           totalTokens: 40,
                                       },
                                       combinedUsage: {
-                                          inputTokens: 50,
+                                          inputTokens: 30,
                                           cachedInputTokens: 0,
                                           cacheWriteTokens: 0,
-                                          outputTokens: 15,
+                                          outputTokens: 10,
                                           reasoningOutputTokens: 0,
-                                          totalTokens: 65,
+                                          totalTokens: 40,
                                       },
                                       typeAgentDispatch: {
                                           ingress: "natural-language" as const,
                                           submittedRequest: "find bug",
-                                          translationInvoked: true,
-                                          translationRequestCount: 1,
+                                          dispatchMethod: "grammar" as const,
+                                          translationInvoked: false,
+                                          translationRequestCount: 0,
                                           activeAgentNames: ["explorer"],
                                           activeSchemaNames: ["explorer"],
                                           translatedActions: [
@@ -426,7 +427,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
         );
         assert.equal(
             report.prefixes["10"].comparisons[0].totalTokensDelta,
-            -405,
+            -630,
         );
         assert.equal(
             report.prefixes["10"].comparisons[1].totalTokensDelta,
@@ -437,9 +438,9 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                 row.matrixName === "model-b" && row.variant === "typeagent",
         );
         assert.equal(treatment?.copilotUsage, undefined);
-        assert.equal(treatment?.dispatcherUsage?.totalTokens, 275);
+        assert.equal(treatment?.dispatcherUsage?.totalTokens, 0);
         assert.equal(treatment?.typeAgentUsage?.totalTokens, 440);
-        assert.equal(treatment?.combinedUsage?.totalTokens, 715);
+        assert.equal(treatment?.combinedUsage?.totalTokens, 440);
         assert.equal(treatment?.overallRecall, 0.9);
         assert.equal(treatment?.file.recall, 0.9);
         assert.equal(treatment?.line.recall, 0.9);
@@ -474,7 +475,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
         );
         assert.equal(
             report.prefixes["10"].comparisons[0].typeagent?.finalAttemptTokens,
-            585,
+            360,
         );
         assert.deepEqual(
             Object.keys(report.prefixes["10"].comparisons[0]).filter((key) =>
@@ -490,7 +491,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
         assert.equal(
             report.tasks[0].results["model-a:typeagent"].dispatcherUsage
                 ?.totalTokens,
-            25,
+            0,
         );
         assert.equal(
             report.tasks[0].results["model-a:typeagent"].typeAgentDispatch
@@ -514,7 +515,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
         assert.doesNotMatch(markdown, /outer Copilot|MCP/i);
         assert.match(
             markdown,
-            /\| model-b \| 9\/10 \| 10\/10 \| 9\/10 \| 990 \| 585 \| 405 \| 1\.000 \| 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 10\/10 \| 9\/10 \|/,
+            /\| model-b \| 9\/10 \| 10\/10 \| 9\/10 \| 990 \| 360 \| 630 \| 1\.000 \| 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 10\/10 \| 9\/10 \|/,
         );
 
         const directTreatment = incompleteRows.find(
