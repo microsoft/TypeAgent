@@ -36,6 +36,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
 import { createSemanticMap } from "@typeagent/agent-runtime";
+import { createSemanticMap } from "@typeagent/agent-runtime";
 import {
     TextEmbeddingModel,
     tryCreateEmbeddingModel,

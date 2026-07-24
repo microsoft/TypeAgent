@@ -3,6 +3,8 @@
 
 import * as kp from "@typeagent/knowpro";
 import * as knowLib from "@typeagent/knowledge-processor";
+import * as kp from "@typeagent/knowpro";
+import * as knowLib from "@typeagent/knowledge-processor";
 import { MemoryConsoleWriter } from "../memoryWriter.js";
 import chalk from "chalk";
 import { IMessageMetadata, textLocationToString } from "./knowproCommon.js";

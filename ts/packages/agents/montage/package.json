@@ -37,9 +37,12 @@
   },
   "dependencies": {
     "@typeagent/agent-runtime": "workspace:*",
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/knowledge-processor": "workspace:*",
+    "@typeagent/knowpro": "workspace:*",
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/knowpro": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",

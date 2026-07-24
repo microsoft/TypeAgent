@@ -3,6 +3,18 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+fun String.escapeForBuildConfig(): String =
+    replace("\\", "\\\\").replace("\"", "\\\"")
+
+val tunnelUrlFromEnv = providers.environmentVariable("TYPEAGENT_SERVER_URL")
+    .orElse("")
+    .get()
+    .escapeForBuildConfig()
+val tunnelTokenFromEnv = providers.environmentVariable("TYPEAGENT_TUNNEL_TOKEN")
+    .orElse("")
+    .get()
+    .escapeForBuildConfig()
+
 android {
     namespace = "com.example.typeagentchat"
     compileSdk {
@@ -19,6 +31,8 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "TYPEAGENT_SERVER_URL", "\"$tunnelUrlFromEnv\"")
+        buildConfigField("String", "TYPEAGENT_TUNNEL_TOKEN", "\"$tunnelTokenFromEnv\"")
     }
 
     buildTypes {
@@ -34,6 +48,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
