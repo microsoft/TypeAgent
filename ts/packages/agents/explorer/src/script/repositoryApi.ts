@@ -177,6 +177,7 @@ export interface RepositoryToolCallTrace {
     outputBytes: number;
     truncated: boolean;
     error?: string | undefined;
+    discarded?: true | undefined;
 }
 
 export interface RepositoryToolTrace {
@@ -206,6 +207,11 @@ export interface RepositoryTools {
     api: RepositoryApi;
     trace: RepositoryToolTrace;
     observations: RepositoryObservation[];
+    startExecution(): {
+        api: RepositoryApi;
+        discard(): void;
+        stop(): void;
+    };
     close(): Promise<void>;
     allowCallsThrough(
         limit: number,
@@ -308,6 +314,10 @@ export async function createRepositoryTools(
     > = {};
     let allowedGrepContextLines = 0;
     let phaseToolCalls = new Map<RepositoryToolCallTrace["tool"], number>();
+    let nextExecutionId = 0;
+    const activeExecutions = new Set<number>();
+    const executionCalls = new Map<number, RepositoryToolCallTrace[]>();
+    const executionObservations = new Map<number, RepositoryObservation[]>();
 
     const api: RepositoryApi = {
         ls,
@@ -321,6 +331,7 @@ export async function createRepositoryTools(
         api,
         trace,
         observations,
+        startExecution,
         allowCallsThrough,
         close: async () => {
             try {
@@ -330,6 +341,86 @@ export async function createRepositoryTools(
             }
         },
     };
+
+    function startExecution(): {
+        api: RepositoryApi;
+        discard(): void;
+        stop(): void;
+    } {
+        const executionId = nextExecutionId++;
+        activeExecutions.add(executionId);
+        executionCalls.set(executionId, []);
+        executionObservations.set(executionId, []);
+        return {
+            api: {
+                ls: (relativePath, callOptions) =>
+                    observeRejection(
+                        ls(relativePath, callOptions, executionId),
+                    ),
+                glob: (pattern, callOptions) =>
+                    observeRejection(
+                        globRepositoryFiles(pattern, callOptions, executionId),
+                    ),
+                grep: (pattern, callOptions) =>
+                    observeRejection(
+                        grepRepository(pattern, callOptions, executionId),
+                    ),
+                read: (relativePath, callOptions) =>
+                    observeRejection(
+                        readRepositoryFile(
+                            relativePath,
+                            callOptions,
+                            executionId,
+                        ),
+                    ),
+                ...(languageServers
+                    ? {
+                          lsp: (request: LspRequest) =>
+                              observeRejection(
+                                  navigateLanguageServer(request, executionId),
+                              ),
+                      }
+                    : {}),
+            },
+            discard: () => discardExecution(executionId),
+            stop: () => {
+                activeExecutions.delete(executionId);
+                executionCalls.delete(executionId);
+                executionObservations.delete(executionId);
+            },
+        };
+    }
+
+    function observeRejection<T>(promise: Promise<T>): Promise<T> {
+        void promise.catch(() => undefined);
+        return promise;
+    }
+
+    function discardExecution(executionId: number): void {
+        for (const call of executionCalls.get(executionId) ?? []) {
+            call.discarded = true;
+            call.error ??=
+                "Repository call result discarded because script execution failed";
+        }
+        const discardedObservations = new Set(
+            executionObservations.get(executionId) ?? [],
+        );
+        for (let index = observations.length - 1; index >= 0; index--) {
+            if (discardedObservations.has(observations[index])) {
+                observations.splice(index, 1);
+            }
+        }
+    }
+
+    function recordObservations(
+        nextObservations: RepositoryObservation[],
+        executionId?: number,
+    ): void {
+        observations.push(...nextObservations);
+        if (executionId !== undefined) {
+            executionObservations.get(executionId)?.push(...nextObservations);
+        }
+    }
 
     function allowCallsThrough(
         limit: number,
@@ -354,6 +445,7 @@ export async function createRepositoryTools(
     async function ls(
         relativePath?: string,
         callOptions: LsOptions = {},
+        executionId?: number,
     ): Promise<string[]> {
         return runTool(
             "ls",
@@ -386,12 +478,14 @@ export async function createRepositoryTools(
                 };
             },
             [],
+            executionId,
         );
     }
 
     async function globRepositoryFiles(
         pattern: string,
         callOptions: GlobOptions = {},
+        executionId?: number,
     ): Promise<string[]> {
         return runTool(
             "glob",
@@ -415,12 +509,14 @@ export async function createRepositoryTools(
                 };
             },
             [],
+            executionId,
         );
     }
 
     async function grepRepository(
         pattern: string,
         callOptions: GrepOptions = {},
+        executionId?: number,
     ): Promise<GrepResult> {
         const requestedPath = callOptions.path;
         const requestedGlob = callOptions.glob;
@@ -496,13 +592,14 @@ export async function createRepositoryTools(
                 };
             },
             { matches: [], truncated: false },
+            executionId,
         );
         const callIndex = trace.calls.length - 1;
         const exactFile = requestedPath
             ? filesByPath.get(normalizeRelativePath(requestedPath))
             : undefined;
-        observations.push(
-            ...grepResult.matches.map((match) => {
+        recordObservations(
+            grepResult.matches.map((match) => {
                 if (
                     !exactFile ||
                     exactFile.relativePath !== match.path ||
@@ -536,6 +633,7 @@ export async function createRepositoryTools(
                         .map(truncateOutputLine),
                 };
             }),
+            executionId,
         );
         return grepResult;
     }
@@ -543,6 +641,7 @@ export async function createRepositoryTools(
     async function readRepositoryFile(
         relativePath: string,
         callOptions: ReadOptions = {},
+        executionId?: number,
     ): Promise<ReadResult> {
         const requestedLimit = callOptions.limit ?? DEFAULT_READ_LINES;
         if (
@@ -630,16 +729,18 @@ export async function createRepositoryTools(
                 };
             },
             { text: TOOL_BUDGET_EXHAUSTED },
+            executionId,
         );
         if (observation) {
             observation.callIndex = trace.calls.length - 1;
-            observations.push(observation);
+            recordObservations([observation], executionId);
         }
         return result;
     }
 
     async function navigateLanguageServer(
         request: LspRequest,
+        executionId?: number,
     ): Promise<LspLocation[]> {
         if (!languageServers) {
             throw new Error("LSP repository navigation is not enabled");
@@ -679,6 +780,7 @@ export async function createRepositoryTools(
                 }
             },
             [],
+            executionId,
         );
     }
 
@@ -687,7 +789,11 @@ export async function createRepositoryTools(
         input: Record<string, unknown>,
         operation: () => Promise<ToolResult<T>>,
         exhaustedValue: T,
+        executionId?: number,
     ): Promise<T> {
+        if (executionId !== undefined && !activeExecutions.has(executionId)) {
+            throw new Error("Repository script execution is no longer active");
+        }
         if (!allowedTools.has(tool)) {
             const available = [...allowedTools]
                 .map((name) => `repo.${name}`)
@@ -710,11 +816,19 @@ export async function createRepositoryTools(
         const startTime = Date.now();
         try {
             const result = await operation();
+            if (
+                executionId !== undefined &&
+                !activeExecutions.has(executionId)
+            ) {
+                throw new Error(
+                    "Repository call completed after script execution ended",
+                );
+            }
             const outputBytes = serializedOutputBytes(result.value);
             if (trace.totalOutputBytes + outputBytes > MAX_TOTAL_OUTPUT_BYTES) {
                 throw new Error("Repository tool output budget exceeded");
             }
-            trace.calls.push({
+            const call: RepositoryToolCallTrace = {
                 tool,
                 startedAt,
                 durationMs: Date.now() - startTime,
@@ -724,14 +838,23 @@ export async function createRepositoryTools(
                 outputBytes,
                 truncated: result.truncated,
                 ...(result.error ? { error: result.error } : {}),
-            });
+            };
+            trace.calls.push(call);
+            if (executionId !== undefined) {
+                executionCalls.get(executionId)?.push(call);
+            }
             trace.totalCalls++;
             trace.totalOutputBytes += outputBytes;
             return result.value;
         } catch (error) {
-            const message =
-                error instanceof Error ? error.message : String(error);
-            trace.calls.push({
+            const discarded =
+                executionId !== undefined && !activeExecutions.has(executionId);
+            const message = discarded
+                ? "Repository call completed after script execution ended"
+                : error instanceof Error
+                  ? error.message
+                  : String(error);
+            const call: RepositoryToolCallTrace = {
                 tool,
                 startedAt,
                 durationMs: Date.now() - startTime,
@@ -740,9 +863,14 @@ export async function createRepositoryTools(
                 outputBytes: 0,
                 truncated: false,
                 error: message,
-            });
+                ...(discarded ? { discarded: true } : {}),
+            };
+            trace.calls.push(call);
+            if (executionId !== undefined) {
+                executionCalls.get(executionId)?.push(call);
+            }
             trace.totalCalls++;
-            throw error;
+            throw discarded ? new Error(message) : error;
         }
     }
 }
