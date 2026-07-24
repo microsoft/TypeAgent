@@ -17,8 +17,8 @@ test("loads the root explorer custom agent in Copilot markdown format", async ()
 
     assert.equal(agent.name, "explorer");
     assert.match(agent.description, /read-only repository localization/i);
-    assert.deepEqual(agent.tools, ["read", "grep", "glob", "bash"]);
-    assert.match(agent.prompt, /use only.*read.*grep.*glob.*bash/is);
+    assert.deepEqual(agent.tools, ["read", "grep", "glob", "ls"]);
+    assert.match(agent.prompt, /use only.*read.*grep.*glob.*ls/is);
     assert.doesNotMatch(agent.prompt, /MCP|TypeAgent|explore tool/i);
     assert.match(agent.prompt, /<final_answer>/);
     assert.equal(agent.file, file);

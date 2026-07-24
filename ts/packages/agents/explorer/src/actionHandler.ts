@@ -43,6 +43,7 @@ export const MAX_REFINEMENT_READ_LINES = 200;
 const MAX_ACTION_RESULT_CHARS = 40_000;
 const MAX_DISCOVERY_READ_LINES = 200;
 const MAX_RESULT_MESSAGE_CHARS = 1_000;
+const MAX_RESULT_PATH_CHARS = 1_000;
 const MAX_RESPONSE_GREP_OBSERVATIONS = 40;
 const MAX_DISCOVERY_RESPONSE_LINES = 120;
 const MAX_EXACT_RESPONSE_LINES = 400;
@@ -72,9 +73,7 @@ export class ExplorerActionSession {
     private groundingObservations: RepositoryObservation[] = [];
     private submitted:
         | {
-              actionName:
-                  | typeof REFINE_REPOSITORY_ACTION
-                  | typeof SUBMIT_EXPLORATION_ACTION;
+              actionName: typeof SUBMIT_EXPLORATION_ACTION;
               text: string;
               citationCount: number;
               truncated: boolean;
@@ -310,47 +309,22 @@ export class ExplorerActionSession {
             MAX_PROGRAM_EXECUTIONS - this.programAttempts;
         const payload = {
             phase,
-            programResult: compactProgramResult(execution.result),
+            programResult: compactProgramResult(
+                execution.result,
+                this.options.maxResults,
+            ),
             repositoryCalls: this.repository.trace.totalCalls,
             remainingRepositoryCalls,
             remainingProgramExecutions,
             nextAction: nextPhaseInstruction(phase),
         };
         const response = serializeActionPayload(payload, responseObservations);
-        const groundingStart = this.groundingObservations.length;
         this.groundingObservations.push(...response.observations);
-        const programLocations = getProgramLocations(execution.result);
-        if (phase === "refine") {
-            try {
-                return await this.submitExploration(
-                    programLocations,
-                    REFINE_REPOSITORY_ACTION,
-                );
-            } catch (error) {
-                const autoSubmissionError =
-                    error instanceof Error ? error.message : String(error);
-                const repair = serializeActionPayload(
-                    {
-                        ...payload,
-                        autoSubmissionError,
-                        nextAction:
-                            "Invoke submitExploration once with corrected locations supported by the refinement evidence",
-                    },
-                    response.observations,
-                );
-                this.groundingObservations.length = groundingStart;
-                this.groundingObservations.push(...repair.observations);
-                return createActionResult(repair.text);
-            }
-        }
         return createActionResult(response.text);
     }
 
     private async submitExploration(
         rawLocations: unknown,
-        actionName:
-            | typeof REFINE_REPOSITORY_ACTION
-            | typeof SUBMIT_EXPLORATION_ACTION = SUBMIT_EXPLORATION_ACTION,
     ): Promise<ActionResult> {
         if (this.submitted) {
             return errorResult("The exploration was already submitted");
@@ -392,7 +366,10 @@ export class ExplorerActionSession {
             }
             throw error;
         }
-        this.submitted = { actionName, ...formatted };
+        this.submitted = {
+            actionName: SUBMIT_EXPLORATION_ACTION,
+            ...formatted,
+        };
         return createActionResult(formatted.text);
     }
 
@@ -404,13 +381,6 @@ export class ExplorerActionSession {
                 call.resultCount > 0,
         );
     }
-}
-
-function getProgramLocations(value: unknown): unknown {
-    return isRecord(value) &&
-        Object.prototype.hasOwnProperty.call(value, "locations")
-        ? value.locations
-        : undefined;
 }
 
 function zeroLineReadDiagnostic(
@@ -705,7 +675,10 @@ function contiguousRanges(indices: number[]): Array<[number, number]> {
     return ranges;
 }
 
-function compactProgramResult(value: unknown): Record<string, unknown> {
+function compactProgramResult(
+    value: unknown,
+    maxResults: number,
+): Record<string, unknown> {
     if (!isRecord(value)) {
         return { success: true };
     }
@@ -720,11 +693,56 @@ function compactProgramResult(value: unknown): Record<string, unknown> {
     const truncated =
         (typeof value.message === "string" && value.message !== message) ||
         (typeof value.error === "string" && value.error !== error);
+    const sourceLocations = Array.isArray(value.locations)
+        ? value.locations
+        : undefined;
+    const locations = sourceLocations
+        ? sourceLocations
+              .map(compactProgramLocation)
+              .filter((location) => location !== undefined)
+              .slice(0, maxResults)
+        : undefined;
     return {
         success: value.success === true,
         ...(message ? { message } : {}),
         ...(error ? { error } : {}),
-        ...(truncated ? { truncated: true } : {}),
+        ...(locations ? { locations } : {}),
+        ...(truncated ||
+        (sourceLocations &&
+            (sourceLocations.length > maxResults ||
+                locations?.length !== sourceLocations.length))
+            ? { truncated: true }
+            : {}),
+    };
+}
+
+function compactProgramLocation(value: unknown):
+    | {
+          path: string;
+          startLine: number;
+          endLine: number;
+      }
+    | undefined {
+    if (!isRecord(value)) {
+        return undefined;
+    }
+    const { path: locationPath, startLine, endLine } = value;
+    if (
+        typeof locationPath !== "string" ||
+        locationPath.length === 0 ||
+        locationPath.length > MAX_RESULT_PATH_CHARS ||
+        !Number.isSafeInteger(startLine) ||
+        !Number.isSafeInteger(endLine) ||
+        Number(startLine) < 1 ||
+        Number(endLine) < Number(startLine) ||
+        Number(endLine) - Number(startLine) > 1_000
+    ) {
+        return undefined;
+    }
+    return {
+        path: locationPath,
+        startLine: Number(startLine),
+        endLine: Number(endLine),
     };
 }
 

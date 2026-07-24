@@ -68,7 +68,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
             agent: {
                 name: "explorer",
                 description: "benchmark explorer",
-                tools: ["read", "grep", "glob", "bash"],
+                tools: ["read", "grep", "glob", "ls"],
                 prompt: "explore only",
                 file: "/repo/.copilot/agents/explorer.md",
                 sha256: "a".repeat(64),
@@ -92,10 +92,10 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                 {
                                     tool: "grep" as const,
                                     durationMs: 1,
-                                    input: {
-                                        pattern: "needle",
+                                    input: { pattern: "needle" },
+                                    execution: {
                                         engine: "ripgrep",
-                                        ripgrepPath: "rg",
+                                        executable: "rg",
                                     },
                                     resultCount: 1,
                                     outputBytes: 1,
@@ -171,7 +171,9 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                                   schemaName: "explorer",
                                                   actionName:
                                                       "exploreRepository",
-                                                  parameters: {},
+                                                  parameters: {
+                                                      request: "find bug",
+                                                  },
                                               },
                                           ],
                                           executionCount: 1,
@@ -522,6 +524,8 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
         exactRawRequestTreatment.query = "find\r\nbug";
         exactRawRequestTreatment.typeAgentDispatch!.submittedRequest =
             exactRawRequestTreatment.query;
+        exactRawRequestTreatment.typeAgentDispatch!.translatedActions[0].parameters =
+            { request: "find\nbug" };
         assert.equal(
             summarizeRows([exactRawRequestTreatment])
                 ?.directExplorerAdoptionCount,

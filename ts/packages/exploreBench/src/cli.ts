@@ -484,8 +484,7 @@ function manifestIdentity(manifest: RunManifest): unknown {
     } = manifest;
     return {
         ...identity,
-        cacheCompatibilityRevision:
-            cacheCompatibilityRevision ?? CACHE_COMPATIBILITY_REVISION,
+        cacheCompatibilityRevision: cacheCompatibilityRevision ?? 0,
     };
 }
 

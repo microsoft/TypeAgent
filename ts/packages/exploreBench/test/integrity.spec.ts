@@ -15,7 +15,7 @@ const identity: RunIdentity = {
     agent: {
         name: "explorer",
         description: "benchmark explorer",
-        tools: ["read", "grep", "glob", "bash"],
+        tools: ["read", "grep", "glob", "ls"],
         prompt: "explore only",
         file: "/repo/.copilot/agents/explorer.md",
         sha256: "a".repeat(64),
@@ -106,67 +106,34 @@ test("accepts direct TypeAgent rows without a Copilot main agent", () => {
     );
 });
 
-test("accepts refinement programs that validate and submit their own locations", () => {
+test("rejects refinement as the terminal submission action", () => {
     const candidate = typeAgentRow("typeagent");
     const invocation = candidate.exploreTelemetry!.invocations![0];
-    invocation.actionAttempts = [
-        completedAction(0, "discoverRepository"),
-        completedAction(1, "refineRepository"),
-    ];
     invocation.submissionAction = "refineRepository";
-    candidate.typeAgentUsage!.requestCount = 2;
-    candidate.exploreTelemetry!.usage.requestCount = 2;
-    invocation.usage.requestCount = 2;
-    invocation.actionTranslationAndCodeGenerationUsage!.requestCount = 2;
 
-    assert.doesNotThrow(() => validateResultRows([candidate], identity));
+    assert.throws(
+        () => validateResultRows([candidate], identity),
+        /Explorer telemetry/i,
+    );
 });
 
-test("requires explicit positive result evidence for refinement auto-submission", () => {
-    const makeCandidate = () => {
-        const candidate = typeAgentRow("typeagent");
-        const invocation = candidate.exploreTelemetry!.invocations![0];
-        invocation.actionAttempts = [
-            completedAction(0, "discoverRepository"),
-            completedAction(1, "refineRepository"),
-        ];
-        invocation.submissionAction = "refineRepository";
-        return candidate;
-    };
-    const mutations: Array<(candidate: RunResult) => void> = [
-        (candidate) => {
-            delete candidate.exploreTelemetry!.invocations![0].submissionAction;
-        },
-        (candidate) => {
-            delete candidate.exploreTelemetry!.invocations![0].result;
-        },
-        (candidate) => {
-            candidate.exploreTelemetry!.invocations![0].result!.citationCount = 0;
-            candidate.exploreTelemetry!.result!.citationCount = 0;
-        },
-        (candidate) => {
-            candidate.exploreTelemetry!.invocations![0].result!.truncated =
-                true;
-        },
-    ];
-
-    for (const mutate of mutations) {
-        const candidate = makeCandidate();
-        mutate(candidate);
-        assert.throws(
-            () => validateResultRows([candidate], identity),
-            /Explorer telemetry/i,
-        );
-    }
-});
-
-test("preserves exact raw ingress independently of the parameterless action", () => {
+test("requires typed request identity except for CRLF normalization", () => {
     const candidate = typeAgentRow("typeagent");
     candidate.query = "find\r\nbug\r\ndetails";
     candidate.typeAgentDispatch!.submittedRequest = candidate.query;
-    candidate.typeAgentDispatch!.translatedActions[0].parameters = {};
+    candidate.typeAgentDispatch!.translatedActions[0].parameters = {
+        request: candidate.query.replaceAll("\r\n", "\n"),
+    };
 
     assert.doesNotThrow(() => validateResultRows([candidate], identity));
+
+    candidate.typeAgentDispatch!.translatedActions[0].parameters = {
+        request: "find\nbug\nwrong details",
+    };
+    assert.throws(
+        () => validateResultRows([candidate], identity),
+        /matching executed Explorer action/i,
+    );
 });
 
 test("accepts repaired submission attempts after discovery and refinement", () => {
@@ -777,24 +744,26 @@ test("requires exact usage and repository-tool evidence", () => {
             name: "grep trace omits ripgrep engine",
             expected: /repository-tool evidence/i,
             apply: (candidate) => {
-                candidate.typeAgentToolTrace!.calls[0].input = {
-                    ripgrepPath: "/usr/bin/rg",
-                };
-                candidate.exploreTelemetry!.toolTrace.calls[0].input = {
-                    ripgrepPath: "/usr/bin/rg",
-                };
+                candidate.typeAgentToolTrace!.calls[0].execution = {
+                    executable: "rg",
+                } as never;
+                candidate.exploreTelemetry!.toolTrace.calls[0].execution =
+                    structuredClone(
+                        candidate.typeAgentToolTrace!.calls[0].execution,
+                    );
             },
         },
         {
             name: "grep trace omits ripgrep executable",
             expected: /repository-tool evidence/i,
             apply: (candidate) => {
-                candidate.typeAgentToolTrace!.calls[0].input = {
+                candidate.typeAgentToolTrace!.calls[0].execution = {
                     engine: "ripgrep",
-                };
-                candidate.exploreTelemetry!.toolTrace.calls[0].input = {
-                    engine: "ripgrep",
-                };
+                } as never;
+                candidate.exploreTelemetry!.toolTrace.calls[0].execution =
+                    structuredClone(
+                        candidate.typeAgentToolTrace!.calls[0].execution,
+                    );
             },
         },
         {
@@ -804,6 +773,57 @@ test("requires exact usage and repository-tool evidence", () => {
                 candidate.typeAgentToolTrace = {
                     calls: [],
                     totalCalls: 0,
+                    totalOutputBytes: 0,
+                };
+                candidate.exploreTelemetry!.toolTrace = structuredClone(
+                    candidate.typeAgentToolTrace!,
+                );
+            },
+        },
+        {
+            name: "tool trace contains only a pre-execution grep probe",
+            expected: /repository-tool evidence/i,
+            apply: (candidate) => {
+                candidate.typeAgentToolTrace = {
+                    calls: [
+                        {
+                            tool: "grep",
+                            durationMs: 1,
+                            input: { pattern: "needle", path: "missing" },
+                            resultCount: 0,
+                            outputBytes: 0,
+                            truncated: false,
+                        },
+                    ],
+                    totalCalls: 1,
+                    totalOutputBytes: 0,
+                };
+                candidate.exploreTelemetry!.toolTrace = structuredClone(
+                    candidate.typeAgentToolTrace,
+                );
+            },
+        },
+        {
+            name: "pre-execution grep probe forges legacy ripgrep input fields",
+            expected: /repository-tool evidence/i,
+            apply: (candidate) => {
+                candidate.typeAgentToolTrace = {
+                    calls: [
+                        {
+                            tool: "grep",
+                            durationMs: 1,
+                            input: {
+                                pattern: "needle",
+                                path: "missing",
+                                engine: "ripgrep",
+                                ripgrepPath: "rg",
+                            },
+                            resultCount: 0,
+                            outputBytes: 0,
+                            truncated: false,
+                        },
+                    ],
+                    totalCalls: 1,
                     totalOutputBytes: 0,
                 };
                 candidate.exploreTelemetry!.toolTrace = structuredClone(
@@ -821,6 +841,37 @@ test("requires exact usage and repository-tool evidence", () => {
             mutation.expected,
             mutation.name,
         );
+    }
+});
+
+test("permits recoverable pre-execution grep probes before proven ripgrep", () => {
+    for (const probe of [
+        {
+            tool: "grep" as const,
+            durationMs: 1,
+            input: { pattern: "needle", path: "missing" },
+            resultCount: 0,
+            outputBytes: 0,
+            truncated: false,
+        },
+        {
+            tool: "grep" as const,
+            durationMs: 1,
+            input: { pattern: "needle(" },
+            resultCount: 0,
+            outputBytes: 0,
+            truncated: false,
+            error: "regex parse error",
+        },
+    ]) {
+        const candidate = typeAgentRow("typeagent");
+        candidate.typeAgentToolTrace!.calls.unshift(probe);
+        candidate.typeAgentToolTrace!.totalCalls += 1;
+        candidate.exploreTelemetry!.toolTrace = structuredClone(
+            candidate.typeAgentToolTrace!,
+        );
+
+        assert.doesNotThrow(() => validateResultRows([candidate], identity));
     }
 });
 
@@ -1085,7 +1136,7 @@ function typeAgentRow(variant: "typeagent" | "typeagent-lsp"): RunResult {
                 {
                     schemaName: "explorer",
                     actionName: "exploreRepository",
-                    parameters: {},
+                    parameters: { request: row.query },
                 },
             ],
             executionCount: 1,
@@ -1150,9 +1201,10 @@ function grepCall() {
     return {
         tool: "grep",
         durationMs: 1,
-        input: {
+        input: { pattern: "needle" },
+        execution: {
             engine: "ripgrep",
-            ripgrepPath: "/usr/bin/rg",
+            executable: "rg",
         },
         resultCount: 1,
         outputBytes: 20,

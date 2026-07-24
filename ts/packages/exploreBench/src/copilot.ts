@@ -16,7 +16,10 @@ import { access, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { createCopilotExplorationTools } from "./copilotTools.js";
+import {
+    createCopilotExplorationTools,
+    type CopilotExplorationTools,
+} from "./copilotTools.js";
 import { readEnvFile, redact } from "./io.js";
 import { parseFinalAnswer } from "./score.js";
 import type {
@@ -225,15 +228,16 @@ export async function runCopilot(
     let session:
         | Awaited<ReturnType<CopilotClient["createSession"]>>
         | undefined;
-    let secret = "";
+    let tools: CopilotExplorationTools | undefined;
+    let providerValue = "";
 
     try {
         const environment = await resolveEnvironment(
             options.apiKeyEnv,
             options.envFile,
         );
-        secret = environment[options.apiKeyEnv] ?? "";
-        const tools = await createCopilotExplorationTools(
+        providerValue = environment[options.apiKeyEnv] ?? "";
+        tools = await createCopilotExplorationTools(
             options.repoPath,
             toolTrace,
             BENCHMARK_TOOL_CALL_LIMIT,
@@ -246,7 +250,7 @@ export async function runCopilot(
             provider: {
                 type: "openai",
                 baseUrl: options.providerBaseUrl,
-                apiKey: secret,
+                apiKey: providerValue,
                 wireApi: "responses",
                 modelId: COPILOT_BEHAVIOR_MODEL_ID,
                 wireModel: options.model,
@@ -330,7 +334,7 @@ export async function runCopilot(
             throw new Error(usageModelError);
         }
     } catch (error) {
-        caughtError = redact((error as Error).message, [secret]);
+        caughtError = redact((error as Error).message, [providerValue]);
         if (session && !usage) {
             usage = await readSessionUsage(session, usageEvents);
         }
@@ -346,7 +350,18 @@ export async function runCopilot(
                     "Copilot session disconnect timed out",
                 );
             } catch (error) {
-                caughtError ??= redact((error as Error).message, [secret]);
+                caughtError ??= redact((error as Error).message, [
+                    providerValue,
+                ]);
+            }
+        }
+        if (tools) {
+            try {
+                await tools.close();
+            } catch (error) {
+                caughtError ??= redact((error as Error).message, [
+                    providerValue,
+                ]);
             }
         }
     }
@@ -636,7 +651,7 @@ export function inspectCopilotToolTrace(
             !agentId && Boolean(toolCallId && explorerTaskIds.has(toolCallId));
         const isExplorerRepositoryTool =
             Boolean(agentId && explorerAgentIds.has(agentId)) &&
-            ["read", "grep", "glob", "bash"].includes(
+            ["read", "grep", "glob", "ls"].includes(
                 stringValue(data?.toolName) ?? "",
             );
         if (!isExplore) {
@@ -977,7 +992,7 @@ function permissionHandler(): PermissionHandler {
     return (request) => {
         if (
             request.kind === "custom-tool" &&
-            new Set(["read", "grep", "glob", "bash"]).has(request.toolName)
+            new Set(["read", "grep", "glob", "ls"]).has(request.toolName)
         ) {
             return { kind: "approve-once" };
         }

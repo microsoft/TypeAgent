@@ -2,13 +2,13 @@
 
 This package runs a read-only SWE-bench Verified localization benchmark through the real GitHub Copilot CLI, controlled by `@github/copilot-sdk`, and a local LiteLLM gateway. Reports use these presentation labels:
 
-- **Copilot SDK (with explore agent)** (`baseline` internally): Copilot's default main agent must delegate once to the root `.copilot/agents/explorer.md` subagent. Only that subagent receives bounded custom `read`, `grep`, `glob`, and read-only `bash` tools.
+- **Copilot SDK (with explore agent)** (`baseline` internally): Copilot's default main agent must delegate once to the root `.copilot/agents/explorer.md` subagent. Only that subagent receives bounded immutable-snapshot `read`, `grep`, `glob`, and `ls` tools.
 - **TypeAgent** (`typeagent`): the raw task enters the canonical TypeAgent dispatcher, which has one active Explorer application agent and translates exactly one `exploreRepository` action. Explorer then runs its bounded typed-action/Code Mode loop in process.
 - **TypeAgent with LSP** (`typeagent-lsp` internally): the same TypeAgent arm also exposes bounded `definition` and `references` navigation through the all-language, pre-provisioned server registry. LSP calls consume the shared eight-call repository budget, and returned locations must still be grounded with `repo.read` before submission.
 
 Legacy `typeagent-mcp` inputs are normalized when reading CLI arguments, manifests, or result JSONL. New manifests and result rows always write `typeagent`.
 
-The Copilot SDK row keeps Copilot's default main agent active and fails unless it completes exactly one synchronous `task` delegation to `explorer`, the subagent uses repository tools, and the main agent performs no direct inspection. The two TypeAgent arms do not start Copilot or MCP: the untouched natural-language task must cross the dispatcher translation boundary, only Explorer may be active, exactly one outer action must execute, and its output must become the final answer. Inside that action, Explorer may use multiple `ls`, `glob`, `grep`, `read`, and—only in the LSP arm—`lsp` operations up to the shared eight-call budget. `repo.grep` executes the resolved `rg` binary against the immutable repository snapshot and records the engine and executable path in telemetry.
+The Copilot SDK row keeps Copilot's default main agent active and fails unless it completes exactly one synchronous `task` delegation to `explorer`, the subagent uses repository tools, and the main agent performs no direct inspection. The two TypeAgent arms do not start Copilot or MCP: the untouched natural-language task must cross the dispatcher translation boundary, only Explorer may be active, exactly one outer action must carry that same request as a validated parameter (allowing only TypeAgent's CRLF-to-LF string normalization), and its output must become the final answer. Inside that action, Explorer may use multiple `ls`, `glob`, `grep`, `read`, and—only in the LSP arm—`lsp` operations up to the shared eight-call budget. All three arms use the same immutable filtered repository snapshot and the same repository-search implementation; grep executes the one resolved Copilot-packaged `rg` binary, whose digest is retained in runtime evidence, and TypeAgent also records the engine and executable name in tool telemetry.
 
 This is localization, not SWE-bench pass@1. It does not generate patches, edit repositories, or run tests. It scores cited files and source-side line ranges against the gold patch.
 
@@ -72,7 +72,7 @@ exclusive so a run cannot silently mix selection modes.
 
 ## Run larger matrices and reuse results
 
-Compatible successful keys are automatically reused from prior runs under the same `.data/explore-bench/runs` directory. Reuse requires the same dataset, model route, variant, agent prompt, provider, harness compatibility revision, limits, and execution settings, plus an exact task/query/SWE-bench identity match. Revision 10 requires refinement to return host-validated grounded locations, exposes exact read ranges to Code Mode, records whether refinement or explicit repair submitted the result, and gives all three arms the same Copilot-packaged ripgrep search semantics. The imported `results.jsonl` rows retain their complete attempt history and a `reusedFrom` record; `cache-provenance.json` summarizes every source. Failed keys and target keys that already have an attempt rerun normally.
+Compatible successful keys are automatically reused from prior runs under the same `.data/explore-bench/runs` directory. Reuse requires the same dataset, model route, variant, agent prompt, provider, harness compatibility revision, limits, and execution settings, plus an exact task/query/SWE-bench identity match. Revision 15 requires the outer TypeAgent action to carry the user request as a validated parameter with only CRLF-to-LF normalization accepted, three completed inner Explorer actions in order (`discoverRepository`, `refineRepository`, then explicit `submitExploration`), every arm to expose the same filtered immutable-snapshot read/list/search primitives with Copilot's packaged ripgrep, host-owned ripgrep execution provenance outside model-controlled tool input, and a verified direct-source manifest/runtime artifact for every imported row. The imported `results.jsonl` rows retain their complete attempt history and a `reusedFrom` record; `cache-provenance.json` summarizes every source. Cache-of-cache rows are not imported, stale same-run task payloads are rejected, and failed or occupied target keys rerun normally.
 
 The first 30 deterministic tasks are an exact prefix of the 100-task selection, so the completed 30-row matrix can supply 180 successful keys (184 raw attempts) to a compatible 100-row run. From the repository root:
 
@@ -125,7 +125,7 @@ Only the baseline starts the packaged native Copilot executable over the SDK's s
 - SDK `mode: "empty"` with a run-scoped Copilot home
 - config discovery, custom instructions, skills, memory, hooks, embeddings, and infinite sessions disabled
 - a source-qualified `task` tool for the baseline main agent
-- `defaultAgent.excludedTools` keeps baseline `read`/`grep`/`glob`/`bash` available to `explorer` but hidden from the main agent
+- `defaultAgent.excludedTools` keeps baseline `read`/`grep`/`glob`/`ls` available to `explorer` but hidden from the main agent
 - deny-by-default permissions
 - fixed absolute baseline command paths with a sanitized child `PATH`
 - a trimmed runtime environment that excludes the LiteLLM credential

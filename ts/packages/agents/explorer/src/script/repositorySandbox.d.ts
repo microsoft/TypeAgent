@@ -55,8 +55,8 @@ interface ExploreProgramResult {
     success: boolean;
     message?: string;
     error?: string;
-    // Discovery returns []; refinement returns its final repository-grounded
-    // locations so the host can validate and submit without another completion.
+    // Discovery returns []; refinement returns repository-grounded candidates
+    // that the final typed submitExploration action reviews.
     locations?: ExploreLocation[];
 }
 

@@ -19,7 +19,7 @@ import type { BenchTask, RunManifest, RunResult } from "../src/types.js";
 const agent = {
     name: "explorer",
     description: "benchmark explorer",
-    tools: ["read", "grep", "glob", "bash"],
+    tools: ["read", "grep", "glob", "ls"],
     prompt: "explore only",
     file: "/repo/.copilot/agents/explorer.md",
     sha256: "a".repeat(64),
@@ -176,12 +176,12 @@ test("rejects revisionless caches instead of assuming current compatibility", ()
     );
 });
 
-test("rejects caches from before shared raw-ripgrep semantics", () => {
-    assert.equal(CACHE_COMPATIBILITY_REVISION, 10);
+test("rejects caches without direct runtime-source provenance", () => {
+    assert.equal(CACHE_COMPATIBILITY_REVISION, 15);
     assert.equal(
         cacheManifestsCompatible(
-            manifest("pre-shared-ripgrep", {
-                cacheCompatibilityRevision: 9,
+            manifest("pre-runtime-source-provenance", {
+                cacheCompatibilityRevision: 14,
             }),
             manifest("direct-typeagent"),
         ),
@@ -229,6 +229,8 @@ test("reuses the complete fail-to-success history with explicit provenance", () 
         originalRunId: "run-30",
         sourceRunId: "run-30",
         resultsPath: sourceManifest.output,
+        manifestPath: "/runs/run-30/manifest.json",
+        runtimeEvidence: sourceManifest.runtimeEvidence,
         importedAt: "2026-07-17T01:00:00.000Z",
     });
 });
@@ -260,6 +262,18 @@ test("does not replace target attempts or reuse failed and mismatched rows", () 
         [
             result("run-30", {
                 swebench: { ...task.swebench, patch: "different patch" },
+            }),
+        ],
+        [
+            result("run-30", {
+                reusedFrom: {
+                    originalRunId: "original-run",
+                    sourceRunId: "original-run",
+                    resultsPath: "/runs/original-run/results.jsonl",
+                    manifestPath: "/runs/original-run/manifest.json",
+                    runtimeEvidence: "/runs/original-run/copilot-runtime.json",
+                    importedAt: "now",
+                },
             }),
         ],
     ]) {
@@ -310,10 +324,10 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
                 tool: "grep" as const,
                 startedAt: "2026-07-17T00:00:00.000Z",
                 durationMs: 1,
-                input: {
-                    pattern: "needle",
+                input: { pattern: "needle" },
+                execution: {
                     engine: "ripgrep",
-                    ripgrepPath: "rg",
+                    executable: "rg",
                 },
                 resultCount: 1,
                 outputBytes: 1,
@@ -374,7 +388,7 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
                 {
                     schemaName: "explorer",
                     actionName: "exploreRepository",
-                    parameters: {},
+                    parameters: { request: task.query },
                 },
             ],
             executionCount: 1,

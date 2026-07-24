@@ -5,6 +5,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { validateResultRows } from "./integrity.js";
 import { readResults, readRunManifest, writeJsonAtomic } from "./io.js";
+import { translatedRequestMatchesIngress } from "./requestIdentity.js";
 import { overallRecall, scoreSwebench } from "./score.js";
 import type {
     BenchmarkVariant,
@@ -216,7 +217,7 @@ export async function writeReports(input: string): Promise<{
             "Token deltas compare Copilot SDK usage against TypeAgent combined usage (dispatcher translation plus inner Explorer reasoning and Code Mode generation exactly once), accumulated across every raw attempt for each final row.",
             `Final-attempt tokens cover the ${manifest.taskIds.length} requested tasks exactly when all rows complete. All-attempt tokens include retries and are shown only when every attempt emitted measurable usage; an unknown provider timeout is never treated as zero.`,
             "Copilot SDK success requires one synchronous explorer-subagent delegation and no direct main-agent inspection; TypeAgent success requires untouched natural-language ingress, dispatcher translation, and one executed Explorer action whose output becomes the final answer.",
-            "The Copilot SDK arm exposes the task tool to its main agent and bounded read/grep/glob/bash tools only to its explorer subagent. The TypeAgent arm runs its dispatcher and Explorer application agent in-process without a Copilot session or transport wrapper.",
+            "The Copilot SDK arm exposes the task tool to its main agent and bounded immutable-snapshot read/grep/glob/ls tools only to its explorer subagent. The TypeAgent arm runs its dispatcher and Explorer application agent in-process without a Copilot session or transport wrapper.",
             "Cached-input, cache-write, and reasoning tokens are subsets; total tokens are input plus output and do not double-count them. Schema-v4 records one inseparable inner usage bucket because the same model completions both translate state into typed actions and generate Code Mode programs; schema-v3 translation/codeMode fields remain readable only for backward compatibility.",
         ],
     };
@@ -846,7 +847,8 @@ function hasValidDirectExplorerDispatch(row: RunResult): boolean {
     const action = evidence.translatedActions[0];
     return (
         action.schemaName === "explorer" &&
-        action.actionName === "exploreRepository"
+        action.actionName === "exploreRepository" &&
+        translatedRequestMatchesIngress(action.parameters?.request, row.query)
     );
 }
 

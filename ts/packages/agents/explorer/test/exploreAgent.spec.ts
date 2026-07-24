@@ -42,6 +42,8 @@ type SessionScripts =
     | ToolStep[][]
     | Partial<Record<ExplorerActionName, ToolStep[]>>;
 
+const MAX_ACTION_RESULT_CHARS = 40_000;
+
 describe("agentic Code Mode explorer", () => {
     const tempDirs: string[] = [];
 
@@ -194,6 +196,15 @@ describe("agentic Code Mode explorer", () => {
             /do not start with generic concept words.*exact clue/i,
         );
         expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
+            /rare exact identifier.*generic word.*cannot exhaust.*result cap/i,
+        );
+        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
+            /filter broad grep or glob results.*production source paths.*rather than selecting the first raw path/i,
+        );
+        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
+            /Every submitted range must be wholly visible.*grep or read observation/i,
+        );
+        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
             /consecutive non-overlapping.*production function.*before tests/i,
         );
         expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
@@ -296,14 +307,23 @@ describe("agentic Code Mode explorer", () => {
         });
     });
 
-    it("submits grounded locations returned by refinement without a third model request", async () => {
+    it("lets a final typed action correct the refinement candidate after observing its evidence", async () => {
         const { repoRoot, telemetryFile } = await makeFixture();
         const adapter = scriptedAdapter(
             [
                 [runProgram("discover", grepProgram())],
                 [runProgram("refine", refineAndSubmitProgram())],
+                [
+                    submitExploration([
+                        {
+                            path: "src/alpha.ts",
+                            startLine: 2,
+                            endLine: 2,
+                        },
+                    ]),
+                ],
             ],
-            usage({ requestCount: 2, inputTokens: 80, outputTokens: 20 }),
+            usage({ requestCount: 3, inputTokens: 120, outputTokens: 30 }),
         );
         const explorer = createCodeModeExplorer({
             repoRoot,
@@ -315,29 +335,106 @@ describe("agentic Code Mode explorer", () => {
 
         await expect(
             explorer.explore({ query: "Find the needle implementation" }),
-        ).resolves.toBe("src/alpha.ts:1-3");
+        ).resolves.toBe("src/alpha.ts:2");
         expect(adapter.calls.map((call) => call.args.actionName)).toEqual([
             "discoverRepository",
             "refineRepository",
+            "submitExploration",
         ]);
-        expect(adapter.results[1]).toEqual({
-            text: "src/alpha.ts:1-3",
+        expect(adapter.results[1]).toMatchObject({
             isError: false,
+            text: expect.stringMatching(/submitExploration/),
+        });
+        expect(JSON.parse(adapter.results[1]?.text ?? "{}")).toMatchObject({
+            programResult: {
+                locations: [
+                    {
+                        path: "src/alpha.ts",
+                        startLine: 1,
+                        endLine: 3,
+                    },
+                ],
+            },
         });
 
         const invocation = latestInvocation(await readTelemetry(telemetryFile));
         expect(invocation).toMatchObject({
-            usage: { requestCount: 2 },
-            submissionAction: "refineRepository",
+            usage: { requestCount: 3 },
+            submissionAction: "submitExploration",
             actionAttempts: [
                 { actionName: "discoverRepository", status: "completed" },
                 { actionName: "refineRepository", status: "completed" },
+                { actionName: "submitExploration", status: "completed" },
             ],
             result: { citationCount: 1, truncated: false },
         });
     });
 
-    it("reports omitted refinement locations as a repairable validation error", async () => {
+    it("bounds refinement candidates without crowding grounded observations", async () => {
+        const { repoRoot, telemetryFile } = await makeFixture();
+        const adapter = scriptedAdapter([
+            [runProgram("discover", grepProgram())],
+            [runProgram("refine", oversizedRefinementCandidateProgram())],
+            [
+                submitExploration([
+                    {
+                        path: "src/alpha.ts",
+                        startLine: 1,
+                        endLine: 3,
+                    },
+                ]),
+            ],
+        ]);
+        const explorer = createCodeModeExplorer({
+            repoRoot,
+            reasoningAdapter: adapter,
+            modelName: "azure/gpt-5.6-luna",
+            telemetryFile,
+        });
+
+        let completedExploration = false;
+        try {
+            completedExploration =
+                (await explorer.explore({
+                    query: "Find the needle implementation",
+                })) === "src/alpha.ts:1-3";
+        } catch {
+            // The oversized payload currently crowds out the read evidence,
+            // which makes the otherwise grounded final submission fail.
+        }
+        const refinementText = adapter.results[1]?.text ?? "";
+        const payload = JSON.parse(refinementText);
+        const expectedLocations = [
+            {
+                path: "src/alpha.ts",
+                startLine: 1,
+                endLine: 3,
+            },
+        ];
+
+        expect({
+            completedExploration,
+            withinActionResultLimit:
+                refinementText.length <= MAX_ACTION_RESULT_CHARS,
+            exactBoundedLocations:
+                JSON.stringify(payload.programResult.locations) ===
+                JSON.stringify(expectedLocations),
+            readObservationVisible: payload.observations.some(
+                (observation: { source?: unknown; path?: unknown }) =>
+                    observation.source === "read" &&
+                    observation.path === "src/alpha.ts",
+            ),
+            observationsUncrowded: payload.observationsTruncated === false,
+        }).toEqual({
+            completedExploration: true,
+            withinActionResultLimit: true,
+            exactBoundedLocations: true,
+            readObservationVisible: true,
+            observationsUncrowded: true,
+        });
+    });
+
+    it("returns refinement evidence when the program omits candidate locations", async () => {
         const { repoRoot, telemetryFile } = await makeFixture();
         const adapter = scriptedAdapter([
             [runProgram("discover", grepProgram())],
@@ -362,9 +459,15 @@ describe("agentic Code Mode explorer", () => {
         await expect(
             explorer.explore({ query: "Find the needle implementation" }),
         ).resolves.toBe("src/alpha.ts:1-3");
-        expect(adapter.results[1]).toMatchObject({
-            isError: false,
-            text: expect.stringMatching(/autoSubmissionError.*locations/is),
+        expect(adapter.results[1]?.isError).toBe(false);
+        expect(JSON.parse(adapter.results[1]?.text ?? "{}")).toMatchObject({
+            nextAction: expect.stringMatching(/Invoke submitExploration/i),
+            observations: [
+                expect.objectContaining({
+                    source: "read",
+                    path: "src/alpha.ts",
+                }),
+            ],
         });
         expect(
             latestInvocation(await readTelemetry(telemetryFile)),
@@ -376,6 +479,15 @@ describe("agentic Code Mode explorer", () => {
         const adapter = scriptedAdapter([
             [runProgram("discover", lspDiscoveryProgram())],
             [runProgram("refine", lspRefinementProgram())],
+            [
+                submitExploration([
+                    {
+                        path: "src/lsp.ts",
+                        startLine: 1,
+                        endLine: 3,
+                    },
+                ]),
+            ],
         ]);
         const explorer = createCodeModeExplorer({
             repoRoot,
@@ -409,7 +521,7 @@ describe("agentic Code Mode explorer", () => {
         );
         expect(lspCall).toMatchObject({ resultCount: 1 });
         expect(lspCall?.error).toBeUndefined();
-        expect(invocation.submissionAction).toBe("refineRepository");
+        expect(invocation.submissionAction).toBe("submitExploration");
     }, 30_000);
 
     it("keeps completed refinement evidence available for a corrected submission", async () => {
@@ -439,7 +551,7 @@ describe("agentic Code Mode explorer", () => {
         ).resolves.toBe("src/alpha.ts:1-3");
         expect(adapter.results[1]).toMatchObject({
             isError: false,
-            text: expect.stringMatching(/autoSubmissionError/),
+            text: expect.stringMatching(/src\/unread[.]ts/),
         });
         expect(
             latestInvocation(await readTelemetry(telemetryFile)),
@@ -1282,6 +1394,29 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Refi
         success: true,
         message: params.query,
         locations: read.location ? [read.location] : [],
+    };
+}`;
+}
+
+function oversizedRefinementCandidateProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<RefinementProgramResult> {
+    await repo.read("src/alpha.ts", { offset: 0, limit: 3 });
+    const candidate = {
+        path: "src/alpha.ts",
+        startLine: 1,
+        endLine: 3,
+        arbitraryExtraProperty: "x".repeat(60_000),
+    };
+    const oversizedCandidate = {
+        path: "src/" + "oversized".repeat(8_000) + ".ts",
+        startLine: 1,
+        endLine: 1,
+    };
+    return {
+        success: true,
+        message: params.query,
+        locations: [candidate, oversizedCandidate],
     };
 }`;
 }

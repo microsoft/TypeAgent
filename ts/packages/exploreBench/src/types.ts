@@ -127,6 +127,10 @@ export interface TypeAgentToolCallTrace {
     startedAt?: string;
     durationMs: number;
     input: unknown;
+    execution?: {
+        engine: string;
+        executable: string;
+    };
     resultCount: number;
     outputBytes: number;
     truncated: boolean;
@@ -321,6 +325,8 @@ export interface ResultReuseProvenance {
     originalRunId: string;
     sourceRunId: string;
     resultsPath: string;
+    manifestPath?: string;
+    runtimeEvidence?: string;
     importedAt: string;
 }
 

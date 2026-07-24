@@ -37,7 +37,7 @@ function options(): CopilotRunOptions {
         agent: {
             name: "explorer",
             description: "benchmark explorer",
-            tools: ["read", "grep", "glob", "bash"],
+            tools: ["read", "grep", "glob", "ls"],
             prompt: "explore only",
             file: "/repo/.copilot/agents/explorer.md",
             sha256: "a".repeat(64),
@@ -81,13 +81,13 @@ test("keeps the default main agent and exposes only the arm's required path", ()
                 name: "explorer",
                 displayName: "explorer",
                 description: "benchmark explorer",
-                tools: ["read", "grep", "glob", "bash"],
+                tools: ["read", "grep", "glob", "ls"],
                 prompt: "explore only",
                 infer: true,
             },
         ],
         defaultAgent: {
-            excludedTools: ["read", "grep", "glob", "bash"],
+            excludedTools: ["read", "grep", "glob", "ls"],
         },
     });
 });
@@ -97,7 +97,7 @@ test("builds the explorer as an inferable subagent with bounded repository tools
         name: "explorer",
         displayName: "explorer",
         description: "benchmark explorer",
-        tools: ["read", "grep", "glob", "bash"],
+        tools: ["read", "grep", "glob", "ls"],
         prompt: "explore only",
         infer: true,
     });
@@ -314,6 +314,57 @@ test("reads schema-v1 TypeAgent telemetry", async () => {
             "azure/gpt-5.6-luna",
         );
         assert.equal(telemetry.usage.cacheWriteTokens, 0);
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+});
+
+test("preserves validated host-owned ripgrep execution telemetry", async () => {
+    const directory = await mkdtemp(
+        path.join(os.tmpdir(), "explore-bench-ripgrep-telemetry-"),
+    );
+    try {
+        const telemetryPath = path.join(directory, "telemetry.json");
+        const telemetry = validTelemetry();
+        telemetry.toolTrace.calls[0].execution = {
+            engine: "ripgrep",
+            executable: "rg",
+        };
+        await writeFile(telemetryPath, JSON.stringify(telemetry));
+
+        const parsed = await readExploreTelemetry(
+            telemetryPath,
+            "azure/gpt-5.6-luna",
+        );
+
+        assert.deepEqual(parsed.toolTrace.calls[0]?.execution, {
+            engine: "ripgrep",
+            executable: "rg",
+        });
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+});
+
+test("rejects malformed ripgrep execution telemetry", async () => {
+    const directory = await mkdtemp(
+        path.join(os.tmpdir(), "explore-bench-invalid-ripgrep-telemetry-"),
+    );
+    try {
+        const telemetryPath = path.join(directory, "telemetry.json");
+        for (const execution of [
+            { engine: "other", executable: "rg" },
+            { engine: "ripgrep" },
+        ]) {
+            const telemetry = validTelemetry();
+            telemetry.toolTrace.calls[0].execution = execution as never;
+            await writeFile(telemetryPath, JSON.stringify(telemetry));
+
+            await assert.rejects(
+                readExploreTelemetry(telemetryPath, "azure/gpt-5.6-luna"),
+                /execution/i,
+            );
+        }
     } finally {
         await rm(directory, { recursive: true, force: true });
     }

@@ -41,6 +41,15 @@ test("loads Copilot only for baseline runs", () => {
     assert.match(source, /await import\("[.]\/copilot[.]js"\)/);
 });
 
+test("treats revisionless same-run manifests as incompatible", () => {
+    const source = readFileSync(cliSource, "utf8");
+
+    assert.match(
+        source,
+        /cacheCompatibilityRevision:\s*cacheCompatibilityRevision\s*\?\?\s*0/,
+    );
+});
+
 test("rejects unsupported one-row model and variant selections", () => {
     const badModel = runCli(
         "run",

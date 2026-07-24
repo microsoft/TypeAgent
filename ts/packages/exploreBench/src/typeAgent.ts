@@ -36,6 +36,7 @@ import {
 } from "explorer-typeagent";
 import { readExploreTelemetry } from "./exploreTelemetry.js";
 import { readEnvFile } from "./io.js";
+import { translatedRequestMatchesIngress } from "./requestIdentity.js";
 import type {
     ExploreTelemetry,
     TokenUsage,
@@ -48,8 +49,10 @@ export const TYPEAGENT_EXPLORER_ACTION = "exploreRepository";
 
 const explorerRequestSchema = `export type ExplorerRequestActions = {
     actionName: "exploreRepository";
-    // The AppAgent reads the exact dispatcher ingress from its session context.
-    parameters: {};
+    parameters: {
+        // Copy the complete user request byte-for-byte without summarizing it.
+        request: string;
+    };
 };`;
 
 const explorerManifest: AppAgentManifest = {
@@ -145,7 +148,6 @@ export async function runTypeAgentDispatcher(
         });
         const provider = createTypeAgentExplorerProvider(
             explorer,
-            options.prompt,
             (execution) => executions.push(execution),
         );
         const messages = new Map<string, IAgentMessage[]>();
@@ -246,8 +248,10 @@ export async function runTypeAgentDispatcher(
                         ? executions[0].actionResult.displayContent
                         : undefined,
                 ) === finalAnswer,
-            executionRequestMatchedIngress:
-                executions[0].request === options.prompt,
+            executionRequestMatchedIngress: translatedRequestMatchesIngress(
+                executions[0].request,
+                options.prompt,
+            ),
             usedCopilot: false,
             usedMcp: false,
         };
@@ -301,7 +305,6 @@ export async function runTypeAgentDispatcher(
 
 export function createTypeAgentExplorerProvider(
     explorer: RepositoryExplorer,
-    request: string,
     onExecution?: (execution: ExplorerExecution) => void,
 ): AppAgentProvider {
     return {
@@ -312,7 +315,7 @@ export function createTypeAgentExplorerProvider(
         },
         loadAppAgent: async (appAgentName) => {
             requireExplorer(appAgentName);
-            return createExplorerAgent(explorer, request, onExecution);
+            return createExplorerAgent(explorer, onExecution);
         },
         unloadAppAgent: async (appAgentName) => {
             requireExplorer(appAgentName);
@@ -372,9 +375,15 @@ export function assertDirectDispatchEvidence(
     const action = evidence.translatedActions[0];
     if (
         action.schemaName !== TYPEAGENT_EXPLORER_AGENT ||
-        action.actionName !== TYPEAGENT_EXPLORER_ACTION
+        action.actionName !== TYPEAGENT_EXPLORER_ACTION ||
+        !translatedRequestMatchesIngress(
+            action.parameters?.request,
+            expectedRequest,
+        )
     ) {
-        throw new Error("TypeAgent translated an unexpected Explorer action");
+        throw new Error(
+            "TypeAgent translated an unexpected Explorer action or mutated its request",
+        );
     }
     if (
         evidence.executionCount !== 1 ||
@@ -392,16 +401,13 @@ export function assertDirectDispatchEvidence(
 
 function createExplorerAgent(
     explorer: RepositoryExplorer,
-    request: string,
     onExecution?: (execution: ExplorerExecution) => void,
 ): AppAgent {
     return {
-        initializeAgentContext: async () => ({ request }),
-        executeAction: async (action, context) => {
+        initializeAgentContext: async () => ({}),
+        executeAction: async (action) => {
             requireExploreAction(action);
-            const exactRequest = requireExplorerRequest(
-                context.sessionContext.agentContext,
-            );
+            const exactRequest = requireExplorerRequest(action);
             if (!explorer.exploreDetailed) {
                 throw new Error(
                     "Direct TypeAgent Explorer requires detailed execution telemetry",
@@ -439,16 +445,16 @@ function requireExploreAction(action: TypeAgentAction): void {
     }
 }
 
-function requireExplorerRequest(agentContext: unknown): string {
+function requireExplorerRequest(action: TypeAgentAction): string {
+    const request = action.parameters?.request;
     if (
-        !agentContext ||
-        typeof agentContext !== "object" ||
-        typeof (agentContext as { request?: unknown }).request !== "string" ||
-        !(agentContext as { request: string }).request.trim()
+        typeof request !== "string" ||
+        request.length === 0 ||
+        request.trim().length === 0
     ) {
-        throw new Error("Explorer session is missing the dispatcher request");
+        throw new Error("Explorer action is missing its typed request");
     }
-    return (agentContext as { request: string }).request;
+    return request;
 }
 
 function requireExplorer(appAgentName: string): void {

@@ -460,6 +460,24 @@ function parseTypeAgentToolCall(
     if (!new Set(["ls", "glob", "grep", "read", "lsp"]).has(tool)) {
         throw new Error(`${context}.tool is not a repository exploration tool`);
     }
+    const executionRecord = recordValue(record.execution);
+    const execution = executionRecord
+        ? {
+              engine: requiredString(
+                  executionRecord,
+                  "engine",
+                  `${context}.execution`,
+              ),
+              executable: requiredString(
+                  executionRecord,
+                  "executable",
+                  `${context}.execution`,
+              ),
+          }
+        : undefined;
+    if (execution && execution.engine !== "ripgrep") {
+        throw new Error(`${context}.execution.engine must be ripgrep`);
+    }
     return {
         tool,
         ...(typeof record.startedAt === "string"
@@ -467,6 +485,14 @@ function parseTypeAgentToolCall(
             : {}),
         durationMs: requiredNonNegativeNumber(record, "durationMs", context),
         input: record.input,
+        ...(execution
+            ? {
+                  execution: {
+                      engine: execution.engine,
+                      executable: execution.executable,
+                  },
+              }
+            : {}),
         resultCount: requiredNonNegativeNumber(record, "resultCount", context),
         outputBytes: requiredNonNegativeNumber(record, "outputBytes", context),
         truncated: requiredBoolean(record, "truncated", context),

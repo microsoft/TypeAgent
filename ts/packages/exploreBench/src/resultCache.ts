@@ -14,10 +14,11 @@ import {
 } from "./io.js";
 import type { BenchTask, RunManifest, RunResult } from "./types.js";
 
-export const CACHE_COMPATIBILITY_REVISION = 10;
+export const CACHE_COMPATIBILITY_REVISION = 15;
 
 export interface ResultCacheSource {
     manifest: RunManifest;
+    manifestPath?: string;
     resultsPath: string;
     rows: RunResult[];
 }
@@ -95,6 +96,7 @@ export function selectReusableAttempts(
                 !task ||
                 attempts.some(
                     (row) =>
+                        row.reusedFrom !== undefined ||
                         models.get(row.matrixName) !== row.model ||
                         !variants.has(row.variant) ||
                         !taskMatchesResult(task, row),
@@ -116,6 +118,13 @@ export function selectReusableAttempts(
                             row.reusedFrom?.originalRunId ?? row.runId,
                         sourceRunId: source.manifest.runId,
                         resultsPath: source.resultsPath,
+                        manifestPath:
+                            source.manifestPath ??
+                            path.join(
+                                path.dirname(source.resultsPath),
+                                "manifest.json",
+                            ),
+                        runtimeEvidence: source.manifest.runtimeEvidence,
                         importedAt: options.importedAt,
                     },
                 })),
@@ -256,6 +265,7 @@ async function loadCacheSources(
             });
             sources.push({
                 manifest,
+                manifestPath,
                 resultsPath: path.resolve(manifest.output),
                 rows,
             });
@@ -332,7 +342,7 @@ function groupResults(rows: RunResult[]): Map<string, RunResult[]> {
     return grouped;
 }
 
-function taskMatchesResult(task: BenchTask, row: RunResult): boolean {
+export function taskMatchesResult(task: BenchTask, row: RunResult): boolean {
     return (
         row.taskId === task.id &&
         row.query === task.query &&

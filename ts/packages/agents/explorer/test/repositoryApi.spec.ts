@@ -8,9 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
-    chunkRipgrepTargets,
     createRepositoryTools,
-    ripgrepArgumentBudget,
     type RepositoryTools,
     type RepositoryToolsOptions,
 } from "../src/script/repositoryApi.js";
@@ -110,10 +108,10 @@ describe("repository tools", () => {
             "grep",
             "read",
         ]);
-        expect(trace.calls[2].input).toMatchObject({
+        expect(trace.calls[2].execution).toMatchObject({
             engine: "ripgrep",
         });
-        expect(trace.calls[2].input.ripgrepPath).toMatch(
+        expect(trace.calls[2].execution?.executable).toMatch(
             /(?:^|[/\\])rg(?:[.]exe)?$/,
         );
         expect(trace.calls.every((call) => call.error === undefined)).toBe(
@@ -191,6 +189,62 @@ describe("repository tools", () => {
                 path: "src/auth.ts",
                 line: 1,
                 text: "export function authenticate(token: string) {",
+            },
+        ]);
+    });
+
+    it("applies native ripgrep globs before the match cap", async () => {
+        const repoRoot = await makeFixture();
+        await writeFile(
+            path.join(repoRoot, "src", "nested", "filtered.ts"),
+            "glob-cap-marker\n",
+        );
+        await writeFile(
+            path.join(repoRoot, "src", "z-target.ts"),
+            "glob-cap-marker\n",
+        );
+        const { api } = await makeTools({ repoRoot });
+
+        await expect(
+            api.grep("glob-cap-marker", {
+                glob: "src/*.ts",
+                maxMatches: 1,
+            }),
+        ).resolves.toEqual([
+            {
+                path: "src/z-target.ts",
+                line: 1,
+                text: "glob-cap-marker",
+            },
+        ]);
+        await expect(
+            api.grep("glob-cap-marker", {
+                glob: "src/**/*.ts",
+                maxMatches: 2,
+            }),
+        ).resolves.toEqual([
+            {
+                path: "src/nested/filtered.ts",
+                line: 1,
+                text: "glob-cap-marker",
+            },
+            {
+                path: "src/z-target.ts",
+                line: 1,
+                text: "glob-cap-marker",
+            },
+        ]);
+
+        await expect(
+            api.grep("glob-cap-marker", {
+                glob: "**/[Zz]-target.ts",
+                maxMatches: 1,
+            }),
+        ).resolves.toEqual([
+            {
+                path: "src/z-target.ts",
+                line: 1,
+                text: "glob-cap-marker",
             },
         ]);
     });
@@ -308,28 +362,46 @@ describe("repository tools", () => {
         expect(trace.calls.filter((call) => call.error)).toHaveLength(5);
     });
 
-    it("keeps valid ripgrep matches when another indexed file is deleted", async () => {
+    it("keeps ripgrep results immutable when the source file is deleted", async () => {
         const repoRoot = await makeFixture();
-        await writeFile(
-            path.join(repoRoot, "src", "surviving.ts"),
-            "export const survivingMarker = true;\n",
-        );
         const { api, trace } = await makeTools({ repoRoot });
 
         await rm(path.join(repoRoot, "src", "auth.ts"));
 
-        await expect(api.grep("survivingMarker")).resolves.toEqual([
+        await expect(api.grep("authenticate")).resolves.toEqual([
             {
-                path: "src/surviving.ts",
+                path: "src/auth.ts",
                 line: 1,
-                text: "export const survivingMarker = true;",
+                text: "export function authenticate(token: string) {",
             },
         ]);
         expect(trace.calls[0]).toMatchObject({
             tool: "grep",
             resultCount: 1,
-            truncated: true,
+            truncated: false,
         });
+    });
+
+    it("keeps ripgrep execution evidence separate from model input", async () => {
+        const repoRoot = await makeFixture();
+        const { api, trace } = await makeTools({ repoRoot });
+
+        await expect(
+            api.grep("needle", {
+                path: "missing",
+                engine: "ripgrep",
+                ripgrepPath: "rg",
+            } as never),
+        ).resolves.toEqual([]);
+
+        expect(trace.calls[0]).toMatchObject({
+            tool: "grep",
+            input: { pattern: "needle", path: "missing" },
+            resultCount: 0,
+        });
+        expect(trace.calls[0].input).not.toHaveProperty("engine");
+        expect(trace.calls[0].input).not.toHaveProperty("ripgrepPath");
+        expect(trace.calls[0].execution).toBeUndefined();
     });
 
     it("supports literal grep and bounds default regex, results, and line output", async () => {
@@ -358,6 +430,15 @@ describe("repository tools", () => {
         await expect(api.grep("valid", { glob: "src/*.ts" })).resolves.toEqual(
             [],
         );
+        await expect(
+            api.grep("valid", { glob: "src/**/*.ts" }),
+        ).resolves.toEqual([
+            {
+                path: "src/nested/token.ts",
+                line: 1,
+                text: "export const token = 'valid';",
+            },
+        ]);
         await expect(api.grep("(a+)+$")).resolves.toEqual([]);
 
         await writeFile(
@@ -378,31 +459,46 @@ describe("repository tools", () => {
         );
     });
 
-    it("keeps ripgrep path order without production-file reprioritization", async () => {
+    it("keeps native ripgrep directory order before applying the match cap", async () => {
         const repoRoot = await makeFixture();
-        await mkdir(path.join(repoRoot, "docs"), { recursive: true });
-        await mkdir(path.join(repoRoot, "tests"), { recursive: true });
+        await mkdir(path.join(repoRoot, "docs", "_data"), { recursive: true });
         await writeFile(
-            path.join(repoRoot, "docs", "guide.ts"),
-            "shared-marker\n",
+            path.join(repoRoot, "docs", ".eleventy.js"),
+            "native-order-marker\n",
         );
         await writeFile(
-            path.join(repoRoot, "tests", "auth.test.ts"),
-            "shared-marker\n",
-        );
-        await writeFile(
-            path.join(repoRoot, "src", "production.ts"),
-            "shared-marker\n",
+            path.join(repoRoot, "docs", "_data", "navigation.js"),
+            "native-order-marker\n",
         );
         const { api } = await makeTools({ repoRoot });
 
         await expect(
-            api.grep("shared-marker", { literal: true, maxMatches: 1 }),
+            api.grep("native-order-marker", {
+                literal: true,
+                maxMatches: 2,
+            }),
         ).resolves.toEqual([
             {
-                path: "docs/guide.ts",
+                path: "docs/.eleventy.js",
                 line: 1,
-                text: "shared-marker",
+                text: "native-order-marker",
+            },
+            {
+                path: "docs/_data/navigation.js",
+                line: 1,
+                text: "native-order-marker",
+            },
+        ]);
+        await expect(
+            api.grep("native-order-marker", {
+                literal: true,
+                maxMatches: 1,
+            }),
+        ).resolves.toEqual([
+            {
+                path: "docs/.eleventy.js",
+                line: 1,
+                text: "native-order-marker",
             },
         ]);
     });
@@ -446,28 +542,6 @@ describe("repository tools", () => {
             truncated: true,
         });
         expect(trace.calls[0].outputBytes).toBeLessThan(1024);
-    });
-
-    it("keeps ripgrep target chunks below the Windows command-line budget", () => {
-        const budget = ripgrepArgumentBudget("win32");
-        const targets = ["a".repeat(7000), "b".repeat(7000)];
-        const chunks = chunkRipgrepTargets(targets, budget);
-
-        expect(budget).toBe(12 * 1024);
-        expect(chunks).toEqual([[targets[0]], [targets[1]]]);
-        expect(
-            chunks.every(
-                (chunk) =>
-                    chunk.reduce(
-                        (bytes, target) =>
-                            bytes + Buffer.byteLength(target) + 1,
-                        0,
-                    ) <= budget,
-            ),
-        ).toBe(true);
-        expect(() => chunkRipgrepTargets(["x".repeat(budget)], budget)).toThrow(
-            /path exceeds ripgrep argument limit/i,
-        );
     });
 
     it("resolves ripgrep only when grep is used", async () => {

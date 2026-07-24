@@ -275,7 +275,7 @@ function manifest(
         agent: {
             name: "explorer",
             description: "benchmark explorer",
-            tools: ["read", "grep", "glob", "bash"],
+            tools: ["read", "grep", "glob", "ls"],
             prompt: "explore only",
             file: "/repo/.copilot/agents/explorer.md",
             sha256: "a".repeat(64),
@@ -302,10 +302,10 @@ function result(
     const grepCall: TypeAgentToolTrace["calls"][number] = {
         tool: "grep",
         durationMs: 1,
-        input: {
-            pattern: "needle",
+        input: { pattern: "needle" },
+        execution: {
             engine: "ripgrep",
-            ripgrepPath: "rg",
+            executable: "rg",
         },
         resultCount: 1,
         outputBytes: 1,
@@ -406,7 +406,7 @@ function result(
                           {
                               schemaName: "explorer",
                               actionName: "exploreRepository",
-                              parameters: {},
+                              parameters: { request: `find bug ${taskId}` },
                           },
                       ],
                       executionCount: 1,

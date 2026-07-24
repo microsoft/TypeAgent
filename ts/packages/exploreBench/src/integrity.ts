@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { isDeepStrictEqual } from "node:util";
+import { translatedRequestMatchesIngress } from "./requestIdentity.js";
 import {
     isTypeAgentVariant,
     type RunManifest,
@@ -131,6 +132,10 @@ function validateDirectTypeAgentRow(row: RunResult, prefix: string): void {
         evidence.translatedActions.length !== 1 ||
         action?.schemaName !== "explorer" ||
         action.actionName !== "exploreRepository" ||
+        !translatedRequestMatchesIngress(
+            action.parameters?.request,
+            row.query,
+        ) ||
         evidence.executionCount !== 1 ||
         evidence.outputMatchedExecution !== true ||
         evidence.executionRequestMatchedIngress !== true
@@ -220,7 +225,7 @@ function validateDirectTypeAgentRow(row: RunResult, prefix: string): void {
     if (
         !row.typeAgentToolTrace ||
         !isDeepStrictEqual(row.typeAgentToolTrace, telemetry.toolTrace) ||
-        !row.typeAgentToolTrace.calls.some((call) => call.tool === "grep") ||
+        !row.typeAgentToolTrace.calls.some(hasRipgrepExecutionEvidence) ||
         !row.typeAgentToolTrace.calls.every(hasValidRipgrepEvidence)
     ) {
         throw new Error(
@@ -272,8 +277,8 @@ function matchesExplorerActionSequence(
 ): boolean {
     if (
         !attempts ||
-        !submissionAction ||
-        attempts.length < 2 ||
+        submissionAction !== "submitExploration" ||
+        attempts.length < 3 ||
         attempts.some((attempt, index) => attempt.index !== index)
     ) {
         return false;
@@ -307,10 +312,6 @@ function matchesExplorerActionSequence(
         return false;
     }
     cursor += 1;
-
-    if (submissionAction === "refineRepository") {
-        return cursor === attempts.length;
-    }
 
     const submissions = attempts.slice(cursor);
     return (
@@ -374,9 +375,30 @@ function hasValidRipgrepEvidence(
         return false;
     }
     const input = call.input as Record<string, unknown>;
+    if (input.engine !== undefined || input.ripgrepPath !== undefined) {
+        return false;
+    }
+    if (hasRipgrepExecutionEvidence(call)) {
+        return true;
+    }
+    return call.resultCount === 0 && call.execution === undefined;
+}
+
+function hasRipgrepExecutionEvidence(
+    call: NonNullable<RunResult["typeAgentToolTrace"]>["calls"][number],
+): boolean {
+    if (
+        call.tool !== "grep" ||
+        !call.execution ||
+        typeof call.execution !== "object" ||
+        Array.isArray(call.execution)
+    ) {
+        return false;
+    }
     return (
-        input.engine === "ripgrep" &&
-        typeof input.ripgrepPath === "string" &&
-        /(?:^|[/\\])rg(?:[.]exe)?$/.test(input.ripgrepPath)
+        call.error === undefined &&
+        call.execution.engine === "ripgrep" &&
+        typeof call.execution.executable === "string" &&
+        /(?:^|[/\\])rg(?:[.]exe)?$/.test(call.execution.executable)
     );
 }

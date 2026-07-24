@@ -2,6 +2,9 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { isUsableFinalAnswer } from "../src/runner.js";
 import { parsePatch, scoreSwebench } from "../src/score.js";
@@ -28,6 +31,51 @@ test("scores exact SWE-bench file and line citations", () => {
     assert.equal(isUsableFinalAnswer(score), true);
 });
 
+test("relocates patch hunks to their current workspace lines", (context) => {
+    const workspace = mkdtempSync(path.join(tmpdir(), "explore-bench-score-"));
+    context.after(() => rmSync(workspace, { recursive: true }));
+    mkdirSync(path.join(workspace, "pkg"));
+    writeFileSync(
+        path.join(workspace, "pkg", "a.py"),
+        [
+            "new preface",
+            "another inserted line",
+            "before",
+            "buggy",
+            "after",
+            "",
+        ].join("\n"),
+    );
+    const shiftedPatch = `diff --git a/pkg/a.py b/pkg/a.py
+--- a/pkg/a.py
++++ b/pkg/a.py
+@@ -1,3 +1,3 @@
+ before
+-buggy
++fixed
+ after
+`;
+
+    const score = scoreSwebench(
+        "<final_answer>\npkg/a.py:3-5 current hunk\n</final_answer>",
+        shiftedPatch,
+        workspace,
+    );
+
+    assert.deepEqual(score.patchFiles, [
+        { path: "pkg/a.py", startLine: 3, endLine: 5 },
+    ]);
+    assert.equal(score.line.recall, 1);
+
+    writeFileSync(
+        path.join(workspace, "pkg", "a.py"),
+        ["before", "buggy", "after", "before", "buggy", "after", ""].join("\n"),
+    );
+    assert.deepEqual(parsePatch(shiftedPatch, workspace), [
+        { path: "pkg/a.py", startLine: 1, endLine: 3 },
+    ]);
+});
+
 test("malformed or empty final answers are retryable failures", () => {
     assert.equal(
         isUsableFinalAnswer(scoreSwebench("plain prose", patch)),
@@ -49,7 +97,7 @@ test("pure-addition hunks keep the file gold without inventing source lines", ()
 +first
 +second
 `;
-    assert.deepEqual(parsePatch(addition), [
+    assert.deepEqual(parsePatch(addition, "/missing-workspace"), [
         { path: "pkg/a.py", startLine: 10, endLine: 9 },
     ]);
     const score = scoreSwebench(

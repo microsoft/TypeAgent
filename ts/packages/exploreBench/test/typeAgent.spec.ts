@@ -18,13 +18,10 @@ const query =
     "Find the implementation that maps source => target incorrectly for empty cache entries.";
 
 test("exposes one Explorer application agent with one natural-language entry action", async () => {
-    const provider = createTypeAgentExplorerProvider(
-        {
-            explore: async () =>
-                "<final_answer>\nsrc/cache.ts:10-20\n</final_answer>",
-        },
-        query,
-    );
+    const provider = createTypeAgentExplorerProvider({
+        explore: async () =>
+            "<final_answer>\nsrc/cache.ts:10-20\n</final_answer>",
+    });
 
     assert.deepEqual(provider.getAppAgentNames(), ["explorer"]);
     const manifest = await provider.getAppAgentManifest("explorer");
@@ -35,44 +32,41 @@ test("exposes one Explorer application agent with one natural-language entry act
             : (schemaFile?.content ?? "");
     assert.equal(manifest.defaultEnabled, true);
     assert.match(schema, /actionName: "exploreRepository"/);
-    assert.match(schema, /parameters: \{\}/);
-    assert.doesNotMatch(schema, /request: string/);
+    assert.match(schema, /parameters:\s*\{[^}]*request: string/s);
+    assert.doesNotMatch(schema, /parameters: \{\}/);
     assert.doesNotMatch(
         schema,
         /discoverRepository|refineRepository|submitExploration/,
     );
 });
 
-test("Explorer action executes the exact session request and reports inner usage", async () => {
+test("Explorer action executes its typed request parameter and reports inner usage", async () => {
     let received: unknown;
-    const provider = createTypeAgentExplorerProvider(
-        {
-            explore: async () => {
-                throw new Error("exploreDetailed must be used");
-            },
-            exploreDetailed: async (request) => {
-                received = request;
-                return {
-                    text: "src/cache.ts:10-20",
-                    usage: usage(2, 100, 20),
-                    toolTrace: {
-                        calls: [],
-                        totalCalls: 0,
-                        totalOutputBytes: 0,
-                    },
-                    result: { citationCount: 1, truncated: false },
-                };
-            },
+    const provider = createTypeAgentExplorerProvider({
+        explore: async () => {
+            throw new Error("exploreDetailed must be used");
         },
-        query,
-    );
+        exploreDetailed: async (request) => {
+            received = request;
+            return {
+                text: "src/cache.ts:10-20",
+                usage: usage(2, 100, 20),
+                toolTrace: {
+                    calls: [],
+                    totalCalls: 0,
+                    totalOutputBytes: 0,
+                },
+                result: { citationCount: 1, truncated: false },
+            };
+        },
+    });
     const agent = await provider.loadAppAgent("explorer");
     const agentContext = await agent.initializeAgentContext?.();
     const result = await agent.executeAction?.(
         {
             schemaName: "explorer",
             actionName: "exploreRepository",
-            parameters: { request: "translation-model mutation" },
+            parameters: { request: query },
         } as TypeAgentAction,
         { sessionContext: { agentContext } } as never,
     );
@@ -90,16 +84,52 @@ test("Explorer action executes the exact session request and reports inner usage
     });
 });
 
+test("Explorer action rejects a missing or empty typed request", async () => {
+    const provider = createTypeAgentExplorerProvider({
+        explore: async () => {
+            throw new Error("exploreDetailed must be used");
+        },
+        exploreDetailed: async () => {
+            throw new Error("invalid request reached Explorer");
+        },
+    });
+    const agent = await provider.loadAppAgent("explorer");
+    const agentContext = await agent.initializeAgentContext?.();
+
+    for (const parameters of [{}, { request: "   " }]) {
+        await assert.rejects(
+            async () =>
+                await agent.executeAction?.(
+                    {
+                        schemaName: "explorer",
+                        actionName: "exploreRepository",
+                        parameters,
+                    } as TypeAgentAction,
+                    { sessionContext: { agentContext } } as never,
+                ),
+            /request/i,
+        );
+    }
+});
+
 test("direct-dispatch evidence fails closed on every bypass", () => {
     const valid = evidence();
     assert.doesNotThrow(() => assertDirectDispatchEvidence(valid, query));
-    assert.throws(() =>
+    const crlfRequest = "first\r\nsecond";
+    assert.doesNotThrow(() =>
         assertDirectDispatchEvidence(
             {
                 ...valid,
-                submittedRequest: "first\nsecond",
+                submittedRequest: crlfRequest,
+                translatedActions: [
+                    {
+                        schemaName: "explorer",
+                        actionName: "exploreRepository",
+                        parameters: { request: "first\nsecond" },
+                    },
+                ],
             },
-            "first\r\nsecond",
+            crlfRequest,
         ),
     );
 
@@ -110,6 +140,26 @@ test("direct-dispatch evidence fails closed on every bypass", () => {
         { ...valid, activeAgentNames: ["explorer", "chat"] },
         { ...valid, activeSchemaNames: ["explorer", "chat"] },
         { ...valid, translatedActions: [] },
+        {
+            ...valid,
+            translatedActions: [
+                {
+                    schemaName: "explorer",
+                    actionName: "exploreRepository",
+                    parameters: {},
+                },
+            ],
+        },
+        {
+            ...valid,
+            translatedActions: [
+                {
+                    schemaName: "explorer",
+                    actionName: "exploreRepository",
+                    parameters: { request: "translation-model mutation" },
+                },
+            ],
+        },
         {
             ...valid,
             translatedActions: [
@@ -174,7 +224,7 @@ function evidence(): TypeAgentDispatchEvidence {
             {
                 schemaName: "explorer",
                 actionName: "exploreRepository",
-                parameters: {},
+                parameters: { request: query },
             },
         ],
         executionCount: 1,
