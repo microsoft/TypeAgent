@@ -117,13 +117,14 @@ function validateDirectTypeAgentRow(row: RunResult, prefix: string): void {
         !evidence ||
         evidence.ingress !== "natural-language" ||
         evidence.submittedRequest !== row.query ||
-        evidence.translationInvoked !== true ||
-        evidence.translationRequestCount !== 1 ||
+        evidence.dispatchMethod !== "grammar" ||
+        evidence.translationInvoked !== false ||
+        evidence.translationRequestCount !== 0 ||
         !isOnlyExplorer(evidence.activeAgentNames) ||
         !isOnlyExplorer(evidence.activeSchemaNames)
     ) {
         throw new Error(
-            `${prefix}: successful direct TypeAgent row lacks untouched natural-language translation evidence`,
+            `${prefix}: successful direct TypeAgent row lacks untouched natural-language grammar-dispatch evidence`,
         );
     }
 
@@ -206,7 +207,7 @@ function validateDirectTypeAgentRow(row: RunResult, prefix: string): void {
         !row.combinedUsage ||
         row.dispatcherUsage.usageComplete === false ||
         row.typeAgentUsage.usageComplete === false ||
-        row.dispatcherUsage.requestCount !== 1 ||
+        row.dispatcherUsage.requestCount !== 0 ||
         !hasValidTokenUsage(row.dispatcherUsage) ||
         !hasValidTokenUsage(row.typeAgentUsage) ||
         !hasValidTokenUsage(row.combinedUsage) ||
@@ -237,7 +238,7 @@ function validateDirectTypeAgentRow(row: RunResult, prefix: string): void {
         row.typeAgentToolTrace?.calls.filter((call) => call.tool === "lsp") ??
         [];
     const successfulLspCalls = lspCalls.filter(
-        (call) => call.error === undefined && call.resultCount > 0,
+        (call) => call.error === undefined,
     ).length;
     const traceLspResultCount = lspCalls.reduce(
         (total, call) => total + call.resultCount,

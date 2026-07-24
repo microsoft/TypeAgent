@@ -14,7 +14,7 @@ import {
 } from "./io.js";
 import type { BenchTask, RunManifest, RunResult } from "./types.js";
 
-export const CACHE_COMPATIBILITY_REVISION = 15;
+export const CACHE_COMPATIBILITY_REVISION = 18;
 
 export interface ResultCacheSource {
     manifest: RunManifest;

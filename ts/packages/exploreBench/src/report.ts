@@ -829,8 +829,9 @@ function hasValidDirectExplorerDispatch(row: RunResult): boolean {
         evidence.ingress !== "natural-language" ||
         evidence.submittedRequest !== row.query ||
         evidence.submittedRequest.trimStart().startsWith("@") ||
-        !evidence.translationInvoked ||
-        evidence.translationRequestCount !== 1 ||
+        evidence.dispatchMethod !== "grammar" ||
+        evidence.translationInvoked ||
+        evidence.translationRequestCount !== 0 ||
         evidence.activeAgentNames.length !== 1 ||
         evidence.activeAgentNames[0] !== "explorer" ||
         evidence.activeSchemaNames.length !== 1 ||
