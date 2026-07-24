@@ -138,13 +138,13 @@ test("requires typed request identity except for CRLF normalization", () => {
 
 test("accepts repaired submission attempts after discovery and refinement", () => {
     const candidate = typeAgentRow("typeagent");
-    candidate.exploreTelemetry!.invocations![0].actionAttempts = [
+    setActionAttempts(candidate, [
         completedAction(0, "discoverRepository"),
         completedAction(1, "refineRepository"),
         failedAction(2, "submitExploration"),
         failedAction(3, "submitExploration"),
         completedAction(4, "submitExploration"),
-    ];
+    ]);
 
     assert.doesNotThrow(() => validateResultRows([candidate], identity));
 });
@@ -159,9 +159,23 @@ test("requires explicit submission provenance for repaired submissions", () => {
     );
 });
 
-test("accepts failed generated programs before each completed phase", () => {
+test("accepts six reasoning calls with repairs before each completed phase", () => {
     const candidate = typeAgentRow("typeagent");
-    candidate.exploreTelemetry!.invocations![0].actionAttempts = [
+    setActionAttempts(candidate, [
+        failedAction(0, "discoverRepository"),
+        completedAction(1, "discoverRepository"),
+        failedAction(2, "refineRepository"),
+        completedAction(3, "refineRepository"),
+        failedAction(4, "submitExploration"),
+        completedAction(5, "submitExploration"),
+    ]);
+
+    assert.doesNotThrow(() => validateResultRows([candidate], identity));
+});
+
+test("rejects seven action attempts beyond the runtime reasoning limit", () => {
+    const candidate = typeAgentRow("typeagent");
+    setActionAttempts(candidate, [
         failedAction(0, "discoverRepository"),
         failedAction(1, "discoverRepository"),
         completedAction(2, "discoverRepository"),
@@ -169,9 +183,12 @@ test("accepts failed generated programs before each completed phase", () => {
         completedAction(4, "refineRepository"),
         failedAction(5, "submitExploration"),
         completedAction(6, "submitExploration"),
-    ];
+    ]);
 
-    assert.doesNotThrow(() => validateResultRows([candidate], identity));
+    assert.throws(
+        () => validateResultRows([candidate], identity),
+        /Explorer telemetry/i,
+    );
 });
 
 test("rejects every direct TypeAgent dispatch and isolation mutation", () => {
@@ -875,6 +892,21 @@ test("permits recoverable pre-execution grep probes before proven ripgrep", () =
     }
 });
 
+test("permits discarded ripgrep executions before proven ripgrep", () => {
+    const candidate = typeAgentRow("typeagent");
+    const discarded = structuredClone(candidate.typeAgentToolTrace!.calls[0]);
+    discarded.error =
+        "Repository call result discarded because script execution failed";
+    candidate.typeAgentToolTrace!.calls.unshift(discarded);
+    candidate.typeAgentToolTrace!.totalCalls += 1;
+    candidate.typeAgentToolTrace!.totalOutputBytes += discarded.outputBytes;
+    candidate.exploreTelemetry!.toolTrace = structuredClone(
+        candidate.typeAgentToolTrace!,
+    );
+
+    assert.doesNotThrow(() => validateResultRows([candidate], identity));
+});
+
 test("requires mode-correct language-server evidence", () => {
     const plainMutations: Array<{
         name: string;
@@ -1158,6 +1190,11 @@ function typeAgentRow(variant: "typeagent" | "typeagent-lsp"): RunResult {
                     actionTranslationAndCodeGenerationUsage:
                         structuredClone(typeAgentUsage),
                     toolTrace,
+                    reasoningTrace: [
+                        reasoningAttempt(0, "discoverRepository", "completed"),
+                        reasoningAttempt(1, "refineRepository", "completed"),
+                        reasoningAttempt(2, "submitExploration", "completed"),
+                    ],
                     actionAttempts: [
                         completedAction(0, "discoverRepository"),
                         completedAction(1, "refineRepository"),
@@ -1170,6 +1207,29 @@ function typeAgentRow(variant: "typeagent" | "typeagent-lsp"): RunResult {
             result: { citationCount: 1, truncated: false },
         },
     };
+}
+
+function setActionAttempts(
+    candidate: RunResult,
+    attempts: Array<{
+        index: number;
+        actionName: string;
+        status: "completed" | "failed";
+    }>,
+): void {
+    const invocation = candidate.exploreTelemetry!.invocations![0];
+    invocation.actionAttempts = attempts;
+    invocation.reasoningTrace = attempts.map((attempt) =>
+        reasoningAttempt(attempt.index, attempt.actionName, attempt.status),
+    );
+}
+
+function reasoningAttempt(
+    index: number,
+    actionName: string,
+    status: "completed" | "failed",
+) {
+    return { index, tool: "execute_action", actionName, status };
 }
 
 function completedAction(index: number, actionName: string) {

@@ -176,12 +176,12 @@ test("rejects revisionless caches instead of assuming current compatibility", ()
     );
 });
 
-test("rejects the immediate prior cache compatibility revision", () => {
-    assert.equal(CACHE_COMPATIBILITY_REVISION, 18);
+test("rejects frozen revision-22 cache after the post-run runtime change", () => {
+    assert.equal(CACHE_COMPATIBILITY_REVISION, 23);
     assert.equal(
         cacheManifestsCompatible(
-            manifest("pre-shared-ripgrep-timeout", {
-                cacheCompatibilityRevision: 17,
+            manifest("frozen-revision-22", {
+                cacheCompatibilityRevision: 22,
             }),
             manifest("direct-typeagent"),
         ),
@@ -411,6 +411,26 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
                     usage,
                     actionTranslationAndCodeGenerationUsage: usage,
                     toolTrace,
+                    reasoningTrace: [
+                        {
+                            index: 0,
+                            tool: "execute_action",
+                            actionName: "discoverRepository",
+                            status: "completed",
+                        },
+                        {
+                            index: 1,
+                            tool: "execute_action",
+                            actionName: "refineRepository",
+                            status: "completed",
+                        },
+                        {
+                            index: 2,
+                            tool: "execute_action",
+                            actionName: "submitExploration",
+                            status: "completed",
+                        },
+                    ],
                     actionAttempts: [
                         {
                             index: 0,
