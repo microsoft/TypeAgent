@@ -1,7 +1,6 @@
 {
-  "name": "image-agent",
+  "name": "@typeagent/image-agent",
   "version": "0.0.1",
-  "private": true,
   "description": "Image dispatcher agent",
   "keywords": [
     "typeagent-agent"
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/imageManifest.json",
     "./agent/handlers": "./dist/imageActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "asc": "asc -i ./src/imageActionSchema.ts -o ./dist/imageSchema.pas.json -t ImageAction",
     "build": "concurrently npm:tsc npm:asc",

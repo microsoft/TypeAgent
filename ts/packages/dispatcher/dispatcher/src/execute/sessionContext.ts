@@ -15,7 +15,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { IAgentMessage, RequestId } from "@typeagent/dispatcher-types";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
-import { IndexData } from "image-memory";
+import { IndexData } from "@typeagent/image-memory";
 import { IndexManager } from "../context/indexManager.js";
 import { validateGrammarPatternsImpl } from "../validation/grammarValidationService.mjs";
 import registerDebug from "debug";

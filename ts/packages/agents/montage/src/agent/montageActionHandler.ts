@@ -27,7 +27,7 @@ import {
     createActionResultFromError,
     createActionResultFromMarkdownDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
-import * as im from "image-memory";
+import * as im from "@typeagent/image-memory";
 import * as kp from "@typeagent/knowpro";
 import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import {

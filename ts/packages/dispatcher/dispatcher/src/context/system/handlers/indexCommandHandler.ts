@@ -12,7 +12,7 @@ import {
     displaySuccess,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { IndexData, IndexSource } from "image-memory";
+import { IndexData, IndexSource } from "@typeagent/image-memory";
 import fileSize from "file-size";
 import { expandHome } from "../../../utils/fsUtils.js";
 

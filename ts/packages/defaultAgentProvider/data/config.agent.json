@@ -23,24 +23,24 @@
       "name": "desktop-automation"
     },
     "code": {
-      "name": "code-agent"
+      "name": "@typeagent/code-agent"
     },
     "photo": {
       "name": "@typeagent/photo-agent",
       "execMode": "separate"
     },
     "image": {
-      "name": "image-agent",
+      "name": "@typeagent/image-agent",
       "execMode": "dispatcher"
     },
     "markdown": {
-      "name": "markdown-agent"
+      "name": "@typeagent/markdown-agent"
     },
     "montage": {
-      "name": "montage-agent"
+      "name": "@typeagent/montage-agent"
     },
     "video": {
-      "name": "video-agent",
+      "name": "@typeagent/video-agent",
       "excecMode": "dispatcher"
     },
     "settings": {

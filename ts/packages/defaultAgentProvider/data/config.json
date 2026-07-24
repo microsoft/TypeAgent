@@ -23,7 +23,7 @@
       "name": "desktop-automation"
     },
     "code": {
-      "name": "code-agent"
+      "name": "@typeagent/code-agent"
     },
     "chat": {
       "name": "chat-agent",
@@ -38,17 +38,17 @@
       "execMode": "dispatcher"
     },
     "image": {
-      "name": "image-agent",
+      "name": "@typeagent/image-agent",
       "execMode": "dispatcher"
     },
     "markdown": {
-      "name": "markdown-agent"
+      "name": "@typeagent/markdown-agent"
     },
     "montage": {
-      "name": "montage-agent"
+      "name": "@typeagent/montage-agent"
     },
     "video": {
-      "name": "video-agent",
+      "name": "@typeagent/video-agent",
       "execMode": "dispatcher"
     },
     "settings": {
@@ -66,7 +66,7 @@
       "name": "powershell-typeagent"
     },
     "screencapture": {
-      "name": "screencapture-agent",
+      "name": "@typeagent/screencapture-agent",
       "execMode": "separate"
     },
     "workflow": {
@@ -79,7 +79,7 @@
       "name": "onboarding-agent"
     },
     "studio": {
-      "name": "studio-agent"
+      "name": "@typeagent/studio-agent"
     },
     "osNotifications": {
       "name": "os-notifications-agent"

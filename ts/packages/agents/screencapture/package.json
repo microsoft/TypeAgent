@@ -1,7 +1,6 @@
 {
-  "name": "screencapture-agent",
+  "name": "@typeagent/screencapture-agent",
   "version": "0.0.1",
-  "private": true,
   "description": "Screen capture and recording dispatcher agent",
   "keywords": [
     "typeagent-agent"
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/screencaptureManifest.json",
     "./agent/handlers": "./dist/screencaptureActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/screencaptureSchema.agr -o ./dist/screencaptureSchema.ag.json",
     "asc": "asc -i ./src/screencaptureSchema.ts -o ./dist/screencaptureSchema.pas.json -t ScreencaptureAction -a ScreencaptureActivity",

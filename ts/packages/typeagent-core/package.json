@@ -28,7 +28,8 @@
   },
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "npm run tsc",
+    "build": "npm run tsc && npm run bundle:private",
+    "bundle:private": "node scripts/inlinePrivateDeps.mjs",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
@@ -40,13 +41,23 @@
   "dependencies": {
     "@typeagent/action-grammar": "workspace:*",
     "@typeagent/action-schema": "workspace:*",
-    "agent-cache": "workspace:*",
+    "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
+    "@typeagent/common-utils": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*",
+    "async": "^3.2.5",
+    "chalk": "^5.4.1",
     "debug": "^4.4.0",
-    "grammar-tools-core": "workspace:*"
+    "regexp.escape": "^2.0.1",
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
+    "agent-cache": "workspace:*",
+    "esbuild": "^0.25.0",
+    "grammar-tools-core": "workspace:*",
     "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",

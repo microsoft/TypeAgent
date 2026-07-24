@@ -8,7 +8,7 @@ import fs from "node:fs";
 import { ChatModel, TextEmbeddingModel } from "@typeagent/aiclient";
 import { isDirectoryPath } from "@typeagent/agent-runtime";
 import path from "node:path";
-import { ImageCollection, importImages } from "image-memory";
+import { ImageCollection, importImages } from "@typeagent/image-memory";
 import { IndexingResults } from "@typeagent/knowpro";
 import { fileURLToPath } from "node:url";
 import registerDebug from "debug";

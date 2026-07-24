@@ -8,7 +8,7 @@ import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { ensureDirectory, getUniqueFileName } from "../utils/fsUtils.js";
 import path from "node:path";
 import { ensureDir, isDirectoryPath } from "@typeagent/agent-runtime";
-import { IndexData, IndexSource } from "image-memory";
+import { IndexData, IndexSource } from "@typeagent/image-memory";
 import { IndexData as WebsiteIndexData } from "@typeagent/website-memory";
 import { IndexingServiceRegistry } from "./indexingServiceRegistry.js";
 // import { searchConversationKnowledge } from "@typeagent/knowpro";
