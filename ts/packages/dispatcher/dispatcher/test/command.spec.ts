@@ -238,5 +238,12 @@ describe("Command", () => {
                 "Command or agent name required.",
             );
         });
+        it("accepts translation separators in normal requests", async () => {
+            const request = "compare source => target inside the issue text";
+            const parsed = await awaitCommand(dispatcher, request);
+            expect(parsed?.lastError).not.toContain(
+                "Invalid translation request with translation separator",
+            );
+        });
     });
 });

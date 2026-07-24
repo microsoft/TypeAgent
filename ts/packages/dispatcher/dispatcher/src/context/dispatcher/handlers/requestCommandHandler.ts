@@ -402,14 +402,8 @@ export class RequestCommandHandler implements CommandHandler {
             ProfileNames.request,
         );
         try {
-            // Don't handle the request if it contains the separator
             const request =
                 params.args.request === undefined ? "" : params.args.request;
-            if (request.includes(RequestAction.Separator)) {
-                throw new Error(
-                    `Invalid translation request with translation separator '${RequestAction.Separator}'.  Use @explain if you want to explain a translation.`,
-                );
-            }
 
             // store attachments for later reuse
             const cachedAttachments: CachedImageWithDetails[] = [];
