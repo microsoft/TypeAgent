@@ -234,13 +234,15 @@ export async function interpretRequest(
     const systemContext = context.sessionContext.agentContext;
     const activeSchemaNames = systemContext.agents.getActiveSchemas();
 
-    const tokenUsage: ai.CompletionUsageStats = {
+    const tokenUsage: ai.CompletionUsageStats & { requestCount: number } = {
+        requestCount: 0,
         completion_tokens: 0,
         prompt_tokens: 0,
         total_tokens: 0,
     };
 
     const usageCallback = (usage: ai.CompletionUsageStats) => {
+        tokenUsage.requestCount++;
         tokenUsage.completion_tokens += usage.completion_tokens;
         tokenUsage.prompt_tokens += usage.prompt_tokens;
         tokenUsage.total_tokens += usage.total_tokens;

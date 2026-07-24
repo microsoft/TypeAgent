@@ -61,6 +61,8 @@ export type RequestMetrics = {
 
 // Statistics returned by the LLM completion APIs
 export type CompletionUsageStats = {
+    // Number of model completions included in this aggregate.
+    requestCount?: number;
     // Number of tokens in the generated completion
     completion_tokens: number;
     // Number of tokens in the prompt
