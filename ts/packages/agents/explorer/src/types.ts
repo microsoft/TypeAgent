@@ -57,6 +57,7 @@ export interface ExplorerReasoningAttempt {
 
 export interface ExplorerSessionSnapshot {
     submitted: boolean;
+    submissionAction?: "refineRepository" | "submitExploration";
     programAttempts: number;
     observationCount: number;
     actionAttempts: ExplorerActionAttempt[];
@@ -81,6 +82,7 @@ export interface ExploreInvocationTelemetry {
     toolTrace: RepositoryToolTrace;
     reasoningTrace: ExplorerReasoningAttempt[];
     actionAttempts: ExplorerActionAttempt[];
+    submissionAction?: "refineRepository" | "submitExploration";
     result?: {
         citationCount: number;
         truncated: boolean;
@@ -107,6 +109,7 @@ export interface ExplorerReasoningSDKAdapter extends ReasoningSDKAdapter {
 
 export interface CodeModeExplorerOptions {
     repoRoot: string;
+    ripgrepPath?: string;
     reasoningAdapter: ExplorerReasoningSDKAdapter;
     modelName: string;
     telemetryFile?: string;

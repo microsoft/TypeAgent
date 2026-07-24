@@ -5,8 +5,8 @@ import { defineTool, type Tool } from "@github/copilot-sdk";
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { access, readFile, realpath, stat } from "node:fs/promises";
-import { createRequire } from "node:module";
 import path from "node:path";
+import { resolvePackagedRipgrepPath } from "./ripgrep.js";
 import type { CopilotToolCallTrace } from "./types.js";
 
 interface ReadArgs {
@@ -98,9 +98,11 @@ export async function createCopilotExplorationTools(
     repoPath: string,
     trace: CopilotToolCallTrace[],
     maxToolCalls = DEFAULT_MAX_TOOL_CALLS,
+    packagedRipgrepPath?: string,
 ): Promise<Tool<any>[]> {
     const root = await realpath(repoPath);
-    const ripgrepPath = await resolvePackagedRipgrepPath();
+    const ripgrepPath =
+        packagedRipgrepPath ?? (await resolvePackagedRipgrepPath());
     const executables = await resolveReadOnlyExecutables();
     const limit = Number.isFinite(maxToolCalls)
         ? Math.min(MAX_TOOL_CALLS, Math.max(0, Math.floor(maxToolCalls)))
@@ -264,6 +266,7 @@ async function grepTool(
 ): Promise<string> {
     const target = await resolveInside(root, args.path ?? ".");
     if ((await stat(target)).isFile()) rejectSensitivePath(root, target);
+    const relativeTarget = path.relative(root, target) || ".";
     const maxMatches = Math.min(
         200,
         Math.max(1, Math.floor(args.maxMatches ?? 50)),
@@ -271,17 +274,20 @@ async function grepTool(
     const ripgrepArgs = [
         "--line-number",
         "--no-heading",
+        "--no-config",
         "--color",
         "never",
         "--max-columns",
         "500",
+        "--sort",
+        "path",
     ];
     if (args.literal) ripgrepArgs.push("--fixed-strings");
     if (args.glob) ripgrepArgs.push("--glob", args.glob);
     for (const excluded of SEARCH_EXCLUDE_GLOBS) {
         ripgrepArgs.push("--iglob", excluded);
     }
-    ripgrepArgs.push("--", args.pattern, target);
+    ripgrepArgs.push("--", args.pattern, relativeTarget);
 
     const result = await runProcess(
         ripgrepPath,
@@ -299,6 +305,7 @@ async function grepTool(
         result.output
             .split(/\r?\n/)
             .filter(Boolean)
+            .map((line) => line.replace(/^(?:[.][/])+/, ""))
             .slice(0, maxMatches)
             .join("\n") || "No matches"
     );
@@ -314,7 +321,14 @@ async function globTool(
         1_000,
         Math.max(1, Math.floor(args.maxMatches ?? 200)),
     );
-    const ripgrepArgs = ["--files", "--color", "never", "--glob", pattern];
+    const ripgrepArgs = [
+        "--files",
+        "--no-config",
+        "--color",
+        "never",
+        "--glob",
+        pattern,
+    ];
     for (const excluded of SEARCH_EXCLUDE_GLOBS) {
         ripgrepArgs.push("--iglob", excluded);
     }
@@ -790,61 +804,6 @@ async function resolveTrustedExecutable(
     throw new Error(
         `Trusted system executable ${name} not found at ${candidates.join(" or ")}`,
     );
-}
-
-async function resolvePackagedRipgrepPath(): Promise<string> {
-    const localRequire = createRequire(import.meta.url);
-    const copilotManifest = localRequire.resolve(
-        "@github/copilot/package.json",
-    );
-    const copilotRequire = createRequire(copilotManifest);
-    const platformTags = resolvePlatformTags(copilotRequire);
-
-    for (const platformTag of platformTags) {
-        const packageName = `@github/copilot-${platformTag}-${process.arch}`;
-        let packageBinary: string;
-        try {
-            packageBinary = copilotRequire.resolve(packageName);
-        } catch {
-            continue;
-        }
-
-        const packageRoot = path.dirname(packageBinary);
-        const binaryName = process.platform === "win32" ? "rg.exe" : "rg";
-        const binaryPlatforms = new Set([platformTag, process.platform]);
-        for (const binaryPlatform of binaryPlatforms) {
-            const candidate = path.join(
-                packageRoot,
-                "ripgrep",
-                "bin",
-                `${binaryPlatform}-${process.arch}`,
-                binaryName,
-            );
-            try {
-                if ((await stat(candidate)).isFile()) return candidate;
-            } catch {
-                // Try the other packaged platform layout.
-            }
-        }
-    }
-
-    throw new Error(
-        `Bundled ripgrep not found in @github/copilot-${process.platform}-${process.arch}`,
-    );
-}
-
-function resolvePlatformTags(copilotRequire: NodeRequire): string[] {
-    if (process.platform !== "linux") return [process.platform];
-    try {
-        const detectLibc = copilotRequire("detect-libc") as {
-            isNonGlibcLinuxSync(): boolean;
-        };
-        return detectLibc.isNonGlibcLinuxSync()
-            ? ["linuxmusl", "linux"]
-            : ["linux", "linuxmusl"];
-    } catch {
-        return ["linux", "linuxmusl"];
-    }
 }
 
 function runProcess(

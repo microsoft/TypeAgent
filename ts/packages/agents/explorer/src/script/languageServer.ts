@@ -128,7 +128,7 @@ export function createLanguageServerManager(
         const position = resolveSymbolPosition(lines, line - 1, symbol);
         if (!position) {
             throw new Error(
-                `symbol ${JSON.stringify(symbol)} is not present within 3 lines of ${relativePath}:${line}`,
+                `symbol ${JSON.stringify(symbol)} is not present in ${relativePath}`,
             );
         }
         const maxResults = boundedInteger(
@@ -531,7 +531,8 @@ function resolveSymbolPosition(
     lineHint: number,
     symbol: string,
 ): Position | undefined {
-    for (let distance = 0; distance <= 3; distance += 1) {
+    const maxDistance = Math.max(lineHint, lines.length - lineHint - 1);
+    for (let distance = 0; distance <= maxDistance; distance += 1) {
         const candidates =
             distance === 0
                 ? [lineHint]
@@ -540,13 +541,34 @@ function resolveSymbolPosition(
             if (line < 0 || line >= lines.length) {
                 continue;
             }
-            const character = lines[line].indexOf(symbol);
+            const character = findIdentifier(lines[line], symbol);
             if (character >= 0) {
                 return { line, character };
             }
         }
     }
     return undefined;
+}
+
+function findIdentifier(line: string, symbol: string): number {
+    let fromIndex = 0;
+    while (fromIndex < line.length) {
+        const character = line.indexOf(symbol, fromIndex);
+        if (character < 0) {
+            return -1;
+        }
+        const before = line[character - 1];
+        const after = line[character + symbol.length];
+        if (!isIdentifierCharacter(before) && !isIdentifierCharacter(after)) {
+            return character;
+        }
+        fromIndex = character + symbol.length;
+    }
+    return -1;
+}
+
+function isIdentifierCharacter(value: string | undefined): boolean {
+    return value !== undefined && /[A-Za-z0-9_$]/.test(value);
 }
 
 function processFailure(

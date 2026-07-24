@@ -181,7 +181,14 @@ function validateDirectTypeAgentRow(row: RunResult, prefix: string): void {
             invocation.actionTranslationAndCodeGenerationUsage,
         ) ||
         !isDeepStrictEqual(invocation.usage, telemetry.usage) ||
-        !matchesExplorerActionSequence(invocation.actionAttempts)
+        !invocation.result ||
+        invocation.result.citationCount < 1 ||
+        !telemetry.result ||
+        !isDeepStrictEqual(invocation.result, telemetry.result) ||
+        !matchesExplorerActionSequence(
+            invocation.actionAttempts,
+            invocation.submissionAction,
+        )
     ) {
         throw new Error(
             `${prefix}: successful direct TypeAgent row lacks completed schema-v4 Explorer telemetry`,
@@ -213,6 +220,7 @@ function validateDirectTypeAgentRow(row: RunResult, prefix: string): void {
     if (
         !row.typeAgentToolTrace ||
         !isDeepStrictEqual(row.typeAgentToolTrace, telemetry.toolTrace) ||
+        !row.typeAgentToolTrace.calls.some((call) => call.tool === "grep") ||
         !row.typeAgentToolTrace.calls.every(hasValidRipgrepEvidence)
     ) {
         throw new Error(
@@ -224,7 +232,7 @@ function validateDirectTypeAgentRow(row: RunResult, prefix: string): void {
         row.typeAgentToolTrace?.calls.filter((call) => call.tool === "lsp") ??
         [];
     const successfulLspCalls = lspCalls.filter(
-        (call) => call.error === undefined,
+        (call) => call.error === undefined && call.resultCount > 0,
     ).length;
     const traceLspResultCount = lspCalls.reduce(
         (total, call) => total + call.resultCount,
@@ -260,10 +268,12 @@ function matchesExplorerActionSequence(
               status: "completed" | "failed";
           }>
         | undefined,
+    submissionAction: "refineRepository" | "submitExploration" | undefined,
 ): boolean {
     if (
         !attempts ||
-        attempts.length < 3 ||
+        !submissionAction ||
+        attempts.length < 2 ||
         attempts.some((attempt, index) => attempt.index !== index)
     ) {
         return false;
@@ -297,6 +307,10 @@ function matchesExplorerActionSequence(
         return false;
     }
     cursor += 1;
+
+    if (submissionAction === "refineRepository") {
+        return cursor === attempts.length;
+    }
 
     const submissions = attempts.slice(cursor);
     return (

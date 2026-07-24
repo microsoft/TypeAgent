@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { loadBenchmarkAgent } from "./agent.js";
-import { resolveCopilotPath } from "./copilot.js";
 import { loadVerifiedTasks, verifiedDataset } from "./dataset.js";
 import {
     cleanupProcessedImages,
@@ -223,7 +222,9 @@ async function runCommand(args: Map<string, string[]>): Promise<void> {
         );
     }
     const copilotPath = variants.includes("baseline")
-        ? await resolveCopilotPath(value(args, "copilot"))
+        ? await (
+              await import("./copilot.js")
+          ).resolveCopilotPath(value(args, "copilot"))
         : "";
     const runtimeEvidence = path.join(runDir, "copilot-runtime.json");
     const providerBaseUrl =

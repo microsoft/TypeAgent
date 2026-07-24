@@ -52,6 +52,7 @@ type RepositoryProgramPhase = "discover" | "refine";
 
 export interface ExplorerActionSessionOptions {
     repoRoot: string;
+    ripgrepPath?: string;
     query: string;
     maxResults: number;
     maxToolCalls: number;
@@ -71,6 +72,9 @@ export class ExplorerActionSession {
     private groundingObservations: RepositoryObservation[] = [];
     private submitted:
         | {
+              actionName:
+                  | typeof REFINE_REPOSITORY_ACTION
+                  | typeof SUBMIT_EXPLORATION_ACTION;
               text: string;
               citationCount: number;
               truncated: boolean;
@@ -92,6 +96,9 @@ export class ExplorerActionSession {
             await createRepositoryTools({
                 repoRoot: options.repoRoot,
                 maxCalls: options.maxToolCalls,
+                ...(options.ripgrepPath
+                    ? { ripgrepPath: options.ripgrepPath }
+                    : {}),
                 ...(options.lsp ? { lsp: options.lsp } : {}),
             }),
         );
@@ -151,6 +158,9 @@ export class ExplorerActionSession {
     public snapshot(): ExplorerSessionSnapshot {
         return {
             submitted: this.submitted !== undefined,
+            ...(this.submitted
+                ? { submissionAction: this.submitted.actionName }
+                : {}),
             programAttempts: this.programAttempts,
             observationCount: this.repository.observations.length,
             actionAttempts: this.actionAttempts.map((attempt) => ({
@@ -307,12 +317,40 @@ export class ExplorerActionSession {
             nextAction: nextPhaseInstruction(phase),
         };
         const response = serializeActionPayload(payload, responseObservations);
+        const groundingStart = this.groundingObservations.length;
         this.groundingObservations.push(...response.observations);
+        const programLocations = getProgramLocations(execution.result);
+        if (phase === "refine") {
+            try {
+                return await this.submitExploration(
+                    programLocations,
+                    REFINE_REPOSITORY_ACTION,
+                );
+            } catch (error) {
+                const autoSubmissionError =
+                    error instanceof Error ? error.message : String(error);
+                const repair = serializeActionPayload(
+                    {
+                        ...payload,
+                        autoSubmissionError,
+                        nextAction:
+                            "Invoke submitExploration once with corrected locations supported by the refinement evidence",
+                    },
+                    response.observations,
+                );
+                this.groundingObservations.length = groundingStart;
+                this.groundingObservations.push(...repair.observations);
+                return createActionResult(repair.text);
+            }
+        }
         return createActionResult(response.text);
     }
 
     private async submitExploration(
         rawLocations: unknown,
+        actionName:
+            | typeof REFINE_REPOSITORY_ACTION
+            | typeof SUBMIT_EXPLORATION_ACTION = SUBMIT_EXPLORATION_ACTION,
     ): Promise<ActionResult> {
         if (this.submitted) {
             return errorResult("The exploration was already submitted");
@@ -354,15 +392,25 @@ export class ExplorerActionSession {
             }
             throw error;
         }
-        this.submitted = formatted;
+        this.submitted = { actionName, ...formatted };
         return createActionResult(formatted.text);
     }
 
     private hasCompletedLspNavigation(): boolean {
         return this.repository.trace.calls.some(
-            (call) => call.tool === "lsp" && call.error === undefined,
+            (call) =>
+                call.tool === "lsp" &&
+                call.error === undefined &&
+                call.resultCount > 0,
         );
     }
+}
+
+function getProgramLocations(value: unknown): unknown {
+    return isRecord(value) &&
+        Object.prototype.hasOwnProperty.call(value, "locations")
+        ? value.locations
+        : undefined;
 }
 
 function zeroLineReadDiagnostic(
@@ -398,7 +446,7 @@ export function getExplorerActionSchema(): string {
 }
 
 export function getRepositorySandboxSchema(enableLsp = false): string {
-    return generateSandboxDeclarations(undefined, enableLsp);
+    return generateSandboxDeclarations(undefined, enableLsp, true);
 }
 
 function createAgent(initialSession?: ExplorerActionSession): AppAgent {
@@ -683,7 +731,7 @@ function compactProgramResult(value: unknown): Record<string, unknown> {
 function nextPhaseInstruction(phase: RepositoryProgramPhase): string {
     switch (phase) {
         case "discover":
-            return `Invoke refineRepository with reads of at most ${MAX_REFINEMENT_READ_LINES} lines around the strongest candidate lines`;
+            return `Invoke refineRepository with reads of at most ${MAX_REFINEMENT_READ_LINES} lines around the strongest candidate lines and return the final grounded locations from that program`;
         case "refine":
             return "Invoke submitExploration with the exact locations most likely needing changes, supported by grep matches or repository reads.";
     }

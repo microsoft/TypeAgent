@@ -237,6 +237,18 @@ describe("agentic Code Mode explorer", () => {
         expect(String(adapter.configs[0]?.systemPrompt)).toContain(
             "interface RepositoryApi",
         );
+        expect(String(adapter.configs[0]?.systemPrompt)).toContain(
+            "locations: ExploreLocation[];",
+        );
+        expect(String(adapter.configs[0]?.systemPrompt)).toContain(
+            "interface ReadResult",
+        );
+        expect(String(adapter.configs[0]?.systemPrompt)).toContain(
+            "location?: ExploreLocation;",
+        );
+        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
+            /Discovery should return \{ success: true, locations: \[\] \}/,
+        );
         expect(String(adapter.configs[0]?.systemPrompt)).toContain("repo.glob");
         expect(String(adapter.configs[0]?.systemPrompt)).not.toContain(
             "repo.lsp",
@@ -284,20 +296,86 @@ describe("agentic Code Mode explorer", () => {
         });
     });
 
-    it("requires and records LSP navigation in the LSP treatment", async () => {
+    it("submits grounded locations returned by refinement without a third model request", async () => {
+        const { repoRoot, telemetryFile } = await makeFixture();
+        const adapter = scriptedAdapter(
+            [
+                [runProgram("discover", grepProgram())],
+                [runProgram("refine", refineAndSubmitProgram())],
+            ],
+            usage({ requestCount: 2, inputTokens: 80, outputTokens: 20 }),
+        );
+        const explorer = createCodeModeExplorer({
+            repoRoot,
+            reasoningAdapter: adapter,
+            modelName: "azure/gpt-5.6-luna",
+            telemetryFile,
+            executionTimeoutMs: 5_000,
+        });
+
+        await expect(
+            explorer.explore({ query: "Find the needle implementation" }),
+        ).resolves.toBe("src/alpha.ts:1-3");
+        expect(adapter.calls.map((call) => call.args.actionName)).toEqual([
+            "discoverRepository",
+            "refineRepository",
+        ]);
+        expect(adapter.results[1]).toEqual({
+            text: "src/alpha.ts:1-3",
+            isError: false,
+        });
+
+        const invocation = latestInvocation(await readTelemetry(telemetryFile));
+        expect(invocation).toMatchObject({
+            usage: { requestCount: 2 },
+            submissionAction: "refineRepository",
+            actionAttempts: [
+                { actionName: "discoverRepository", status: "completed" },
+                { actionName: "refineRepository", status: "completed" },
+            ],
+            result: { citationCount: 1, truncated: false },
+        });
+    });
+
+    it("reports omitted refinement locations as a repairable validation error", async () => {
         const { repoRoot, telemetryFile } = await makeFixture();
         const adapter = scriptedAdapter([
-            [runProgram("discover", lspDiscoveryProgram())],
-            [runProgram("refine", lspRefinementProgram())],
+            [runProgram("discover", grepProgram())],
+            [runProgram("refine", readProgram())],
             [
                 submitExploration([
                     {
-                        path: "src/lsp.ts",
+                        path: "src/alpha.ts",
                         startLine: 1,
                         endLine: 3,
                     },
                 ]),
             ],
+        ]);
+        const explorer = createCodeModeExplorer({
+            repoRoot,
+            reasoningAdapter: adapter,
+            modelName: "azure/gpt-5.6-luna",
+            telemetryFile,
+        });
+
+        await expect(
+            explorer.explore({ query: "Find the needle implementation" }),
+        ).resolves.toBe("src/alpha.ts:1-3");
+        expect(adapter.results[1]).toMatchObject({
+            isError: false,
+            text: expect.stringMatching(/autoSubmissionError.*locations/is),
+        });
+        expect(
+            latestInvocation(await readTelemetry(telemetryFile)),
+        ).toMatchObject({ submissionAction: "submitExploration" });
+    });
+
+    it("requires and records LSP navigation in the LSP treatment", async () => {
+        const { repoRoot, telemetryFile } = await makeFixture();
+        const adapter = scriptedAdapter([
+            [runProgram("discover", lspDiscoveryProgram())],
+            [runProgram("refine", lspRefinementProgram())],
         ]);
         const explorer = createCodeModeExplorer({
             repoRoot,
@@ -322,8 +400,8 @@ describe("agentic Code Mode explorer", () => {
         const invocation = latestInvocation(await readTelemetry(telemetryFile));
         expect(invocation.toolTrace.calls.map((call) => call.tool)).toEqual([
             "grep",
-            "lsp",
             "read",
+            "lsp",
             "read",
         ]);
         const lspCall = invocation.toolTrace.calls.find(
@@ -331,7 +409,58 @@ describe("agentic Code Mode explorer", () => {
         );
         expect(lspCall).toMatchObject({ resultCount: 1 });
         expect(lspCall?.error).toBeUndefined();
+        expect(invocation.submissionAction).toBe("refineRepository");
     }, 30_000);
+
+    it("keeps completed refinement evidence available for a corrected submission", async () => {
+        const { repoRoot, telemetryFile } = await makeFixture();
+        const adapter = scriptedAdapter([
+            [runProgram("discover", grepProgram())],
+            [runProgram("refine", invalidRefinementSubmissionProgram())],
+            [
+                submitExploration([
+                    {
+                        path: "src/alpha.ts",
+                        startLine: 1,
+                        endLine: 3,
+                    },
+                ]),
+            ],
+        ]);
+        const explorer = createCodeModeExplorer({
+            repoRoot,
+            reasoningAdapter: adapter,
+            modelName: "azure/gpt-5.6-luna",
+            telemetryFile,
+        });
+
+        await expect(
+            explorer.explore({ query: "Find the needle implementation" }),
+        ).resolves.toBe("src/alpha.ts:1-3");
+        expect(adapter.results[1]).toMatchObject({
+            isError: false,
+            text: expect.stringMatching(/autoSubmissionError/),
+        });
+        expect(
+            latestInvocation(await readTelemetry(telemetryFile)),
+        ).toMatchObject({
+            submissionAction: "submitExploration",
+            actionAttempts: [
+                {
+                    actionName: "discoverRepository",
+                    status: "completed",
+                },
+                {
+                    actionName: "refineRepository",
+                    status: "completed",
+                },
+                {
+                    actionName: "submitExploration",
+                    status: "completed",
+                },
+            ],
+        });
+    });
 
     it("keeps refinement open until required LSP navigation completes", async () => {
         const { repoRoot, telemetryFile } = await makeFixture();
@@ -1142,6 +1271,33 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
 }`;
 }
 
+function refineAndSubmitProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<RefinementProgramResult> {
+    const matches = await repo.grep("needle", { literal: true, maxMatches: 1 });
+    const match = matches[0];
+    const startLine = Math.max(1, match.line - 1);
+    const read = await repo.read(match.path, { offset: startLine - 1, limit: 3 });
+    return {
+        success: true,
+        message: params.query,
+        locations: read.location ? [read.location] : [],
+    };
+}`;
+}
+
+function invalidRefinementSubmissionProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.read("src/alpha.ts", { offset: 0, limit: 3 });
+    return {
+        success: true,
+        message: params.query,
+        locations: [{ path: "src/unread.ts", startLine: 1, endLine: 1 }],
+    };
+}`;
+}
+
 function emptyReadProgram(): string {
     return `
 async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
@@ -1171,7 +1327,6 @@ function lspDiscoveryProgram(): string {
     return `
 async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
     await repo.grep("lspTarget", { literal: true, path: "src/lsp.ts", maxMatches: 2 });
-    await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "lspTarget" });
     await repo.read("src/lsp.ts", { offset: 0, limit: 5 });
     return { success: true, message: params.query };
 }`;
@@ -1179,9 +1334,15 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
 
 function lspRefinementProgram(): string {
     return `
-async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
-    await repo.read("src/lsp.ts", { offset: 0, limit: 3 });
-    return { success: true, message: params.query };
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<RefinementProgramResult> {
+    const definitions = await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "lspTarget" });
+    const definition = definitions[0];
+    const read = await repo.read(definition.path, { offset: definition.startLine - 1, limit: 3 });
+    return {
+        success: true,
+        message: params.query,
+        locations: read.location ? [read.location] : [],
+    };
 }`;
 }
 
@@ -1230,7 +1391,7 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
     await repo.read("src/zeta.ts", { offset: 0, limit: 3 });
     await repo.read("src/alpha.ts", { offset: 0, limit: 3 });
     const fourth = await repo.read("src/zeta.ts", { offset: 0, limit: 3 });
-    return { success: true, message: fourth || "TOOL_BUDGET_EXHAUSTED" };
+    return { success: true, message: fourth.text || "TOOL_BUDGET_EXHAUSTED" };
 }`;
 }
 

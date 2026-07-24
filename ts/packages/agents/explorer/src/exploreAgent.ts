@@ -105,6 +105,9 @@ export function createCodeModeExplorer(
             const canonicalRepoRoot = await repoRoot;
             actionSession = await ExplorerActionSession.create({
                 repoRoot: canonicalRepoRoot,
+                ...(options.ripgrepPath
+                    ? { ripgrepPath: options.ripgrepPath }
+                    : {}),
                 query,
                 maxResults,
                 maxToolCalls,
@@ -167,6 +170,7 @@ export function createCodeModeExplorer(
                 snapshot.toolTrace,
                 reasoningTrace,
                 snapshot.actionAttempts,
+                snapshot.submissionAction,
                 snapshot.result,
             );
             await recordTelemetry(invocation);
@@ -197,6 +201,7 @@ export function createCodeModeExplorer(
                         snapshot?.toolTrace ?? emptyToolTrace(),
                         reasoningTrace,
                         snapshot?.actionAttempts ?? [],
+                        snapshot?.submissionAction,
                         snapshot?.result,
                         message,
                     ),
@@ -288,9 +293,9 @@ function buildExplorerSystemPrompt(
 ): string {
     return `You are the TypeAgent repository Explorer. Complete this typed action sequence in one bounded reasoning session. Every action is validated and executed through the TypeAgent dispatcher:
 
-1. Call execute_action with explorer.discoverRepository. Generate one complete read-only Code Mode program using at most ${Math.max(1, maxToolCalls - REFINEMENT_RESERVED_CALLS)} repository calls because ${REFINEMENT_RESERVED_CALLS} calls are reserved for refinement. Use the final discovery call to read the strongest production candidate when grep results alone do not expose its helper bodies.
-2. Inspect the returned repository-grounded evidence, then call execute_action with explorer.refineRepository exactly once. Generate one complete read-only Code Mode program using at most ${MAX_REFINEMENT_CALLS_PER_PROGRAM} repository calls. Verify primary mutation sites with repo.read calls of at most ${MAX_REFINEMENT_READ_LINES} lines. You may use repo.ls or repo.glob to locate companion files and at most two targeted repo.grep calls to follow helpers, long functions, or alternate production files exposed by discovery. Trace cross-file caller/callee paths and behavior-bearing helper definitions before tests. Read exact companion context and alternate production candidates when evidence conflicts.
-3. Inspect the returned refinement result, then call explorer.submitExploration with no more than ${maxResults} exact repository-relative locations most likely needing changes. Every submitted range must be wholly visible in successful grep or read evidence. The successful submission ends the loop; do not call refineRepository a second time.
+1. Call execute_action with explorer.discoverRepository. Generate one complete read-only Code Mode program returning Promise<DiscoveryProgramResult> and using at most ${Math.max(1, maxToolCalls - REFINEMENT_RESERVED_CALLS)} repository calls because ${REFINEMENT_RESERVED_CALLS} calls are reserved for refinement. Return locations: [] from discovery. Use the final discovery call to read the strongest production candidate when grep results alone do not expose its helper bodies.
+2. Inspect the returned repository-grounded evidence, then call execute_action with explorer.refineRepository. Generate one complete read-only Code Mode program returning Promise<RefinementProgramResult> and using at most ${MAX_REFINEMENT_CALLS_PER_PROGRAM} repository calls. Verify primary mutation sites with repo.read calls of at most ${MAX_REFINEMENT_READ_LINES} lines. You may use repo.ls or repo.glob to locate companion files and at most two targeted repo.grep calls to follow helpers, long functions, or alternate production files exposed by discovery. Trace cross-file caller/callee paths and behavior-bearing helper definitions before tests. Read exact companion context and alternate production candidates when evidence conflicts. Return no more than ${maxResults} exact repository-relative locations in the program's non-empty locations array. The host validates and submits those locations, ending the loop without another model request.
+3. Only if refinement reports that its returned locations are invalid, call explorer.submitExploration once to repair them from the returned error and already-grounded evidence. Do not run another repository program unless refinement explicitly reports missing required navigation and calls remain.
 
 ${buildProgramRules(maxResults, maxToolCalls, enableLsp)}${enableLsp ? buildLspRules() : ""}
 
@@ -303,8 +308,8 @@ ${repositorySchema}`;
 
 function buildLspRules(): string {
     return `
-- This LSP treatment must call repo.lsp at least once. Use a grep result to supply its path, 1-based line hint, and source identifier as symbol. The line hint may be within three lines of a multiline call. Prefer definition; use references only after narrowing to a strong candidate.
-- Refinement cannot complete until at least one repo.lsp call returns without error. If refinement reports missing navigation, retry refineRepository with a corrected repo.lsp call instead of attempting submission.
+- This LSP treatment must call repo.lsp at least once. Use a grep result to supply its path, 1-based line hint, and source identifier as symbol. The host resolves the nearest exact identifier in that file when the hint points inside a function body or multiline call. Prefer definition; use references only after narrowing to a strong candidate.
+- Refinement cannot complete until at least one repo.lsp call returns without error. If refinement reports missing navigation, retry refineRepository with a corrected repo.lsp call and return locations from that program instead of attempting submission.
 - The server registry selects an available pre-provisioned language server from the file extension and nearest project root. Do not call repo.lsp when the repository has no configured server for that file type.
 - LSP locations are navigation clues, not submission evidence. Read the relevant returned locations with repo.read before submitting them.
 - At most two LSP calls are available across discovery and refinement.`;
@@ -317,7 +322,7 @@ function buildProgramRules(
 ): string {
     return `Repository rules:
 - Static inspection only. Use only repo.ls, repo.glob, repo.grep, and repo.read${enableLsp ? ", and repo.lsp" : ""} inside the generated program.
-- Every program must be a complete string beginning exactly with async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> { and ending with }. Never send only the function body.
+- Every program must be a complete string beginning exactly with async function execute(repo: RepositoryApi, params: ExploreParams): Promise<DiscoveryProgramResult> { for discovery or async function execute(repo: RepositoryApi, params: ExploreParams): Promise<RefinementProgramResult> { for refinement, and ending with }. Never send only the function body or use ExploreProgramResult as the return type.
 - Discovery and all refinements share one budget of at most ${maxToolCalls} repository calls.
 - The first grep must use the rarest exact clue present in the request: a qualified symbol such as Class.method, quoted error, configuration key, or named file. Do not start with generic concept words when an exact clue is available. Only broaden after the exact clue is absent or insufficient. grep uses safe regular expressions by default; literal is only for fixed strings.
 - Search bare identifiers unless the repository language is already confirmed; do not add a language-specific declaration keyword such as function or def to every symbol search.
@@ -327,9 +332,10 @@ function buildProgramRules(
 - When discovery exposes a production caller and a separate behavior-bearing helper, begin refinement with repo.read calls for both caller and helper before spending calls on repo.glob or test searches.
 - When a request names more independent change sites than the maximum of ${maxResults} locations, consolidate nearby related production definitions into the smallest grounded enclosing range that covers them instead of dropping named sites. Never merge unrelated files or submit an entire file.
 - Type empty accumulators explicitly, for example const matches: GrepMatch[] = []; never rely on inference from an untyped [].
+- repo.read returns { text, location }. Build refinement locations from defined read result.location values or exact grep match lines; never reconstruct a read range from its requested offset or limit because the file may end earlier.
 - Prioritize production implementation files before tests, docs, examples, assets, and generated files.
 - Treat historical paths and line numbers as clues and verify them against current repository contents.
-- Repository call results are captured automatically. Each generated program should return { success: true } after it finishes inspecting; do not copy candidate locations into the program result.
+- Repository call results are captured automatically. Discovery should return { success: true, locations: [] }. Refinement must return { success: true, locations: [...] } after inspection; derive locations from its repository results when navigation changes the candidate.
 - Submit no more than ${maxResults} final locations for the exact lines or line ranges most likely needing changes. Prefer complete behavior-bearing blocks over isolated interior statements; do not automatically submit an entire read window or fabricate repository contents or ranges.`;
 }
 
@@ -344,6 +350,7 @@ function createInvocation(
     toolTrace: RepositoryToolTrace,
     reasoningTrace: ExploreInvocationTelemetry["reasoningTrace"],
     actionAttempts: ExploreInvocationTelemetry["actionAttempts"],
+    submissionAction: ExploreInvocationTelemetry["submissionAction"],
     result?: ExploreInvocationTelemetry["result"],
     error?: string,
 ): ExploreInvocationTelemetry {
@@ -355,6 +362,7 @@ function createInvocation(
         toolTrace,
         reasoningTrace: reasoningTrace.map((attempt) => ({ ...attempt })),
         actionAttempts: actionAttempts.map((attempt) => ({ ...attempt })),
+        ...(submissionAction ? { submissionAction } : {}),
         ...(result ? { result } : {}),
         ...(error ? { error: error.slice(0, 2_000) } : {}),
     };

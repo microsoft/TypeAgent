@@ -74,6 +74,7 @@ export interface ExplorerExecution {
 
 export interface TypeAgentRunOptions {
     repoPath: string;
+    ripgrepPath: string;
     prompt: string;
     model: string;
     variant: "typeagent" | "typeagent-lsp";
@@ -135,6 +136,7 @@ export async function runTypeAgentDispatcher(
                 : undefined;
         explorer = createCodeModeExplorer({
             repoRoot: options.repoPath,
+            ripgrepPath: options.ripgrepPath,
             reasoningAdapter,
             modelName: options.model,
             maxToolCalls: 8,
@@ -285,7 +287,9 @@ export async function runTypeAgentDispatcher(
         ...(exploreTelemetry ? { exploreTelemetry } : {}),
         telemetryFile: options.telemetryFile,
         ...(dispatchEvidence ? { dispatchEvidence } : {}),
-        lspAdopted: lspCalls.some((call) => call.error === undefined),
+        lspAdopted: lspCalls.some(
+            (call) => call.error === undefined && call.resultCount > 0,
+        ),
         lspCallCount: lspCalls.length,
         lspResultCount: lspCalls.reduce(
             (total, call) => total + call.resultCount,

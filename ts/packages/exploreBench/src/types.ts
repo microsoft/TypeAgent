@@ -160,6 +160,7 @@ export interface ExploreInvocationTelemetry {
         status: "completed" | "failed";
         error?: string;
     }>;
+    submissionAction?: "refineRepository" | "submitExploration";
     result?: {
         citationCount: number;
         truncated: boolean;

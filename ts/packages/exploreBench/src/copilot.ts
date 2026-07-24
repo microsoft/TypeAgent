@@ -77,6 +77,7 @@ export interface CopilotRunOptions {
     envFile?: string;
     telemetryFile: string;
     timeoutMs: number;
+    ripgrepPath: string;
 }
 
 export interface CopilotToolInspection {
@@ -236,6 +237,7 @@ export async function runCopilot(
             options.repoPath,
             toolTrace,
             BENCHMARK_TOOL_CALL_LIMIT,
+            options.ripgrepPath,
         );
         const routing = buildAgentRoutingConfig(options.agent);
 

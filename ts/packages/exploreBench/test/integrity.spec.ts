@@ -106,6 +106,60 @@ test("accepts direct TypeAgent rows without a Copilot main agent", () => {
     );
 });
 
+test("accepts refinement programs that validate and submit their own locations", () => {
+    const candidate = typeAgentRow("typeagent");
+    const invocation = candidate.exploreTelemetry!.invocations![0];
+    invocation.actionAttempts = [
+        completedAction(0, "discoverRepository"),
+        completedAction(1, "refineRepository"),
+    ];
+    invocation.submissionAction = "refineRepository";
+    candidate.typeAgentUsage!.requestCount = 2;
+    candidate.exploreTelemetry!.usage.requestCount = 2;
+    invocation.usage.requestCount = 2;
+    invocation.actionTranslationAndCodeGenerationUsage!.requestCount = 2;
+
+    assert.doesNotThrow(() => validateResultRows([candidate], identity));
+});
+
+test("requires explicit positive result evidence for refinement auto-submission", () => {
+    const makeCandidate = () => {
+        const candidate = typeAgentRow("typeagent");
+        const invocation = candidate.exploreTelemetry!.invocations![0];
+        invocation.actionAttempts = [
+            completedAction(0, "discoverRepository"),
+            completedAction(1, "refineRepository"),
+        ];
+        invocation.submissionAction = "refineRepository";
+        return candidate;
+    };
+    const mutations: Array<(candidate: RunResult) => void> = [
+        (candidate) => {
+            delete candidate.exploreTelemetry!.invocations![0].submissionAction;
+        },
+        (candidate) => {
+            delete candidate.exploreTelemetry!.invocations![0].result;
+        },
+        (candidate) => {
+            candidate.exploreTelemetry!.invocations![0].result!.citationCount = 0;
+            candidate.exploreTelemetry!.result!.citationCount = 0;
+        },
+        (candidate) => {
+            candidate.exploreTelemetry!.invocations![0].result!.truncated =
+                true;
+        },
+    ];
+
+    for (const mutate of mutations) {
+        const candidate = makeCandidate();
+        mutate(candidate);
+        assert.throws(
+            () => validateResultRows([candidate], identity),
+            /Explorer telemetry/i,
+        );
+    }
+});
+
 test("preserves exact raw ingress independently of the parameterless action", () => {
     const candidate = typeAgentRow("typeagent");
     candidate.query = "find\r\nbug\r\ndetails";
@@ -126,6 +180,16 @@ test("accepts repaired submission attempts after discovery and refinement", () =
     ];
 
     assert.doesNotThrow(() => validateResultRows([candidate], identity));
+});
+
+test("requires explicit submission provenance for repaired submissions", () => {
+    const candidate = typeAgentRow("typeagent");
+    delete candidate.exploreTelemetry!.invocations![0].submissionAction;
+
+    assert.throws(
+        () => validateResultRows([candidate], identity),
+        /Explorer telemetry/i,
+    );
 });
 
 test("accepts failed generated programs before each completed phase", () => {
@@ -478,6 +542,32 @@ test("rejects every direct TypeAgent Explorer telemetry mutation", () => {
             },
         },
         {
+            name: "missing invocation result",
+            apply: (candidate) => {
+                delete candidate.exploreTelemetry!.invocations![0].result;
+            },
+        },
+        {
+            name: "missing aggregate result",
+            apply: (candidate) => {
+                delete candidate.exploreTelemetry!.result;
+            },
+        },
+        {
+            name: "zero grounded locations",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].result!.citationCount = 0;
+                candidate.exploreTelemetry!.result!.citationCount = 0;
+            },
+        },
+        {
+            name: "invocation result differs from aggregate",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].result!.truncated =
+                    true;
+            },
+        },
+        {
             name: "missing refinement",
             apply: (candidate) => {
                 candidate.exploreTelemetry!.invocations![0].actionAttempts = [
@@ -707,6 +797,20 @@ test("requires exact usage and repository-tool evidence", () => {
                 };
             },
         },
+        {
+            name: "tool trace contains no ripgrep call",
+            expected: /repository-tool evidence/i,
+            apply: (candidate) => {
+                candidate.typeAgentToolTrace = {
+                    calls: [],
+                    totalCalls: 0,
+                    totalOutputBytes: 0,
+                };
+                candidate.exploreTelemetry!.toolTrace = structuredClone(
+                    candidate.typeAgentToolTrace,
+                );
+            },
+        },
     ];
 
     for (const mutation of mutations) {
@@ -800,6 +904,18 @@ test("requires mode-correct language-server evidence", () => {
                 candidate.exploreTelemetry!.toolTrace.calls.find(
                     (call) => call.tool === "lsp",
                 )!.error = "failed";
+            },
+        ],
+        [
+            "LSP arm recorded only an empty navigation result",
+            (candidate: RunResult) => {
+                candidate.lspResultCount = 0;
+                candidate.typeAgentToolTrace!.calls.find(
+                    (call) => call.tool === "lsp",
+                )!.resultCount = 0;
+                candidate.exploreTelemetry!.toolTrace.calls.find(
+                    (call) => call.tool === "lsp",
+                )!.resultCount = 0;
             },
         ],
     ] as const) {
@@ -997,6 +1113,7 @@ function typeAgentRow(variant: "typeagent" | "typeagent-lsp"): RunResult {
                         completedAction(1, "refineRepository"),
                         completedAction(2, "submitExploration"),
                     ],
+                    submissionAction: "submitExploration",
                     result: { citationCount: 1, truncated: false },
                 },
             ],

@@ -4,12 +4,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import {
-    COPILOT_SDK_VERSION,
-    createCopilotClient,
-    runCopilot,
-    stopCopilotClient,
-} from "./copilot.js";
 import { ensureDockerRepo } from "./docker.js";
 import { validateResultRows, type RunIdentity } from "./integrity.js";
 import {
@@ -20,6 +14,7 @@ import {
     writeJsonAtomic,
 } from "./io.js";
 import { scoreSwebench } from "./score.js";
+import { resolvePackagedRipgrepPath } from "./ripgrep.js";
 import { runTypeAgentDispatcher } from "./typeAgent.js";
 import type {
     BenchTask,
@@ -124,9 +119,11 @@ export async function runBenchmark(
         return;
     }
 
+    const ripgrepPath = await resolvePackagedRipgrepPath();
     const needsCopilot = pending.some((work) => work.variant === "baseline");
-    const client = needsCopilot
-        ? createCopilotClient({
+    const copilot = needsCopilot ? await import("./copilot.js") : undefined;
+    const client = copilot
+        ? copilot.createCopilotClient({
               copilotPath: options.copilotPath,
               baseDirectory: path.join(
                   path.dirname(options.output),
@@ -142,12 +139,18 @@ export async function runBenchmark(
     await writeJsonAtomic(options.runtimeEvidence, {
         schemaVersion: 1,
         capturedAt: new Date().toISOString(),
+        repositorySearch: {
+            engine: "ripgrep",
+            source: "copilot-packaged",
+            executable: path.basename(ripgrepPath),
+            sharedAcrossArms: true,
+        },
         harnesses: [
             ...(client
                 ? [
                       {
                           name: "copilot-sdk",
-                          sdkVersion: COPILOT_SDK_VERSION,
+                          sdkVersion: copilot!.COPILOT_SDK_VERSION,
                           copilotPath: options.copilotPath,
                           ...runtimeStatus,
                       },
@@ -203,6 +206,7 @@ export async function runBenchmark(
                     const output = isTypeAgentVariant(work.variant)
                         ? await runTypeAgentDispatcher({
                               repoPath: path.resolve(work.task.repoPath),
+                              ripgrepPath,
                               prompt: work.task.query,
                               model: work.entry.model,
                               variant: work.variant,
@@ -213,8 +217,9 @@ export async function runBenchmark(
                                   : {}),
                               telemetryFile,
                           })
-                        : await runCopilot(client!, {
+                        : await copilot!.runCopilot(client!, {
                               repoPath: path.resolve(work.task.repoPath),
+                              ripgrepPath,
                               prompt: work.task.query,
                               model: work.entry.model,
                               variant: work.variant,
@@ -395,7 +400,7 @@ export async function runBenchmark(
     } finally {
         if (client) {
             try {
-                await stopCopilotClient(client);
+                await copilot!.stopCopilotClient(client);
             } catch (error) {
                 process.stderr.write(
                     `warning: Copilot CLI shutdown required force stop: ${(error as Error).message}\n`,

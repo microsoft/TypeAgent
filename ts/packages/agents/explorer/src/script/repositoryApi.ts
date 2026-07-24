@@ -19,12 +19,12 @@ const DEFAULT_MAX_CALLS = 64;
 const DEFAULT_LS_DEPTH = 2;
 const DEFAULT_LS_ENTRIES = 200;
 const DEFAULT_GLOB_MATCHES = 200;
-const DEFAULT_GREP_MATCHES = 100;
+const DEFAULT_GREP_MATCHES = 50;
 const DEFAULT_READ_LINES = 200;
 const MAX_LS_DEPTH = 20;
 const MAX_LS_ENTRIES = 1000;
 const MAX_GLOB_MATCHES = 1000;
-const MAX_GREP_MATCHES = 500;
+const MAX_GREP_MATCHES = 200;
 const MAX_GREP_CONTEXT_LINES = 20;
 const MAX_LSP_CALLS = 2;
 const MAX_READ_LINES = 1000;
@@ -32,8 +32,6 @@ const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_OUTPUT_LINE_LENGTH = 500;
 const MAX_TOTAL_OUTPUT_BYTES = 2 * 1024 * 1024;
 const MAX_GIT_OUTPUT_BYTES = 64 * 1024 * 1024;
-const DEFAULT_RIPGREP_SCAN_MATCHES = 1000;
-const MAX_RIPGREP_SCAN_MATCHES = 10_000;
 const MAX_RIPGREP_OUTPUT_BYTES = 8 * 1024 * 1024;
 const MAX_RIPGREP_ARGUMENT_BYTES = ripgrepArgumentBudget(process.platform);
 const TOOL_BUDGET_EXHAUSTED =
@@ -132,11 +130,20 @@ export interface GrepMatch {
     text: string;
 }
 
+export interface ReadResult {
+    text: string;
+    location?: {
+        path: string;
+        startLine: number;
+        endLine: number;
+    };
+}
+
 export interface RepositoryApi {
     ls(relativePath?: string, options?: LsOptions): Promise<string[]>;
     glob(pattern: string, options?: GlobOptions): Promise<string[]>;
     grep(pattern: string, options?: GrepOptions): Promise<GrepMatch[]>;
-    read(relativePath: string, options?: ReadOptions): Promise<string>;
+    read(relativePath: string, options?: ReadOptions): Promise<ReadResult>;
     lsp?(request: LspRequest): Promise<LspLocation[]>;
 }
 
@@ -169,6 +176,7 @@ export interface RepositoryObservation {
 export interface RepositoryToolsOptions {
     repoRoot: string;
     maxCalls?: number | undefined;
+    ripgrepPath?: string | undefined;
     lsp?: LanguageServerOptions | undefined;
 }
 
@@ -223,7 +231,9 @@ export async function createRepositoryTools(
     const filesByPath = new Map(
         files.map((file) => [file.relativePath, file] as const),
     );
-    const searchFiles = [...files].sort(compareSearchFiles);
+    const searchFiles = [...files].sort((left, right) =>
+        left.relativePath.localeCompare(right.relativePath),
+    );
     const ripgrepSnapshot: RipgrepSnapshot = {
         root: repoRoot,
         filesByPath,
@@ -385,13 +395,14 @@ export async function createRepositoryTools(
                     ? compileGlob(validateGlob(includePattern))
                     : undefined;
                 const literal = callOptions.literal ?? false;
-                const searchSymbol = extractSearchSymbol(pattern);
-                const maxMatches = boundedInteger(
-                    callOptions.maxMatches,
-                    DEFAULT_GREP_MATCHES,
-                    1,
+                const maxMatches = Math.min(
                     MAX_GREP_MATCHES,
-                    "maxMatches",
+                    Math.max(
+                        1,
+                        Math.floor(
+                            callOptions.maxMatches ?? DEFAULT_GREP_MATCHES,
+                        ),
+                    ),
                 );
                 const eligibleFiles = searchFiles.filter(
                     (file) =>
@@ -399,7 +410,7 @@ export async function createRepositoryTools(
                         (!include || include.test(file.relativePath)),
                 );
                 const resolvedRipgrepPath = await (ripgrepPath ??=
-                    resolveRipgrepPath());
+                    resolveRipgrepPath(options.ripgrepPath));
                 const search = await searchSnapshotWithRipgrep(
                     resolvedRipgrepPath,
                     ripgrepSnapshot,
@@ -408,59 +419,15 @@ export async function createRepositoryTools(
                     literal,
                     maxMatches,
                 );
-                const matchesByFile = new Map<string, GrepMatch[]>();
-                for (const match of search.matches) {
-                    const fileMatches = matchesByFile.get(match.path) ?? [];
-                    fileMatches.push(match);
-                    matchesByFile.set(match.path, fileMatches);
-                }
-                const firstMatchByFile: GrepMatch[] = [];
-                const repeatedMatches: GrepMatch[] = [];
-                let totalMatches = 0;
-                let stoppedAtFileLimit = false;
-
-                outer: for (const file of eligibleFiles) {
-                    const fileMatches =
-                        matchesByFile.get(file.relativePath) ?? [];
-                    if (fileMatches.length > 0) {
-                        totalMatches += fileMatches.length;
-                        const representative = selectRepresentativeMatch(
-                            fileMatches,
-                            searchSymbol,
-                        );
-                        firstMatchByFile.push(representative);
-                        for (const match of fileMatches) {
-                            if (
-                                match !== representative &&
-                                repeatedMatches.length < maxMatches
-                            ) {
-                                repeatedMatches.push(match);
-                            }
-                        }
-                        if (firstMatchByFile.length >= maxMatches) {
-                            stoppedAtFileLimit = true;
-                            break outer;
-                        }
-                    }
-                }
-                const matches = firstMatchByFile.slice(0, maxMatches);
-                matches.push(
-                    ...repeatedMatches.slice(0, maxMatches - matches.length),
-                );
+                const matches = search.matches.slice(0, maxMatches);
 
                 return {
                     value: matches,
                     resultCount: matches.length,
-                    truncated:
-                        stoppedAtFileLimit ||
-                        search.scanTruncated ||
-                        totalMatches > matches.length,
+                    truncated: search.scanTruncated,
                     traceInput: {
                         engine: "ripgrep",
                         ripgrepPath: path.basename(resolvedRipgrepPath),
-                        ...(search.literalFallback
-                            ? { literalFallback: true }
-                            : {}),
                     },
                 };
             },
@@ -512,7 +479,7 @@ export async function createRepositoryTools(
     async function readRepositoryFile(
         relativePath: string,
         callOptions: ReadOptions = {},
-    ): Promise<string> {
+    ): Promise<ReadResult> {
         const requestedLimit = callOptions.limit ?? DEFAULT_READ_LINES;
         if (
             !Number.isSafeInteger(requestedLimit) ||
@@ -570,7 +537,7 @@ export async function createRepositoryTools(
                     };
                 }
                 let truncatedLine = false;
-                const value = selected
+                const text = selected
                     .map((line, index) => {
                         if (line.length > MAX_OUTPUT_LINE_LENGTH) {
                             truncatedLine = true;
@@ -579,7 +546,18 @@ export async function createRepositoryTools(
                     })
                     .join("\n");
                 return {
-                    value,
+                    value: {
+                        text,
+                        ...(selected.length > 0
+                            ? {
+                                  location: {
+                                      path: normalizedPath,
+                                      startLine: offset + 1,
+                                      endLine: offset + selected.length,
+                                  },
+                              }
+                            : {}),
+                    },
                     resultCount: selected.length,
                     truncated:
                         offset > 0 ||
@@ -587,7 +565,7 @@ export async function createRepositoryTools(
                         truncatedLine,
                 };
             },
-            TOOL_BUDGET_EXHAUSTED,
+            { text: TOOL_BUDGET_EXHAUSTED },
         );
         if (observation) {
             observation.callIndex = trace.calls.length - 1;
@@ -725,168 +703,43 @@ async function searchSnapshotWithRipgrep(
     maxMatches: number,
 ): Promise<{
     matches: GrepMatch[];
-    literalFallback: boolean;
     scanTruncated: boolean;
 }> {
     if (files.length === 0) {
         return {
             matches: [],
-            literalFallback: false,
             scanTruncated: false,
         };
     }
-    const scanMatches = Math.min(
-        MAX_RIPGREP_SCAN_MATCHES,
-        Math.max(DEFAULT_RIPGREP_SCAN_MATCHES, maxMatches * 20),
-    );
-    let search = await searchRipgrepSnapshot(literal);
-    let literalFallback = false;
-    if (!literal && search.code === 2 && isRipgrepRegexError(search.stderr)) {
-        search = await searchRipgrepSnapshot(true);
-        literalFallback = true;
-    }
-    if (search.code !== 0 && search.code !== 1) {
-        throw new Error(
-            search.stderr.trim() || `ripgrep exited with code ${search.code}`,
+    const matches: GrepMatch[] = [];
+    let scanTruncated = false;
+    for (const targets of chunkRipgrepTargets(
+        files.map((file) => file.relativePath),
+    )) {
+        const remaining = maxMatches - matches.length;
+        if (remaining <= 0) {
+            scanTruncated = true;
+            break;
+        }
+        const result = await runRipgrep(
+            ripgrepPath,
+            pattern,
+            literal,
+            snapshot.root,
+            targets,
+            remaining,
         );
+        const partialResult = isUsablePartialRipgrepResult(result);
+        if (result.code !== 0 && result.code !== 1 && !partialResult) {
+            throw new Error(
+                result.stderr.trim() ||
+                    `ripgrep exited with code ${result.code}`,
+            );
+        }
+        matches.push(...parseRipgrepMatches(result, snapshot));
+        scanTruncated ||= partialResult || result.matchLimitReached;
     }
-    return {
-        matches: search.matches,
-        literalFallback,
-        scanTruncated: search.truncated,
-    };
-
-    async function searchRipgrepSnapshot(literalSearch: boolean): Promise<{
-        code: number;
-        stderr: string;
-        matches: GrepMatch[];
-        truncated: boolean;
-    }> {
-        const candidates: SnapshotFile[] = [];
-        const candidatePaths = new Set<string>();
-        let candidateTruncated = false;
-        let stderr = "";
-        for (let priority = 0; priority <= 3; priority++) {
-            const priorityTargets = files
-                .filter(
-                    (file) =>
-                        searchPathPriority(file.relativePath) === priority,
-                )
-                .map((file) => file.relativePath);
-            if (priorityTargets.length === 0) {
-                continue;
-            }
-            for (const targets of chunkRipgrepTargets(priorityTargets)) {
-                const remaining = maxMatches - candidates.length;
-                if (remaining <= 0) {
-                    break;
-                }
-                const result = await runRipgrep(
-                    ripgrepPath,
-                    pattern,
-                    literalSearch,
-                    snapshot.root,
-                    targets,
-                    undefined,
-                    1,
-                    remaining,
-                );
-                stderr += result.stderr;
-                const partialResult = isUsablePartialRipgrepResult(result);
-                if (result.code !== 0 && result.code !== 1 && !partialResult) {
-                    return {
-                        code: result.code,
-                        stderr,
-                        matches: [],
-                        truncated: false,
-                    };
-                }
-                candidateTruncated ||= partialResult;
-                for (const match of parseRipgrepMatches(result, snapshot)) {
-                    if (candidatePaths.has(match.path)) {
-                        continue;
-                    }
-                    const file = snapshot.filesByPath.get(match.path);
-                    if (!file) {
-                        throw new Error(
-                            "ripgrep returned an unknown snapshot path",
-                        );
-                    }
-                    candidatePaths.add(match.path);
-                    candidates.push(file);
-                }
-                candidateTruncated ||= result.matchLimitReached;
-            }
-            if (candidates.length >= maxMatches) {
-                break;
-            }
-        }
-        if (candidates.length === 0) {
-            return {
-                code: 1,
-                stderr,
-                matches: [],
-                truncated: candidateTruncated,
-            };
-        }
-
-        const perFileLimit = Math.max(
-            1,
-            Math.ceil(scanMatches / candidates.length),
-        );
-        const matches: GrepMatch[] = [];
-        let detailTruncated = false;
-        for (let priority = 0; priority <= 3; priority++) {
-            const targets = candidates
-                .filter(
-                    (file) =>
-                        searchPathPriority(file.relativePath) === priority,
-                )
-                .map((file) => file.relativePath);
-            if (targets.length === 0) {
-                continue;
-            }
-            for (const chunk of chunkRipgrepTargets(targets)) {
-                const remaining = scanMatches - matches.length;
-                if (remaining <= 0) {
-                    detailTruncated = true;
-                    break;
-                }
-                const result = await runRipgrep(
-                    ripgrepPath,
-                    pattern,
-                    literalSearch,
-                    snapshot.root,
-                    chunk,
-                    undefined,
-                    perFileLimit,
-                    remaining,
-                );
-                stderr += result.stderr;
-                const partialResult = isUsablePartialRipgrepResult(result);
-                if (result.code !== 0 && result.code !== 1 && !partialResult) {
-                    return {
-                        code: result.code,
-                        stderr,
-                        matches: [],
-                        truncated: false,
-                    };
-                }
-                detailTruncated ||= partialResult;
-                matches.push(...parseRipgrepMatches(result, snapshot));
-                detailTruncated ||= result.matchLimitReached;
-            }
-        }
-        return {
-            code: 0,
-            stderr,
-            matches: matches.slice(0, scanMatches),
-            truncated:
-                candidateTruncated ||
-                detailTruncated ||
-                matches.length >= scanMatches,
-        };
-    }
+    return { matches, scanTruncated };
 }
 
 function parseRipgrepMatches(
@@ -1001,12 +854,6 @@ export function chunkRipgrepTargets(
     return chunks;
 }
 
-function isRipgrepRegexError(stderr: string): boolean {
-    return /regex parse error|unclosed group|repetition operator missing expression/iu.test(
-        stderr,
-    );
-}
-
 function isUsablePartialRipgrepResult(result: RipgrepProcessResult): boolean {
     return result.code === 2 && result.stdout.includes('"type":"summary"');
 }
@@ -1017,29 +864,21 @@ function runRipgrep(
     literal: boolean,
     cwd: string,
     targets: readonly string[],
-    includePattern: string | undefined,
-    maxMatchesPerFile: number,
     maxMatches: number,
 ): Promise<RipgrepProcessResult> {
     return new Promise((resolve, reject) => {
         const args = [
             "--json",
+            "--no-config",
             "--color",
             "never",
             "--max-columns",
             String(MAX_OUTPUT_LINE_LENGTH),
-            "--max-count",
-            String(maxMatchesPerFile),
             "--sort",
             "path",
-            "--threads",
-            "1",
         ];
         if (literal) {
             args.push("--fixed-strings");
-        }
-        if (includePattern) {
-            args.push("--glob", includePattern);
         }
         args.push("--", pattern, ...targets);
         const child = spawn(ripgrepPath, args, {
@@ -1125,8 +964,9 @@ function runRipgrep(
     });
 }
 
-async function resolveRipgrepPath(): Promise<string> {
-    const configured = process.env.TYPEAGENT_RIPGREP_PATH?.trim();
+async function resolveRipgrepPath(explicitPath?: string): Promise<string> {
+    const configured =
+        explicitPath?.trim() ?? process.env.TYPEAGENT_RIPGREP_PATH?.trim();
     const names = configured
         ? [configured]
         : process.platform === "win32"
@@ -1157,104 +997,6 @@ async function resolveRipgrepPath(): Promise<string> {
     throw new Error(
         "ripgrep is required for TypeAgent repository search; install rg or set TYPEAGENT_RIPGREP_PATH",
     );
-}
-
-function extractSearchSymbol(pattern: string): string | undefined {
-    const candidate = pattern.trim();
-    if (!/^[A-Za-z_$][\w$]*(?:[.][A-Za-z_$][\w$]*)*$/u.test(candidate)) {
-        return undefined;
-    }
-    return candidate.split(".").at(-1);
-}
-
-function selectRepresentativeMatch(
-    matches: GrepMatch[],
-    symbol: string | undefined,
-): GrepMatch {
-    if (!symbol) {
-        return matches[0];
-    }
-    return [...matches].sort(
-        (left, right) =>
-            symbolMatchRank(left.text, symbol) -
-                symbolMatchRank(right.text, symbol) || left.line - right.line,
-    )[0];
-}
-
-function symbolMatchRank(line: string, symbol: string): number {
-    if (isSymbolDefinition(line, symbol)) {
-        return 0;
-    }
-    return containsWholeSymbol(line, symbol) ? 1 : 2;
-}
-
-function isSymbolDefinition(line: string, symbol: string): boolean {
-    const name = escapeRegularExpression(symbol);
-    const modifiers =
-        "(?:(?:export|public|private|protected|static|async|abstract|final|override|virtual|inline)\\s+)*";
-    const boundary = `(?![A-Za-z0-9_$])`;
-    return new RegExp(
-        `^\\s*${modifiers}(?:(?:class|def|enum|fn|func|function|interface|struct|type)\\s+${name}${boundary}|(?:const|let|var)\\s+${name}${boundary}|${name}${boundary}\\s*\\([^)]*\\)\\s*(?::[^=]+)?\\s*\\{)`,
-        "u",
-    ).test(line);
-}
-
-function containsWholeSymbol(line: string, symbol: string): boolean {
-    const name = escapeRegularExpression(symbol);
-    return new RegExp(`(?:^|[^A-Za-z0-9_$])${name}(?![A-Za-z0-9_$])`, "u").test(
-        line,
-    );
-}
-
-function escapeRegularExpression(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-}
-
-function compareSearchFiles(left: SnapshotFile, right: SnapshotFile): number {
-    return (
-        searchPathPriority(left.relativePath) -
-            searchPathPriority(right.relativePath) ||
-        left.relativePath.localeCompare(right.relativePath)
-    );
-}
-
-function searchPathPriority(fileName: string): number {
-    const parts = fileName.toLowerCase().split("/");
-    if (
-        parts.some((part) =>
-            [
-                "doc",
-                "docs",
-                "documentation",
-                "example",
-                "examples",
-                "asset",
-                "assets",
-                "locale",
-                "locales",
-                "vendor",
-                "third_party",
-            ].includes(part),
-        )
-    ) {
-        return 3;
-    }
-    if (
-        parts.some((part) =>
-            ["test", "tests", "testing", "spec", "specs"].includes(part),
-        ) ||
-        /(?:^|[._-])(test|spec)(?:[._-]|$)/i.test(path.posix.basename(fileName))
-    ) {
-        return 2;
-    }
-    if (
-        /\.(?:c|cc|cpp|cxx|go|h|hh|hpp|hxx|java|js|jsx|php|py|rb|rs|ts|tsx)$/i.test(
-            fileName,
-        )
-    ) {
-        return 0;
-    }
-    return 1;
 }
 
 function normalizeRipgrepOutputPath(value: string): string {

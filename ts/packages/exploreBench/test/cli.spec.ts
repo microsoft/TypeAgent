@@ -3,10 +3,13 @@
 
 import assert from "node:assert/strict";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 const cli = path.resolve("dist/src/cli.js");
+const cliSource = fileURLToPath(new URL("../../src/cli.ts", import.meta.url));
 
 function runCli(...args: string[]): SpawnSyncReturns<string> {
     return spawnSync(process.execPath, [cli, ...args], {
@@ -29,6 +32,13 @@ test("documents one-model and one-variant run selection", () => {
     assert.match(result.stdout, /--force-rerun/);
     assert.match(result.stdout, /cleanup-images/);
     assert.match(result.stdout, /--apply/);
+});
+
+test("loads Copilot only for baseline runs", () => {
+    const source = readFileSync(cliSource, "utf8");
+
+    assert.doesNotMatch(source, /^import .*?[.]\/copilot[.]js/m);
+    assert.match(source, /await import\("[.]\/copilot[.]js"\)/);
 });
 
 test("rejects unsupported one-row model and variant selections", () => {

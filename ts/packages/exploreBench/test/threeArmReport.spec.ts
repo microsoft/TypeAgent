@@ -299,29 +299,36 @@ function result(
 ): RunResult {
     const finalAnswer =
         "<final_answer>\npkg/a.py:1 reason\npkg/other.py:2 extra\n</final_answer>";
-    const lspTrace: TypeAgentToolTrace = {
-        calls: [
-            {
-                tool: "lsp",
-                durationMs: 1,
-                input: {
-                    method: "definition",
-                    path: "pkg/a.py",
-                    line: 1,
-                    symbol: "target",
-                },
-                resultCount: 1,
-                outputBytes: 20,
-                truncated: false,
-            },
-        ],
-        totalCalls: 1,
-        totalOutputBytes: 20,
+    const grepCall: TypeAgentToolTrace["calls"][number] = {
+        tool: "grep",
+        durationMs: 1,
+        input: {
+            pattern: "needle",
+            engine: "ripgrep",
+            ripgrepPath: "rg",
+        },
+        resultCount: 1,
+        outputBytes: 1,
+        truncated: false,
     };
-    const typeAgentTrace: TypeAgentToolTrace =
-        variant === "typeagent-lsp"
-            ? lspTrace
-            : { calls: [], totalCalls: 0, totalOutputBytes: 0 };
+    const lspCall: TypeAgentToolTrace["calls"][number] = {
+        tool: "lsp",
+        durationMs: 1,
+        input: {
+            method: "definition",
+            path: "pkg/a.py",
+            line: 1,
+            symbol: "target",
+        },
+        resultCount: 1,
+        outputBytes: 20,
+        truncated: false,
+    };
+    const typeAgentTrace: TypeAgentToolTrace = {
+        calls: [grepCall, ...(variant === "typeagent-lsp" ? [lspCall] : [])],
+        totalCalls: variant === "typeagent-lsp" ? 2 : 1,
+        totalOutputBytes: variant === "typeagent-lsp" ? 21 : 1,
+    };
     const typeAgent = variant !== "baseline";
     return {
         runId: manifest.runId,
@@ -462,6 +469,7 @@ function result(
                                       status: "completed" as const,
                                   },
                               ],
+                              submissionAction: "submitExploration",
                               result: {
                                   citationCount: 2,
                                   truncated: false,

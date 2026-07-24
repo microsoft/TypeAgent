@@ -87,6 +87,24 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                     (variant): RunResult => {
                         const finalAnswer =
                             "<final_answer>\npkg/a.py:10 reason\n</final_answer>";
+                        const typeAgentToolTrace = {
+                            calls: [
+                                {
+                                    tool: "grep" as const,
+                                    durationMs: 1,
+                                    input: {
+                                        pattern: "needle",
+                                        engine: "ripgrep",
+                                        ripgrepPath: "rg",
+                                    },
+                                    resultCount: 1,
+                                    outputBytes: 1,
+                                    truncated: false,
+                                },
+                            ],
+                            totalCalls: 1,
+                            totalOutputBytes: 1,
+                        };
                         return {
                             runId: manifest.runId,
                             taskId,
@@ -162,11 +180,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                           usedCopilot: false,
                                           usedMcp: false,
                                       },
-                                      typeAgentToolTrace: {
-                                          calls: [],
-                                          totalCalls: 0,
-                                          totalOutputBytes: 0,
-                                      },
+                                      typeAgentToolTrace,
                                       exploreTelemetry: {
                                           schemaVersion: 4 as const,
                                           model,
@@ -181,11 +195,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                               reasoningOutputTokens: 0,
                                               totalTokens: 40,
                                           },
-                                          toolTrace: {
-                                              calls: [],
-                                              totalCalls: 0,
-                                              totalOutputBytes: 0,
-                                          },
+                                          toolTrace: typeAgentToolTrace,
                                           invocations: [
                                               {
                                                   index: 0,
@@ -211,11 +221,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                                           reasoningOutputTokens: 0,
                                                           totalTokens: 40,
                                                       },
-                                                  toolTrace: {
-                                                      calls: [],
-                                                      totalCalls: 0,
-                                                      totalOutputBytes: 0,
-                                                  },
+                                                  toolTrace: typeAgentToolTrace,
                                                   actionAttempts: [
                                                       {
                                                           index: 0,
@@ -236,8 +242,18 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                                           status: "completed" as const,
                                                       },
                                                   ],
+                                                  submissionAction:
+                                                      "submitExploration",
+                                                  result: {
+                                                      citationCount: 1,
+                                                      truncated: false,
+                                                  },
                                               },
                                           ],
+                                          result: {
+                                              citationCount: 1,
+                                              truncated: false,
+                                          },
                                       },
                                   }
                                 : {
@@ -440,7 +456,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
         assert.equal(
             report.tasks[0].results["model-a:typeagent"].typeAgentToolTrace
                 ?.totalCalls,
-            0,
+            1,
         );
         assert.equal(
             report.prefixes["10"].comparisons[0].directExplorerAdoptionRate,

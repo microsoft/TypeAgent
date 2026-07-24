@@ -93,7 +93,14 @@ describe("repository tools", () => {
         ]);
         await expect(
             api.read("src/auth.ts", { offset: 1, limit: 2 }),
-        ).resolves.toBe("2\t    return verifyJwtSignature(token);\n3\t}");
+        ).resolves.toEqual({
+            text: "2\t    return verifyJwtSignature(token);\n3\t}",
+            location: {
+                path: "src/auth.ts",
+                startLine: 2,
+                endLine: 3,
+            },
+        });
 
         expect(trace.totalCalls).toBe(4);
         expect(trace.totalOutputBytes).toBeGreaterThan(0);
@@ -134,6 +141,22 @@ describe("repository tools", () => {
         ]);
     });
 
+    it("returns the exact grounded range when a read reaches end of file", async () => {
+        const repoRoot = await makeFixture();
+        const { api } = await makeTools({ repoRoot });
+
+        await expect(
+            api.read("src/auth.ts", { offset: 2, limit: 200 }),
+        ).resolves.toEqual({
+            text: "3\t}\n4\tconst literal = 'a.*b';",
+            location: {
+                path: "src/auth.ts",
+                startLine: 3,
+                endLine: 4,
+            },
+        });
+    });
+
     it("allows multiple concurrent searches without exceeding the call budget", async () => {
         const repoRoot = await makeFixture();
         const { api, trace } = await makeTools({
@@ -160,14 +183,14 @@ describe("repository tools", () => {
             }),
         ).resolves.toEqual([
             {
-                path: "src/auth.ts",
-                line: 1,
-                text: "export function authenticate(token: string) {",
-            },
-            {
                 path: "README.md",
                 line: 1,
                 text: "fixture root",
+            },
+            {
+                path: "src/auth.ts",
+                line: 1,
+                text: "export function authenticate(token: string) {",
             },
         ]);
     });
@@ -279,8 +302,8 @@ describe("repository tools", () => {
         await rm(authPath);
         await symlink(outside, authPath);
         const content = await api.read("src/auth.ts", { limit: 1 });
-        expect(content).toContain("authenticate");
-        expect(content).not.toContain("outside-secret");
+        expect(content.text).toContain("authenticate");
+        expect(content.text).not.toContain("outside-secret");
         await expect(api.grep("outside-secret")).resolves.toEqual([]);
         expect(trace.calls.filter((call) => call.error)).toHaveLength(5);
     });
@@ -341,14 +364,10 @@ describe("repository tools", () => {
             path.join(repoRoot, "src", "literal-paren.ts"),
             "export const marker = 'needle(';\n",
         );
-        const literalFallback = await makeTools({ repoRoot });
-        await expect(literalFallback.api.grep("needle(")).resolves.toEqual([
-            {
-                path: "src/literal-paren.ts",
-                line: 1,
-                text: "export const marker = 'needle(';",
-            },
-        ]);
+        const invalidRegex = await makeTools({ repoRoot });
+        await expect(invalidRegex.api.grep("needle(")).rejects.toThrow(
+            /regex parse error/i,
+        );
 
         const matches = await api.grep("needle", { maxMatches: 1 });
         expect(matches).toHaveLength(1);
@@ -359,7 +378,7 @@ describe("repository tools", () => {
         );
     });
 
-    it("prioritizes production source matches before docs and tests", async () => {
+    it("keeps ripgrep path order without production-file reprioritization", async () => {
         const repoRoot = await makeFixture();
         await mkdir(path.join(repoRoot, "docs"), { recursive: true });
         await mkdir(path.join(repoRoot, "tests"), { recursive: true });
@@ -381,14 +400,14 @@ describe("repository tools", () => {
             api.grep("shared-marker", { literal: true, maxMatches: 1 }),
         ).resolves.toEqual([
             {
-                path: "src/production.ts",
+                path: "docs/guide.ts",
                 line: 1,
                 text: "shared-marker",
             },
         ]);
     });
 
-    it("returns matches from distinct files before repeats from one file", async () => {
+    it("keeps raw ripgrep matches instead of diversifying across files", async () => {
         const repoRoot = await makeFixture();
         await writeFile(
             path.join(repoRoot, "src", "a-many.ts"),
@@ -404,7 +423,7 @@ describe("repository tools", () => {
             api.grep("common-marker", { literal: true, maxMatches: 2 }),
         ).resolves.toEqual([
             { path: "src/a-many.ts", line: 1, text: "common-marker" },
-            { path: "src/z-target.ts", line: 1, text: "common-marker" },
+            { path: "src/a-many.ts", line: 2, text: "common-marker" },
         ]);
     });
 
@@ -476,7 +495,7 @@ describe("repository tools", () => {
         }
     });
 
-    it("prefers a symbol definition over an earlier reference in the same file", async () => {
+    it("keeps exact-identifier matches in source order", async () => {
         const repoRoot = await makeFixture();
         await writeFile(
             path.join(repoRoot, "src", "definition.ts"),
@@ -494,8 +513,8 @@ describe("repository tools", () => {
         await expect(api.grep("target", { maxMatches: 1 })).resolves.toEqual([
             {
                 path: "src/definition.ts",
-                line: 4,
-                text: "export function target() {",
+                line: 1,
+                text: "const value = target();",
             },
         ]);
     });
@@ -538,9 +557,9 @@ describe("repository tools", () => {
         await expect(
             api.grep("token", { maxMatches: 1 }),
         ).resolves.toHaveLength(1);
-        await expect(api.read("README.md")).resolves.toMatch(
-            /TOOL_BUDGET_EXHAUSTED/,
-        );
+        await expect(api.read("README.md")).resolves.toMatchObject({
+            text: expect.stringMatching(/TOOL_BUDGET_EXHAUSTED/),
+        });
         expect(trace.totalCalls).toBe(2);
         expect(trace.calls).toHaveLength(2);
     });
@@ -556,7 +575,9 @@ describe("repository tools", () => {
         for (let attempt = 0; attempt < 4; attempt++) {
             await expect(
                 api.read("bulk.txt", { limit: 1000 }),
-            ).resolves.toContain("1\t");
+            ).resolves.toMatchObject({
+                text: expect.stringContaining("1\t"),
+            });
         }
         await expect(api.read("bulk.txt", { limit: 1000 })).rejects.toThrow(
             /output budget/i,

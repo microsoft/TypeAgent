@@ -26,6 +26,7 @@ export interface ExplorerReasoningState {
     trace: ExplorerReasoningAttempt[];
     toolCalls: number;
     maxToolCalls: number;
+    submitted: boolean;
 }
 
 export interface ExplorerReasoningTools {
@@ -44,7 +45,7 @@ export class ExplorerReasoningLimitError extends Error {
 export function createExplorerReasoningState(
     maxToolCalls: number,
 ): ExplorerReasoningState {
-    return { trace: [], toolCalls: 0, maxToolCalls };
+    return { trace: [], toolCalls: 0, maxToolCalls, submitted: false };
 }
 
 export function createExplorerReasoningTools(
@@ -77,6 +78,7 @@ export function createExplorerReasoningTools(
                             actionName,
                             parameters,
                         );
+                        state.submitted ||= result.submitted;
                         return result.isError
                             ? failure(result.text)
                             : success(result.text);
@@ -87,8 +89,7 @@ export function createExplorerReasoningTools(
                         .map((item) => item.text)
                         .join("\n");
                     return (
-                        (result.isError !== true &&
-                            args.actionName === SUBMIT_EXPLORATION_ACTION) ||
+                        (result.isError !== true && state.submitted) ||
                         (result.isError === true &&
                             text.startsWith(REPOSITORY_BUDGET_EXHAUSTED))
                     );

@@ -14,7 +14,7 @@ import {
 } from "./io.js";
 import type { BenchTask, RunManifest, RunResult } from "./types.js";
 
-export const CACHE_COMPATIBILITY_REVISION = 6;
+export const CACHE_COMPATIBILITY_REVISION = 10;
 
 export interface ResultCacheSource {
     manifest: RunManifest;
@@ -285,8 +285,7 @@ function isCacheableManifest(manifest: RunManifest): manifest is RunManifest {
 function cacheManifestIdentity(manifest: RunManifest): unknown {
     return {
         schemaVersion: manifest.schemaVersion,
-        cacheCompatibilityRevision:
-            manifest.cacheCompatibilityRevision ?? CACHE_COMPATIBILITY_REVISION,
+        cacheCompatibilityRevision: manifest.cacheCompatibilityRevision ?? 0,
         dataset: manifest.dataset,
         split: manifest.split,
         copilotPath: manifest.copilotPath,

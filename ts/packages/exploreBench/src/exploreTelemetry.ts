@@ -248,6 +248,10 @@ function parseExploreInvocation(
         schemaVersion === 4 && telemetry.actionAttempts !== undefined
             ? parseActionAttempts(telemetry.actionAttempts, context)
             : undefined;
+    const submissionAction = optionalSubmissionAction(
+        telemetry.submissionAction,
+        context,
+    );
     return {
         index:
             telemetry.index === undefined
@@ -271,9 +275,25 @@ function parseExploreInvocation(
         },
         ...(reasoningTrace ? { reasoningTrace } : {}),
         ...(actionAttempts ? { actionAttempts } : {}),
+        ...(submissionAction ? { submissionAction } : {}),
         ...(result ? { result } : {}),
         ...(error ? { error } : {}),
     };
+}
+
+function optionalSubmissionAction(
+    value: unknown,
+    context: string,
+): "refineRepository" | "submitExploration" | undefined {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (value !== "refineRepository" && value !== "submitExploration") {
+        throw new Error(
+            `${context}.submissionAction must be 'refineRepository' or 'submitExploration'`,
+        );
+    }
+    return value;
 }
 
 function parseReasoningTrace(

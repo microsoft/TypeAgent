@@ -49,7 +49,7 @@ describe("repository language server", () => {
             const locations = await tools.api.lsp!({
                 method: "definition",
                 path: "src/main.ts",
-                line: 4,
+                line: 12,
                 symbol: "target",
             });
 
@@ -271,6 +271,13 @@ describe("repository language server", () => {
                 "}",
                 "",
                 "export const value = target();",
+                "// body clue 1",
+                "// body clue 2",
+                "// body clue 3",
+                "// body clue 4",
+                "// body clue 5",
+                "// body clue 6",
+                "// targetExtra body clue 7",
             ].join("\n"),
         );
         await writeFile(

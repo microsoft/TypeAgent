@@ -28,6 +28,7 @@ import type { ExploreTelemetry } from "../src/types.js";
 function options(): CopilotRunOptions {
     return {
         repoPath: "/repo",
+        ripgrepPath: "/copilot/ripgrep/rg",
         prompt: "find bug",
         model: "azure/gpt-5.6-luna",
         variant: "baseline",
@@ -501,6 +502,41 @@ test("reads schema-v4 action translation and Code Mode generation usage", async 
             telemetry.invocations?.[0]?.actionTranslationAndCodeGenerationUsage
                 ?.totalTokens,
             35,
+        );
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+});
+
+test("rejects an unknown schema-v4 submission action", async () => {
+    const directory = await mkdtemp(
+        path.join(os.tmpdir(), "explore-bench-telemetry-v4-submission-"),
+    );
+    try {
+        const telemetryPath = path.join(directory, "telemetry.json");
+        const first = validTelemetry();
+        await writeFile(
+            telemetryPath,
+            JSON.stringify({
+                schemaVersion: 4,
+                model: first.model,
+                invocations: [
+                    {
+                        index: 0,
+                        status: "completed",
+                        usage: first.usage,
+                        actionTranslationAndCodeGenerationUsage: first.usage,
+                        toolTrace: first.toolTrace,
+                        submissionAction: "hiddenSubmission",
+                        result: first.result,
+                    },
+                ],
+            }),
+        );
+
+        await assert.rejects(
+            readExploreTelemetry(telemetryPath, "azure/gpt-5.6-luna"),
+            /submissionAction must be 'refineRepository' or 'submitExploration'/,
         );
     } finally {
         await rm(directory, { recursive: true, force: true });

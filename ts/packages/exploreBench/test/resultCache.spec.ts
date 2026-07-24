@@ -129,11 +129,7 @@ function result(runId: string, overrides: Partial<RunResult> = {}): RunResult {
 }
 
 test("cache compatibility ignores run paths and Node interpreter location", () => {
-    const sourceWithRevision = manifest("run-30");
-    const {
-        cacheCompatibilityRevision: _cacheCompatibilityRevision,
-        ...source
-    } = sourceWithRevision;
+    const source = manifest("run-30");
     const target = manifest("run-100", {
         taskIds: [task.id, "repo__repo-2"],
         maxConcurrency: 3,
@@ -168,11 +164,25 @@ test("cache compatibility ignores run paths and Node interpreter location", () =
     );
 });
 
-test("rejects caches from before the repairable LSP refinement revision", () => {
-    assert.equal(CACHE_COMPATIBILITY_REVISION, 6);
+test("rejects revisionless caches instead of assuming current compatibility", () => {
+    const {
+        cacheCompatibilityRevision: _cacheCompatibilityRevision,
+        ...revisionless
+    } = manifest("revisionless");
+
+    assert.equal(
+        cacheManifestsCompatible(revisionless, manifest("current")),
+        false,
+    );
+});
+
+test("rejects caches from before shared raw-ripgrep semantics", () => {
+    assert.equal(CACHE_COMPATIBILITY_REVISION, 10);
     assert.equal(
         cacheManifestsCompatible(
-            manifest("mcp-harness", { cacheCompatibilityRevision: 2 }),
+            manifest("pre-shared-ripgrep", {
+                cacheCompatibilityRevision: 9,
+            }),
             manifest("direct-typeagent"),
         ),
         false,
@@ -294,6 +304,25 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
         reasoningOutputTokens: 0,
         totalTokens: 2,
     };
+    const toolTrace = {
+        calls: [
+            {
+                tool: "grep" as const,
+                startedAt: "2026-07-17T00:00:00.000Z",
+                durationMs: 1,
+                input: {
+                    pattern: "needle",
+                    engine: "ripgrep",
+                    ripgrepPath: "rg",
+                },
+                resultCount: 1,
+                outputBytes: 1,
+                truncated: false,
+            },
+        ],
+        totalCalls: 1,
+        totalOutputBytes: 1,
+    };
     const treatment = result("legacy", {
         variant: "typeagent",
         mcpAdopted: false,
@@ -315,11 +344,7 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
         mcpServerReady: false,
         mcpAdvertisedTools: [],
         mcpToolTrace: [],
-        typeAgentToolTrace: {
-            calls: [],
-            totalCalls: 0,
-            totalOutputBytes: 0,
-        },
+        typeAgentToolTrace: toolTrace,
         dispatcherUsage: {
             requestCount: 1,
             inputTokens: 1,
@@ -363,18 +388,14 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
             model: "route-a",
             status: "completed",
             usage,
-            toolTrace: { calls: [], totalCalls: 0, totalOutputBytes: 0 },
+            toolTrace,
             invocations: [
                 {
                     index: 0,
                     status: "completed",
                     usage,
                     actionTranslationAndCodeGenerationUsage: usage,
-                    toolTrace: {
-                        calls: [],
-                        totalCalls: 0,
-                        totalOutputBytes: 0,
-                    },
+                    toolTrace,
                     actionAttempts: [
                         {
                             index: 0,
@@ -392,6 +413,7 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
                             status: "completed",
                         },
                     ],
+                    submissionAction: "submitExploration",
                     result: { citationCount: 1, truncated: false },
                 },
             ],

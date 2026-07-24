@@ -6,7 +6,7 @@
 interface LspRequest {
     method: "definition" | "references";
     path: string;
-    // 1-based source line at or within three lines of the exact symbol.
+    // 1-based source line hint; the host resolves the nearest exact identifier.
     line: number;
     symbol: string;
     maxResults?: number;

@@ -16,7 +16,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import type { Tool, ToolInvocation } from "@github/copilot-sdk";
+import { createRepositoryTools } from "explorer-typeagent";
 import { createCopilotExplorationTools } from "../src/copilotTools.js";
+import { resolvePackagedRipgrepPath } from "../src/ripgrep.js";
 import type { CopilotToolCallTrace } from "../src/types.js";
 
 const invocation: ToolInvocation = {
@@ -106,6 +108,82 @@ test("creates traced SDK tools and uses Copilot's packaged ripgrep", async () =>
         await rm(repo, { recursive: true, force: true });
     }
 });
+
+test("keeps Copilot and TypeAgent grep results in the same ripgrep order", async () => {
+    const repo = await mkdtemp(
+        path.join(os.tmpdir(), "typeagent-shared-ripgrep-"),
+    );
+    const packagedRipgrepPath = await resolvePackagedRipgrepPath();
+    try {
+        await mkdir(path.join(repo, "src"), { recursive: true });
+        await writeFile(
+            path.join(repo, "README.md"),
+            "needle\nconst literal = 'a.*b';\n",
+        );
+        await writeFile(
+            path.join(repo, "src", "dense.ts"),
+            Array.from({ length: 220 }, (_, index) => `needle ${index}`).join(
+                "\n",
+            ),
+        );
+        const copilotTools = await createCopilotExplorationTools(
+            repo,
+            [],
+            10,
+            packagedRipgrepPath,
+        );
+        const copilotGrep = requiredTool(copilotTools, "grep");
+        const typeAgent = await createRepositoryTools({
+            repoRoot: repo,
+            maxCalls: 10,
+            ripgrepPath: packagedRipgrepPath,
+        });
+        try {
+            for (const args of [
+                { pattern: "needle", maxMatches: 3 },
+                { pattern: "a.*b", literal: true },
+                { pattern: "needle" },
+                { pattern: "needle", maxMatches: 999 },
+            ]) {
+                const copilot = parseCopilotGrepOutput(
+                    String(await copilotGrep.handler!(args, invocation)),
+                );
+                const typeAgentMatches = await typeAgent.api.grep(
+                    args.pattern,
+                    args,
+                );
+                assert.deepEqual(typeAgentMatches, copilot);
+            }
+            await assert.rejects(
+                async () =>
+                    await copilotGrep.handler!(
+                        { pattern: "needle(" },
+                        invocation,
+                    ),
+                /regex parse error/i,
+            );
+            await assert.rejects(
+                async () => await typeAgent.api.grep("needle("),
+                /regex parse error/i,
+            );
+        } finally {
+            await typeAgent.close();
+        }
+    } finally {
+        await rm(repo, { recursive: true, force: true });
+    }
+});
+
+function parseCopilotGrepOutput(
+    output: string,
+): Array<{ path: string; line: number; text: string }> {
+    if (output === "No matches") return [];
+    return output.split("\n").map((line) => {
+        const match = /^(.*?):(\d+):(.*)$/u.exec(line);
+        assert.ok(match, `unexpected Copilot grep line: ${line}`);
+        return { path: match[1], line: Number(match[2]), text: match[3] };
+    });
+}
 
 test("keeps file access inside the repository, including through symlinks", async () => {
     const parent = await mkdtemp(

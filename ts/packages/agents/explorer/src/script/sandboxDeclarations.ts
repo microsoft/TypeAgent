@@ -28,7 +28,19 @@ const lspDeclarations = readFileSync(
 export function generateSandboxDeclarations(
     parameters: Record<string, FlowParameterDefinition> = exploreFlowParameters,
     enableLsp = false,
+    requireLocations = false,
 ): string {
-    const declarations = generator.generate(parameters);
+    const generated = generator.generate(parameters);
+    const declarations = requireLocations
+        ? generated.replace(
+              "    locations?: ExploreLocation[];",
+              "    locations: ExploreLocation[];",
+          )
+        : generated;
+    if (requireLocations && declarations === generated) {
+        throw new Error(
+            "Repository sandbox is missing the optional locations declaration",
+        );
+    }
     return enableLsp ? `${declarations}\n${lspDeclarations}\n` : declarations;
 }
