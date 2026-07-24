@@ -8,8 +8,8 @@
  */
 
 import path from "path";
-import * as knowLib from "knowledge-processor";
-import { conversation } from "knowledge-processor";
+import * as knowLib from "@typeagent/knowledge-processor";
+import { conversation } from "@typeagent/knowledge-processor";
 import { sqlite } from "memory-providers";
 import {
     KnowledgeProcessorContext,
@@ -21,7 +21,7 @@ import {
     dateTime,
     ensureDir,
     isDirectoryPath,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import {
     arg,
     argBool,
@@ -56,7 +56,7 @@ import {
     loadEmailMemory,
     memoryNameToIndexPath,
 } from "../memory/knowproCommon.js";
-import * as cm from "conversation-memory";
+import * as cm from "@typeagent/conversation-memory";
 
 export async function createEmailMemory(
     models: Models,

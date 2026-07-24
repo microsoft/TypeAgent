@@ -30,8 +30,8 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
-    "telemetry": "workspace:*",
-    "typechat-utils": "workspace:*"
+    "@typeagent/telemetry": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*"
   },
   "devDependencies": {
     "@typeagent/action-schema-compiler": "workspace:*",

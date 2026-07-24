@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { dateTime, getFileName, readAllText } from "typeagent";
+import { dateTime, getFileName, readAllText } from "@typeagent/agent-runtime";
 import { Podcast } from "./podcast.js";
 import { PodcastMessage, PodcastMessageMeta } from "./podcastMessage.js";
-import { ConversationSettings } from "knowpro";
+import { ConversationSettings } from "@typeagent/knowpro";
 import {
     parseTranscript,
     parseVttTranscript,

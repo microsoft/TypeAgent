@@ -1,7 +1,6 @@
 {
-  "name": "memory-storage",
+  "name": "@typeagent/memory-storage",
   "version": "0.0.1",
-  "private": true,
   "description": "Memory storage and index providers.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -35,12 +34,12 @@
   },
   "dependencies": {
     "@azure/search-documents": "12.1.0",
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/knowledge-processor": "workspace:*",
+    "@typeagent/knowpro": "workspace:*",
     "better-sqlite3": "12.6.2",
-    "debug": "^4.4.0",
-    "knowledge-processor": "workspace:*",
-    "knowpro": "workspace:*",
-    "typeagent": "workspace:*"
+    "debug": "^4.4.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.13",

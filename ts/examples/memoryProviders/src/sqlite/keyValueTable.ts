@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 import * as sqlite from "better-sqlite3";
-import * as knowLib from "knowledge-processor";
-import { ValueType, ValueDataType } from "knowledge-processor";
-import { ScoredItem } from "typeagent";
+import * as knowLib from "@typeagent/knowledge-processor";
+import { ValueType, ValueDataType } from "@typeagent/knowledge-processor";
+import { ScoredItem } from "@typeagent/agent-runtime";
 
 export interface KeyValueTable<
     TKeyId extends ValueType = string,

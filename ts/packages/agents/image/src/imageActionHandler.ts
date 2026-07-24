@@ -9,7 +9,7 @@ import {
     ActionResultSuccess,
     ActionTokenUsage,
 } from "@typeagent/agent-sdk";
-import { downloadImage, getMimeType } from "typechat-utils";
+import { downloadImage, getMimeType } from "@typeagent/typechat-utils";
 import {
     createActionResult,
     createActionResultFromHtmlDisplayWithScript,

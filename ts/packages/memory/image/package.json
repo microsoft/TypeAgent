@@ -29,17 +29,17 @@
   },
   "dependencies": {
     "@azure-rest/maps-search": "^2.0.0-beta.3",
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/knowledge-processor": "workspace:*",
+    "@typeagent/knowpro": "workspace:*",
+    "@typeagent/memory-storage": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*",
     "better-sqlite3": "12.6.2",
     "debug": "^4.4.0",
     "get-folder-size": "^5.0.0",
-    "knowledge-processor": "workspace:*",
-    "knowpro": "workspace:*",
-    "memory-storage": "workspace:*",
-    "telemetry": "workspace:*",
-    "typeagent": "workspace:*",
-    "typechat": "^0.1.1",
-    "typechat-utils": "workspace:*"
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.13",

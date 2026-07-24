@@ -2,13 +2,13 @@
 // Licensed under the MIT License.
 
 import { ChatModel, openai } from "@typeagent/aiclient";
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import {
     conversation as kpLib,
     TextEmbeddingModelWithCache,
     TextEmbeddingCache,
-} from "knowledge-processor";
-import * as ms from "memory-storage";
+} from "@typeagent/knowledge-processor";
+import * as ms from "@typeagent/memory-storage";
 import { error, PromptSection, Result, success } from "typechat";
 import { createEmbeddingModelWithCache } from "./common.js";
 

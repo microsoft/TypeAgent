@@ -1,18 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import {
     conversation as kpLib,
     TextEmbeddingModelWithCache,
-} from "knowledge-processor";
-import { collections } from "typeagent";
+} from "@typeagent/knowledge-processor";
+import { collections } from "@typeagent/agent-runtime";
 import { createEmbeddingModelWithCache } from "./common.js";
 
 import registerDebug from "debug";
 import { PodcastMessage, PodcastMessageMeta } from "./podcastMessage.js";
 import { addSynonymsFileAsAliases } from "./memory.js";
-import { getAbsolutePathFromUrl } from "memory-storage";
+import { getAbsolutePathFromUrl } from "@typeagent/memory-storage";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
 export class Podcast implements kp.IConversation<PodcastMessage> {

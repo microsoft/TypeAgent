@@ -3,7 +3,7 @@
 
 import * as fs from "fs";
 import chalk from "chalk";
-import { similarity, SimilarityType } from "typeagent";
+import { similarity, SimilarityType } from "@typeagent/agent-runtime";
 import { SymbolNode, SchemaParser } from "@typeagent/action-schema";
 import { distance } from "fastest-levenshtein";
 

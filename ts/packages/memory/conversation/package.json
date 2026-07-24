@@ -1,7 +1,6 @@
 {
-  "name": "conversation-memory",
+  "name": "@typeagent/conversation-memory",
   "version": "0.0.1",
-  "private": true,
   "description": "Using structured RAG to implement conversation memory",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -30,15 +29,15 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/knowledge-processor": "workspace:*",
+    "@typeagent/knowpro": "workspace:*",
+    "@typeagent/memory-storage": "workspace:*",
+    "@typeagent/textpro": "workspace:*",
     "async": "^3.2.5",
     "debug": "^4.4.0",
-    "knowledge-processor": "workspace:*",
-    "knowpro": "workspace:*",
     "mailparser": "3.9.6",
-    "memory-storage": "workspace:*",
-    "textpro": "workspace:*",
-    "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "webvtt-parser": "2.2.0"
   },

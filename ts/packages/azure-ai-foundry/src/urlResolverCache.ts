@@ -3,7 +3,7 @@
 
 import { existsSync, writeFileSync, mkdirSync, readFileSync } from "fs";
 import path from "path";
-import { isDirectoryPath } from "typeagent";
+import { isDirectoryPath } from "@typeagent/agent-runtime";
 import zlib from "zlib";
 import registerDebug from "debug";
 

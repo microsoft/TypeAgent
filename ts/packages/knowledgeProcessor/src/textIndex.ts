@@ -14,7 +14,7 @@ import {
     createObjectFolder,
     createSemanticIndex,
     removeDir,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import {
     HitTable,
     intersectMultiple,

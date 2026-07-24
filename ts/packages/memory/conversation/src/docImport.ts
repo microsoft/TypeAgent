@@ -1,21 +1,21 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getFileName, readAllText } from "typeagent";
+import { getFileName, readAllText } from "@typeagent/agent-runtime";
 import {
     DocMemory,
     DocMemorySettings,
     DocPart,
     DocPartMeta,
 } from "./docMemory.js";
-import { splitLargeTextIntoChunks } from "knowledge-processor";
-import * as tp from "textpro";
+import { splitLargeTextIntoChunks } from "@typeagent/knowledge-processor";
+import * as tp from "@typeagent/textpro";
 import { parseVttTranscript } from "./transcript.js";
-import { filePathToUrlString } from "memory-storage";
+import { filePathToUrlString } from "@typeagent/memory-storage";
 import path from "path";
 import { getHtml } from "@typeagent/aiclient";
 import { Result, success } from "typechat";
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 
 /**
  * Import a text document as DocMemory

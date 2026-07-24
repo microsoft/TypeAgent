@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import sqlite from "better-sqlite3";
-import * as ms from "memory-storage";
+import * as ms from "@typeagent/memory-storage";
 
 export class GeoTable extends ms.sqlite.SqliteDataFrame {
     constructor(public db: sqlite.Database) {

@@ -8,7 +8,7 @@
  * A newer version of knowledgeMerge.ts, where the entity merge doesn't force the data to become lower case.
  */
 
-import { conversation as kpLib } from "knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { Scored } from "./common.js";
 import {
     ISemanticRefCollection,

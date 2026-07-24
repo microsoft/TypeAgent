@@ -10,7 +10,7 @@ import {
     readJsonFile,
     stringSimilarity,
     writeJsonFile,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { ConversationManager } from "./conversationManager.js";
 import { TextEmbeddingModel } from "@typeagent/aiclient";
 

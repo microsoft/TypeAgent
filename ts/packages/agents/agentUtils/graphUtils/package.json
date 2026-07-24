@@ -34,6 +34,7 @@
     "@azure/identity-cache-persistence": "^1.1.1",
     "@azure/logger": "^1.1.0",
     "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
@@ -45,8 +46,7 @@
     "googleapis": "^144.0.0",
     "open": "^10.1.0",
     "proper-lockfile": "^4.1.2",
-    "string-compare": "^1.1.2",
-    "typeagent": "workspace:*"
+    "string-compare": "^1.1.2"
   },
   "devDependencies": {
     "@microsoft/microsoft-graph-types": "^2.40.0",
