@@ -7,6 +7,10 @@ import os from "node:os";
 import path from "node:path";
 import { ExplorerActionSession } from "../src/actionHandler.js";
 import { createExplorerActionDispatcher } from "../src/reasoning/explorerActionDispatcher.js";
+import {
+    createDefaultLanguageServers,
+    defaultTypeScriptLanguageServerCommand,
+} from "../src/script/languageServer.js";
 
 describe("Explorer action dispatcher", () => {
     const tempDirs: string[] = [];
@@ -254,7 +258,7 @@ describe("Explorer action dispatcher", () => {
         }
     });
 
-    it("grounds a range covered by consecutive visible grep lines only", async () => {
+    it("rejects ranges covered only by visible grep lines", async () => {
         const runtime = await createExplorerActionDispatcher(
             await createSession(),
         );
@@ -293,8 +297,10 @@ describe("Explorer action dispatcher", () => {
                     ],
                 }),
             ).resolves.toMatchObject({
-                isError: false,
-                text: "src/alpha.ts:1-2",
+                isError: true,
+                text: expect.stringMatching(
+                    /no matching observed range from read/i,
+                ),
             });
         } finally {
             await runtime.close();
@@ -559,6 +565,218 @@ describe("Explorer action dispatcher", () => {
             await runtime.close();
         }
     });
+
+    it("reserves enough of the eight-call budget to recover missing LSP requirements", async () => {
+        const session = await createSession(8, true);
+        const runtime = await createExplorerActionDispatcher(session);
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: fourCallDiscoveryProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: fourCallMissingLspRequirementsProgram(),
+                }),
+            ).resolves.toMatchObject({
+                isError: true,
+                text: expect.stringMatching(/2 repository calls remain/i),
+            });
+
+            const recovered = await runtime.executeAction(
+                "explorer",
+                "refineRepository",
+                { program: readAndNavigateLspProgram() },
+            );
+            expect(recovered).toMatchObject({ isError: false });
+            expect(JSON.parse(recovered.text).observations).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        source: "read",
+                        path: "src/lsp.ts",
+                        startLine: 1,
+                        endLine: 3,
+                    }),
+                ]),
+            );
+            expect(session.snapshot().toolTrace).toMatchObject({
+                totalCalls: 8,
+                calls: [
+                    { tool: "grep" },
+                    { tool: "grep" },
+                    { tool: "glob" },
+                    { tool: "ls" },
+                    { tool: "ls" },
+                    { tool: "glob" },
+                    { tool: "read" },
+                    { tool: "lsp", resultCount: 1 },
+                ],
+            });
+        } finally {
+            await runtime.close();
+        }
+    }, 30_000);
+
+    it("carries exact read evidence across only a missing-navigation recovery", async () => {
+        const session = await createSession(8, true);
+        const runtime = await createExplorerActionDispatcher(session);
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: fourCallDiscoveryProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: readAndMissLspProgram(),
+                }),
+            ).resolves.toMatchObject({
+                isError: true,
+                text: expect.stringMatching(
+                    /complete an error-free language-server call/i,
+                ),
+            });
+            await expect(
+                runtime.executeAction("explorer", "submitExploration", {
+                    locations: [
+                        { path: "src/lsp.ts", startLine: 1, endLine: 3 },
+                    ],
+                }),
+            ).resolves.toMatchObject({
+                isError: true,
+                text: expect.stringMatching(
+                    /complete discovery and refinement/i,
+                ),
+            });
+
+            const recovered = await runtime.executeAction(
+                "explorer",
+                "refineRepository",
+                { program: navigateLspOnlyProgram() },
+            );
+            expect(recovered).toMatchObject({ isError: false });
+            expect(JSON.parse(recovered.text).observations).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        source: "read",
+                        path: "src/lsp.ts",
+                        startLine: 1,
+                        endLine: 3,
+                    }),
+                ]),
+            );
+            await expect(
+                runtime.executeAction("explorer", "submitExploration", {
+                    locations: [
+                        { path: "src/lsp.ts", startLine: 1, endLine: 3 },
+                    ],
+                }),
+            ).resolves.toMatchObject({
+                isError: false,
+                text: "src/lsp.ts:1-3",
+            });
+            expect(session.snapshot().toolTrace.totalCalls).toBe(7);
+        } finally {
+            await runtime.close();
+        }
+    }, 30_000);
+
+    it("accepts an error-free empty LSP response without inventing locations", async () => {
+        const session = await createSession(8, true);
+        const runtime = await createExplorerActionDispatcher(session);
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: fourCallDiscoveryProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: readAndEmptyLspProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+            const lspCall = session.snapshot().toolTrace.calls.at(-1);
+            expect(lspCall).toMatchObject({
+                tool: "lsp",
+                resultCount: 0,
+            });
+            expect(lspCall?.error).toBeUndefined();
+            await expect(
+                runtime.executeAction("explorer", "submitExploration", {
+                    locations: [
+                        { path: "src/lsp.ts", startLine: 1, endLine: 6 },
+                    ],
+                }),
+            ).resolves.toMatchObject({
+                isError: false,
+                text: "src/lsp.ts:1-6",
+            });
+        } finally {
+            await runtime.close();
+        }
+    }, 30_000);
+
+    it("does not carry reads from a runtime-failed refinement", async () => {
+        const session = await createSession(8, true);
+        const runtime = await createExplorerActionDispatcher(session);
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: fourCallDiscoveryProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: readThenThrowProgram(),
+                }),
+            ).resolves.toMatchObject({
+                isError: true,
+                text: expect.stringMatching(/runtime failure/i),
+            });
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: navigateLspOnlyProgram(),
+                }),
+            ).resolves.toMatchObject({
+                isError: true,
+                text: expect.stringMatching(/read exact candidate context/i),
+            });
+        } finally {
+            await runtime.close();
+        }
+    }, 30_000);
+
+    it("leaves one global LSP attempt after discovery", async () => {
+        const session = await createSession(8, true);
+        const runtime = await createExplorerActionDispatcher(session);
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: twoMissingLspCallsProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: readAndNavigateLspProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+            expect(
+                session
+                    .snapshot()
+                    .toolTrace.calls.filter((call) => call.tool === "lsp"),
+            ).toEqual([
+                expect.objectContaining({ resultCount: 0 }),
+                expect.objectContaining({ resultCount: 1 }),
+            ]);
+        } finally {
+            await runtime.close();
+        }
+    }, 30_000);
 
     it("grounds a mutation near the middle of a 200-line refinement read", async () => {
         const runtime = await createExplorerActionDispatcher(
@@ -905,6 +1123,7 @@ describe("Explorer action dispatcher", () => {
 
     async function createSession(
         maxToolCalls = 8,
+        enableLsp = false,
     ): Promise<ExplorerActionSession> {
         const root = await mkdtemp(
             path.join(os.tmpdir(), "typeagent-explorer-dispatcher-test-"),
@@ -918,6 +1137,19 @@ describe("Explorer action dispatcher", () => {
                 "\n",
             ),
         );
+        if (enableLsp) {
+            await writeFile(
+                path.join(repoRoot, "src", "lsp.ts"),
+                [
+                    "export function lspTarget() {",
+                    "    return 1;",
+                    "}",
+                    "",
+                    "export const result = lspTarget();",
+                    "export const external = console.log;",
+                ].join("\n"),
+            );
+        }
         await writeFile(
             path.join(repoRoot, "src", "large.ts"),
             Array.from({ length: 320 }, (_, index) => {
@@ -965,6 +1197,20 @@ describe("Explorer action dispatcher", () => {
             maxToolCalls,
             maxOutputChars: 8_000,
             executionTimeoutMs: 5_000,
+            ...(enableLsp
+                ? {
+                      lsp: {
+                          servers: createDefaultLanguageServers({
+                              typescript:
+                                  defaultTypeScriptLanguageServerCommand(),
+                              python: {
+                                  command: process.execPath,
+                                  args: ["-e", "process.exit(1)"],
+                              },
+                          }),
+                      },
+                  }
+                : {}),
         });
     }
 });
@@ -973,6 +1219,80 @@ function grepProgram(): string {
     return `
 async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
     await repo.grep("needle", { literal: true, maxMatches: 1 });
+    return { success: true, message: params.query };
+}`;
+}
+
+function fourCallDiscoveryProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.grep("needle", { literal: true, maxMatches: 1 });
+    await repo.grep("alpha", { literal: true, maxMatches: 1 });
+    await repo.glob("**/*.ts", { maxMatches: 10 });
+    await repo.ls("src", { depth: 1, maxEntries: 10 });
+    return { success: true, message: params.query };
+}`;
+}
+
+function fourCallMissingLspRequirementsProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.ls("src", { depth: 1, maxEntries: 10 });
+    await repo.glob("**/*.ts", { maxMatches: 10 });
+    await repo.grep("needle", { literal: true, maxMatches: 1 });
+    await repo.grep("alpha", { literal: true, maxMatches: 1 });
+    return { success: true, message: params.query };
+}`;
+}
+
+function readAndNavigateLspProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.read("src/lsp.ts", { offset: 0, limit: 3 });
+    await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "lspTarget" });
+    return { success: true, message: params.query };
+}`;
+}
+
+function readAndMissLspProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.read("src/lsp.ts", { offset: 0, limit: 3 });
+    await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "missingSymbol" });
+    return { success: true, message: params.query };
+}`;
+}
+
+function readAndEmptyLspProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.read("src/lsp.ts", { offset: 0, limit: 6 });
+    await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 6, symbol: "log" });
+    return { success: true, message: params.query };
+}`;
+}
+
+function navigateLspOnlyProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "lspTarget" });
+    return { success: true, message: params.query };
+}`;
+}
+
+function readThenThrowProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.read("src/lsp.ts", { offset: 0, limit: 3 });
+    throw new Error("runtime failure");
+}`;
+}
+
+function twoMissingLspCallsProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "missingSymbol" });
+    await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "anotherMissingSymbol" });
     return { success: true, message: params.query };
 }`;
 }
@@ -1039,6 +1359,7 @@ function scopedGrepRefinementProgram(): string {
 async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
     await repo.read("src/alpha.ts", { offset: 0, limit: 3 });
     await repo.grep("mutation-marker", { path: "src/wide.ts", literal: true, maxMatches: 1 });
+    await repo.read("src/wide.ts", { offset: 187, limit: 13 });
     return { success: true, message: params.query };
 }`;
 }
