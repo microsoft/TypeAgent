@@ -45,8 +45,8 @@ import {
     lookupPropertyInPropertyIndex,
     PropertyNames,
 } from "./propertyIndex.js";
-import { conversation as kpLib } from "knowledge-processor";
-import { collections, NormalizedEmbedding } from "typeagent";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
+import { collections, NormalizedEmbedding } from "@typeagent/agent-runtime";
 import { facetValueToString } from "./knowledgeLib.js";
 import {
     isInDateRange,

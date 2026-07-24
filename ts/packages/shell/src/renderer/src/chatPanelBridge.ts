@@ -26,7 +26,7 @@ import {
     parseStatusNotice,
     type TemplateEditServices,
     type ConnectionStatus,
-} from "chat-ui";
+} from "@typeagent/chat-ui";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import {
     ClientIO,

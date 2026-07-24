@@ -11,7 +11,7 @@ import { ConversationManager } from "../src/conversation/conversationManager.js"
 import { createEmailMemory } from "../src/email/email.js";
 import { createConversationSettings } from "../src/conversation/conversation.js";
 import { SearchTermsActionV2 } from "../src/conversation/knowledgeTermSearchSchema2.js";
-import { readAllText, readJsonFile } from "typeagent";
+import { readAllText, readJsonFile } from "@typeagent/agent-runtime";
 import { SearchProcessingOptions } from "../src/conversation/searchProcessor.js";
 
 // TODO: this test is not enabled on all dev machines yet. Currently requires some private datasets and indexes

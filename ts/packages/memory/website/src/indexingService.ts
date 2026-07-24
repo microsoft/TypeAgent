@@ -6,7 +6,7 @@ import path from "node:path";
 import { ChatModel, TextEmbeddingModel } from "@typeagent/aiclient";
 import { WebsiteCollection } from "./websiteCollection.js";
 import { importWebsites, getDefaultBrowserPaths } from "./importWebsites.js";
-import { IndexingResults } from "knowpro";
+import { IndexingResults } from "@typeagent/knowpro";
 import { fileURLToPath } from "node:url";
 import registerDebug from "debug";
 import getFolderSize from "get-folder-size";

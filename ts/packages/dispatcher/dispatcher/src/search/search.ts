@@ -12,10 +12,10 @@ import {
     TermFilter,
 } from "../context/dispatcher/schema/lookupActionSchema.js";
 import { ActionContext, ActionResult, Entity } from "@typeagent/agent-sdk";
-import { conversation } from "knowledge-processor";
+import { conversation } from "@typeagent/knowledge-processor";
 //import { getLookupSettings, handleLookup } from "./internet.js";
 import registerDebug from "debug";
-import { getImageElement, getMimeType } from "typechat-utils";
+import { getImageElement, getMimeType } from "@typeagent/typechat-utils";
 import { lookupAndAnswerFromMemory } from "../context/memory.js";
 
 const debug = registerDebug("typeagent:dispatcher:lookup");

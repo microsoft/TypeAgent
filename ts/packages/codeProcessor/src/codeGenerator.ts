@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createTranslator, MessageSourceRole } from "typeagent";
+import { createTranslator, MessageSourceRole } from "@typeagent/agent-runtime";
 import { CodeGenResponse } from "./codeGenSchema.js";
 import { openai } from "@typeagent/aiclient";
 import { getData, PromptSection, TypeChatLanguageModel } from "typechat";

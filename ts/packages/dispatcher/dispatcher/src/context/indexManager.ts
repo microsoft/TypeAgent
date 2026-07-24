@@ -7,11 +7,11 @@ import registerDebug from "debug";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { ensureDirectory, getUniqueFileName } from "../utils/fsUtils.js";
 import path from "node:path";
-import { ensureDir, isDirectoryPath } from "typeagent";
+import { ensureDir, isDirectoryPath } from "@typeagent/agent-runtime";
 import { IndexData, IndexSource } from "image-memory";
-import { IndexData as WebsiteIndexData } from "website-memory";
+import { IndexData as WebsiteIndexData } from "@typeagent/website-memory";
 import { IndexingServiceRegistry } from "./indexingServiceRegistry.js";
-// import { searchConversationKnowledge } from "knowpro";
+// import { searchConversationKnowledge } from "@typeagent/knowpro";
 
 const debug = registerDebug("typeagent:indexManager");
 

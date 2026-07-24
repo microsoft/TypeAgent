@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { asyncArray, dateTime, readJsonFile } from "typeagent";
+import { asyncArray, dateTime, readJsonFile } from "@typeagent/agent-runtime";
 import {
     Action,
     ConcreteEntity,

@@ -11,7 +11,7 @@ import {
     readJsonFile,
     writeJsonFile,
     writeJsonFiles,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { TextBlock, TextBlockType } from "../text.js";
 import { split, splitIntoLines } from "../textChunker.js";
 import {

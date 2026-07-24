@@ -11,7 +11,7 @@ import {
     NameValue,
     ObjectFolder,
     ObjectFolderSettings,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 
 export type ObjectTableRow = {
     name: string;

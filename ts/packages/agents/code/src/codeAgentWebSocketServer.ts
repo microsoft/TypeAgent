@@ -5,7 +5,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { AddressInfo } from "net";
 import registerDebug from "debug";
 import { isAllowedAgentOrigin } from "./originAllowlist.js";
-import { attachHeartbeat } from "websocket-channel-server";
+import { attachHeartbeat } from "@typeagent/websocket-channel-server";
 
 const debug = registerDebug("typeagent:code:websocket");
 

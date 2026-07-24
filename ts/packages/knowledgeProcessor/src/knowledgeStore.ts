@@ -5,7 +5,7 @@ import {
     FileSystem,
     ObjectFolder,
     ObjectFolderSettings,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { TextIndex, TextIndexSettings } from "./textIndex.js";
 import { TemporalLog } from "./temporal.js";
 import {

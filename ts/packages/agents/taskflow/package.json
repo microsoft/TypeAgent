@@ -1,7 +1,6 @@
 {
-  "name": "taskflow-typeagent",
+  "name": "@typeagent/taskflow-typeagent",
   "version": "0.0.1",
-  "private": true,
   "description": "TypeAgent TaskFlow — user-taught macros over TypeAgent actions",
   "keywords": [
     "typeagent-agent"

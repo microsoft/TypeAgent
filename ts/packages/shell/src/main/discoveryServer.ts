@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createWebSocketChannelServer } from "websocket-channel-server";
+import { createWebSocketChannelServer } from "@typeagent/websocket-channel-server";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import {
     AGENT_SERVER_DISCOVERY_NAME,

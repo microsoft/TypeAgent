@@ -16,18 +16,18 @@ import {
     STATUS_NOTICE_EVENT,
     parseStatusNotice,
     type ConnectionStatus,
-} from "chat-ui";
+} from "@typeagent/chat-ui";
 import type {
     TemplateEditServices,
     DynamicDisplayResult,
     ImageCaptureProvider,
-} from "chat-ui";
+} from "@typeagent/chat-ui";
 import { VsCodeAzureSpeechProvider } from "./azureSpeechProvider.js";
 import { CameraView } from "./cameraView.js";
 import { injectStyle } from "./injectStyle.js";
 import type { SpeechToken } from "@typeagent/agent-server-protocol";
 import type { QuestionForm, QuestionFormResponse } from "@typeagent/agent-sdk";
-import chatPanelStyles from "chat-ui/styles";
+import chatPanelStyles from "@typeagent/chat-ui/styles";
 import completionUiStyles from "@typeagent/completion-ui/styles.css";
 import vscodeThemeStyles from "./vscode-theme.css";
 import { QueueStateMirror } from "@typeagent/dispatcher-types";

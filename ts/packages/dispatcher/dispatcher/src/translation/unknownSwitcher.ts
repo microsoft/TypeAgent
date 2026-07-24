@@ -4,7 +4,7 @@
 import {
     InlineTranslatorSchemaDef,
     createJsonTranslatorFromSchemaDef,
-} from "typechat-utils";
+} from "@typeagent/typechat-utils";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
@@ -14,7 +14,7 @@ import {
     SchemaCreator as sc,
 } from "@typeagent/action-schema";
 import { getCombinedActionSchemaTypeName } from "./agentTranslators.js";
-import { PromptLogger } from "telemetry";
+import { PromptLogger } from "@typeagent/telemetry";
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
 
 function createSelectionActionTypeDefinition(

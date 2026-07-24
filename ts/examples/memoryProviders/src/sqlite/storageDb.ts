@@ -2,13 +2,17 @@
 // Licensed under the MIT License.
 
 import path from "path";
-import * as knowLib from "knowledge-processor";
+import * as knowLib from "@typeagent/knowledge-processor";
 import { createDatabase, tablePath } from "./common.js";
 import { createTextIndex } from "./textTable.js";
 import { createObjectTable } from "./objectTable.js";
-import { ensureDir, ObjectFolder, ObjectFolderSettings } from "typeagent";
+import {
+    ensureDir,
+    ObjectFolder,
+    ObjectFolderSettings,
+} from "@typeagent/agent-runtime";
 import { createTemporalLogTable, TemporalTable } from "./temporalTable.js";
-import { TemporalLogSettings } from "knowledge-processor";
+import { TemporalLogSettings } from "@typeagent/knowledge-processor";
 import { createKeyValueTable, KeyValueTable } from "./keyValueTable.js";
 
 export interface StorageDb extends knowLib.StorageProvider {

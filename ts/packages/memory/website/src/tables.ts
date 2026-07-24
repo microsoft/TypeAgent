@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type sqlite from "better-sqlite3";
-import * as ms from "memory-storage";
+import * as ms from "@typeagent/memory-storage";
 
 // Website visit frequency table
 export interface VisitFrequency {

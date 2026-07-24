@@ -10,9 +10,9 @@ import {
     ValueDataType,
     ValueType,
     sets,
-} from "knowledge-processor";
+} from "@typeagent/knowledge-processor";
 import { generateTextId, toValidIndexName } from "./common.js";
-import { ScoredItem, generateEmbedding } from "typeagent";
+import { ScoredItem, generateEmbedding } from "@typeagent/agent-runtime";
 import { openai } from "@typeagent/aiclient";
 
 const { ModelType, createEmbeddingModel } = openai;

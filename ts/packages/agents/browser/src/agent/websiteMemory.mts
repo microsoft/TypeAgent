@@ -17,11 +17,11 @@ import {
     searchWebMemories,
     SearchWebMemoriesRequest,
 } from "./searchWebMemories.mjs";
-import * as website from "website-memory";
-import * as kpLib from "knowledge-processor";
+import * as website from "@typeagent/website-memory";
+import * as kpLib from "@typeagent/knowledge-processor";
 import { openai as ai } from "@typeagent/aiclient";
 import registerDebug from "debug";
-import { docPartsFromHtml } from "conversation-memory";
+import { docPartsFromHtml } from "@typeagent/conversation-memory";
 import {
     importProgressEvents,
     ImportProgressEvent,
@@ -118,7 +118,7 @@ import {
     ExtractionInput,
     BatchProgress,
     AIModelRequiredError,
-} from "website-memory";
+} from "@typeagent/website-memory";
 import { BrowserKnowledgeExtractor } from "./knowledge/browserKnowledgeExtractor.mjs";
 
 import { createContentExtractor, processHtmlFolder } from "./websiteImport.mjs";

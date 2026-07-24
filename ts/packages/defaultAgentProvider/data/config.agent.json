@@ -17,7 +17,7 @@
       "name": "list-agent"
     },
     "browser": {
-      "name": "browser-typeagent"
+      "name": "@typeagent/browser"
     },
     "desktop": {
       "name": "desktop-automation"
@@ -26,7 +26,7 @@
       "name": "code-agent"
     },
     "photo": {
-      "name": "photo-agent",
+      "name": "@typeagent/photo-agent",
       "execMode": "separate"
     },
     "image": {

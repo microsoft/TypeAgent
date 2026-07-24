@@ -4,7 +4,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod/v4";
-import * as cm from "conversation-memory";
+import * as cm from "@typeagent/conversation-memory";
 import { addPingTool, toolResult } from "./mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 

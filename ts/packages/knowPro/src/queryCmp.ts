@@ -5,8 +5,8 @@
  * Query comparison operations
  */
 
-import { collections } from "typeagent";
-import { conversation as kpLib } from "knowledge-processor";
+import { collections } from "@typeagent/agent-runtime";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 
 export enum ComparisonOp {
     Eq,

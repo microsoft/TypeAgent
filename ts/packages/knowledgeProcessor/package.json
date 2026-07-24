@@ -1,7 +1,6 @@
 {
-  "name": "knowledge-processor",
+  "name": "@typeagent/knowledge-processor",
   "version": "0.0.1",
-  "private": true,
   "description": "Libraries for using AI with textual and other knowledge.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -35,14 +34,14 @@
   },
   "dependencies": {
     "@azure-rest/maps-search": "^2.0.0-beta.3",
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/config": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*",
     "debug": "^4.4.0",
     "exifreader": "^4.39.0",
     "sharp": "^0.33.5",
-    "typeagent": "workspace:*",
-    "typechat": "^0.1.1",
-    "typechat-utils": "workspace:*"
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
