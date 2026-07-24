@@ -18,6 +18,7 @@ export interface ScriptResult {
     message?: string;
     data?: unknown;
     error?: string;
+    runtimeError?: true;
 }
 
 export interface FlowParameterDefinition {

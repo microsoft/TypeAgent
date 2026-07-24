@@ -26,6 +26,21 @@ describe("script executor", () => {
         expect(jest.getTimerCount()).toBe(0);
     });
 
+    it("preserves an advisory script failure without a runtime marker", async () => {
+        const executor = createScriptExecutor({ apiParamName: "repo" });
+
+        await expect(
+            executor.execute(
+                'async function execute() { return { success: false, error: "advisory failure" }; }',
+                {},
+                {},
+            ),
+        ).resolves.toEqual({
+            success: false,
+            error: "advisory failure",
+        });
+    });
+
     it("returns a failure when asynchronous execution times out", async () => {
         jest.useFakeTimers();
         const executor = createScriptExecutor({
@@ -44,6 +59,7 @@ describe("script executor", () => {
             success: false,
             error: "Script execution timeout",
             message: "Script execution failed: Script execution timeout",
+            runtimeError: true,
         });
         expect(jest.getTimerCount()).toBe(0);
     });

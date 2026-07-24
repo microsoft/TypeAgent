@@ -112,6 +112,7 @@ export function createScriptExecutor(config: ScriptExecutorConfig): {
                     success: false,
                     error: errorMessage,
                     message: `Script execution failed: ${errorMessage}`,
+                    runtimeError: true,
                 };
             } finally {
                 if (timeoutHandle !== undefined) {
