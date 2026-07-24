@@ -176,12 +176,12 @@ test("rejects revisionless caches instead of assuming current compatibility", ()
     );
 });
 
-test("rejects caches without direct runtime-source provenance", () => {
-    assert.equal(CACHE_COMPATIBILITY_REVISION, 15);
+test("rejects the immediate prior cache compatibility revision", () => {
+    assert.equal(CACHE_COMPATIBILITY_REVISION, 18);
     assert.equal(
         cacheManifestsCompatible(
-            manifest("pre-runtime-source-provenance", {
-                cacheCompatibilityRevision: 14,
+            manifest("pre-shared-ripgrep-timeout", {
+                cacheCompatibilityRevision: 17,
             }),
             manifest("direct-typeagent"),
         ),
@@ -360,7 +360,16 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
         mcpToolTrace: [],
         typeAgentToolTrace: toolTrace,
         dispatcherUsage: {
-            requestCount: 1,
+            requestCount: 0,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            cacheWriteTokens: 0,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+            totalTokens: 0,
+        },
+        typeAgentUsage: usage,
+        combinedUsage: {
             inputTokens: 1,
             cachedInputTokens: 0,
             cacheWriteTokens: 0,
@@ -368,20 +377,12 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
             reasoningOutputTokens: 0,
             totalTokens: 2,
         },
-        typeAgentUsage: usage,
-        combinedUsage: {
-            inputTokens: 2,
-            cachedInputTokens: 0,
-            cacheWriteTokens: 0,
-            outputTokens: 2,
-            reasoningOutputTokens: 0,
-            totalTokens: 4,
-        },
         typeAgentDispatch: {
             ingress: "natural-language",
             submittedRequest: task.query,
-            translationInvoked: true,
-            translationRequestCount: 1,
+            dispatchMethod: "grammar",
+            translationInvoked: false,
+            translationRequestCount: 0,
             activeAgentNames: ["explorer"],
             activeSchemaNames: ["explorer"],
             translatedActions: [

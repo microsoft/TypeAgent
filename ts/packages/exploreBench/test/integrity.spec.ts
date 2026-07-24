@@ -196,21 +196,21 @@ test("rejects every direct TypeAgent dispatch and isolation mutation", () => {
             },
         },
         {
-            name: "translation not invoked",
+            name: "grammar dispatch not proven",
             apply: (candidate) => {
-                candidate.typeAgentDispatch!.translationInvoked = false;
+                candidate.typeAgentDispatch!.dispatchMethod = false;
             },
         },
         {
-            name: "zero translations",
+            name: "unexpected translation",
             apply: (candidate) => {
-                candidate.typeAgentDispatch!.translationRequestCount = 0;
+                candidate.typeAgentDispatch!.translationInvoked = true;
             },
         },
         {
-            name: "duplicate translations",
+            name: "nonzero translation count",
             apply: (candidate) => {
-                candidate.typeAgentDispatch!.translationRequestCount = 2;
+                candidate.typeAgentDispatch!.translationRequestCount = 1;
             },
         },
         {
@@ -957,18 +957,6 @@ test("requires mode-correct language-server evidence", () => {
                 )!.error = "failed";
             },
         ],
-        [
-            "LSP arm recorded only an empty navigation result",
-            (candidate: RunResult) => {
-                candidate.lspResultCount = 0;
-                candidate.typeAgentToolTrace!.calls.find(
-                    (call) => call.tool === "lsp",
-                )!.resultCount = 0;
-                candidate.exploreTelemetry!.toolTrace.calls.find(
-                    (call) => call.tool === "lsp",
-                )!.resultCount = 0;
-            },
-        ],
     ] as const) {
         const candidate = structuredClone(lspRow);
         apply(candidate);
@@ -978,6 +966,16 @@ test("requires mode-correct language-server evidence", () => {
             name,
         );
     }
+
+    const emptyResult = structuredClone(lspRow);
+    emptyResult.lspResultCount = 0;
+    emptyResult.typeAgentToolTrace!.calls.find(
+        (call) => call.tool === "lsp",
+    )!.resultCount = 0;
+    emptyResult.exploreTelemetry!.toolTrace.calls.find(
+        (call) => call.tool === "lsp",
+    )!.resultCount = 0;
+    assert.doesNotThrow(() => validateResultRows([emptyResult], lspIdentity));
 });
 
 test("rejects successful rows that did not retain the default main agent", () => {
@@ -1070,14 +1068,14 @@ function typeAgentRow(variant: "typeagent" | "typeagent-lsp"): RunResult {
         totalTokens: 120,
     };
     const dispatcherUsage = {
-        requestCount: 1,
+        requestCount: 0,
         usageComplete: true,
-        inputTokens: 25,
+        inputTokens: 0,
         cachedInputTokens: 0,
         cacheWriteTokens: 0,
-        outputTokens: 5,
+        outputTokens: 0,
         reasoningOutputTokens: 0,
-        totalTokens: 30,
+        totalTokens: 0,
     };
     const toolTrace = {
         calls: toolCalls,
@@ -1093,12 +1091,12 @@ function typeAgentRow(variant: "typeagent" | "typeagent-lsp"): RunResult {
         dispatcherUsage,
         typeAgentUsage,
         combinedUsage: {
-            inputTokens: 125,
+            inputTokens: 100,
             cachedInputTokens: 0,
             cacheWriteTokens: 0,
-            outputTokens: 25,
+            outputTokens: 20,
             reasoningOutputTokens: 0,
-            totalTokens: 150,
+            totalTokens: 120,
         },
         mcpAdopted: false,
         lspAdopted: variant === "typeagent-lsp",
@@ -1128,8 +1126,9 @@ function typeAgentRow(variant: "typeagent" | "typeagent-lsp"): RunResult {
         typeAgentDispatch: {
             ingress: "natural-language",
             submittedRequest: row.query,
-            translationInvoked: true,
-            translationRequestCount: 1,
+            dispatchMethod: "grammar",
+            translationInvoked: false,
+            translationRequestCount: 0,
             activeAgentNames: ["explorer"],
             activeSchemaNames: ["explorer"],
             translatedActions: [
