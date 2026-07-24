@@ -99,7 +99,10 @@ function describeRejectedLocation(
         ? String(value.endLine)
         : "?";
     const observed = observations
-        .filter((observation) => observation.path === rawPath)
+        .filter(
+            (observation) =>
+                observation.source === "read" && observation.path === rawPath,
+        )
         .slice(0, MAX_REPORTED_OBSERVATIONS)
         .map(
             (observation) =>
@@ -107,8 +110,8 @@ function describeRejectedLocation(
         );
     return `${rawPath}:${startLine}-${endLine} rejected; ${
         observed.length > 0
-            ? `observed ranges ${observed.join(", ")}`
-            : "no matching observed range"
+            ? `observed read ranges ${observed.join(", ")}`
+            : "no matching observed range from read"
     }`;
 }
 
@@ -188,7 +191,11 @@ function isRangeGrounded(
 ): boolean {
     let nextLine = startLine;
     const ranges = observations
-        .filter((observation) => observation.path === relativePath)
+        .filter(
+            (observation) =>
+                observation.source === "read" &&
+                observation.path === relativePath,
+        )
         .sort((left, right) => left.startLine - right.startLine);
     for (const range of ranges) {
         if (range.endLine < nextLine) {
