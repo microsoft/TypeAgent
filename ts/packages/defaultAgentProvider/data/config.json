@@ -59,7 +59,7 @@
       "name": "weather-agent"
     },
     "taskflow": {
-      "name": "taskflow-typeagent",
+      "name": "@typeagent/taskflow-typeagent",
       "execMode": "dispatcher"
     },
     "powershell": {
