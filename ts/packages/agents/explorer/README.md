@@ -38,6 +38,12 @@ and bounded TypeAgent reasoning session. The model sees the compact grounded
 result of discovery before generating refinement, then sees refinement evidence
 before invoking the typed `submitExploration` action. Final locations are
 validated against that ledger; an invalid submission receives bounded observed
-ranges so the same session can repair it. The MCP transport remains in
-`packages/mcp/explore`; the benchmark remains separately packaged in
-`packages/exploreBench`.
+ranges so the same session can repair it. Predictable refinements that omit a
+mandatory read or LSP call are rejected before consuming repository budget, and
+the bounded sixth reasoning action permits one final correction. Each action
+result includes bounded repository-call inputs, counts, truncation, and errors;
+candidate ranges returned by Code Mode remain visible through read compaction.
+Host-validated evidence survives an advisory program result, while runtime
+failures remain errors and repository calls completing after a timeout are
+discarded. The MCP transport remains in `packages/mcp/explore`; the benchmark
+remains separately packaged in `packages/exploreBench`.
