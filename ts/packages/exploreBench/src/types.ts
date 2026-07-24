@@ -110,6 +110,7 @@ export interface TypeAgentDispatchAction {
 export interface TypeAgentDispatchEvidence {
     ingress: "natural-language";
     submittedRequest: string;
+    dispatchMethod: "construction" | "grammar" | false;
     translationInvoked: boolean;
     translationRequestCount: number;
     activeAgentNames: string[];
