@@ -17,7 +17,12 @@ import {
     ProgressBar,
     StopWatch,
 } from "interactive-app";
-import { changeFileExt, ensureDir, getFileName, readAllText } from "@typeagent/agent-runtime";
+import {
+    changeFileExt,
+    ensureDir,
+    getFileName,
+    readAllText,
+} from "@typeagent/agent-runtime";
 import {
     createIndexingEventHandler,
     setKnowledgeExtractorV2,

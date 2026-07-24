@@ -329,9 +329,7 @@ async function listScopedPackages(
             if (
                 name &&
                 (scopePrefixes.length === 0 ||
-                    scopePrefixes.some((p) =>
-                        name.toLowerCase().startsWith(p),
-                    ))
+                    scopePrefixes.some((p) => name.toLowerCase().startsWith(p)))
             ) {
                 names.push(name);
             }

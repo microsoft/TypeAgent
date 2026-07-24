@@ -5,7 +5,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import registerDebug from "debug";
 
-import { importWebsites, Website, WebsiteCollection } from "@typeagent/website-memory";
+import {
+    importWebsites,
+    Website,
+    WebsiteCollection,
+} from "@typeagent/website-memory";
 
 import { IndexingKnowledgeExtractor } from "./indexingKnowledgeExtractor.mjs";
 
@@ -162,7 +166,9 @@ export class BrowserIndexingService {
             location === "default" ||
             !location.includes(path.sep)
         ) {
-            const { getDefaultBrowserPaths } = await import("@typeagent/website-memory");
+            const { getDefaultBrowserPaths } = await import(
+                "@typeagent/website-memory"
+            );
             const defaultPaths = getDefaultBrowserPaths();
 
             if (browserType === "chrome") {

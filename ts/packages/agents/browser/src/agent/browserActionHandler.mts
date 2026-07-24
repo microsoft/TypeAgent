@@ -1405,7 +1405,9 @@ async function resolveWebPage(
                 context.agentContext.resolverSettings.keywordResolver ||
                 fastResolution
             ) {
-                const { urlResolver } = await import("@typeagent/azure-ai-foundry");
+                const { urlResolver } = await import(
+                    "@typeagent/azure-ai-foundry"
+                );
                 const cachehitUrls = urlResolver.resolveURLByKeyword(site);
                 if (cachehitUrls && cachehitUrls.length > 0) {
                     debug(`Resolved URLs from cache: ${cachehitUrls}`);

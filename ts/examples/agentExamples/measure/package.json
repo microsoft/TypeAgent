@@ -28,9 +28,9 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
-    "better-sqlite3": "12.6.2",
-    "@typeagent/agent-runtime": "workspace:*"
+    "better-sqlite3": "12.6.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.13",

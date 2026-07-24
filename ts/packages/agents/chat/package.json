@@ -28,13 +28,13 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/telemetry": "workspace:*",
-    "@typeagent/agent-runtime": "workspace:*",
-    "typechat": "^0.1.1",
-    "@typeagent/typechat-utils": "workspace:*"
+    "@typeagent/typechat-utils": "workspace:*",
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "copyfiles": "^2.4.1",

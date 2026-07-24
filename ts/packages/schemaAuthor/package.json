@@ -29,8 +29,8 @@
   },
   "dependencies": {
     "@typeagent/action-schema": "workspace:*",
-    "@typeagent/aiclient": "workspace:*",
     "@typeagent/agent-runtime": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {

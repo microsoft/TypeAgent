@@ -3,7 +3,11 @@
 
 import path from "path";
 import os from "node:os";
-import { createNormalized, ensureDir, NormalizedEmbedding } from "@typeagent/agent-runtime";
+import {
+    createNormalized,
+    ensureDir,
+    NormalizedEmbedding,
+} from "@typeagent/agent-runtime";
 import { hasEnvSettings, openai } from "@typeagent/aiclient";
 import * as knowLib from "@typeagent/knowledge-processor";
 

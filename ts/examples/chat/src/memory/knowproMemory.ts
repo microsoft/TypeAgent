@@ -20,7 +20,12 @@ import {
 } from "interactive-app";
 import { parseFreeAndNamedArguments } from "../common.js";
 import { createSearchGroup, whenFilterFromNamedArgs } from "./knowproCommon.js";
-import { collections, ensureDir, isFilePath, readJsonFile } from "@typeagent/agent-runtime";
+import {
+    collections,
+    ensureDir,
+    isFilePath,
+    readJsonFile,
+} from "@typeagent/agent-runtime";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";

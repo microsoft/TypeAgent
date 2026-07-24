@@ -1,7 +1,6 @@
 {
   "name": "@typeagent/discord-agent",
   "version": "0.0.1",
-  "private": false,
   "description": "TypeAgent agent for discord",
   "keywords": [
     "typeagent-agent"
@@ -15,15 +14,15 @@
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/discordManifest.json",
+    "./agent/handlers": "./dist/discordActionHandler.js"
+  },
   "files": [
     "dist",
     "src",
     "!dist/tsconfig.tsbuildinfo"
   ],
-  "exports": {
-    "./agent/manifest": "./src/discordManifest.json",
-    "./agent/handlers": "./dist/discordActionHandler.js"
-  },
   "scripts": {
     "agc": "agc -i ./src/discordSchema.agr -o ./dist/discordSchema.ag.json",
     "asc": "asc -i ./src/discordSchema.ts -o ./dist/discordSchema.pas.json -t DiscordActions",

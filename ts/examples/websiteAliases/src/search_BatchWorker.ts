@@ -4,7 +4,10 @@
 import { parentPort, workerData } from "worker_threads";
 import chalk from "chalk";
 import { loadConfigSync } from "@typeagent/config";
-import { bingWithGrounding, openPhraseGeneratorAgent } from "@typeagent/azure-ai-foundry";
+import {
+    bingWithGrounding,
+    openPhraseGeneratorAgent,
+} from "@typeagent/azure-ai-foundry";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import { isPageAvailable } from "./common.js";

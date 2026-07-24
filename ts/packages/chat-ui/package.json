@@ -1,7 +1,6 @@
 {
   "name": "@typeagent/chat-ui",
   "version": "0.0.1",
-  "private": false,
   "description": "Shared chat UI rendering for TypeAgent shell and Chrome extension",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

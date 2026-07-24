@@ -24,9 +24,11 @@
   "dependencies": {
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "body-parser": "1.20.6",
@@ -35,9 +37,7 @@
     "default-agent-provider": "workspace:*",
     "dotenv": "^16.3.1",
     "express": "^4.22.0",
-    "find-config": "^1.0.0",
-    "@typeagent/telemetry": "workspace:*",
-    "@typeagent/agent-runtime": "workspace:*"
+    "find-config": "^1.0.0"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

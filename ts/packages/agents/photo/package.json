@@ -1,7 +1,6 @@
 {
   "name": "@typeagent/photo-agent",
   "version": "0.0.1",
-  "private": false,
   "description": "Photo dispatcher agent",
   "keywords": [
     "typeagent-agent"
@@ -15,15 +14,15 @@
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/photoManifest.json",
+    "./agent/handlers": "./dist/photoActionHandler.js"
+  },
   "files": [
     "dist",
     "src",
     "!dist/tsconfig.tsbuildinfo"
   ],
-  "exports": {
-    "./agent/manifest": "./src/photoManifest.json",
-    "./agent/handlers": "./dist/photoActionHandler.js"
-  },
   "scripts": {
     "asc": "asc -i ./src/photoSchema.ts -o ./dist/photoSchema.pas.json -t PhotoAction",
     "build": "concurrently npm:tsc npm:asc",

@@ -48,8 +48,10 @@
     "tsc": "tsc -b src test"
   },
   "dependencies": {
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*",
     "agent-cache": "workspace:*",
     "body-parser": "^1.20.6",
     "chalk": "^5.4.1",
@@ -57,9 +59,7 @@
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "find-config": "^1.0.0",
-    "@typeagent/agent-runtime": "workspace:*",
     "typechat": "^0.1.1",
-    "@typeagent/typechat-utils": "workspace:*",
     "ws": "^8.21.1"
   },
   "devDependencies": {

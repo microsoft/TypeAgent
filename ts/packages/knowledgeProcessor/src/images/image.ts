@@ -13,7 +13,11 @@ import {
     createConversationManager,
 } from "../conversation/conversationManager.js";
 import path from "path";
-import { createTypeChat, isDirectoryPath, promptLib } from "@typeagent/agent-runtime";
+import {
+    createTypeChat,
+    isDirectoryPath,
+    promptLib,
+} from "@typeagent/agent-runtime";
 import { createEntitySearchOptions } from "../conversation/entities.js";
 import { Image } from "./imageSchema.js";
 import {

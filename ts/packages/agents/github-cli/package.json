@@ -1,7 +1,6 @@
 {
   "name": "@typeagent/github-cli-agent",
   "version": "0.0.1",
-  "private": false,
   "description": "TypeAgent agent for github-cli",
   "keywords": [
     "typeagent-agent"
@@ -15,15 +14,15 @@
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/github-cliManifest.json",
+    "./agent/handlers": "./dist/github-cliActionHandler.js"
+  },
   "files": [
     "dist",
     "src",
     "!dist/tsconfig.tsbuildinfo"
   ],
-  "exports": {
-    "./agent/manifest": "./src/github-cliManifest.json",
-    "./agent/handlers": "./dist/github-cliActionHandler.js"
-  },
   "scripts": {
     "agc": "agc -i ./src/github-cliSchema.agr -o ./dist/github-cliSchema.ag.json",
     "asc": "asc -i ./src/github-cliSchema.ts -o ./dist/github-cliSchema.pas.json -t GithubCliActions",

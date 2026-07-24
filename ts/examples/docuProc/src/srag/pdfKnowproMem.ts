@@ -16,7 +16,12 @@ import {
     StopWatch,
     InteractiveIo,
 } from "interactive-app";
-import { collections, dateTime, ensureDir, getFileName } from "@typeagent/agent-runtime";
+import {
+    collections,
+    dateTime,
+    ensureDir,
+    getFileName,
+} from "@typeagent/agent-runtime";
 
 import { ChatModel, TextEmbeddingModel, openai } from "@typeagent/aiclient";
 import {

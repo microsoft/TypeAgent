@@ -40,6 +40,7 @@
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
+    "@typeagent/websocket-channel-server": "workspace:*",
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
     "@types/ws": "^8.5.10",
@@ -47,7 +48,6 @@
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5",
-    "@typeagent/websocket-channel-server": "workspace:*",
     "ws": "^8.21.1"
   }
 }

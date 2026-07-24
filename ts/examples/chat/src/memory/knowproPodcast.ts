@@ -25,7 +25,11 @@ import {
     sourcePathToMemoryIndexPath,
 } from "./knowproCommon.js";
 import { argDestFile, argToDate, copyFileToDir } from "../common.js";
-import { ensureDir, getAbsolutePath, getFileName } from "@typeagent/agent-runtime";
+import {
+    ensureDir,
+    getAbsolutePath,
+    getFileName,
+} from "@typeagent/agent-runtime";
 
 export type KnowproPodcastContext = {
     printer: KnowProPrinter;

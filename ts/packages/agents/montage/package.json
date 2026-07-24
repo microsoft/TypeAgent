@@ -31,9 +31,12 @@
     "webpack": "webpack"
   },
   "dependencies": {
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/knowledge-processor": "workspace:*",
+    "@typeagent/knowpro": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
     "body-parser": "1.20.6",
     "d3": "^7.9.0",
@@ -42,11 +45,8 @@
     "express": "^4.22.0",
     "express-rate-limit": "^7.5.0",
     "image-memory": "workspace:*",
-    "@typeagent/knowledge-processor": "workspace:*",
-    "@typeagent/knowpro": "workspace:*",
     "koffi": "^2.10.1",
     "sharp": "^0.33.5",
-    "@typeagent/agent-runtime": "workspace:*",
     "typechat": "^0.1.1",
     "winreg": "^1.2.5"
   },

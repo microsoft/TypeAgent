@@ -16,7 +16,11 @@ import {
     openai,
 } from "@typeagent/aiclient";
 import { generateActionRequests } from "./actionGen.js";
-import { dedupeList, generateEmbeddingWithRetry, TypeSchema } from "@typeagent/agent-runtime";
+import {
+    dedupeList,
+    generateEmbeddingWithRetry,
+    TypeSchema,
+} from "@typeagent/agent-runtime";
 
 loadConfigSync();
 

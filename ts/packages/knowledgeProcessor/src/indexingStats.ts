@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import { openai } from "@typeagent/aiclient";
-import { readJsonFile, removeFile, writeJsonFile } from "@typeagent/agent-runtime";
+import {
+    readJsonFile,
+    removeFile,
+    writeJsonFile,
+} from "@typeagent/agent-runtime";
 
 export type ItemIndexingStats = {
     name?: string | undefined;

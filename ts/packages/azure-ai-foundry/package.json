@@ -1,7 +1,6 @@
 {
   "name": "@typeagent/azure-ai-foundry",
   "version": "0.0.1",
-  "private": false,
   "description": "Clients for AI APIs used by Microsoft AI Systems team.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -35,14 +34,14 @@
   "dependencies": {
     "@azure/ai-projects": "^2.2.0",
     "@azure/identity": "^4.10.0",
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/config": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
     "async": "^3.2.5",
     "debug": "^4.4.0",
     "openai": "^6.16.0",
-    "@typeagent/telemetry": "workspace:*",
-    "@typeagent/agent-runtime": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {

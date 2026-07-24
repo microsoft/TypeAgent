@@ -41,7 +41,10 @@ import {
 } from "../src/searchLib.js";
 import * as q from "../src/query.js";
 import { PropertyNames } from "../src/propertyIndex.js";
-import { createEmbeddingCache, TextEmbeddingCache } from "@typeagent/knowledge-processor";
+import {
+    createEmbeddingCache,
+    TextEmbeddingCache,
+} from "@typeagent/knowledge-processor";
 import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
 import { dateTime } from "@typeagent/agent-runtime";
 import { TestMessage } from "./testMessage.js";

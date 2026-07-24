@@ -3,7 +3,11 @@
 
 import { openai, ChatModel, TextEmbeddingModel } from "@typeagent/aiclient";
 import * as knowLib from "@typeagent/knowledge-processor";
-import { createObjectFolder, loadSchema, ObjectFolder } from "@typeagent/agent-runtime";
+import {
+    createObjectFolder,
+    loadSchema,
+    ObjectFolder,
+} from "@typeagent/agent-runtime";
 
 import { createPdfDocumenter, PdfFileDocumenter } from "./pdfFileDocumenter.js";
 import { Chunk, ChunkId } from "./pdfChunker.js";

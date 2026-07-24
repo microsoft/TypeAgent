@@ -22,13 +22,13 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/config": "workspace:*",
     "@typeagent/conversation-memory": "workspace:*",
+    "@typeagent/knowpro": "workspace:*",
     "dotenv": "^16.3.1",
     "examples-lib": "workspace:*",
     "interactive-app": "workspace:*",
-    "@typeagent/knowpro": "workspace:*",
-    "@typeagent/agent-runtime": "workspace:*",
     "zod": "^4.1.13"
   },
   "devDependencies": {
