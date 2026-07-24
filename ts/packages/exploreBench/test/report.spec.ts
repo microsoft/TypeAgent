@@ -6,7 +6,11 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { benchmarkPrefixLimits, writeReports } from "../src/report.js";
+import {
+    benchmarkPrefixLimits,
+    summarizeRows,
+    writeReports,
+} from "../src/report.js";
 import { scoreSwebench } from "../src/score.js";
 import type { RunManifest, RunResult } from "../src/types.js";
 
@@ -107,27 +111,21 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                             maxAttempts: 2,
                             finalAnswer,
                             score: scoreSwebench(finalAnswer, patch),
-                            usage: {
-                                source: "assistant.usage",
-                                requestCount: 1,
-                                models: [model],
-                                inputTokens: variant === "baseline" ? 100 : 110,
-                                cachedInputTokens: 0,
-                                cacheWriteTokens: 0,
-                                outputTokens: 10,
-                                reasoningOutputTokens: 0,
-                                totalTokens: variant === "baseline" ? 110 : 120,
-                            },
                             ...(variant === "typeagent"
                                 ? {
-                                      attemptedExploreCalls: 1,
-                                      completedExploreCalls: 1,
-                                      successfulExploreCalls: 1,
-                                      outsideExploreInspection: false,
-                                      mcpServerReady: true,
-                                      mcpAdvertisedTools: ["explore"],
+                                      dispatcherUsage: {
+                                          requestCount: 1,
+                                          usageComplete: true,
+                                          inputTokens: 20,
+                                          cachedInputTokens: 0,
+                                          cacheWriteTokens: 0,
+                                          outputTokens: 5,
+                                          reasoningOutputTokens: 0,
+                                          totalTokens: 25,
+                                      },
                                       typeAgentUsage: {
                                           requestCount: 2,
+                                          usageComplete: true,
                                           inputTokens: 30,
                                           cachedInputTokens: 0,
                                           cacheWriteTokens: 0,
@@ -136,12 +134,33 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                           totalTokens: 40,
                                       },
                                       combinedUsage: {
-                                          inputTokens: 140,
+                                          inputTokens: 50,
                                           cachedInputTokens: 0,
                                           cacheWriteTokens: 0,
-                                          outputTokens: 20,
+                                          outputTokens: 15,
                                           reasoningOutputTokens: 0,
-                                          totalTokens: 160,
+                                          totalTokens: 65,
+                                      },
+                                      typeAgentDispatch: {
+                                          ingress: "natural-language" as const,
+                                          submittedRequest: "find bug",
+                                          translationInvoked: true,
+                                          translationRequestCount: 1,
+                                          activeAgentNames: ["explorer"],
+                                          activeSchemaNames: ["explorer"],
+                                          translatedActions: [
+                                              {
+                                                  schemaName: "explorer",
+                                                  actionName:
+                                                      "exploreRepository",
+                                                  parameters: {},
+                                              },
+                                          ],
+                                          executionCount: 1,
+                                          outputMatchedExecution: true,
+                                          executionRequestMatchedIngress: true,
+                                          usedCopilot: false,
+                                          usedMcp: false,
                                       },
                                       typeAgentToolTrace: {
                                           calls: [],
@@ -149,11 +168,12 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                           totalOutputBytes: 0,
                                       },
                                       exploreTelemetry: {
-                                          schemaVersion: 1 as const,
+                                          schemaVersion: 4 as const,
                                           model,
                                           status: "completed" as const,
                                           usage: {
                                               requestCount: 2,
+                                              usageComplete: true,
                                               inputTokens: 30,
                                               cachedInputTokens: 0,
                                               cacheWriteTokens: 0,
@@ -166,9 +186,72 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                               totalCalls: 0,
                                               totalOutputBytes: 0,
                                           },
+                                          invocations: [
+                                              {
+                                                  index: 0,
+                                                  status: "completed" as const,
+                                                  usage: {
+                                                      requestCount: 2,
+                                                      usageComplete: true,
+                                                      inputTokens: 30,
+                                                      cachedInputTokens: 0,
+                                                      cacheWriteTokens: 0,
+                                                      outputTokens: 10,
+                                                      reasoningOutputTokens: 0,
+                                                      totalTokens: 40,
+                                                  },
+                                                  actionTranslationAndCodeGenerationUsage:
+                                                      {
+                                                          requestCount: 2,
+                                                          usageComplete: true,
+                                                          inputTokens: 30,
+                                                          cachedInputTokens: 0,
+                                                          cacheWriteTokens: 0,
+                                                          outputTokens: 10,
+                                                          reasoningOutputTokens: 0,
+                                                          totalTokens: 40,
+                                                      },
+                                                  toolTrace: {
+                                                      calls: [],
+                                                      totalCalls: 0,
+                                                      totalOutputBytes: 0,
+                                                  },
+                                                  actionAttempts: [
+                                                      {
+                                                          index: 0,
+                                                          actionName:
+                                                              "discoverRepository",
+                                                          status: "completed" as const,
+                                                      },
+                                                      {
+                                                          index: 1,
+                                                          actionName:
+                                                              "refineRepository",
+                                                          status: "completed" as const,
+                                                      },
+                                                      {
+                                                          index: 2,
+                                                          actionName:
+                                                              "submitExploration",
+                                                          status: "completed" as const,
+                                                      },
+                                                  ],
+                                              },
+                                          ],
                                       },
                                   }
                                 : {
+                                      usage: {
+                                          source: "assistant.usage" as const,
+                                          requestCount: 1,
+                                          models: [model],
+                                          inputTokens: 100,
+                                          cachedInputTokens: 0,
+                                          cacheWriteTokens: 0,
+                                          outputTokens: 10,
+                                          reasoningOutputTokens: 0,
+                                          totalTokens: 110,
+                                      },
                                       combinedUsage: {
                                           inputTokens: 100,
                                           cachedInputTokens: 0,
@@ -178,9 +261,18 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                           totalTokens: 110,
                                       },
                                   }),
-                            mcpAdopted: variant === "typeagent",
+                            mcpAdopted: false,
+                            attemptedExploreCalls: 0,
+                            completedExploreCalls: 0,
+                            successfulExploreCalls: 0,
+                            outsideExploreInspection: false,
+                            mcpServerReady: false,
+                            mcpAdvertisedTools: [],
+                            lspAdopted: false,
+                            lspCallCount: 0,
+                            lspResultCount: 0,
                             subagentAdopted: variant === "baseline",
-                            defaultMainAgent: true,
+                            defaultMainAgent: variant === "baseline",
                             attemptedExplorerDelegations:
                                 variant === "baseline" ? 1 : 0,
                             completedExplorerDelegations:
@@ -201,18 +293,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                           },
                                       ]
                                     : [],
-                            mcpToolTrace:
-                                variant === "typeagent"
-                                    ? [
-                                          {
-                                              toolCallId: "explore-1",
-                                              server: "typeagent",
-                                              tool: "explore",
-                                              completed: true,
-                                              success: true,
-                                          },
-                                      ]
-                                    : [],
+                            mcpToolTrace: [],
                             toolTrace: [],
                             events: [],
                         };
@@ -258,6 +339,15 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                 finalAnswer:
                     "<final_answer>\npkg/a.py:10 reason\n</final_answer>",
                 error: "provider failed",
+                typeAgentDispatch: {
+                    ...incompleteRows.find(
+                        (row) =>
+                            row.taskId === taskIds[0] &&
+                            row.matrixName === "model-b" &&
+                            row.variant === "typeagent",
+                    )!.typeAgentDispatch!,
+                    executionCount: 0,
+                },
             },
         ];
         await writeFile(
@@ -273,7 +363,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
             path.join(directory, "results.jsonl"),
         );
         assert.deepEqual(Object.keys(report.prefixes), ["1", "5", "10"]);
-        assert.equal(report.schemaVersion, 2);
+        assert.equal(report.schemaVersion, 3);
         assert.equal(report.rawRows, 41);
         assert.equal(report.dedupedRows, 39);
         assert.deepEqual(
@@ -312,7 +402,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
         );
         assert.equal(
             report.prefixes["10"].comparisons[0].totalTokensDelta,
-            450,
+            -405,
         );
         assert.equal(
             report.prefixes["10"].comparisons[1].totalTokensDelta,
@@ -322,9 +412,10 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
             (row) =>
                 row.matrixName === "model-b" && row.variant === "typeagent",
         );
-        assert.equal(treatment?.copilotUsage?.totalTokens, 1_320);
+        assert.equal(treatment?.copilotUsage, undefined);
+        assert.equal(treatment?.dispatcherUsage?.totalTokens, 275);
         assert.equal(treatment?.typeAgentUsage?.totalTokens, 440);
-        assert.equal(treatment?.combinedUsage?.totalTokens, 1_760);
+        assert.equal(treatment?.combinedUsage?.totalTokens, 715);
         assert.equal(treatment?.overallRecall, 0.9);
         assert.equal(treatment?.file.recall, 0.9);
         assert.equal(treatment?.line.recall, 0.9);
@@ -345,14 +436,21 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                 ?.totalCalls,
             0,
         );
-        assert.equal(report.prefixes["10"].comparisons[0].mcpAdoptionRate, 1);
+        assert.equal(
+            report.prefixes["10"].comparisons[0].directExplorerAdoptionRate,
+            0.9,
+        );
+        assert.equal(
+            "mcpAdoptionRate" in report.prefixes["10"].comparisons[0],
+            false,
+        );
         assert.equal(
             report.prefixes["10"].comparisons[0].baseline?.finalAttemptTokens,
             990,
         );
         assert.equal(
             report.prefixes["10"].comparisons[0].typeagent?.finalAttemptTokens,
-            1_440,
+            585,
         );
         assert.deepEqual(
             Object.keys(report.prefixes["10"].comparisons[0]).filter((key) =>
@@ -361,6 +459,20 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
             ["baseline", "typeagent"],
         );
         assert.doesNotMatch(JSON.stringify(report), /withoutMcp|withMcp/);
+        assert.equal(
+            report.tasks[0].results["model-a:typeagent"].directExplorerAdopted,
+            true,
+        );
+        assert.equal(
+            report.tasks[0].results["model-a:typeagent"].dispatcherUsage
+                ?.totalTokens,
+            25,
+        );
+        assert.equal(
+            report.tasks[0].results["model-a:typeagent"].typeAgentDispatch
+                ?.executionCount,
+            1,
+        );
         assert.equal(path.basename(markdownPath), "report.md");
         const markdown = await readFile(markdownPath, "utf8");
         assert.match(
@@ -371,14 +483,61 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
         assert.doesNotMatch(markdown, /### TypeAgent MCP − baseline/);
         assert.match(
             markdown,
-            /\| Model \| Paired \| Copilot SDK completed \| TypeAgent completed \| Copilot SDK final tokens \| TypeAgent final tokens \(combined\) \| Final tokens saved \| Copilot SDK recall \| TypeAgent recall \| Copilot SDK file P\/R\/F1 \| TypeAgent file P\/R\/F1 \| Copilot SDK line P\/R\/F1 \| TypeAgent line P\/R\/F1 \| Explore agent used \| TypeAgent used \|/,
+            /\| Model \| Paired \| Copilot SDK completed \| TypeAgent completed \| Copilot SDK final tokens \| TypeAgent final tokens \(dispatcher \+ Explorer\) \| Final tokens saved \| Copilot SDK recall \| TypeAgent recall \| Copilot SDK file P\/R\/F1 \| TypeAgent file P\/R\/F1 \| Copilot SDK line P\/R\/F1 \| TypeAgent line P\/R\/F1 \| Explore agent used \| Direct Explorer dispatch used \|/,
         );
         assert.match(markdown, /Copilot SDK \(with explore agent\)/);
         assert.doesNotMatch(markdown, /Without MCP|With MCP/);
+        assert.doesNotMatch(markdown, /outer Copilot|MCP/i);
         assert.match(
             markdown,
-            /\| model-b \| 9\/10 \| 10\/10 \| 9\/10 \| 990 \| 1,440 \| -450 \| 1\.000 \| 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 10\/10 \| 10\/10 \|/,
+            /\| model-b \| 9\/10 \| 10\/10 \| 9\/10 \| 990 \| 585 \| 405 \| 1\.000 \| 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 1\.000 \/ 1\.000 \/ 1\.000 \| 10\/10 \| 9\/10 \|/,
         );
+
+        const directTreatment = incompleteRows.find(
+            (row) => row.variant === "typeagent",
+        )!;
+        const exactRawRequestTreatment = structuredClone(directTreatment);
+        exactRawRequestTreatment.query = "find\r\nbug";
+        exactRawRequestTreatment.typeAgentDispatch!.submittedRequest =
+            exactRawRequestTreatment.query;
+        assert.equal(
+            summarizeRows([exactRawRequestTreatment])
+                ?.directExplorerAdoptionCount,
+            1,
+        );
+        const {
+            dispatcherUsage: _legacyDispatcherUsage,
+            typeAgentDispatch: _legacyDispatch,
+            ...legacyTreatment
+        } = directTreatment;
+        const legacySummary = summarizeRows([
+            {
+                ...legacyTreatment,
+                usage: {
+                    source: "assistant.usage",
+                    requestCount: 1,
+                    models: [legacyTreatment.model],
+                    inputTokens: 110,
+                    cachedInputTokens: 0,
+                    cacheWriteTokens: 0,
+                    outputTokens: 10,
+                    reasoningOutputTokens: 0,
+                    totalTokens: 120,
+                },
+                combinedUsage: {
+                    inputTokens: 140,
+                    cachedInputTokens: 0,
+                    cacheWriteTokens: 0,
+                    outputTokens: 20,
+                    reasoningOutputTokens: 0,
+                    totalTokens: 160,
+                },
+                mcpAdopted: true,
+            },
+        ]);
+        assert.equal(legacySummary?.combinedUsage?.totalTokens, 160);
+        assert.equal(legacySummary?.dispatcherUsage, undefined);
+        assert.equal(legacySummary?.directExplorerAdoptionCount, 0);
 
         const taskIdsFile = path.join(directory, "exact-task-ids.json");
         await writeFile(

@@ -23,6 +23,13 @@ import type {
 
 type ThreeArmId = BenchmarkVariant;
 
+interface ExecutionLatencySummary {
+    executions: number;
+    meanMs: number;
+    p50Ms: number;
+    p95Ms: number;
+}
+
 interface ThreeArmSummary {
     label: string;
     completed: number;
@@ -31,7 +38,7 @@ interface ThreeArmSummary {
     file: MetricSummary | null;
     line: MetricSummary | null;
     finalAttemptTokens: number | null;
-    averageDurationMs: number | null;
+    successfulExecutionLatency: ExecutionLatencySummary | null;
     lspAdoptionCount: number;
     lspCallCount: number;
     lspResultCount: number;
@@ -46,7 +53,7 @@ interface ThreeArmModelReport {
 }
 
 export interface ThreeArmReport {
-    schemaVersion: 1;
+    schemaVersion: 2;
     generatedAt: string;
     inputs: {
         paired: string;
@@ -103,8 +110,12 @@ export async function writeThreeArmReport(options: {
     const lspRaw = await readResults(lspInput);
     validateResultRows(pairedRaw, pairedManifest);
     validateResultRows(lspRaw, lspManifest);
-    const pairedRows = dedupeAndRescore(pairedRaw);
-    const lspRows = dedupeAndRescore(lspRaw);
+    const pairedRows = dedupeAndRescore(pairedRaw).filter(
+        (row) => row.variant === "baseline" || row.variant === "typeagent",
+    );
+    const lspRows = dedupeAndRescore(lspRaw).filter(
+        (row) => row.variant === "typeagent-lsp",
+    );
     assertTaskIdentity(pairedRows, lspRows, lspManifest.taskIds);
     const rows = [...pairedRows, ...lspRows];
     const taskIds = lspManifest.taskIds;
@@ -130,7 +141,7 @@ export async function writeThreeArmReport(options: {
         return buildModelReport(matrixName, taskIds, modelRows);
     });
     const report: ThreeArmReport = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         generatedAt: new Date().toISOString(),
         inputs: { paired: pairedInput, lsp: lspInput },
         runIds: {
@@ -174,7 +185,8 @@ export async function writeThreeArmReport(options: {
         })),
         notes: [
             "Metrics compare only the three-way intersection of successful rows for the same task and model; completion counts cover the full requested cohort.",
-            "The retained Copilot SDK and TypeAgent rows are read without issuing new model requests; only the TypeAgent with LSP input is new.",
+            "Latency reports one final successful execution per common task; failed retry attempts are excluded from mean, p50, and p95.",
+            "All three arms are read from the supplied current-harness result files; report generation does not issue model requests.",
             "LSP navigation is charged against the same eight-call repository budget, and every successful TypeAgent with LSP row must contain an error-free language-server call followed by repository-grounded reads before submission.",
             "The LSP call total counts successful navigation calls; failed attempts remain available in raw TypeAgent tool telemetry.",
             "SWE-bench Verified is Python-only at the gold-patch level in this cohort, so TypeScript language-server benchmark coverage is reported explicitly and may be zero.",
@@ -241,7 +253,7 @@ function armSummary(
         file: summary?.file ?? null,
         line: summary?.line ?? null,
         finalAttemptTokens: summary?.finalAttemptUsage?.totalTokens ?? null,
-        averageDurationMs: summary?.avgDurationMs ?? null,
+        successfulExecutionLatency: summarizeExecutionLatency(commonRows),
         lspAdoptionCount: requestedRows.filter((row) => row.lspAdopted).length,
         lspCallCount: requestedRows.reduce(
             (total, row) => total + (row.lspCallCount ?? 0),
@@ -270,17 +282,17 @@ function renderMarkdown(report: ThreeArmReport): string {
         const copilot = model.arms.baseline;
         const typeagent = model.arms.typeagent;
         const lsp = model.arms["typeagent-lsp"];
-        return `| ${model.matrixName} | ${model.commonSuccessfulTasks}/${model.requestedTasks} | ${copilot.completed}/${model.requestedTasks} | ${typeagent.completed}/${model.requestedTasks} | ${lsp.completed}/${model.requestedTasks} | ${formatNumber(copilot.overallRecall)} | ${formatNumber(typeagent.overallRecall)} | ${formatNumber(lsp.overallRecall)} | ${formatMetric(copilot.file)} | ${formatMetric(typeagent.file)} | ${formatMetric(lsp.file)} | ${formatMetric(copilot.line)} | ${formatMetric(typeagent.line)} | ${formatMetric(lsp.line)} | ${formatInteger(copilot.finalAttemptTokens)} | ${formatInteger(typeagent.finalAttemptTokens)} | ${formatInteger(lsp.finalAttemptTokens)} | ${lsp.lspAdoptionCount}/${model.requestedTasks} | ${lsp.lspCallCount} | ${lsp.lspResultCount} |`;
+        return `| ${model.matrixName} | ${model.commonSuccessfulTasks}/${model.requestedTasks} | ${copilot.completed}/${model.requestedTasks} | ${typeagent.completed}/${model.requestedTasks} | ${lsp.completed}/${model.requestedTasks} | ${formatNumber(copilot.overallRecall)} | ${formatNumber(typeagent.overallRecall)} | ${formatNumber(lsp.overallRecall)} | ${formatMetric(copilot.file)} | ${formatMetric(typeagent.file)} | ${formatMetric(lsp.file)} | ${formatMetric(copilot.line)} | ${formatMetric(typeagent.line)} | ${formatMetric(lsp.line)} | ${formatInteger(copilot.finalAttemptTokens)} | ${formatInteger(typeagent.finalAttemptTokens)} | ${formatInteger(lsp.finalAttemptTokens)} | ${formatLatency(copilot.successfulExecutionLatency)} | ${formatLatency(typeagent.successfulExecutionLatency)} | ${formatLatency(lsp.successfulExecutionLatency)} | ${lsp.lspAdoptionCount}/${model.requestedTasks} | ${lsp.lspCallCount} | ${lsp.lspResultCount} |`;
     });
     return [
         "# Explore benchmark: three-arm LSP comparison",
         "",
         `Tasks: ${report.taskCount}; Python coverage: ${report.languageCoverage.python}; TypeScript coverage: ${report.languageCoverage.typescript}.`,
         "",
-        "Quality and token columns use only the successful three-way task intersection for each model. Completion and LSP adoption cover all requested tasks.",
+        "Quality, final-attempt token, and latency columns use only the successful three-way task intersection for each model. Latency counts one final successful execution per task and excludes failed retries. Completion and LSP adoption cover all requested tasks.",
         "",
-        "| Model | Three-way paired | Copilot SDK (with explore agent) completed | TypeAgent completed | TypeAgent with LSP completed | Copilot SDK recall | TypeAgent recall | TypeAgent with LSP recall | Copilot SDK file P/R/F1 | TypeAgent file P/R/F1 | TypeAgent with LSP file P/R/F1 | Copilot SDK line P/R/F1 | TypeAgent line P/R/F1 | TypeAgent with LSP line P/R/F1 | Copilot SDK tokens | TypeAgent tokens | TypeAgent with LSP tokens | LSP adopted | Successful LSP calls | LSP locations |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Model | Three-way paired | Copilot SDK (with explore agent) completed | TypeAgent completed | TypeAgent with LSP completed | Copilot SDK recall | TypeAgent recall | TypeAgent with LSP recall | Copilot SDK file P/R/F1 | TypeAgent file P/R/F1 | TypeAgent with LSP file P/R/F1 | Copilot SDK line P/R/F1 | TypeAgent line P/R/F1 | TypeAgent with LSP line P/R/F1 | Copilot SDK final-attempt tokens | TypeAgent final-attempt tokens | TypeAgent with LSP final-attempt tokens | Copilot SDK latency mean/p50/p95 | TypeAgent latency mean/p50/p95 | TypeAgent with LSP latency mean/p50/p95 | LSP adopted | Successful LSP calls | LSP locations |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ...rows,
         "",
         "## Notes",
@@ -315,9 +327,9 @@ function assertCompatibleManifests(
             "Paired input must contain Copilot SDK and TypeAgent variants",
         );
     }
-    if (lsp.variants.length !== 1 || lsp.variants[0] !== "typeagent-lsp") {
+    if (!lsp.variants.includes("typeagent-lsp")) {
         throw new Error(
-            "LSP input must contain only the TypeAgent with LSP variant",
+            "LSP input must contain the TypeAgent with LSP variant",
         );
     }
     const pairedTasks = new Set(paired.taskIds);
@@ -379,4 +391,42 @@ function formatNumber(value: number | null): string {
 
 function formatInteger(value: number | null): string {
     return value === null ? "n/a" : Math.round(value).toLocaleString("en-US");
+}
+
+function summarizeExecutionLatency(
+    rows: RunResult[],
+): ExecutionLatencySummary | null {
+    if (rows.length === 0) {
+        return null;
+    }
+    const durations = rows.map((row) => row.durationMs);
+    return {
+        executions: rows.length,
+        meanMs:
+            durations.reduce((total, value) => total + value, 0) /
+            durations.length,
+        p50Ms: median(durations),
+        p95Ms: percentile(durations, 0.95),
+    };
+}
+
+function median(values: number[]): number {
+    const sorted = [...values].sort((left, right) => left - right);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+        ? (sorted[middle - 1] + sorted[middle]) / 2
+        : sorted[middle];
+}
+
+function percentile(values: number[], fraction: number): number {
+    const sorted = [...values].sort((left, right) => left - right);
+    return sorted[Math.ceil(sorted.length * fraction) - 1];
+}
+
+function formatLatency(latency: ExecutionLatencySummary | null): string {
+    return latency
+        ? [latency.meanMs, latency.p50Ms, latency.p95Ms]
+              .map((value) => `${(value / 1_000).toFixed(1)}s`)
+              .join("/")
+        : "n/a";
 }

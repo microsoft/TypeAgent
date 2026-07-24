@@ -222,7 +222,9 @@ async function runCommand(args: Map<string, string[]>): Promise<void> {
             `Benchmark agent must be named explorer; observed ${JSON.stringify(agent.name)}`,
         );
     }
-    const copilotPath = await resolveCopilotPath(value(args, "copilot"));
+    const copilotPath = variants.includes("baseline")
+        ? await resolveCopilotPath(value(args, "copilot"))
+        : "";
     const runtimeEvidence = path.join(runDir, "copilot-runtime.json");
     const providerBaseUrl =
         value(args, "litellm-base-url") ?? "http://localhost:4627/v1";
@@ -435,7 +437,10 @@ function selectedLanguages(
 }
 
 function mcpConfig(args: Map<string, string[]>): McpServerConfig {
-    const commandValue = required(args, "mcp-command");
+    const commandValue = value(args, "mcp-command");
+    if (!commandValue) {
+        return { command: "", args: [], envVars: [] };
+    }
     const command =
         commandValue === "node"
             ? process.execPath
@@ -465,7 +470,7 @@ async function ensureCompatibleManifest(
         JSON.stringify(manifestIdentity(requested))
     ) {
         throw new Error(
-            `Run ${requested.runId} already exists with different tasks, models, provider, MCP, or execution settings`,
+            `Run ${requested.runId} already exists with different tasks, models, provider, harness, or execution settings`,
         );
     }
 }
@@ -568,18 +573,12 @@ real GitHub Copilot CLI/SDK, comparing Copilot SDK (with explore agent),
 TypeAgent, and the optional TypeAgent with LSP arm.
 
 Usage:
-  node dist/src/cli.js run --mcp-command <command> [options]
+  node dist/src/cli.js run [options]
   node dist/src/cli.js report --input <results.jsonl>
   node dist/src/cli.js report-three-arm --paired-input <results.jsonl> --lsp-input <results.jsonl>
   node dist/src/cli.js cleanup-images --input <results.jsonl> [options]
 
-Required:
-  --mcp-command <command>       TypeAgent MCP stdio command or absolute path
-
 Run options:
-  --mcp-arg=<value>             MCP argument; repeatable (use = for values starting with --)
-  --mcp-cwd <dir>               MCP working directory
-  --mcp-env <name>              Extra parent environment variable forwarded to MCP; repeatable
   --matrix <file>               Default: examples/matrix.json
   --model <model>               Run one allowed model instead of --matrix
   --variant <name>              baseline, typeagent, or typeagent-lsp; repeatable; default first two

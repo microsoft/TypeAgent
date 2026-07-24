@@ -4797,6 +4797,18 @@ importers:
       '@github/copilot-sdk':
         specifier: 1.0.4
         version: 1.0.4
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../dispatcher/dispatcher
+      explorer-typeagent:
+        specifier: workspace:*
+        version: link:../agents/explorer
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

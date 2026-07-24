@@ -66,10 +66,12 @@ test("accepts the legacy TypeAgent variant as a CLI input alias", () => {
         "azure/gpt-5.6-sol",
         "--variant",
         "typeagent-mcp",
+        "--task-offset",
+        "-1",
     );
 
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /Missing --mcp-command/);
+    assert.match(result.stderr, /--task-offset must be a non-negative integer/);
     assert.doesNotMatch(result.stderr, /Unsupported benchmark variant/);
 });
 

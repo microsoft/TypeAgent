@@ -1407,6 +1407,14 @@ function parseExploreInvocation(
         : undefined;
     const error =
         typeof telemetry.error === "string" ? telemetry.error : undefined;
+    const reasoningTrace =
+        schemaVersion === 4 && telemetry.reasoningTrace !== undefined
+            ? parseReasoningTrace(telemetry.reasoningTrace, context)
+            : undefined;
+    const actionAttempts =
+        schemaVersion === 4 && telemetry.actionAttempts !== undefined
+            ? parseActionAttempts(telemetry.actionAttempts, context)
+            : undefined;
     return {
         index:
             telemetry.index === undefined
@@ -1428,9 +1436,74 @@ function parseExploreInvocation(
                 toolTraceContext,
             ),
         },
+        ...(reasoningTrace ? { reasoningTrace } : {}),
+        ...(actionAttempts ? { actionAttempts } : {}),
         ...(result ? { result } : {}),
         ...(error ? { error } : {}),
     };
+}
+
+function parseReasoningTrace(
+    value: unknown,
+    context: string,
+): NonNullable<ExploreInvocationTelemetry["reasoningTrace"]> {
+    if (!Array.isArray(value)) {
+        throw new Error(`${context}.reasoningTrace must be an array`);
+    }
+    return value.map((item, index) => {
+        const itemContext = `${context}.reasoningTrace[${index}]`;
+        const record = recordValue(item);
+        if (!record) {
+            throw new Error(`${itemContext} must be an object`);
+        }
+        const status = requiredAttemptStatus(record, itemContext);
+        const actionName = optionalString(record.actionName);
+        const error = optionalString(record.error);
+        return {
+            index: requiredNonNegativeNumber(record, "index", itemContext),
+            tool: requiredString(record, "tool", itemContext),
+            status,
+            ...(actionName ? { actionName } : {}),
+            ...(error ? { error } : {}),
+        };
+    });
+}
+
+function parseActionAttempts(
+    value: unknown,
+    context: string,
+): NonNullable<ExploreInvocationTelemetry["actionAttempts"]> {
+    if (!Array.isArray(value)) {
+        throw new Error(`${context}.actionAttempts must be an array`);
+    }
+    return value.map((item, index) => {
+        const itemContext = `${context}.actionAttempts[${index}]`;
+        const record = recordValue(item);
+        if (!record) {
+            throw new Error(`${itemContext} must be an object`);
+        }
+        const error = optionalString(record.error);
+        return {
+            index: requiredNonNegativeNumber(record, "index", itemContext),
+            actionName: requiredString(record, "actionName", itemContext),
+            status: requiredAttemptStatus(record, itemContext),
+            ...(error ? { error } : {}),
+        };
+    });
+}
+
+function requiredAttemptStatus(
+    value: Record<string, unknown>,
+    context: string,
+): "completed" | "failed" {
+    if (value.status !== "completed" && value.status !== "failed") {
+        throw new Error(`${context}.status must be 'completed' or 'failed'`);
+    }
+    return value.status;
+}
+
+function optionalString(value: unknown): string | undefined {
+    return typeof value === "string" ? value : undefined;
 }
 
 function parseTypeAgentUsage(

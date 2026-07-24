@@ -97,105 +97,705 @@ test("rejects mixed run, task, matrix model, and variant rows", () => {
     }
 });
 
-test("rejects successful treatment rows without one exclusive MCP invocation", () => {
-    assert.throws(
-        () =>
-            validateResultRows(
-                [
-                    {
-                        ...row,
-                        variant: "typeagent",
-                        mcpAdopted: true,
-                        subagentAdopted: false,
-                        attemptedExplorerDelegations: 0,
-                        completedExplorerDelegations: 0,
-                        successfulExplorerDelegations: 0,
-                        explorerSubagentTrace: [],
-                    },
-                ],
-                identity,
-            ),
-        /exactly one successful exclusive explore invocation/,
+test("accepts direct TypeAgent rows without a Copilot main agent", () => {
+    assert.doesNotThrow(() =>
+        validateResultRows([typeAgentRow("typeagent")], identity),
     );
 });
 
-test("requires recorded language-server adoption for the LSP treatment", () => {
+test("preserves exact raw ingress independently of the parameterless action", () => {
+    const candidate = typeAgentRow("typeagent");
+    candidate.query = "find\r\nbug\r\ndetails";
+    candidate.typeAgentDispatch!.submittedRequest = candidate.query;
+    candidate.typeAgentDispatch!.translatedActions[0].parameters = {};
+
+    assert.doesNotThrow(() => validateResultRows([candidate], identity));
+});
+
+test("accepts repaired submission attempts after discovery and refinement", () => {
+    const candidate = typeAgentRow("typeagent");
+    candidate.exploreTelemetry!.invocations![0].actionAttempts = [
+        completedAction(0, "discoverRepository"),
+        completedAction(1, "refineRepository"),
+        failedAction(2, "submitExploration"),
+        failedAction(3, "submitExploration"),
+        completedAction(4, "submitExploration"),
+    ];
+
+    assert.doesNotThrow(() => validateResultRows([candidate], identity));
+});
+
+test("accepts failed generated programs before each completed phase", () => {
+    const candidate = typeAgentRow("typeagent");
+    candidate.exploreTelemetry!.invocations![0].actionAttempts = [
+        failedAction(0, "discoverRepository"),
+        failedAction(1, "discoverRepository"),
+        completedAction(2, "discoverRepository"),
+        failedAction(3, "refineRepository"),
+        completedAction(4, "refineRepository"),
+        failedAction(5, "submitExploration"),
+        completedAction(6, "submitExploration"),
+    ];
+
+    assert.doesNotThrow(() => validateResultRows([candidate], identity));
+});
+
+test("rejects every direct TypeAgent dispatch and isolation mutation", () => {
+    const mutations: Array<{
+        name: string;
+        apply(candidate: RunResult): void;
+    }> = [
+        {
+            name: "missing dispatch evidence",
+            apply: (candidate) => delete candidate.typeAgentDispatch,
+        },
+        {
+            name: "non-natural-language ingress",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.ingress = "typed-action" as never;
+            },
+        },
+        {
+            name: "changed submitted request",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.submittedRequest = "changed";
+            },
+        },
+        {
+            name: "translation not invoked",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.translationInvoked = false;
+            },
+        },
+        {
+            name: "zero translations",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.translationRequestCount = 0;
+            },
+        },
+        {
+            name: "duplicate translations",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.translationRequestCount = 2;
+            },
+        },
+        {
+            name: "additional active agent",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.activeAgentNames.push("chat");
+            },
+        },
+        {
+            name: "additional active schema",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.activeSchemaNames.push("chat");
+            },
+        },
+        {
+            name: "missing translated action",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.translatedActions = [];
+            },
+        },
+        {
+            name: "duplicate translated action",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.translatedActions.push(
+                    structuredClone(
+                        candidate.typeAgentDispatch!.translatedActions[0],
+                    ),
+                );
+            },
+        },
+        {
+            name: "wrong translated schema",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.translatedActions[0].schemaName =
+                    "chat";
+            },
+        },
+        {
+            name: "wrong translated action",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.translatedActions[0].actionName =
+                    "discoverRepository";
+            },
+        },
+        {
+            name: "execution used a different request",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.executionRequestMatchedIngress =
+                    false;
+            },
+        },
+        {
+            name: "duplicate execution",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.executionCount = 2;
+            },
+        },
+        {
+            name: "output not produced by execution",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.outputMatchedExecution = false;
+            },
+        },
+        {
+            name: "dispatch used Copilot",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.usedCopilot = true;
+            },
+        },
+        {
+            name: "dispatch used MCP",
+            apply: (candidate) => {
+                candidate.typeAgentDispatch!.usedMcp = true;
+            },
+        },
+        {
+            name: "MCP adopted",
+            apply: (candidate) => {
+                candidate.mcpAdopted = true;
+            },
+        },
+        {
+            name: "MCP explore attempted",
+            apply: (candidate) => {
+                candidate.attemptedExploreCalls = 1;
+            },
+        },
+        {
+            name: "MCP explore completed",
+            apply: (candidate) => {
+                candidate.completedExploreCalls = 1;
+            },
+        },
+        {
+            name: "MCP explore succeeded",
+            apply: (candidate) => {
+                candidate.successfulExploreCalls = 1;
+            },
+        },
+        {
+            name: "outside Explorer inspection",
+            apply: (candidate) => {
+                candidate.outsideExploreInspection = true;
+            },
+        },
+        {
+            name: "MCP server ready",
+            apply: (candidate) => {
+                candidate.mcpServerReady = true;
+            },
+        },
+        {
+            name: "MCP tool advertised",
+            apply: (candidate) => {
+                candidate.mcpAdvertisedTools = ["explore"];
+            },
+        },
+        {
+            name: "MCP trace recorded",
+            apply: (candidate) => {
+                candidate.mcpToolTrace = [
+                    {
+                        toolCallId: "mcp-1",
+                        server: "typeagent",
+                        tool: "explore",
+                        completed: true,
+                        success: true,
+                    },
+                ];
+            },
+        },
+        {
+            name: "subagent adopted",
+            apply: (candidate) => {
+                candidate.subagentAdopted = true;
+            },
+        },
+        {
+            name: "subagent attempted",
+            apply: (candidate) => {
+                candidate.attemptedExplorerDelegations = 1;
+            },
+        },
+        {
+            name: "subagent completed",
+            apply: (candidate) => {
+                candidate.completedExplorerDelegations = 1;
+            },
+        },
+        {
+            name: "subagent succeeded",
+            apply: (candidate) => {
+                candidate.successfulExplorerDelegations = 1;
+            },
+        },
+        {
+            name: "subagent failed",
+            apply: (candidate) => {
+                candidate.failedExplorerDelegations = 1;
+            },
+        },
+        {
+            name: "subagent trace recorded",
+            apply: (candidate) => {
+                candidate.explorerSubagentTrace = [
+                    structuredClone(row.explorerSubagentTrace[0]),
+                ];
+            },
+        },
+        {
+            name: "Copilot main-agent inspection",
+            apply: (candidate) => {
+                candidate.mainAgentRepositoryInspection = true;
+            },
+        },
+        {
+            name: "Copilot tool trace recorded",
+            apply: (candidate) => {
+                candidate.toolTrace = [
+                    {
+                        tool: "grep",
+                        args: {},
+                        ok: true,
+                        durationMs: 1,
+                        output: "match",
+                    },
+                ];
+            },
+        },
+        {
+            name: "Copilot event recorded",
+            apply: (candidate) => {
+                candidate.events = [{ type: "assistant.message" }];
+            },
+        },
+        {
+            name: "Copilot selected agent recorded",
+            apply: (candidate) => {
+                candidate.selectedAgentName = "explorer";
+            },
+        },
+        {
+            name: "Copilot default main agent recorded",
+            apply: (candidate) => {
+                candidate.defaultMainAgent = true;
+            },
+        },
+    ];
+
+    for (const mutation of mutations) {
+        const candidate = typeAgentRow("typeagent");
+        mutation.apply(candidate);
+        assert.throws(
+            () => validateResultRows([candidate], identity),
+            /direct TypeAgent/i,
+            mutation.name,
+        );
+    }
+});
+
+test("rejects every direct TypeAgent Explorer telemetry mutation", () => {
+    const mutations: Array<{
+        name: string;
+        apply(candidate: RunResult): void;
+    }> = [
+        {
+            name: "missing telemetry",
+            apply: (candidate) => delete candidate.exploreTelemetry,
+        },
+        {
+            name: "legacy telemetry schema",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.schemaVersion = 3;
+            },
+        },
+        {
+            name: "failed aggregate telemetry",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.status = "failed";
+            },
+        },
+        {
+            name: "missing invocation",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations = [];
+            },
+        },
+        {
+            name: "duplicate invocation",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations!.push(
+                    structuredClone(
+                        candidate.exploreTelemetry!.invocations![0],
+                    ),
+                );
+            },
+        },
+        {
+            name: "failed invocation",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].status = "failed";
+            },
+        },
+        {
+            name: "missing action-generation usage",
+            apply: (candidate) => {
+                delete candidate.exploreTelemetry!.invocations![0]
+                    .actionTranslationAndCodeGenerationUsage;
+            },
+        },
+        {
+            name: "action-generation usage differs from invocation usage",
+            apply: (candidate) => {
+                const usage =
+                    candidate.exploreTelemetry!.invocations![0]
+                        .actionTranslationAndCodeGenerationUsage!;
+                usage.inputTokens += 1;
+                usage.totalTokens += 1;
+            },
+        },
+        {
+            name: "invocation usage differs from aggregate telemetry usage",
+            apply: (candidate) => {
+                const invocation = candidate.exploreTelemetry!.invocations![0];
+                invocation.usage.inputTokens += 1;
+                invocation.usage.totalTokens += 1;
+                invocation.actionTranslationAndCodeGenerationUsage =
+                    structuredClone(invocation.usage);
+            },
+        },
+        {
+            name: "missing action attempts",
+            apply: (candidate) => {
+                delete candidate.exploreTelemetry!.invocations![0]
+                    .actionAttempts;
+            },
+        },
+        {
+            name: "missing refinement",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].actionAttempts = [
+                    completedAction(0, "discoverRepository"),
+                    completedAction(1, "submitExploration"),
+                ];
+            },
+        },
+        {
+            name: "missing discovery",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].actionAttempts = [
+                    completedAction(0, "refineRepository"),
+                    completedAction(1, "submitExploration"),
+                ];
+            },
+        },
+        {
+            name: "missing submission",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].actionAttempts = [
+                    completedAction(0, "discoverRepository"),
+                    completedAction(1, "refineRepository"),
+                ];
+            },
+        },
+        {
+            name: "out-of-order actions",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].actionAttempts = [
+                    completedAction(0, "refineRepository"),
+                    completedAction(1, "discoverRepository"),
+                    completedAction(2, "submitExploration"),
+                ];
+            },
+        },
+        {
+            name: "failed refinement",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].actionAttempts![1].status =
+                    "failed";
+            },
+        },
+        {
+            name: "successful submission followed by another submission",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].actionAttempts = [
+                    completedAction(0, "discoverRepository"),
+                    completedAction(1, "refineRepository"),
+                    completedAction(2, "submitExploration"),
+                    completedAction(3, "submitExploration"),
+                ];
+            },
+        },
+        {
+            name: "failed final submission",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].actionAttempts![2] =
+                    failedAction(2, "submitExploration");
+            },
+        },
+        {
+            name: "additional failed action attempt",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].actionAttempts!.push(
+                    {
+                        index: 3,
+                        actionName: "refineRepository",
+                        status: "failed",
+                    },
+                );
+            },
+        },
+        {
+            name: "repeated discovery before submission",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].actionAttempts = [
+                    completedAction(0, "discoverRepository"),
+                    completedAction(1, "refineRepository"),
+                    failedAction(2, "discoverRepository"),
+                    completedAction(3, "submitExploration"),
+                ];
+            },
+        },
+        {
+            name: "repeated refinement before submission",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].actionAttempts = [
+                    completedAction(0, "discoverRepository"),
+                    completedAction(1, "refineRepository"),
+                    failedAction(2, "refineRepository"),
+                    completedAction(3, "submitExploration"),
+                ];
+            },
+        },
+        {
+            name: "non-contiguous submission retry index",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].actionAttempts = [
+                    completedAction(0, "discoverRepository"),
+                    completedAction(1, "refineRepository"),
+                    failedAction(2, "submitExploration"),
+                    completedAction(4, "submitExploration"),
+                ];
+            },
+        },
+        {
+            name: "incorrect action-attempt index",
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.invocations![0].actionAttempts![1].index = 2;
+            },
+        },
+    ];
+
+    for (const mutation of mutations) {
+        const candidate = typeAgentRow("typeagent");
+        mutation.apply(candidate);
+        assert.throws(
+            () => validateResultRows([candidate], identity),
+            /Explorer telemetry/i,
+            mutation.name,
+        );
+    }
+});
+
+test("requires exact usage and repository-tool evidence", () => {
+    const mutations: Array<{
+        name: string;
+        expected: RegExp;
+        apply(candidate: RunResult): void;
+    }> = [
+        {
+            name: "missing dispatcher usage",
+            expected: /usage evidence/i,
+            apply: (candidate) => delete candidate.dispatcherUsage,
+        },
+        {
+            name: "missing Explorer usage",
+            expected: /usage evidence/i,
+            apply: (candidate) => delete candidate.typeAgentUsage,
+        },
+        {
+            name: "missing combined usage",
+            expected: /usage evidence/i,
+            apply: (candidate) => delete candidate.combinedUsage,
+        },
+        {
+            name: "duplicate dispatcher request count",
+            expected: /usage evidence/i,
+            apply: (candidate) => {
+                candidate.dispatcherUsage!.requestCount = 2;
+            },
+        },
+        {
+            name: "dispatcher total disagrees with its token components",
+            expected: /usage evidence/i,
+            apply: (candidate) => {
+                candidate.dispatcherUsage!.totalTokens += 1;
+                candidate.combinedUsage!.totalTokens += 1;
+            },
+        },
+        {
+            name: "combined usage contains a negative component",
+            expected: /usage evidence/i,
+            apply: (candidate) => {
+                candidate.combinedUsage!.cacheWriteTokens = -1;
+            },
+        },
+        {
+            name: "combined usage contains a non-finite component",
+            expected: /usage evidence/i,
+            apply: (candidate) => {
+                candidate.combinedUsage!.reasoningOutputTokens =
+                    Number.POSITIVE_INFINITY;
+            },
+        },
+        {
+            name: "telemetry usage differs from executed action",
+            expected: /usage evidence/i,
+            apply: (candidate) => {
+                candidate.exploreTelemetry!.usage.inputTokens += 1;
+                candidate.exploreTelemetry!.usage.totalTokens += 1;
+                const invocation = candidate.exploreTelemetry!.invocations![0];
+                invocation.usage = structuredClone(
+                    candidate.exploreTelemetry!.usage,
+                );
+                invocation.actionTranslationAndCodeGenerationUsage =
+                    structuredClone(candidate.exploreTelemetry!.usage);
+            },
+        },
+        {
+            name: "combined usage double counts a token",
+            expected: /usage evidence/i,
+            apply: (candidate) => {
+                candidate.combinedUsage!.inputTokens += 1;
+                candidate.combinedUsage!.totalTokens += 1;
+            },
+        },
+        {
+            name: "row tool trace differs from telemetry",
+            expected: /repository-tool evidence/i,
+            apply: (candidate) => {
+                candidate.typeAgentToolTrace!.totalOutputBytes += 1;
+            },
+        },
+        {
+            name: "grep trace omits ripgrep engine",
+            expected: /repository-tool evidence/i,
+            apply: (candidate) => {
+                candidate.typeAgentToolTrace!.calls[0].input = {
+                    ripgrepPath: "/usr/bin/rg",
+                };
+                candidate.exploreTelemetry!.toolTrace.calls[0].input = {
+                    ripgrepPath: "/usr/bin/rg",
+                };
+            },
+        },
+        {
+            name: "grep trace omits ripgrep executable",
+            expected: /repository-tool evidence/i,
+            apply: (candidate) => {
+                candidate.typeAgentToolTrace!.calls[0].input = {
+                    engine: "ripgrep",
+                };
+                candidate.exploreTelemetry!.toolTrace.calls[0].input = {
+                    engine: "ripgrep",
+                };
+            },
+        },
+    ];
+
+    for (const mutation of mutations) {
+        const candidate = typeAgentRow("typeagent");
+        mutation.apply(candidate);
+        assert.throws(
+            () => validateResultRows([candidate], identity),
+            mutation.expected,
+            mutation.name,
+        );
+    }
+});
+
+test("requires mode-correct language-server evidence", () => {
+    const plainMutations: Array<{
+        name: string;
+        apply(candidate: RunResult): void;
+    }> = [
+        {
+            name: "plain arm adopted LSP",
+            apply: (candidate) => {
+                candidate.lspAdopted = true;
+            },
+        },
+        {
+            name: "plain arm counted an LSP call",
+            apply: (candidate) => {
+                candidate.lspCallCount = 1;
+            },
+        },
+        {
+            name: "plain arm recorded a successful LSP call",
+            apply: (candidate) => {
+                candidate.typeAgentToolTrace!.calls.push(lspCall());
+                candidate.typeAgentToolTrace!.totalCalls += 1;
+                candidate.typeAgentToolTrace!.totalOutputBytes += 20;
+                candidate.exploreTelemetry!.toolTrace = structuredClone(
+                    candidate.typeAgentToolTrace!,
+                );
+            },
+        },
+    ];
+    for (const mutation of plainMutations) {
+        const candidate = typeAgentRow("typeagent");
+        mutation.apply(candidate);
+        assert.throws(
+            () => validateResultRows([candidate], identity),
+            /language-server evidence/i,
+            mutation.name,
+        );
+    }
+
     const lspIdentity: RunIdentity = {
         ...identity,
         variants: ["typeagent-lsp"],
     };
-    const lspCall = {
-        tool: "lsp",
-        durationMs: 1,
-        input: {
-            method: "definition",
-            path: "pkg/a.py",
-            line: 1,
-            symbol: "target",
-        },
-        resultCount: 1,
-        outputBytes: 20,
-        truncated: false,
-    };
-    const lspRow: RunResult = {
-        ...row,
-        variant: "typeagent-lsp",
-        mcpAdopted: true,
-        lspAdopted: true,
-        lspCallCount: 1,
-        lspResultCount: 1,
-        subagentAdopted: false,
-        attemptedExploreCalls: 1,
-        completedExploreCalls: 1,
-        successfulExploreCalls: 1,
-        outsideExploreInspection: false,
-        mcpServerReady: true,
-        mcpAdvertisedTools: ["explore"],
-        attemptedExplorerDelegations: 0,
-        completedExplorerDelegations: 0,
-        successfulExplorerDelegations: 0,
-        explorerSubagentTrace: [],
-        mcpToolTrace: [
-            {
-                toolCallId: "explore-1",
-                server: "typeagent",
-                tool: "explore",
-                completed: true,
-                success: true,
-            },
-        ],
-        typeAgentToolTrace: {
-            calls: [lspCall],
-            totalCalls: 1,
-            totalOutputBytes: 20,
-        },
-        exploreTelemetry: {
-            schemaVersion: 1,
-            model: "route-a",
-            status: "completed",
-            usage: {
-                requestCount: 1,
-                inputTokens: 1,
-                cachedInputTokens: 0,
-                cacheWriteTokens: 0,
-                outputTokens: 1,
-                reasoningOutputTokens: 0,
-                totalTokens: 2,
-            },
-            toolTrace: {
-                calls: [lspCall],
-                totalCalls: 1,
-                totalOutputBytes: 20,
-            },
-        },
-    };
+    const lspRow = typeAgentRow("typeagent-lsp");
 
     assert.doesNotThrow(() => validateResultRows([lspRow], lspIdentity));
-    assert.throws(
-        () =>
-            validateResultRows([{ ...lspRow, lspAdopted: false }], lspIdentity),
-        /language-server adoption/i,
-    );
+    for (const [name, apply] of [
+        [
+            "LSP arm did not adopt LSP",
+            (candidate: RunResult) => {
+                candidate.lspAdopted = false;
+            },
+        ],
+        [
+            "LSP arm counted no calls",
+            (candidate: RunResult) => {
+                candidate.lspCallCount = 0;
+            },
+        ],
+        [
+            "LSP arm recorded no successful call",
+            (candidate: RunResult) => {
+                candidate.typeAgentToolTrace!.calls.find(
+                    (call) => call.tool === "lsp",
+                )!.error = "failed";
+                candidate.exploreTelemetry!.toolTrace.calls.find(
+                    (call) => call.tool === "lsp",
+                )!.error = "failed";
+            },
+        ],
+    ] as const) {
+        const candidate = structuredClone(lspRow);
+        apply(candidate);
+        assert.throws(
+            () => validateResultRows([candidate], lspIdentity),
+            /language-server evidence/i,
+            name,
+        );
+    }
 });
 
 test("rejects successful rows that did not retain the default main agent", () => {
@@ -260,3 +860,157 @@ test("accepts failed task-schema attempts before one successful delegation", () 
         ),
     );
 });
+
+function typeAgentRow(variant: "typeagent" | "typeagent-lsp"): RunResult {
+    const lspCalls = variant === "typeagent-lsp" ? [lspCall()] : [];
+    const toolCalls = [grepCall(), ...lspCalls];
+    const typeAgentUsage = {
+        requestCount: 3,
+        usageComplete: true,
+        inputTokens: 100,
+        cachedInputTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 20,
+        reasoningOutputTokens: 0,
+        totalTokens: 120,
+    };
+    const dispatcherUsage = {
+        requestCount: 1,
+        usageComplete: true,
+        inputTokens: 25,
+        cachedInputTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 5,
+        reasoningOutputTokens: 0,
+        totalTokens: 30,
+    };
+    const toolTrace = {
+        calls: toolCalls,
+        totalCalls: toolCalls.length,
+        totalOutputBytes: toolCalls.reduce(
+            (total, call) => total + call.outputBytes,
+            0,
+        ),
+    };
+    return {
+        ...row,
+        variant,
+        dispatcherUsage,
+        typeAgentUsage,
+        combinedUsage: {
+            inputTokens: 125,
+            cachedInputTokens: 0,
+            cacheWriteTokens: 0,
+            outputTokens: 25,
+            reasoningOutputTokens: 0,
+            totalTokens: 150,
+        },
+        mcpAdopted: false,
+        lspAdopted: variant === "typeagent-lsp",
+        lspCallCount: lspCalls.length,
+        lspResultCount: lspCalls.reduce(
+            (total, call) => total + call.resultCount,
+            0,
+        ),
+        subagentAdopted: false,
+        defaultMainAgent: false,
+        attemptedExploreCalls: 0,
+        completedExploreCalls: 0,
+        successfulExploreCalls: 0,
+        outsideExploreInspection: false,
+        mcpServerReady: false,
+        mcpAdvertisedTools: [],
+        attemptedExplorerDelegations: 0,
+        completedExplorerDelegations: 0,
+        successfulExplorerDelegations: 0,
+        failedExplorerDelegations: 0,
+        mainAgentRepositoryInspection: false,
+        explorerSubagentTrace: [],
+        mcpToolTrace: [],
+        toolTrace: [],
+        events: [],
+        typeAgentToolTrace: structuredClone(toolTrace),
+        typeAgentDispatch: {
+            ingress: "natural-language",
+            submittedRequest: row.query,
+            translationInvoked: true,
+            translationRequestCount: 1,
+            activeAgentNames: ["explorer"],
+            activeSchemaNames: ["explorer"],
+            translatedActions: [
+                {
+                    schemaName: "explorer",
+                    actionName: "exploreRepository",
+                    parameters: {},
+                },
+            ],
+            executionCount: 1,
+            outputMatchedExecution: true,
+            executionRequestMatchedIngress: true,
+            usedCopilot: false,
+            usedMcp: false,
+        },
+        exploreTelemetry: {
+            schemaVersion: 4,
+            model: row.model,
+            status: "completed",
+            usage: structuredClone(typeAgentUsage),
+            toolTrace,
+            invocations: [
+                {
+                    index: 0,
+                    status: "completed",
+                    usage: structuredClone(typeAgentUsage),
+                    actionTranslationAndCodeGenerationUsage:
+                        structuredClone(typeAgentUsage),
+                    toolTrace,
+                    actionAttempts: [
+                        completedAction(0, "discoverRepository"),
+                        completedAction(1, "refineRepository"),
+                        completedAction(2, "submitExploration"),
+                    ],
+                    result: { citationCount: 1, truncated: false },
+                },
+            ],
+            result: { citationCount: 1, truncated: false },
+        },
+    };
+}
+
+function completedAction(index: number, actionName: string) {
+    return { index, actionName, status: "completed" as const };
+}
+
+function failedAction(index: number, actionName: string) {
+    return { index, actionName, status: "failed" as const };
+}
+
+function lspCall() {
+    return {
+        tool: "lsp",
+        durationMs: 1,
+        input: {
+            method: "definition",
+            path: "pkg/a.py",
+            line: 1,
+            symbol: "target",
+        },
+        resultCount: 1,
+        outputBytes: 20,
+        truncated: false,
+    };
+}
+
+function grepCall() {
+    return {
+        tool: "grep",
+        durationMs: 1,
+        input: {
+            engine: "ripgrep",
+            ripgrepPath: "/usr/bin/rg",
+        },
+        resultCount: 1,
+        outputBytes: 20,
+        truncated: false,
+    };
+}

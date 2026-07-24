@@ -15,6 +15,7 @@ const packageRoot = path.resolve(
     "..",
 );
 const defaultBenchmarkCli = path.join(packageRoot, "dist", "src", "cli.js");
+const benchmarkVariants = new Set(["baseline", "typeagent", "typeagent-lsp"]);
 const ownedBenchmarkOptions = new Set([
     "variant",
     "litellm-base-url",
@@ -54,7 +55,11 @@ export function parseWrapperArgs(argv) {
         }
         const equals = token.indexOf("=");
         const name = token.slice(2, equals < 0 ? undefined : equals);
-        if (name !== "trace-output" && name !== "upstream-base-url") {
+        if (
+            name !== "trace-output" &&
+            name !== "upstream-base-url" &&
+            name !== "variant"
+        ) {
             throw new Error(`Unknown wrapper option: --${name}`);
         }
         if (options.has(name)) {
@@ -94,16 +99,23 @@ export function parseWrapperArgs(argv) {
     }
     const traceOutput = options.get("trace-output");
     const upstreamBaseUrl = options.get("upstream-base-url");
+    const variant = options.get("variant") ?? "typeagent";
     if (!traceOutput) {
         throw new Error("Missing --trace-output");
     }
     if (!upstreamBaseUrl) {
         throw new Error("Missing --upstream-base-url");
     }
+    if (!benchmarkVariants.has(variant)) {
+        throw new Error(
+            `Unsupported benchmark variant ${JSON.stringify(variant)}; expected baseline, typeagent, or typeagent-lsp`,
+        );
+    }
     return {
         help: false,
         traceOutput: path.resolve(traceOutput),
         upstreamBaseUrl,
+        variant,
         benchmarkArgs,
     };
 }
@@ -699,6 +711,7 @@ async function drainActive(active) {
 export async function runBenchmarkWithTrace({
     traceOutput,
     upstreamBaseUrl,
+    variant = "typeagent",
     benchmarkArgs,
     benchmarkCli = defaultBenchmarkCli,
     stdio = "inherit",
@@ -729,7 +742,7 @@ export async function runBenchmarkWithTrace({
                 "run",
                 ...benchmarkArgs,
                 "--variant",
-                "typeagent",
+                variant,
                 "--litellm-base-url",
                 proxy.proxyBaseUrl,
                 "--force-rerun",
@@ -843,15 +856,16 @@ function waitForChild(child) {
 
 const helpText = `run-mcp-with-http-trace
 
-Run the TypeAgent MCP benchmark through a loopback recording proxy.
+Run one benchmark arm through a loopback recording proxy.
 
 Usage:
   node scripts/run-mcp-with-http-trace.mjs \\
     --trace-output <trace.jsonl> \\
     --upstream-base-url <http-or-https-url> \\
+    [--variant <baseline|typeagent|typeagent-lsp>] \\
     -- <normal benchmark run options>
 
-The wrapper forces --variant typeagent and --force-rerun, and supplies
+The wrapper defaults to --variant typeagent, forces --force-rerun, and supplies
 --litellm-base-url. Do not pass those options after --. The output file is
 created exclusively and will not overwrite an existing trace.
 

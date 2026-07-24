@@ -11,7 +11,7 @@ import {
     stopCopilotClient,
 } from "./copilot.js";
 import { ensureDockerRepo } from "./docker.js";
-import { validateResultRows } from "./integrity.js";
+import { validateResultRows, type RunIdentity } from "./integrity.js";
 import {
     appendResult,
     readResults,
@@ -20,6 +20,7 @@ import {
     writeJsonAtomic,
 } from "./io.js";
 import { scoreSwebench } from "./score.js";
+import { runTypeAgentDispatcher } from "./typeAgent.js";
 import type {
     BenchTask,
     BenchmarkAgentConfig,
@@ -28,6 +29,7 @@ import type {
     McpServerConfig,
     RunResult,
 } from "./types.js";
+import { isTypeAgentVariant } from "./types.js";
 
 export interface BenchmarkOptions {
     runId: string;
@@ -71,14 +73,15 @@ export async function runBenchmark(
     if (variants.length === 0 || new Set(variants).size !== variants.length) {
         throw new Error("Benchmark variants must be non-empty and unique");
     }
-    const previousRows = await readResults(options.output);
-    validateResultRows(previousRows, {
+    const identity: RunIdentity = {
         runId: options.runId,
         taskIds: tasks.map((task) => task.id),
         matrix,
         variants,
         agent: options.agent,
-    });
+    };
+    const previousRows = await readResults(options.output);
+    validateResultRows(previousRows, identity);
     const pending = selectPendingWork(
         tasks,
         matrix,
@@ -121,19 +124,46 @@ export async function runBenchmark(
         return;
     }
 
-    const client = createCopilotClient({
-        copilotPath: options.copilotPath,
-        baseDirectory: path.join(path.dirname(options.output), ".copilot"),
-        workingDirectory: path.dirname(options.output),
-    });
-    await client.start();
-    const runtimeStatus = await client.getStatus();
+    const needsCopilot = pending.some((work) => work.variant === "baseline");
+    const client = needsCopilot
+        ? createCopilotClient({
+              copilotPath: options.copilotPath,
+              baseDirectory: path.join(
+                  path.dirname(options.output),
+                  ".copilot",
+              ),
+              workingDirectory: path.dirname(options.output),
+          })
+        : undefined;
+    if (client) {
+        await client.start();
+    }
+    const runtimeStatus = client ? await client.getStatus() : undefined;
     await writeJsonAtomic(options.runtimeEvidence, {
         schemaVersion: 1,
         capturedAt: new Date().toISOString(),
-        sdkVersion: COPILOT_SDK_VERSION,
-        copilotPath: options.copilotPath,
-        ...runtimeStatus,
+        harnesses: [
+            ...(client
+                ? [
+                      {
+                          name: "copilot-sdk",
+                          sdkVersion: COPILOT_SDK_VERSION,
+                          copilotPath: options.copilotPath,
+                          ...runtimeStatus,
+                      },
+                  ]
+                : []),
+            ...(pending.some((work) => isTypeAgentVariant(work.variant))
+                ? [
+                      {
+                          name: "typeagent-dispatcher",
+                          outerTranslation: "natural-language",
+                          applicationAgents: ["explorer"],
+                          mcp: false,
+                      },
+                  ]
+                : []),
+        ],
     });
 
     try {
@@ -170,21 +200,34 @@ export async function runBenchmark(
                     process.stderr.write(
                         `start\t${work.task.id}\t${matrixName}\t${work.variant}\tattempt=${attempt}/${options.maxAttempts}\n`,
                     );
-                    const output = await runCopilot(client, {
-                        repoPath: path.resolve(work.task.repoPath),
-                        prompt: work.task.query,
-                        model: work.entry.model,
-                        variant: work.variant,
-                        providerBaseUrl: options.providerBaseUrl,
-                        apiKeyEnv: options.apiKeyEnv,
-                        agent: options.agent,
-                        ...(options.envFile
-                            ? { envFile: options.envFile }
-                            : {}),
-                        mcp: options.mcp,
-                        telemetryFile,
-                        timeoutMs: options.timeoutMs,
-                    });
+                    const output = isTypeAgentVariant(work.variant)
+                        ? await runTypeAgentDispatcher({
+                              repoPath: path.resolve(work.task.repoPath),
+                              prompt: work.task.query,
+                              model: work.entry.model,
+                              variant: work.variant,
+                              providerBaseUrl: options.providerBaseUrl,
+                              apiKeyEnv: options.apiKeyEnv,
+                              ...(options.envFile
+                                  ? { envFile: options.envFile }
+                                  : {}),
+                              telemetryFile,
+                          })
+                        : await runCopilot(client!, {
+                              repoPath: path.resolve(work.task.repoPath),
+                              prompt: work.task.query,
+                              model: work.entry.model,
+                              variant: work.variant,
+                              providerBaseUrl: options.providerBaseUrl,
+                              apiKeyEnv: options.apiKeyEnv,
+                              agent: options.agent,
+                              ...(options.envFile
+                                  ? { envFile: options.envFile }
+                                  : {}),
+                              mcp: options.mcp,
+                              telemetryFile,
+                              timeoutMs: options.timeoutMs,
+                          });
                     const score = scoreSwebench(
                         output.finalAnswer,
                         work.task.swebench.patch,
@@ -195,7 +238,7 @@ export async function runBenchmark(
                     const error =
                         output.error ??
                         (output.ok && !usableFinalAnswer
-                            ? "Copilot CLI completed without a parseable <final_answer> citation"
+                            ? `${isTypeAgentVariant(work.variant) ? "TypeAgent Explorer" : "Copilot CLI"} completed without a parseable <final_answer> citation`
                             : undefined);
                     const result: RunResult = {
                         runId: options.runId,
@@ -218,12 +261,20 @@ export async function runBenchmark(
                         durationMs: output.durationMs,
                         attempt,
                         maxAttempts: options.maxAttempts,
-                        ...(output.usedRepair ? { usedRepair: true } : {}),
                         finalAnswer: output.finalAnswer,
                         score,
-                        ...(output.usage ? { usage: output.usage } : {}),
+                        ...("usedRepair" in output && output.usedRepair
+                            ? { usedRepair: true }
+                            : {}),
+                        ...("usage" in output && output.usage
+                            ? { usage: output.usage }
+                            : {}),
                         ...(output.typeAgentUsage
                             ? { typeAgentUsage: output.typeAgentUsage }
+                            : {}),
+                        ...("dispatcherUsage" in output &&
+                        output.dispatcherUsage
+                            ? { dispatcherUsage: output.dispatcherUsage }
                             : {}),
                         ...(output.combinedUsage
                             ? { combinedUsage: output.combinedUsage }
@@ -236,46 +287,91 @@ export async function runBenchmark(
                               }
                             : {}),
                         telemetryFile: output.telemetryFile,
-                        attemptedExploreCalls: output.attemptedExploreCalls,
-                        completedExploreCalls: output.completedExploreCalls,
-                        successfulExploreCalls: output.successfulExploreCalls,
+                        attemptedExploreCalls:
+                            "attemptedExploreCalls" in output
+                                ? output.attemptedExploreCalls
+                                : 0,
+                        completedExploreCalls:
+                            "completedExploreCalls" in output
+                                ? output.completedExploreCalls
+                                : 0,
+                        successfulExploreCalls:
+                            "successfulExploreCalls" in output
+                                ? output.successfulExploreCalls
+                                : 0,
                         outsideExploreInspection:
-                            output.outsideExploreInspection,
-                        mcpServerReady: output.mcpServerReady,
-                        mcpAdvertisedTools: output.mcpAdvertisedTools,
-                        ...(output.telemetryError
+                            "outsideExploreInspection" in output
+                                ? output.outsideExploreInspection
+                                : false,
+                        mcpServerReady:
+                            "mcpServerReady" in output
+                                ? output.mcpServerReady
+                                : false,
+                        mcpAdvertisedTools:
+                            "mcpAdvertisedTools" in output
+                                ? output.mcpAdvertisedTools
+                                : [],
+                        ...("telemetryError" in output && output.telemetryError
                             ? { telemetryError: output.telemetryError }
                             : {}),
-                        mcpAdopted: output.mcpAdopted,
+                        mcpAdopted:
+                            "mcpAdopted" in output ? output.mcpAdopted : false,
                         lspAdopted: output.lspAdopted,
                         lspCallCount: output.lspCallCount,
                         lspResultCount: output.lspResultCount,
-                        subagentAdopted: output.subagentAdopted,
-                        defaultMainAgent: output.defaultMainAgent,
+                        subagentAdopted:
+                            "subagentAdopted" in output
+                                ? output.subagentAdopted
+                                : false,
+                        defaultMainAgent:
+                            "defaultMainAgent" in output
+                                ? output.defaultMainAgent
+                                : false,
                         attemptedExplorerDelegations:
-                            output.attemptedExplorerDelegations,
+                            "attemptedExplorerDelegations" in output
+                                ? output.attemptedExplorerDelegations
+                                : 0,
                         completedExplorerDelegations:
-                            output.completedExplorerDelegations,
+                            "completedExplorerDelegations" in output
+                                ? output.completedExplorerDelegations
+                                : 0,
                         successfulExplorerDelegations:
-                            output.successfulExplorerDelegations,
+                            "successfulExplorerDelegations" in output
+                                ? output.successfulExplorerDelegations
+                                : 0,
                         failedExplorerDelegations:
-                            output.failedExplorerDelegations,
+                            "failedExplorerDelegations" in output
+                                ? output.failedExplorerDelegations
+                                : 0,
                         mainAgentRepositoryInspection:
-                            output.mainAgentRepositoryInspection,
-                        explorerSubagentTrace: output.explorerSubagentTrace,
-                        mcpToolTrace: output.mcpToolTrace,
-                        toolTrace: output.toolTrace,
-                        events: output.events,
-                        ...(output.selectedAgentName
+                            "mainAgentRepositoryInspection" in output
+                                ? output.mainAgentRepositoryInspection
+                                : false,
+                        explorerSubagentTrace:
+                            "explorerSubagentTrace" in output
+                                ? output.explorerSubagentTrace
+                                : [],
+                        mcpToolTrace:
+                            "mcpToolTrace" in output ? output.mcpToolTrace : [],
+                        toolTrace:
+                            "toolTrace" in output ? output.toolTrace : [],
+                        events: "events" in output ? output.events : [],
+                        ...("selectedAgentName" in output &&
+                        output.selectedAgentName
                             ? {
                                   selectedAgentName: output.selectedAgentName,
                               }
                             : {}),
+                        ...("dispatchEvidence" in output &&
+                        output.dispatchEvidence
+                            ? { typeAgentDispatch: output.dispatchEvidence }
+                            : {}),
                         ...(error ? { error } : {}),
                     };
+                    failClosedResultIntegrity(result, identity);
                     await writeResult(result);
                     process.stderr.write(
-                        `${result.ok ? "ok" : "fail"}\t${work.task.id}\t${matrixName}\t${work.variant}\t${result.durationMs}ms\tmcp=${result.attemptedExploreCalls ?? 0}/${result.successfulExploreCalls ?? 0}\tsubagent=${result.attemptedExplorerDelegations ?? 0}/${output.successfulExplorerDelegations}\tmainInspect=${result.mainAgentRepositoryInspection === true}\n`,
+                        `${result.ok ? "ok" : "fail"}\t${work.task.id}\t${matrixName}\t${work.variant}\t${result.durationMs}ms\tdirect=${result.typeAgentDispatch?.executionCount ?? 0}\tsubagent=${result.attemptedExplorerDelegations ?? 0}/${result.successfulExplorerDelegations ?? 0}\tmainInspect=${result.mainAgentRepositoryInspection === true}\n`,
                     );
                     if (result.ok) {
                         break;
@@ -285,13 +381,31 @@ export async function runBenchmark(
         );
         await writeQueue;
     } finally {
-        try {
-            await stopCopilotClient(client);
-        } catch (error) {
-            process.stderr.write(
-                `warning: Copilot CLI shutdown required force stop: ${(error as Error).message}\n`,
-            );
+        if (client) {
+            try {
+                await stopCopilotClient(client);
+            } catch (error) {
+                process.stderr.write(
+                    `warning: Copilot CLI shutdown required force stop: ${(error as Error).message}\n`,
+                );
+            }
         }
+    }
+}
+
+export function failClosedResultIntegrity(
+    result: RunResult,
+    identity: RunIdentity,
+): void {
+    try {
+        validateResultRows([result], identity);
+    } catch (error) {
+        if (!result.ok) {
+            throw error;
+        }
+        result.ok = false;
+        result.error = `Integrity validation failed: ${error instanceof Error ? error.message : String(error)}`;
+        validateResultRows([result], identity);
     }
 }
 

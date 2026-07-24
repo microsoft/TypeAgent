@@ -165,6 +165,17 @@ test("cache compatibility ignores run paths and Node interpreter location", () =
     );
 });
 
+test("rejects caches from before the repairable LSP refinement revision", () => {
+    assert.equal(CACHE_COMPATIBILITY_REVISION, 5);
+    assert.equal(
+        cacheManifestsCompatible(
+            manifest("mcp-harness", { cacheCompatibilityRevision: 2 }),
+            manifest("direct-typeagent"),
+        ),
+        false,
+    );
+});
+
 test("reuses the complete fail-to-success history with explicit provenance", () => {
     const sourceManifest = manifest("run-30");
     const targetManifest = manifest("run-100");
@@ -258,7 +269,7 @@ test("does not replace target attempts or reuse failed and mismatched rows", () 
     }
 });
 
-test("imports a legacy TypeAgent cache into canonical output without rewriting it", async () => {
+test("imports the legacy TypeAgent variant alias without rewriting its source", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "result-cache-"));
     const runsDir = path.join(directory, "runs");
     const sourceOutput = path.join(runsDir, "legacy", "results.jsonl");
@@ -282,34 +293,106 @@ test("imports a legacy TypeAgent cache into canonical output without rewriting i
     };
     const treatment = result("legacy", {
         variant: "typeagent",
-        mcpAdopted: true,
+        mcpAdopted: false,
+        lspAdopted: false,
+        lspCallCount: 0,
+        lspResultCount: 0,
         subagentAdopted: false,
+        defaultMainAgent: false,
         attemptedExplorerDelegations: 0,
         completedExplorerDelegations: 0,
         successfulExplorerDelegations: 0,
+        failedExplorerDelegations: 0,
         mainAgentRepositoryInspection: false,
         explorerSubagentTrace: [],
-        attemptedExploreCalls: 1,
-        completedExploreCalls: 1,
-        successfulExploreCalls: 1,
+        attemptedExploreCalls: 0,
+        completedExploreCalls: 0,
+        successfulExploreCalls: 0,
         outsideExploreInspection: false,
-        mcpServerReady: true,
-        mcpAdvertisedTools: ["explore"],
-        mcpToolTrace: [
-            {
-                toolCallId: "explore-1",
-                server: "typeagent",
-                tool: "explore",
-                completed: true,
-                success: true,
-            },
-        ],
+        mcpServerReady: false,
+        mcpAdvertisedTools: [],
+        mcpToolTrace: [],
+        typeAgentToolTrace: {
+            calls: [],
+            totalCalls: 0,
+            totalOutputBytes: 0,
+        },
+        dispatcherUsage: {
+            requestCount: 1,
+            inputTokens: 1,
+            cachedInputTokens: 0,
+            cacheWriteTokens: 0,
+            outputTokens: 1,
+            reasoningOutputTokens: 0,
+            totalTokens: 2,
+        },
+        typeAgentUsage: usage,
+        combinedUsage: {
+            inputTokens: 2,
+            cachedInputTokens: 0,
+            cacheWriteTokens: 0,
+            outputTokens: 2,
+            reasoningOutputTokens: 0,
+            totalTokens: 4,
+        },
+        typeAgentDispatch: {
+            ingress: "natural-language",
+            submittedRequest: task.query,
+            translationInvoked: true,
+            translationRequestCount: 1,
+            activeAgentNames: ["explorer"],
+            activeSchemaNames: ["explorer"],
+            translatedActions: [
+                {
+                    schemaName: "explorer",
+                    actionName: "exploreRepository",
+                    parameters: {},
+                },
+            ],
+            executionCount: 1,
+            outputMatchedExecution: true,
+            executionRequestMatchedIngress: true,
+            usedCopilot: false,
+            usedMcp: false,
+        },
         exploreTelemetry: {
             schemaVersion: 4,
             model: "route-a",
             status: "completed",
             usage,
             toolTrace: { calls: [], totalCalls: 0, totalOutputBytes: 0 },
+            invocations: [
+                {
+                    index: 0,
+                    status: "completed",
+                    usage,
+                    actionTranslationAndCodeGenerationUsage: usage,
+                    toolTrace: {
+                        calls: [],
+                        totalCalls: 0,
+                        totalOutputBytes: 0,
+                    },
+                    actionAttempts: [
+                        {
+                            index: 0,
+                            actionName: "discoverRepository",
+                            status: "completed",
+                        },
+                        {
+                            index: 1,
+                            actionName: "refineRepository",
+                            status: "completed",
+                        },
+                        {
+                            index: 2,
+                            actionName: "submitExploration",
+                            status: "completed",
+                        },
+                    ],
+                    result: { citationCount: 1, truncated: false },
+                },
+            ],
+            result: { citationCount: 1, truncated: false },
         },
     });
     const legacyManifestText = JSON.stringify({

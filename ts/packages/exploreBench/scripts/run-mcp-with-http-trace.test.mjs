@@ -323,6 +323,33 @@ test("ends the client and reports a trace append failure", async (t) => {
 });
 
 test("owns routing arguments and requires explicit wrapper inputs", () => {
+    for (const variant of ["baseline", "typeagent", "typeagent-lsp"]) {
+        assert.equal(
+            parseWrapperArgs([
+                "--trace-output",
+                "trace.jsonl",
+                "--upstream-base-url",
+                "http://127.0.0.1:4627/v1",
+                "--variant",
+                variant,
+                "--",
+            ]).variant,
+            variant,
+        );
+    }
+    assert.throws(
+        () =>
+            parseWrapperArgs([
+                "--trace-output",
+                "trace.jsonl",
+                "--upstream-base-url",
+                "http://127.0.0.1:4627/v1",
+                "--variant",
+                "typeagent-mcp",
+                "--",
+            ]),
+        /Unsupported benchmark variant/,
+    );
     assert.throws(
         () =>
             parseWrapperArgs([
@@ -377,7 +404,7 @@ test("refuses to overwrite an existing trace", async (t) => {
     assert.equal(await readFile(traceOutput, "utf8"), "existing\n");
 });
 
-test("propagates a child failure after injecting MCP-only routing", async (t) => {
+test("propagates a child failure after injecting the selected routing", async (t) => {
     const temporary = await temporaryDirectory(t);
     const traceOutput = path.join(temporary, "trace.jsonl");
     const capture = path.join(temporary, "argv.json");
@@ -394,6 +421,7 @@ process.exitCode = 7;
     const result = await runBenchmarkWithTrace({
         traceOutput,
         upstreamBaseUrl: "http://127.0.0.1:4627/v1",
+        variant: "typeagent-lsp",
         benchmarkArgs: ["--capture", capture],
         benchmarkCli: fixture,
         stdio: "ignore",
@@ -403,7 +431,7 @@ process.exitCode = 7;
     const args = JSON.parse(await readFile(capture, "utf8"));
     assert.deepEqual(args.slice(0, 3), ["run", "--capture", capture]);
     assert.equal(args.filter((argument) => argument === "--variant").length, 1);
-    assert.equal(args[args.indexOf("--variant") + 1], "typeagent");
+    assert.equal(args[args.indexOf("--variant") + 1], "typeagent-lsp");
     assert.equal(
         args.filter((argument) => argument === "--litellm-base-url").length,
         1,

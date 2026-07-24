@@ -101,6 +101,27 @@ export interface TypeAgentUsage extends TokenUsage {
     usageComplete?: boolean;
 }
 
+export interface TypeAgentDispatchAction {
+    schemaName: string;
+    actionName: string;
+    parameters?: Record<string, unknown>;
+}
+
+export interface TypeAgentDispatchEvidence {
+    ingress: "natural-language";
+    submittedRequest: string;
+    translationInvoked: boolean;
+    translationRequestCount: number;
+    activeAgentNames: string[];
+    activeSchemaNames: string[];
+    translatedActions: TypeAgentDispatchAction[];
+    executionCount: number;
+    outputMatchedExecution: boolean;
+    executionRequestMatchedIngress: boolean;
+    usedCopilot: boolean;
+    usedMcp: boolean;
+}
+
 export interface TypeAgentToolCallTrace {
     tool: string;
     startedAt?: string;
@@ -126,6 +147,19 @@ export interface ExploreInvocationTelemetry {
     codeModeUsage?: TypeAgentUsage;
     actionTranslationAndCodeGenerationUsage?: TypeAgentUsage;
     toolTrace: TypeAgentToolTrace;
+    reasoningTrace?: Array<{
+        index: number;
+        tool: string;
+        actionName?: string;
+        status: "completed" | "failed";
+        error?: string;
+    }>;
+    actionAttempts?: Array<{
+        index: number;
+        actionName: string;
+        status: "completed" | "failed";
+        error?: string;
+    }>;
     result?: {
         citationCount: number;
         truncated: boolean;
@@ -240,9 +274,11 @@ export interface RunResult {
     score: SwebenchScore;
     /** Outer GitHub Copilot CLI usage from SDK assistant.usage events. */
     usage?: CopilotUsage;
-    /** Inner TypeAgent Code Mode model usage from MCP telemetry. */
+    /** Inner Explorer Code Mode model usage from TypeAgent telemetry. */
     typeAgentUsage?: TypeAgentUsage;
-    /** Outer Copilot plus inner TypeAgent usage. */
+    /** TypeAgent dispatcher natural-language-to-action translation usage. */
+    dispatcherUsage?: TypeAgentUsage;
+    /** Dispatcher translation plus inner Explorer reasoning usage. */
     combinedUsage?: TokenUsage;
     /** Combined usage from the final attempt only, populated while reporting. */
     finalAttemptUsage?: TokenUsage;
@@ -272,6 +308,7 @@ export interface RunResult {
     toolTrace: CopilotToolCallTrace[];
     events: CopilotTraceItem[];
     selectedAgentName?: string;
+    typeAgentDispatch?: TypeAgentDispatchEvidence;
     reusedFrom?: ResultReuseProvenance;
     error?: string;
 }

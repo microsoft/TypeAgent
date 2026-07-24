@@ -11,7 +11,11 @@
   },
   "dependencies": {
     "@github/copilot": "1.0.67",
-    "@github/copilot-sdk": "1.0.4"
+    "@github/copilot-sdk": "1.0.4",
+    "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
+    "agent-dispatcher": "workspace:*",
+    "explorer-typeagent": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -6,10 +6,11 @@ import path from "node:path";
 import test from "node:test";
 import {
     createTelemetryFilePath,
+    failClosedResultIntegrity,
     mapWithConcurrencyPerModel,
     selectPendingWork,
 } from "../src/runner.js";
-import type { BenchTask } from "../src/types.js";
+import type { BenchTask, RunResult } from "../src/types.js";
 
 const task: BenchTask = {
     id: "repo__repo-1",
@@ -50,7 +51,7 @@ test("resume skips an ok key and retries a failed variant", () => {
     );
 });
 
-test("selects exactly one TypeAgent MCP work item for a one-row smoke", () => {
+test("selects exactly one direct TypeAgent work item for a one-row smoke", () => {
     const pending = selectPendingWork(
         [task],
         [{ name: "azure/gpt-5.6-sol", model: "azure/gpt-5.6-sol" }],
@@ -116,6 +117,36 @@ test("force rerun selects every key despite successful prior rows", () => {
     );
 
     assert.equal(pending.length, 1);
+});
+
+test("turns a provisionally successful integrity violation into a retryable failure", () => {
+    const result = {
+        runId: "run-a",
+        taskId: task.id,
+        matrixName: "model-a",
+        model: "route-a",
+        variant: "baseline",
+        swebench: task.swebench,
+        ok: true,
+    } as RunResult;
+
+    failClosedResultIntegrity(result, {
+        runId: "run-a",
+        taskIds: [task.id],
+        matrix: [{ name: "model-a", model: "route-a" }],
+        variants: ["baseline"],
+        agent: {
+            name: "explorer",
+            description: "benchmark explorer",
+            tools: [],
+            prompt: "explore only",
+            file: "/repo/.copilot/agents/explorer.md",
+            sha256: "a".repeat(64),
+        },
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? "", /integrity validation failed/i);
 });
 
 test("allocates a unique telemetry file for every attempt", () => {
