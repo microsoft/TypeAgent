@@ -10,6 +10,7 @@ import {
 
 export interface ExploreScriptExecution {
     ok: boolean;
+    runtimeError: boolean;
     result?: unknown;
     error?: string;
     toolTrace: RepositoryToolTrace;
@@ -38,26 +39,35 @@ export function createExploreScriptExecutor(defaultTimeout: number): {
             maxResults,
             timeout = defaultTimeout,
         ) {
-            const result = await executor.execute(
-                script,
-                tools.api,
-                { query, maxResults },
-                { timeout },
-            );
-            return {
-                ok: result.success,
-                result,
-                ...(result.success
-                    ? {}
-                    : {
-                          error:
-                              result.error ??
-                              result.message ??
-                              "Generated explore program failed",
-                      }),
-                toolTrace: tools.trace,
-                observations: tools.observations,
-            };
+            const execution = tools.startExecution();
+            try {
+                const result = await executor.execute(
+                    script,
+                    execution.api,
+                    { query, maxResults },
+                    { timeout },
+                );
+                if (!result.success && result.runtimeError === true) {
+                    execution.discard();
+                }
+                return {
+                    ok: result.success,
+                    runtimeError: result.runtimeError === true,
+                    result,
+                    ...(result.success
+                        ? {}
+                        : {
+                              error:
+                                  result.error ??
+                                  result.message ??
+                                  "Generated explore program failed",
+                          }),
+                    toolTrace: tools.trace,
+                    observations: tools.observations,
+                };
+            } finally {
+                execution.stop();
+            }
         },
     };
 }
