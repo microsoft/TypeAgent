@@ -18,6 +18,7 @@ import {
     validateResumeTaskRows,
     validateRuntimeEvidence,
 } from "../src/runner.js";
+import { CACHE_COMPATIBILITY_REVISION } from "../src/resultCache.js";
 import { resolvePackagedRipgrepPath } from "../src/ripgrep.js";
 import { scoreSwebench } from "../src/score.js";
 import type { BenchTask, RunManifest, RunResult } from "../src/types.js";
@@ -390,7 +391,7 @@ test("fully cached imported rows require a verified direct source runtime artifa
     const options = benchmarkOptions(targetDirectory, "target-run");
     const sourceManifest: RunManifest = {
         schemaVersion: 1,
-        cacheCompatibilityRevision: 18,
+        cacheCompatibilityRevision: CACHE_COMPATIBILITY_REVISION,
         runId: "source-run",
         createdAt: "2026-07-24T00:00:00.000Z",
         dataset: task.swebench.dataset,

@@ -225,6 +225,29 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                                           totalTokens: 40,
                                                       },
                                                   toolTrace: typeAgentToolTrace,
+                                                  reasoningTrace: [
+                                                      {
+                                                          index: 0,
+                                                          tool: "execute_action",
+                                                          actionName:
+                                                              "discoverRepository",
+                                                          status: "completed" as const,
+                                                      },
+                                                      {
+                                                          index: 1,
+                                                          tool: "execute_action",
+                                                          actionName:
+                                                              "refineRepository",
+                                                          status: "completed" as const,
+                                                      },
+                                                      {
+                                                          index: 2,
+                                                          tool: "execute_action",
+                                                          actionName:
+                                                              "submitExploration",
+                                                          status: "completed" as const,
+                                                      },
+                                                  ],
                                                   actionAttempts: [
                                                       {
                                                           index: 0,
