@@ -194,6 +194,10 @@ function validateDirectTypeAgentRow(row: RunResult, prefix: string): void {
         !matchesExplorerActionSequence(
             invocation.actionAttempts,
             invocation.submissionAction,
+        ) ||
+        !matchesExplorerReasoningTrace(
+            invocation.reasoningTrace,
+            invocation.actionAttempts,
         )
     ) {
         throw new Error(
@@ -266,6 +270,8 @@ function isOnlyExplorer(names: string[]): boolean {
     return names.length === 1 && names[0] === "explorer";
 }
 
+const MAX_EXPLORER_REASONING_CALLS = 6;
+
 function matchesExplorerActionSequence(
     attempts:
         | Array<{
@@ -280,6 +286,7 @@ function matchesExplorerActionSequence(
         !attempts ||
         submissionAction !== "submitExploration" ||
         attempts.length < 3 ||
+        attempts.length > MAX_EXPLORER_REASONING_CALLS ||
         attempts.some((attempt, index) => attempt.index !== index)
     ) {
         return false;
@@ -325,6 +332,58 @@ function matchesExplorerActionSequence(
             );
         })
     );
+}
+
+function matchesExplorerReasoningTrace(
+    trace:
+        | Array<{
+              index: number;
+              tool: string;
+              actionName?: string;
+              status: "completed" | "failed";
+          }>
+        | undefined,
+    actionAttempts:
+        | Array<{
+              index: number;
+              actionName: string;
+              status: "completed" | "failed";
+          }>
+        | undefined,
+): boolean {
+    if (
+        !trace ||
+        !actionAttempts ||
+        trace.length < actionAttempts.length ||
+        trace.length > MAX_EXPLORER_REASONING_CALLS ||
+        trace.some(
+            (attempt, index) =>
+                attempt.index !== index || attempt.tool !== "execute_action",
+        )
+    ) {
+        return false;
+    }
+
+    let traceIndex = 0;
+    for (const actionAttempt of actionAttempts) {
+        while (
+            traceIndex < trace.length &&
+            (trace[traceIndex].actionName !== actionAttempt.actionName ||
+                trace[traceIndex].status !== actionAttempt.status)
+        ) {
+            if (trace[traceIndex].status !== "failed") {
+                return false;
+            }
+            traceIndex += 1;
+        }
+        if (traceIndex >= trace.length) {
+            return false;
+        }
+        traceIndex += 1;
+    }
+    return trace
+        .slice(traceIndex)
+        .every((attempt) => attempt.status === "failed");
 }
 
 function isCombinedUsage(
@@ -379,13 +438,19 @@ function hasValidRipgrepEvidence(
     if (input.engine !== undefined || input.ripgrepPath !== undefined) {
         return false;
     }
-    if (hasRipgrepExecutionEvidence(call)) {
+    if (hasValidRipgrepExecutionShape(call)) {
         return true;
     }
     return call.resultCount === 0 && call.execution === undefined;
 }
 
 function hasRipgrepExecutionEvidence(
+    call: NonNullable<RunResult["typeAgentToolTrace"]>["calls"][number],
+): boolean {
+    return call.error === undefined && hasValidRipgrepExecutionShape(call);
+}
+
+function hasValidRipgrepExecutionShape(
     call: NonNullable<RunResult["typeAgentToolTrace"]>["calls"][number],
 ): boolean {
     if (
@@ -397,7 +462,6 @@ function hasRipgrepExecutionEvidence(
         return false;
     }
     return (
-        call.error === undefined &&
         call.execution.engine === "ripgrep" &&
         typeof call.execution.executable === "string" &&
         /(?:^|[/\\])rg(?:[.]exe)?$/.test(call.execution.executable)
