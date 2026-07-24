@@ -8,7 +8,9 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
+    chunkRipgrepTargets,
     createRepositoryTools,
+    ripgrepArgumentBudget,
     type RepositoryTools,
     type RepositoryToolsOptions,
 } from "../src/script/repositoryApi.js";
@@ -279,7 +281,32 @@ describe("repository tools", () => {
         const content = await api.read("src/auth.ts", { limit: 1 });
         expect(content).toContain("authenticate");
         expect(content).not.toContain("outside-secret");
+        await expect(api.grep("outside-secret")).resolves.toEqual([]);
         expect(trace.calls.filter((call) => call.error)).toHaveLength(5);
+    });
+
+    it("keeps valid ripgrep matches when another indexed file is deleted", async () => {
+        const repoRoot = await makeFixture();
+        await writeFile(
+            path.join(repoRoot, "src", "surviving.ts"),
+            "export const survivingMarker = true;\n",
+        );
+        const { api, trace } = await makeTools({ repoRoot });
+
+        await rm(path.join(repoRoot, "src", "auth.ts"));
+
+        await expect(api.grep("survivingMarker")).resolves.toEqual([
+            {
+                path: "src/surviving.ts",
+                line: 1,
+                text: "export const survivingMarker = true;",
+            },
+        ]);
+        expect(trace.calls[0]).toMatchObject({
+            tool: "grep",
+            resultCount: 1,
+            truncated: true,
+        });
     });
 
     it("supports literal grep and bounds default regex, results, and line output", async () => {
@@ -400,6 +427,28 @@ describe("repository tools", () => {
             truncated: true,
         });
         expect(trace.calls[0].outputBytes).toBeLessThan(1024);
+    });
+
+    it("keeps ripgrep target chunks below the Windows command-line budget", () => {
+        const budget = ripgrepArgumentBudget("win32");
+        const targets = ["a".repeat(7000), "b".repeat(7000)];
+        const chunks = chunkRipgrepTargets(targets, budget);
+
+        expect(budget).toBe(12 * 1024);
+        expect(chunks).toEqual([[targets[0]], [targets[1]]]);
+        expect(
+            chunks.every(
+                (chunk) =>
+                    chunk.reduce(
+                        (bytes, target) =>
+                            bytes + Buffer.byteLength(target) + 1,
+                        0,
+                    ) <= budget,
+            ),
+        ).toBe(true);
+        expect(() => chunkRipgrepTargets(["x".repeat(budget)], budget)).toThrow(
+            /path exceeds ripgrep argument limit/i,
+        );
     });
 
     it("resolves ripgrep only when grep is used", async () => {
