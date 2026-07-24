@@ -280,6 +280,12 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                             successfulExplorerDelegations:
                                 variant === "baseline" ? 1 : 0,
                             failedExplorerDelegations: 0,
+                            explorerRepositoryCalls:
+                                variant === "baseline" ? 1 : 0,
+                            firstAssistantActionExclusiveExplorer:
+                                variant === "baseline",
+                            explorerCompletedBeforeLaterAssistantAction:
+                                variant === "baseline",
                             mainAgentRepositoryInspection: false,
                             explorerSubagentTrace:
                                 variant === "baseline"

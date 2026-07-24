@@ -8,31 +8,29 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
-    addUsage,
     buildAgentRoutingConfig,
     buildBenchmarkPrompt,
     buildBenchmarkSystemMessage,
     buildCustomAgentConfig,
-    buildMcpServerConfig,
     inspectCopilotToolTrace,
     normalizeRpcUsage,
-    readExploreTelemetry,
-    readExploreTelemetryEventually,
     resolveCopilotPath,
+    runCopilot,
     shouldRepairFinalAnswer,
     summarizeCopilotUsage,
     treatmentValidationError,
     validateObservedUsageModels,
     type CopilotRunOptions,
 } from "../src/copilot.js";
+import { readExploreTelemetry } from "../src/exploreTelemetry.js";
 import type { ExploreTelemetry } from "../src/types.js";
 
-function options(variant: CopilotRunOptions["variant"]): CopilotRunOptions {
+function options(): CopilotRunOptions {
     return {
         repoPath: "/repo",
         prompt: "find bug",
         model: "azure/gpt-5.6-luna",
-        variant,
+        variant: "baseline",
         providerBaseUrl: "http://localhost:4627/v1",
         apiKeyEnv: "CUSTOM_PROVIDER_API_KEY",
         agent: {
@@ -43,82 +41,58 @@ function options(variant: CopilotRunOptions["variant"]): CopilotRunOptions {
             file: "/repo/.copilot/agents/explorer.md",
             sha256: "a".repeat(64),
         },
-        mcp: {
-            command: "/mcp/server",
-            args: ["--stdio"],
-            cwd: "/mcp",
-            envVars: ["TYPEAGENT_MODEL_API_KEY"],
-        },
         telemetryFile: "/telemetry/row.json",
         timeoutMs: 1_000,
     };
 }
 
-test("builds arm-specific main-agent prompts with explicit required paths", () => {
-    const treatment = buildBenchmarkSystemMessage("typeagent");
-    const baseline = buildBenchmarkSystemMessage("baseline");
-    assert.match(
-        treatment,
-        /first assistant action MUST be exactly one call to it/,
-    );
-    assert.match(treatment, /Wait for its result/);
-    assert.match(treatment, /do not call any other tool/);
-    assert.match(treatment, /at most six repository-relative file paths/i);
-    assert.doesNotMatch(treatment, /short reason/i);
+test("builds the baseline prompt with its explicit required path", () => {
+    const baseline = buildBenchmarkSystemMessage();
     assert.match(baseline, /default main agent/i);
     assert.match(baseline, /exactly one successful delegation/i);
     assert.match(baseline, /Do not inspect the repository yourself/i);
     assert.match(baseline, /at most six repository-relative file paths/i);
     assert.doesNotMatch(baseline, /short reason/i);
     assert.match(
-        buildBenchmarkPrompt("baseline", "find bug"),
+        buildBenchmarkPrompt("find bug"),
         /^Use the explorer subagent\./,
     );
-    assert.match(
-        buildBenchmarkPrompt("typeagent", "find bug"),
-        /^Use the explore tool\./,
-    );
-    assert.equal(
-        buildBenchmarkSystemMessage("typeagent-lsp"),
-        buildBenchmarkSystemMessage("typeagent"),
+});
+
+test("rejects legacy TypeAgent variants before starting Copilot", async () => {
+    await assert.rejects(
+        runCopilot(
+            {} as never,
+            {
+                ...options(),
+                variant: "typeagent" as never,
+            } as CopilotRunOptions,
+        ),
+        /Copilot runner supports only the baseline arm/i,
     );
 });
 
 test("keeps the default main agent and exposes only the arm's required path", () => {
-    assert.deepEqual(
-        buildAgentRoutingConfig("baseline", options("baseline").agent),
-        {
-            availableTools: ["builtin:task", "custom:*"],
-            customAgents: [
-                {
-                    name: "explorer",
-                    displayName: "explorer",
-                    description: "benchmark explorer",
-                    tools: ["read", "grep", "glob", "bash"],
-                    prompt: "explore only",
-                    infer: true,
-                },
-            ],
-            defaultAgent: {
-                excludedTools: ["read", "grep", "glob", "bash"],
+    assert.deepEqual(buildAgentRoutingConfig(options().agent), {
+        availableTools: ["builtin:task", "custom:*"],
+        customAgents: [
+            {
+                name: "explorer",
+                displayName: "explorer",
+                description: "benchmark explorer",
+                tools: ["read", "grep", "glob", "bash"],
+                prompt: "explore only",
+                infer: true,
             },
+        ],
+        defaultAgent: {
+            excludedTools: ["read", "grep", "glob", "bash"],
         },
-    );
-    assert.deepEqual(
-        buildAgentRoutingConfig("typeagent", options("typeagent").agent),
-        { availableTools: ["mcp:*"] },
-    );
-    assert.deepEqual(
-        buildAgentRoutingConfig(
-            "typeagent-lsp",
-            options("typeagent-lsp").agent,
-        ),
-        { availableTools: ["mcp:*"] },
-    );
+    });
 });
 
 test("builds the explorer as an inferable subagent with bounded repository tools", () => {
-    assert.deepEqual(buildCustomAgentConfig(options("baseline").agent), {
+    assert.deepEqual(buildCustomAgentConfig(options().agent), {
         name: "explorer",
         displayName: "explorer",
         description: "benchmark explorer",
@@ -142,24 +116,14 @@ test("requires one completed explorer delegation in baseline sessions", () => {
     assert.equal(valid.completedExplorerDelegations, 1);
     assert.equal(valid.failedExplorerDelegations, 0);
     assert.equal(valid.mainAgentRepositoryInspection, false);
-    assert.equal(
-        treatmentValidationError("baseline", valid, false, [], undefined),
-        undefined,
-    );
+    assert.equal(treatmentValidationError(valid), undefined);
 
     assert.match(
-        treatmentValidationError(
-            "baseline",
-            inspectCopilotToolTrace([]),
-            false,
-            [],
-            undefined,
-        ) ?? "",
+        treatmentValidationError(inspectCopilotToolTrace([])) ?? "",
         /at least one explorer subagent attempt/i,
     );
     assert.match(
         treatmentValidationError(
-            "baseline",
             inspectCopilotToolTrace([
                 assistantTask("task-1"),
                 taskStart("task-1"),
@@ -167,9 +131,6 @@ test("requires one completed explorer delegation in baseline sessions", () => {
                 subagentFailed("task-1"),
                 complete("task-1", false),
             ]),
-            false,
-            [],
-            undefined,
         ) ?? "",
         /successful explorer subagent delegation/i,
     );
@@ -191,10 +152,7 @@ test("allows failed task-schema attempts before one successful explorer delegati
     assert.equal(inspection.attemptedExplorerDelegations, 2);
     assert.equal(inspection.successfulExplorerDelegations, 1);
     assert.equal(inspection.failedExplorerDelegations, 1);
-    assert.equal(
-        treatmentValidationError("baseline", inspection, false, [], undefined),
-        undefined,
-    );
+    assert.equal(treatmentValidationError(inspection), undefined);
 });
 
 test("detects repository inspection by the default main agent", () => {
@@ -212,13 +170,7 @@ test("detects repository inspection by the default main agent", () => {
     ]);
     assert.equal(inspection.mainAgentRepositoryInspection, true);
     assert.match(
-        treatmentValidationError(
-            "baseline",
-            inspection,
-            false,
-            [],
-            undefined,
-        ) ?? "",
+        treatmentValidationError(inspection) ?? "",
         /default main agent inspected the repository/i,
     );
 });
@@ -232,7 +184,7 @@ test("requires an exclusive synchronous explorer task as the first baseline acti
         complete("task-1", true),
     ]);
     assert.match(
-        treatmentValidationError("baseline", prose, false, [], undefined) ?? "",
+        treatmentValidationError(prose) ?? "",
         /first assistant action.*explorer task/i,
     );
 
@@ -244,13 +196,7 @@ test("requires an exclusive synchronous explorer task as the first baseline acti
         complete("task-1", true),
     ]);
     assert.match(
-        treatmentValidationError(
-            "baseline",
-            background,
-            false,
-            [],
-            undefined,
-        ) ?? "",
+        treatmentValidationError(background) ?? "",
         /synchronous explorer task/i,
     );
 });
@@ -266,266 +212,6 @@ test("repairs only answers without a parseable citation", () => {
             "<final_answer>\nsrc/index.ts:10-12 reason\n</final_answer>",
         ),
         false,
-    );
-});
-
-test("builds one-tool native MCP config without putting secrets in arguments", () => {
-    const outerCredential = "outer-secret";
-    const innerCredential = "inner-secret";
-    const modelEnvironment = {
-        CUSTOM_PROVIDER_API_KEY: outerCredential,
-        TYPEAGENT_MODEL_API_KEY: innerCredential,
-    };
-    const config = buildMcpServerConfig(options("typeagent"), modelEnvironment);
-    assert.equal(config.type, "stdio");
-    assert.equal(config.command, "/mcp/server");
-    assert.deepEqual(config.tools, ["explore"]);
-    assert.equal(config.workingDirectory, "/mcp");
-    assert.deepEqual(config.env, modelEnvironment);
-    assert.match(config.args?.join(" ") ?? "", /--repo \/repo/);
-    assert.match(config.args?.join(" ") ?? "", /--max-tool-calls 8/);
-    assert.match(config.args?.join(" ") ?? "", /--model azure\/gpt-5.6-luna/);
-    assert.doesNotMatch(config.args?.join(" ") ?? "", /secret/);
-    assert.equal(config.timeout, 300_000);
-
-    const lspConfig = buildMcpServerConfig(
-        options("typeagent-lsp"),
-        modelEnvironment,
-    );
-    assert.ok(lspConfig.args?.includes("--enable-lsp"));
-    assert.match(
-        lspConfig.args?.join(" ") ?? "",
-        /--request-timeout-ms 120000/,
-    );
-    assert.ok(!config.args?.includes("--enable-lsp"));
-});
-
-test("requires a successful language-server call only in the LSP arm", () => {
-    const inspection = inspectCopilotToolTrace([
-        assistantExplore("call-1"),
-        start("call-1"),
-        complete("call-1", true),
-    ]);
-    assert.match(
-        treatmentValidationError(
-            "typeagent-lsp",
-            inspection,
-            true,
-            ["explore"],
-            validTelemetry(),
-        ) ?? "",
-        /language-server navigation/i,
-    );
-    assert.equal(
-        treatmentValidationError(
-            "typeagent-lsp",
-            inspection,
-            true,
-            ["explore"],
-            lspTelemetry(),
-        ),
-        undefined,
-    );
-});
-
-test("allows failed MCP attempts before one successful explore invocation", () => {
-    const events = [
-        assistantExplore("call-1"),
-        start("call-1"),
-        complete("call-1", false),
-        start("call-2"),
-        complete("call-2", false),
-        start("call-3"),
-        complete("call-3", true),
-    ];
-    const inspection = inspectCopilotToolTrace(events);
-    assert.equal(inspection.attemptedExploreCalls, 3);
-    assert.equal(inspection.completedExploreCalls, 3);
-    assert.equal(inspection.successfulExploreCalls, 1);
-    assert.equal(
-        treatmentValidationError(
-            "typeagent",
-            inspection,
-            true,
-            ["explore"],
-            validTelemetry(),
-        ),
-        undefined,
-    );
-});
-
-test("requires one successful MCP invocation and rejects every outside tool start", () => {
-    const missing = inspectCopilotToolTrace([]);
-    assert.match(
-        treatmentValidationError(
-            "typeagent",
-            missing,
-            true,
-            ["explore"],
-            undefined,
-        ) ?? "",
-        /at least one explore attempt/i,
-    );
-
-    const valid = inspectCopilotToolTrace([
-        assistantExplore("call-1"),
-        start("call-1"),
-        complete("call-1", true),
-    ]);
-    assert.equal(
-        treatmentValidationError(
-            "typeagent",
-            valid,
-            true,
-            ["explore"],
-            validTelemetry(),
-        ),
-        undefined,
-    );
-
-    const outside = inspectCopilotToolTrace([
-        assistantExplore("call-1"),
-        start("call-1"),
-        complete("call-1", true),
-        {
-            type: "tool.execution_start",
-            data: { toolCallId: "read-1", toolName: "read" },
-        },
-    ]);
-    assert.equal(outside.outsideExploreInspection, true);
-    assert.match(
-        treatmentValidationError(
-            "typeagent",
-            outside,
-            true,
-            ["explore"],
-            validTelemetry(),
-        ) ?? "",
-        /outside explore/i,
-    );
-
-    const single = validTelemetry();
-    const repeatedTelemetry: ExploreTelemetry = {
-        ...single,
-        schemaVersion: 2,
-        invocations: [
-            {
-                index: 0,
-                status: single.status,
-                usage: single.usage,
-                toolTrace: single.toolTrace,
-                ...(single.result ? { result: single.result } : {}),
-            },
-            {
-                index: 1,
-                status: single.status,
-                usage: single.usage,
-                toolTrace: single.toolTrace,
-                ...(single.result ? { result: single.result } : {}),
-            },
-        ],
-    };
-    assert.match(
-        treatmentValidationError(
-            "typeagent",
-            valid,
-            true,
-            ["explore"],
-            repeatedTelemetry,
-        ) ?? "",
-        /telemetry for exactly one explore invocation/i,
-    );
-
-    assert.match(
-        treatmentValidationError("typeagent", valid, true, ["explore"], {
-            ...single,
-            usage: { ...single.usage, usageComplete: false },
-        }) ?? "",
-        /usage is incomplete/i,
-    );
-});
-
-test("requires explore to be the first prose-free assistant action", () => {
-    const proseInspection = inspectCopilotToolTrace([
-        assistantExplore("call-1", "I will inspect the repository first."),
-        start("call-1"),
-        complete("call-1", true),
-    ]);
-    assert.match(
-        treatmentValidationError(
-            "typeagent",
-            proseInspection,
-            true,
-            ["explore"],
-            validTelemetry(),
-        ) ?? "",
-        /first assistant action/i,
-    );
-
-    const parallelInspection = inspectCopilotToolTrace([
-        {
-            type: "assistant.message",
-            data: {
-                content: "",
-                toolRequests: [
-                    assistantExploreRequest("call-1"),
-                    { toolCallId: "read-1", name: "read", arguments: {} },
-                ],
-            },
-        },
-        start("call-1"),
-        complete("call-1", true),
-    ]);
-    assert.match(
-        treatmentValidationError(
-            "typeagent",
-            parallelInspection,
-            true,
-            ["explore"],
-            validTelemetry(),
-        ) ?? "",
-        /exactly one TypeAgent explore request/i,
-    );
-});
-
-test("requires explore to complete before a later assistant action", () => {
-    const inspection = inspectCopilotToolTrace([
-        assistantExplore("call-1"),
-        start("call-1"),
-        assistantAnswer("Searching is complete."),
-        complete("call-1", true),
-    ]);
-    assert.match(
-        treatmentValidationError(
-            "typeagent",
-            inspection,
-            true,
-            ["explore"],
-            validTelemetry(),
-        ) ?? "",
-        /before any later assistant action/i,
-    );
-});
-
-test("allows citation repair after the exclusive explore call completes", () => {
-    const inspection = inspectCopilotToolTrace([
-        assistantExplore("call-1"),
-        start("call-1"),
-        complete("call-1", true),
-        assistantAnswer("The likely file is pkg/a.py."),
-        assistantAnswer(
-            "<final_answer>\npkg/a.py:10 likely fix\n</final_answer>",
-        ),
-    ]);
-    assert.equal(
-        treatmentValidationError(
-            "typeagent",
-            inspection,
-            true,
-            ["explore"],
-            validTelemetry(),
-        ),
-        undefined,
     );
 });
 
@@ -615,7 +301,7 @@ test("normalizes the Copilot usage RPC fallback", () => {
     );
 });
 
-test("reads schema-v1 TypeAgent telemetry and combines token usage", async () => {
+test("reads schema-v1 TypeAgent telemetry", async () => {
     const directory = await mkdtemp(
         path.join(os.tmpdir(), "explore-bench-telemetry-"),
     );
@@ -627,27 +313,6 @@ test("reads schema-v1 TypeAgent telemetry and combines token usage", async () =>
             "azure/gpt-5.6-luna",
         );
         assert.equal(telemetry.usage.cacheWriteTokens, 0);
-        assert.deepEqual(
-            addUsage(
-                {
-                    inputTokens: 100,
-                    cachedInputTokens: 20,
-                    cacheWriteTokens: 3,
-                    outputTokens: 10,
-                    reasoningOutputTokens: 5,
-                    totalTokens: 110,
-                },
-                telemetry.usage,
-            ),
-            {
-                inputTokens: 130,
-                cachedInputTokens: 20,
-                cacheWriteTokens: 3,
-                outputTokens: 15,
-                reasoningOutputTokens: 5,
-                totalTokens: 145,
-            },
-        );
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
@@ -671,29 +336,6 @@ test("accepts glob and LSP calls in TypeAgent repository telemetry", async () =>
 
             assert.equal(parsed.toolTrace.calls[0]?.tool, tool);
         }
-    } finally {
-        await rm(directory, { recursive: true, force: true });
-    }
-});
-
-test("waits for terminal TypeAgent telemetry after an outer timeout", async () => {
-    const directory = await mkdtemp(
-        path.join(os.tmpdir(), "explore-bench-late-telemetry-"),
-    );
-    try {
-        const telemetryPath = path.join(directory, "telemetry.json");
-        const pending = readExploreTelemetryEventually(
-            telemetryPath,
-            "azure/gpt-5.6-luna",
-            1_000,
-            10,
-        );
-        setTimeout(() => {
-            void writeFile(telemetryPath, JSON.stringify(validTelemetry()));
-        }, 40);
-
-        const telemetry = await pending;
-        assert.equal(telemetry.usage.totalTokens, 35);
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
@@ -926,19 +568,6 @@ test("resolves the packaged native Copilot executable", async () => {
     }
 });
 
-function start(id: string): Record<string, unknown> {
-    return {
-        type: "tool.execution_start",
-        data: {
-            toolCallId: id,
-            toolName: "typeagent-explore",
-            mcpServerName: "typeagent",
-            mcpToolName: "explore",
-            arguments: { query: "bug" },
-        },
-    };
-}
-
 function complete(id: string, success: boolean): Record<string, unknown> {
     return {
         type: "tool.execution_complete",
@@ -949,26 +578,6 @@ function complete(id: string, success: boolean): Record<string, unknown> {
                 ? { result: { content: "pkg/a.py:10" } }
                 : { error: { message: "failed" } }),
         },
-    };
-}
-
-function assistantExplore(id: string, content = ""): Record<string, unknown> {
-    return {
-        type: "assistant.message",
-        data: {
-            content,
-            toolRequests: [assistantExploreRequest(id)],
-        },
-    };
-}
-
-function assistantExploreRequest(id: string): Record<string, unknown> {
-    return {
-        toolCallId: id,
-        name: "typeagent-explore",
-        mcpServerName: "typeagent",
-        mcpToolName: "explore",
-        arguments: { query: "bug" },
     };
 }
 
@@ -1092,31 +701,5 @@ function validTelemetry(): ExploreTelemetry {
             totalOutputBytes: 20,
         },
         result: { citationCount: 1, truncated: false },
-    };
-}
-
-function lspTelemetry(): ExploreTelemetry {
-    const telemetry = validTelemetry();
-    const lspCall = {
-        tool: "lsp",
-        startedAt: "2026-07-16T00:00:01.000Z",
-        durationMs: 5,
-        input: {
-            method: "definition",
-            path: "pkg/a.py",
-            line: 1,
-            symbol: "target",
-        },
-        resultCount: 1,
-        outputBytes: 30,
-        truncated: false,
-    };
-    return {
-        ...telemetry,
-        toolTrace: {
-            calls: [...telemetry.toolTrace.calls, lspCall],
-            totalCalls: telemetry.toolTrace.totalCalls + 1,
-            totalOutputBytes: telemetry.toolTrace.totalOutputBytes + 30,
-        },
     };
 }

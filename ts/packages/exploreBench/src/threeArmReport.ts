@@ -187,7 +187,7 @@ export async function writeThreeArmReport(options: {
             "Metrics compare only the three-way intersection of successful rows for the same task and model; completion counts cover the full requested cohort.",
             "Latency reports one final successful execution per common task; failed retry attempts are excluded from mean, p50, and p95.",
             "All three arms are read from the supplied current-harness result files; report generation does not issue model requests.",
-            "LSP navigation is charged against the same eight-call repository budget, and every successful TypeAgent with LSP row must contain an error-free language-server call followed by repository-grounded reads before submission.",
+            "LSP navigation is charged against the same eight-call repository budget, and every successful TypeAgent with LSP row must contain an error-free language-server call and repository-grounded reads before submission.",
             "The LSP call total counts successful navigation calls; failed attempts remain available in raw TypeAgent tool telemetry.",
             "SWE-bench Verified is Python-only at the gold-patch level in this cohort, so TypeScript language-server benchmark coverage is reported explicitly and may be zero.",
         ],

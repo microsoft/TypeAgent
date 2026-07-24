@@ -34,7 +34,7 @@ import {
     type RepositoryExplorer,
     type LanguageServerOptions,
 } from "explorer-typeagent";
-import { readExploreTelemetry } from "./copilot.js";
+import { readExploreTelemetry } from "./exploreTelemetry.js";
 import { readEnvFile } from "./io.js";
 import type {
     ExploreTelemetry,

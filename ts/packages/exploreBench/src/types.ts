@@ -302,6 +302,9 @@ export interface RunResult {
     completedExplorerDelegations?: number;
     successfulExplorerDelegations?: number;
     failedExplorerDelegations?: number;
+    explorerRepositoryCalls?: number;
+    firstAssistantActionExclusiveExplorer?: boolean;
+    explorerCompletedBeforeLaterAssistantAction?: boolean;
     mainAgentRepositoryInspection?: boolean;
     explorerSubagentTrace: ExplorerSubagentTrace[];
     mcpToolTrace: McpToolCallTrace[];

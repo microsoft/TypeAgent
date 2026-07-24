@@ -59,6 +59,9 @@ const row: RunResult = {
     completedExplorerDelegations: 1,
     successfulExplorerDelegations: 1,
     failedExplorerDelegations: 0,
+    explorerRepositoryCalls: 1,
+    firstAssistantActionExclusiveExplorer: true,
+    explorerCompletedBeforeLaterAssistantAction: true,
     mainAgentRepositoryInspection: false,
     explorerSubagentTrace: [
         {
@@ -777,6 +780,18 @@ test("requires mode-correct language-server evidence", () => {
             },
         ],
         [
+            "LSP arm count differs from its trace",
+            (candidate: RunResult) => {
+                candidate.lspCallCount = 2;
+            },
+        ],
+        [
+            "LSP arm result count differs from its trace",
+            (candidate: RunResult) => {
+                candidate.lspResultCount = (candidate.lspResultCount ?? 0) + 1;
+            },
+        ],
+        [
             "LSP arm recorded no successful call",
             (candidate: RunResult) => {
                 candidate.typeAgentToolTrace!.calls.find(
@@ -831,8 +846,21 @@ test("rejects successful baseline rows without one explorer delegation", () => {
                 ],
                 identity,
             ),
-        /exactly one successful explorer subagent delegation/i,
+        /Explorer delegation and execution integrity/i,
     );
+});
+
+test("rejects successful baseline rows without execution-order evidence", () => {
+    for (const candidate of [
+        { ...row, explorerRepositoryCalls: 0 },
+        { ...row, firstAssistantActionExclusiveExplorer: false },
+        { ...row, explorerCompletedBeforeLaterAssistantAction: false },
+    ]) {
+        assert.throws(
+            () => validateResultRows([candidate], identity),
+            /execution integrity/i,
+        );
+    }
 });
 
 test("accepts failed task-schema attempts before one successful delegation", () => {

@@ -108,6 +108,9 @@ function result(runId: string, overrides: Partial<RunResult> = {}): RunResult {
         completedExplorerDelegations: 1,
         successfulExplorerDelegations: 1,
         failedExplorerDelegations: 0,
+        explorerRepositoryCalls: 1,
+        firstAssistantActionExclusiveExplorer: true,
+        explorerCompletedBeforeLaterAssistantAction: true,
         mainAgentRepositoryInspection: false,
         explorerSubagentTrace: [
             {
@@ -166,7 +169,7 @@ test("cache compatibility ignores run paths and Node interpreter location", () =
 });
 
 test("rejects caches from before the repairable LSP refinement revision", () => {
-    assert.equal(CACHE_COMPATIBILITY_REVISION, 5);
+    assert.equal(CACHE_COMPATIBILITY_REVISION, 6);
     assert.equal(
         cacheManifestsCompatible(
             manifest("mcp-harness", { cacheCompatibilityRevision: 2 }),

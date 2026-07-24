@@ -90,6 +90,9 @@ export function validateResultRows(
                 (row.attemptedExplorerDelegations ?? 0) < 1 ||
                 row.completedExplorerDelegations !== 1 ||
                 row.successfulExplorerDelegations !== 1 ||
+                (row.explorerRepositoryCalls ?? 0) < 1 ||
+                row.firstAssistantActionExclusiveExplorer !== true ||
+                row.explorerCompletedBeforeLaterAssistantAction !== true ||
                 row.mainAgentRepositoryInspection !== false ||
                 row.explorerSubagentTrace.filter(
                     (call) =>
@@ -100,7 +103,7 @@ export function validateResultRows(
                 ).length !== 1
             ) {
                 throw new Error(
-                    `${prefix}: successful baseline lacks exactly one successful explorer subagent delegation`,
+                    `${prefix}: successful baseline lacks required Explorer delegation and execution integrity`,
                 );
             }
         }
@@ -217,19 +220,27 @@ function validateDirectTypeAgentRow(row: RunResult, prefix: string): void {
         );
     }
 
-    const successfulLspCalls =
-        row.typeAgentToolTrace?.calls.filter(
-            (call) => call.tool === "lsp" && call.error === undefined,
-        ).length ?? 0;
+    const lspCalls =
+        row.typeAgentToolTrace?.calls.filter((call) => call.tool === "lsp") ??
+        [];
+    const successfulLspCalls = lspCalls.filter(
+        (call) => call.error === undefined,
+    ).length;
+    const traceLspResultCount = lspCalls.reduce(
+        (total, call) => total + call.resultCount,
+        0,
+    );
     if (
-        row.variant === "typeagent"
+        row.lspCallCount !== lspCalls.length ||
+        row.lspResultCount !== traceLspResultCount ||
+        (row.variant === "typeagent"
             ? row.lspAdopted !== false ||
               row.lspCallCount !== 0 ||
               row.lspResultCount !== 0 ||
               successfulLspCalls !== 0
             : row.lspAdopted !== true ||
               (row.lspCallCount ?? 0) < 1 ||
-              successfulLspCalls < 1
+              successfulLspCalls < 1)
     ) {
         throw new Error(
             `${prefix}: successful direct TypeAgent row has invalid language-server evidence`,

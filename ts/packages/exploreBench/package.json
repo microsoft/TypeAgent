@@ -2,7 +2,7 @@
   "name": "@typeagent/explore-bench",
   "version": "0.0.1",
   "private": true,
-  "description": "GitHub Copilot CLI and TypeAgent MCP SWE-bench localization benchmark",
+  "description": "GitHub Copilot SDK and direct TypeAgent SWE-bench localization benchmark",
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",

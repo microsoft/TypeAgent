@@ -224,7 +224,6 @@ export async function runBenchmark(
                               ...(options.envFile
                                   ? { envFile: options.envFile }
                                   : {}),
-                              mcp: options.mcp,
                               telemetryFile,
                               timeoutMs: options.timeoutMs,
                           });
@@ -343,6 +342,19 @@ export async function runBenchmark(
                             "failedExplorerDelegations" in output
                                 ? output.failedExplorerDelegations
                                 : 0,
+                        explorerRepositoryCalls:
+                            "explorerRepositoryCalls" in output
+                                ? output.explorerRepositoryCalls
+                                : 0,
+                        firstAssistantActionExclusiveExplorer:
+                            "firstAssistantActionExclusiveExplorer" in output
+                                ? output.firstAssistantActionExclusiveExplorer
+                                : false,
+                        explorerCompletedBeforeLaterAssistantAction:
+                            "explorerCompletedBeforeLaterAssistantAction" in
+                            output
+                                ? output.explorerCompletedBeforeLaterAssistantAction
+                                : false,
                         mainAgentRepositoryInspection:
                             "mainAgentRepositoryInspection" in output
                                 ? output.mainAgentRepositoryInspection

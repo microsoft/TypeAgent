@@ -113,6 +113,11 @@ test("writes a compatible three-arm report with presentation-only labels", async
     assert.match(markdown, /Copilot SDK \(with explore agent\)/);
     assert.match(markdown, /TypeAgent with LSP/);
     assert.match(markdown, /Successful LSP calls/);
+    assert.match(
+        markdown,
+        /error-free language-server call and repository-grounded reads/,
+    );
+    assert.doesNotMatch(markdown, /call followed by repository-grounded reads/);
     assert.match(markdown, /latency mean\/p50\/p95/);
     assert.match(markdown, /0\.1s\/0\.1s\/0\.1s/);
     assert.match(markdown, /0\.2s\/0\.2s\/0\.2s/);
@@ -483,6 +488,9 @@ function result(
         completedExplorerDelegations: typeAgent ? 0 : 1,
         successfulExplorerDelegations: typeAgent ? 0 : 1,
         failedExplorerDelegations: 0,
+        explorerRepositoryCalls: typeAgent ? 0 : 1,
+        firstAssistantActionExclusiveExplorer: !typeAgent,
+        explorerCompletedBeforeLaterAssistantAction: !typeAgent,
         mainAgentRepositoryInspection: false,
         explorerSubagentTrace: typeAgent
             ? []
