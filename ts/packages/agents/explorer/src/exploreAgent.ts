@@ -304,6 +304,7 @@ ${repositorySchema}`;
 function buildLspRules(): string {
     return `
 - This LSP treatment must call repo.lsp at least once. Use a grep result to supply its path, 1-based line hint, and source identifier as symbol. The line hint may be within three lines of a multiline call. Prefer definition; use references only after narrowing to a strong candidate.
+- Refinement cannot complete until at least one repo.lsp call returns without error. If refinement reports missing navigation, retry refineRepository with a corrected repo.lsp call instead of attempting submission.
 - The server registry selects an available pre-provisioned language server from the file extension and nearest project root. Do not call repo.lsp when the repository has no configured server for that file type.
 - LSP locations are navigation clues, not submission evidence. Read the relevant returned locations with repo.read before submitting them.
 - At most two LSP calls are available across discovery and refinement.`;

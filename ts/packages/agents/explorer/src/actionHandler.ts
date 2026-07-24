@@ -277,6 +277,19 @@ export class ExplorerActionSession {
                 `The ${phase} program must inspect new repository evidence before submission`,
             );
         }
+        if (
+            phase === "refine" &&
+            this.options.lsp &&
+            !this.hasCompletedLspNavigation()
+        ) {
+            const message =
+                "The refine program must complete language-server navigation before submission; retry refineRepository with a program that calls repo.lsp";
+            return errorResult(
+                remainingRepositoryCalls === 0
+                    ? `${REPOSITORY_BUDGET_EXHAUSTED}: ${message}`
+                    : `${message}; ${remainingRepositoryCalls} repository calls remain`,
+            );
+        }
         this.programAttempts++;
         const responseObservations = compactObservations(
             observations,
@@ -309,12 +322,7 @@ export class ExplorerActionSession {
                 "Complete discovery and refinement before submission",
             );
         }
-        if (
-            this.options.lsp &&
-            !this.repository.trace.calls.some(
-                (call) => call.tool === "lsp" && call.error === undefined,
-            )
-        ) {
+        if (this.options.lsp && !this.hasCompletedLspNavigation()) {
             return errorResult(
                 "TypeAgent with LSP must complete at least one language-server navigation call before submission",
             );
@@ -348,6 +356,12 @@ export class ExplorerActionSession {
         }
         this.submitted = formatted;
         return createActionResult(formatted.text);
+    }
+
+    private hasCompletedLspNavigation(): boolean {
+        return this.repository.trace.calls.some(
+            (call) => call.tool === "lsp" && call.error === undefined,
+        );
     }
 }
 

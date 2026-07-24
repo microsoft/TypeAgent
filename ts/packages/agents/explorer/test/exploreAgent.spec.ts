@@ -333,6 +333,59 @@ describe("agentic Code Mode explorer", () => {
         expect(lspCall?.error).toBeUndefined();
     }, 30_000);
 
+    it("keeps refinement open until required LSP navigation completes", async () => {
+        const { repoRoot, telemetryFile } = await makeFixture();
+        const adapter = scriptedAdapter([
+            [runProgram("discover", grepProgram())],
+            [runProgram("refine", failedLspRefinementProgram())],
+            [runProgram("refine", lspRetryRefinementProgram())],
+            [
+                submitExploration([
+                    {
+                        path: "src/lsp.ts",
+                        startLine: 1,
+                        endLine: 3,
+                    },
+                ]),
+            ],
+        ]);
+        const explorer = createCodeModeExplorer({
+            repoRoot,
+            reasoningAdapter: adapter,
+            modelName: "azure/gpt-5.6-luna",
+            telemetryFile,
+            lsp: {
+                servers: createDefaultLanguageServers({
+                    typescript: defaultTypeScriptLanguageServerCommand(),
+                    python: {
+                        command: process.execPath,
+                        args: ["-e", "process.exit(1)"],
+                    },
+                }),
+            },
+        });
+
+        await expect(
+            explorer.explore({ query: "Find lspTarget" }),
+        ).resolves.toBe("src/lsp.ts:1-3");
+        expect(adapter.results[1]).toMatchObject({
+            isError: true,
+            text: expect.stringMatching(/retry refineRepository.*repo[.]lsp/i),
+        });
+        const invocation = latestInvocation(await readTelemetry(telemetryFile));
+        expect(invocation.actionAttempts).toMatchObject([
+            { actionName: "discoverRepository", status: "completed" },
+            { actionName: "refineRepository", status: "failed" },
+            { actionName: "refineRepository", status: "completed" },
+            { actionName: "submitExploration", status: "completed" },
+        ]);
+        expect(
+            invocation.toolTrace.calls
+                .filter((call) => call.tool === "lsp")
+                .map((call) => call.error),
+        ).toEqual([expect.stringMatching(/not present/i), undefined]);
+    }, 30_000);
+
     it("shares observations and one repository-call budget across all phases", async () => {
         const { repoRoot, telemetryFile } = await makeFixture();
         const adapter = scriptedAdapter([
@@ -1127,6 +1180,24 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
 function lspRefinementProgram(): string {
     return `
 async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.read("src/lsp.ts", { offset: 0, limit: 3 });
+    return { success: true, message: params.query };
+}`;
+}
+
+function failedLspRefinementProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "missingSymbol" });
+    await repo.read("src/lsp.ts", { offset: 0, limit: 3 });
+    return { success: true, message: params.query };
+}`;
+}
+
+function lspRetryRefinementProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.lsp({ method: "definition", path: "src/lsp.ts", line: 5, symbol: "lspTarget" });
     await repo.read("src/lsp.ts", { offset: 0, limit: 3 });
     return { success: true, message: params.query };
 }`;
