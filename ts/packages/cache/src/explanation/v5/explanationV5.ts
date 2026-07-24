@@ -81,7 +81,7 @@ import {
     PolitenessGeneralizer,
 } from "./politenessGeneralizationV5.js";
 import { PolitenessGeneralization } from "./politenessGeneralizationSchemaV5.js";
-import { createPromptLogger } from "telemetry";
+import { createPromptLogger } from "@typeagent/telemetry";
 
 const promptLogger = createPromptLogger();
 

@@ -21,7 +21,7 @@ import {
     MessageReference,
     ReplyEmailAction,
 } from "./emailActionsSchema.js";
-import { generateNotes } from "typeagent";
+import { generateNotes } from "@typeagent/agent-runtime";
 import { openai } from "@typeagent/aiclient";
 import {
     ActionContext,

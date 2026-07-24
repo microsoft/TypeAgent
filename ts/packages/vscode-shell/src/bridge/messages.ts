@@ -20,7 +20,7 @@ import type {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import type { CompletionState } from "agent-dispatcher/helpers/completion";
-import type { ConnectionActionId } from "chat-ui";
+import type { ConnectionActionId } from "@typeagent/chat-ui";
 import type { SpeechToken } from "@typeagent/agent-server-protocol";
 
 /**

@@ -8,7 +8,7 @@ import {
     createEmbeddingFolder,
     createObjectFolder,
     createSemanticIndex,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { CodeBlock, StoredCodeBlock } from "./code.js";
 import { TextEmbeddingModel } from "@typeagent/aiclient";
 import path from "path";

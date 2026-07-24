@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Website } from "website-memory";
+import { Website } from "@typeagent/website-memory";
 import { QueryAnalysis } from "./schema/queryAnalysis.mjs";
 import { AnswerEnhancement } from "./schema/answerEnhancement.mjs";
 import { AnswerGenerator } from "./answerGenerator.mjs";

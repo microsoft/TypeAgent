@@ -10,13 +10,17 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 class WebSocketManager {
 
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .pingInterval(30, TimeUnit.SECONDS)
+        .build()
     private val lock = Any()
     private val nextCallId = AtomicInteger(0)
+    private val connectionGeneration = AtomicInteger(0)
     private val pendingInvokes = mutableMapOf<Int, PendingInvoke>()
 
     private var webSocket: WebSocket? = null
@@ -34,24 +38,43 @@ class WebSocketManager {
     )
     val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus
 
-    fun connect(url: String = DEFAULT_URL) {
+    fun connect(
+        url: String,
+        tunnelToken: String? = null
+    ) {
+        val targetUrl = url.trim()
+        if (targetUrl.isBlank()) {
+            val errorMessage = "Missing TYPEAGENT_SERVER_URL. Set it before building the app."
+            Log.e(TAG, errorMessage)
+            _connectionStatus.value = ConnectionStatus(
+                text = errorMessage,
+                state = ConnectionStatus.State.ERROR
+            )
+            return
+        }
+
         synchronized(lock) {
             pendingInvokes.clear()
             conversationId = null
             connectionId = null
         }
         webSocket?.cancel()
+        val generation = connectionGeneration.incrementAndGet()
         _connectionStatus.value = ConnectionStatus(
             text = "Connecting...",
             state = ConnectionStatus.State.CONNECTING
         )
 
-        val request = Request.Builder()
-            .url(url)
-            .build()
+        val requestBuilder = Request.Builder().url(targetUrl)
+        val trimmedToken = tunnelToken?.trim().orEmpty()
+        if (trimmedToken.isNotEmpty()) {
+            requestBuilder.header("X-Tunnel-Authorization", "tunnel $trimmedToken")
+        }
+        val request = requestBuilder.build()
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                if (connectionGeneration.get() != generation) return
                 Log.d(TAG, "WebSocket connected")
                 joinConversation()
             }
@@ -66,6 +89,7 @@ class WebSocketManager {
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                if (connectionGeneration.get() != generation) return
                 Log.d(TAG, "WebSocket disconnected: code=$code reason=$reason")
                 failPendingInvokes("Disconnected")
                 synchronized(lock) {
@@ -79,7 +103,12 @@ class WebSocketManager {
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                val errorMessage = t.message ?: "Unknown WebSocket error"
+                if (connectionGeneration.get() != generation) return
+                val responseCode = response?.code
+                val errorMessage = when (responseCode) {
+                    401, 403 -> "Tunnel auth failed. Check token."
+                    else -> t.message ?: "Unknown WebSocket error"
+                }
                 Log.e(TAG, "WebSocket error: $errorMessage", t)
                 failPendingInvokes(errorMessage)
                 _connectionStatus.value = ConnectionStatus(
@@ -416,10 +445,12 @@ class WebSocketManager {
     }
 
     private fun appendUserMessage(text: String) {
-        _messages.value = _messages.value + Message(
-            text = text,
-            isUser = true
-        )
+        synchronized(lock) {
+            _messages.value = _messages.value + Message(
+                text = text,
+                isUser = true
+            )
+        }
     }
 
     private fun appendAssistantContent(requestId: String?, content: String) {
@@ -518,10 +549,10 @@ class WebSocketManager {
             .put("message", message)
 
         if (!socket.send(envelope.toString())) {
-            synchronized(lock) {
-                pendingInvokes.remove(callId)
+            val removed = synchronized(lock) { pendingInvokes.remove(callId) }
+            if (removed != null) {
+                onError("Failed to send RPC invoke for $methodName.")
             }
-            onError("Failed to send RPC invoke for $methodName.")
         }
     }
 
@@ -672,7 +703,6 @@ class WebSocketManager {
 
     companion object {
         private const val TAG = "WebSocketManager"
-        private const val DEFAULT_URL = "ws://10.0.2.2:8999"
         private const val NORMAL_CLOSURE_STATUS = 1000
         private const val AGENT_SERVER_CHANNEL = "agent-server"
         private const val CLIENT_IO_CHANNEL_PREFIX = "clientio:"

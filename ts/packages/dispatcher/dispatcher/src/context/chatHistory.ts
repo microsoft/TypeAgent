@@ -9,7 +9,7 @@ import {
 import {
     CachedImageWithDetails,
     extractRelevantExifTags,
-} from "typechat-utils";
+} from "@typeagent/typechat-utils";
 import { PromptSection } from "typechat";
 import { normalizeParamString, PromptEntity } from "agent-cache";
 import { SchemaCreator as sc, validateType } from "@typeagent/action-schema";

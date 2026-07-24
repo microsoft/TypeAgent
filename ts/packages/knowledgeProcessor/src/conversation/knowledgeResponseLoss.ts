@@ -10,7 +10,7 @@ import {
     VerbTense,
     ActionParam,
 } from "./knowledgeSchema.js";
-import { createSemanticMap } from "typeagent";
+import { createSemanticMap } from "@typeagent/agent-runtime";
 
 export async function createLocalSemanticMap<T>(_model: TextEmbeddingModel) {
     const map = new Map<string, T>();

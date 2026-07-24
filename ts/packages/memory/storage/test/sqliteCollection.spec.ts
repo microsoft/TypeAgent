@@ -10,7 +10,7 @@ import {
     testFilePath,
 } from "./testCommon.js";
 import { SqlMessageCollection } from "../src/sqlite/sqliteProvider.js";
-import { IMessage } from "knowpro";
+import { IMessage } from "@typeagent/knowpro";
 
 describe("memory.sqlite.messageCollection", () => {
     const testTimeout = 1000 * 60 * 5;

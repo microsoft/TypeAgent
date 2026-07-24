@@ -6,10 +6,10 @@
 
 import fs from "node:fs";
 import { ChatModel, TextEmbeddingModel } from "@typeagent/aiclient";
-import { isDirectoryPath } from "typeagent";
+import { isDirectoryPath } from "@typeagent/agent-runtime";
 import path from "node:path";
 import { ImageCollection, importImages } from "image-memory";
-import { IndexingResults } from "knowpro";
+import { IndexingResults } from "@typeagent/knowpro";
 import { fileURLToPath } from "node:url";
 import registerDebug from "debug";
 import getFolderSize from "get-folder-size";

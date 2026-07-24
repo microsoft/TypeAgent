@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ChatModel, openai } from "@typeagent/aiclient";
-import { MessageSourceRole, loadSchema } from "typeagent";
+import { MessageSourceRole, loadSchema } from "@typeagent/agent-runtime";
 import {
     PromptSection,
     TypeChatJsonTranslator,

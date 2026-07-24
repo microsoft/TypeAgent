@@ -3,7 +3,7 @@
 import { Module, StoredCodeBlock, tsCode } from "code-processor";
 import { ArgDef } from "interactive-app";
 import path from "path";
-import { readAllLines } from "typeagent";
+import { readAllLines } from "@typeagent/agent-runtime";
 import ts from "typescript";
 import { fileURLToPath } from "url";
 

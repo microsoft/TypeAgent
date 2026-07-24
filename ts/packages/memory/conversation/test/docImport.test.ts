@@ -8,7 +8,7 @@ import {
     importDocMemoryFromTextFile,
 } from "../src/docImport.js";
 import { verifyMessages, verifyNoIndexingErrors } from "./verify.js";
-import { getFileName } from "typeagent";
+import { getFileName } from "@typeagent/agent-runtime";
 import { DocMemory } from "../src/docMemory.js";
 
 const mdTestFile = "./test/data/aardvark.md";

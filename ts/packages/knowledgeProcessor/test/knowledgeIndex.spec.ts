@@ -4,7 +4,7 @@
 import { loadConfigSync } from "@typeagent/config";
 import path from "path";
 import { getRootDataPath, hasTestKeys, testIf } from "./testCore.js";
-import { cleanDir } from "typeagent";
+import { cleanDir } from "@typeagent/agent-runtime";
 import { createTextIndex } from "../src/textIndex.js";
 import { TextBlock, TextBlockType } from "../src/text.js";
 loadConfigSync();

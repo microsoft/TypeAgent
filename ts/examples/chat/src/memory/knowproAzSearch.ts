@@ -15,14 +15,14 @@ import {
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import * as ms from "memory-storage";
-import * as kp from "knowpro";
+import * as ms from "@typeagent/memory-storage";
+import * as kp from "@typeagent/knowpro";
 import chalk from "chalk";
 import { parseFreeAndNamedArguments } from "../common.js";
 import { createSearchGroup, dateRangeFromNamedArgs } from "./knowproCommon.js";
 import { batchSemanticRefsByMessage } from "./knowproCommon.js";
-import { split } from "knowledge-processor";
-import { collections, generateEmbedding } from "typeagent";
+import { split } from "@typeagent/knowledge-processor";
+import { collections, generateEmbedding } from "@typeagent/agent-runtime";
 
 type AzureMemoryContext = {
     semanticRefIndex?: ms.azSearch.AzSemanticRefIndex | undefined;

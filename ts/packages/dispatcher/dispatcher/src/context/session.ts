@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getFileExtensionForMimeType } from "typechat-utils";
+import { getFileExtensionForMimeType } from "@typeagent/typechat-utils";
 import {
     DeepPartialUndefined,
     DeepPartialUndefinedAndNull,

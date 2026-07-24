@@ -1,14 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { conversation as kpLib } from "knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { openai as ai } from "@typeagent/aiclient";
 import {
     ContentExtractor,
     ExtractionMode,
     ExtractionInput,
     ExtractionResult,
-} from "website-memory";
+} from "@typeagent/website-memory";
 import { ContentSummaryAdapter } from "./contentSummaryAdapter.mjs";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:browser:indexing");

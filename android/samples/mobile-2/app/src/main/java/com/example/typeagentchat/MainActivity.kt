@@ -51,15 +51,24 @@ import com.example.typeagentchat.ui.theme.TypeAgentChatTheme
 class MainActivity : ComponentActivity() {
 
     private val webSocketManager = WebSocketManager()
+    private val tunnelUrl = BuildConfig.TYPEAGENT_SERVER_URL.trim()
+    private val tunnelToken = BuildConfig.TYPEAGENT_TUNNEL_TOKEN.trim().ifBlank { null }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        webSocketManager.connect()
+        webSocketManager.connect(
+            url = tunnelUrl,
+            tunnelToken = tunnelToken
+        )
 
         setContent {
             TypeAgentChatTheme {
-                ChatApp(webSocketManager = webSocketManager)
+                ChatApp(
+                    webSocketManager = webSocketManager,
+                    tunnelUrl = tunnelUrl,
+                    tunnelToken = tunnelToken
+                )
             }
         }
     }
@@ -71,7 +80,11 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun ChatApp(webSocketManager: WebSocketManager) {
+private fun ChatApp(
+    webSocketManager: WebSocketManager,
+    tunnelUrl: String,
+    tunnelToken: String?
+) {
     val messages by webSocketManager.messages.collectAsState()
     val connectionStatus by webSocketManager.connectionStatus.collectAsState()
     var inputText by remember { mutableStateOf("") }
@@ -106,7 +119,12 @@ private fun ChatApp(webSocketManager: WebSocketManager) {
             ChatHeader()
             ConnectionStatusIndicator(
                 status = connectionStatus,
-                onReconnect = { webSocketManager.connect() }
+                onReconnect = {
+                    webSocketManager.connect(
+                        url = tunnelUrl,
+                        tunnelToken = tunnelToken
+                    )
+                }
             )
 
             Surface(

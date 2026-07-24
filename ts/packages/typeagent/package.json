@@ -1,7 +1,6 @@
 {
-  "name": "typeagent",
+  "name": "@typeagent/agent-runtime",
   "version": "0.0.1",
-  "private": true,
   "description": "Sample library code intended only for the example agents and apps in the TypeAgent project",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

@@ -52,7 +52,7 @@ import {
 } from "@typeagent/agent-server-client";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import { joinNamedOrFallback } from "@typeagent/agent-server-client/conversation";
-import type { ConnectionStatus } from "chat-ui";
+import type { ConnectionStatus } from "@typeagent/chat-ui";
 import {
     loadUserSettings,
     saveUserSettings,

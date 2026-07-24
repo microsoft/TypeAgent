@@ -9,7 +9,7 @@ import {
     SimilarityType,
     createEmbeddingFolder,
     createSemanticIndex,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import path from "path";
 import { TextIndexSettings } from "../textIndex.js";
 

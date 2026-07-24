@@ -3,8 +3,8 @@
 
 import path from "path";
 import os from "node:os";
-import { ensureDir } from "typeagent";
-import { DeletionInfo, IMessage } from "knowpro";
+import { ensureDir } from "@typeagent/agent-runtime";
+import { DeletionInfo, IMessage } from "@typeagent/knowpro";
 
 export async function ensureTestDir() {
     return ensureDir(getRootDataPath());

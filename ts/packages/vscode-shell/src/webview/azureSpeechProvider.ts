@@ -13,7 +13,7 @@
  */
 
 import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
-import type { SpeechInputProvider, SpeechState } from "chat-ui";
+import type { SpeechInputProvider, SpeechState } from "@typeagent/chat-ui";
 import type { SpeechToken } from "@typeagent/agent-server-protocol";
 
 export class VsCodeAzureSpeechProvider implements SpeechInputProvider {
