@@ -23,7 +23,10 @@ import {
 } from "../src/script/languageServer.js";
 import { createRepositoryTools } from "../src/script/repositoryApi.js";
 import { generateSandboxDeclarations } from "../src/script/sandboxDeclarations.js";
-import { validateExploreScript } from "../src/script/scriptValidator.js";
+import {
+    hasExploreRepositoryCall,
+    validateExploreScript,
+} from "../src/script/scriptValidator.js";
 
 describe("repository language server", () => {
     const tempDirs: string[] = [];
@@ -255,6 +258,39 @@ describe("repository language server", () => {
             valid: true,
             errors: [],
         });
+    });
+
+    it("detects repository calls without accepting unused method references", () => {
+        expect(hasExploreRepositoryCall("repo.read('src/a.ts')", "read")).toBe(
+            true,
+        );
+        expect(
+            hasExploreRepositoryCall(
+                "repo['lsp']({ method: 'definition' })",
+                "lsp",
+            ),
+        ).toBe(true);
+        expect(
+            hasExploreRepositoryCall(
+                "const load = repo.read; await load('src/a.ts')",
+                "read",
+            ),
+        ).toBe(true);
+        expect(
+            hasExploreRepositoryCall(
+                "const { lsp: navigate } = repo; await navigate({ method: 'definition' })",
+                "lsp",
+            ),
+        ).toBe(true);
+        expect(
+            hasExploreRepositoryCall(
+                "const { read } = repo; await read('src/a.ts')",
+                "read",
+            ),
+        ).toBe(true);
+        expect(hasExploreRepositoryCall("const load = repo.read", "read")).toBe(
+            false,
+        );
     });
 
     async function makeFixture(): Promise<string> {
