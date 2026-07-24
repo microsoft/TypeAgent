@@ -168,59 +168,27 @@ describe("agentic Code Mode explorer", () => {
         expect(result).not.toContain("Evidence");
         expect(adapter.configs).toHaveLength(1);
         expect(adapter.configs[0]?.maxTurns).toBe(5);
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
+        const systemPrompt = String(adapter.configs[0]?.systemPrompt);
+        expect(systemPrompt).toMatch(
             /exact lines? or line ranges? most likely needing changes/i,
         );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
-            /complete behavior-bearing blocks over isolated interior statements/i,
+        expect(systemPrompt).not.toMatch(/smallest contiguous/i);
+        expect(systemPrompt).toContain("const matches: GrepMatch[] = []");
+        expect(systemPrompt).toContain("Never send only the function body");
+        expect(systemPrompt).toMatch(
+            /Start with exact task clues; narrow broad or truncated searches before reading; follow task- or evidence-indicated companion sites; read every submitted range; stop after all indicated sites are verified[.]/i,
         );
-        expect(String(adapter.configs[0]?.systemPrompt)).not.toMatch(
-            /smallest contiguous/i,
+        expect(systemPrompt).not.toMatch(
+            /prioritize production|production source paths|before tests, docs/i,
         );
-        expect(String(adapter.configs[0]?.systemPrompt)).toContain(
-            "const matches: GrepMatch[] = []",
+        expect(systemPrompt).toMatch(
+            /Every submitted range must be wholly visible in a successful read observation/i,
         );
-        expect(String(adapter.configs[0]?.systemPrompt)).toContain(
-            "Never send only the function body",
+        expect(systemPrompt).not.toMatch(
+            /Every submitted range must be wholly visible in a successful grep or read observation/i,
         );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
-            /long candidate.*issue-specific.*body matches/i,
-        );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
-            /bare identifiers.*language-specific declaration/i,
-        );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
-            /first grep.*qualified symbol.*quoted error.*named file/i,
-        );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
-            /do not start with generic concept words.*exact clue/i,
-        );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
-            /rare exact identifier.*generic word.*cannot exhaust.*result cap/i,
-        );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
-            /filter broad grep or glob results.*production source paths.*rather than selecting the first raw path/i,
-        );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
-            /Every submitted range must be wholly visible.*grep or read observation/i,
-        );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
-            /consecutive non-overlapping.*production function.*before tests/i,
-        );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
+        expect(systemPrompt).toMatch(
             /refineRepository.*at most 4 repository calls/i,
-        );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
-            /two targeted repo[.]grep.*alternate production files/i,
-        );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
-            /cross-file caller.*behavior-bearing helper.*before tests/i,
-        );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
-            /begin refinement.*read.*caller.*helper.*before.*glob.*tests?/i,
-        );
-        expect(String(adapter.configs[0]?.systemPrompt)).toMatch(
-            /more.*change sites.*max.*locations.*consolidate.*enclosing range.*instead of dropping/i,
         );
         expect(adapter.configs[0]?.tools.map((tool) => tool.name)).toEqual([
             "execute_action",
@@ -460,7 +428,8 @@ describe("agentic Code Mode explorer", () => {
             explorer.explore({ query: "Find the needle implementation" }),
         ).resolves.toBe("src/alpha.ts:1-3");
         expect(adapter.results[1]?.isError).toBe(false);
-        expect(JSON.parse(adapter.results[1]?.text ?? "{}")).toMatchObject({
+        const refinementPayload = JSON.parse(adapter.results[1]?.text ?? "{}");
+        expect(refinementPayload).toMatchObject({
             nextAction: expect.stringMatching(/Invoke submitExploration/i),
             observations: [
                 expect.objectContaining({
@@ -469,6 +438,10 @@ describe("agentic Code Mode explorer", () => {
                 }),
             ],
         });
+        expect(refinementPayload.nextAction).toMatch(
+            /supported by repository reads/i,
+        );
+        expect(refinementPayload.nextAction).not.toMatch(/grep matches/i);
         expect(
             latestInvocation(await readTelemetry(telemetryFile)),
         ).toMatchObject({ submissionAction: "submitExploration" });
@@ -1028,11 +1001,11 @@ describe("agentic Code Mode explorer", () => {
         ]);
     });
 
-    it("retains exact discovery evidence without repeating a range ledger", async () => {
+    it("grounds discovery evidence with an exact refinement read", async () => {
         const { repoRoot } = await makeFixture();
         const adapter = scriptedAdapter([
             [runProgram("discover", grepZetaProgram())],
-            [runProgram("refine", readProgram())],
+            [runProgram("refine", readZetaProgram())],
             [
                 submitExploration([
                     {
@@ -1383,11 +1356,19 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
 }`;
 }
 
+function readZetaProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.read("src/zeta.ts", { offset: 0, limit: 1 });
+    return { success: true, message: params.query };
+}`;
+}
+
 function refineAndSubmitProgram(): string {
     return `
 async function execute(repo: RepositoryApi, params: ExploreParams): Promise<RefinementProgramResult> {
-    const matches = await repo.grep("needle", { literal: true, maxMatches: 1 });
-    const match = matches[0];
+    const search = await repo.grep("needle", { literal: true, maxMatches: 1 });
+    const match = search.matches[0];
     const startLine = Math.max(1, match.line - 1);
     const read = await repo.read(match.path, { offset: startLine - 1, limit: 3 });
     return {
