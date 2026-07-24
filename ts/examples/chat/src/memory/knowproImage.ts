@@ -14,7 +14,7 @@ import {
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as kp from "@typeagent/knowpro";
-import * as im from "image-memory";
+import * as im from "@typeagent/image-memory";
 import fs from "fs";
 import path from "path";
 import {

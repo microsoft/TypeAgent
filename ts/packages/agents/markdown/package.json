@@ -1,7 +1,7 @@
 {
-  "name": "markdown-agent",
+  "name": "@typeagent/markdown-agent",
   "version": "0.0.1",
-  "private": true,
+  "private": false,
   "description": "Markdown agent",
   "keywords": [
     "typeagent-agent"

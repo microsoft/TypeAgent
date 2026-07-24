@@ -36,7 +36,7 @@
     "code-processor": "workspace:*",
     "dotenv": "^16.3.1",
     "exifreader": "^4.39.0",
-    "image-memory": "workspace:*",
+    "@typeagent/image-memory": "workspace:*",
     "interactive-app": "workspace:*",
     "memory-providers": "workspace:*",
     "mongodb": "^6.15.0",

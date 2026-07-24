@@ -29,7 +29,7 @@ import { ConstructionProvider } from "../agentProvider/agentProvider.js";
 import { MultipleActionConfig } from "../translation/multipleActionSchema.js";
 import { IndexManager } from "./indexManager.js";
 import { IndexingServiceRegistry } from "./indexingServiceRegistry.js";
-import { IndexData } from "image-memory";
+import { IndexData } from "@typeagent/image-memory";
 
 const debugSession = registerDebug("typeagent:session");
 

@@ -1,7 +1,7 @@
 {
-  "name": "code-agent",
+  "name": "@typeagent/code-agent",
   "version": "0.0.1",
-  "private": true,
+  "private": false,
   "description": "Code dispatcher agent",
   "keywords": [
     "typeagent-agent"
@@ -15,6 +15,11 @@
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "exports": {
     "./agent/manifest": "./src/codeManifest.json",
     "./agent/handlers": "./dist/codeActionHandler.js"
