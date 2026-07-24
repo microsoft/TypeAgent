@@ -15,6 +15,7 @@ import {
 
 describe("repository tools", () => {
     const execFileAsync = promisify(execFile);
+    const itOnPosix = process.platform === "win32" ? it.skip : it;
     const tempDirs: string[] = [];
     const openTools: RepositoryTools[] = [];
 
@@ -82,13 +83,16 @@ describe("repository tools", () => {
             "src/auth.ts",
             "src/nested/token.ts",
         ]);
-        await expect(api.grep("authenticate")).resolves.toEqual([
-            {
-                path: "src/auth.ts",
-                line: 1,
-                text: "export function authenticate(token: string) {",
-            },
-        ]);
+        await expect(api.grep("authenticate")).resolves.toEqual({
+            matches: [
+                {
+                    path: "src/auth.ts",
+                    line: 1,
+                    text: "export function authenticate(token: string) {",
+                },
+            ],
+            truncated: false,
+        });
         await expect(
             api.read("src/auth.ts", { offset: 1, limit: 2 }),
         ).resolves.toEqual({
@@ -166,7 +170,9 @@ describe("repository tools", () => {
             Array.from({ length: 8 }, () => api.grep("authenticate")),
         );
 
-        expect(results.filter((matches) => matches.length > 0)).toHaveLength(3);
+        expect(
+            results.filter((result) => result.matches.length > 0),
+        ).toHaveLength(3);
         expect(trace.totalCalls).toBe(3);
         expect(trace.calls).toHaveLength(3);
     });
@@ -179,18 +185,21 @@ describe("repository tools", () => {
             api.grep("authenticate|fixture", {
                 glob: "**/*.{ts,md}",
             }),
-        ).resolves.toEqual([
-            {
-                path: "README.md",
-                line: 1,
-                text: "fixture root",
-            },
-            {
-                path: "src/auth.ts",
-                line: 1,
-                text: "export function authenticate(token: string) {",
-            },
-        ]);
+        ).resolves.toEqual({
+            matches: [
+                {
+                    path: "README.md",
+                    line: 1,
+                    text: "fixture root",
+                },
+                {
+                    path: "src/auth.ts",
+                    line: 1,
+                    text: "export function authenticate(token: string) {",
+                },
+            ],
+            truncated: false,
+        });
     });
 
     it("applies native ripgrep globs before the match cap", async () => {
@@ -210,43 +219,52 @@ describe("repository tools", () => {
                 glob: "src/*.ts",
                 maxMatches: 1,
             }),
-        ).resolves.toEqual([
-            {
-                path: "src/z-target.ts",
-                line: 1,
-                text: "glob-cap-marker",
-            },
-        ]);
+        ).resolves.toEqual({
+            matches: [
+                {
+                    path: "src/z-target.ts",
+                    line: 1,
+                    text: "glob-cap-marker",
+                },
+            ],
+            truncated: true,
+        });
         await expect(
             api.grep("glob-cap-marker", {
                 glob: "src/**/*.ts",
                 maxMatches: 2,
             }),
-        ).resolves.toEqual([
-            {
-                path: "src/nested/filtered.ts",
-                line: 1,
-                text: "glob-cap-marker",
-            },
-            {
-                path: "src/z-target.ts",
-                line: 1,
-                text: "glob-cap-marker",
-            },
-        ]);
+        ).resolves.toEqual({
+            matches: [
+                {
+                    path: "src/nested/filtered.ts",
+                    line: 1,
+                    text: "glob-cap-marker",
+                },
+                {
+                    path: "src/z-target.ts",
+                    line: 1,
+                    text: "glob-cap-marker",
+                },
+            ],
+            truncated: true,
+        });
 
         await expect(
             api.grep("glob-cap-marker", {
                 glob: "**/[Zz]-target.ts",
                 maxMatches: 1,
             }),
-        ).resolves.toEqual([
-            {
-                path: "src/z-target.ts",
-                line: 1,
-                text: "glob-cap-marker",
-            },
-        ]);
+        ).resolves.toEqual({
+            matches: [
+                {
+                    path: "src/z-target.ts",
+                    line: 1,
+                    text: "glob-cap-marker",
+                },
+            ],
+            truncated: true,
+        });
     });
 
     it("globs deterministic bounded repository-relative file paths", async () => {
@@ -328,7 +346,10 @@ describe("repository tools", () => {
         await expect(
             api.glob("**/*", { maxMatches: 100 }),
         ).resolves.not.toContain("outside-link.txt");
-        await expect(api.grep("outside-marker")).resolves.toEqual([]);
+        await expect(api.grep("outside-marker")).resolves.toEqual({
+            matches: [],
+            truncated: false,
+        });
         await expect(api.read("outside-link.txt")).rejects.toThrow(
             /not available/i,
         );
@@ -358,7 +379,10 @@ describe("repository tools", () => {
         const content = await api.read("src/auth.ts", { limit: 1 });
         expect(content.text).toContain("authenticate");
         expect(content.text).not.toContain("outside-secret");
-        await expect(api.grep("outside-secret")).resolves.toEqual([]);
+        await expect(api.grep("outside-secret")).resolves.toEqual({
+            matches: [],
+            truncated: false,
+        });
         expect(trace.calls.filter((call) => call.error)).toHaveLength(5);
     });
 
@@ -368,13 +392,16 @@ describe("repository tools", () => {
 
         await rm(path.join(repoRoot, "src", "auth.ts"));
 
-        await expect(api.grep("authenticate")).resolves.toEqual([
-            {
-                path: "src/auth.ts",
-                line: 1,
-                text: "export function authenticate(token: string) {",
-            },
-        ]);
+        await expect(api.grep("authenticate")).resolves.toEqual({
+            matches: [
+                {
+                    path: "src/auth.ts",
+                    line: 1,
+                    text: "export function authenticate(token: string) {",
+                },
+            ],
+            truncated: false,
+        });
         expect(trace.calls[0]).toMatchObject({
             tool: "grep",
             resultCount: 1,
@@ -392,7 +419,7 @@ describe("repository tools", () => {
                 engine: "ripgrep",
                 ripgrepPath: "rg",
             } as never),
-        ).resolves.toEqual([]);
+        ).resolves.toEqual({ matches: [], truncated: false });
 
         expect(trace.calls[0]).toMatchObject({
             tool: "grep",
@@ -412,34 +439,48 @@ describe("repository tools", () => {
         );
         const { api, trace } = await makeTools({ repoRoot });
 
-        await expect(api.grep("a.*b", { literal: true })).resolves.toEqual([
-            {
-                path: "src/auth.ts",
-                line: 4,
-                text: "const literal = 'a.*b';",
-            },
-        ]);
-        await expect(api.grep("auth.*token")).resolves.toHaveLength(1);
-        await expect(api.grep("valid", { glob: "*.ts" })).resolves.toEqual([
-            {
-                path: "src/nested/token.ts",
-                line: 1,
-                text: "export const token = 'valid';",
-            },
-        ]);
-        await expect(api.grep("valid", { glob: "src/*.ts" })).resolves.toEqual(
-            [],
-        );
+        await expect(api.grep("a.*b", { literal: true })).resolves.toEqual({
+            matches: [
+                {
+                    path: "src/auth.ts",
+                    line: 4,
+                    text: "const literal = 'a.*b';",
+                },
+            ],
+            truncated: false,
+        });
+        const regexSearch = await api.grep("auth.*token");
+        expect(regexSearch.matches).toHaveLength(1);
+        await expect(api.grep("valid", { glob: "*.ts" })).resolves.toEqual({
+            matches: [
+                {
+                    path: "src/nested/token.ts",
+                    line: 1,
+                    text: "export const token = 'valid';",
+                },
+            ],
+            truncated: false,
+        });
+        await expect(api.grep("valid", { glob: "src/*.ts" })).resolves.toEqual({
+            matches: [],
+            truncated: false,
+        });
         await expect(
             api.grep("valid", { glob: "src/**/*.ts" }),
-        ).resolves.toEqual([
-            {
-                path: "src/nested/token.ts",
-                line: 1,
-                text: "export const token = 'valid';",
-            },
-        ]);
-        await expect(api.grep("(a+)+$")).resolves.toEqual([]);
+        ).resolves.toEqual({
+            matches: [
+                {
+                    path: "src/nested/token.ts",
+                    line: 1,
+                    text: "export const token = 'valid';",
+                },
+            ],
+            truncated: false,
+        });
+        await expect(api.grep("(a+)+$")).resolves.toEqual({
+            matches: [],
+            truncated: false,
+        });
 
         await writeFile(
             path.join(repoRoot, "src", "literal-paren.ts"),
@@ -450,9 +491,9 @@ describe("repository tools", () => {
             /regex parse error/i,
         );
 
-        const matches = await api.grep("needle", { maxMatches: 1 });
-        expect(matches).toHaveLength(1);
-        expect(matches[0].text.length).toBeLessThanOrEqual(500);
+        const search = await api.grep("needle", { maxMatches: 1 });
+        expect(search.matches).toHaveLength(1);
+        expect(search.matches[0].text.length).toBeLessThanOrEqual(500);
         expect(trace.calls.at(-1)?.outputBytes).toBeLessThan(1024);
         await expect(api.read("src/auth.ts", { limit: 1001 })).rejects.toThrow(
             /limit/i,
@@ -477,30 +518,36 @@ describe("repository tools", () => {
                 literal: true,
                 maxMatches: 2,
             }),
-        ).resolves.toEqual([
-            {
-                path: "docs/.eleventy.js",
-                line: 1,
-                text: "native-order-marker",
-            },
-            {
-                path: "docs/_data/navigation.js",
-                line: 1,
-                text: "native-order-marker",
-            },
-        ]);
+        ).resolves.toEqual({
+            matches: [
+                {
+                    path: "docs/.eleventy.js",
+                    line: 1,
+                    text: "native-order-marker",
+                },
+                {
+                    path: "docs/_data/navigation.js",
+                    line: 1,
+                    text: "native-order-marker",
+                },
+            ],
+            truncated: true,
+        });
         await expect(
             api.grep("native-order-marker", {
                 literal: true,
                 maxMatches: 1,
             }),
-        ).resolves.toEqual([
-            {
-                path: "docs/.eleventy.js",
-                line: 1,
-                text: "native-order-marker",
-            },
-        ]);
+        ).resolves.toEqual({
+            matches: [
+                {
+                    path: "docs/.eleventy.js",
+                    line: 1,
+                    text: "native-order-marker",
+                },
+            ],
+            truncated: true,
+        });
     });
 
     it("keeps raw ripgrep matches instead of diversifying across files", async () => {
@@ -517,10 +564,13 @@ describe("repository tools", () => {
 
         await expect(
             api.grep("common-marker", { literal: true, maxMatches: 2 }),
-        ).resolves.toEqual([
-            { path: "src/a-many.ts", line: 1, text: "common-marker" },
-            { path: "src/a-many.ts", line: 2, text: "common-marker" },
-        ]);
+        ).resolves.toEqual({
+            matches: [
+                { path: "src/a-many.ts", line: 1, text: "common-marker" },
+                { path: "src/a-many.ts", line: 2, text: "common-marker" },
+            ],
+            truncated: true,
+        });
     });
 
     it("bounds broad ripgrep output before applying the result cap", async () => {
@@ -533,9 +583,10 @@ describe("repository tools", () => {
 
         await expect(
             api.grep("common-marker", { literal: true, maxMatches: 1 }),
-        ).resolves.toEqual([
-            { path: "src/dense.ts", line: 1, text: "common-marker" },
-        ]);
+        ).resolves.toEqual({
+            matches: [{ path: "src/dense.ts", line: 1, text: "common-marker" }],
+            truncated: true,
+        });
         expect(trace.calls[0]).toMatchObject({
             tool: "grep",
             resultCount: 1,
@@ -543,6 +594,116 @@ describe("repository tools", () => {
         });
         expect(trace.calls[0].outputBytes).toBeLessThan(1024);
     });
+
+    it("exposes capped ripgrep truncation to repository callers", async () => {
+        const repoRoot = await makeFixture();
+        await writeFile(
+            path.join(repoRoot, "src", "dense.ts"),
+            ["visible-marker", "visible-marker"].join("\n"),
+        );
+        const { api } = await makeTools({ repoRoot });
+
+        await expect(
+            api.grep("visible-marker", { literal: true, maxMatches: 1 }),
+        ).resolves.toEqual({
+            matches: [
+                { path: "src/dense.ts", line: 1, text: "visible-marker" },
+            ],
+            truncated: true,
+        });
+    });
+
+    itOnPosix(
+        "surfaces an actionable ripgrep timeout before the script deadline and permits a narrower retry",
+        async () => {
+            const repoRoot = await makeFixture();
+            const fakeRipgrepPath = path.join(
+                path.dirname(repoRoot),
+                "fake-timeout-rg",
+            );
+            await writeFile(
+                fakeRipgrepPath,
+                [
+                    "#!/usr/bin/env node",
+                    "const target = process.argv.at(-1);",
+                    'if (target === ".") {',
+                    "    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);",
+                    "} else {",
+                    "    process.stdout.write(JSON.stringify({",
+                    '        type: "match",',
+                    "        data: {",
+                    "            path: { text: target },",
+                    '            lines: { text: "export function authenticate(token: string) {\\n" },',
+                    "            line_number: 1,",
+                    "        },",
+                    '    }) + "\\n");',
+                    "}",
+                ].join("\n"),
+                { mode: 0o755 },
+            );
+            const executionTimeoutMs = 5_000;
+            const { api, trace } = await makeTools({
+                repoRoot,
+                ripgrepPath: fakeRipgrepPath,
+                executionTimeoutMs,
+            });
+            let outerTimer: NodeJS.Timeout | undefined;
+
+            try {
+                await expect(
+                    Promise.race([
+                        api.grep("authenticate"),
+                        new Promise<never>((_, reject) => {
+                            outerTimer = setTimeout(
+                                () =>
+                                    reject(
+                                        new Error("Script execution timeout"),
+                                    ),
+                                executionTimeoutMs,
+                            );
+                        }),
+                    ]),
+                ).rejects.toThrow(/ripgrep timed out.*narrow.*(?:path|glob)/i);
+            } finally {
+                clearTimeout(outerTimer);
+            }
+
+            await expect(
+                api.grep("authenticate", {
+                    path: "src/auth.ts",
+                    literal: true,
+                    maxMatches: 1,
+                }),
+            ).resolves.toEqual({
+                matches: [
+                    {
+                        path: "src/auth.ts",
+                        line: 1,
+                        text: "export function authenticate(token: string) {",
+                    },
+                ],
+                truncated: true,
+            });
+            expect(trace.calls).toHaveLength(2);
+            expect(trace.calls[0]).toMatchObject({
+                tool: "grep",
+                input: { pattern: "authenticate" },
+                error: expect.stringMatching(
+                    /ripgrep timed out.*narrow.*(?:path|glob)/i,
+                ),
+            });
+            expect(trace.calls[1]).toMatchObject({
+                tool: "grep",
+                input: {
+                    pattern: "authenticate",
+                    path: "src/auth.ts",
+                    literal: true,
+                    maxMatches: 1,
+                },
+                resultCount: 1,
+            });
+        },
+    );
 
     it("resolves ripgrep only when grep is used", async () => {
         const previous = process.env.TYPEAGENT_RIPGREP_PATH;
@@ -584,13 +745,16 @@ describe("repository tools", () => {
         );
         const { api } = await makeTools({ repoRoot });
 
-        await expect(api.grep("target", { maxMatches: 1 })).resolves.toEqual([
-            {
-                path: "src/definition.ts",
-                line: 1,
-                text: "const value = target();",
-            },
-        ]);
+        await expect(api.grep("target", { maxMatches: 1 })).resolves.toEqual({
+            matches: [
+                {
+                    path: "src/definition.ts",
+                    line: 1,
+                    text: "const value = target();",
+                },
+            ],
+            truncated: true,
+        });
     });
 
     it("keeps arbitrary regular-expression matches in source order", async () => {
@@ -608,13 +772,16 @@ describe("repository tools", () => {
 
         await expect(
             api.grep("target|missing", { maxMatches: 1 }),
-        ).resolves.toEqual([
-            {
-                path: "src/definition.ts",
-                line: 1,
-                text: "const value = target();",
-            },
-        ]);
+        ).resolves.toEqual({
+            matches: [
+                {
+                    path: "src/definition.ts",
+                    line: 1,
+                    text: "const value = target();",
+                },
+            ],
+            truncated: true,
+        });
     });
 
     it("enforces call and per-call result caps while tracing failures", async () => {
@@ -630,7 +797,7 @@ describe("repository tools", () => {
         expect(trace.calls[0].truncated).toBe(true);
         await expect(
             api.grep("token", { maxMatches: 1 }),
-        ).resolves.toHaveLength(1);
+        ).resolves.toMatchObject({ matches: [expect.any(Object)] });
         await expect(api.read("README.md")).resolves.toMatchObject({
             text: expect.stringMatching(/TOOL_BUDGET_EXHAUSTED/),
         });
