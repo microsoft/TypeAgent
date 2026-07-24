@@ -71,6 +71,8 @@ export class ExplorerActionSession {
     private readonly actionAttempts: ExplorerActionAttempt[] = [];
     private programAttempts = 0;
     private groundingObservations: RepositoryObservation[] = [];
+    private carriedRefinementReads: RepositoryObservation[] = [];
+    private refinementRecoveryPending = false;
     private submitted:
         | {
               actionName: typeof SUBMIT_EXPLORATION_ACTION;
@@ -98,6 +100,7 @@ export class ExplorerActionSession {
                 ...(options.ripgrepPath
                     ? { ripgrepPath: options.ripgrepPath }
                     : {}),
+                executionTimeoutMs: options.executionTimeoutMs,
                 ...(options.lsp ? { lsp: options.lsp } : {}),
             }),
         );
@@ -227,8 +230,7 @@ export class ExplorerActionSession {
         const callLimit =
             phase === "discover"
                 ? this.options.maxToolCalls - REFINEMENT_RESERVED_CALLS
-                : this.repository.trace.totalCalls +
-                  MAX_REFINEMENT_CALLS_PER_PROGRAM;
+                : this.refinementCallLimit();
         this.repository.allowCallsThrough(
             Math.max(1, Math.min(this.options.maxToolCalls, callLimit)),
             phase === "refine"
@@ -245,7 +247,9 @@ export class ExplorerActionSession {
                 : undefined,
             phase === "refine"
                 ? { grep: 2, ...(this.options.lsp ? { lsp: 1 } : {}) }
-                : undefined,
+                : this.options.lsp
+                  ? { lsp: 1 }
+                  : undefined,
             phase === "refine" ? 6 : undefined,
         );
         const observationStart = this.repository.observations.length;
@@ -257,22 +261,29 @@ export class ExplorerActionSession {
             this.options.maxResults,
             this.options.executionTimeoutMs,
         );
+        const observations =
+            this.repository.observations.slice(observationStart);
+        const calls = this.repository.trace.calls.slice(callStart);
         if (!execution.ok) {
             return errorResult(
                 execution.error ?? "Repository program execution failed",
             );
         }
-        const observations =
-            this.repository.observations.slice(observationStart);
-        const calls = this.repository.trace.calls.slice(callStart);
         const remainingRepositoryCalls = Math.max(
             0,
             this.options.maxToolCalls - this.repository.trace.totalCalls,
         );
+        const phaseObservations =
+            phase === "refine"
+                ? [...this.carriedRefinementReads, ...observations]
+                : observations;
         if (
             phase === "refine" &&
-            !observations.some((observation) => observation.source === "read")
+            !phaseObservations.some(
+                (observation) => observation.source === "read",
+            )
         ) {
+            this.prepareLspRecovery(phase, observations, calls);
             const diagnostic = zeroLineReadDiagnostic(calls);
             const message = `The ${phase} program must read exact candidate context before submission${diagnostic ? `; ${diagnostic}` : ""}`;
             return errorResult(
@@ -289,10 +300,11 @@ export class ExplorerActionSession {
         if (
             phase === "refine" &&
             this.options.lsp &&
-            !this.hasCompletedLspNavigation()
+            !this.hasCompletedLspCall()
         ) {
+            this.prepareLspRecovery(phase, observations, calls);
             const message =
-                "The refine program must complete language-server navigation before submission; retry refineRepository with a program that calls repo.lsp";
+                "The refine program must complete an error-free language-server call before submission; retry refineRepository with a program that calls repo.lsp";
             return errorResult(
                 remainingRepositoryCalls === 0
                     ? `${REPOSITORY_BUDGET_EXHAUSTED}: ${message}`
@@ -301,7 +313,7 @@ export class ExplorerActionSession {
         }
         this.programAttempts++;
         const responseObservations = compactObservations(
-            observations,
+            phaseObservations,
             phase,
             this.repository.observations.slice(0, observationStart),
         );
@@ -320,6 +332,10 @@ export class ExplorerActionSession {
         };
         const response = serializeActionPayload(payload, responseObservations);
         this.groundingObservations.push(...response.observations);
+        if (phase === "refine") {
+            this.carriedRefinementReads = [];
+            this.refinementRecoveryPending = false;
+        }
         return createActionResult(response.text);
     }
 
@@ -334,9 +350,9 @@ export class ExplorerActionSession {
                 "Complete discovery and refinement before submission",
             );
         }
-        if (this.options.lsp && !this.hasCompletedLspNavigation()) {
+        if (this.options.lsp && !this.hasCompletedLspCall()) {
             return errorResult(
-                "TypeAgent with LSP must complete at least one language-server navigation call before submission",
+                "TypeAgent with LSP must complete at least one error-free language-server call before submission",
             );
         }
         let formatted;
@@ -373,13 +389,53 @@ export class ExplorerActionSession {
         return createActionResult(formatted.text);
     }
 
-    private hasCompletedLspNavigation(): boolean {
+    private hasCompletedLspCall(): boolean {
         return this.repository.trace.calls.some(
-            (call) =>
-                call.tool === "lsp" &&
-                call.error === undefined &&
-                call.resultCount > 0,
+            (call) => call.tool === "lsp" && call.error === undefined,
         );
+    }
+
+    private refinementCallLimit(): number {
+        const defaultLimit =
+            this.repository.trace.totalCalls + MAX_REFINEMENT_CALLS_PER_PROGRAM;
+        if (!this.options.lsp || this.hasCompletedLspCall()) {
+            return defaultLimit;
+        }
+        const requiredRecoveryCalls =
+            this.carriedRefinementReads.length > 0 ? 1 : 2;
+        return this.refinementRecoveryPending
+            ? this.repository.trace.totalCalls + requiredRecoveryCalls
+            : Math.min(
+                  defaultLimit,
+                  this.options.maxToolCalls - requiredRecoveryCalls,
+              );
+    }
+
+    private prepareLspRecovery(
+        phase: RepositoryProgramPhase,
+        observations: RepositoryObservation[],
+        calls: ExplorerSessionSnapshot["toolTrace"]["calls"],
+    ): void {
+        if (
+            phase !== "refine" ||
+            !this.options.lsp ||
+            this.hasCompletedLspCall() ||
+            calls.length === 0
+        ) {
+            return;
+        }
+        for (const observation of observations) {
+            if (
+                observation.source === "read" &&
+                !this.carriedRefinementReads.some(
+                    (candidate) =>
+                        candidate.callIndex === observation.callIndex,
+                )
+            ) {
+                this.carriedRefinementReads.push(observation);
+            }
+        }
+        this.refinementRecoveryPending = true;
     }
 }
 
@@ -751,7 +807,7 @@ function nextPhaseInstruction(phase: RepositoryProgramPhase): string {
         case "discover":
             return `Invoke refineRepository with reads of at most ${MAX_REFINEMENT_READ_LINES} lines around the strongest candidate lines and return the final grounded locations from that program`;
         case "refine":
-            return "Invoke submitExploration with the exact locations most likely needing changes, supported by grep matches or repository reads.";
+            return "Invoke submitExploration with the exact locations most likely needing changes, supported by repository reads; grep and LSP only locate candidates.";
     }
 }
 
