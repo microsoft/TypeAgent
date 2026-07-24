@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=96c15ea2d32dde6034c2697c6aea7b5785aa0634e2807607f9d3560c7348a169 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=1148c7524cfe271d07d32f8b882330b8fd6b3e2f2212a2ef50ec4e9d72b54423 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/action-grammar — AI-generated documentation
@@ -12,13 +12,13 @@
 
 ## Overview
 
-The `@typeagent/action-grammar` package is a TypeScript library that provides the grammar engine for the TypeAgent framework. It enables the parsing, compilation, and matching of natural language input against grammar rules defined in `.agr` files. These rules allow the conversion of user input, such as natural language commands, into structured JSON action objects that can be processed by agents.
+The `@typeagent/action-grammar` package is a TypeScript library that provides a grammar engine for the TypeAgent framework. It enables the parsing, compilation, and matching of natural language input against grammar rules defined in `.agr` files. These rules allow user utterances to be converted into structured JSON action objects, which can then be processed by other components in the TypeAgent ecosystem.
 
-This package is a core component of the TypeAgent ecosystem and is used by several other packages, including `@typeagent/core`, `@typeagent/action-grammar-compiler`, and `agent-cli`.
+This package is a core dependency for several other TypeAgent packages, such as `@typeagent/core`, `@typeagent/action-grammar-compiler`, and `agent-cli`. It supports both rule-based and machine learning-assisted approaches to grammar generation and matching, making it a versatile tool for natural language understanding.
 
 ## What it does
 
-The primary purpose of this package is to process natural language input and match it against predefined grammar rules to generate structured actions. These actions are represented as JSON objects, which can be consumed by other components in the TypeAgent ecosystem. For example:
+The primary purpose of `@typeagent/action-grammar` is to process natural language input and match it against predefined grammar rules to generate structured actions. These actions are represented as JSON objects, such as:
 
 ```json
 {
@@ -34,7 +34,7 @@ The primary purpose of this package is to process natural language input and mat
 
 1. **Grammar Parsing**:
 
-   - Parses `.agr` files, which are written in a custom domain-specific language (DSL) for defining natural language grammar rules.
+   - Parses `.agr` files written in a custom domain-specific language (DSL) for defining natural language grammar rules.
    - The DSL supports constructs such as literals, wildcards, alternation, optionals, repetition, rule references, imports, and entity declarations.
    - The `parseGrammarRules` function converts `.agr` files into an Abstract Syntax Tree (AST).
 
@@ -58,7 +58,11 @@ The primary purpose of this package is to process natural language input and mat
    - Supports runtime loading and caching of grammar rules, enabling dynamic updates to the grammar.
 
 6. **Grammar Generation**:
+
    - Includes tools for generating grammar rules from schemas and examples using large language models (LLMs) like Claude.
+
+7. **Collision Analysis**:
+   - Provides utilities for detecting and resolving overlaps between grammar rules.
 
 ## Setup
 
@@ -170,6 +174,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`, `dotenv`, `regexp.escape`
 
 ### Used by
 
+- [@typeagent/action-browser](../../tools/actionBrowser/README.md)
 - [@typeagent/action-grammar-compiler](../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/core](../../packages/typeagent-core/README.md)
 - [agent-cache](../../packages/cache/README.md)
@@ -179,7 +184,7 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`, `dotenv`, `regexp.escape`
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 - grammar-tools-cli
 - grammar-tools-core
-- [snips-bench](../../examples/snipsBench/README.md)
+- _…and 1 more workspace consumers._
 
 ### Files of interest
 
@@ -197,6 +202,6 @@ External: `@anthropic-ai/claude-agent-sdk`, `debug`, `dotenv`, `regexp.escape`
 
 ---
 
-_Auto-generated against commit `defc71271dc68db47e0d376be7aa9f755da0ac91` on `2026-07-14T08:47:00.044Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-grammar docs:verify-links` to spot-check._
+_Auto-generated against commit `d71a4baa2697f70bb62c315e67827ecc1ef19e9f` on `2026-07-22T16:16:20.408Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/action-grammar docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

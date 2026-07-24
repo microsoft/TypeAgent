@@ -311,6 +311,16 @@ describe("Grammar Rule Writer", () => {
     it("with object value", () => {
         validateRoundTrip(`<test> = hello -> { b: true, n: 12, s: "string" };`);
     });
+    it("preserves quoted object property names", () => {
+        const grammar =
+            `<test> = hello -> ` +
+            `{ "display-name": 1, "title": 2, role: 3 };`;
+
+        expect(writeGrammarRules(parseGrammarRules("test", grammar))).toBe(
+            `${grammar}\n`,
+        );
+        validateRoundTrip(grammar);
+    });
     it("with object spread value", () => {
         validateRoundTrip(
             `<test> = hello $(x:<other>) -> { ...x, extra: 1 };\n<other> = world -> { a: 2 };`,
