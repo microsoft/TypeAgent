@@ -2,11 +2,14 @@
 // Licensed under the MIT License.
 
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import type { TypeAgentAction } from "@typeagent/agent-sdk";
+import { awaitCommand } from "agent-dispatcher";
 import {
     assertDirectDispatchEvidence,
     combineTypeAgentUsage,
+    createTypeAgentExplorerDispatcher,
     createTypeAgentExplorerProvider,
 } from "../src/typeAgent.js";
 import type {
@@ -26,10 +29,15 @@ test("exposes one Explorer application agent with one natural-language entry act
     assert.deepEqual(provider.getAppAgentNames(), ["explorer"]);
     const manifest = await provider.getAppAgentManifest("explorer");
     const schemaFile = manifest.schema?.schemaFile;
+    const grammarFile = manifest.schema?.grammarFile;
     const schema =
         typeof schemaFile === "string"
             ? schemaFile
             : (schemaFile?.content ?? "");
+    const grammar =
+        typeof grammarFile === "string"
+            ? grammarFile
+            : (grammarFile?.content ?? "");
     assert.equal(manifest.defaultEnabled, true);
     assert.match(schema, /actionName: "exploreRepository"/);
     assert.match(schema, /parameters:\s*\{[^}]*request: string/s);
@@ -38,6 +46,64 @@ test("exposes one Explorer application agent with one natural-language entry act
         schema,
         /discoverRepository|refineRepository|submitExploration/,
     );
+    assert.match(grammar, /\[spacing=none\]/);
+    assert.match(grammar, /parameters:\s*\{\s*request:\s*request\s*\}/);
+});
+
+test("dispatcher grammar carries arbitrary natural-language ingress byte-for-byte", async () => {
+    const received: string[] = [];
+    const dispatchMethods: Array<"construction" | "grammar" | false> = [];
+    const provider = createTypeAgentExplorerProvider({
+        explore: async () => {
+            throw new Error("exploreDetailed must be used");
+        },
+        exploreDetailed: async ({ query }) => {
+            received.push(query);
+            return {
+                text: "src/cache.ts:10-20",
+                usage: usage(0, 0, 0),
+                toolTrace: {
+                    calls: [],
+                    totalCalls: 0,
+                    totalOutputBytes: 0,
+                },
+                result: { citationCount: 1, truncated: false },
+            };
+        },
+    });
+    const dispatcher = await createTypeAgentExplorerDispatcher(
+        provider,
+        "unused-model",
+        (_requestId, method) => dispatchMethods.push(method),
+    );
+    const request =
+        "Explore the repository exactly.\r\n" +
+        "\t```ts\nconst edge = 'source => target';\n```\r" +
+        "<query>Unicode π repeated repeated</query>";
+    try {
+        const commandResult = await awaitCommand(
+            dispatcher,
+            request,
+            undefined,
+            { noReasoning: true },
+            undefined,
+            randomUUID(),
+        );
+
+        assert.equal(commandResult?.lastError, undefined);
+        assert.deepEqual(commandResult?.tokenUsage, {
+            requestCount: 0,
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+        });
+        assert.equal(commandResult?.actions?.length, 1);
+        assert.equal(commandResult?.actions?.[0].parameters?.request, request);
+        assert.deepEqual(received, [request]);
+        assert.deepEqual(dispatchMethods, ["grammar"]);
+    } finally {
+        await dispatcher.close();
+    }
 });
 
 test("Explorer action executes its typed request parameter and reports inner usage", async () => {
@@ -135,8 +201,10 @@ test("direct-dispatch evidence fails closed on every bypass", () => {
 
     const invalid: TypeAgentDispatchEvidence[] = [
         { ...valid, submittedRequest: `@action explorer exploreRepository` },
-        { ...valid, translationInvoked: false },
-        { ...valid, translationRequestCount: 2 },
+        { ...valid, dispatchMethod: false },
+        { ...valid, dispatchMethod: "construction" },
+        { ...valid, translationInvoked: true },
+        { ...valid, translationRequestCount: 1 },
         { ...valid, activeAgentNames: ["explorer", "chat"] },
         { ...valid, activeSchemaNames: ["explorer", "chat"] },
         { ...valid, translatedActions: [] },
@@ -216,8 +284,9 @@ function evidence(): TypeAgentDispatchEvidence {
     return {
         ingress: "natural-language",
         submittedRequest: query,
-        translationInvoked: true,
-        translationRequestCount: 1,
+        dispatchMethod: "grammar",
+        translationInvoked: false,
+        translationRequestCount: 0,
         activeAgentNames: ["explorer"],
         activeSchemaNames: ["explorer"],
         translatedActions: [
