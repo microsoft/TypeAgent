@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getImageElement, getMimeType } from "typechat-utils";
+import {
+    getAttachmentFileName,
+    isImageAttachment,
+    rehydrateImageAttachments,
+} from "typechat-utils";
 import {
     ChatResponseAction,
     Entity,
@@ -28,31 +32,15 @@ export async function executeChatResponseAction(
     return handleChatResponse(chatAction, context);
 }
 
-async function rehydrateImages(context: ActionContext, files: string[]) {
-    let html = "<div>";
-
-    for (let i = 0; i < files.length; i++) {
-        let name = files[i];
-        console.log(`Rehydrating Image ${name}`);
-        if (files[i].lastIndexOf("\\") > -1) {
-            name = files[i].substring(files[i].lastIndexOf("\\") + 1);
-        }
-
-        const a = await context.sessionContext.sessionStorage?.read(
-            `\\..\\user_files\\${name}`,
-            "base64",
-        );
-
-        if (a) {
-            html += getImageElement(
-                `data:image/${getMimeType(name.substring(name.indexOf(".")))};base64,${a}`,
-            );
-        }
-    }
-
-    html += "</div>";
-
-    return html;
+// Build the file entity the dispatcher records for a related file. Uploaded
+// image attachments are tagged as images; anything else (e.g. a workspace file
+// the user referenced from the editor) is recorded as a plain file reference.
+export function relatedFileToEntity(file: string): Entity {
+    const name = getAttachmentFileName(file);
+    return {
+        name,
+        type: isImageAttachment(name) ? ["file", "image", "data"] : ["file"],
+    };
 }
 
 async function handleChatResponse(
@@ -67,7 +55,7 @@ async function handleChatResponse(
 
         case "showImageFile":
             return createActionResultFromHtmlDisplay(
-                `<div>${await rehydrateImages(context, chatAction.parameters.files)}</div>`,
+                `<div>${await rehydrateImageAttachments(context.sessionContext.sessionStorage, chatAction.parameters.files)}</div>`,
             );
 
         default:
@@ -110,7 +98,7 @@ async function generateResponse(
             context.actionIO.appendDisplay(
                 {
                     type: "html",
-                    content: `<div class='chat-smallImage'>${await rehydrateImages(context, generateResponseAction.parameters.relatedFiles!)}</div>`,
+                    content: `<div class='chat-smallImage'>${await rehydrateImageAttachments(context.sessionContext.sessionStorage, generateResponseAction.parameters.relatedFiles!)}</div>`,
                 },
                 "block",
             );
@@ -124,17 +112,10 @@ async function generateResponse(
         }
 
         if (generateResponseAction.parameters.relatedFiles !== undefined) {
-            const fileEntities: Entity[] = new Array<Entity>();
-            for (const file of generateResponseAction.parameters.relatedFiles) {
-                let name = file;
-                if (file.lastIndexOf("\\") > -1) {
-                    name = file.substring(file.lastIndexOf("\\") + 1);
-                }
-                fileEntities.push({
-                    name,
-                    type: ["file", "image", "data"],
-                });
-            }
+            const fileEntities: Entity[] =
+                generateResponseAction.parameters.relatedFiles.map(
+                    relatedFileToEntity,
+                );
 
             logEntities("File Entities:", fileEntities);
             result.entities = result.entities.concat(fileEntities);

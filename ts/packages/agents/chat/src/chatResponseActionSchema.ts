@@ -34,7 +34,10 @@ export interface GenerateResponseAction {
         userRequestEntities: Entity[];
         // ALL the actions and entities present in the generated text
         generatedTextEntities: Entity[];
-        // The file names of any attachments
+        // File names of images the user uploaded as attachments this turn (each
+        // is provided to you alongside its image as "File Name: ..."). Only list
+        // those uploaded attachment names here; do not add files that are only
+        // referenced through the editor or workspace context.
         relatedFiles?: string[];
     };
 }
