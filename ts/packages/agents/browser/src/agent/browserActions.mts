@@ -10,7 +10,7 @@ import type { AiSearchLookupMode } from "./lookup/aiSearchLookup.mjs";
 import { ChildProcess } from "child_process";
 import { TabTitleIndex } from "./tabTitleIndex.mjs";
 import { TextEmbeddingModel } from "@typeagent/aiclient";
-import type { WebsiteCollection, IndexData } from "website-memory";
+import type { WebsiteCollection, IndexData } from "@typeagent/website-memory";
 import { ActionContext, SessionContext } from "@typeagent/agent-sdk";
 import { ChoiceManager } from "@typeagent/agent-sdk/helpers/action";
 

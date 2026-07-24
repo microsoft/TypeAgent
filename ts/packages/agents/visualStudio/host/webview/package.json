@@ -23,7 +23,7 @@
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
-    "chat-ui": "workspace:*"
+    "@typeagent/chat-ui": "workspace:*"
   },
   "devDependencies": {
     "rimraf": "^6.0.1",

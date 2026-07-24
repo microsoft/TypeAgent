@@ -10,7 +10,7 @@ import {
     StructuredTag,
     Tag,
 } from "./interfaces.js";
-import { conversation as kpLib } from "knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { IPropertyToSemanticRefIndex } from "./interfaces.js";
 import { TextRangesInScope } from "./collections.js";
 import { facetValueToString } from "./knowledgeLib.js";

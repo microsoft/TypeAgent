@@ -7,7 +7,7 @@ import {
     removeFile,
     writeFile,
     writeJsonFile,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { deserializeEmbeddings, serializeEmbeddings } from "./fuzzyIndex.js";
 import path from "path";
 import { IConversationDataWithIndexes } from "./secondaryIndexes.js";

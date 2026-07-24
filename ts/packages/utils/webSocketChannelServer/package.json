@@ -1,7 +1,7 @@
 {
-  "name": "websocket-channel-server",
+  "name": "@typeagent/websocket-channel-server",
   "version": "0.0.1",
-  "private": true,
+  "private": false,
   "description": "RpcChannel Web socket server.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

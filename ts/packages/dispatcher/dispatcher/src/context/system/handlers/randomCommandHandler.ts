@@ -13,7 +13,7 @@ import {
     CompletionSettings,
     openai,
 } from "@typeagent/aiclient";
-import { createTypeChat, promptLib } from "typeagent";
+import { createTypeChat, promptLib } from "@typeagent/agent-runtime";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
 import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
 import {

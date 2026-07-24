@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ExtractionMode } from "website-memory";
+import { ExtractionMode } from "@typeagent/website-memory";
 
 /**
  * Enhanced website metadata for indexing

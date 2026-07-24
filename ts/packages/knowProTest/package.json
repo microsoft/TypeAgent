@@ -30,11 +30,11 @@
   },
   "dependencies": {
     "@typeagent/aiclient": "workspace:*",
-    "conversation-memory": "workspace:*",
+    "@typeagent/conversation-memory": "workspace:*",
     "interactive-app": "workspace:*",
-    "knowledge-processor": "workspace:*",
-    "knowpro": "workspace:*",
-    "typeagent": "workspace:*",
+    "@typeagent/knowledge-processor": "workspace:*",
+    "@typeagent/knowpro": "workspace:*",
+    "@typeagent/agent-runtime": "workspace:*",
     "typechat": "0.1.1"
   },
   "devDependencies": {

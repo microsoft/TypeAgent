@@ -6,7 +6,7 @@
  * Knowledge functions
  */
 
-import { dateTime, getTopK } from "typeagent";
+import { dateTime, getTopK } from "@typeagent/agent-runtime";
 import { Scored } from "./common.js";
 import {
     SemanticRef,
@@ -19,7 +19,7 @@ import {
     MessageOrdinal,
     IMessageCollection,
 } from "./interfaces.js";
-import { conversation as kpLib } from "knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { getSemanticRefsFromScoredOrdinals } from "./searchLib.js";
 
 export function facetValueToString(facet: kpLib.Facet): string {

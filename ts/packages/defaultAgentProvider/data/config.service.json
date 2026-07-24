@@ -17,7 +17,7 @@
       "name": "list-agent"
     },
     "browser": {
-      "name": "browser-typeagent"
+      "name": "@typeagent/browser"
     },
     "desktop": {
       "name": "desktop-automation"

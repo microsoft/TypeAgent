@@ -49,7 +49,7 @@ import {
     NormalizedEmbedding,
     similarity,
     SimilarityType,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { TextEmbeddingModel, openai } from "@typeagent/aiclient";
 import registerDebug from "debug";
 import { ActionSchemaFile } from "./actionConfigProvider.js";

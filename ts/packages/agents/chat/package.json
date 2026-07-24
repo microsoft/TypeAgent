@@ -30,11 +30,11 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
-    "knowledge-processor": "workspace:*",
-    "telemetry": "workspace:*",
-    "typeagent": "workspace:*",
+    "@typeagent/knowledge-processor": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
+    "@typeagent/agent-runtime": "workspace:*",
     "typechat": "^0.1.1",
-    "typechat-utils": "workspace:*"
+    "@typeagent/typechat-utils": "workspace:*"
   },
   "devDependencies": {
     "copyfiles": "^2.4.1",

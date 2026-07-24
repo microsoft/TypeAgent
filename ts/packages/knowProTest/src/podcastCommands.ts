@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-import * as cm from "conversation-memory";
+import * as cm from "@typeagent/conversation-memory";
 import { parseTypedArguments } from "interactive-app";
 import path from "path";
-import { getFileName } from "typeagent";
+import { getFileName } from "@typeagent/agent-runtime";
 import { Result, error, success } from "typechat";
 import {
     memoryNameToIndexPath,

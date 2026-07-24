@@ -9,7 +9,7 @@ import {
     generateEmbeddingWithRetry,
     ScoredItem,
     NameValue,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import {
     TextEmbeddingModel,
     openai,

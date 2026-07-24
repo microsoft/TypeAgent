@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as cm from "conversation-memory";
-import * as kp from "knowpro";
-import * as knowLib from "knowledge-processor";
+import * as cm from "@typeagent/conversation-memory";
+import * as kp from "@typeagent/knowpro";
+import * as knowLib from "@typeagent/knowledge-processor";
 import {
     arg,
     argBool,
@@ -16,7 +16,7 @@ import {
     StopWatch,
     InteractiveIo,
 } from "interactive-app";
-import { collections, dateTime, ensureDir, getFileName } from "typeagent";
+import { collections, dateTime, ensureDir, getFileName } from "@typeagent/agent-runtime";
 
 import { ChatModel, TextEmbeddingModel, openai } from "@typeagent/aiclient";
 import {

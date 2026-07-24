@@ -6,7 +6,7 @@ import { describeIf, hasTestKeys } from "test-lib";
 import { ensureTestDir, testFilePath } from "./testCommon.js";
 import { createDatabase } from "../src/sqlite/sqliteCommon.js";
 import { SqliteEmbeddingIndex } from "../src/sqlite/sqliteEmbeddingIndex.js";
-import { createNormalized, NormalizedEmbedding } from "typeagent";
+import { createNormalized, NormalizedEmbedding } from "@typeagent/agent-runtime";
 
 describeIf(
     "memory.sqlite.embeddingIndex",

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 import * as azSearch from "@azure/search-documents";
 import { createDefaultCredential, getEnvSetting } from "@typeagent/aiclient";
-import { NormalizedEmbedding } from "typeagent";
+import { NormalizedEmbedding } from "@typeagent/agent-runtime";
 
 export enum EnvVars {
     AZURE_SEARCH_ENDPOINT = "AZURE_SEARCH_ENDPOINT",

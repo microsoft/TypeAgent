@@ -11,7 +11,7 @@ import {
     indexOfNearestTextInIndexSubset,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
-import { NormalizedEmbedding } from "typeagent";
+import { NormalizedEmbedding } from "@typeagent/agent-runtime";
 import { Scored } from "./common.js";
 
 export type ScoredTextLocation = {

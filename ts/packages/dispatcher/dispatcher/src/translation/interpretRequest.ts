@@ -16,7 +16,7 @@ import {
     requestIdToString,
 } from "../context/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
-import { CachedImageWithDetails } from "typechat-utils";
+import { CachedImageWithDetails } from "@typeagent/typechat-utils";
 import { unicodeChar } from "../command/command.js";
 import { confirmTranslation } from "./confirmTranslation.js";
 import {

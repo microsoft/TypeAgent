@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ChatModel } from "@typeagent/aiclient";
-import { loadSchema } from "typeagent";
+import { loadSchema } from "@typeagent/agent-runtime";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 

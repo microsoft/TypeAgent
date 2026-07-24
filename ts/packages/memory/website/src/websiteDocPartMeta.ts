@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DocPartMeta } from "conversation-memory";
-import { conversation as kpLib } from "knowledge-processor";
+import { DocPartMeta } from "@typeagent/conversation-memory";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { WebsiteMeta } from "./websiteMeta.js";
 import { DetectedAction, ActionSummary } from "./extraction/types.js";
 

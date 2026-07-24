@@ -57,9 +57,9 @@
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "find-config": "^1.0.0",
-    "typeagent": "workspace:*",
+    "@typeagent/agent-runtime": "workspace:*",
     "typechat": "^0.1.1",
-    "typechat-utils": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*",
     "ws": "^8.21.1"
   },
   "devDependencies": {

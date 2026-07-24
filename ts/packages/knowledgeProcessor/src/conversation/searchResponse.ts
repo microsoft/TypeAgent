@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections, dateTime, ScoredItem } from "typeagent";
+import { collections, dateTime, ScoredItem } from "@typeagent/agent-runtime";
 import { ActionGroup, ActionSearchResult, mergeActions } from "./actions.js";
 import {
     CompositeEntity,

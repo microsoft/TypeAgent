@@ -3,8 +3,8 @@
 
 import chalk, { ChalkInstance } from "chalk";
 import * as fs from "fs";
-import * as knowLib from "knowledge-processor";
-import { asyncArray } from "typeagent";
+import * as knowLib from "@typeagent/knowledge-processor";
+import { asyncArray } from "@typeagent/agent-runtime";
 
 import * as iapp from "interactive-app";
 import { ChunkyIndex, IndexNames } from "./pdfChunkyIndex.js";

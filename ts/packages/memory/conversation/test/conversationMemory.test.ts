@@ -14,8 +14,8 @@ import {
 } from "../src/conversationMemory.js";
 import { getTestTranscriptDialog, TestTranscriptInfo } from "./testCommon.js";
 import { verifyConversationBasic } from "./verify.js";
-import * as kp from "knowpro";
-import { conversation as kpLib } from "knowledge-processor";
+import * as kp from "@typeagent/knowpro";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 
 describeIf(
     "conversationMemory.online",

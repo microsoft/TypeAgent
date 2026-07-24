@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { FileSystem, ObjectFolderSettings, asyncArray } from "typeagent";
+import { FileSystem, ObjectFolderSettings, asyncArray } from "@typeagent/agent-runtime";
 import { SourceTextBlock, TextBlock, TextBlockType } from "./text.js";
 import {
     TemporalLog,

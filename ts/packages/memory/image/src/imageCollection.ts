@@ -21,15 +21,15 @@ import {
     dataFrame,
     MessageCollection,
     SemanticRefCollection,
-} from "knowpro";
-import { createEmbeddingCache } from "knowledge-processor";
+} from "@typeagent/knowpro";
+import { createEmbeddingCache } from "@typeagent/knowledge-processor";
 import {
     tryCreateEmbeddingModel,
     TextEmbeddingModel,
 } from "@typeagent/aiclient";
 //import registerDebug from "debug";
 import sqlite from "better-sqlite3";
-import * as ms from "memory-storage";
+import * as ms from "@typeagent/memory-storage";
 import { ExposureTable, GeoTable } from "./tables.js";
 import { Image, ImageMeta } from "./imageMeta.js";
 import path from "node:path";

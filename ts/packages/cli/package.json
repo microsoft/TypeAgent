@@ -71,9 +71,9 @@
     "marked": "^15.0.0",
     "marked-terminal": "^7.3.0",
     "open": "^10.1.0",
-    "telemetry": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
     "ts-node": "^10.9.1",
-    "typechat-utils": "workspace:*"
+    "@typeagent/typechat-utils": "workspace:*"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

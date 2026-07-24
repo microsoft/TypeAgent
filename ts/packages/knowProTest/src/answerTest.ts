@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import { execGetAnswerRequest } from "./knowproCommands.js";
 import { BatchCallback } from "./types.js";
 import { getCommandArgs, queryError } from "./common.js";
@@ -13,7 +13,7 @@ import {
     generateTextEmbeddingsWithRetry,
     readJsonFile,
     writeJsonFile,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { getBatchFileLines } from "interactive-app";
 import { SimilarityComparison } from "./types.js";
 

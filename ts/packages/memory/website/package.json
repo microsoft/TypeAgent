@@ -1,7 +1,7 @@
 {
-  "name": "website-memory",
+  "name": "@typeagent/website-memory",
   "version": "0.0.1",
-  "private": true,
+  "private": false,
   "description": "Using structured RAG to implement website visit memory",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -35,7 +35,7 @@
     "@typeagent/common-utils": "workspace:*",
     "better-sqlite3": "12.6.2",
     "cheerio": "^1.0.0",
-    "conversation-memory": "workspace:*",
+    "@typeagent/conversation-memory": "workspace:*",
     "debug": "^4.4.0",
     "dompurify": "^3.4.12",
     "get-folder-size": "^5.0.0",
@@ -44,11 +44,11 @@
     "graphology-metrics": "^2.1.0",
     "graphology-types": "^0.24.7",
     "jsdom": "^28.1.0",
-    "knowledge-processor": "workspace:*",
-    "knowpro": "workspace:*",
-    "memory-storage": "workspace:*",
-    "telemetry": "workspace:*",
-    "typeagent": "workspace:*",
+    "@typeagent/knowledge-processor": "workspace:*",
+    "@typeagent/knowpro": "workspace:*",
+    "@typeagent/memory-storage": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
+    "@typeagent/agent-runtime": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {

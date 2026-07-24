@@ -13,7 +13,7 @@ import {
 } from "typechat";
 import * as answerSchema from "./answerResponseSchema.js";
 import * as contextSchema from "./answerContextSchema.js";
-import { asyncArray, getTopK, loadSchema, rewriteText } from "typeagent";
+import { asyncArray, getTopK, loadSchema, rewriteText } from "@typeagent/agent-runtime";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import {
     IConversation,

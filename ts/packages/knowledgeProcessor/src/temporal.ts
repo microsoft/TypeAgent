@@ -12,7 +12,7 @@ import {
     dateTime,
     ensureUniqueObjectName,
     //generateMonotonicName,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { intersectMultiple, setFrom } from "./setOperations.js";
 import { pathToFileURL } from "url";
 import path from "path";

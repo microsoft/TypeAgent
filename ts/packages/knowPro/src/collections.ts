@@ -6,7 +6,7 @@
  * COLLECTIONS USED BY QUERY PROCESSOR
  */
 
-import { collections, createTopNList } from "typeagent";
+import { collections, createTopNList } from "@typeagent/agent-runtime";
 import {
     IMessageCollection,
     ISemanticRefCollection,

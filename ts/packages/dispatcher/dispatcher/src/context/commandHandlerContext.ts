@@ -18,7 +18,7 @@ import {
     PromptLogger,
     createPromptLogger,
     PromptLoggerOptions,
-} from "telemetry";
+} from "@typeagent/telemetry";
 import { DevTrace } from "./devTrace.js";
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
@@ -56,9 +56,9 @@ import {
     AppAgentEvent,
     ActivityContext,
 } from "@typeagent/agent-sdk";
-import { Profiler } from "telemetry";
-import { conversation as Conversation } from "knowledge-processor";
-import { ConversationMemory } from "conversation-memory";
+import { Profiler } from "@typeagent/telemetry";
+import { conversation as Conversation } from "@typeagent/knowledge-processor";
+import { ConversationMemory } from "@typeagent/conversation-memory";
 import {
     AppAgentManager,
     AppAgentStateInitSettings,
@@ -123,7 +123,7 @@ import {
 } from "@typeagent/action-grammar";
 import fs from "node:fs";
 import { CosmosClient, PartitionKeyBuilder } from "@azure/cosmos";
-import { CosmosPartitionKeyBuilder } from "telemetry";
+import { CosmosPartitionKeyBuilder } from "@typeagent/telemetry";
 import { DefaultAzureCredential } from "@azure/identity";
 import { DisplayLog } from "../displayLog.js";
 import {

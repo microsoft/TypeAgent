@@ -6,8 +6,8 @@ import {
     loadIndexingStats,
     saveIndexingStats,
     TextBlock,
-} from "knowledge-processor";
-import { dateTime, getAbsolutePath, WorkQueue } from "typeagent";
+} from "@typeagent/knowledge-processor";
+import { dateTime, getAbsolutePath, WorkQueue } from "@typeagent/agent-runtime";
 import { KnowledgeProcessorWriter } from "../knowledgeProc/knowledgeProcessorWriter.js";
 import { existsSync } from "node:fs";
 import { error, Result, success } from "typechat";

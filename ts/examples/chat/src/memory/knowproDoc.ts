@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as cm from "conversation-memory";
+import * as cm from "@typeagent/conversation-memory";
 import path from "path";
 import fs from "fs";
 import { KnowProPrinter } from "./knowproPrinter.js";
@@ -17,7 +17,7 @@ import {
     ProgressBar,
     StopWatch,
 } from "interactive-app";
-import { changeFileExt, ensureDir, getFileName, readAllText } from "typeagent";
+import { changeFileExt, ensureDir, getFileName, readAllText } from "@typeagent/agent-runtime";
 import {
     createIndexingEventHandler,
     setKnowledgeExtractorV2,
@@ -26,7 +26,7 @@ import {
 import { argSourceFile } from "../common.js";
 import { getFileNameFromUrl, toUrl } from "examples-lib";
 import { getHtml } from "@typeagent/aiclient";
-import * as tp from "textpro";
+import * as tp from "@typeagent/textpro";
 import { pathToFileURL } from "url";
 import chalk from "chalk";
 

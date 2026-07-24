@@ -24,7 +24,7 @@ import {
     IncrementalJsonValueCallBack,
 } from "./incrementalJsonParser.js";
 import { addImagePromptContent, CachedImageWithDetails } from "./image.js";
-import { PromptLogger } from "telemetry";
+import { PromptLogger } from "@typeagent/telemetry";
 
 export type InlineTranslatorSchemaDef = {
     kind: "inline";

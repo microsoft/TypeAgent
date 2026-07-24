@@ -7,7 +7,7 @@
  * ===============================================
  */
 
-import { asyncArray, removeDir } from "typeagent";
+import { asyncArray, removeDir } from "@typeagent/agent-runtime";
 import {
     CommandHandler,
     CommandMetadata,
@@ -38,7 +38,7 @@ import {
     sampleFiles,
 } from "./common.js";
 import { createCommandTransformer } from "./commandTransformer.js";
-import { createPromptLogger } from "telemetry";
+import { createPromptLogger } from "@typeagent/telemetry";
 
 const promptLogger = createPromptLogger();
 

@@ -6,14 +6,14 @@ import {
     createSemanticIndexFolder,
     KnowledgeStore,
     TextIndexSettings,
-} from "knowledge-processor";
+} from "@typeagent/knowledge-processor";
 import { CodeBlock, StoredCodeBlock } from "./code.js";
 import {
     asyncArray,
     FileSystem,
     ObjectFolderSettings,
     ScoredItem,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import path from "path";
 import { TextEmbeddingModel } from "@typeagent/aiclient";
 import { CodeReviewer } from "./codeReviewer.js";

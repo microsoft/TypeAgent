@@ -211,7 +211,7 @@
     "@typeagent/websocket-utils": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "ansi_up": "^6.0.6",
-    "chat-ui": "workspace:*",
+    "@typeagent/chat-ui": "workspace:*",
     "debug": "^4.4.0",
     "dompurify": "^3.4.12",
     "isomorphic-ws": "^5.0.0",

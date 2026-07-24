@@ -8,7 +8,7 @@ import {
     generateEmbedding,
     ScoredItem,
     NameValue,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import {
     TextEmbeddingModel,
     tryCreateEmbeddingModel,

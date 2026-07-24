@@ -40,7 +40,7 @@
     "@typeagent/dispatcher-rpc": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "bootstrap": "^5.3.3",
-    "chat-ui": "workspace:*",
+    "@typeagent/chat-ui": "workspace:*",
     "cytoscape": "^3.32.0",
     "cytoscape-dagre": "^2.5.0",
     "dagre": "^0.8.5",

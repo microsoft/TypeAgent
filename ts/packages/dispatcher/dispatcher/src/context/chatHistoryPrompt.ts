@@ -3,7 +3,7 @@
 
 import { HistoryContext } from "agent-cache";
 import { Entity } from "@typeagent/agent-sdk";
-import { CachedImageWithDetails, TypeAgentJsonValidator } from "typechat-utils";
+import { CachedImageWithDetails, TypeAgentJsonValidator } from "@typeagent/typechat-utils";
 import { PromptSection } from "typechat";
 import { getLocationString } from "./geolocation.js";
 import type { UserContext } from "../translation/userContext.js";

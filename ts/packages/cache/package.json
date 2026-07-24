@@ -44,9 +44,9 @@
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "regexp.escape": "^2.0.1",
-    "telemetry": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
     "typechat": "^0.1.1",
-    "typechat-utils": "workspace:*"
+    "@typeagent/typechat-utils": "workspace:*"
   },
   "devDependencies": {
     "@types/async": "^3.2.24",

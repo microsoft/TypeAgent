@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { getDbPath } from "test-lib";
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import { SqliteStorageProvider } from "../src/sqlite/sqliteProvider.js";
 
 describe("memory.sqlite.dataFrame", () => {

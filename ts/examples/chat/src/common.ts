@@ -16,18 +16,18 @@ import {
     ItemIndexingStats,
     SourceTextBlock,
     TextBlock,
-} from "knowledge-processor";
+} from "@typeagent/knowledge-processor";
 import {
     asyncArray,
     ChatUserInterface,
     dateTime,
     getFileName,
     NameValue,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { KnowledgeProcessorWriter } from "./knowledgeProc/knowledgeProcessorWriter.js";
 import path from "path";
 import fs from "fs";
-import * as knowLib from "knowledge-processor";
+import * as knowLib from "@typeagent/knowledge-processor";
 
 /**
  * Models used by example code

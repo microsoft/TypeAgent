@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DateTimeRange } from "knowpro";
+import { DateTimeRange } from "@typeagent/knowpro";
 
 export type FacetTerm = {
     // the name of the facet, such as "color", "profession", "patent number"; "*" means match any facet name

@@ -14,11 +14,11 @@ import {
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { Result, success } from "typechat";
-import { ensureDir, getFileName, readAllText } from "typeagent";
-import * as kp from "knowpro";
+import { ensureDir, getFileName, readAllText } from "@typeagent/agent-runtime";
+import * as kp from "@typeagent/knowpro";
 import { createIndexingEventHandler } from "./knowproCommon.js";
 import chalk from "chalk";
-import { conversation as kpLib } from "knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { RestaurantDb } from "./restaurantDb.js";
 import { argDestFile, argSourceFile } from "../common.js";
 import path from "path";

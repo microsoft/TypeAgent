@@ -13,7 +13,7 @@ import {
     createConversationManager,
 } from "../conversation/conversationManager.js";
 import path from "path";
-import { createTypeChat, isDirectoryPath, promptLib } from "typeagent";
+import { createTypeChat, isDirectoryPath, promptLib } from "@typeagent/agent-runtime";
 import { createEntitySearchOptions } from "../conversation/entities.js";
 import { Image } from "./imageSchema.js";
 import {
@@ -31,7 +31,7 @@ import {
     ImagePromptDetails,
     isImageFileType,
     parseDateString,
-} from "typechat-utils";
+} from "@typeagent/typechat-utils";
 import { KnowledgeExtractor } from "../conversation/knowledge.js";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { createTypeScriptJsonValidator } from "typechat/ts";

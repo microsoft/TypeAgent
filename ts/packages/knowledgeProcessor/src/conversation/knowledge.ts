@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { async, asyncArray, collections, loadSchema } from "typeagent";
+import { async, asyncArray, collections, loadSchema } from "@typeagent/agent-runtime";
 import {
     Action,
     ConcreteEntity,

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import type * as sqlite from "better-sqlite3";
 import path from "path";
 import { SqliteCollection } from "./sqliteCollection.js";

@@ -3,8 +3,8 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./browserActions.mjs";
-import * as website from "website-memory";
-import * as kp from "knowpro";
+import * as website from "@typeagent/website-memory";
+import * as kp from "@typeagent/knowpro";
 import registerDebug from "debug";
 import {
     Entity,

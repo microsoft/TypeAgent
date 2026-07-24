@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { conversation as kpLib } from "knowledge-processor";
-import * as kp from "knowpro";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
+import * as kp from "@typeagent/knowpro";
 import { queue, QueueObject } from "async";
 import { parseTranscript } from "./transcript.js";
 import registerDebug from "debug";

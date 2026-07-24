@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-import * as kpLib from "knowledge-processor";
-import { IMessage } from "knowpro";
+import * as kpLib from "@typeagent/knowledge-processor";
+import { IMessage } from "@typeagent/knowpro";
 //import { WebVTTParser } from "webvtt-parser";
 import * as vtt from "webvtt-parser";
 

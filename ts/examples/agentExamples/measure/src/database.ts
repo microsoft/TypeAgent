@@ -5,7 +5,7 @@ import Database, * as sqlite from "better-sqlite3";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { removeFile } from "typeagent";
+import { removeFile } from "@typeagent/agent-runtime";
 
 function getDbOptions() {
     if (process?.versions?.electron !== undefined) {

@@ -15,16 +15,16 @@ import {
 } from "interactive-app";
 import { KnowproContext, searchDef } from "./knowproMemory.js";
 import { argChunkSize, argDestFile, argSourceFile } from "../common.js";
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import * as kpTest from "knowpro-test";
-import * as cm from "conversation-memory";
-import * as tp from "textpro";
+import * as cm from "@typeagent/conversation-memory";
+import * as tp from "@typeagent/textpro";
 import {
     changeFileExt,
     getAbsolutePath,
     getFileName,
     readAllText,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import chalk from "chalk";
 import { openai } from "@typeagent/aiclient";
 import {

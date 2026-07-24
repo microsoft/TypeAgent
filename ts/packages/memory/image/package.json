@@ -33,13 +33,13 @@
     "better-sqlite3": "12.6.2",
     "debug": "^4.4.0",
     "get-folder-size": "^5.0.0",
-    "knowledge-processor": "workspace:*",
-    "knowpro": "workspace:*",
-    "memory-storage": "workspace:*",
-    "telemetry": "workspace:*",
-    "typeagent": "workspace:*",
+    "@typeagent/knowledge-processor": "workspace:*",
+    "@typeagent/knowpro": "workspace:*",
+    "@typeagent/memory-storage": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
+    "@typeagent/agent-runtime": "workspace:*",
     "typechat": "^0.1.1",
-    "typechat-utils": "workspace:*"
+    "@typeagent/typechat-utils": "workspace:*"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.13",

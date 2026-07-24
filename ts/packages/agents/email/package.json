@@ -35,7 +35,7 @@
     "debug": "^4.4.0",
     "graph-utils": "workspace:*",
     "kp": "workspace:*",
-    "typeagent": "workspace:*"
+    "@typeagent/agent-runtime": "workspace:*"
   },
   "devDependencies": {
     "@typeagent/action-schema-compiler": "workspace:*",

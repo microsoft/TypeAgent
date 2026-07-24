@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type * as sqlite from "better-sqlite3";
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import { sql_makeInPlaceholders } from "./sqliteCommon.js";
 
 export class SqliteDataFrame implements kp.dataFrame.IDataFrame {

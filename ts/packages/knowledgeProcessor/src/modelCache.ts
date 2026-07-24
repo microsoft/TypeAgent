@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { TextEmbeddingModel } from "@typeagent/aiclient";
-import { collections } from "typeagent";
+import { collections } from "@typeagent/agent-runtime";
 import { error, Result, success } from "typechat";
 
 /**

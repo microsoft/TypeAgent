@@ -35,7 +35,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "debug": "^4.4.0",
-    "typeagent": "workspace:*"
+    "@typeagent/agent-runtime": "workspace:*"
   },
   "devDependencies": {
     "@typeagent/action-grammar-compiler": "workspace:*",

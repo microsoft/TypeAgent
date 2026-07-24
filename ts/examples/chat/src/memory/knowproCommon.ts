@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 import { CommandMetadata, NamedArgs, ProgressBar } from "interactive-app";
-import * as knowLib from "knowledge-processor";
-import * as kp from "knowpro";
-import * as cm from "conversation-memory";
+import * as knowLib from "@typeagent/knowledge-processor";
+import * as kp from "@typeagent/knowpro";
+import * as cm from "@typeagent/conversation-memory";
 import { MemoryConsoleWriter } from "../memoryWriter.js";
 import {
     addFileNameSuffixToPath,
@@ -12,7 +12,7 @@ import {
     keyValuesFromNamedArgs,
 } from "../common.js";
 import path from "path";
-import { dateTime, getFileName } from "typeagent";
+import { dateTime, getFileName } from "@typeagent/agent-runtime";
 import { TypeChatJsonTranslator } from "typechat";
 
 /**

@@ -30,7 +30,7 @@ import {
     sql_appendCondition,
     sql_makeInClause,
 } from "./database.js";
-import { dateTime, ensureDir } from "typeagent";
+import { dateTime, ensureDir } from "@typeagent/agent-runtime";
 
 export function instantiate(): AppAgent {
     return createMeasurementAgent();

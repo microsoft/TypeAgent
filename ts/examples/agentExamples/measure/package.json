@@ -30,7 +30,7 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "better-sqlite3": "12.6.2",
-    "typeagent": "workspace:*"
+    "@typeagent/agent-runtime": "workspace:*"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.13",

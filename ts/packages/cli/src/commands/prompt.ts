@@ -5,7 +5,7 @@ import { Args, Command, Flags } from "@oclif/core";
 import { openai, getChatModelNames } from "@typeagent/aiclient";
 import fs from "node:fs";
 import chalk from "chalk";
-import { createPromptLogger } from "telemetry";
+import { createPromptLogger } from "@typeagent/telemetry";
 
 const promptLogger = createPromptLogger();
 

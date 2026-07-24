@@ -18,7 +18,7 @@ import {
     LinkInfo,
     ActionInfo,
     StructuredDataCollection,
-} from "website-memory";
+} from "@typeagent/website-memory";
 
 // Re-export types for consumers
 export type {

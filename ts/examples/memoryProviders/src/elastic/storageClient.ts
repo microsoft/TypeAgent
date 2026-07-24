@@ -5,13 +5,13 @@ import {
     ObjectFolder,
     ObjectFolderSettings,
     createObjectFolder,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import {
     TemporalLogSettings,
     StorageProvider,
     createTemporalLog,
-} from "knowledge-processor";
-import * as knowLib from "knowledge-processor";
+} from "@typeagent/knowledge-processor";
+import * as knowLib from "@typeagent/knowledge-processor";
 import { createElasicClient, deleteIndeces } from "./common.js";
 import { createKeyValueIndex } from "./keyValueIndex.js";
 import { createTextIndex } from "./simplifiedTextIndex.js";

@@ -10,7 +10,7 @@ import {
     TextEmbeddingModel,
 } from "@typeagent/aiclient";
 import { TextBlock, TextBlockType } from "../src/text.js";
-import { readAllText, readJsonFile } from "typeagent";
+import { readAllText, readJsonFile } from "@typeagent/agent-runtime";
 import { splitIntoBlocks } from "../src/textChunker.js";
 import { SearchTermsActionV2 } from "../src/conversation/knowledgeTermSearchSchema2.js";
 import path from "path";

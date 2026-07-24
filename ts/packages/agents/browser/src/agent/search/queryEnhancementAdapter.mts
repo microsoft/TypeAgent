@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { SearchWebMemoriesRequest } from "../searchWebMemories.mjs";
-import { Website } from "website-memory";
+import { Website } from "@typeagent/website-memory";
 import { QueryAnalysis } from "./schema/queryAnalysis.mjs";
 import { QueryAnalyzer } from "./queryAnalyzer.mjs";
 import { MetadataRanker } from "./utils/metadataRanker.mjs";

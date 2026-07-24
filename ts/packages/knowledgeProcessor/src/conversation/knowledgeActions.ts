@@ -10,7 +10,7 @@ import {
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { SearchAction } from "./knowledgeSearchSchema.js";
-import { dateTime, loadSchema } from "typeagent";
+import { dateTime, loadSchema } from "@typeagent/agent-runtime";
 import { DateTime, DateTimeRange, DateVal, TimeVal } from "./dateTimeSchema.js";
 import { SearchTermsAction } from "./knowledgeTermSearchSchema.js";
 import { SearchTermsActionV2 } from "./knowledgeTermSearchSchema2.js";

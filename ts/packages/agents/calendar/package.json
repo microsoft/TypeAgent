@@ -37,7 +37,7 @@
     "date-fns": "^4.1.0",
     "debug": "^4.4.0",
     "graph-utils": "workspace:*",
-    "typechat-utils": "workspace:*"
+    "@typeagent/typechat-utils": "workspace:*"
   },
   "devDependencies": {
     "@typeagent/action-grammar-compiler": "workspace:*",

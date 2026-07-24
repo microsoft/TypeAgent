@@ -9,7 +9,7 @@ import {
     createVectorQuery,
     SimilarityAlgorithm,
 } from "./azSearchIndex.js";
-import { NormalizedEmbedding } from "typeagent";
+import { NormalizedEmbedding } from "@typeagent/agent-runtime";
 
 export interface TermDoc {
     termId: string;

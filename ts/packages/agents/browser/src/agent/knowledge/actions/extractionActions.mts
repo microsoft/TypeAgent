@@ -25,10 +25,10 @@ import {
     ExtractionMode,
     ExtractionInput,
     EXTRACTION_MODE_CONFIGS,
-} from "website-memory";
-import * as website from "website-memory";
+} from "@typeagent/website-memory";
+import * as website from "@typeagent/website-memory";
 import { BrowserKnowledgeExtractor } from "../browserKnowledgeExtractor.mjs";
-import { docPartsFromHtml } from "conversation-memory";
+import { docPartsFromHtml } from "@typeagent/conversation-memory";
 import { handleKnowledgeAction } from "./knowledgeActionRouter.mjs";
 import {
     generateDetailedKnowledgeCards,

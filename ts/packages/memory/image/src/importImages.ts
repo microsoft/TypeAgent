@@ -1,15 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createKnowledgeModel } from "knowpro";
-import { conversation as kpLib, image } from "knowledge-processor";
+import { createKnowledgeModel } from "@typeagent/knowpro";
+import { conversation as kpLib, image } from "@typeagent/knowledge-processor";
 import fs from "node:fs";
 import path from "node:path";
-import { isImageFileType } from "typechat-utils";
+import { isImageFileType } from "@typeagent/typechat-utils";
 import { ChatModel } from "@typeagent/aiclient";
-import { isDirectoryPath } from "typeagent";
+import { isDirectoryPath } from "@typeagent/agent-runtime";
 import registerDebug from "debug";
-import { ISemanticRefCollection } from "knowpro";
+import { ISemanticRefCollection } from "@typeagent/knowpro";
 import { ImageCollection } from "./imageCollection.js";
 import { Image, ImageMeta } from "./imageMeta.js";
 

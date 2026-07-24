@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 import * as sqlite from "better-sqlite3";
-import * as knowLib from "knowledge-processor";
-import { dateTime, NameValue } from "typeagent";
+import * as knowLib from "@typeagent/knowledge-processor";
+import { dateTime, NameValue } from "@typeagent/agent-runtime";
 import { getTypeSerializer, sql_makeInClause } from "./common.js";
-import { ValueType, ValueDataType } from "knowledge-processor";
+import { ValueType, ValueDataType } from "@typeagent/knowledge-processor";
 
 export type TemporalLogRow<T> = {
     logId: number;

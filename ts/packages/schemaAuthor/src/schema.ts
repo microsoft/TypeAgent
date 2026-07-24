@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TypeSchema } from "typeagent";
+import { TypeSchema } from "@typeagent/agent-runtime";
 import { NodeType, SchemaParser, SymbolNode } from "@typeagent/action-schema";
 
 export function loadActionSchema(

@@ -14,8 +14,8 @@ import {
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import * as kp from "knowpro";
-import * as cm from "conversation-memory";
+import * as kp from "@typeagent/knowpro";
+import * as cm from "@typeagent/conversation-memory";
 import * as kpTest from "knowpro-test";
 import fs from "fs";
 import path from "path";
@@ -25,7 +25,7 @@ import {
     sourcePathToMemoryIndexPath,
 } from "./knowproCommon.js";
 import { argDestFile, argToDate, copyFileToDir } from "../common.js";
-import { ensureDir, getAbsolutePath, getFileName } from "typeagent";
+import { ensureDir, getAbsolutePath, getFileName } from "@typeagent/agent-runtime";
 
 export type KnowproPodcastContext = {
     printer: KnowProPrinter;

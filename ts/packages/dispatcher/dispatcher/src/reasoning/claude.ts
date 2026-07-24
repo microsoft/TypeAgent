@@ -22,13 +22,13 @@ import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import {
     ConversationMessage,
     ConversationMessageMeta,
-} from "conversation-memory";
+} from "@typeagent/conversation-memory";
 import registerDebug from "debug";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { TypeAgentJsonValidator } from "typechat-utils";
+import { TypeAgentJsonValidator } from "@typeagent/typechat-utils";
 import { z } from "zod/v4";
 import { serializeEntityForPrompt } from "../context/chatHistoryPrompt.js";
 import {

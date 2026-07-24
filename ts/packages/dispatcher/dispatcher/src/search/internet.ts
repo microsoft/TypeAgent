@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import { LookupOptions, extractEntities } from "typeagent";
+import { LookupOptions, extractEntities } from "@typeagent/agent-runtime";
 import { ChatModel, openai } from "@typeagent/aiclient";
 import { ActionContext, ActionResult, Entity } from "@typeagent/agent-sdk";
 import {
@@ -11,7 +11,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
-import { agents, bingWithGrounding } from "azure-ai-foundry";
+import { agents, bingWithGrounding } from "@typeagent/azure-ai-foundry";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 
 /**

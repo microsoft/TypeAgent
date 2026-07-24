@@ -5,7 +5,7 @@ import * as path from "path";
 import { loadConfigSync } from "@typeagent/config";
 import * as fs from "fs";
 import { finished } from "stream/promises";
-import { createPromptLogger } from "telemetry";
+import { createPromptLogger } from "@typeagent/telemetry";
 
 const promptLogger = createPromptLogger();
 
@@ -16,7 +16,7 @@ import {
     openai,
 } from "@typeagent/aiclient";
 import { generateActionRequests } from "./actionGen.js";
-import { dedupeList, generateEmbeddingWithRetry, TypeSchema } from "typeagent";
+import { dedupeList, generateEmbeddingWithRetry, TypeSchema } from "@typeagent/agent-runtime";
 
 loadConfigSync();
 

@@ -17,8 +17,8 @@ import {
     ensureCommandResult,
     getRequestId,
 } from "../../commandHandlerContext.js";
-import { CachedImageWithDetails } from "typechat-utils";
-import { Logger } from "telemetry";
+import { CachedImageWithDetails } from "@typeagent/typechat-utils";
+import { Logger } from "@typeagent/telemetry";
 import { executeActions } from "../../../execute/actionHandlers.js";
 import {
     TypeAgentTranslator,

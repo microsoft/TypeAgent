@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { bingWithGrounding, extractorAgent, agents } from "azure-ai-foundry";
+import { bingWithGrounding, extractorAgent, agents } from "@typeagent/azure-ai-foundry";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import puppeteer, { TimeoutError } from "puppeteer";
 import chalk from "chalk";
-import { urlResolver } from "azure-ai-foundry";
+import { urlResolver } from "@typeagent/azure-ai-foundry";
 import {
     closeChrome,
     getRandomDelay,

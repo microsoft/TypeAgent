@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import * as kpTest from "knowpro-test";
 import {
     arg,
@@ -20,7 +20,7 @@ import {
 } from "interactive-app";
 import { parseFreeAndNamedArguments } from "../common.js";
 import { createSearchGroup, whenFilterFromNamedArgs } from "./knowproCommon.js";
-import { collections, ensureDir, isFilePath, readJsonFile } from "typeagent";
+import { collections, ensureDir, isFilePath, readJsonFile } from "@typeagent/agent-runtime";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
@@ -31,7 +31,7 @@ import { createKnowproPodcastCommands } from "./knowproPodcast.js";
 import { createKnowproTestCommands } from "./knowproTest.js";
 import { createKnowproDocMemoryCommands } from "./knowproDoc.js";
 import { Result } from "typechat";
-import { conversation as knowLib } from "knowledge-processor";
+import { conversation as knowLib } from "@typeagent/knowledge-processor";
 import { createKnowproKnowledgeCommands } from "./knowproKnowledge.js";
 import { createDiagnosticCommands } from "./knowproDiagnostics.js";
 import { createKnowproAzureCommands } from "./knowproAzSearch.js";
