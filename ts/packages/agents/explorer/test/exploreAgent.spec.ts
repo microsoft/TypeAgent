@@ -184,8 +184,16 @@ describe("agentic Code Mode explorer", () => {
         expect(systemPrompt).toMatch(
             /change-bearing source, test, configuration, or documentation block/i,
         );
+        expect(systemPrompt).not.toMatch(/strongest candidate/i);
+        expect(systemPrompt).not.toMatch(/narrow or omit/i);
         expect(systemPrompt).toMatch(
-            /Program-returned locations are advisory: narrow or omit them when the inspected evidence supports a more precise final answer/i,
+            /refinement may use the remaining shared repository-call budget/i,
+        );
+        expect(systemPrompt).toMatch(
+            /independently select every evidence-indicated change-bearing block/i,
+        );
+        expect(systemPrompt).toMatch(
+            /observationsTruncated.*true.*narrow.*follow-up/i,
         );
         expect(systemPrompt).toMatch(
             /A repo[.]read location is an evidence window, not automatically the final change-bearing block/i,
@@ -197,7 +205,7 @@ describe("agentic Code Mode explorer", () => {
             /Every submitted range must be wholly visible in a successful grep or read observation/i,
         );
         expect(systemPrompt).toMatch(
-            /refineRepository.*at most 4 repository calls/i,
+            /refineRepository.*remaining shared repository-call budget/i,
         );
         expect(adapter.configs[0]?.tools.map((tool) => tool.name)).toEqual([
             "execute_action",
@@ -1230,7 +1238,7 @@ describe("agentic Code Mode explorer", () => {
         );
     });
 
-    it("spends the reserved final call on exact-read recovery", async () => {
+    it("uses a naturally remaining shared call for exact-read recovery", async () => {
         const { repoRoot, telemetryFile } = await makeFixture();
         const adapter = scriptedAdapter(
             [
@@ -1254,7 +1262,7 @@ describe("agentic Code Mode explorer", () => {
             reasoningAdapter: adapter,
             modelName: "azure/gpt-5.6-luna",
             telemetryFile,
-            maxToolCalls: 2,
+            maxToolCalls: 3,
         });
 
         await expect(
@@ -1272,7 +1280,7 @@ describe("agentic Code Mode explorer", () => {
             latestInvocation(await readTelemetry(telemetryFile)),
         ).toMatchObject({
             status: "completed",
-            toolTrace: { totalCalls: 2 },
+            toolTrace: { totalCalls: 3 },
             actionAttempts: [
                 expect.objectContaining({
                     actionName: "discoverRepository",

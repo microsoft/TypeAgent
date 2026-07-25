@@ -55,6 +55,12 @@ describe("Explorer action dispatcher", () => {
             expect(discoveryPayload).not.toHaveProperty("observationRanges");
             expect(discoveryPayload).not.toHaveProperty("citableRanges");
             expect(discoveryPayload).not.toHaveProperty("programResult.data");
+            expect(discoveryPayload.nextAction).not.toMatch(
+                /strongest candidate/i,
+            );
+            expect(discoveryPayload.nextAction).toMatch(
+                /every evidence-indicated candidate/i,
+            );
 
             const refinement = await runtime.executeAction(
                 "explorer",
@@ -64,6 +70,7 @@ describe("Explorer action dispatcher", () => {
             expect(refinement).toMatchObject({ isError: false });
             const refinementPayload = JSON.parse(refinement.text) as {
                 remainingProgramExecutions: number;
+                nextAction: string;
                 observations: Array<{
                     source: "grep" | "read";
                     path: string;
@@ -72,6 +79,9 @@ describe("Explorer action dispatcher", () => {
                 }>;
             };
             expect(refinementPayload.remainingProgramExecutions).toBe(0);
+            expect(refinementPayload.nextAction).not.toMatch(
+                /narrowed|omitted/i,
+            );
             expect(refinementPayload.observations[0]).toMatchObject({
                 path: "src/alpha.ts",
                 startLine: 1,
@@ -261,6 +271,38 @@ describe("Explorer action dispatcher", () => {
                     truncated: true,
                 }),
             ]);
+        } finally {
+            await runtime.close();
+        }
+    });
+
+    it("keeps every short grep observation that fits the action result", async () => {
+        const runtime = await createExplorerActionDispatcher(
+            await createSession(),
+        );
+        try {
+            const result = await runtime.executeAction(
+                "explorer",
+                "discoverRepository",
+                { program: eightyMatchGrepProgram() },
+            );
+            expect(result).toMatchObject({ isError: false });
+            const payload = JSON.parse(result.text) as {
+                observationsTruncated: boolean;
+                observations: Array<{ lines: string[] }>;
+            };
+            expect(payload.observationsTruncated).toBe(false);
+            expect(payload.observations).toHaveLength(80);
+            expect(
+                payload.observations.flatMap(
+                    (observation) => observation.lines,
+                ),
+            ).toEqual(
+                expect.arrayContaining([
+                    expect.stringContaining("wide-line-1"),
+                    expect.stringContaining("wide-line-80"),
+                ]),
+            );
         } finally {
             await runtime.close();
         }
@@ -479,6 +521,27 @@ describe("Explorer action dispatcher", () => {
         }
     });
 
+    it("makes unused discovery calls available to refinement", async () => {
+        const session = await createSession();
+        const runtime = await createExplorerActionDispatcher(session);
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: grepProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: fiveReadRefinementProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+            expect(session.snapshot().toolTrace.totalCalls).toBe(6);
+        } finally {
+            await runtime.close();
+        }
+    });
+
     it("clamps oversized refinement reads to 200 lines", async () => {
         const session = await createSession();
         const runtime = await createExplorerActionDispatcher(session);
@@ -576,6 +639,7 @@ describe("Explorer action dispatcher", () => {
             );
             expect(refinement).toMatchObject({ isError: false });
             const payload = JSON.parse(refinement.text) as {
+                observationsTruncated: boolean;
                 observations: Array<{
                     path: string;
                     startLine: number;
@@ -599,6 +663,41 @@ describe("Explorer action dispatcher", () => {
                 );
                 expect(leading?.endLine).toBeGreaterThanOrEqual(startLine + 31);
             }
+            expect(payload.observationsTruncated).toBe(true);
+        } finally {
+            await runtime.close();
+        }
+    });
+
+    it("keeps exact reads ahead of broad grep evidence in a bounded result", async () => {
+        const runtime = await createExplorerActionDispatcher(
+            await createSession(),
+        );
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: grepProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            const refinement = await runtime.executeAction(
+                "explorer",
+                "refineRepository",
+                { program: broadGrepThenExactReadProgram() },
+            );
+            expect(refinement).toMatchObject({ isError: false });
+            const payload = JSON.parse(refinement.text) as {
+                observationsTruncated: boolean;
+                observations: Array<{
+                    source: "grep" | "read";
+                    path: string;
+                }>;
+            };
+            expect(payload.observationsTruncated).toBe(true);
+            expect(payload.observations[0]).toMatchObject({
+                source: "read",
+                path: "src/alpha.ts",
+            });
         } finally {
             await runtime.close();
         }
@@ -2198,6 +2297,33 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
     await repo.grep("target-marker", { path: "src/large.ts", literal: true, maxMatches: 1 });
     await repo.grep("line-", { path: "src/large.ts", literal: true, maxMatches: 40 });
     return { success: true, message: params.query };
+}`;
+}
+
+function eightyMatchGrepProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.grep("wide-line", { path: "src/wide.ts", literal: true, maxMatches: 80 });
+    return { success: true, message: params.query };
+}`;
+}
+
+function fiveReadRefinementProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    for (let offset = 0; offset < 5; offset++) {
+        await repo.read("src/wide.ts", { offset, limit: 1 });
+    }
+    return { success: true, message: params.query };
+}`;
+}
+
+function broadGrepThenExactReadProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.grep("wide-line", { path: "src/wide.ts", literal: true, maxMatches: 200 });
+    const exact = await repo.read("src/alpha.ts", { offset: 0, limit: 3 });
+    return { success: true, locations: exact.location ? [exact.location] : [] };
 }`;
 }
 
