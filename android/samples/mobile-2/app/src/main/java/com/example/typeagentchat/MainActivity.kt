@@ -1,9 +1,19 @@
 package com.example.typeagentchat
 
+import android.Manifest
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,8 +30,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -39,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -46,6 +61,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.example.typeagentchat.ui.theme.TypeAgentChatTheme
 
 class MainActivity : ComponentActivity() {
@@ -91,6 +107,14 @@ private fun ChatApp(
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
     val canSend = connectionStatus.state == ConnectionStatus.State.CONNECTED && inputText.isNotBlank()
+    val voiceInput = rememberVoiceInputController(
+        onRecognizedText = { recognizedText ->
+            inputText = mergeSpeechInputText(
+                currentText = inputText,
+                recognizedText = recognizedText
+            )
+        }
+    )
 
     fun submitMessage() {
         if (!canSend) {
@@ -163,45 +187,204 @@ private fun ChatApp(
                 }
             }
 
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                tonalElevation = 4.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    OutlinedTextField(
-                        value = inputText,
-                        onValueChange = { inputText = it },
-                        modifier = Modifier.weight(1f),
-                        label = { Text("Message") },
-                        placeholder = {
-                            Text(
-                                if (connectionStatus.state == ConnectionStatus.State.CONNECTED) {
-                                    "Ask TypeAgent something"
-                                } else {
-                                    "Waiting for connection"
-                                }
-                            )
-                        },
-                        maxLines = 4,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = { submitMessage() })
-                    )
+            ChatInputBar(
+                inputText = inputText,
+                onInputTextChange = { inputText = it },
+                isConnected = connectionStatus.state == ConnectionStatus.State.CONNECTED,
+                canSend = canSend,
+                onSend = { submitMessage() },
+                isVoiceInputAvailable = voiceInput.isAvailable,
+                onVoiceInputClick = voiceInput.onStartRequested
+            )
+        }
+    }
+}
 
-                    Button(
-                        onClick = { submitMessage() },
-                        enabled = canSend,
-                        modifier = Modifier.height(56.dp)
-                    ) {
-                        Text("Send")
-                    }
+private data class VoiceInputController(
+    val isAvailable: Boolean,
+    val onStartRequested: () -> Unit
+)
+
+@Composable
+private fun rememberVoiceInputController(
+    onRecognizedText: (String) -> Unit
+): VoiceInputController {
+    val context = LocalContext.current
+    val isSpeechAvailable = remember { SpeechRecognizer.isRecognitionAvailable(context) }
+    var hasRecordAudioPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val speechLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) {
+            return@rememberLauncherForActivityResult
+        }
+        val recognizedText = result.data
+            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            ?.firstOrNull()
+        if (!recognizedText.isNullOrBlank()) {
+            onRecognizedText(recognizedText)
+        }
+    }
+
+    fun startVoiceInput() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to TypeAgent")
+        }
+        try {
+            speechLauncher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(
+                context,
+                "No speech recognition app is available on this device.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    val requestAudioPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasRecordAudioPermission = granted
+        if (granted) {
+            startVoiceInput()
+        } else {
+            Toast.makeText(
+                context,
+                "Microphone permission is required for voice input.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    return remember(
+        isSpeechAvailable,
+        hasRecordAudioPermission,
+        requestAudioPermissionLauncher
+    ) {
+        VoiceInputController(
+            isAvailable = isSpeechAvailable,
+            onStartRequested = {
+                if (!isSpeechAvailable) {
+                    Toast.makeText(
+                        context,
+                        "Voice input is not available on this device.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@VoiceInputController
                 }
+                hasRecordAudioPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+                if (hasRecordAudioPermission) {
+                    startVoiceInput()
+                } else {
+                    requestAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            }
+        )
+    }
+}
+
+private fun mergeSpeechInputText(
+    currentText: String,
+    recognizedText: String
+): String {
+    return if (currentText.isBlank()) {
+        recognizedText
+    } else {
+        "$currentText $recognizedText"
+    }
+}
+
+@Composable
+private fun ChatInputBar(
+    inputText: String,
+    onInputTextChange: (String) -> Unit,
+    isConnected: Boolean,
+    canSend: Boolean,
+    onSend: () -> Unit,
+    isVoiceInputAvailable: Boolean,
+    onVoiceInputClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 4.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                OutlinedTextField(
+                    value = inputText,
+                    onValueChange = onInputTextChange,
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Message") },
+                    placeholder = {
+                        Text(
+                            if (isConnected) {
+                                "Ask TypeAgent something"
+                            } else {
+                                "Waiting for connection"
+                            }
+                        )
+                    },
+                    maxLines = 4,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { onSend() })
+                )
+
+                IconButton(
+                    onClick = onVoiceInputClick,
+                    enabled = isVoiceInputAvailable,
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Mic,
+                        contentDescription = if (isVoiceInputAvailable) {
+                            "Voice input"
+                        } else {
+                            "Voice input unavailable"
+                        },
+                        tint = if (isVoiceInputAvailable) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+
+                Button(
+                    onClick = onSend,
+                    enabled = canSend,
+                    modifier = Modifier.height(56.dp)
+                ) {
+                    Text("Send")
+                }
+            }
+
+            if (!isVoiceInputAvailable) {
+                Text(
+                    text = "Voice input is unavailable on this device.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
