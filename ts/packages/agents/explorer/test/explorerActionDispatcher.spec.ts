@@ -126,14 +126,14 @@ describe("Explorer action dispatcher", () => {
         }
     });
 
-    it("uses a minimal all-or-nothing grounded localization contract", async () => {
+    it("uses read-grounded final locations", async () => {
         const session = await createSession();
         const runtime = await createExplorerActionDispatcher(session);
         try {
             const schema = await runtime.discoverActions("explorer");
             expect(schema).toContain("locations:");
             expect(schema).not.toContain("citations:");
-            expect(schema).not.toContain("reason:");
+            expect(schema).not.toContain("exclusions?:");
 
             const discovery = await runtime.executeAction(
                 "explorer",
@@ -656,6 +656,140 @@ describe("Explorer action dispatcher", () => {
         }
     });
 
+    it("preserves every returned candidate range that fits the shared refinement budget", async () => {
+        const runtime = await createExplorerActionDispatcher(
+            await createSession(),
+        );
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: grepProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            const refinement = await runtime.executeAction(
+                "explorer",
+                "refineRepository",
+                { program: multipleBroadCandidatesProgram() },
+            );
+            expect(refinement).toMatchObject({ isError: false });
+            const payload = JSON.parse(refinement.text) as {
+                observations: Array<{
+                    path: string;
+                    startLine: number;
+                    endLine: number;
+                }>;
+            };
+            expect(
+                payload.observations.some(
+                    (observation) =>
+                        observation.path === "src/wide.ts" &&
+                        observation.startLine <= 1 &&
+                        observation.endLine >= 150,
+                ),
+            ).toBe(true);
+            expect(
+                payload.observations.some(
+                    (observation) =>
+                        observation.path === "src/wide.ts" &&
+                        observation.startLine <= 201 &&
+                        observation.endLine >= 350,
+                ),
+            ).toBe(true);
+            await expect(
+                runtime.executeAction("explorer", "submitExploration", {
+                    locations: [
+                        {
+                            path: "src/wide.ts",
+                            startLine: 1,
+                            endLine: 150,
+                        },
+                        {
+                            path: "src/wide.ts",
+                            startLine: 201,
+                            endLine: 350,
+                        },
+                    ],
+                }),
+            ).resolves.toMatchObject({
+                isError: false,
+                text: "src/wide.ts:1-150\nsrc/wide.ts:201-350",
+            });
+        } finally {
+            await runtime.close();
+        }
+    });
+
+    it("accepts a refinement candidate already visible in discovery grounding", async () => {
+        const runtime = await createExplorerActionDispatcher(
+            await createSession(),
+        );
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: groundedDiscoveryProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: confirmPriorGroundingProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+            await expect(
+                runtime.executeAction("explorer", "submitExploration", {
+                    locations: [
+                        {
+                            path: "src/wide.ts",
+                            startLine: 1,
+                            endLine: 100,
+                        },
+                    ],
+                }),
+            ).resolves.toMatchObject({
+                isError: false,
+                text: "src/wide.ts:1-100",
+            });
+        } finally {
+            await runtime.close();
+        }
+    });
+
+    it("allows final submission to narrow and omit advisory refinement candidates", async () => {
+        const runtime = await createExplorerActionDispatcher(
+            await createSession(),
+        );
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: grepProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: multipleBroadCandidatesProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            await expect(
+                runtime.executeAction("explorer", "submitExploration", {
+                    locations: [
+                        {
+                            path: "src/wide.ts",
+                            startLine: 100,
+                            endLine: 110,
+                        },
+                    ],
+                }),
+            ).resolves.toMatchObject({
+                isError: false,
+                text: "src/wide.ts:100-110",
+            });
+        } finally {
+            await runtime.close();
+        }
+    });
+
     it("rejects partially visible candidates and normalizes a bounded retry", async () => {
         const session = await createSession();
         const runtime = await createExplorerActionDispatcher(session);
@@ -704,7 +838,7 @@ describe("Explorer action dispatcher", () => {
         }
     });
 
-    it("reserves one repository call after a bounded candidate visibility failure", async () => {
+    it("uses a naturally remaining repository call after a candidate visibility failure", async () => {
         const session = await createSession();
         const runtime = await createExplorerActionDispatcher(session);
         try {
@@ -716,7 +850,7 @@ describe("Explorer action dispatcher", () => {
 
             await expect(
                 runtime.executeAction("explorer", "refineRepository", {
-                    program: fourReadOversizedCandidateProgram(),
+                    program: threeReadOversizedCandidateProgram(),
                 }),
             ).resolves.toMatchObject({
                 isError: true,
@@ -729,6 +863,41 @@ describe("Explorer action dispatcher", () => {
                     program: normalizedCandidateReadProgram(),
                 }),
             ).resolves.toMatchObject({ isError: false });
+            expect(session.snapshot().toolTrace.totalCalls).toBe(8);
+        } finally {
+            await runtime.close();
+        }
+    });
+
+    it("reuses validated refinement reads when candidate visibility exhausts the call budget", async () => {
+        const session = await createSession();
+        const runtime = await createExplorerActionDispatcher(session);
+        try {
+            await expect(
+                runtime.executeAction("explorer", "discoverRepository", {
+                    program: fourCallDiscoveryProgram(),
+                }),
+            ).resolves.toMatchObject({ isError: false });
+
+            await expect(
+                runtime.executeAction("explorer", "refineRepository", {
+                    program: fourCallOversizedCandidateProgram(),
+                }),
+            ).resolves.toMatchObject({
+                isError: true,
+                text: expect.stringMatching(/fully visible.*smaller exact/i),
+            });
+            expect(session.snapshot().toolTrace.totalCalls).toBe(8);
+
+            const recovery = await runtime.executeAction(
+                "explorer",
+                "refineRepository",
+                { program: normalizedCandidateWithoutReadProgram() },
+            );
+            expect(recovery).toMatchObject({ isError: false });
+            expect(JSON.parse(recovery.text).programResult.locations).toEqual([
+                { path: "src/wide.ts", startLine: 100, endLine: 110 },
+            ]);
             expect(session.snapshot().toolTrace.totalCalls).toBe(8);
         } finally {
             await runtime.close();
@@ -1872,6 +2041,41 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
 }`;
 }
 
+function multipleBroadCandidatesProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.read("src/wide.ts", { offset: 0, limit: 200 });
+    await repo.read("src/wide.ts", { offset: 200, limit: 200 });
+    await repo.read("src/wide.ts", { offset: 400, limit: 200 });
+    return {
+        success: true,
+        locations: [
+            { path: "src/wide.ts", startLine: 1, endLine: 150 },
+            { path: "src/wide.ts", startLine: 201, endLine: 350 },
+        ],
+    };
+}`;
+}
+
+function groundedDiscoveryProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.read("src/wide.ts", { offset: 0, limit: 100 });
+    return { success: true, locations: [] };
+}`;
+}
+
+function confirmPriorGroundingProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.read("src/wide.ts", { offset: 49, limit: 1 });
+    return {
+        success: true,
+        locations: [{ path: "src/wide.ts", startLine: 1, endLine: 100 }],
+    };
+}`;
+}
+
 function oversizedCandidateCompactedReadsProgram(): string {
     return `
 async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
@@ -1880,21 +2084,34 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
     await repo.read("src/wide.ts", { offset: 400, limit: 200 });
     return {
         success: true,
-        locations: first.location ? [{ path: first.location.path, startLine: 1, endLine: 200 }] : [],
+        locations: first.location ? [{ path: first.location.path, startLine: 1, endLine: 500 }] : [],
     };
 }`;
 }
 
-function fourReadOversizedCandidateProgram(): string {
+function threeReadOversizedCandidateProgram(): string {
     return `
 async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
     const first = await repo.read("src/wide.ts", { offset: 0, limit: 200 });
     await repo.read("src/wide.ts", { offset: 200, limit: 200 });
     await repo.read("src/wide.ts", { offset: 400, limit: 200 });
-    await repo.read("src/alpha.ts", { offset: 0, limit: 3 });
     return {
         success: true,
-        locations: first.location ? [{ path: first.location.path, startLine: 1, endLine: 200 }] : [],
+        locations: first.location ? [{ path: first.location.path, startLine: 1, endLine: 500 }] : [],
+    };
+}`;
+}
+
+function fourCallOversizedCandidateProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    await repo.grep("wide-line", { path: "src/wide.ts", literal: true, maxMatches: 1 });
+    await repo.read("src/wide.ts", { offset: 0, limit: 200 });
+    await repo.read("src/wide.ts", { offset: 200, limit: 200 });
+    await repo.read("src/wide.ts", { offset: 400, limit: 200 });
+    return {
+        success: true,
+        locations: [{ path: "src/wide.ts", startLine: 1, endLine: 500 }],
     };
 }`;
 }
@@ -1906,6 +2123,16 @@ async function execute(repo: RepositoryApi, params: ExploreParams): Promise<Expl
     return {
         success: true,
         locations: [{ path: "./src/wide.ts", startLine: 100, endLine: 110 }],
+    };
+}`;
+}
+
+function normalizedCandidateWithoutReadProgram(): string {
+    return `
+async function execute(repo: RepositoryApi, params: ExploreParams): Promise<ExploreProgramResult> {
+    return {
+        success: true,
+        locations: [{ path: "src/wide.ts", startLine: 100, endLine: 110 }],
     };
 }`;
 }

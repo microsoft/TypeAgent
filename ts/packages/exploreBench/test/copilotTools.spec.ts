@@ -78,6 +78,11 @@ test("creates traced SDK tools and uses Copilot's packaged ripgrep", async () =>
             ),
             "README.md:2: needle here",
         );
+        assert.deepEqual(trace[0].readRange, {
+            path: "README.md",
+            startLine: 2,
+            endLine: 2,
+        });
 
         const grep = requiredTool(tools, "grep");
         const oldPath = process.env.PATH;

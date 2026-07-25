@@ -279,12 +279,15 @@ async function traced<T>(
     budget.executed += 1;
     try {
         const value = await run();
+        const readRange =
+            tool === "read" ? readRangeFromOutput(args, value) : undefined;
         trace.push({
             tool,
             args: boundTraceValue(args),
             ok: true,
             durationMs: Date.now() - start,
             output: String(value).slice(0, MAX_TRACE_OUTPUT),
+            ...(readRange ? { readRange } : {}),
         });
         return value;
     } catch (error) {
@@ -298,6 +301,45 @@ async function traced<T>(
         });
         throw error;
     }
+}
+
+function readRangeFromOutput(
+    args: unknown,
+    value: unknown,
+): CopilotToolCallTrace["readRange"] {
+    const pathValue =
+        args !== null &&
+        typeof args === "object" &&
+        !Array.isArray(args) &&
+        typeof (args as Record<string, unknown>).path === "string"
+            ? String((args as Record<string, unknown>).path)
+            : "";
+    if (!pathValue || typeof value !== "string") {
+        return undefined;
+    }
+    const prefix = `${pathValue}:`;
+    const lines = value
+        .split(/\r?\n/u)
+        .filter((line) => line.startsWith(prefix))
+        .map((line) => /^(\d+):/u.exec(line.slice(prefix.length)))
+        .filter((match): match is RegExpExecArray => match !== null)
+        .map((match) => Number(match[1]));
+    if (
+        lines.length === 0 ||
+        lines.some(
+            (line, index) =>
+                !Number.isSafeInteger(line) ||
+                line < 1 ||
+                (index > 0 && line !== lines[index - 1] + 1),
+        )
+    ) {
+        return undefined;
+    }
+    return {
+        path: pathValue,
+        startLine: lines[0],
+        endLine: lines.at(-1)!,
+    };
 }
 
 function boundTraceValue(value: unknown, depth = 0): unknown {

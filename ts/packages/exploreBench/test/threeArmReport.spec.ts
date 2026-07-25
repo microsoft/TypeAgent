@@ -324,7 +324,7 @@ function result(
           : 300,
 ): RunResult {
     const finalAnswer =
-        "<final_answer>\npkg/a.py:1 reason\npkg/other.py:2 extra\n</final_answer>";
+        "<final_answer>\npkg/a.py:1\npkg/other.py:2\n</final_answer>";
     const grepCall: TypeAgentToolTrace["calls"][number] = {
         tool: "grep",
         durationMs: 1,
@@ -556,10 +556,29 @@ function result(
                       started: true,
                       completed: true,
                       success: true,
+                      arguments: { prompt: `find bug ${taskId}` },
+                      resultContent: finalAnswer,
                   },
               ],
         mcpToolTrace: [],
-        toolTrace: [],
+        toolTrace: typeAgent
+            ? []
+            : [
+                  {
+                      tool: "read",
+                      args: { path: "pkg/a.py", offset: 1, limit: 1 },
+                      ok: true,
+                      durationMs: 1,
+                      output: "pkg/a.py:1: old",
+                  },
+                  {
+                      tool: "read",
+                      args: { path: "pkg/other.py", offset: 2, limit: 1 },
+                      ok: true,
+                      durationMs: 1,
+                      output: "pkg/other.py:2: old",
+                  },
+              ],
         events: [],
     };
 }

@@ -99,7 +99,7 @@ function result(runId: string, overrides: Partial<RunResult> = {}): RunResult {
         durationMs: 1,
         attempt: 1,
         maxAttempts: 2,
-        finalAnswer: "<final_answer>\npkg/a.py:1 reason\n</final_answer>",
+        finalAnswer: "<final_answer>\npkg/a.py:1\n</final_answer>",
         score: scoreSwebench("", ""),
         mcpAdopted: false,
         subagentAdopted: true,
@@ -119,10 +119,20 @@ function result(runId: string, overrides: Partial<RunResult> = {}): RunResult {
                 started: true,
                 completed: true,
                 success: true,
+                arguments: { prompt: task.query },
+                resultContent: "<final_answer>\npkg/a.py:1\n</final_answer>",
             },
         ],
         mcpToolTrace: [],
-        toolTrace: [],
+        toolTrace: [
+            {
+                tool: "read",
+                args: { path: "pkg/a.py", offset: 1, limit: 1 },
+                ok: true,
+                durationMs: 1,
+                output: "pkg/a.py:1: line 1",
+            },
+        ],
         events: [],
         ...overrides,
     };
@@ -176,12 +186,12 @@ test("rejects revisionless caches instead of assuming current compatibility", ()
     );
 });
 
-test("rejects frozen revision-22 cache after the post-run runtime change", () => {
-    assert.equal(CACHE_COMPATIBILITY_REVISION, 23);
+test("rejects frozen revision-26 cache after clarifying read-window precision", () => {
+    assert.equal(CACHE_COMPATIBILITY_REVISION, 27);
     assert.equal(
         cacheManifestsCompatible(
-            manifest("frozen-revision-22", {
-                cacheCompatibilityRevision: 22,
+            manifest("frozen-revision-26", {
+                cacheCompatibilityRevision: 26,
             }),
             manifest("direct-typeagent"),
         ),
@@ -296,6 +306,43 @@ test("does not replace target attempts or reuse failed and mismatched rows", () 
     }
 });
 
+test("skips a compatible baseline cache that fails current integrity", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "result-cache-"));
+    const runsDir = path.join(directory, "runs");
+    const sourceOutput = path.join(runsDir, "source", "results.jsonl");
+    const targetOutput = path.join(runsDir, "target", "results.jsonl");
+    const sourceManifest = manifest("source", { output: sourceOutput });
+    const targetManifest = manifest("target", { output: targetOutput });
+    const completeQuery =
+        "UNIQUE-PREFIX\n<problem_statement>find bug</problem_statement>\nUNIQUE-SUFFIX";
+    const completeTask = { ...task, query: completeQuery };
+    const invalid = result("source", { query: completeQuery });
+    invalid.explorerSubagentTrace[0].arguments = { prompt: "find bug" };
+
+    try {
+        await mkdir(path.dirname(sourceOutput), { recursive: true });
+        await writeFile(
+            path.join(path.dirname(sourceOutput), "manifest.json"),
+            JSON.stringify(sourceManifest),
+        );
+        await writeFile(sourceOutput, `${JSON.stringify(invalid)}\n`);
+
+        const summary = await seedResultsFromPriorRuns({
+            runsDir,
+            targetManifest,
+            tasks: [completeTask],
+            output: targetOutput,
+        });
+
+        assert.equal(summary.importedKeys, 0);
+        assert.equal(summary.importedRows, 0);
+        assert.equal(summary.warnings.length, 1);
+        assert.match(summary.warnings[0], /complete benchmark query/i);
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+});
+
 test("imports the legacy TypeAgent variant alias without rewriting its source", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "result-cache-"));
     const runsDir = path.join(directory, "runs");
@@ -358,6 +405,7 @@ test("imports the legacy TypeAgent variant alias without rewriting its source", 
         mcpServerReady: false,
         mcpAdvertisedTools: [],
         mcpToolTrace: [],
+        toolTrace: [],
         typeAgentToolTrace: toolTrace,
         dispatcherUsage: {
             requestCount: 0,

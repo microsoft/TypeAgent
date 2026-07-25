@@ -20,6 +20,11 @@ import {
     createCopilotExplorationTools,
     type CopilotExplorationTools,
 } from "./copilotTools.js";
+import {
+    baselineAnswerValidationError,
+    baselineDelegatedQueryValidationError,
+    baselineRelayValidationError,
+} from "./baselineValidation.js";
 import { readEnvFile, redact } from "./io.js";
 import { parseFinalAnswer } from "./score.js";
 import type {
@@ -35,6 +40,12 @@ import type {
 } from "./types.js";
 import { BENCHMARK_TOOL_CALL_LIMIT } from "./types.js";
 
+export {
+    baselineAnswerValidationError,
+    baselineDelegatedQueryValidationError,
+    baselineRelayValidationError,
+};
+
 // Copilot uses modelId only for its built-in agent behavior, tool, and token
 // limit profile. wireModel below is the exact Luna/Terra/Sol route sent to
 // LiteLLM for inference.
@@ -48,19 +59,19 @@ Your final response MUST be only this XML block, with no markdown and no prose o
 path/to/file.ext:10-20
 path/to/other.ext:5
 </final_answer>
-Return at most six repository-relative file paths with exact line or line ranges most likely needing changes.
+Return at most six repository-relative file paths with exact line or line ranges most likely needing changes. Include every evidence-indicated change-bearing source, test, configuration, or documentation block, preserving complete relevant blocks without adding unrelated surrounding lines.
 If evidence is weak, still output the closest file:line locations inside the block.`;
 
 export function buildBenchmarkSystemMessage(): string {
     const requiredPath = `You are the default main agent in an evaluation benchmark.
-Your first assistant action MUST delegate to the \`explorer\` subagent with the \`task\` tool, and you must complete exactly one successful delegation. Provide every required task argument: \`description\`, \`prompt\`, \`agent_type: "explorer"\`, \`name\`, and \`mode: "sync"\`. If the task schema is rejected before the subagent starts, correct it and retry. Do not request another tool or include prose in the first action. Pass the complete query and problem statement to the subagent, including reproduction details, exact identifiers, errors, and historical line references.
+Your first assistant action MUST delegate to the \`explorer\` subagent with the \`task\` tool, and you must complete exactly one successful delegation. Provide every required task argument: \`description\`, \`prompt\`, \`agent_type: "explorer"\`, \`name\`, and \`mode: "sync"\`. If the task schema is rejected before the subagent starts, correct it and retry. Do not request another tool or include prose in the first action. Copy the complete user \`<query>\` block exactly into the task prompt without paraphrasing, summarizing, omitting, or reordering any content. You may add Explorer instructions before or after that exact block.
 Wait for the explorer subagent to finish. Do not inspect the repository yourself. Then return only the explorer's repository locations in the required output format.`;
     return `${requiredPath}\n${benchmarkOutputContract}`;
 }
 
 export function buildBenchmarkPrompt(query: string): string {
     const instruction = "Use the explorer subagent.";
-    return `${instruction}\n\n<query>\n${query}\n</query>\n\nRemember: final response only, exactly <final_answer> path:line locations </final_answer>. Do not include analysis prose outside the block.`;
+    return `${instruction}\n\n<query>\n${query}\n</query>\n\nCopy the complete <query> block exactly into the explorer task prompt; do not paraphrase or omit any content. Remember: final response only, exactly <final_answer> path:line locations </final_answer>. Do not include analysis prose outside the block.`;
 }
 
 export interface CopilotHarnessOptions {
@@ -247,6 +258,7 @@ export async function runCopilot(
 
         session = await client.createSession({
             model: options.model,
+            reasoningEffort: "medium",
             provider: {
                 type: "openai",
                 baseUrl: options.providerBaseUrl,
@@ -367,8 +379,24 @@ export async function runCopilot(
     }
 
     const inspection = inspectCopilotToolTrace(events);
-    const treatmentError = treatmentValidationError(inspection);
-    const error = [caughtError, treatmentError].filter(Boolean).join("\n");
+    const treatmentError = treatmentValidationError(inspection, options.prompt);
+    const answerError = finalAnswer
+        ? baselineAnswerValidationError(
+              finalAnswer,
+              toolTrace,
+              options.repoPath,
+          )
+        : undefined;
+    const relayError = finalAnswer
+        ? baselineRelayValidationError(
+              finalAnswer,
+              inspection.explorerSubagentTrace,
+              options.repoPath,
+          )
+        : undefined;
+    const error = [caughtError, treatmentError, answerError, relayError]
+        .filter(Boolean)
+        .join("\n");
     const combinedUsage = usage?.usageComplete !== false ? usage : undefined;
     const ok = Boolean(finalAnswer) && !error;
 
@@ -598,6 +626,9 @@ export function inspectCopilotToolTrace(
         const success =
             completed && taskCompletion?.success === true && !childFailure;
         const model = childCompletion?.model ?? childStart?.model;
+        const resultContent = stringValue(
+            recordValue(taskCompletion?.result)?.content,
+        );
         return {
             toolCallId: start.toolCallId,
             ...(childStart?.agentId ? { agentId: childStart.agentId } : {}),
@@ -618,6 +649,7 @@ export function inspectCopilotToolTrace(
             ...(childCompletion?.totalToolCalls !== undefined
                 ? { totalToolCalls: childCompletion.totalToolCalls }
                 : {}),
+            ...(resultContent ? { resultContent } : {}),
             ...(childFailure
                 ? { error: childFailure }
                 : taskCompletion?.error
@@ -700,6 +732,7 @@ export function inspectCopilotToolTrace(
 
 export function treatmentValidationError(
     inspection: CopilotToolInspection,
+    expectedQuery?: string,
 ): string | undefined {
     if (inspection.attemptedExploreCalls !== 0) {
         return `Baseline unexpectedly invoked TypeAgent explore ${inspection.attemptedExploreCalls} time(s).`;
@@ -724,6 +757,13 @@ export function treatmentValidationError(
     }
     if (inspection.explorerRepositoryCalls < 1) {
         return "Baseline explorer subagent completed without using a repository inspection tool.";
+    }
+    if (expectedQuery !== undefined) {
+        const queryError = baselineDelegatedQueryValidationError(
+            inspection.explorerSubagentTrace,
+            expectedQuery,
+        );
+        if (queryError) return queryError;
     }
     return undefined;
 }

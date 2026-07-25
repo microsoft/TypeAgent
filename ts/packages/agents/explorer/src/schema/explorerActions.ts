@@ -27,9 +27,9 @@ export type SubmitExplorationAction = {
     parameters: {
         locations: {
             path: string;
-            // First exact line of the implementation block likely to change.
+            // First line of a change-bearing source, test, configuration, or documentation block.
             startLine: number;
-            // Last exact line of the complete behavior-bearing block.
+            // Last line of the complete change-bearing block.
             endLine: number;
         }[];
     };

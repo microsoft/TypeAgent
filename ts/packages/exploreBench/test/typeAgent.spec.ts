@@ -39,6 +39,10 @@ test("exposes one Explorer application agent with one natural-language entry act
             ? grammarFile
             : (grammarFile?.content ?? "");
     assert.equal(manifest.defaultEnabled, true);
+    assert.match(
+        manifest.schema?.description ?? "",
+        /change-bearing source, test, configuration, or documentation locations/i,
+    );
     assert.match(schema, /actionName: "exploreRepository"/);
     assert.match(schema, /parameters:\s*\{[^}]*request: string/s);
     assert.doesNotMatch(schema, /parameters: \{\}/);

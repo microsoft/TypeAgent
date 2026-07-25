@@ -86,7 +86,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                 (["baseline", "typeagent"] as const).map(
                     (variant): RunResult => {
                         const finalAnswer =
-                            "<final_answer>\npkg/a.py:10 reason\n</final_answer>";
+                            "<final_answer>\npkg/a.py:10\n</final_answer>";
                         const typeAgentToolTrace = {
                             calls: [
                                 {
@@ -338,11 +338,30 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                                               started: true,
                                               completed: true,
                                               success: true,
+                                              arguments: {
+                                                  prompt: "find bug",
+                                              },
+                                              resultContent: finalAnswer,
                                           },
                                       ]
                                     : [],
                             mcpToolTrace: [],
-                            toolTrace: [],
+                            toolTrace:
+                                variant === "baseline"
+                                    ? [
+                                          {
+                                              tool: "read",
+                                              args: {
+                                                  path: "pkg/a.py",
+                                                  offset: 10,
+                                                  limit: 1,
+                                              },
+                                              ok: true,
+                                              durationMs: 1,
+                                              output: "pkg/a.py:10: old",
+                                          },
+                                      ]
+                                    : [],
                             events: [],
                         };
                     },
@@ -384,8 +403,7 @@ test("writes paired 1/5/10 prefix comparisons", async () => {
                         row.variant === "typeagent",
                 )!,
                 ok: false,
-                finalAnswer:
-                    "<final_answer>\npkg/a.py:10 reason\n</final_answer>",
+                finalAnswer: "<final_answer>\npkg/a.py:10\n</final_answer>",
                 error: "provider failed",
                 typeAgentDispatch: {
                     ...incompleteRows.find(

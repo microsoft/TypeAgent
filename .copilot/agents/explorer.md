@@ -19,4 +19,4 @@ path/to/file.ext:10-20
 path/to/other.ext:5
 </final_answer>
 
-Return at most six repository-relative file paths with exact line or line ranges most likely needing changes. If evidence is weak, read the closest candidate before citing it.
+Return at most six repository-relative file paths with exact line or line ranges most likely needing changes. Include every evidence-indicated change-bearing source, test, configuration, or documentation block, preserving complete relevant blocks without adding unrelated surrounding lines. If evidence is weak, read the closest candidate before citing it.

@@ -2,6 +2,11 @@
 // Licensed under the MIT License.
 
 import { isDeepStrictEqual } from "node:util";
+import {
+    baselineAnswerValidationError,
+    baselineDelegatedQueryValidationError,
+    baselineRelayValidationError,
+} from "./baselineValidation.js";
 import { translatedRequestMatchesIngress } from "./requestIdentity.js";
 import {
     isTypeAgentVariant,
@@ -106,6 +111,24 @@ export function validateResultRows(
                 throw new Error(
                     `${prefix}: successful baseline lacks required Explorer delegation and execution integrity`,
                 );
+            }
+            const validationError =
+                baselineDelegatedQueryValidationError(
+                    row.explorerSubagentTrace,
+                    row.query,
+                ) ??
+                baselineRelayValidationError(
+                    row.finalAnswer,
+                    row.explorerSubagentTrace,
+                    row.repoPath,
+                ) ??
+                baselineAnswerValidationError(
+                    row.finalAnswer,
+                    row.toolTrace,
+                    row.repoPath,
+                );
+            if (validationError) {
+                throw new Error(`${prefix}: ${validationError}`);
             }
         }
     });

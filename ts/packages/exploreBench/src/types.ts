@@ -196,6 +196,11 @@ export interface CopilotToolCallTrace {
     ok: boolean;
     durationMs: number;
     output: string;
+    readRange?: {
+        path: string;
+        startLine: number;
+        endLine: number;
+    };
 }
 
 export interface McpToolCallTrace {
@@ -221,6 +226,7 @@ export interface ExplorerSubagentTrace {
     durationMs?: number;
     totalTokens?: number;
     totalToolCalls?: number;
+    resultContent?: string;
     error?: string;
 }
 

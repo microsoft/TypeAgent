@@ -264,7 +264,7 @@ function describeToolCall(
         typeof action?.actionName === "string"
             ? ` for ${action.actionName}`
             : "";
-    return `Called ${toolName}${actionName}.`;
+    return `Called ${toolName}${actionName} with arguments:\n${JSON.stringify(args)}`;
 }
 
 function addUsage(

@@ -50,7 +50,7 @@ const row: RunResult = {
     durationMs: 1,
     attempt: 1,
     maxAttempts: 2,
-    finalAnswer: "<final_answer>\npkg/a.py:1 reason\n</final_answer>",
+    finalAnswer: "<final_answer>\npkg/a.py:1\n</final_answer>",
     score: scoreSwebench("", ""),
     mcpAdopted: false,
     subagentAdopted: true,
@@ -70,15 +70,87 @@ const row: RunResult = {
             started: true,
             completed: true,
             success: true,
+            arguments: { prompt: "find bug" },
+            resultContent: "<final_answer>\npkg/a.py:1\n</final_answer>",
         },
     ],
     mcpToolTrace: [],
-    toolTrace: [],
+    toolTrace: [
+        {
+            tool: "read",
+            args: { path: "pkg/a.py", offset: 1, limit: 1 },
+            ok: true,
+            durationMs: 1,
+            output: "pkg/a.py:1: line 1",
+        },
+    ],
     events: [],
 };
 
 test("accepts rows that belong to the manifest", () => {
     assert.doesNotThrow(() => validateResultRows([row], identity));
+});
+
+test("revalidates successful cached baseline grounding and relay evidence", () => {
+    const mutations: Array<{
+        pattern: RegExp;
+        apply(candidate: RunResult): void;
+    }> = [
+        {
+            pattern: /benchmark query/i,
+            apply: (candidate) => {
+                candidate.explorerSubagentTrace[0].arguments = {
+                    prompt: "different request",
+                };
+            },
+        },
+        {
+            pattern: /relay/i,
+            apply: (candidate) => {
+                candidate.explorerSubagentTrace[0].resultContent =
+                    "<final_answer>\npkg/b.py:2\n</final_answer>";
+            },
+        },
+        {
+            pattern: /successful read evidence/i,
+            apply: (candidate) => {
+                candidate.toolTrace = [];
+            },
+        },
+        {
+            pattern: /benchmark query/i,
+            apply: (candidate) => {
+                candidate.query =
+                    "UNIQUE-PREFIX\n<problem_statement>find bug</problem_statement>\nUNIQUE-SUFFIX";
+                candidate.explorerSubagentTrace[0].arguments = {
+                    prompt: "find bug",
+                };
+            },
+        },
+        {
+            pattern: /successful read evidence/i,
+            apply: (candidate) => {
+                candidate.finalAnswer =
+                    "<final_answer>\npkg/a.py:1-2\n</final_answer>";
+                candidate.explorerSubagentTrace[0].resultContent =
+                    candidate.finalAnswer;
+                candidate.toolTrace[0].readRange = {
+                    path: "pkg/a.py",
+                    startLine: 1,
+                    endLine: 2,
+                };
+            },
+        },
+    ];
+
+    for (const mutation of mutations) {
+        const candidate = structuredClone(row);
+        mutation.apply(candidate);
+        assert.throws(
+            () => validateResultRows([candidate], identity),
+            mutation.pattern,
+        );
+    }
 });
 
 test("rejects mixed run, task, matrix model, and variant rows", () => {

@@ -20,8 +20,10 @@ interface GlobOptions {
 }
 
 interface ReadOptions {
+    // Zero-based line offset. Grep and LSP line numbers are 1-based, so
+    // subtract one when using a match or location as the first line to read.
     offset?: number;
-    // Host-clamped to 200 lines per read.
+    // Host-clamped to 200 lines per read during Explorer execution.
     limit?: number;
 }
 

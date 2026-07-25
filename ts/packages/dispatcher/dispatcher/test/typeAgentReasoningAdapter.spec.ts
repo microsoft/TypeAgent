@@ -146,9 +146,15 @@ describe("native TypeAgent reasoning adapter", () => {
         const secondPrompt = JSON.stringify(complete.mock.calls[1]?.[0]);
         const thirdPrompt = JSON.stringify(complete.mock.calls[2]?.[0]);
         expect(secondPrompt).toContain("discoverRepository: ok");
-        expect(secondPrompt).not.toContain('"program"');
+        expect(secondPrompt).toContain(
+            '\\"actionName\\":\\"discoverRepository\\"',
+        );
+        expect(secondPrompt).toContain('\\"program\\":\\"program\\"');
         expect(thirdPrompt).toContain("discoverRepository: ok");
         expect(thirdPrompt).toContain("refineRepository: ok");
+        expect(thirdPrompt).toContain(
+            '\\"actionName\\":\\"refineRepository\\"',
+        );
         expect(events.at(-1)).toEqual({
             type: "done",
             result: {

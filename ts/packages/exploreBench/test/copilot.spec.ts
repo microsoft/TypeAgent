@@ -8,6 +8,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+    baselineAnswerValidationError,
+    baselineRelayValidationError,
     buildAgentRoutingConfig,
     buildBenchmarkPrompt,
     buildBenchmarkSystemMessage,
@@ -52,7 +54,12 @@ test("builds the baseline prompt with its explicit required path", () => {
     assert.match(baseline, /default main agent/i);
     assert.match(baseline, /exactly one successful delegation/i);
     assert.match(baseline, /Do not inspect the repository yourself/i);
+    assert.match(baseline, /copy.*query.*exactly.*without paraphrasing/is);
     assert.match(baseline, /at most six repository-relative file paths/i);
+    assert.match(
+        baseline,
+        /change-bearing source, test, configuration, or documentation block/i,
+    );
     assert.doesNotMatch(baseline, /short reason/i);
     assert.match(
         buildBenchmarkPrompt("find bug"),
@@ -137,6 +144,112 @@ test("requires one completed explorer delegation in baseline sessions", () => {
     );
 });
 
+test("requires lossless query delegation and an unchanged explorer result", () => {
+    const exactQuery = "find source => target\r\n雪";
+    const events = [
+        assistantTask("task-1", "", { prompt: `Envelope\n${exactQuery}` }),
+        taskStart("task-1", { prompt: `Envelope\n${exactQuery}` }),
+        subagentStarted("task-1"),
+        subagentToolStart("task-1", "read-1", "read"),
+        subagentCompleted("task-1"),
+        complete(
+            "task-1",
+            true,
+            "<final_answer>\npkg/a.py:10\n</final_answer>",
+        ),
+        assistantAnswer("<final_answer>\npkg/a.py:10\n</final_answer>"),
+    ];
+    const inspection = inspectCopilotToolTrace(events);
+    assert.equal(treatmentValidationError(inspection, exactQuery), undefined);
+    assert.match(
+        treatmentValidationError(inspection, `${exactQuery}!`) ?? "",
+        /complete benchmark query/i,
+    );
+    assert.equal(
+        baselineRelayValidationError(
+            "<final_answer>\npkg/a.py:10\n</final_answer>",
+            inspection.explorerSubagentTrace,
+        ),
+        undefined,
+    );
+    assert.match(
+        baselineRelayValidationError(
+            "<final_answer>\npkg/a.py:10\npkg/b.py:20\n</final_answer>",
+            inspection.explorerSubagentTrace,
+        ) ?? "",
+        /must not add, remove, or widen/i,
+    );
+
+    const ordered = inspectCopilotToolTrace([
+        assistantTask("task-ordered", "", {
+            prompt: `Envelope\n${exactQuery}`,
+        }),
+        taskStart("task-ordered", { prompt: `Envelope\n${exactQuery}` }),
+        subagentStarted("task-ordered"),
+        subagentToolStart("task-ordered", "read-ordered", "read"),
+        subagentCompleted("task-ordered"),
+        complete(
+            "task-ordered",
+            true,
+            "<final_answer>\npkg/a.py:10\npkg/b.py:20\n</final_answer>",
+        ),
+        assistantAnswer(
+            "<final_answer>\npkg/a.py:10\npkg/b.py:20\n</final_answer>",
+        ),
+    ]);
+    assert.match(
+        baselineRelayValidationError(
+            "<final_answer>\npkg/b.py:20\npkg/a.py:10\n</final_answer>",
+            ordered.explorerSubagentTrace,
+        ) ?? "",
+        /unchanged/i,
+    );
+
+    const formattedQuery =
+        "<problem_statement>\nRead `alpha` in the [reference](https://example.test/a-b).\r\n</problem_statement>";
+    const formatted = inspectCopilotToolTrace([
+        assistantTask("task-formatted", "", {
+            prompt: "<problem_statement>\nRead alpha in the reference (https://example.test/a-b).\n</problem_statement>",
+        }),
+        taskStart("task-formatted", {
+            prompt: "<problem_statement>\nRead alpha in the reference (https://example.test/a-b).\n</problem_statement>",
+        }),
+        subagentStarted("task-formatted"),
+        subagentToolStart("task-formatted", "read-formatted", "read"),
+        subagentCompleted("task-formatted"),
+        complete(
+            "task-formatted",
+            true,
+            "<final_answer>\npkg/a.py:10\n</final_answer>",
+        ),
+        assistantAnswer("<final_answer>\npkg/a.py:10\n</final_answer>"),
+    ]);
+    assert.equal(
+        treatmentValidationError(formatted, formattedQuery),
+        undefined,
+    );
+
+    const completeQuery =
+        "UNIQUE-PREFIX\n<problem_statement>bug body</problem_statement>\nUNIQUE-SUFFIX";
+    const incomplete = inspectCopilotToolTrace([
+        assistantTask("task-incomplete", "", { prompt: "bug body" }),
+        taskStart("task-incomplete", { prompt: "bug body" }),
+        subagentStarted("task-incomplete"),
+        subagentToolStart("task-incomplete", "read-incomplete", "read"),
+        subagentCompleted("task-incomplete"),
+        complete(
+            "task-incomplete",
+            true,
+            "<final_answer>\npkg/a.py:10\n</final_answer>",
+        ),
+        assistantAnswer("<final_answer>\npkg/a.py:10\n</final_answer>"),
+    ]);
+    assert.match(
+        treatmentValidationError(incomplete, completeQuery) ?? "",
+        /complete benchmark query/i,
+    );
+});
+
 test("allows failed task-schema attempts before one successful explorer delegation", () => {
     const inspection = inspectCopilotToolTrace([
         assistantTask("task-invalid", "", { name: undefined }),
@@ -213,6 +326,101 @@ test("repairs only answers without a parseable citation", () => {
             "<final_answer>\nsrc/index.ts:10-12 reason\n</final_answer>",
         ),
         false,
+    );
+});
+
+test("applies the same bounded read-grounding contract to baseline answers", () => {
+    const reads = [
+        {
+            tool: "read",
+            args: { path: "src/a.ts", offset: 1, limit: 5 },
+            ok: true,
+            durationMs: 1,
+            output: Array.from(
+                { length: 5 },
+                (_, index) => `src/a.ts:${index + 1}: line ${index + 1}`,
+            ).join("\n"),
+        },
+    ];
+    assert.equal(
+        baselineAnswerValidationError(
+            "<final_answer>\nsrc/a.ts:1-5\n</final_answer>",
+            reads,
+        ),
+        undefined,
+    );
+    assert.match(
+        baselineAnswerValidationError(
+            "<final_answer>\nsrc/a.ts:1-6\n</final_answer>",
+            reads,
+        ) ?? "",
+        /successful read evidence/i,
+    );
+    assert.match(
+        baselineAnswerValidationError(
+            `<final_answer>\n${Array.from(
+                { length: 7 },
+                (_, index) => `src/a.ts:${index + 1}`,
+            ).join("\n")}\n</final_answer>`,
+            reads,
+        ) ?? "",
+        /at most 6 locations/i,
+    );
+    assert.match(
+        baselineAnswerValidationError(
+            "<final_answer>\nsrc/a.ts:1-1002\n</final_answer>",
+            reads,
+        ) ?? "",
+        /at most 1001 lines/i,
+    );
+    assert.match(
+        baselineAnswerValidationError(
+            "<final_answer>\nsrc/a.ts:1 explanation\n</final_answer>",
+            reads,
+        ) ?? "",
+        /explanation prose/i,
+    );
+    assert.match(
+        baselineAnswerValidationError(
+            "<final_answer>\nsrc/a.ts:1\nsrc/a.ts:1\n</final_answer>",
+            reads,
+        ) ?? "",
+        /duplicate location/i,
+    );
+    assert.equal(
+        baselineAnswerValidationError(
+            "<final_answer>\nsrc/a.ts:1-5\n</final_answer>",
+            [
+                {
+                    ...reads[0],
+                    output: "src/a.ts:1: line 1\n[trace output truncated]",
+                    readRange: {
+                        path: "src/a.ts",
+                        startLine: 1,
+                        endLine: 5,
+                    },
+                },
+            ],
+        ),
+        undefined,
+    );
+    assert.match(
+        baselineAnswerValidationError(
+            "<final_answer>\nsrc/a.ts:1-2\n</final_answer>",
+            [
+                {
+                    ...reads[0],
+                    args: { path: "src/a.ts", offset: 1, limit: 1 },
+                    output: "src/a.ts:1: line 1",
+                    readRange: {
+                        path: "src/a.ts",
+                        startLine: 1,
+                        endLine: 2,
+                    },
+                },
+            ],
+        ) ?? "",
+        /successful read evidence/i,
     );
 });
 
@@ -655,14 +863,18 @@ test("resolves the packaged native Copilot executable", async () => {
     }
 });
 
-function complete(id: string, success: boolean): Record<string, unknown> {
+function complete(
+    id: string,
+    success: boolean,
+    content = "pkg/a.py:10",
+): Record<string, unknown> {
     return {
         type: "tool.execution_complete",
         data: {
             toolCallId: id,
             success,
             ...(success
-                ? { result: { content: "pkg/a.py:10" } }
+                ? { result: { content } }
                 : { error: { message: "failed" } }),
         },
     };

@@ -170,7 +170,7 @@ describe("agentic Code Mode explorer", () => {
         expect(adapter.configs[0]?.maxTurns).toBe(6);
         const systemPrompt = String(adapter.configs[0]?.systemPrompt);
         expect(systemPrompt).toMatch(
-            /exact lines? or line ranges? most likely needing changes/i,
+            /final exact repository-relative locations most likely needing changes/i,
         );
         expect(systemPrompt).not.toMatch(/smallest contiguous/i);
         expect(systemPrompt).toContain("const matches: GrepMatch[] = []");
@@ -180,6 +180,15 @@ describe("agentic Code Mode explorer", () => {
         );
         expect(systemPrompt).not.toMatch(
             /prioritize production|production source paths|before tests, docs/i,
+        );
+        expect(systemPrompt).toMatch(
+            /change-bearing source, test, configuration, or documentation block/i,
+        );
+        expect(systemPrompt).toMatch(
+            /Program-returned locations are advisory: narrow or omit them when the inspected evidence supports a more precise final answer/i,
+        );
+        expect(systemPrompt).toMatch(
+            /A repo[.]read location is an evidence window, not automatically the final change-bearing block/i,
         );
         expect(systemPrompt).toMatch(
             /Every submitted range must be wholly visible in a successful read observation/i,
@@ -225,6 +234,9 @@ describe("agentic Code Mode explorer", () => {
         );
         expect(String(adapter.configs[0]?.systemPrompt)).toContain(
             'actionName: "submitExploration"',
+        );
+        expect(String(adapter.configs[0]?.systemPrompt)).not.toContain(
+            "exclusions?:",
         );
         expect(String(adapter.configs[0]?.systemPrompt)).toContain(
             "interface RepositoryApi",
@@ -739,8 +751,8 @@ describe("agentic Code Mode explorer", () => {
         ).resolves.toMatch(/^src\/alpha[.]ts:1-3/m);
 
         const invocation = latestInvocation(await readTelemetry(telemetryFile));
-        expect(invocation.toolTrace.totalCalls).toBe(7);
-        expect(invocation.toolTrace.calls).toHaveLength(7);
+        expect(invocation.toolTrace.totalCalls).toBe(8);
+        expect(invocation.toolTrace.calls).toHaveLength(8);
         expect(invocation.toolTrace.calls.at(-1)?.tool).toBe("read");
         expect(
             JSON.parse(adapter.results[1]?.text ?? "{}").observations,
@@ -754,7 +766,7 @@ describe("agentic Code Mode explorer", () => {
             ]),
         );
         expect(adapter.results[1]?.text).toContain(
-            '"remainingRepositoryCalls":1',
+            '"remainingRepositoryCalls":0',
         );
         expect(
             JSON.parse(adapter.results[1]?.text ?? "{}").observations,

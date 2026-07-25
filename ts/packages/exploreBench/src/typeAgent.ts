@@ -65,7 +65,7 @@ const explorerManifest: AppAgentManifest = {
     defaultEnabled: true,
     schema: {
         description:
-            "Explore a repository for the exact implementation locations requested by the user.",
+            "Explore a repository for the change-bearing source, test, configuration, or documentation locations requested by the user.",
         schemaType: "ExplorerRequestActions",
         schemaFile: { format: "ts", content: explorerRequestSchema },
         grammarFile: { format: "agr", content: explorerRequestGrammar },
