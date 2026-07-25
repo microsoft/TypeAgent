@@ -40,14 +40,12 @@ export const REPOSITORY_BUDGET_EXHAUSTED =
 const MIN_PROGRAM_EXECUTIONS = 2;
 const MAX_PROGRAM_EXECUTIONS = 2;
 export const REFINEMENT_RESERVED_CALLS = 4;
-export const MAX_REFINEMENT_CALLS_PER_PROGRAM = 4;
 export const MAX_REFINEMENT_READ_LINES = 200;
 const MAX_ACTION_RESULT_CHARS = 40_000;
 const MAX_DISCOVERY_READ_LINES = 200;
 const MAX_RESULT_MESSAGE_CHARS = 1_000;
 const MAX_RESULT_PATH_CHARS = 1_000;
 const MAX_CALL_SUMMARY_STRING_CHARS = 1_000;
-const MAX_RESPONSE_GREP_OBSERVATIONS = 40;
 const MAX_DISCOVERY_RESPONSE_LINES = 120;
 const MAX_EXACT_RESPONSE_LINES = 400;
 const CONTEXT_LINES_AROUND_GREP = 4;
@@ -362,7 +360,7 @@ export class ExplorerActionSession {
             execution.result,
             this.options.maxResults,
         );
-        const responseObservations = compactObservations(
+        const compactedObservations = compactObservations(
             phaseObservations,
             phase,
             this.repository.observations.slice(0, observationStart),
@@ -379,7 +377,11 @@ export class ExplorerActionSession {
             remainingProgramExecutions,
             nextAction: nextPhaseInstruction(phase),
         };
-        const response = serializeActionPayload(payload, responseObservations);
+        const response = serializeActionPayload(
+            payload,
+            compactedObservations.observations,
+            compactedObservations.truncated,
+        );
         if (
             phase === "refine" &&
             programResult.locations?.some(
@@ -469,8 +471,6 @@ export class ExplorerActionSession {
     }
 
     private refinementCallLimit(): number {
-        const defaultLimit =
-            this.repository.trace.totalCalls + MAX_REFINEMENT_CALLS_PER_PROGRAM;
         const requiredRecoveryCalls =
             this.options.lsp && !this.hasCompletedLspCall()
                 ? this.carriedRefinementReads.length > 0
@@ -483,14 +483,7 @@ export class ExplorerActionSession {
                 this.repository.trace.totalCalls + requiredRecoveryCalls,
             );
         }
-        const remainingCalls =
-            this.options.maxToolCalls - this.repository.trace.totalCalls;
-        const recoveryReserve =
-            remainingCalls < MAX_REFINEMENT_CALLS_PER_PROGRAM ? 1 : 0;
-        return Math.min(
-            defaultLimit,
-            this.options.maxToolCalls - recoveryReserve,
-        );
+        return this.options.maxToolCalls;
     }
 
     private prepareLspRecovery(
@@ -606,13 +599,10 @@ function compactObservations(
     phase: RepositoryProgramPhase,
     priorObservations: RepositoryObservation[],
     candidateLocations: readonly CompactProgramLocation[] = [],
-): ReturnType<typeof compactObservation>[] {
-    const retainedGreps = new Set(
-        selectGrepObservations(
-            observations.filter((observation) => observation.source === "grep"),
-            MAX_RESPONSE_GREP_OBSERVATIONS,
-        ),
-    );
+): {
+    observations: ReturnType<typeof compactObservation>[];
+    truncated: boolean;
+} {
     const relevantGreps = [...priorObservations, ...observations].filter(
         (observation) => observation.source === "grep",
     );
@@ -633,24 +623,37 @@ function compactObservations(
         candidateAllocations,
         lineBudget,
     );
-    return observations.flatMap((observation) => {
+    let truncated = false;
+    const compacted = observations.flatMap((observation) => {
         if (observation.source === "grep") {
-            return retainedGreps.has(observation)
-                ? [compactObservation(observation)]
-                : [];
+            return [compactObservation(observation)];
         }
         const readLineBudget = readLineBudgets.get(observation) ?? 0;
         if (observation.lines.length <= readLineBudget) {
             return [compactObservation(observation)];
         }
-        return compactReadAroundGreps(
+        const selected = compactReadAroundGreps(
             observation,
             relevantGreps,
             readLineBudget,
             phase === "refine" ? 32 : 8,
             candidateAllocations.get(observation),
         );
+        if (
+            selected.reduce((total, entry) => total + entry.lines.length, 0) <
+            observation.lines.length
+        ) {
+            truncated = true;
+        }
+        return selected;
     });
+    return {
+        observations: [
+            ...compacted.filter((observation) => observation.source === "read"),
+            ...compacted.filter((observation) => observation.source === "grep"),
+        ],
+        truncated,
+    };
 }
 
 function allocateCandidateLines(
@@ -784,47 +787,6 @@ function compactRepositoryCallInput(input: Record<string, unknown>): {
         }),
     );
     return { value, truncated };
-}
-
-function selectGrepObservations(
-    observations: RepositoryObservation[],
-    limit: number,
-): RepositoryObservation[] {
-    if (observations.length <= limit) {
-        return observations;
-    }
-    const groups = new Map<number, RepositoryObservation[]>();
-    for (const observation of observations) {
-        const group = groups.get(observation.callIndex) ?? [];
-        group.push(observation);
-        groups.set(observation.callIndex, group);
-    }
-    const orderedGroups = [...groups.values()];
-    const selected: RepositoryObservation[] = [];
-    for (let index = 0; index < orderedGroups.length; index++) {
-        const remaining = limit - selected.length;
-        if (remaining <= 0) {
-            break;
-        }
-        const groupsLeft = orderedGroups.length - index;
-        const quota = Math.max(1, Math.floor(remaining / groupsLeft));
-        selected.push(...sampleEvenly(orderedGroups[index], quota));
-    }
-    return selected.slice(0, limit);
-}
-
-function sampleEvenly<T>(values: T[], limit: number): T[] {
-    if (values.length <= limit) {
-        return values;
-    }
-    if (limit === 1) {
-        return [values[0]];
-    }
-    return Array.from(
-        { length: limit },
-        (_, index) =>
-            values[Math.round((index * (values.length - 1)) / (limit - 1))],
-    );
 }
 
 function compactReadAroundGreps(
@@ -1123,21 +1085,22 @@ function hasProgramLocationReadOverlap(
 function nextPhaseInstruction(phase: RepositoryProgramPhase): string {
     switch (phase) {
         case "discover":
-            return `Invoke refineRepository with reads of at most ${MAX_REFINEMENT_READ_LINES} lines around the strongest candidate lines and return the final grounded locations from that program`;
+            return `Invoke refineRepository using the remaining shared repository-call budget to read every evidence-indicated candidate, with at most ${MAX_REFINEMENT_READ_LINES} lines per read, and return grounded locations from that program`;
         case "refine":
-            return "Invoke submitExploration with exact change-bearing locations supported by repository reads; program candidates are advisory and may be narrowed or omitted when the evidence supports a more precise final answer.";
+            return "Invoke submitExploration with exact locations supported by repository reads; independently select every evidence-indicated change-bearing block and exclude unrelated surrounding lines.";
     }
 }
 
 function serializeActionPayload(
     payload: Record<string, unknown>,
     observations: ReturnType<typeof compactObservation>[],
+    initiallyTruncated = false,
 ): {
     text: string;
     observations: ReturnType<typeof compactObservation>[];
 } {
     const visible: ReturnType<typeof compactObservation>[] = [];
-    let observationsTruncated = false;
+    let observationsTruncated = initiallyTruncated;
     const serialize = (
         values: ReturnType<typeof compactObservation>[],
         truncated: boolean,
