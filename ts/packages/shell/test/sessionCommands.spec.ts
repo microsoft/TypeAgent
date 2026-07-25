@@ -192,22 +192,56 @@ test.describe("@session Commands", () => {
                 mainWindow,
             );
             expect(msg.toLowerCase()).toContain("new session created: ");
+            const currentSession = /new session created:\s*(\S+)/i.exec(
+                msg,
+            )?.[1];
+            expect(
+                currentSession,
+                "Current session name was not returned.",
+            ).toBeDefined();
 
             // get the session list
             msg = await sendUserRequestAndWaitForCompletion(
                 `@session list`,
                 mainWindow,
             );
-            const sessions: string[] = msg.split("\n");
+            const sessions: string[] = msg.split("\n").filter(Boolean);
+            const sessionToOpen = sessions.find(
+                (session) => session !== currentSession,
+            );
+            expect(
+                sessionToOpen,
+                "No earlier session was available to open.",
+            ).toBeDefined();
+
+            // Add a deterministic entry without requiring an LLM call.
+            const marker = "BLUEBIRD-743";
+            msg = await sendUserRequestAndWaitForCompletion(
+                `@history insert {"user":"Please remember ${marker}.","assistant":{"text":"I will remember ${marker}.","source":"system"}}`,
+                mainWindow,
+            );
+            expect(msg).toContain("Inserted 1 input entries");
+
+            msg = await sendUserRequestAndWaitForCompletion(
+                `@history`,
+                mainWindow,
+            );
+            expect(msg).toContain(marker);
 
             // open the earlier session
             msg = await sendUserRequestAndWaitForCompletion(
-                `@session open ${sessions[0]}`,
+                `@session open ${sessionToOpen}`,
                 mainWindow,
             );
             expect(msg, `Unexpected session opened!`).toBe(
-                `Session opened: ${sessions[0]}`,
+                `Session opened: ${sessionToOpen}`,
             );
+
+            msg = await sendUserRequestAndWaitForCompletion(
+                `@history`,
+                mainWindow,
+            );
+            expect(msg, "History was not cleared.").toBe("");
 
             // close the application
         });

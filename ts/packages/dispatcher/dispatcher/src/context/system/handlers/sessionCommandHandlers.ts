@@ -103,6 +103,7 @@ class SessionOpenCommandHandler implements CommandHandler {
             systemContext.indexingServiceRegistry,
         );
         await setSessionOnCommandHandlerContext(systemContext, session);
+        systemContext.chatHistory.clear();
         displaySuccess(`Session opened: ${params.args.session}`, context);
     }
 }
