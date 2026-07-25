@@ -87,6 +87,33 @@ function toBundleName(npmName) {
         .toLowerCase();
 }
 
+// Workspace packages keyed by npm name -> { path, private }. Used to decide
+// which agents are published to the npm feed.
+function workspacePackages() {
+    const res = spawnSync("pnpm", ["ls", "-r", "--depth", "-1", "--json"], {
+        cwd: tsRoot,
+        encoding: "utf8",
+        maxBuffer: 1 << 26,
+        shell: process.platform === "win32",
+    });
+    if (res.status !== 0)
+        throw new Error(`pnpm ls failed (${res.status}): ${res.stderr ?? ""}`);
+    const map = new Map();
+    for (const p of JSON.parse(res.stdout)) if (p.name) map.set(p.name, p);
+    return map;
+}
+
+// An agent published to the npm feed is installed via its npm specifier (M1),
+// so it must NOT also be shipped as a universal package. The npm publish step
+// packs '@typeagent/*' packages that aren't private, so mirror that filter.
+function isNpmPublished(npmName, pkgs) {
+    if (!npmName.startsWith("@typeagent/")) return false;
+    const p = pkgs.get(npmName);
+    if (!p) return false;
+    const pj = readJson(path.join(p.path, "package.json"));
+    return pj.private !== true;
+}
+
 // Resolve an exports subpath target from a package.json (handles string or
 // conditional-object export entries).
 function exportTarget(pkg, key) {
@@ -141,6 +168,22 @@ function main() {
                 args.agents.includes(n) ||
                 args.agents.includes(toBundleName(n)),
         );
+
+    // Agents published to the npm feed are installed via their npm specifier,
+    // so don't also ship them as universal packages. Only bundle agents that
+    // can't be npm-published. An explicit `--agents` list overrides this (for
+    // local testing of a specific bundle).
+    if (!args.agents && excluded.length) {
+        const pkgs = workspacePackages();
+        const npmPublished = excluded.filter((n) => isNpmPublished(n, pkgs));
+        if (npmPublished.length)
+            console.warn(
+                `Skipping ${npmPublished.length} npm-published agent(s) ` +
+                    `(installed via the npm feed, not as universal packages): ` +
+                    npmPublished.join(", "),
+            );
+        excluded = excluded.filter((n) => !npmPublished.includes(n));
+    }
 
     // Universal-package names must be unique after scope stripping.
     const seen = new Map();
@@ -199,6 +242,26 @@ function main() {
         );
         results.push(bundleName);
     }
+
+    // Always leave a manifest so the artifact is non-empty (all optional agents
+    // may be npm-published, leaving no bundles) and self-documenting.
+    fs.writeFileSync(
+        path.join(args.out, "bundles.json"),
+        JSON.stringify(
+            {
+                profile: args.profile,
+                platform: args.platform,
+                arch: args.arch,
+                bundles: results,
+                note:
+                    "npm-published agents ('@typeagent/*', not private) are " +
+                    "installed from the npm feed and are intentionally not " +
+                    "bundled as universal packages.",
+            },
+            null,
+            2,
+        ) + "\n",
+    );
 
     console.log(
         `\nPackaged ${results.length} optional agent bundle(s) under ${args.out}.\n` +
