@@ -74,6 +74,19 @@ function agentNames(cfg) {
         .filter((n) => typeof n === "string");
 }
 
+// Map an npm package name to a bundle-folder / universal-package name.
+// Azure Artifacts universal package names must be lowercase and contain only
+// alphanumeric segments separated by '-', '.', or '_' — the npm scope
+// ('@typeagent/') is invalid there. Stripping the scope yields a valid, stable
+// identity matching the pre-scoping bundle name (e.g. '@typeagent/code-agent'
+// -> 'code-agent'). The scoped name is still used for `pnpm --filter`.
+function toBundleName(npmName) {
+    return npmName
+        .replace(/^@[^/]+\//, "")
+        .replace(/[^a-zA-Z0-9._-]/g, "-")
+        .toLowerCase();
+}
+
 // Resolve an exports subpath target from a package.json (handles string or
 // conditional-object export entries).
 function exportTarget(pkg, key) {
@@ -122,7 +135,24 @@ function main() {
     const prof = readJson(path.join(dataDir, `config.${args.profile}.json`));
     const profileNames = new Set(agentNames(prof));
     let excluded = agentNames(full).filter((n) => !profileNames.has(n));
-    if (args.agents) excluded = excluded.filter((n) => args.agents.includes(n));
+    if (args.agents)
+        excluded = excluded.filter(
+            (n) =>
+                args.agents.includes(n) ||
+                args.agents.includes(toBundleName(n)),
+        );
+
+    // Universal-package names must be unique after scope stripping.
+    const seen = new Map();
+    for (const n of excluded) {
+        const b = toBundleName(n);
+        if (seen.has(b))
+            throw new Error(
+                `Bundle name collision: '${seen.get(b)}' and '${n}' both map ` +
+                    `to universal-package name '${b}'.`,
+            );
+        seen.set(b, n);
+    }
 
     console.log(
         `Packaging ${excluded.length} optional agent(s) for profile ` +
@@ -132,8 +162,9 @@ function main() {
 
     const results = [];
     for (const npmName of excluded) {
-        const dest = path.join(args.out, npmName);
-        console.log(`\n[${npmName}] deploying...`);
+        const bundleName = toBundleName(npmName);
+        const dest = path.join(args.out, bundleName);
+        console.log(`\n[${npmName}] deploying -> ${bundleName}/ ...`);
         fs.rmSync(dest, { recursive: true, force: true });
         run(
             "pnpm",
@@ -166,13 +197,14 @@ function main() {
         console.log(
             `[${npmName}] validated (manifest + handlers + agent-sdk present).`,
         );
-        results.push(npmName);
+        results.push(bundleName);
     }
 
     console.log(
         `\nPackaged ${results.length} optional agent bundle(s) under ${args.out}.\n` +
+            `Bundle folders (== universal-package names): ${results.join(", ")}\n` +
             `Each is installable via the dispatcher:  @install <name> <bundle-folder>\n` +
-            `or publishable per-RID:  az artifacts universal publish --name <name> --path <bundle-folder>`,
+            `or publishable per-RID:  az artifacts universal publish --name <bundle-folder> --path <bundle-folder>`,
     );
 }
 
