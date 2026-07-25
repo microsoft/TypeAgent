@@ -186,12 +186,12 @@ test("rejects revisionless caches instead of assuming current compatibility", ()
     );
 });
 
-test("rejects frozen revision-26 cache after clarifying read-window precision", () => {
-    assert.equal(CACHE_COMPATIBILITY_REVISION, 27);
+test("rejects frozen revision-27 cache after restoring shared refinement evidence", () => {
+    assert.equal(CACHE_COMPATIBILITY_REVISION, 28);
     assert.equal(
         cacheManifestsCompatible(
-            manifest("frozen-revision-26", {
-                cacheCompatibilityRevision: 26,
+            manifest("frozen-revision-27", {
+                cacheCompatibilityRevision: 27,
             }),
             manifest("direct-typeagent"),
         ),
