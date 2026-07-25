@@ -658,31 +658,34 @@ export async function processCommands<T>(
         ".typeagent",
         "command_history.json",
     );
-    if (fs.existsSync(historyFile)) {
-        const hh = JSON.parse(
-            fs.readFileSync(historyFile, { encoding: "utf-8" }),
-        );
-        history = hh.commands;
+    let rl: readline.promises.Interface | undefined;
+    if (inputs === undefined) {
+        if (fs.existsSync(historyFile)) {
+            const hh = JSON.parse(
+                fs.readFileSync(historyFile, { encoding: "utf-8" }),
+            );
+            history = hh.commands;
+        }
+
+        rl = createInterface({
+            input: process.stdin,
+            output: process.stdout,
+            history,
+            terminal: true,
+        });
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
     }
-
-    const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout,
-        history,
-        terminal: true,
-    });
-
-    process.stdin.setRawMode(true);
-    process.stdin.resume();
 
     while (true) {
         const prompt =
             typeof interactivePrompt === "function"
                 ? await interactivePrompt(context)
                 : interactivePrompt;
-        const request = inputs
-            ? getNextInput(prompt, inputs)
-            : await question(promptColor(prompt), rl, history);
+        const request =
+            inputs !== undefined
+                ? getNextInput(prompt, inputs)
+                : await question(promptColor(prompt), rl, history);
         if (request.length) {
             if (
                 request.toLowerCase() === "quit" ||
@@ -702,10 +705,12 @@ export async function processCommands<T>(
         console.log("");
 
         // save command history
-        fs.writeFileSync(
-            historyFile,
-            JSON.stringify({ commands: (rl as any).history }),
-        );
+        if (rl !== undefined) {
+            fs.writeFileSync(
+                historyFile,
+                JSON.stringify({ commands: (rl as any).history }),
+            );
+        }
     }
 }
 
