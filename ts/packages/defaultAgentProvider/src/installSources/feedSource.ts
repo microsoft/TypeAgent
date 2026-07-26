@@ -263,6 +263,10 @@ interface FeedAgentPackageInfo {
     readonly packageName: string;
     readonly defaultAgentName?: string;
     readonly latestVersion?: string;
+    // The package's published `description` (from the latest version manifest),
+    // surfaced in `@package available` and used to match a free-text request to
+    // an installable agent. Absent when the manifest declares none.
+    readonly description?: string;
 }
 
 interface AzureFeedInfo {
@@ -576,6 +580,19 @@ function defaultAgentNameFromManifest(
         : undefined;
 }
 
+// Read a package version manifest's `description`, normalized to a non-empty
+// trimmed string (or undefined when absent/blank).
+function descriptionFromManifest(
+    manifest: Record<string, unknown> | undefined,
+): string | undefined {
+    const description = manifest?.description;
+    if (typeof description !== "string") {
+        return undefined;
+    }
+    const trimmed = description.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+}
+
 // Full descriptor enumeration: the scoped package list narrowed to packages
 // whose latest published version carries the agent keyword, each annotated with
 // its latest version and (when legal) its declared default agent name. Powers
@@ -627,10 +644,15 @@ async function enumerateFeedAgentDescriptors(
             packageName: string;
             defaultAgentName?: string;
             latestVersion?: string;
+            description?: string;
         } = { packageName, latestVersion: latest };
         const defaultAgentName = defaultAgentNameFromManifest(manifest);
         if (defaultAgentName !== undefined) {
             descriptor.defaultAgentName = defaultAgentName;
+        }
+        const description = descriptionFromManifest(manifest);
+        if (description !== undefined) {
+            descriptor.description = description;
         }
         descriptors.push(descriptor);
     }
@@ -1154,6 +1176,7 @@ export function createFeedSource(
                 ref: d.packageName,
                 packageName: d.packageName,
                 defaultAgentName: d.defaultAgentName,
+                description: d.description,
             }));
         },
     };

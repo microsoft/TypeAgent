@@ -44,6 +44,7 @@ function okJson(body: unknown): any {
 function fakeFetch(opts: {
     packages: string[];
     keywords: Record<string, string[]>;
+    descriptions?: Record<string, string>;
 }): typeof fetch {
     return (async (input: any) => {
         const url = String(input);
@@ -58,12 +59,13 @@ function fakeFetch(opts: {
         // enough for the membership/reresolve tests to pin a concrete version.
         const decoded = decodeURIComponent(url.slice(REGISTRY.length));
         const keywords = opts.keywords[decoded] ?? [];
+        const description = opts.descriptions?.[decoded];
         return okJson({
             keywords,
             versions: {
-                "1.0.0": { keywords },
-                "1.4.0": { keywords },
-                "2.0.0": { keywords },
+                "1.0.0": { keywords, description },
+                "1.4.0": { keywords, description },
+                "2.0.0": { keywords, description },
             },
             "dist-tags": { latest: "2.0.0" },
         });
@@ -702,6 +704,38 @@ describe("feedSource.listAgents", () => {
         expect(
             (await source.listAgents!()).map((r) => r.packageName).sort(),
         ).toEqual(["@typeagent/a-agent", "@typeagent/b-agent"]);
+    });
+
+    it("surfaces each agent's published description from the manifest", async () => {
+        const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
+        const source = createFeedSource(CONFIG, {
+            installDir,
+            cacheFilePath: path.join(installDir, "cache.json"),
+            now: () => 1000,
+            tokenRunner: goodToken,
+            fetchFn: fakeFetch({
+                packages: ["@typeagent/photo-agent", "@typeagent/plain-agent"],
+                keywords: {
+                    "@typeagent/photo-agent": ["typeagent-agent"],
+                    "@typeagent/plain-agent": ["typeagent-agent"],
+                },
+                descriptions: {
+                    "@typeagent/photo-agent":
+                        "  Organize and search your photo library  ",
+                },
+            }),
+        });
+        await source.refresh!();
+        const byName = new Map(
+            (await source.listAgents!()).map((r) => [r.packageName, r]),
+        );
+        // Present description is trimmed; a manifest with none stays undefined.
+        expect(byName.get("@typeagent/photo-agent")?.description).toBe(
+            "Organize and search your photo library",
+        );
+        expect(
+            byName.get("@typeagent/plain-agent")?.description,
+        ).toBeUndefined();
     });
 });
 

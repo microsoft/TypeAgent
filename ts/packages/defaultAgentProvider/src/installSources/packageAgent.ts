@@ -53,6 +53,7 @@ export interface AvailableAgentInfo {
     readonly ref: string;
     readonly defaultAgentName?: string | undefined;
     readonly packageName?: string | undefined;
+    readonly description?: string | undefined;
 }
 
 /** Agent information grouped under one configured install source. */
@@ -296,7 +297,7 @@ class ListAvailableCommandHandler implements CommandHandler {
         displaySourceTables(
             context,
             groups,
-            ["Name", "Package"],
+            ["Name", "Package", "Description"],
             (a, b) =>
                 (a.defaultAgentName ?? a.packageName ?? "").localeCompare(
                     b.defaultAgentName ?? b.packageName ?? "",
@@ -304,6 +305,7 @@ class ListAvailableCommandHandler implements CommandHandler {
             (row) => [
                 chalk.cyanBright(row.defaultAgentName ?? "—"),
                 row.packageName ? chalk.gray(row.packageName) : chalk.gray("—"),
+                row.description ? row.description : chalk.gray("—"),
             ],
         );
     }
