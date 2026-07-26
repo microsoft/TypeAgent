@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/montage-agent",
   "version": "0.0.1",
-  "description": "Montage agent for creating montages.",
+  "description": "Agent to create photo montages.",
   "keywords": [
     "typeagent-agent"
   ],

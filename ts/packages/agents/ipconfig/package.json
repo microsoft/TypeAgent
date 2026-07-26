@@ -2,7 +2,7 @@
   "name": "ipconfig-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "TypeAgent agent for ipconfig",
+  "description": "Windows IP configuration command-line tool that displays and manages network adapter settings",
   "keywords": [
     "typeagent-agent"
   ],

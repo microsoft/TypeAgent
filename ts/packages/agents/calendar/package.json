@@ -2,7 +2,7 @@
   "name": "calendar",
   "version": "0.0.1",
   "private": true,
-  "description": "Calendar dispatcher agent",
+  "description": "Agent integration with MS Graph's calendar",
   "keywords": [
     "typeagent-agent"
   ],

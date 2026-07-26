@@ -2,7 +2,7 @@
   "name": "music-local",
   "version": "0.0.1",
   "private": true,
-  "description": "Local media player agent for TypeAgent",
+  "description": "Agent to play local music files",
   "keywords": [
     "typeagent-agent"
   ],

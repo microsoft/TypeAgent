@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/discord-agent",
   "version": "0.0.1",
-  "description": "TypeAgent agent for discord",
+  "description": "Discord chat agent — send messages, draft messages from intent, list channels, browse channel history, manage server/channel invites.",
   "keywords": [
     "typeagent-agent"
   ],
