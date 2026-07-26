@@ -31,11 +31,11 @@
     "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/chat-agent": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/knowledge-processor": "workspace:*",
     "@typeagent/telemetry": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "chat-agent": "workspace:*",
     "debug": "^4.4.0",
     "typechat": "^0.1.1"
   },

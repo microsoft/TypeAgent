@@ -1,7 +1,6 @@
 {
-  "name": "graph-utils",
+  "name": "@typeagent/graph-utils",
   "version": "0.0.1",
-  "private": true,
   "description": "Utility function to access msgraph apis.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

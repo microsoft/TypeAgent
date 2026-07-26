@@ -7,7 +7,7 @@ import {
     AgentCacheFactory,
     MatchResult,
     RequestAction,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import { existsSync } from "fs";
 import path from "path";
 import { NodeType, SchemaParser } from "@typeagent/action-schema";

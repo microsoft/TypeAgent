@@ -13,7 +13,7 @@ import {
     getCurrentMonthDates,
     getNextDaysDates,
     getNWeeksDateRangeISO,
-} from "graph-utils";
+} from "@typeagent/graph-utils";
 
 export function generateEventReferenceCriteria(
     eventReference: EventReference,

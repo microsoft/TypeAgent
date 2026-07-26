@@ -10,7 +10,7 @@ import {
     ExplanationOptions,
     equalNormalizedObject,
     toFullActions,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 
 import {
     type CommandHandlerContext,

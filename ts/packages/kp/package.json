@@ -1,7 +1,6 @@
 {
-  "name": "kp",
+  "name": "@typeagent/kp",
   "version": "0.0.1",
-  "private": true,
   "description": "Lightweight knowledge processor: keyword indexing with dictionary enrichment",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

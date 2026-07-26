@@ -1,7 +1,6 @@
 {
-  "name": "agent-cache",
+  "name": "@typeagent/agent-cache",
   "version": "0.0.1",
-  "private": true,
   "description": "Construction cache for TypeAgent requests",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

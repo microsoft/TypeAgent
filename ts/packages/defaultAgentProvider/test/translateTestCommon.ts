@@ -17,7 +17,7 @@ import {
     normalizeParamValue,
     ParamValueType,
     splitFullActionName,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

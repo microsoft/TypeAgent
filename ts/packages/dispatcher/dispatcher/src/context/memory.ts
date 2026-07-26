@@ -21,7 +21,7 @@ import type {
     Entity,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
-import { ExecutableAction, getFullActionName } from "agent-cache";
+import { ExecutableAction, getFullActionName } from "@typeagent/agent-cache";
 import { CachedImageWithDetails } from "@typeagent/typechat-utils";
 import { getAppAgentName } from "../internal.js";
 import {

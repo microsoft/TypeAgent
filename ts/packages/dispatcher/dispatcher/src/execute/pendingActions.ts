@@ -18,7 +18,7 @@ import {
     getPropertyInfo,
     normalizeParamString,
     PromptEntity,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionContext,

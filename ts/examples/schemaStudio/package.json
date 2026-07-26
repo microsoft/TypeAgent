@@ -23,11 +23,11 @@
   },
   "dependencies": {
     "@typeagent/action-schema": "workspace:*",
+    "@typeagent/agent-cache": "workspace:*",
     "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/azure-ai-foundry": "workspace:*",
     "@typeagent/config": "workspace:*",
-    "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",

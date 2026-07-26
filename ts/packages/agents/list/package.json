@@ -1,8 +1,7 @@
 {
-  "name": "list-agent",
+  "name": "@typeagent/list-agent",
   "version": "0.0.1",
-  "private": true,
-  "description": "List dispatcher agent",
+  "description": "Agent to create and manage lists",
   "keywords": [
     "typeagent-agent"
   ],
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/listManifest.json",
     "./agent/handlers": "./dist/listActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/listSchema.agr -o ./dist/listSchema.ag.json",
     "asc": "asc -i ./src/listSchema.ts -o ./dist/listSchema.pas.json -t ListAction -a ListActivity",

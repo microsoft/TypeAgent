@@ -16,7 +16,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { DisplayLogEntry } from "@typeagent/dispatcher-types";
-import { FullAction, toExecutableActions } from "agent-cache";
+import { FullAction, toExecutableActions } from "@typeagent/agent-cache";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { executeActions } from "../../../execute/actionHandlers.js";
 import { askYesNoWithContext } from "../../interactiveIO.js";

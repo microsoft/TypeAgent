@@ -4,7 +4,7 @@ import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { RequestAction, printProcessRequestActionResult } from "agent-cache";
+import { RequestAction, printProcessRequestActionResult } from "@typeagent/agent-cache";
 import { createLimiter, getElapsedString } from "@typeagent/common-utils";
 import chalk from "chalk";
 

@@ -2,25 +2,25 @@
   "description": "Configuration when hosted within another agent (no chat).",
   "agents": {
     "player": {
-      "name": "music"
+      "name": "@typeagent/music"
     },
     "localPlayer": {
-      "name": "music-local"
+      "name": "@typeagent/music-local"
     },
     "calendar": {
-      "name": "calendar"
+      "name": "@typeagent/calendar"
     },
     "email": {
-      "name": "email"
+      "name": "@typeagent/email"
     },
     "list": {
-      "name": "list-agent"
+      "name": "@typeagent/list-agent"
     },
     "browser": {
       "name": "@typeagent/browser"
     },
     "desktop": {
-      "name": "desktop-automation"
+      "name": "@typeagent/desktop-automation"
     },
     "code": {
       "name": "@typeagent/code-agent"
@@ -48,7 +48,7 @@
       "execMode": "dispatcher"
     },
     "weather": {
-      "name": "weather-agent",
+      "name": "@typeagent/weather-agent",
       "path": "../agents/weather"
     }
   },

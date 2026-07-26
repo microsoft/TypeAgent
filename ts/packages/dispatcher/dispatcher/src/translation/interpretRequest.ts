@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { openai as ai } from "@typeagent/aiclient";
-import { HistoryContext, RequestAction } from "agent-cache";
+import { HistoryContext, RequestAction } from "@typeagent/agent-cache";
 import {
     getActivityActiveSchemas,
     getActivityCacheSpec,

@@ -12,7 +12,7 @@ import {
     GoogleEmailClient,
     parseDayRange,
     probeGraphConfig,
-} from "graph-utils";
+} from "@typeagent/graph-utils";
 import chalk from "chalk";
 import {
     EmailAction,
@@ -63,7 +63,7 @@ import {
     SearchResult,
     ScoredChunkResult,
     ChunkContent,
-} from "kp";
+} from "@typeagent/kp";
 import { emailsToChunks } from "./emailKpBridge.js";
 
 import registerDebug from "debug";

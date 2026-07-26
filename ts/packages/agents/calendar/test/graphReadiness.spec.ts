@@ -10,7 +10,7 @@
  * doesn't have its own test infra and calendar already does.
  */
 
-import { evaluateGraphReadiness, probeGraphConfig } from "graph-utils";
+import { evaluateGraphReadiness, probeGraphConfig } from "@typeagent/graph-utils";
 
 describe("probeGraphConfig", () => {
     test("msGraphConfigured: true when CLIENTID is set", () => {

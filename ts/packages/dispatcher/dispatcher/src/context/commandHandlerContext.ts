@@ -20,7 +20,7 @@ import {
     PromptLoggerOptions,
 } from "@typeagent/telemetry";
 import { DevTrace } from "./devTrace.js";
-import { AgentCache } from "agent-cache";
+import { AgentCache } from "@typeagent/agent-cache";
 import { randomUUID } from "crypto";
 import {
     DispatcherConfig,

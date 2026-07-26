@@ -1,8 +1,7 @@
 {
-  "name": "timer-agent",
+  "name": "@typeagent/timer-agent",
   "version": "0.0.1",
-  "private": true,
-  "description": "Timer dispatcher agent for setting reminders that fire as agent-initiated messages",
+  "description": "Agent for setting reminders that fire as agent-initiated messages",
   "keywords": [
     "typeagent-agent"
   ],
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/timerManifest.json",
     "./agent/handlers": "./dist/timerActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/timerSchema.agr -o ./dist/timerSchema.ag.json",
     "asc": "asc -i ./src/timerSchema.ts -o ./dist/timerSchema.pas.json -t TimerAction",

@@ -1,8 +1,7 @@
 {
-  "name": "music-local",
+  "name": "@typeagent/music-local",
   "version": "0.0.1",
-  "private": true,
-  "description": "Local media player agent for TypeAgent",
+  "description": "Agent to play local music files",
   "keywords": [
     "typeagent-agent"
   ],
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/agent/localPlayerManifest.json",
     "./agent/handlers": "./dist/agent/localPlayerHandlers.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/agent/localPlayerSchema.agr -o ./dist/agent/localPlayerSchema.ag.json",
     "asc": "asc -i ./src/agent/localPlayerSchema.ts -o ./dist/agent/localPlayerSchema.pas.json -t LocalPlayerActions -e LocalPlayerEntities",

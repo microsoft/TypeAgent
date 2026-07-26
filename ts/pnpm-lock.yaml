@@ -111,6 +111,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../packages/actionSchema
+      '@typeagent/agent-cache':
+        specifier: workspace:*
+        version: link:../../packages/cache
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../packages/agentRpc
@@ -129,9 +132,6 @@ importers:
       '@typeagent/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
-      agent-cache:
-        specifier: workspace:*
-        version: link:../../packages/cache
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../packages/dispatcher/dispatcher
@@ -681,6 +681,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../packages/actionSchema
+      '@typeagent/agent-cache':
+        specifier: workspace:*
+        version: link:../../packages/cache
       '@typeagent/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/typeagent
@@ -693,9 +696,6 @@ importers:
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
-      agent-cache:
-        specifier: workspace:*
-        version: link:../../packages/cache
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../packages/dispatcher/dispatcher
@@ -1532,15 +1532,15 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
+      '@typeagent/agent-cache':
+        specifier: workspace:*
+        version: link:../cache
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
-      agent-cache:
-        specifier: workspace:*
-        version: link:../cache
       coder-wrapper:
         specifier: workspace:*
         version: link:../coderWrapper
@@ -2222,6 +2222,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/graph-utils':
+        specifier: workspace:*
+        version: link:../agentUtils/graphUtils
       '@typeagent/typechat-utils':
         specifier: workspace:*
         version: link:../../utils/typechatUtils
@@ -2234,9 +2237,6 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
-      graph-utils:
-        specifier: workspace:*
-        version: link:../agentUtils/graphUtils
     devDependencies:
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
@@ -2366,6 +2366,9 @@ importers:
 
   packages/agents/desktop:
     dependencies:
+      '@typeagent/agent-cache':
+        specifier: workspace:*
+        version: link:../../cache
       '@typeagent/agent-runtime':
         specifier: workspace:*
         version: link:../../typeagent
@@ -2378,9 +2381,6 @@ importers:
       '@typeagent/typechat-utils':
         specifier: workspace:*
         version: link:../../utils/typechatUtils
-      agent-cache:
-        specifier: workspace:*
-        version: link:../../cache
       body-parser:
         specifier: ^1.20.6
         version: 1.20.6
@@ -2494,18 +2494,18 @@ importers:
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/graph-utils':
+        specifier: workspace:*
+        version: link:../agentUtils/graphUtils
+      '@typeagent/kp':
+        specifier: workspace:*
+        version: link:../../kp
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
-      graph-utils:
-        specifier: workspace:*
-        version: link:../agentUtils/graphUtils
-      kp:
-        specifier: workspace:*
-        version: link:../../kp
     devDependencies:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
@@ -2565,6 +2565,9 @@ importers:
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/chat-agent':
+        specifier: workspace:*
+        version: link:../chat
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
@@ -2577,9 +2580,6 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
-      chat-agent:
-        specifier: workspace:*
-        version: link:../chat
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
@@ -3262,6 +3262,9 @@ importers:
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/chat-agent':
+        specifier: workspace:*
+        version: link:../chat
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
@@ -3274,9 +3277,6 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
-      chat-agent:
-        specifier: workspace:*
-        version: link:../chat
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
@@ -3769,6 +3769,9 @@ importers:
       '@azure/storage-blob':
         specifier: ^12.26.0
         version: 12.27.0
+      '@typeagent/agent-cache':
+        specifier: workspace:*
+        version: link:../cache
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../agentRpc
@@ -3793,9 +3796,6 @@ importers:
       '@typeagent/typechat-utils':
         specifier: workspace:*
         version: link:../utils/typechatUtils
-      agent-cache:
-        specifier: workspace:*
-        version: link:../cache
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
@@ -3976,7 +3976,7 @@ importers:
 
   packages/cacheExplorer:
     dependencies:
-      agent-cache:
+      '@typeagent/agent-cache':
         specifier: workspace:*
         version: link:../cache
       agent-dispatcher:
@@ -4077,6 +4077,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
+      '@typeagent/agent-cache':
+        specifier: workspace:*
+        version: link:../cache
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -4101,9 +4104,6 @@ importers:
       '@typeagent/typechat-utils':
         specifier: workspace:*
         version: link:../utils/typechatUtils
-      agent-cache:
-        specifier: workspace:*
-        version: link:../cache
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
@@ -4309,6 +4309,9 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
+      '@typeagent/weather-agent':
+        specifier: workspace:*
+        version: link:../agents/weather
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -4318,9 +4321,6 @@ importers:
       isomorphic-ws:
         specifier: ^5.0.0
         version: 5.0.0(ws@8.21.1)
-      weather-agent:
-        specifier: workspace:*
-        version: link:../agents/weather
       zod:
         specifier: ^4.1.13
         version: 4.1.13
@@ -4459,6 +4459,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
+      '@typeagent/agent-cache':
+        specifier: workspace:*
+        version: link:../cache
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../agentRpc
@@ -4474,6 +4477,12 @@ importers:
       '@typeagent/browser':
         specifier: workspace:*
         version: link:../agents/browser
+      '@typeagent/calendar':
+        specifier: workspace:*
+        version: link:../agents/calendar
+      '@typeagent/chat-agent':
+        specifier: workspace:*
+        version: link:../agents/chat
       '@typeagent/code-agent':
         specifier: workspace:*
         version: link:../agents/code
@@ -4483,30 +4492,54 @@ importers:
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
+      '@typeagent/desktop-automation':
+        specifier: workspace:*
+        version: link:../agents/desktop
       '@typeagent/discord-agent':
         specifier: workspace:*
         version: link:../agents/discord
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
+      '@typeagent/email':
+        specifier: workspace:*
+        version: link:../agents/email
       '@typeagent/github-cli-agent':
         specifier: workspace:*
         version: link:../agents/github-cli
       '@typeagent/image-agent':
         specifier: workspace:*
         version: link:../agents/image
+      '@typeagent/ipconfig-agent':
+        specifier: workspace:*
+        version: link:../agents/ipconfig
       '@typeagent/knowledge-processor':
         specifier: workspace:*
         version: link:../knowledgeProcessor
+      '@typeagent/list-agent':
+        specifier: workspace:*
+        version: link:../agents/list
       '@typeagent/markdown-agent':
         specifier: workspace:*
         version: link:../agents/markdown
       '@typeagent/montage-agent':
         specifier: workspace:*
         version: link:../agents/montage
+      '@typeagent/music':
+        specifier: workspace:*
+        version: link:../agents/player
+      '@typeagent/music-local':
+        specifier: workspace:*
+        version: link:../agents/playerLocal
+      '@typeagent/os-notifications-agent':
+        specifier: workspace:*
+        version: link:../agents/osNotifications
       '@typeagent/photo-agent':
         specifier: workspace:*
         version: link:../agents/photo
+      '@typeagent/powershell-typeagent':
+        specifier: workspace:*
+        version: link:../agents/powershell
       '@typeagent/screencapture-agent':
         specifier: workspace:*
         version: link:../agents/screencapture
@@ -4519,42 +4552,36 @@ importers:
       '@typeagent/telemetry':
         specifier: workspace:*
         version: link:../telemetry
+      '@typeagent/timer-agent':
+        specifier: workspace:*
+        version: link:../agents/timer
       '@typeagent/typechat-utils':
         specifier: workspace:*
         version: link:../utils/typechatUtils
+      '@typeagent/utility-typeagent':
+        specifier: workspace:*
+        version: link:../agents/utility
       '@typeagent/video-agent':
         specifier: workspace:*
         version: link:../agents/video
       '@typeagent/visualstudio-agent':
         specifier: workspace:*
         version: link:../agents/visualStudio
-      agent-cache:
+      '@typeagent/weather-agent':
         specifier: workspace:*
-        version: link:../cache
+        version: link:../agents/weather
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
-      calendar:
-        specifier: workspace:*
-        version: link:../agents/calendar
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
-      chat-agent:
-        specifier: workspace:*
-        version: link:../agents/chat
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
-      desktop-automation:
-        specifier: workspace:*
-        version: link:../agents/desktop
       dispatcher-node-providers:
         specifier: workspace:*
         version: link:../dispatcher/nodeProviders
-      email:
-        specifier: workspace:*
-        version: link:../agents/email
       exifreader:
         specifier: ^4.39.0
         version: 4.40.3
@@ -4567,27 +4594,9 @@ importers:
       greeting-agent:
         specifier: workspace:*
         version: link:../agents/greeting
-      ipconfig-agent:
-        specifier: workspace:*
-        version: link:../agents/ipconfig
-      list-agent:
-        specifier: workspace:*
-        version: link:../agents/list
-      music:
-        specifier: workspace:*
-        version: link:../agents/player
-      music-local:
-        specifier: workspace:*
-        version: link:../agents/playerLocal
       onboarding-agent:
         specifier: workspace:*
         version: link:../agents/onboarding
-      os-notifications-agent:
-        specifier: workspace:*
-        version: link:../agents/osNotifications
-      powershell-typeagent:
-        specifier: workspace:*
-        version: link:../agents/powershell
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
@@ -4600,18 +4609,9 @@ importers:
       string-width:
         specifier: ^7.2.0
         version: 7.2.0
-      timer-agent:
-        specifier: workspace:*
-        version: link:../agents/timer
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@4.1.13)
-      utility-typeagent:
-        specifier: workspace:*
-        version: link:../agents/utility
-      weather-agent:
-        specifier: workspace:*
-        version: link:../agents/weather
       windowsclock-agent:
         specifier: workspace:*
         version: link:../agents/windowsClock
@@ -4685,6 +4685,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../actionSchema
+      '@typeagent/agent-cache':
+        specifier: workspace:*
+        version: link:../../cache
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
@@ -4733,9 +4736,6 @@ importers:
       '@typeagent/website-memory':
         specifier: workspace:*
         version: link:../../memory/website
-      agent-cache:
-        specifier: workspace:*
-        version: link:../../cache
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -6030,15 +6030,15 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
+      '@typeagent/agent-cache':
+        specifier: workspace:*
+        version: link:../cache
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
-      agent-cache:
-        specifier: workspace:*
-        version: link:../cache
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12

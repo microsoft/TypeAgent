@@ -10,7 +10,7 @@ import {
     readExplanationTestData,
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
-import { fromJsonActions, RequestAction, toJsonActions } from "agent-cache";
+import { fromJsonActions, RequestAction, toJsonActions } from "@typeagent/agent-cache";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
 import {
@@ -18,7 +18,7 @@ import {
     compileGrammarToNFA,
     matchGrammarWithNFA,
 } from "@typeagent/action-grammar";
-import { convertConstructionsToGrammar } from "agent-cache/grammar";
+import { convertConstructionsToGrammar } from "@typeagent/agent-cache/grammar";
 
 const dataFiles = ["test/data/explanations/**/v5/*.json"];
 

@@ -7,7 +7,7 @@
 // (`matchContextSelector.ts`) can share them without importing each other or
 // pulling the command-context module into their dependency cycle.
 
-import { MatchResult } from "agent-cache";
+import { MatchResult } from "@typeagent/agent-cache";
 
 // The primary (schema, action) of a MatchResult — its first action, with
 // empty-string fallbacks when the match has no action.

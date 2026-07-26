@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { fromJsonActions, toFullActions } from "agent-cache";
+import { fromJsonActions, toFullActions } from "@typeagent/agent-cache";
 import { createDispatcher } from "agent-dispatcher";
 import { awaitCommand } from "@typeagent/dispatcher-types";
 import {

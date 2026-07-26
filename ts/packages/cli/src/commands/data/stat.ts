@@ -3,7 +3,7 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import chalk from "chalk";
-import { CorrectionRecord } from "agent-cache";
+import { CorrectionRecord } from "@typeagent/agent-cache";
 import {
     getCacheFactory,
     readExplanationTestData,

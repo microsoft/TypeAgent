@@ -6,7 +6,7 @@ import {
     FullAction,
     getFullActionName,
     PromptEntity,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import {
     type CommandHandlerContext,
     getCommandResult,
