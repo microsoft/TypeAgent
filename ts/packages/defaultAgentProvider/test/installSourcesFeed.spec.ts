@@ -180,6 +180,97 @@ describe("enumerateFeedAgents", () => {
     });
 });
 
+// Fake fetch spanning multiple feeds: each `/_apis/packaging/feeds/<feed>/`
+// query returns that feed's own inventory; packuments are always served from
+// the primary REGISTRY and keyed by decoded package name.
+function multiFeedFetch(opts: {
+    feeds: Record<string, string[]>; // feed path segment -> package names
+    keywords: Record<string, string[]>;
+}): typeof fetch {
+    return (async (input: any) => {
+        const url = String(input);
+        const m = url.match(/\/_apis\/packaging\/feeds\/([^/]+)\/packages/);
+        if (m) {
+            const names = opts.feeds[m[1]] ?? [];
+            return okJson({
+                value: names.map((name) => ({ normalizedName: name })),
+            });
+        }
+        const decoded = decodeURIComponent(url.slice(REGISTRY.length));
+        const keywords = opts.keywords[decoded] ?? [];
+        return okJson({
+            keywords,
+            versions: { "1.0.0": { keywords }, "2.0.0": { keywords } },
+            "dist-tags": { latest: "2.0.0" },
+        });
+    }) as unknown as typeof fetch;
+}
+
+describe("feed discovery registries", () => {
+    const DISCOVERY =
+        "https://pkgs.dev.azure.com/myorg/myproject/_packaging/typeagent-up/npm/registry/";
+
+    it("enumerates and de-dupes inventory across the primary and discovery feeds", async () => {
+        const config: FeedSourceConfig = {
+            ...CONFIG,
+            discoveryRegistries: [DISCOVERY],
+        };
+        // The primary feed only has echo; the agents live in the discovery
+        // (upstream) feed. echo is in both -> de-duped to a single row.
+        const fetchFn = multiFeedFetch({
+            feeds: {
+                typeagent: ["@typeagent/echo"],
+                "typeagent-up": ["@typeagent/code-agent", "@typeagent/echo"],
+            },
+            keywords: {
+                "@typeagent/echo": ["typeagent-agent"],
+                "@typeagent/code-agent": ["typeagent-agent"],
+            },
+        });
+        const agents = await enumerateFeedAgents(config, "tok", fetchFn);
+        expect(agents.sort()).toEqual([
+            "@typeagent/code-agent",
+            "@typeagent/echo",
+        ]);
+    });
+
+    it("resolves discovery registries from TYPEAGENT_FEED_DISCOVERY_REGISTRIES when config is silent", async () => {
+        const prior = process.env.TYPEAGENT_FEED_DISCOVERY_REGISTRIES;
+        process.env.TYPEAGENT_FEED_DISCOVERY_REGISTRIES = DISCOVERY;
+        try {
+            const fetchFn = multiFeedFetch({
+                feeds: {
+                    typeagent: [],
+                    "typeagent-up": ["@typeagent/code-agent"],
+                },
+                keywords: { "@typeagent/code-agent": ["typeagent-agent"] },
+            });
+            const agents = await enumerateFeedAgents(CONFIG, "tok", fetchFn);
+            expect(agents).toEqual(["@typeagent/code-agent"]);
+        } finally {
+            if (prior === undefined) {
+                delete process.env.TYPEAGENT_FEED_DISCOVERY_REGISTRIES;
+            } else {
+                process.env.TYPEAGENT_FEED_DISCOVERY_REGISTRIES = prior;
+            }
+        }
+    });
+
+    it("throws on an unrecognized discovery registry URL", async () => {
+        const config: FeedSourceConfig = {
+            ...CONFIG,
+            discoveryRegistries: ["https://registry.npmjs.org/"],
+        };
+        await expect(
+            enumerateFeedAgents(
+                config,
+                "tok",
+                fakeFetch({ packages: [], keywords: {} }),
+            ),
+        ).rejects.toThrow(/unrecognized discovery registry URL/);
+    });
+});
+
 describe("feedSource.find", () => {
     it("matches a package present in the cached list", async () => {
         const installDir = fs.mkdtempSync(path.join(os.tmpdir(), "ta-feed-"));
