@@ -1,0 +1,387 @@
+/* Copyright (c) Microsoft Corporation.
+   Licensed under the MIT License. */
+
+/* New Agent wizard webview styles. Uses VS Code theme tokens so it tracks the
+   active color theme; no inline styles (the CSP forbids `style=""`). */
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  padding: 0;
+  margin: 0;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: auto;
+  padding: 12px 16px;
+  box-sizing: border-box;
+  gap: 10px;
+}
+
+/* --- Buttons ------------------------------------------------------------- */
+.wz-btn {
+  font-family: inherit;
+  font-size: inherit;
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+  border-radius: 4px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.wz-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.wz-btn-primary {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+.wz-btn-primary:hover:not(:disabled) {
+  background: var(--vscode-button-hoverBackground);
+}
+.wz-btn-secondary {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border-color: var(--vscode-contrastBorder, transparent);
+}
+.wz-btn-secondary:hover:not(:disabled) {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* --- Start screen -------------------------------------------------------- */
+.wz-start {
+  max-width: 620px;
+  margin: 24px auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.wz-start-title {
+  font-size: 1.5em;
+  margin: 0;
+}
+.wz-start-lead {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+}
+.wz-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 600;
+}
+.wz-textarea,
+.wz-input {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid
+    var(--vscode-input-border, var(--vscode-contrastBorder, #8888));
+  border-radius: 4px;
+  padding: 6px 8px;
+  resize: vertical;
+}
+.wz-textarea:focus,
+.wz-input:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+.wz-start-actions {
+  display: flex;
+}
+
+/* --- Header -------------------------------------------------------------- */
+.wz-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid var(--vscode-panel-border, #8884);
+  padding-bottom: 10px;
+}
+.wz-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wz-title {
+  font-size: 1.3em;
+  margin: 0;
+  flex: 1;
+}
+.wz-toggle {
+  margin-left: auto;
+}
+.wz-subtitle {
+  color: var(--vscode-descriptionForeground);
+}
+.wz-progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--vscode-editorWidget-background, #8883);
+  overflow: hidden;
+}
+.wz-progress-fill {
+  height: 100%;
+  background: var(
+    --vscode-progressBar-background,
+    var(--vscode-button-background)
+  );
+  transition: width 0.2s ease;
+}
+.wz-progress-label {
+  font-size: 0.9em;
+  color: var(--vscode-descriptionForeground);
+}
+.wz-run-next {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+/* --- Banners ------------------------------------------------------------- */
+.wz-banner {
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+.wz-banner-status {
+  background: var(--vscode-inputValidation-infoBackground, #063b49);
+  border: 1px solid var(--vscode-inputValidation-infoBorder, #1177bb);
+  color: var(--vscode-foreground);
+}
+.wz-banner-error {
+  background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+  border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
+}
+.wz-banner-warn {
+  background: var(--vscode-inputValidation-warningBackground, #352a05);
+  border: 1px solid var(--vscode-inputValidation-warningBorder, #b89500);
+}
+.wz-reconcile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wz-reconcile-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* --- Body: stepper + detail --------------------------------------------- */
+.wz-body {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+.wz-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 220px;
+  flex-shrink: 0;
+}
+.wz-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+  background: transparent;
+  color: var(--vscode-foreground);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.wz-step:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+.wz-step-selected {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+.wz-step-current {
+  border-color: var(--vscode-focusBorder);
+}
+.wz-step-index {
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 50%;
+  font-size: 0.8em;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  flex-shrink: 0;
+}
+.wz-step-name {
+  flex: 1;
+}
+.wz-step-complete .wz-step-index {
+  background: var(
+    --vscode-testing-iconPassed,
+    var(--vscode-charts-green, #388a34)
+  );
+  color: #fff;
+}
+
+/* Status dots. */
+.wz-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.wz-dot-pending {
+  background: var(--vscode-descriptionForeground);
+  opacity: 0.5;
+}
+.wz-dot-running {
+  background: var(
+    --vscode-progressBar-background,
+    var(--vscode-charts-blue, #3794ff)
+  );
+}
+.wz-dot-complete {
+  background: var(
+    --vscode-testing-iconPassed,
+    var(--vscode-charts-green, #388a34)
+  );
+}
+.wz-dot-stale {
+  background: var(
+    --vscode-testing-iconQueued,
+    var(--vscode-charts-yellow, #cca700)
+  );
+}
+
+/* --- Detail pane --------------------------------------------------------- */
+.wz-detail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.wz-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wz-detail-title {
+  margin: 0;
+  font-size: 1.1em;
+}
+.wz-detail-time {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+}
+.wz-detail-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.wz-badge {
+  border-radius: 10px;
+  padding: 1px 10px;
+  font-size: 0.8em;
+}
+.wz-badge-pending {
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}
+.wz-badge-running {
+  background: var(
+    --vscode-progressBar-background,
+    var(--vscode-charts-blue, #3794ff)
+  );
+  color: #fff;
+}
+.wz-badge-complete {
+  background: var(
+    --vscode-testing-iconPassed,
+    var(--vscode-charts-green, #388a34)
+  );
+  color: #fff;
+}
+.wz-badge-stale {
+  background: var(
+    --vscode-testing-iconQueued,
+    var(--vscode-charts-yellow, #cca700)
+  );
+  color: #000;
+}
+
+.wz-json {
+  border: 1px solid var(--vscode-panel-border, #8884);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+.wz-json > summary {
+  cursor: pointer;
+  color: var(--vscode-descriptionForeground);
+}
+.wz-json-pre {
+  margin: 8px 0 4px;
+  padding: 8px;
+  overflow: auto;
+  max-height: 260px;
+  background: var(--vscode-textCodeBlock-background, #8881);
+  border-radius: 4px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.9em;
+}
+
+.wz-hint {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+}
+
+/* --- Install bar --------------------------------------------------------- */
+.wz-install {
+  border-top: 1px solid var(--vscode-panel-border, #8884);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wz-install-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.wz-health {
+  font-size: 0.9em;
+}
+.wz-health-pass {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green, #388a34));
+}
+.wz-health-warn {
+  color: var(--vscode-testing-iconQueued, var(--vscode-charts-yellow, #cca700));
+}
+.wz-health-fail {
+  color: var(--vscode-testing-iconFailed, var(--vscode-charts-red, #be1100));
+}
+.wz-health-unavailable {
+  color: var(--vscode-descriptionForeground);
+}
+.wz-installed {
+  font-size: 0.9em;
+  color: var(--vscode-descriptionForeground);
+}
+
+.wz-center {
+  margin: auto;
+  color: var(--vscode-descriptionForeground);
+}

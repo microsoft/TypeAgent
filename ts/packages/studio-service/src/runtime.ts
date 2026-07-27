@@ -10,6 +10,7 @@ import {
     canonicalizeRepoRoot,
     type StudioRuntime,
 } from "@typeagent/core/runtime";
+import { InMemoryOnboardingBridge } from "@typeagent/core/onboardingBridge";
 import {
     FileWorkspaceState,
     studioWorkspaceStateFile,
@@ -18,6 +19,7 @@ import {
     createDefaultWildcardValidatorResolver,
     canValidateWildcards,
 } from "./wildcardValidation.js";
+import { createServiceOnboardingPhaseRunner } from "./onboarding/dispatcherGateway.js";
 
 /**
  * Candidate repository roots for Studio to inspect, most-specific first. The
@@ -144,6 +146,12 @@ export function getStudioRuntime(repoRoot?: string): StudioRuntime {
                 resolveWildcardValidator:
                     createDefaultWildcardValidatorResolver(),
                 resolveCanValidateWildcards: canValidateWildcards,
+                // Channelize onboarding onto the service: drive the wizard's
+                // phases through a real onboarding-only dispatcher (built lazily
+                // on first use) instead of the default in-memory stub.
+                onboarding: new InMemoryOnboardingBridge({
+                    phaseRunner: createServiceOnboardingPhaseRunner(),
+                }),
             },
         );
         runtimeCache.set(key, runtime);

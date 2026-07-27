@@ -18,7 +18,14 @@ import type {
     StudioCollisionScanResult,
     StudioCorpusImportRequest,
     StudioCorpusImportResult,
+    PackagingHealthGateResult,
 } from "./studioRuntimeCore.js";
+import type {
+    OnboardingState,
+    OnboardingPhaseName,
+    PhaseStatus,
+    RestorePhaseResult,
+} from "../onboardingBridge/index.js";
 
 /**
  * Wire types for the Studio service channel — the typed protocol the standalone,
@@ -189,6 +196,96 @@ export type StudioServiceInvokeFunctions = {
     ): Promise<number>;
     /** Re-create sandboxes from the agent runtime's persisted snapshot. */
     restoreSandboxes(repoRoot?: string): Promise<void>;
+
+    // --- Onboarding / New Agent wizard (F1.x). Mutating: runs the onboarding
+    // agent in the SERVICE process via the injected phaseRunner, so installs
+    // land in the real service sandboxes (not a split-brain in-process copy).
+    // Repo-scoped like the rest; the "active session" is per-workspace runtime
+    // state, keyed by the last-started session. ---
+
+    /** Start a New Agent onboarding session from a natural-language seed. */
+    startOnboarding(
+        repoRoot: string | undefined,
+        seed: { description: string; agentName?: string },
+    ): Promise<OnboardingState>;
+    /** Snapshot the active (last-started) onboarding session. */
+    getActiveOnboardingSession(repoRoot?: string): Promise<OnboardingState>;
+    /** Forget the active onboarding session pointer (does not delete artifacts). */
+    clearActiveOnboardingSession(repoRoot?: string): Promise<void>;
+    /** The canonical ordered phase list the wizard renders as tabs. */
+    listPhases(repoRoot?: string): Promise<readonly OnboardingPhaseName[]>;
+    /** Default inputs the wizard pre-fills for a phase's form. */
+    getDefaultInputsForPhaseOnActiveSession(
+        repoRoot: string | undefined,
+        phase: OnboardingPhaseName,
+    ): Promise<unknown>;
+    /** Run a single phase (with optional overridden inputs); returns new state. */
+    runPhaseOnActiveSession(
+        repoRoot: string | undefined,
+        phase: OnboardingPhaseName,
+        inputs?: unknown,
+    ): Promise<OnboardingState>;
+    /** Status badge for one phase (pending/running/complete/stale). */
+    getPhaseStatusOnActiveSession(
+        repoRoot: string | undefined,
+        phase: OnboardingPhaseName,
+    ): Promise<PhaseStatus>;
+    /** Phases marked stale because an upstream phase re-ran (F1.5). */
+    listStalePhasesOnActiveSession(
+        repoRoot?: string,
+    ): Promise<OnboardingPhaseName[]>;
+    /** Run every not-yet-complete phase in order; returns the phases run. */
+    runRemainingPhasesOnActiveSession(repoRoot?: string): Promise<{
+        state: OnboardingState;
+        completedPhases: OnboardingPhaseName[];
+    }>;
+    /** Force-rerun the given phases in order (F1.5 reconciliation). */
+    rerunPhasesOnActiveSession(
+        repoRoot: string | undefined,
+        phases: OnboardingPhaseName[],
+    ): Promise<{
+        state: OnboardingState;
+        rerunPhases: OnboardingPhaseName[];
+    }>;
+    /** Restore a phase's prior outputs and report the stale downstream (F1.5). */
+    restorePhaseOnActiveSession(
+        repoRoot: string | undefined,
+        phase: OnboardingPhaseName,
+    ): Promise<RestorePhaseResult>;
+    /** Resolve the install artifact (scaffolded dir/package) for the session. */
+    resolveInstallArtifactPathForActiveSession(
+        repoRoot?: string,
+    ): Promise<string>;
+    /** Evaluate the packaging health gate for the active session (F1.4). */
+    evaluatePackagingHealthGateForActiveSession(
+        repoRoot?: string,
+    ): Promise<PackagingHealthGateResult>;
+    /** Evaluate + throw on a failing gate (the install-blocking variant). */
+    enforcePackagingHealthGateForActiveSession(
+        repoRoot?: string,
+    ): Promise<PackagingHealthGateResult>;
+    /** Evaluate the packaging health gate for an explicit artifact path. */
+    checkPackagingHealthGate(
+        repoRoot: string | undefined,
+        artifactPath: string,
+    ): Promise<PackagingHealthGateResult>;
+    /** Install the active session's agent into a sandbox (F1.3). */
+    installLastSessionToSandbox(
+        repoRoot: string | undefined,
+        sandboxId?: string,
+        options?: { skipHealthGate?: boolean },
+    ): Promise<{ sessionId: string; artifactPath: string }>;
+    /** Install a specific artifact into a sandbox (F1.3). */
+    installArtifactToSandbox(
+        repoRoot: string | undefined,
+        artifactPath: string,
+        sandboxId?: string,
+    ): Promise<{ sessionId: string; artifactPath: string }>;
+    /** Route a conversational prompt to onboarding vs. schema author (F1.2). */
+    routeConversation(
+        repoRoot: string | undefined,
+        prompt: string,
+    ): Promise<{ target: "onboarding" | "schemaAuthor"; reason: string }>;
 };
 
 /** Server → client pushes. */

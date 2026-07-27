@@ -18,7 +18,14 @@ import type {
     StudioCorpusImportRequest,
     StudioCorpusImportResult,
     AvailableAgent,
+    PackagingHealthGateResult,
 } from "@typeagent/core/runtime";
+import type {
+    OnboardingState,
+    OnboardingPhaseName,
+    PhaseStatus,
+    RestorePhaseResult,
+} from "@typeagent/core/onboardingBridge";
 import type {
     StudioEvent,
     CollisionDetectedEvent,
@@ -334,6 +341,173 @@ export class StudioServiceClient {
 
     restoreSandboxes(): Promise<void> {
         return this.rpc.invoke("restoreSandboxes", this.repoRoot);
+    }
+
+    // --- Onboarding / New Agent wizard (F1.x) ---
+
+    /** Start a New Agent onboarding session from a natural-language seed. */
+    startOnboarding(seed: {
+        description: string;
+        agentName?: string;
+    }): Promise<OnboardingState> {
+        return this.rpc.invoke("startOnboarding", this.repoRoot, seed);
+    }
+
+    /** Snapshot the active (last-started) onboarding session. */
+    getActiveOnboardingSession(): Promise<OnboardingState> {
+        return this.rpc.invoke("getActiveOnboardingSession", this.repoRoot);
+    }
+
+    /** Forget the active onboarding session pointer. */
+    clearActiveOnboardingSession(): Promise<void> {
+        return this.rpc.invoke("clearActiveOnboardingSession", this.repoRoot);
+    }
+
+    /** The canonical ordered phase list the wizard renders as tabs. */
+    listPhases(): Promise<readonly OnboardingPhaseName[]> {
+        return this.rpc.invoke("listPhases", this.repoRoot);
+    }
+
+    /** Default inputs the wizard pre-fills for a phase's form. */
+    getDefaultInputsForPhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<unknown> {
+        return this.rpc.invoke(
+            "getDefaultInputsForPhaseOnActiveSession",
+            this.repoRoot,
+            phase,
+        );
+    }
+
+    /** Run a single phase (with optional overridden inputs); returns new state. */
+    runPhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+        inputs?: unknown,
+    ): Promise<OnboardingState> {
+        return this.rpc.invoke(
+            "runPhaseOnActiveSession",
+            this.repoRoot,
+            phase,
+            inputs,
+        );
+    }
+
+    /** Status badge for one phase (pending/running/complete/stale). */
+    getPhaseStatusOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<PhaseStatus> {
+        return this.rpc.invoke(
+            "getPhaseStatusOnActiveSession",
+            this.repoRoot,
+            phase,
+        );
+    }
+
+    /** Phases marked stale because an upstream phase re-ran (F1.5). */
+    listStalePhasesOnActiveSession(): Promise<OnboardingPhaseName[]> {
+        return this.rpc.invoke("listStalePhasesOnActiveSession", this.repoRoot);
+    }
+
+    /** Run every not-yet-complete phase in order; returns the phases run. */
+    runRemainingPhasesOnActiveSession(): Promise<{
+        state: OnboardingState;
+        completedPhases: OnboardingPhaseName[];
+    }> {
+        return this.rpc.invoke(
+            "runRemainingPhasesOnActiveSession",
+            this.repoRoot,
+        );
+    }
+
+    /** Force-rerun the given phases in order (F1.5 reconciliation). */
+    rerunPhasesOnActiveSession(phases: OnboardingPhaseName[]): Promise<{
+        state: OnboardingState;
+        rerunPhases: OnboardingPhaseName[];
+    }> {
+        return this.rpc.invoke(
+            "rerunPhasesOnActiveSession",
+            this.repoRoot,
+            phases,
+        );
+    }
+
+    /** Restore a phase's prior outputs and report the stale downstream (F1.5). */
+    restorePhaseOnActiveSession(
+        phase: OnboardingPhaseName,
+    ): Promise<RestorePhaseResult> {
+        return this.rpc.invoke(
+            "restorePhaseOnActiveSession",
+            this.repoRoot,
+            phase,
+        );
+    }
+
+    /** Resolve the install artifact (scaffolded dir/package) for the session. */
+    resolveInstallArtifactPathForActiveSession(): Promise<string> {
+        return this.rpc.invoke(
+            "resolveInstallArtifactPathForActiveSession",
+            this.repoRoot,
+        );
+    }
+
+    /** Evaluate the packaging health gate for the active session (F1.4). */
+    evaluatePackagingHealthGateForActiveSession(): Promise<PackagingHealthGateResult> {
+        return this.rpc.invoke(
+            "evaluatePackagingHealthGateForActiveSession",
+            this.repoRoot,
+        );
+    }
+
+    /** Evaluate + throw on a failing gate (the install-blocking variant). */
+    enforcePackagingHealthGateForActiveSession(): Promise<PackagingHealthGateResult> {
+        return this.rpc.invoke(
+            "enforcePackagingHealthGateForActiveSession",
+            this.repoRoot,
+        );
+    }
+
+    /** Evaluate the packaging health gate for an explicit artifact path. */
+    checkPackagingHealthGate(
+        artifactPath: string,
+    ): Promise<PackagingHealthGateResult> {
+        return this.rpc.invoke(
+            "checkPackagingHealthGate",
+            this.repoRoot,
+            artifactPath,
+        );
+    }
+
+    /** Install the active session's agent into a sandbox (F1.3). */
+    installLastSessionToSandbox(
+        sandboxId?: string,
+        options?: { skipHealthGate?: boolean },
+    ): Promise<{ sessionId: string; artifactPath: string }> {
+        return this.rpc.invoke(
+            "installLastSessionToSandbox",
+            this.repoRoot,
+            sandboxId,
+            options,
+        );
+    }
+
+    /** Install a specific artifact into a sandbox (F1.3). */
+    installArtifactToSandbox(
+        artifactPath: string,
+        sandboxId?: string,
+    ): Promise<{ sessionId: string; artifactPath: string }> {
+        return this.rpc.invoke(
+            "installArtifactToSandbox",
+            this.repoRoot,
+            artifactPath,
+            sandboxId,
+        );
+    }
+
+    /** Route a conversational prompt to onboarding vs. schema author (F1.2). */
+    routeConversation(
+        prompt: string,
+    ): Promise<{ target: "onboarding" | "schemaAuthor"; reason: string }> {
+        return this.rpc.invoke("routeConversation", this.repoRoot, prompt);
     }
 
     close(): void {
