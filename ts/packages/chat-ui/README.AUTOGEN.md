@@ -3,26 +3,28 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=3eadefeccda3d9e10116a4c4862778d80b9bfc2f1f72f1ab23dc09baf09a0edf -->
+<!-- AUTOGEN:DOCS:HASH:sha256=15ee56d87e10ae7094dc91827e8bc977cba2da1d9941305c88572905f2c8dcad -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# chat-ui — AI-generated documentation
+# @typeagent/chat-ui — AI-generated documentation
 
 > 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
-The `chat-ui` package provides a shared, framework-free chat user interface for TypeAgent applications. It is used across multiple platforms, including the VS Code shell extension, the browser extension chat panel, and the Visual Studio extension webview. The package includes components for rendering user and agent messages, handling streaming updates, replaying chat history, managing connection status, and collecting user feedback. It ensures a consistent and interactive chat experience across these environments.
+The `@typeagent/chat-ui` package provides a shared, framework-free chat user interface for various TypeAgent applications. It is designed to deliver a consistent and interactive chat experience across multiple platforms, including the VS Code shell extension, the browser extension chat panel, and the Visual Studio extension webview. The package includes components for rendering chat messages, handling streaming updates, replaying chat history, managing connection status, and collecting user feedback.
+
+This package is a TypeScript library that ships with both TypeScript source files and CSS styles. It is designed to be integrated into host applications, which are responsible for managing the chat interface and its interactions with users and agents.
 
 ## What it does
 
-The `chat-ui` package offers a set of tools and components to build and manage chat interfaces. Key features include:
+The `@typeagent/chat-ui` package provides the following key features:
 
-- **ChatPanel**: The primary component for rendering the chat interface. It supports:
+- **ChatPanel**: The core component for rendering the chat interface. It supports:
 
-  - Adding user and agent messages via `addAgentMessage`.
+  - Adding user and agent messages using `addAgentMessage`.
   - Updating display metadata with `setDisplayInfo`.
-  - Replaying historical chat entries using `replayHistory`.
+  - Replaying historical chat entries via `replayHistory`.
   - Streaming updates for dynamic content display.
 
 - **FeedbackWidget**: A component for collecting user feedback, including thumbs-up/thumbs-down ratings, comments, and contextual information.
@@ -39,9 +41,9 @@ The package is used by several TypeAgent components, such as the VS Code shell, 
 
 ## Setup
 
-To integrate the `chat-ui` package into your project, follow these steps:
+To integrate the `@typeagent/chat-ui` package into your project, follow these steps:
 
-1. **Install the package**: Add `chat-ui` to your project dependencies using your preferred package manager.
+1. **Install the package**: Add `@typeagent/chat-ui` to your project dependencies using your preferred package manager.
 2. **Install required dependencies**: Ensure the following workspace dependencies are installed:
    - `@typeagent/agent-sdk`
    - `@typeagent/completion-ui`
@@ -56,7 +58,7 @@ For additional details on usage and integration, refer to the hand-written READM
 
 ## Key Files
 
-The `chat-ui` package is organized into several key files, each responsible for specific functionality:
+The `@typeagent/chat-ui` package is organized into several key files, each responsible for specific functionality:
 
 - **[index.ts](./src/index.ts)**: The main entry point, exporting the package's primary components and utilities.
 - **[chatPanel.ts](./src/chatPanel.ts)**: Implements the `ChatPanel` component, which is the core of the chat UI. It handles user input, agent messages, and display updates.
@@ -68,7 +70,7 @@ The `chat-ui` package is organized into several key files, each responsible for 
 
 ## How to extend
 
-To extend the `chat-ui` package, follow these steps:
+To extend the `@typeagent/chat-ui` package, follow these steps:
 
 1. **Understand the core components**: Start by reviewing the [chatPanel.ts](./src/chatPanel.ts) file, as it contains the implementation of the `ChatPanel` component, which is central to the package's functionality.
 
@@ -85,7 +87,7 @@ To extend the `chat-ui` package, follow these steps:
 
 6. **Test your changes**: Add or update tests to verify the functionality of your changes. Ensure that the package remains compatible with its existing integrations.
 
-By following these steps, you can effectively extend the `chat-ui` package to meet your specific requirements while maintaining compatibility with the rest of the TypeAgent ecosystem.
+By following these steps, you can effectively extend the `@typeagent/chat-ui` package to meet your specific requirements while maintaining compatibility with the rest of the TypeAgent ecosystem.
 
 ## Reference
 
@@ -108,9 +110,9 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ### Used by
 
+- [@typeagent/browser](../../packages/agents/browser/README.md)
 - [@typeagent/browser-extension](../../packages/agents/browserExtension/README.md)
 - [agent-shell](../../packages/shell/README.md)
-- [browser-typeagent](../../packages/agents/browser/README.md)
 - visualstudio-extension-webview
 - [vscode-shell](../../packages/vscode-shell/README.md)
 
@@ -120,6 +122,6 @@ External: `ansi_up`, `dompurify`, `markdown-it`
 
 ---
 
-_Auto-generated against commit `74f6008eafef6c7e010df09a4ca8d8b068509d74` on `2026-07-23T16:45:39.375Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter chat-ui docs:verify-links` to spot-check._
+_Auto-generated against commit `fa4bb9b44db12e2d15b83e03e59f9c7147ed2b50` on `2026-07-27T19:08:36.121Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/chat-ui docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

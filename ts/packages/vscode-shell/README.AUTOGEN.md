@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c74f6ccd555253fac9cb68218e041f05c6a8c450f3e285b4b733da09a53ee2da -->
+<!-- AUTOGEN:DOCS:HASH:sha256=cfcc4fb24ec4104b64e7f095e12f8d8201ed31dc9156eb644331051f498347b7 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-shell — AI-generated documentation
@@ -158,13 +158,13 @@ Workspace:
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
+- [@typeagent/chat-ui](../../packages/chat-ui/README.md)
 - [@typeagent/completion-ui](../../packages/completionUI/README.md)
 - [@typeagent/core](../../packages/typeagent-core/README.md)
 - [@typeagent/dispatcher-rpc](../../packages/dispatcher/rpc/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
 - [@typeagent/websocket-utils](../../packages/utils/webSocketUtils/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
-- [chat-ui](../../packages/chat-ui/README.md)
 
 External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `microsoft-cognitiveservices-speech-sdk`, `ws`
 
@@ -174,6 +174,6 @@ External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `micr
 
 ---
 
-_Auto-generated against commit `274f0c51c3f1dca4e627c5311084db01d02fe1e9` on `2026-07-23T15:09:16.468Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `fa4bb9b44db12e2d15b83e03e59f9c7147ed2b50` on `2026-07-27T19:08:36.121Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

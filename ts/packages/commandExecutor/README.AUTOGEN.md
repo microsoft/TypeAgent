@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7c872fb7a3245052b2675202876c9e5d1055def38d108b0ff1d4e17fecc2d880 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=831a111f82b3853ae8857159da430a7d98430f4c878ade9c57d17efffc2bcbf6 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # command-executor-mcp — AI-generated documentation
@@ -12,9 +12,7 @@
 
 ## Overview
 
-The `command-executor-mcp` package is an MCP (Model Context Protocol) server designed to execute user commands such as playing music, managing lists, and interacting with calendars. It acts as a bridge between MCP clients (e.g., Claude Code) and the TypeAgent system, translating natural language commands into structured actions that the TypeAgent dispatcher can process.
-
-This server supports natural language execution, schema discovery, dynamic schema loading, and direct action invocation. It connects to the TypeAgent dispatcher via WebSocket and includes automatic reconnection capabilities to ensure reliability.
+The `command-executor-mcp` package is an MCP (Model Context Protocol) server that facilitates the execution of user commands such as playing music, managing lists, and interacting with calendars. It acts as a bridge between MCP clients (e.g., Claude Code) and the TypeAgent system, translating natural language commands into structured actions that the TypeAgent dispatcher can process. The server supports schema discovery, dynamic schema loading, and direct action invocation, making it a versatile tool for integrating natural language interfaces with structured backend systems.
 
 ## What it does
 
@@ -33,6 +31,7 @@ The server connects to the TypeAgent dispatcher via WebSocket and includes autom
 To configure and run the `command-executor-mcp` server, you need to set the following environment variables:
 
 - `AGENT_SERVER_CONFIG`: Path to the agent server configuration file. This file defines settings such as grammar systems and cache options.
+- `AGENT_SERVER_CONVERSATION`: Identifier for the conversation context used by the server.
 - `AGENT_SERVER_URL`: WebSocket URL of the TypeAgent dispatcher. Defaults to `ws://localhost:8999` if not explicitly set.
 - `TYPEAGENT_INSTANCE_DIR`: Directory for the TypeAgent instance, used to locate configuration files and other resources.
 
@@ -136,14 +135,15 @@ External: `@modelcontextprotocol/sdk`, `dotenv`, `html-to-text`, `isomorphic-ws`
 
 ### Environment variables
 
-_3 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_4 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `AGENT_SERVER_CONFIG`
+- `AGENT_SERVER_CONVERSATION`
 - `AGENT_SERVER_URL`
 - `TYPEAGENT_INSTANCE_DIR`
 
 ---
 
-_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter command-executor-mcp docs:verify-links` to spot-check._
+_Auto-generated against commit `fa4bb9b44db12e2d15b83e03e59f9c7147ed2b50` on `2026-07-27T19:08:36.121Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter command-executor-mcp docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
