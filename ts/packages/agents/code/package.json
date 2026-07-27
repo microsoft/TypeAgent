@@ -1,7 +1,6 @@
 {
-  "name": "code-agent",
+  "name": "@typeagent/code-agent",
   "version": "0.0.1",
-  "private": true,
   "description": "Code dispatcher agent",
   "keywords": [
     "typeagent-agent"
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/codeManifest.json",
     "./agent/handlers": "./dist/codeActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/codeSchema.agr -o ./dist/codeSchema.ag.json",
     "agc:all": "concurrently npm:agc npm:agc:debug npm:agc:display npm:agc:general npm:agc:workbench npm:agc:extension npm:agc:vscode-shell",

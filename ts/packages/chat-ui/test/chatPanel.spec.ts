@@ -598,6 +598,50 @@ describe("roadrunner (explained) placement", () => {
     });
 });
 
+describe("attachment send state", () => {
+    it("keeps an image-only message sendable after leaving command history", async () => {
+        const root = document.createElement("div");
+        document.body.appendChild(root);
+        const panel = new ChatPanel(root, {
+            platformAdapter: { handleLinkClick() {} },
+            imageCaptureProvider: {
+                pickFile: async () => ["data:image/png;base64,AA=="],
+            },
+            onSend() {},
+        });
+        const input = root.querySelector<HTMLElement>("#phraseDiv")!;
+        const sendButton =
+            root.querySelector<HTMLButtonElement>("#sendbutton")!;
+        const pressHistoryKey = (key: "ArrowUp" | "ArrowDown") => {
+            input.dispatchEvent(
+                new KeyboardEvent("keydown", {
+                    key,
+                    bubbles: true,
+                    cancelable: true,
+                }),
+            );
+        };
+
+        panel.injectCommand("@help");
+        pressHistoryKey("ArrowUp");
+        pressHistoryKey("ArrowDown");
+        expect(input.textContent).toBe("");
+        expect(sendButton.disabled).toBe(true);
+
+        root.querySelector<HTMLButtonElement>(".chat-attach-button")!.click();
+        await Promise.resolve();
+        expect(root.querySelector(".chat-attachment-thumb")).not.toBeNull();
+        expect(sendButton.disabled).toBe(false);
+
+        pressHistoryKey("ArrowUp");
+        pressHistoryKey("ArrowDown");
+
+        expect(input.textContent).toBe("");
+        expect(root.querySelector(".chat-attachment-thumb")).not.toBeNull();
+        expect(sendButton.disabled).toBe(false);
+    });
+});
+
 describe("icons", () => {
     it("each affordance icon renders an <svg> inside an <i> wrapper", () => {
         for (const make of [iconStop, iconJumpQueue, iconX]) {

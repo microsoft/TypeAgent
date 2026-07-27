@@ -1703,7 +1703,7 @@ export class ChatPanel {
         } else {
             this.textInput.textContent = "";
         }
-        this.sendButton.disabled = !this.textInput.textContent?.trim();
+        this.updateSendButtonState();
         // Place the caret at the end of the recalled text so the user
         // can continue editing from where the input ends, rather than
         // leaving it stuck at the start of the input box.

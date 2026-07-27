@@ -12,7 +12,7 @@ import {
 import {
     StudioRegistryServer,
     resolveStudioRepoRootCandidates,
-} from "studio-service";
+} from "@typeagent/studio-service";
 
 const debug = registerDebug("typeagent:studio:lifecycle");
 

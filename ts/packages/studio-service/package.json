@@ -1,7 +1,6 @@
 {
-  "name": "studio-service",
+  "name": "@typeagent/studio-service",
   "version": "0.0.1",
-  "private": true,
   "description": "TypeAgent Studio service — the standalone, per-workspace host of the @typeagent/core Studio runtime and its typed service channel.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

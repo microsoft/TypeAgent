@@ -205,6 +205,9 @@ importers:
       '@typeagent/conversation-memory':
         specifier: workspace:*
         version: link:../../packages/memory/conversation
+      '@typeagent/image-memory':
+        specifier: workspace:*
+        version: link:../../packages/memory/image
       '@typeagent/knowledge-processor':
         specifier: workspace:*
         version: link:../../packages/knowledgeProcessor
@@ -241,9 +244,6 @@ importers:
       exifreader:
         specifier: ^4.39.0
         version: 4.40.3
-      image-memory:
-        specifier: workspace:*
-        version: link:../../packages/memory/image
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
@@ -318,6 +318,9 @@ importers:
       '@typeagent/conversation-memory':
         specifier: workspace:*
         version: link:../../packages/memory/conversation
+      '@typeagent/image-memory':
+        specifier: workspace:*
+        version: link:../../packages/memory/image
       '@typeagent/knowledge-processor':
         specifier: workspace:*
         version: link:../../packages/knowledgeProcessor
@@ -336,9 +339,6 @@ importers:
       exifreader:
         specifier: ^4.39.0
         version: 4.40.3
-      image-memory:
-        specifier: workspace:*
-        version: link:../../packages/memory/image
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
@@ -2852,6 +2852,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
+      '@typeagent/image-memory':
+        specifier: workspace:*
+        version: link:../../memory/image
       '@typeagent/knowledge-processor':
         specifier: workspace:*
         version: link:../../knowledgeProcessor
@@ -2879,9 +2882,6 @@ importers:
       express-rate-limit:
         specifier: ^7.5.0
         version: 7.5.1(express@4.22.1)
-      image-memory:
-        specifier: workspace:*
-        version: link:../../memory/image
       koffi:
         specifier: ^2.10.1
         version: 2.11.0
@@ -3311,15 +3311,15 @@ importers:
       '@typeagent/core':
         specifier: workspace:*
         version: link:../../typeagent-core
+      '@typeagent/studio-service':
+        specifier: workspace:*
+        version: link:../../studio-service
       '@typeagent/websocket-utils':
         specifier: workspace:*
         version: link:../../utils/webSocketUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
-      studio-service:
-        specifier: workspace:*
-        version: link:../../studio-service
       ws:
         specifier: ^8.21.1
         version: 8.21.1
@@ -4474,6 +4474,9 @@ importers:
       '@typeagent/browser':
         specifier: workspace:*
         version: link:../agents/browser
+      '@typeagent/code-agent':
+        specifier: workspace:*
+        version: link:../agents/code
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
@@ -4489,12 +4492,27 @@ importers:
       '@typeagent/github-cli-agent':
         specifier: workspace:*
         version: link:../agents/github-cli
+      '@typeagent/image-agent':
+        specifier: workspace:*
+        version: link:../agents/image
       '@typeagent/knowledge-processor':
         specifier: workspace:*
         version: link:../knowledgeProcessor
+      '@typeagent/markdown-agent':
+        specifier: workspace:*
+        version: link:../agents/markdown
+      '@typeagent/montage-agent':
+        specifier: workspace:*
+        version: link:../agents/montage
       '@typeagent/photo-agent':
         specifier: workspace:*
         version: link:../agents/photo
+      '@typeagent/screencapture-agent':
+        specifier: workspace:*
+        version: link:../agents/screencapture
+      '@typeagent/studio-agent':
+        specifier: workspace:*
+        version: link:../agents/studio
       '@typeagent/taskflow-typeagent':
         specifier: workspace:*
         version: link:../agents/taskflow
@@ -4504,6 +4522,9 @@ importers:
       '@typeagent/typechat-utils':
         specifier: workspace:*
         version: link:../utils/typechatUtils
+      '@typeagent/video-agent':
+        specifier: workspace:*
+        version: link:../agents/video
       '@typeagent/visualstudio-agent':
         specifier: workspace:*
         version: link:../agents/visualStudio
@@ -4522,9 +4543,6 @@ importers:
       chat-agent:
         specifier: workspace:*
         version: link:../agents/chat
-      code-agent:
-        specifier: workspace:*
-        version: link:../agents/code
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
@@ -4549,21 +4567,12 @@ importers:
       greeting-agent:
         specifier: workspace:*
         version: link:../agents/greeting
-      image-agent:
-        specifier: workspace:*
-        version: link:../agents/image
       ipconfig-agent:
         specifier: workspace:*
         version: link:../agents/ipconfig
       list-agent:
         specifier: workspace:*
         version: link:../agents/list
-      markdown-agent:
-        specifier: workspace:*
-        version: link:../agents/markdown
-      montage-agent:
-        specifier: workspace:*
-        version: link:../agents/montage
       music:
         specifier: workspace:*
         version: link:../agents/player
@@ -4582,9 +4591,6 @@ importers:
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
-      screencapture-agent:
-        specifier: workspace:*
-        version: link:../agents/screencapture
       semver:
         specifier: ^7.7.2
         version: 7.8.4
@@ -4594,9 +4600,6 @@ importers:
       string-width:
         specifier: ^7.2.0
         version: 7.2.0
-      studio-agent:
-        specifier: workspace:*
-        version: link:../agents/studio
       timer-agent:
         specifier: workspace:*
         version: link:../agents/timer
@@ -4606,9 +4609,6 @@ importers:
       utility-typeagent:
         specifier: workspace:*
         version: link:../agents/utility
-      video-agent:
-        specifier: workspace:*
-        version: link:../agents/video
       weather-agent:
         specifier: workspace:*
         version: link:../agents/weather
@@ -4712,6 +4712,9 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../types
+      '@typeagent/image-memory':
+        specifier: workspace:*
+        version: link:../../memory/image
       '@typeagent/knowledge-processor':
         specifier: workspace:*
         version: link:../../knowledgeProcessor
@@ -4754,9 +4757,6 @@ importers:
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
-      image-memory:
-        specifier: workspace:*
-        version: link:../../memory/image
       open:
         specifier: ^10.1.0
         version: 10.1.2
@@ -5999,15 +5999,36 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
-      agent-cache:
+      '@typeagent/agent-sdk':
         specifier: workspace:*
-        version: link:../cache
+        version: link:../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../telemetry
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../utils/typechatUtils
+      async:
+        specifier: ^3.2.5
+        version: 3.2.6
+      chalk:
+        specifier: ^5.4.1
+        version: 5.6.2
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
-      grammar-tools-core:
-        specifier: workspace:*
-        version: link:../grammarTools/core
+      regexp.escape:
+        specifier: ^2.0.1
+        version: 2.0.1
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -6015,6 +6036,15 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
+      agent-cache:
+        specifier: workspace:*
+        version: link:../cache
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+      grammar-tools-core:
+        specifier: workspace:*
+        version: link:../grammarTools/core
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@26.1.1)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.4.5))
