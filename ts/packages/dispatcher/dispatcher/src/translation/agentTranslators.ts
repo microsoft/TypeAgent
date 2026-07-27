@@ -18,7 +18,7 @@ import {
     getMultipleActionSchemaDef,
     MultipleActionOptions,
 } from "./multipleActionSchema.js";
-import { HistoryContext, ParamObjectType } from "agent-cache";
+import { HistoryContext, ParamObjectType } from "@typeagent/agent-cache";
 import {
     createTypeAgentRequestPrompt,
     EntityPromptShape,

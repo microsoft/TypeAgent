@@ -43,7 +43,7 @@ import {
     getAvailableProviders,
     GoogleCalendarClient,
     probeGraphConfig,
-} from "graph-utils";
+} from "@typeagent/graph-utils";
 import {
     getNWeeksDateRangeISO,
     generateQueryFromFuzzyDay,

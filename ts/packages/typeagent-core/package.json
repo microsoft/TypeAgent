@@ -53,9 +53,9 @@
     "typechat": "^0.1.1"
   },
   "devDependencies": {
+    "@typeagent/agent-cache": "workspace:*",
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
-    "agent-cache": "workspace:*",
     "esbuild": "^0.25.12",
     "grammar-tools-core": "workspace:*",
     "jest": "^29.7.0",

@@ -1,7 +1,6 @@
 {
-  "name": "powershell-typeagent",
+  "name": "@typeagent/powershell-typeagent",
   "version": "0.0.1",
-  "private": true,
   "description": "Agent to create and execute PowerShell workflows",
   "keywords": [
     "typeagent-agent"
@@ -20,6 +19,11 @@
     "./agent/handlers": "./dist/actionHandler.mjs",
     "./recipe": "./dist/types/scriptRecipe.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/powershellSchema.agr -o ./dist/powershellSchema.ag.json",
     "agc:all": "concurrently npm:agc npm:agc:files npm:agc:processes npm:agc:system npm:agc:services npm:agc:network npm:agc:data npm:agc:archives",

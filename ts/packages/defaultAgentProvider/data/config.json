@@ -2,31 +2,31 @@
   "description": "Default agent provider configuration - contains all *current* agents",
   "agents": {
     "player": {
-      "name": "music"
+      "name": "@typeagent/music"
     },
     "localPlayer": {
-      "name": "music-local"
+      "name": "@typeagent/music-local"
     },
     "calendar": {
-      "name": "calendar"
+      "name": "@typeagent/calendar"
     },
     "email": {
-      "name": "email"
+      "name": "@typeagent/email"
     },
     "list": {
-      "name": "list-agent"
+      "name": "@typeagent/list-agent"
     },
     "browser": {
       "name": "@typeagent/browser"
     },
     "desktop": {
-      "name": "desktop-automation"
+      "name": "@typeagent/desktop-automation"
     },
     "code": {
       "name": "@typeagent/code-agent"
     },
     "chat": {
-      "name": "chat-agent",
+      "name": "@typeagent/chat-agent",
       "execMode": "dispatcher"
     },
     "photo": {
@@ -56,14 +56,14 @@
       "execMode": "dispatcher"
     },
     "weather": {
-      "name": "weather-agent"
+      "name": "@typeagent/weather-agent"
     },
     "taskflow": {
       "name": "@typeagent/taskflow-typeagent",
       "execMode": "dispatcher"
     },
     "powershell": {
-      "name": "powershell-typeagent"
+      "name": "@typeagent/powershell-typeagent"
     },
     "screencapture": {
       "name": "@typeagent/screencapture-agent",
@@ -73,7 +73,7 @@
       "name": "workflow-agent"
     },
     "utility": {
-      "name": "utility-typeagent"
+      "name": "@typeagent/utility-typeagent"
     },
     "onboarding": {
       "name": "onboarding-agent"
@@ -82,10 +82,10 @@
       "name": "@typeagent/studio-agent"
     },
     "osNotifications": {
-      "name": "os-notifications-agent"
+      "name": "@typeagent/os-notifications-agent"
     },
     "timer": {
-      "name": "timer-agent"
+      "name": "@typeagent/timer-agent"
     },
     "github-cli": {
       "name": "@typeagent/github-cli-agent"
@@ -100,7 +100,7 @@
       "name": "@typeagent/discord-agent"
     },
     "ipconfig": {
-      "name": "ipconfig-agent"
+      "name": "@typeagent/ipconfig-agent"
     }
   },
   "mcpServers": {

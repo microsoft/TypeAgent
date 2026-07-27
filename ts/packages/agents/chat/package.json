@@ -1,7 +1,6 @@
 {
-  "name": "chat-agent",
+  "name": "@typeagent/chat-agent",
   "version": "0.0.1",
-  "private": true,
   "description": "Agent for conversation and information lookup",
   "keywords": [
     "typeagent-agent"
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/chatManifest.json",
     "./agent/handlers": "./dist/chatResponseHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "build": "npm run tsc",
     "postbuild": "copyfiles -u 1 \"src/**/config.json\" dist",

@@ -1,7 +1,6 @@
 {
-  "name": "weather-agent",
+  "name": "@typeagent/weather-agent",
   "version": "0.0.1",
-  "private": true,
   "description": "Agent to get weather information including current conditions, forecasts, and alerts",
   "keywords": [
     "typeagent-agent"
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/weatherManifest.json",
     "./agent/handlers": "./dist/weatherActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/weatherSchema.agr -o ./dist/weatherSchema.ag.json",
     "asc": "asc -i ./src/weatherSchema.ts -o ./dist/weatherSchema.pas.json -t WeatherAction",

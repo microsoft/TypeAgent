@@ -7,7 +7,7 @@ import {
     MatchSet,
     Construction,
     isMatchPart,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 
 function createMatchSetListGroup(groupName: string, matchSetsDiv: Element) {
     const groupDiv = document.createElement("div");

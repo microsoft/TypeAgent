@@ -11,7 +11,7 @@ import {
     extractRelevantExifTags,
 } from "@typeagent/typechat-utils";
 import { PromptSection } from "typechat";
-import { normalizeParamString, PromptEntity } from "agent-cache";
+import { normalizeParamString, PromptEntity } from "@typeagent/agent-cache";
 import { SchemaCreator as sc, validateType } from "@typeagent/action-schema";
 import { getAppAgentName } from "../internal.js";
 

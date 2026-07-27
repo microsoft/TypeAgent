@@ -14,7 +14,7 @@ import {
     fromJsonActions,
     normalizeParamString,
     RequestAction,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
 

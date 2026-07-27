@@ -3,7 +3,7 @@
 
 import { describe, it, expect, jest } from "@jest/globals";
 import type { ActionContext } from "@typeagent/agent-sdk";
-import type { RequestAction } from "agent-cache";
+import type { RequestAction } from "@typeagent/agent-cache";
 import { confirmTranslation } from "../src/translation/confirmTranslation.js";
 import type { CommandHandlerContext } from "../src/context/commandHandlerContext.js";
 

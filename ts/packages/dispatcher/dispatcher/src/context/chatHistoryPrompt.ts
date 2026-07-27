@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { HistoryContext } from "agent-cache";
+import { HistoryContext } from "@typeagent/agent-cache";
 import { Entity } from "@typeagent/agent-sdk";
 import {
     CachedImageWithDetails,

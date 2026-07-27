@@ -1,7 +1,6 @@
 {
-  "name": "android-mobile-agent",
+  "name": "@typeagent/android-mobile-agent",
   "version": "0.0.1",
-  "private": true,
   "description": "Agent to perform actions on mobile Android devices.",
   "keywords": [
     "typeagent-agent"
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/androidMobileManifest.json",
     "./agent/handlers": "./dist/androidMobileActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",

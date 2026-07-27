@@ -6,7 +6,7 @@
 // Note: MatchResult.conflictValues (in agent-cache) tracks parameter-value conflicts
 // during cache matching — not action collisions. The two are unrelated; do not conflate.
 
-import { MatchResult } from "agent-cache";
+import { MatchResult } from "@typeagent/agent-cache";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import {
     CollisionCandidate,

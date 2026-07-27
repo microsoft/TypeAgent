@@ -11,7 +11,7 @@
 // registry-expanded neighborhood for a cache-masked collision, §13.3 — its
 // siblings have no MatchResult).
 
-import { MatchResult } from "agent-cache";
+import { MatchResult } from "@typeagent/agent-cache";
 import type { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import {
     CollisionCandidate,

@@ -6,7 +6,11 @@ import {
     DeepPartialUndefined,
     DeepPartialUndefinedAndNull,
 } from "@typeagent/common-utils";
-import { CacheConfig, AgentCache, getDefaultExplainerName } from "agent-cache";
+import {
+    CacheConfig,
+    AgentCache,
+    getDefaultExplainerName,
+} from "@typeagent/agent-cache";
 import { getSessionGrammarStorePath } from "@typeagent/action-grammar";
 import registerDebug from "debug";
 import fs from "node:fs";

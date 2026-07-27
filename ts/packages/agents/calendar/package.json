@@ -1,7 +1,6 @@
 {
-  "name": "calendar",
+  "name": "@typeagent/calendar",
   "version": "0.0.1",
-  "private": true,
   "description": "Agent integration with MS Graph's calendar",
   "keywords": [
     "typeagent-agent"
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/calendarManifest.json",
     "./agent/handlers": "./dist/calendarActionHandlerV3.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/calendarSchema.agr -o ./dist/calendarSchema.ag.json",
     "asc": "asc -i ./src/calendarActionsSchemaV3.ts -o ./dist/calendarSchema.pas.json -t CalendarActionV3 -e CalendarEntities",
@@ -33,11 +37,11 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/graph-utils": "workspace:*",
     "@typeagent/typechat-utils": "workspace:*",
     "chalk": "^5.4.1",
     "date-fns": "^4.1.0",
-    "debug": "^4.4.0",
-    "graph-utils": "workspace:*"
+    "debug": "^4.4.0"
   },
   "devDependencies": {
     "@typeagent/action-grammar-compiler": "workspace:*",

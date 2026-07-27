@@ -1,7 +1,6 @@
 {
-  "name": "desktop-automation",
+  "name": "@typeagent/desktop-automation",
   "version": "0.0.1",
-  "private": true,
   "description": "Agent to control the desktop",
   "keywords": [
     "typeagent-agent"
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/manifest.json",
     "./agent/handlers": "./dist/actionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/desktopSchema.agr -o ./dist/desktopSchema.ag.json",
     "agc:all": "concurrently npm:agc npm:agc:display npm:agc:personalization npm:agc:taskbar npm:agc:input npm:agc:privacy npm:agc:power npm:agc:system",
@@ -48,11 +52,11 @@
     "tsc": "tsc -b src test"
   },
   "dependencies": {
+    "@typeagent/agent-cache": "workspace:*",
     "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/typechat-utils": "workspace:*",
-    "agent-cache": "workspace:*",
     "body-parser": "^1.20.6",
     "chalk": "^5.4.1",
     "cors": "^2.8.5",

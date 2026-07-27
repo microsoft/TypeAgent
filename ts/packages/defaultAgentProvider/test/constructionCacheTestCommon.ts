@@ -25,7 +25,7 @@ import {
     fromJsonActions,
     toJsonActions,
     ExecutableAction,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import { glob } from "glob";
 import { fileURLToPath } from "node:url";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";

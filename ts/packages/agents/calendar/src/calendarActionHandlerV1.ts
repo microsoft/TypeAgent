@@ -12,7 +12,7 @@ import {
     CalendarClient,
     GraphEntity,
     ErrorResponse,
-} from "graph-utils";
+} from "@typeagent/graph-utils";
 import chalk from "chalk";
 import {
     CalendarAction,
