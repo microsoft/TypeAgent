@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getRetryAfterMs } from "../src/restClient.js";
+import { fetchWithRetry, getRetryAfterMs } from "../src/restClient.js";
 
 describe("restClient", () => {
     test("retryPauseHeader", () => {
@@ -45,5 +45,27 @@ describe("restClient", () => {
         });
         retryPauseMs = getRetryAfterMs(response, retryPauseDefault);
         expect(retryPauseMs).toEqual(retryPauseDefault);
+    });
+
+    test("fetchWithRetry names the endpoint on a non-transient error", async () => {
+        const origFetch = globalThis.fetch;
+        try {
+            (globalThis as any).fetch = async () =>
+                new Response(JSON.stringify({ error: "bad request" }), {
+                    status: 400,
+                    headers: { "content-type": "application/json" },
+                });
+            const url =
+                "https://example.test/openai/deployments/foo/chat/completions";
+            const result = await fetchWithRetry(url);
+            expect(result.success).toBe(false);
+            if (!result.success) {
+                // The endpoint is named so a 4xx says which deployment was hit.
+                expect(result.message).toContain(url);
+                expect(result.message).toContain("400");
+            }
+        } finally {
+            globalThis.fetch = origFetch;
+        }
     });
 });

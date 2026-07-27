@@ -56,6 +56,13 @@ import {
     estimateReasoningTokens,
     reasoningTokenUsage,
 } from "./reasoningLoopBase.js";
+import {
+    SUBAGENT_TOOL_DESCRIPTIONS,
+    handleCreateSubagent,
+    handleInvokeSubagent,
+    handleListSubagents,
+    handleStopSubagent,
+} from "./subagentTools.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 import { ScriptRecipeGenerator } from "./scriptRecipeGenerator.js";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
@@ -361,6 +368,31 @@ function recordReasoningActions(
         return;
     }
     commandResult.actions = [...(commandResult.actions ?? []), ...actions];
+}
+
+/**
+ * Adapt a subagent tool handler (which returns text or throws) into the MCP
+ * tool result shape, surfacing failures as isError results so the reasoning
+ * model can read the message and recover rather than aborting the loop.
+ */
+async function subagentToolResult(fn: () => Promise<string> | string): Promise<{
+    content: { type: "text"; text: string }[];
+    isError?: boolean;
+}> {
+    try {
+        return { content: [{ type: "text", text: await fn() }] };
+    } catch (error) {
+        return {
+            content: [
+                {
+                    type: "text",
+                    text:
+                        error instanceof Error ? error.message : String(error),
+                },
+            ],
+            isError: true,
+        };
+    }
 }
 
 function getClaudeOptions(
@@ -727,6 +759,84 @@ function getClaudeOptions(
         },
     };
 
+    // Subagent tools: let the reasoning loop create and manage subagents, each
+    // with its own spawned command-executor instance. Only registered when
+    // execution.subagents is enabled (see also the system-prompt guidance).
+    const subagentsEnabled = config.execution.subagents;
+    const subagentTools = [];
+    if (subagentsEnabled) {
+        const createSubagentSchema = {
+            name: z.string(),
+            instructions: z.string().optional(),
+        };
+        const createSubagentTool: SdkMcpToolDefinition<
+            typeof createSubagentSchema
+        > = {
+            name: "create_subagent",
+            description: SUBAGENT_TOOL_DESCRIPTIONS.create_subagent,
+            inputSchema: createSubagentSchema,
+            handler: async (args) =>
+                subagentToolResult(() =>
+                    handleCreateSubagent(systemContext, {
+                        name: args.name,
+                        instructions: args.instructions,
+                    }),
+                ),
+        };
+
+        const invokeSubagentSchema = {
+            id: z.string(),
+            task: z.string(),
+        };
+        const invokeSubagentTool: SdkMcpToolDefinition<
+            typeof invokeSubagentSchema
+        > = {
+            name: "invoke_subagent",
+            description: SUBAGENT_TOOL_DESCRIPTIONS.invoke_subagent,
+            inputSchema: invokeSubagentSchema,
+            handler: async (args) =>
+                subagentToolResult(() =>
+                    handleInvokeSubagent(systemContext, {
+                        id: args.id,
+                        task: args.task,
+                    }),
+                ),
+        };
+
+        const listSubagentsSchema = {};
+        const listSubagentsTool: SdkMcpToolDefinition<
+            typeof listSubagentsSchema
+        > = {
+            name: "list_subagents",
+            description: SUBAGENT_TOOL_DESCRIPTIONS.list_subagents,
+            inputSchema: listSubagentsSchema,
+            handler: async () =>
+                subagentToolResult(() => handleListSubagents(systemContext)),
+        };
+
+        const stopSubagentSchema = {
+            id: z.string(),
+        };
+        const stopSubagentTool: SdkMcpToolDefinition<
+            typeof stopSubagentSchema
+        > = {
+            name: "stop_subagent",
+            description: SUBAGENT_TOOL_DESCRIPTIONS.stop_subagent,
+            inputSchema: stopSubagentSchema,
+            handler: async (args) =>
+                subagentToolResult(() =>
+                    handleStopSubagent(systemContext, { id: args.id }),
+                ),
+        };
+
+        subagentTools.push(
+            createSubagentTool,
+            invokeSubagentTool,
+            listSubagentsTool,
+            stopSubagentTool,
+        );
+    }
+
     const askUserSchema = {
         question: z.string(),
         choices: z.array(z.string()).min(2),
@@ -898,6 +1008,22 @@ function getClaudeOptions(
                 "- `ask_user`: Ask the user ONE multiple-choice question and block for their answer - only when genuinely blocked on a decision only they can make (see Autonomous Execution Policy)",
                 "- `ask_user_form`: Ask the user SEVERAL questions at once (pick / multiChoice / yesNo, optional free-text) in one form and block for their answers - prefer over repeated `ask_user` when you need more than one answer",
                 "",
+                ...(subagentsEnabled
+                    ? [
+                          "## Subagents",
+                          "You can delegate self-contained sub-tasks to subagents. Each subagent is a",
+                          "separate worker with its own command-executor instance running in an isolated",
+                          "conversation, so its work does not disturb this conversation.",
+                          "- `create_subagent`: create a subagent (name, optional instructions) → returns an id",
+                          "- `invoke_subagent`: give an existing subagent a task (id, task) → returns its result",
+                          "- `list_subagents`: list the subagents you have created",
+                          "- `stop_subagent`: stop a subagent and free its resources (id)",
+                          "Use subagents for focused, independent lines of work. Create one, invoke it with",
+                          "the sub-task, use its result, then stop it when you no longer need it. Do NOT",
+                          "create subagents for trivial single-step actions you can do directly.",
+                          "",
+                      ]
+                    : []),
                 'For follow-up requests that refer to earlier turns (e.g. "those", "it", "mine"), first consult the [Recent conversation context] block included with the request; call search_memory only when you need older history not shown there.',
                 "",
                 "When the user asks about agent capabilities, use discover_actions first.",
@@ -1291,6 +1417,7 @@ function getClaudeOptions(
                     getConversationInfoTool,
                     readConversationTool,
                     getUserContextTool,
+                    ...subagentTools,
                     findInstallableAgentTool,
                     askUserTool,
                     askUserFormTool,

@@ -2154,6 +2154,15 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
                 );
             },
         ),
+        subagents: getToggleHandlerTable(
+            "allow the reasoning loop to create and manage subagents (each with its own command-executor process)",
+            async (context, enable) => {
+                await changeContextConfig(
+                    { execution: { subagents: enable } },
+                    context,
+                );
+            },
+        ),
     },
 };
 

@@ -11,9 +11,36 @@ export interface AppAction {
     parameters?: Record<string, unknown>; // the type of the parameters are defined by the AppAgent
 }
 
+/**
+ * A JSON-serializable snapshot of a thrown value. `Error` instances don't
+ * survive `JSON.stringify` (`message`/`stack` are non-enumerable and the
+ * `cause` chain isn't walked), so a failed action captures this to preserve
+ * the message, stack, cause chain, and any extra properties (HTTP status,
+ * response body, etc.) for debugging. Build one with `serializeError` from
+ * `@typeagent/agent-sdk/helpers/action`.
+ */
+export type SerializedError = {
+    message: string;
+    name?: string | undefined;
+    stack?: string | undefined;
+    // `Error.cause`, recursively serialized.
+    cause?: SerializedError | undefined;
+    // `AggregateError.errors`, each recursively serialized.
+    errors?: SerializedError[] | undefined;
+    // Extra own-enumerable properties not captured above (e.g. a fetch
+    // error's `status`, `code`, or response `body`).
+    extra?: Record<string, unknown> | undefined;
+};
+
 export type ActionResultError = {
     error: string;
     fallbackToReasoning?: boolean | undefined;
+    // Structured snapshot of the underlying exception when this error came
+    // from a thrown value (populated by the dispatcher's action executor).
+    // Optional - `undefined` for errors created from a plain message.
+    // Dev-facing diagnostics: surfaced in the reasoning tool result and the
+    // result inspector, not shown in the normal display.
+    errorDetails?: SerializedError | undefined;
 };
 
 // LLM token usage an agent may attribute to executing an action/command.

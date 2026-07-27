@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=6aa3b5cd7693ebc569455f1397c9fcacbf3525b6576cecb29fb988eaecf2b190 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=da07518a7a40888acd4d6c8bc2bd3e95c7e667e7d15dd45326a7d6e52a75406f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-server — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `agent-server` package is a TypeScript library that implements a long-running WebSocket server for hosting TypeAgent dispatchers. It serves as the central hub for managing client connections, orchestrating conversations, and facilitating communication between clients and agents. The server supports multiple clients and conversations simultaneously, with features like conversation persistence, idle timeouts, and ephemeral conversation cleanup.
+The `agent-server` package is a TypeScript library that implements a long-running WebSocket server for hosting TypeAgent dispatchers. It acts as the central hub for managing client connections, orchestrating conversations, and facilitating communication between clients and agents. The server supports multiple clients and conversations simultaneously, with features such as conversation persistence, idle timeouts, and ephemeral conversation cleanup.
 
 ## What it does
 
-The `agent-server` provides the following core functionalities:
+The `agent-server` provides the following key functionalities:
 
 - **WebSocket Server**: Hosts a WebSocket server to manage client connections and enable communication between clients and agents.
 - **Conversation Management**: Supports actions such as `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, and `deleteConversation`. These actions allow clients to manage and interact with conversations.
@@ -32,6 +32,7 @@ The server integrates with other TypeAgent packages, such as `@typeagent/agent-s
 To set up the `agent-server`, you need to configure the following environment variables:
 
 - `AGENT_SERVER_PORT`: Specifies the port on which the server listens for WebSocket connections. Defaults to `8999` if not set.
+- `AGENT_SERVER_URL`: The base URL for the server. This is used for client-server communication.
 - `SPEECH_SDK_ENDPOINT`: The endpoint for the speech SDK. Refer to the hand-written README for details on obtaining this value.
 - `SPEECH_SDK_KEY`: The API key for the speech SDK. Refer to the hand-written README for details on obtaining this value.
 - `SPEECH_SDK_REGION`: The region for the speech SDK. Refer to the hand-written README for details on obtaining this value.
@@ -139,10 +140,10 @@ Workspace:
 - [@typeagent/config](../../../packages/config/README.md)
 - [@typeagent/dispatcher-rpc](../../../packages/dispatcher/rpc/README.md)
 - [@typeagent/dispatcher-types](../../../packages/dispatcher/types/README.md)
+- [@typeagent/websocket-channel-server](../../../packages/utils/webSocketChannelServer/README.md)
 - [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
 - [default-agent-provider](../../../packages/defaultAgentProvider/README.md)
 - [dispatcher-node-providers](../../../packages/dispatcher/nodeProviders/README.md)
-- [websocket-channel-server](../../../packages/utils/webSocketChannelServer/README.md)
 
 External: `@azure/identity`, `better-sqlite3`, `debug`, `dotenv`, `ws`
 
@@ -156,9 +157,10 @@ External: `@azure/identity`, `better-sqlite3`, `debug`, `dotenv`, `ws`
 
 ### Environment variables
 
-_8 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_9 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
 - `AGENT_SERVER_PORT`
+- `AGENT_SERVER_URL`
 - `SPEECH_SDK_ENDPOINT`
 - `SPEECH_SDK_KEY`
 - `SPEECH_SDK_REGION`
@@ -169,6 +171,6 @@ _8 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
+_Auto-generated against commit `fa4bb9b44db12e2d15b83e03e59f9c7147ed2b50` on `2026-07-27T19:08:36.121Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

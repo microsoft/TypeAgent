@@ -59,6 +59,10 @@ import {
 import { Profiler } from "@typeagent/telemetry";
 import { conversation as Conversation } from "@typeagent/knowledge-processor";
 import { ConversationMemory } from "@typeagent/conversation-memory";
+// Type-only import: the reasoning modules statically import this file, so a
+// runtime import here would create a cycle. subagentManager.ts is a leaf, and
+// `import type` is erased at compile time, so this stays cycle-free.
+import type { SubagentManager } from "../reasoning/subagentManager.js";
 import {
     AppAgentManager,
     AppAgentStateInitSettings,
@@ -276,6 +280,10 @@ export type CommandHandlerContext = {
     noReasoning: boolean;
     isInsideReasoningLoop: boolean; // true while the MCP execute_action handler is dispatching a sub-action
     reasoningSourceIcon?: string | undefined; // engine-specific icon override while inside a reasoning loop
+    // Lazily created by the reasoning loop when execution.subagents is enabled;
+    // owns the spawned command-executor subagent processes for this session and
+    // is disposed on session close.
+    subagentManager?: SubagentManager | undefined;
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
     constructionProvider?: ConstructionProvider | undefined;
@@ -1091,6 +1099,7 @@ export async function initializeCommandHandlerContext(
             noReasoning: false,
             isInsideReasoningLoop: false,
             reasoningSourceIcon: undefined,
+            subagentManager: undefined,
             pendingToggleTransientAgents: [],
             agentCache: await getAgentCache(
                 session,
@@ -1711,6 +1720,16 @@ export async function closeCommandHandlerContext(
 ) {
     // Stop accepting exclusive mutations in this closing session.
     context.appAgentProviderSetController.dispose();
+    // Tear down any reasoning subagents (spawned command-executor processes and
+    // their isolated conversations) before the rest of the session unwinds.
+    if (context.subagentManager) {
+        try {
+            await context.subagentManager.dispose();
+        } catch (e) {
+            debugError(`Failed to dispose subagent manager: ${e}`);
+        }
+        context.subagentManager = undefined;
+    }
     // Drain in-flight/queued entries before tearing down agents.
     try {
         await context.requestQueue.drainAndStop();

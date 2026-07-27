@@ -61,6 +61,11 @@ export type BridgeToWebviewMessage =
           seq?: number;
       }
     | {
+          type: "appendDiagnosticData";
+          requestId?: string;
+          data: unknown;
+      }
+    | {
           type: "setUserRequest";
           requestId?: string;
           command: string;

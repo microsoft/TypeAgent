@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=1ecb293213fb971be98bf94d00394caa1670ef6ac8a2ca5439c3089635ecb65a -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c42d73fb1a1f201ab835a0bcbc314df5e1da537ba2dbf798b07cc85b351a12df -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a TypeScript library that serves as the core component of the TypeAgent ecosystem. It processes user inputs, translates natural language into structured actions using large language models (LLMs), and coordinates interactions across various application agents. The Dispatcher is designed to integrate with multiple front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for building personal agents with natural language interfaces.
+The TypeAgent Dispatcher is a TypeScript library that serves as the core orchestration component of the TypeAgent ecosystem. It processes user inputs, translates natural language into structured actions using large language models (LLMs), and coordinates interactions across various application agents. The Dispatcher is designed to integrate with multiple front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for building personal agents with natural language interfaces.
 
 ## What it does
 
@@ -20,7 +20,7 @@ The Dispatcher provides a framework for interpreting user inputs and orchestrati
 
 ### Natural Language Requests
 
-The Dispatcher leverages LLMs to process natural language inputs and translate them into structured actions defined by application agent schemas. For example:
+The Dispatcher uses LLMs to process natural language inputs and translate them into structured actions defined by application agent schemas. For example:
 
 ```bash
 [calendar]🤖> can you setup a meeting between 2-3PM
@@ -71,6 +71,7 @@ The Dispatcher translates these requests into structured payloads and forwards t
 
 To configure the Dispatcher, the following environment variables must be set:
 
+- `AGENT_SERVER_URL`: URL of the agent server.
 - `CLAUDE_CUSTOM_PROMPT_FILE`: Path to a custom prompt file for Claude.
 - `CLAUDE_FORCE_REASONING`: Boolean flag to enforce reasoning with Claude.
 - `COPILOT_REASONING_EFFORT`: Effort level for Copilot reasoning.
@@ -172,25 +173,25 @@ Workspace:
 - [@typeagent/action-grammar](../../../packages/actionGrammar/README.md)
 - [@typeagent/action-schema](../../../packages/actionSchema/README.md)
 - [@typeagent/agent-rpc](../../../packages/agentRpc/README.md)
+- [@typeagent/agent-runtime](../../../packages/typeagent/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 - [@typeagent/aiclient](../../../packages/aiclient/README.md)
+- [@typeagent/azure-ai-foundry](../../../packages/azure-ai-foundry/README.md)
 - [@typeagent/common-utils](../../../packages/utils/commonUtils/README.md)
 - [@typeagent/completion-ui](../../../packages/completionUI/README.md)
+- [@typeagent/conversation-memory](../../../packages/memory/conversation/README.md)
 - [@typeagent/dispatcher-types](../../../packages/dispatcher/types/README.md)
+- [@typeagent/image-memory](../../../packages/memory/image/README.md)
+- [@typeagent/knowledge-processor](../../../packages/knowledgeProcessor/README.md)
+- [@typeagent/knowpro](../../../packages/knowPro/README.md)
+- [@typeagent/taskflow-typeagent](../../../packages/agents/taskflow/README.md)
+- [@typeagent/telemetry](../../../packages/telemetry/README.md)
+- [@typeagent/typechat-utils](../../../packages/utils/typechatUtils/README.md)
+- [@typeagent/website-memory](../../../packages/memory/website/README.md)
 - [agent-cache](../../../packages/cache/README.md)
-- [azure-ai-foundry](../../../packages/azure-ai-foundry/README.md)
-- [conversation-memory](../../../packages/memory/conversation/README.md)
 - grammar-tools-core
-- [image-memory](../../../packages/memory/image/README.md)
-- [knowledge-processor](../../../packages/knowledgeProcessor/README.md)
-- [knowpro](../../../packages/knowPro/README.md)
-- taskflow-typeagent
-- [telemetry](../../../packages/telemetry/README.md)
-- [typeagent](../../../packages/typeagent/README.md)
-- [typechat-utils](../../../packages/utils/typechatUtils/README.md)
-- [website-memory](../../../packages/memory/website/README.md)
 
-External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-rest-pipeline`, `@azure/cosmos`, `@azure/identity`, `@github/copilot-sdk`, `chalk`, `debug`, `exifreader`, `file-size`, `glob`, `html-to-text`, `open`, `proper-lockfile`, `string-width`, `typechat`, `zod`
+External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-rest-pipeline`, `@azure/cosmos`, `@azure/identity`, `@github/copilot-sdk`, `@modelcontextprotocol/sdk`, `chalk`, `debug`, `exifreader`, `file-size`, `glob`, `html-to-text`, `open`, `proper-lockfile`, `string-width`, `typechat`, `zod`
 
 ### Used by
 
@@ -218,12 +219,13 @@ External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-r
 - [./src/context/dispatcher/schema/clarifyActionSchema.ts](./src/context/dispatcher/schema/clarifyActionSchema.ts)
 - [./src/context/dispatcher/schema/dispatcherActionSchema.ts](./src/context/dispatcher/schema/dispatcherActionSchema.ts)
 - [./src/context/dispatcher/schema/lookupActionSchema.ts](./src/context/dispatcher/schema/lookupActionSchema.ts)
-- _…and 214 more under `./src/`._
+- _…and 217 more under `./src/`._
 
 ### Environment variables
 
-_9 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
+_10 environment variables referenced from `./src/` (set in `ts/.env` or your shell). See the `## Setup` section above for guidance on obtaining each value._
 
+- `AGENT_SERVER_URL`
 - `CLAUDE_CUSTOM_PROMPT_FILE`
 - `CLAUDE_FORCE_REASONING`
 - `COPILOT_REASONING_EFFORT`
@@ -236,6 +238,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `274f0c51c3f1dca4e627c5311084db01d02fe1e9` on `2026-07-23T15:09:16.468Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `33c83792f9a6ab6f17e52ca4856f765a2a056905` on `2026-07-27T20:21:59.625Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

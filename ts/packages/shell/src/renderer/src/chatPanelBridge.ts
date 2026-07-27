@@ -846,8 +846,11 @@ export function createChatPanelClient(
                 );
             });
         },
-        appendDiagnosticData: () => {
-            // Diagnostic data has no ChatPanel surface yet (deferred).
+        appendDiagnosticData: (requestId, data) => {
+            afterReplay(() => {
+                if (isCancelledRequest(ridStr(requestId))) return;
+                chatPanel.appendDiagnosticData(ridStr(requestId), data);
+            });
         },
         setDynamicDisplay: (
             _requestId,

@@ -7,6 +7,8 @@ import { z } from "zod/v4";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
     connectDispatcher,
+    connectAgentServer,
+    AgentServerConnection,
     AGENT_SERVER_DEFAULT_URL,
 } from "@typeagent/agent-server-client";
 import type {
@@ -339,6 +341,16 @@ export class CommandServer {
     public server: McpServer;
     private dispatcher: Dispatcher | null = null;
     private agentServerUrl: string;
+    // Set when this instance runs in its own dedicated conversation (see
+    // `conversationName`). Owns the whole connection and the created
+    // conversation so `close()` can tear both down.
+    private connection: AgentServerConnection | null = null;
+    // Conversation name to create/join instead of the shared default. When
+    // undefined, the instance joins the default conversation as before.
+    private conversationName: string | undefined;
+    // Id of the conversation this instance created; reused across reconnects
+    // and deleted on close.
+    private ownedConversationId: string | null = null;
     private reconnectInterval: NodeJS.Timeout | null = null;
     private isConnecting: boolean = false;
     private reconnectDelayMs: number = 5000;
@@ -372,6 +384,13 @@ export class CommandServer {
             process.env.AGENT_SERVER_URL ??
             AGENT_SERVER_DEFAULT_URL;
 
+        // When set (e.g. by the reasoning subagent manager), this instance runs
+        // in its own dedicated conversation instead of the shared default one,
+        // so its commands do not contend with the parent conversation's request
+        // queue (which would deadlock while the parent's reasoning turn awaits).
+        this.conversationName =
+            process.env.AGENT_SERVER_CONVERSATION?.trim() || undefined;
+
         this.logger.log(`CommandServer initializing.`);
         this.logger.log(`TypeAgent server URL: ${this.agentServerUrl}`);
 
@@ -399,17 +418,22 @@ export class CommandServer {
                 this.responseCollector,
                 () => this.currentRequestConfirmed,
             );
-            this.dispatcher = await connectDispatcher(
-                clientIO,
-                this.agentServerUrl,
-                { filter: true },
-                () => {
-                    this.logger.log(
-                        "Dispatcher connection dropped, will reconnect...",
-                    );
-                    this.dispatcher = null;
-                },
-            );
+            if (this.conversationName !== undefined) {
+                this.dispatcher =
+                    await this.connectIsolatedConversation(clientIO);
+            } else {
+                this.dispatcher = await connectDispatcher(
+                    clientIO,
+                    this.agentServerUrl,
+                    { filter: true },
+                    () => {
+                        this.logger.log(
+                            "Dispatcher connection dropped, will reconnect...",
+                        );
+                        this.dispatcher = null;
+                    },
+                );
+            }
             this.logger.log(
                 `Connected to TypeAgent dispatcher at ${this.agentServerUrl}`,
             );
@@ -423,6 +447,51 @@ export class CommandServer {
         } finally {
             this.isConnecting = false;
         }
+    }
+
+    /**
+     * Connect on a dedicated conversation named `conversationName`. The
+     * conversation is created once and reused across reconnects; the whole
+     * connection (and the created conversation) is torn down in `close()`.
+     */
+    private async connectIsolatedConversation(
+        clientIO: ClientIO,
+    ): Promise<Dispatcher> {
+        const connection = await connectAgentServer(this.agentServerUrl, () => {
+            this.logger.log("Dispatcher connection dropped, will reconnect...");
+            this.dispatcher = null;
+            this.connection = null;
+        });
+        this.connection = connection;
+
+        // Reuse the conversation created on a prior connect if it still exists.
+        if (this.ownedConversationId !== null) {
+            try {
+                const joined = await connection.joinConversation(clientIO, {
+                    filter: true,
+                    conversationId: this.ownedConversationId,
+                });
+                return joined.dispatcher;
+            } catch (error) {
+                this.logger.log(
+                    `Previous conversation ${this.ownedConversationId} unavailable (${error}); creating a new one.`,
+                );
+                this.ownedConversationId = null;
+            }
+        }
+
+        const info = await connection.createConversation(
+            this.conversationName!,
+        );
+        this.ownedConversationId = info.conversationId;
+        this.logger.log(
+            `Subagent conversation '${this.conversationName}' -> ${info.conversationId}`,
+        );
+        const joined = await connection.joinConversation(clientIO, {
+            filter: true,
+            conversationId: info.conversationId,
+        });
+        return joined.dispatcher;
     }
 
     private async applyConfigurationSettings(): Promise<void> {
@@ -456,7 +525,30 @@ export class CommandServer {
 
     public async close(): Promise<void> {
         this.stopReconnectionMonitoring();
-        if (this.dispatcher) {
+        if (this.connection) {
+            // Isolated-conversation path: delete our dedicated conversation and
+            // tear down the whole connection.
+            if (this.ownedConversationId) {
+                try {
+                    await this.connection.deleteConversation(
+                        this.ownedConversationId,
+                    );
+                } catch (error) {
+                    this.logger.error(
+                        "Failed to delete subagent conversation",
+                        error,
+                    );
+                }
+            }
+            try {
+                await this.connection.close();
+            } catch (error) {
+                this.logger.error("Failed to close connection", error);
+            }
+            this.connection = null;
+            this.dispatcher = null;
+            this.ownedConversationId = null;
+        } else if (this.dispatcher) {
             await this.dispatcher.close();
             this.dispatcher = null;
         }
@@ -579,6 +671,21 @@ export class CommandServer {
                 toolResult(
                     request.message ? "PONG: " + request.message : "pong",
                 ),
+        );
+
+        this.server.registerTool(
+            "connection_status",
+            {
+                inputSchema: {},
+                description:
+                    "Report whether this command-executor is currently connected to the TypeAgent agent server. Returns structured { connected, url, conversationId }.",
+            },
+            async () =>
+                toolResult(this.dispatcher ? "connected" : "disconnected", {
+                    connected: this.dispatcher !== null,
+                    url: this.agentServerUrl,
+                    conversationId: this.ownedConversationId,
+                }),
         );
 
         this.server.registerTool(

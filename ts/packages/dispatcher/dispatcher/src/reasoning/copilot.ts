@@ -38,6 +38,13 @@ import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { createLimiter } from "@typeagent/common-utils";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
+import {
+    SUBAGENT_TOOL_DESCRIPTIONS,
+    handleCreateSubagent,
+    handleInvokeSubagent,
+    handleListSubagents,
+    handleStopSubagent,
+} from "./subagentTools.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 import { formatUserContextForPrompt } from "./userContextPrompt.js";
 import { ToolRunFolder } from "./reasoningLoopBase.js";
@@ -565,6 +572,30 @@ function formatToolCallDisplay(toolName: string, input: unknown): string {
  */
 function generateRequestId(): string {
     return `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/**
+ * Adapt a text-returning (or throwing) subagent handler into the Copilot tool
+ * result shape.
+ */
+async function copilotSubagentResult(
+    fn: () => Promise<string> | string,
+): Promise<{
+    textResultForLlm: string;
+    resultType: "success" | "failure";
+    error?: string;
+}> {
+    try {
+        const text = await fn();
+        return { textResultForLlm: text, resultType: "success" as const };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+            textResultForLlm: message,
+            resultType: "failure" as const,
+            error: message,
+        };
+    }
 }
 
 /**
@@ -1138,6 +1169,97 @@ function getCopilotSessionConfig(
     const model = resolveModel(context);
     const reasoningEffort = resolveReasoningEffort(context);
 
+    // Optional subagent tools: spawn/manage isolated command-executor workers.
+    // Gated behind `@config execution subagents` since it spawns processes.
+    const subagentsEnabled =
+        systemContext.session.getConfig().execution.subagents;
+    const subagentTools = subagentsEnabled
+        ? [
+              defineTool<{ name: string; instructions?: string }>(
+                  "create_subagent",
+                  {
+                      description: SUBAGENT_TOOL_DESCRIPTIONS.create_subagent,
+                      parameters: {
+                          type: "object",
+                          properties: {
+                              name: {
+                                  type: "string",
+                                  description: "Short name for the subagent",
+                              },
+                              instructions: {
+                                  type: "string",
+                                  description:
+                                      "Optional standing instructions given to the subagent on its first task",
+                              },
+                          },
+                          required: ["name"],
+                      },
+                      handler: async (args) =>
+                          copilotSubagentResult(() =>
+                              handleCreateSubagent(systemContext, {
+                                  name: args.name,
+                                  instructions: args.instructions,
+                              }),
+                          ),
+                  },
+              ),
+              defineTool<{ id: string; task: string }>("invoke_subagent", {
+                  description: SUBAGENT_TOOL_DESCRIPTIONS.invoke_subagent,
+                  parameters: {
+                      type: "object",
+                      properties: {
+                          id: {
+                              type: "string",
+                              description:
+                                  "Id of the subagent returned by create_subagent",
+                          },
+                          task: {
+                              type: "string",
+                              description:
+                                  "The task, in natural language, for the subagent to perform",
+                          },
+                      },
+                      required: ["id", "task"],
+                  },
+                  handler: async (args) =>
+                      copilotSubagentResult(() =>
+                          handleInvokeSubagent(systemContext, {
+                              id: args.id,
+                              task: args.task,
+                          }),
+                      ),
+              }),
+              defineTool("list_subagents", {
+                  description: SUBAGENT_TOOL_DESCRIPTIONS.list_subagents,
+                  parameters: {
+                      type: "object",
+                      properties: {},
+                  },
+                  handler: async () =>
+                      copilotSubagentResult(() =>
+                          handleListSubagents(systemContext),
+                      ),
+              }),
+              defineTool<{ id: string }>("stop_subagent", {
+                  description: SUBAGENT_TOOL_DESCRIPTIONS.stop_subagent,
+                  parameters: {
+                      type: "object",
+                      properties: {
+                          id: {
+                              type: "string",
+                              description: "Id of the subagent to stop",
+                          },
+                      },
+                      required: ["id"],
+                  },
+                  handler: async (args) =>
+                      copilotSubagentResult(() =>
+                          handleStopSubagent(systemContext, { id: args.id }),
+                      ),
+              }),
+          ]
+        : [];
+
     return {
         clientName: "TypeAgent",
         model,
@@ -1151,6 +1273,7 @@ function getCopilotSessionConfig(
             getConversationInfoTool,
             readConversationTool,
             getUserContextTool,
+            ...subagentTools,
             findInstallableAgentTool,
             askUserTool,
             askUserFormTool,
@@ -1163,6 +1286,14 @@ function getCopilotSessionConfig(
             "get_conversation_info",
             "read_conversation",
             "get_user_context",
+            ...(subagentsEnabled
+                ? [
+                      "create_subagent",
+                      "invoke_subagent",
+                      "list_subagents",
+                      "stop_subagent",
+                  ]
+                : []),
             "find_installable_agent",
             "ask_user",
             "ask_user_form",
@@ -1202,6 +1333,22 @@ function getCopilotSessionConfig(
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file path, language, cursor/selection ranges, workspace, diagnostic counts). Contains NO file or selection text.",
                 "- For actual file/selection **text**, use the code agent's read actions (getActiveEditor, getSelection, getFileContent, getDiagnostics) via discover_actions/execute_action.",
                 "",
+                ...(subagentsEnabled
+                    ? [
+                          "## Subagent Tools",
+                          "You can delegate self-contained sub-tasks to subagents. Each subagent is a",
+                          "separate worker with its own command-executor instance running in an isolated",
+                          "conversation, so its work does not disturb this conversation.",
+                          "- `create_subagent`: create a subagent (name, optional instructions) → returns an id",
+                          "- `invoke_subagent`: give an existing subagent a task (id, task) → returns its result",
+                          "- `list_subagents`: list the subagents you have created",
+                          "- `stop_subagent`: stop a subagent and free its resources (id)",
+                          "Use subagents for focused, independent lines of work: create one, invoke it",
+                          "with the sub-task, use its result, then stop it when done. Do NOT create",
+                          "subagents for trivial single-step actions you can do directly.",
+                          "",
+                      ]
+                    : []),
                 "## User Interaction",
                 '- `ask_user`: Ask the user ONE multiple-choice question and block for their answer. Strongly prefer to act autonomously with a safe default; use this ONLY when genuinely blocked on a decision only the user can make (an ambiguous choice among concrete options, or confirmation before a destructive/irreversible action). Provide the exact options (for yes/no use ["Yes", "No"]), and ask at most one such question.',
                 "- `ask_user_form`: Ask SEVERAL questions at once (pick / multiChoice / yesNo, optional free-text) in one form and block for all answers. Prefer this over multiple `ask_user` calls when a single blocking moment needs more than one answer.",
@@ -1216,6 +1363,34 @@ function getCopilotSessionConfig(
             ].join("\n"),
         },
     };
+}
+
+// The Copilot runtime raises this when a reasoning session has no usable
+// credentials (no logged-in user, no token, no BYOK provider). Auth is handled
+// by the external `copilot`/`gh` CLI, so the fix is to sign in.
+const COPILOT_LOGIN_HINT =
+    "GitHub Copilot isn't signed in, so the reasoning session couldn't " +
+    "authenticate. Run `@copilot login` to sign in (or `copilot login` in a " +
+    "terminal), then try your request again.";
+
+function isCopilotAuthError(message: string): boolean {
+    const m = message.toLowerCase();
+    return (
+        m.includes("authentication info or custom provider") ||
+        m.includes("not created with authentication")
+    );
+}
+
+/**
+ * If `error` is the Copilot "not authenticated / no provider" failure, return a
+ * clear, actionable Error pointing at `@copilot login`; otherwise return
+ * undefined so the caller keeps the original error.
+ */
+function copilotAuthError(error: unknown): Error | undefined {
+    const message = error instanceof Error ? error.message : String(error);
+    return isCopilotAuthError(message)
+        ? new Error(COPILOT_LOGIN_HINT)
+        : undefined;
 }
 
 /**
@@ -1304,6 +1479,10 @@ async function executeReasoningWithoutPlanning(
             setSessionId(context, sessionId);
         } catch (err) {
             debug("Failed to create session:", err);
+            const authErr = copilotAuthError(err);
+            if (authErr) {
+                throw authErr;
+            }
             throw new Error(
                 `Failed to create Copilot session.\n` +
                     `Error: ${err instanceof Error ? err.message : String(err)}`,
@@ -1530,14 +1709,17 @@ async function executeReasoningWithoutPlanning(
     } catch (error) {
         debug("Error during reasoning:", error);
         toolFolder.flush();
+        const authErr = copilotAuthError(error);
         context.actionIO.appendDisplay(
             {
                 type: "text",
-                content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+                content: authErr
+                    ? authErr.message
+                    : `Error: ${error instanceof Error ? error.message : String(error)}`,
             },
             displayMode,
         );
-        throw error;
+        throw authErr ?? error;
     } finally {
         // Unsubscribe from all events
         unsubscribeReasoningDelta();
@@ -1915,9 +2097,11 @@ async function executeReasoningWithTracing(
             unsubscribeUsage();
         }
     } catch (error) {
-        tracer.markFailed(error instanceof Error ? error : String(error));
+        const authErr = copilotAuthError(error);
+        const toThrow = authErr ?? error;
+        tracer.markFailed(toThrow instanceof Error ? toThrow : String(toThrow));
         await tracer.saveTrace();
-        throw error;
+        throw toThrow;
     }
 }
 

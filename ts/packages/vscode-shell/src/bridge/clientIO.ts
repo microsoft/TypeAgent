@@ -188,7 +188,13 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
                 seq,
             });
         },
-        appendDiagnosticData: () => {},
+        appendDiagnosticData: (requestId: RequestId, data: unknown) => {
+            ctx.broadcast({
+                type: "appendDiagnosticData",
+                requestId: clientIdOf(requestId),
+                data,
+            });
+        },
         // Live-updating display (agent set ActionResult.dynamicDisplayId).
         // Forward to the webview, which registers a refresh timer via chat-ui's
         // ChatPanel.setDynamicDisplay and polls back for fresh content through

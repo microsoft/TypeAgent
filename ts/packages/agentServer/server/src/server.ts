@@ -420,6 +420,12 @@ async function main() {
 
     console.log(`Agent server started at ws://localhost:${port}`);
     writeServerPid(port, process.pid);
+    // Publish our own listen URL into the process environment so in-process
+    // consumers (e.g. the reasoning loop's subagent manager, which spawns
+    // command-executor child processes that connect back over WebSocket) and
+    // any child processes we spawn resolve the right port. An explicit
+    // AGENT_SERVER_URL override (e.g. a tunnel) is respected.
+    process.env.AGENT_SERVER_URL ??= `ws://localhost:${port}`;
     // Warn (once) in this console if the server's own build changes on disk
     // while this process keeps running the old code, and push the notice to
     // any already-connected clients the moment it's detected.

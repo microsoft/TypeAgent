@@ -176,6 +176,24 @@ describe("buildReasoningActionResult", () => {
         });
     });
 
+    it("appends the serialized cause chain and details to the error text", () => {
+        const result = buildReasoningActionResult(
+            {
+                error: "fetch failed",
+                errorDetails: {
+                    message: "fetch failed",
+                    cause: { message: "deployment does not exist" },
+                    extra: { status: 404 },
+                },
+            },
+            display,
+        );
+        expect(result.isError).toBe(true);
+        expect(result.text).toContain("Error: fetch failed");
+        expect(result.text).toContain("Caused by: deployment does not exist");
+        expect(result.text).toContain('"status":404');
+    });
+
     it("falls back to display for an undefined result", () => {
         expect(buildReasoningActionResult(undefined, display)).toEqual({
             text: JSON.stringify(display),

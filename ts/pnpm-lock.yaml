@@ -4679,6 +4679,9 @@ importers:
       '@github/copilot-sdk':
         specifier: 1.0.5
         version: 1.0.5
+      '@modelcontextprotocol/sdk':
+        specifier: 1.26.0
+        version: 1.26.0(supports-color@8.1.1)(zod@4.1.13)
       '@typeagent/action-grammar':
         specifier: workspace:*
         version: link:../../actionGrammar

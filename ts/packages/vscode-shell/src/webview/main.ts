@@ -979,6 +979,10 @@ window.addEventListener("message", (event) => {
                 msg.requestId,
             );
             break;
+        case "appendDiagnosticData":
+            if (isCancelledRequest(msg.requestId)) break;
+            chatPanel.appendDiagnosticData(msg.requestId, msg.data);
+            break;
         case "clear":
             chatPanel.clear();
             cancelledRequests.clear();

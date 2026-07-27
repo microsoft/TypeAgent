@@ -89,6 +89,7 @@ export {
     ActionResult,
     ActionResultActivityContext,
     ActionTokenUsage,
+    SerializedError,
     PendingChoice,
     PendingYesNoChoice,
     PendingMultiChoice,

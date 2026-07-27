@@ -8,10 +8,14 @@ import {
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import {
+    displayInfo,
     displayStatus,
     displaySuccess,
     displayWarn,
+    displayError,
 } from "@typeagent/agent-sdk/helpers/display";
+import { getCopilotClient, getCopilotCliPath } from "@typeagent/aiclient";
+import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -418,6 +422,241 @@ class FixWithCopilotCommandHandler implements CommandHandler {
     }
 }
 
+// GitHub device codes look like "ABCD-1234"; the CLI prints one to enter in the
+// browser. The verification page is the host's /login/device URL.
+const DEVICE_CODE_RE = /\b[A-Z0-9]{4}-[A-Z0-9]{4}\b/;
+const DEVICE_URL_RE = /https?:\/\/\S*\/login\/device\S*/i;
+const LOGIN_TIMEOUT_MS = 3 * 60 * 1000;
+
+/** Best-effort cross-platform "open this URL in the default browser". */
+function openUrl(url: string): void {
+    try {
+        const [command, args] =
+            process.platform === "win32"
+                ? (["cmd", ["/c", "start", "", url]] as const)
+                : process.platform === "darwin"
+                  ? (["open", [url]] as const)
+                  : (["xdg-open", [url]] as const);
+        const child = spawn(command, [...args], {
+            detached: true,
+            stdio: "ignore",
+            windowsHide: true,
+        });
+        child.on("error", () => {});
+        child.unref();
+    } catch {
+        // Opening a browser is a convenience; the URL is also shown in chat.
+    }
+}
+
+class CopilotLoginCommandHandler implements CommandHandler {
+    public readonly description =
+        "Sign in to GitHub Copilot via the browser device flow";
+    public readonly parameters = {
+        flags: {
+            host: {
+                description:
+                    "GitHub host URL (e.g. https://example.ghe.com for Enterprise Cloud with data residency)",
+                type: "string",
+                default: "https://github.com",
+            },
+            "no-open": {
+                description:
+                    "Do not auto-open the verification URL in a browser (the code and URL are still shown in chat)",
+                type: "boolean",
+                default: false,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        // Already signed in? Report and stop before spawning anything.
+        try {
+            const client = await getCopilotClient();
+            const status = await client.getAuthStatus();
+            if (status.isAuthenticated) {
+                displaySuccess(
+                    `Already signed in to GitHub Copilot${status.login ? ` as ${status.login}` : ""}${status.authType ? ` (${status.authType})` : ""}.`,
+                    context,
+                );
+                return;
+            }
+        } catch (e) {
+            // Status check is best-effort; fall through and try to sign in.
+            displayWarn(
+                `Could not read Copilot auth status: ${e instanceof Error ? e.message : String(e)}`,
+                context,
+            );
+        }
+
+        const cliPath = getCopilotCliPath();
+        if (cliPath === undefined) {
+            displayWarn(
+                "This session talks to a remote Copilot CLI server (cliUrl), so there is no local CLI to sign in here. Run 'copilot login' on the machine hosting that server.",
+                context,
+            );
+            return;
+        }
+
+        const host = params.flags.host;
+        const args = ["login"];
+        if (host && host !== "https://github.com") {
+            args.push("--host", host);
+        }
+
+        displayStatus("Starting GitHub Copilot sign-in…", context);
+        await this.runLogin(context, cliPath, args, !params.flags["no-open"]);
+
+        // Confirm the outcome so the user knows reasoning is ready.
+        try {
+            const client = await getCopilotClient();
+            const status = await client.getAuthStatus();
+            if (status.isAuthenticated) {
+                displaySuccess(
+                    `Signed in to GitHub Copilot${status.login ? ` as ${status.login}` : ""}. Copilot reasoning is ready.`,
+                    context,
+                );
+            } else {
+                displayWarn(
+                    "Sign-in finished but Copilot still reports as not authenticated. If Copilot reasoning keeps failing, restart the app so the Copilot client reloads credentials.",
+                    context,
+                );
+            }
+        } catch {
+            // The login process outcome was already surfaced by runLogin.
+        }
+    }
+
+    /**
+     * Spawn `copilot login`, stream its output into the chat, auto-open the
+     * first verification URL, and answer any "press Enter" prompt (stdin is a
+     * pipe, so the CLI can't read the keyboard directly). Resolves when the
+     * process exits, times out, or fails to start.
+     */
+    private runLogin(
+        context: ActionContext<CommandHandlerContext>,
+        cliPath: string,
+        args: string[],
+        openBrowser: boolean,
+    ): Promise<void> {
+        return new Promise<void>((resolve) => {
+            let child: ChildProcess;
+            try {
+                child = spawn(cliPath, args, {
+                    stdio: ["pipe", "pipe", "pipe"],
+                    env: process.env,
+                });
+            } catch (e) {
+                displayError(
+                    `Failed to launch 'copilot login': ${e instanceof Error ? e.message : String(e)}\nInstall the Copilot CLI, then run 'copilot login' in a terminal.`,
+                    context,
+                );
+                resolve();
+                return;
+            }
+
+            let openedUrl = false;
+            let answeredPrompt = false;
+            let tail = "";
+            let outBuf = "";
+            let errBuf = "";
+
+            const inspect = (text: string) => {
+                tail = (tail + text).slice(-2000);
+                if (openBrowser && !openedUrl) {
+                    const m = text.match(DEVICE_URL_RE);
+                    if (m) {
+                        openedUrl = true;
+                        openUrl(m[0]);
+                        displayInfo(
+                            "Opened the GitHub verification page in your browser. Enter the code shown above if prompted.",
+                            context,
+                        );
+                    }
+                }
+                if (!answeredPrompt && /press\s+enter/i.test(text)) {
+                    answeredPrompt = true;
+                    try {
+                        child.stdin?.write("\n");
+                    } catch {
+                        // The prompt may have already advanced; ignore.
+                    }
+                }
+            };
+
+            const pump = (chunk: Buffer, which: "out" | "err") => {
+                const s = chunk.toString();
+                inspect(s);
+                const combined = (which === "out" ? outBuf : errBuf) + s;
+                const lines = combined.split(/\r?\n/);
+                const remainder = lines.pop() ?? "";
+                if (which === "out") {
+                    outBuf = remainder;
+                } else {
+                    errBuf = remainder;
+                }
+                for (const line of lines) {
+                    const t = line.trim();
+                    if (t.length > 0) {
+                        const code = t.match(DEVICE_CODE_RE);
+                        // Highlight the line carrying the one-time code.
+                        if (code) {
+                            displayInfo(`🔑 ${t}`, context);
+                        } else {
+                            displayInfo(t, context);
+                        }
+                    }
+                }
+            };
+
+            child.stdout?.on("data", (c: Buffer) => pump(c, "out"));
+            child.stderr?.on("data", (c: Buffer) => pump(c, "err"));
+
+            const timer = setTimeout(() => {
+                displayError(
+                    "GitHub Copilot sign-in timed out after 3 minutes. Run 'copilot login' in a terminal to finish.",
+                    context,
+                );
+                try {
+                    child.kill();
+                } catch {
+                    // Already gone.
+                }
+            }, LOGIN_TIMEOUT_MS);
+
+            child.on("error", (e: Error) => {
+                clearTimeout(timer);
+                displayError(
+                    `'copilot login' failed to start: ${e.message}\nEnsure the Copilot CLI is installed, then run 'copilot login' in a terminal.`,
+                    context,
+                );
+                resolve();
+            });
+
+            child.on("close", (code: number | null) => {
+                clearTimeout(timer);
+                // Flush any trailing partial lines.
+                for (const remainder of [outBuf, errBuf]) {
+                    const t = remainder.trim();
+                    if (t.length > 0) {
+                        displayInfo(t, context);
+                    }
+                }
+                if (code !== 0 && code !== null) {
+                    displayError(
+                        `'copilot login' exited with code ${code}.${tail.trim() ? `\n${tail.trim()}` : ""}`,
+                        context,
+                    );
+                }
+                resolve();
+            });
+        });
+    }
+}
+
 export function getCopilotCommandHandlers(): CommandHandlerTable {
     return {
         description: "GitHub Copilot session commands",
@@ -425,6 +664,7 @@ export function getCopilotCommandHandlers(): CommandHandlerTable {
         commands: {
             import: new CopilotImportCommandHandler(),
             fix: new FixWithCopilotCommandHandler(),
+            login: new CopilotLoginCommandHandler(),
         },
     };
 }
