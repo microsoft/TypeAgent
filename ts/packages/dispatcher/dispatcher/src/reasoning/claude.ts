@@ -763,7 +763,7 @@ function getClaudeOptions(
     // with its own spawned command-executor instance. Only registered when
     // execution.subagents is enabled (see also the system-prompt guidance).
     const subagentsEnabled = config.execution.subagents;
-    const subagentTools: SdkMcpToolDefinition<any>[] = [];
+    const subagentTools = [];
     if (subagentsEnabled) {
         const createSubagentSchema = {
             name: z.string(),

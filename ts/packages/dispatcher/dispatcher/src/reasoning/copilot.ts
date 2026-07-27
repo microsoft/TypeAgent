@@ -1175,32 +1175,35 @@ function getCopilotSessionConfig(
         systemContext.session.getConfig().execution.subagents;
     const subagentTools = subagentsEnabled
         ? [
-              defineTool("create_subagent", {
-                  description: SUBAGENT_TOOL_DESCRIPTIONS.create_subagent,
-                  parameters: {
-                      type: "object",
-                      properties: {
-                          name: {
-                              type: "string",
-                              description: "Short name for the subagent",
+              defineTool<{ name: string; instructions?: string }>(
+                  "create_subagent",
+                  {
+                      description: SUBAGENT_TOOL_DESCRIPTIONS.create_subagent,
+                      parameters: {
+                          type: "object",
+                          properties: {
+                              name: {
+                                  type: "string",
+                                  description: "Short name for the subagent",
+                              },
+                              instructions: {
+                                  type: "string",
+                                  description:
+                                      "Optional standing instructions given to the subagent on its first task",
+                              },
                           },
-                          instructions: {
-                              type: "string",
-                              description:
-                                  "Optional standing instructions given to the subagent on its first task",
-                          },
+                          required: ["name"],
                       },
-                      required: ["name"],
+                      handler: async (args) =>
+                          copilotSubagentResult(() =>
+                              handleCreateSubagent(systemContext, {
+                                  name: args.name,
+                                  instructions: args.instructions,
+                              }),
+                          ),
                   },
-                  handler: async (args: any) =>
-                      copilotSubagentResult(() =>
-                          handleCreateSubagent(systemContext, {
-                              name: args.name,
-                              instructions: args.instructions,
-                          }),
-                      ),
-              }),
-              defineTool("invoke_subagent", {
+              ),
+              defineTool<{ id: string; task: string }>("invoke_subagent", {
                   description: SUBAGENT_TOOL_DESCRIPTIONS.invoke_subagent,
                   parameters: {
                       type: "object",
@@ -1218,7 +1221,7 @@ function getCopilotSessionConfig(
                       },
                       required: ["id", "task"],
                   },
-                  handler: async (args: any) =>
+                  handler: async (args) =>
                       copilotSubagentResult(() =>
                           handleInvokeSubagent(systemContext, {
                               id: args.id,
@@ -1237,7 +1240,7 @@ function getCopilotSessionConfig(
                           handleListSubagents(systemContext),
                       ),
               }),
-              defineTool("stop_subagent", {
+              defineTool<{ id: string }>("stop_subagent", {
                   description: SUBAGENT_TOOL_DESCRIPTIONS.stop_subagent,
                   parameters: {
                       type: "object",
@@ -1249,7 +1252,7 @@ function getCopilotSessionConfig(
                       },
                       required: ["id"],
                   },
-                  handler: async (args: any) =>
+                  handler: async (args) =>
                       copilotSubagentResult(() =>
                           handleStopSubagent(systemContext, { id: args.id }),
                       ),

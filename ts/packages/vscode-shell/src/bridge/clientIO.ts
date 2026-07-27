@@ -188,7 +188,7 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
                 seq,
             });
         },
-        appendDiagnosticData: (requestId: RequestId, data: any) => {
+        appendDiagnosticData: (requestId: RequestId, data: unknown) => {
             ctx.broadcast({
                 type: "appendDiagnosticData",
                 requestId: clientIdOf(requestId),
