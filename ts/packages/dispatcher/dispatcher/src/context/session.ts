@@ -205,6 +205,15 @@ export type DispatcherConfig = {
         // for environments that prefer explicit setup invocations
         // (CI / scripted / agents-as-libraries).
         setupOnFirstUse: boolean;
+        // Whether the reasoning loop can create and manage subagents. Each
+        // subagent runs as its own spawned command-executor process (its own
+        // action-execution instance in an isolated conversation), driven by the
+        // reasoning model through the create/invoke/list/stop subagent tools.
+        // Off by default: spawning processes and opening extra agent-server
+        // connections is a powerful capability that requires a reachable
+        // agent-server and a built command-executor. Enable per session via
+        // `@config execution subagents on`.
+        subagents: boolean;
         // Controls how Entity objects are rendered into LLM prompts (translation + reasoning context).
         // "facets" (default): current shape `{id, name, type, facets: [{name, value}, ...]}`.
         // "flat": collapse facets into a `properties` object — `{id, name, type, uniqueId?, properties: {...}}`.
@@ -444,6 +453,7 @@ const defaultSessionConfig: SessionConfig = {
         reasoningHistoryTurns: 10, // recent chat turns injected into the reasoning prompt
         recordUserMessages: true, // record the user's own turns in the transcript
         setupOnFirstUse: true,
+        subagents: false, // reasoning subagents disabled by default (opt-in)
         // Default set based on the entity-shape experiment (bench-results/entity-shape-experiment.md):
         // appending the Entity TS type to the reasoning system prompt produced 4 consistent
         // gains / 0 consistent regressions on a 20-test sample (median of 3 runs).

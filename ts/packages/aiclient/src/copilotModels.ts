@@ -206,6 +206,25 @@ export async function getCopilotClient(
 }
 
 /**
+ * Resolve the copilot CLI binary path the SDK client would spawn, so callers
+ * that need to run the CLI themselves (e.g. an interactive `copilot login`)
+ * invoke the same binary. Returns `undefined` when the client is configured to
+ * connect to a remote CLI server (`cliUrl`), in which case there is no local
+ * binary to run.
+ */
+export function getCopilotCliPath(
+    options?: CopilotClientOptions | string,
+): string | undefined {
+    const opts = typeof options === "string" ? { cliPath: options } : options;
+    if (opts?.cliUrl ?? cachedCliUrl) {
+        return undefined;
+    }
+    const cliPath = opts?.cliPath ?? cachedCliPath ?? findCopilotPath();
+    cachedCliPath = cliPath;
+    return cliPath;
+}
+
+/**
  * Eagerly start (or connect to) the Copilot CLI so the first user-visible
  * request doesn't pay the one-time spawn/startup cost (measured at several
  * seconds cold). Safe to call multiple times — it reuses the singleton and
