@@ -650,6 +650,12 @@ export class ChatPanel {
         { source: string; sourceIcon?: string; action?: unknown }
     >();
     /**
+     * Per-thread serialized ActionResult stashed when the dispatcher's
+     * diagnostic arrives before the thread's container exists; consumed by
+     * getOrCreateAgentContainer when it creates the container.
+     */
+    private pendingThreadResult = new Map<string, unknown>();
+    /**
      * Floating overlay surface for showToast() — fixed-positioned above the
      * chat in rootElement, lazily created on first toast.
      */
@@ -2942,6 +2948,11 @@ export class ChatPanel {
             container.setActionData(pending.action);
         }
         this.pendingThreadDisplayInfo.delete(threadId);
+        const pendingResult = this.pendingThreadResult.get(threadId);
+        if (pendingResult !== undefined) {
+            container.setActionResultData(pendingResult);
+            this.pendingThreadResult.delete(threadId);
+        }
         return container;
     }
 
@@ -3464,6 +3475,7 @@ export class ChatPanel {
         this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
+        this.pendingThreadResult.clear();
         this.agentRunningRequestIds.clear();
         this.clearAllSentAck();
 
@@ -3501,6 +3513,7 @@ export class ChatPanel {
         this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
+        this.pendingThreadResult.clear();
         this.userMessageById.clear();
         this.scrollToBottom();
     }
@@ -3535,6 +3548,7 @@ export class ChatPanel {
         this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
+        this.pendingThreadResult.clear();
         this.agentRunningRequestIds.clear();
         this.clearAllSentAck();
         this.suppressFirstMessageTracking = true;
@@ -3573,6 +3587,7 @@ export class ChatPanel {
         this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
+        this.pendingThreadResult.clear();
         this.userMessageById.clear();
         this.scrollToBottom();
 
@@ -3787,6 +3802,30 @@ export class ChatPanel {
         });
     }
 
+    /**
+     * Receive dev diagnostic data from the dispatcher. Only the tagged
+     * "actionResult" payload (emitted after every action) feeds the
+     * per-bubble result inspector; other diagnostic shapes are ignored.
+     * Attaches to the thread's current bubble, or stashes for the next one.
+     */
+    public appendDiagnosticData(requestId: string | undefined, data: unknown) {
+        if (
+            typeof data !== "object" ||
+            data === null ||
+            (data as { type?: unknown }).type !== "actionResult"
+        ) {
+            return;
+        }
+        const result = (data as { result?: unknown }).result;
+        const threadId = this.resolveThreadId(requestId);
+        const target = this.threadContainers.get(threadId);
+        if (target) {
+            target.setActionResultData(result);
+            return;
+        }
+        this.pendingThreadResult.set(threadId, result);
+    }
+
     /** Returns true if a user-message bubble for `requestId` already exists. */
     public hasUserMessage(requestId: string): boolean {
         return this.userMessageById.has(requestId);
@@ -3812,6 +3851,7 @@ export class ChatPanel {
         this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
+        this.pendingThreadResult.clear();
         this.userMessageById.clear();
         this.sentCommandByRequestId.clear();
         this.requestStartByRequestId.clear();
@@ -5918,6 +5958,7 @@ class AgentMessageContainer {
     private readonly messageDiv: HTMLDivElement;
     private readonly bodyDiv: HTMLDivElement;
     private readonly detailsDiv: HTMLDivElement;
+    private readonly resultDiv: HTMLDivElement;
     private readonly metricsDiv: HTMLDivElement;
     private readonly nameSpan: HTMLSpanElement;
     private readonly iconDiv: HTMLDivElement;
@@ -5931,6 +5972,9 @@ class AgentMessageContainer {
     // clicking the agent name toggles the message body between the
     // rendered response and a <pre> of the action JSON.
     private actionDataHtml?: string;
+    // Serialized ActionResult JSON (success or error) shown in a panel
+    // separate from the action JSON, toggled by clicking the agent icon.
+    private actionResultHtml?: string;
     private savedMessageHtml?: string;
     // When setActionData receives an action with schemaName/actionName,
     // we display "schema.action" as the bubble title instead of the raw
@@ -5979,10 +6023,16 @@ class AgentMessageContainer {
         this.timestampDiv = timestampDiv;
         this.div.appendChild(timestampDiv);
 
-        // Icon
+        // Icon. Clicking it toggles the serialized ActionResult panel (when
+        // result data has been attached) - a separate affordance from the
+        // agent name, which toggles the action JSON.
         this.iconDiv = document.createElement("div");
         this.iconDiv.className = "agent-icon";
         this.iconDiv.textContent = icon;
+        this.iconDiv.addEventListener("click", () => {
+            if (this.actionResultHtml === undefined) return;
+            this.toggleResultData();
+        });
         this.div.appendChild(this.iconDiv);
 
         // Message body
@@ -5998,6 +6048,13 @@ class AgentMessageContainer {
         this.detailsDiv = document.createElement("div");
         this.detailsDiv.className = "chat-message-details";
         bodyDiv.appendChild(this.detailsDiv);
+
+        // Collapsible ActionResult inspector (hidden by default). Separate
+        // from detailsDiv so the resolved action JSON and its result can be
+        // inspected independently. Fed via appendDiagnosticData.
+        this.resultDiv = document.createElement("div");
+        this.resultDiv.className = "chat-message-details chat-message-result";
+        bodyDiv.appendChild(this.resultDiv);
 
         // Metrics strip (hidden by default, revealed on hover via CSS).
         // Starts empty so the hover area collapses to zero height until
@@ -6222,6 +6279,26 @@ class AgentMessageContainer {
     private toggleActionData() {
         if (this.actionDataHtml === undefined) return;
         this.detailsDiv.classList.toggle("chat-details-visible");
+    }
+
+    /**
+     * Attach a serialized ActionResult (success or error) to this bubble.
+     * Rendered as pretty-printed JSON in a panel separate from the action
+     * JSON; clicking the agent icon toggles it.
+     */
+    public setActionResultData(result: unknown) {
+        if (result === undefined || result === null) return;
+        const json = JSON.stringify(result, undefined, 2);
+        const html = `<pre class="chat-json">${highlightJson(json)}</pre>`;
+        this.resultDiv.innerHTML = sanitize(html);
+        this.actionResultHtml = html;
+        this.iconDiv.classList.add("clickable");
+        this.iconDiv.title = "Click to show / hide action result";
+    }
+
+    private toggleResultData() {
+        if (this.actionResultHtml === undefined) return;
+        this.resultDiv.classList.toggle("chat-details-visible");
     }
 
     public setMessage(

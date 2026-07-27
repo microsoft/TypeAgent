@@ -1844,6 +1844,25 @@ table.sc-kv-table.sc-card-fields {
   display: block;
 }
 
+/* The ActionResult inspector reuses the details-panel styling but gets a
+   subtle accent + label so it reads as distinct from the action JSON. */
+.chat-message-result {
+  border-top-color: rgba(25, 118, 210, 0.35);
+}
+.chat-message-result::before {
+  content: "result";
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+  margin-bottom: 2px;
+}
+/* Agent icon becomes a click affordance when result data is attached. */
+.agent-icon.clickable {
+  cursor: pointer;
+}
+
 /* Logged tool calls inside a reasoning step. Every tool call (single or a folded
    run "Tool: <name> xN") renders as a native <details> whose <summary> is a
    clickable line with the tool name as inline code; expanding it reveals only

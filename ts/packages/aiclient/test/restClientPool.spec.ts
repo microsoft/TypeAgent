@@ -164,6 +164,11 @@ describe("callJsonApiWithPool — multi-member rotation", () => {
         const result = await callJsonApiWithPool(pool, mockBuildRequest());
         expect(result.success).toBe(false);
         expect(calls).toHaveLength(1); // did NOT rotate
+        if (!result.success) {
+            // The failing endpoint is named so a 404/401 says which
+            // deployment was hit.
+            expect(result.message).toContain("https://first.example/x");
+        }
     });
 
     test("5xx on tier-1 rotates to tier-2", async () => {

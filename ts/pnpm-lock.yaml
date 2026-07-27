@@ -80,15 +80,15 @@ importers:
 
   examples/agentExamples/measure:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../../packages/typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../../packages/agentSdk
       better-sqlite3:
         specifier: 12.6.2
         version: 12.6.2
-      typeagent:
-        specifier: workspace:*
-        version: link:../../../packages/typeagent
     devDependencies:
       '@types/better-sqlite3':
         specifier: 7.6.13
@@ -114,6 +114,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../packages/agentRpc
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../packages/agentSdk
@@ -123,6 +126,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../packages/utils/commonUtils
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../packages/telemetry
       agent-cache:
         specifier: workspace:*
         version: link:../../packages/cache
@@ -150,12 +156,6 @@ importers:
       find-config:
         specifier: ^1.0.0
         version: 1.0.0
-      telemetry:
-        specifier: workspace:*
-        version: link:../../packages/telemetry
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -193,12 +193,39 @@ importers:
       '@azure/search-documents':
         specifier: 12.1.0
         version: 12.1.0
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../packages/aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@typeagent/conversation-memory':
+        specifier: workspace:*
+        version: link:../../packages/memory/conversation
+      '@typeagent/image-memory':
+        specifier: workspace:*
+        version: link:../../packages/memory/image
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../../packages/knowledgeProcessor
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../../packages/knowPro
+      '@typeagent/memory-storage':
+        specifier: workspace:*
+        version: link:../../packages/memory/storage
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../packages/telemetry
+      '@typeagent/textpro':
+        specifier: workspace:*
+        version: link:../../packages/textPro
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../../packages/utils/typechatUtils
       better-sqlite3:
         specifier: 12.6.2
         version: 12.6.2
@@ -208,9 +235,6 @@ importers:
       code-processor:
         specifier: workspace:*
         version: link:../../packages/codeProcessor
-      conversation-memory:
-        specifier: workspace:*
-        version: link:../../packages/memory/conversation
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -220,42 +244,18 @@ importers:
       exifreader:
         specifier: ^4.39.0
         version: 4.40.3
-      image-memory:
-        specifier: workspace:*
-        version: link:../../packages/memory/image
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../packages/knowledgeProcessor
-      knowpro:
-        specifier: workspace:*
-        version: link:../../packages/knowPro
       knowpro-test:
         specifier: workspace:*
         version: link:../../packages/knowProTest
       memory-providers:
         specifier: workspace:*
         version: link:../memoryProviders
-      memory-storage:
-        specifier: workspace:*
-        version: link:../../packages/memory/storage
-      telemetry:
-        specifier: workspace:*
-        version: link:../../packages/telemetry
-      textpro:
-        specifier: workspace:*
-        version: link:../../packages/textPro
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../../packages/utils/typechatUtils
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -275,6 +275,9 @@ importers:
 
   examples/classify:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -287,9 +290,6 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -303,6 +303,9 @@ importers:
 
   examples/commandHistogram:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -312,42 +315,39 @@ importers:
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@typeagent/conversation-memory':
+        specifier: workspace:*
+        version: link:../../packages/memory/conversation
+      '@typeagent/image-memory':
+        specifier: workspace:*
+        version: link:../../packages/memory/image
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../../packages/knowledgeProcessor
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../../packages/knowPro
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
       code-processor:
         specifier: workspace:*
         version: link:../../packages/codeProcessor
-      conversation-memory:
-        specifier: workspace:*
-        version: link:../../packages/memory/conversation
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
       exifreader:
         specifier: ^4.39.0
         version: 4.40.3
-      image-memory:
-        specifier: workspace:*
-        version: link:../../packages/memory/image
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../packages/knowledgeProcessor
-      knowpro:
-        specifier: workspace:*
-        version: link:../../packages/knowPro
       memory-providers:
         specifier: workspace:*
         version: link:../memoryProviders
       mongodb:
         specifier: ^6.15.0
         version: 6.16.0(socks@2.8.7)
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -380,21 +380,30 @@ importers:
 
   examples/docuProc:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../packages/aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@typeagent/conversation-memory':
+        specifier: workspace:*
+        version: link:../../packages/memory/conversation
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../../packages/knowledgeProcessor
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../../packages/knowPro
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
       cheerio:
         specifier: 1.0.0-rc.12
         version: 1.0.0-rc.12
-      conversation-memory:
-        specifier: workspace:*
-        version: link:../../packages/memory/conversation
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
@@ -407,21 +416,12 @@ importers:
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../packages/knowledgeProcessor
-      knowpro:
-        specifier: workspace:*
-        version: link:../../packages/knowPro
       memory-providers:
         specifier: workspace:*
         version: link:../memoryProviders
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -447,9 +447,15 @@ importers:
 
   examples/examplesLib:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../packages/aiclient
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../../packages/knowPro
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -459,12 +465,6 @@ importers:
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
-      knowpro:
-        specifier: workspace:*
-        version: link:../../packages/knowPro
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -487,12 +487,18 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.26.0
         version: 1.26.0(supports-color@8.1.1)(zod@4.1.13)
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
-      conversation-memory:
+      '@typeagent/conversation-memory':
         specifier: workspace:*
         version: link:../../packages/memory/conversation
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../../packages/knowPro
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -502,12 +508,6 @@ importers:
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
-      knowpro:
-        specifier: workspace:*
-        version: link:../../packages/knowPro
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
       zod:
         specifier: ^4.1.13
         version: 4.1.13
@@ -530,24 +530,24 @@ importers:
       '@elastic/elasticsearch':
         specifier: ^9.3.4
         version: 9.3.4(supports-color@8.1.1)
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../packages/aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../../packages/knowledgeProcessor
       better-sqlite3:
         specifier: 12.6.2
         version: 12.6.2
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../packages/knowledgeProcessor
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -628,12 +628,18 @@ importers:
 
   examples/playground:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../packages/aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../packages/telemetry
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -643,12 +649,6 @@ importers:
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
-      telemetry:
-        specifier: workspace:*
-        version: link:../../packages/telemetry
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -681,9 +681,15 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../packages/actionSchema
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../packages/aiclient
+      '@typeagent/azure-ai-foundry':
+        specifier: workspace:*
+        version: link:../../packages/azure-ai-foundry
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -693,9 +699,6 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../packages/dispatcher/dispatcher
-      azure-ai-foundry:
-        specifier: workspace:*
-        version: link:../../packages/azure-ai-foundry
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
@@ -714,9 +717,6 @@ importers:
       schema-author:
         specifier: workspace:*
         version: link:../../packages/schemaAuthor
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -739,12 +739,18 @@ importers:
 
   examples/searchActionTest:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../packages/aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../../packages/utils/typechatUtils
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -754,15 +760,9 @@ importers:
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../../packages/utils/typechatUtils
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -838,12 +838,18 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../packages/actionSchema
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../packages/aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../packages/telemetry
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -859,12 +865,6 @@ importers:
       fastest-levenshtein:
         specifier: ^1.0.16
         version: 1.0.16
-      telemetry:
-        specifier: workspace:*
-        version: link:../../packages/telemetry
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -884,18 +884,21 @@ importers:
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../packages/aiclient
+      '@typeagent/azure-ai-foundry':
+        specifier: workspace:*
+        version: link:../../packages/azure-ai-foundry
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../packages/utils/commonUtils
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../packages/config
-      azure-ai-foundry:
-        specifier: workspace:*
-        version: link:../../packages/azure-ai-foundry
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -914,9 +917,6 @@ importers:
       puppeteer:
         specifier: ^24.15.0
         version: 24.37.5(typescript@5.4.5)
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -1595,11 +1595,14 @@ importers:
         version: 4.4.3(supports-color@8.1.1)
       isomorphic-ws:
         specifier: ^5.0.0
-        version: 5.0.0(ws@8.21.0)
+        version: 5.0.0(ws@8.21.1)
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
         version: 29.7.0
+      '@typeagent/websocket-channel-server':
+        specifier: workspace:*
+        version: link:../../utils/webSocketChannelServer
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -1621,12 +1624,9 @@ importers:
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
-      websocket-channel-server:
-        specifier: workspace:*
-        version: link:../../utils/webSocketChannelServer
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
 
   packages/agentServer/protocol:
     dependencies:
@@ -1682,6 +1682,9 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../../dispatcher/types
+      '@typeagent/websocket-channel-server':
+        specifier: workspace:*
+        version: link:../../utils/webSocketChannelServer
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
@@ -1700,12 +1703,9 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
-      websocket-channel-server:
-        specifier: workspace:*
-        version: link:../../utils/webSocketChannelServer
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
@@ -1752,6 +1752,9 @@ importers:
       '@microsoft/microsoft-graph-client':
         specifier: ^3.0.7
         version: 3.0.7(@azure/identity@4.10.0)
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../../agentSdk
@@ -1788,9 +1791,6 @@ importers:
       string-compare:
         specifier: ^1.1.2
         version: 1.1.2
-      typeagent:
-        specifier: workspace:*
-        version: link:../../../typeagent
     devDependencies:
       '@microsoft/microsoft-graph-types':
         specifier: ^2.40.0
@@ -1856,6 +1856,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -1868,45 +1871,63 @@ importers:
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/azure-ai-foundry':
+        specifier: workspace:*
+        version: link:../../azure-ai-foundry
       '@typeagent/browser-control-rpc':
         specifier: workspace:*
         version: link:../browserControlRpc
+      '@typeagent/chat-ui':
+        specifier: workspace:*
+        version: link:../../chat-ui
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../config
+      '@typeagent/conversation-memory':
+        specifier: workspace:*
+        version: link:../../memory/conversation
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../../dispatcher/types
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../../knowPro
+      '@typeagent/taskflow-typeagent':
+        specifier: workspace:*
+        version: link:../taskflow
+      '@typeagent/textpro':
+        specifier: workspace:*
+        version: link:../../textPro
+      '@typeagent/website-memory':
+        specifier: workspace:*
+        version: link:../../memory/website
+      '@typeagent/websocket-channel-server':
+        specifier: workspace:*
+        version: link:../../utils/webSocketChannelServer
       '@typeagent/websocket-utils':
         specifier: workspace:*
         version: link:../../utils/webSocketUtils
-      azure-ai-foundry:
-        specifier: workspace:*
-        version: link:../../azure-ai-foundry
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
-      chat-ui:
-        specifier: workspace:*
-        version: link:../../chat-ui
       cheerio:
         specifier: ^1.1.0
         version: 1.1.0
-      conversation-memory:
-        specifier: workspace:*
-        version: link:../../memory/conversation
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       express:
         specifier: ^4.22.0
         version: 4.22.1
@@ -1940,12 +1961,6 @@ importers:
       jsonpath:
         specifier: ^1.2.0
         version: 1.3.0
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../knowledgeProcessor
-      knowpro:
-        specifier: workspace:*
-        version: link:../../knowPro
       pdfjs-dist:
         specifier: ^5.3.31
         version: 5.3.31
@@ -1967,30 +1982,15 @@ importers:
       sanitize-filename:
         specifier: ^1.6.3
         version: 1.6.3
-      taskflow-typeagent:
-        specifier: workspace:*
-        version: link:../taskflow
-      textpro:
-        specifier: workspace:*
-        version: link:../../textPro
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@4.3.6)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
-      website-memory:
-        specifier: workspace:*
-        version: link:../../memory/website
-      websocket-channel-server:
-        specifier: workspace:*
-        version: link:../../utils/webSocketChannelServer
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
       xss:
         specifier: ^1.0.15
         version: 1.0.15
@@ -2059,8 +2059,8 @@ importers:
         specifier: workspace:*
         version: link:../../agentRpc
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
     devDependencies:
       prettier:
         specifier: ^3.5.3
@@ -2095,6 +2095,9 @@ importers:
       '@typeagent/browser-control-rpc':
         specifier: workspace:*
         version: link:../browserControlRpc
+      '@typeagent/chat-ui':
+        specifier: workspace:*
+        version: link:../../chat-ui
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
@@ -2104,9 +2107,6 @@ importers:
       bootstrap:
         specifier: ^5.3.3
         version: 5.3.6(@popperjs/core@2.11.8)
-      chat-ui:
-        specifier: workspace:*
-        version: link:../../chat-ui
       cytoscape:
         specifier: ^3.32.0
         version: 3.33.3
@@ -2120,8 +2120,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
@@ -2222,6 +2222,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../../utils/typechatUtils
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -2234,9 +2237,6 @@ importers:
       graph-utils:
         specifier: workspace:*
         version: link:../agentUtils/graphUtils
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../../utils/typechatUtils
     devDependencies:
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
@@ -2268,27 +2268,27 @@ importers:
 
   packages/agents/chat:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
-      knowledge-processor:
+      '@typeagent/knowledge-processor':
         specifier: workspace:*
         version: link:../../knowledgeProcessor
-      telemetry:
+      '@typeagent/telemetry':
         specifier: workspace:*
         version: link:../../telemetry
-      typeagent:
+      '@typeagent/typechat-utils':
         specifier: workspace:*
-        version: link:../../typeagent
+        version: link:../../utils/typechatUtils
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../../utils/typechatUtils
     devDependencies:
       copyfiles:
         specifier: ^2.4.1
@@ -2308,6 +2308,12 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../telemetry
+      '@typeagent/websocket-channel-server':
+        specifier: workspace:*
+        version: link:../../utils/webSocketChannelServer
       '@typeagent/websocket-utils':
         specifier: workspace:*
         version: link:../../utils/webSocketUtils
@@ -2320,15 +2326,9 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
-      telemetry:
-        specifier: workspace:*
-        version: link:../../telemetry
-      websocket-channel-server:
-        specifier: workspace:*
-        version: link:../../utils/webSocketChannelServer
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
@@ -2366,12 +2366,18 @@ importers:
 
   packages/agents/desktop:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../../utils/typechatUtils
       agent-cache:
         specifier: workspace:*
         version: link:../../cache
@@ -2393,18 +2399,12 @@ importers:
       find-config:
         specifier: ^1.0.0
         version: 1.0.0
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../../utils/typechatUtils
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
@@ -2485,6 +2485,9 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.150
         version: 0.3.162(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.26.0(zod@4.4.3))(zod@4.3.6)
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -2503,9 +2506,6 @@ importers:
       kp:
         specifier: workspace:*
         version: link:../../kp
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
     devDependencies:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
@@ -2556,6 +2556,9 @@ importers:
 
   packages/agents/greeting:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -2565,6 +2568,12 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../telemetry
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
@@ -2574,15 +2583,6 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../knowledgeProcessor
-      telemetry:
-        specifier: workspace:*
-        version: link:../../telemetry
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -2611,10 +2611,10 @@ importers:
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
-      telemetry:
+      '@typeagent/telemetry':
         specifier: workspace:*
         version: link:../../telemetry
-      typechat-utils:
+      '@typeagent/typechat-utils':
         specifier: workspace:*
         version: link:../../utils/typechatUtils
     devDependencies:
@@ -2725,6 +2725,9 @@ importers:
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../telemetry
       '@typeagent/websocket-utils':
         specifier: workspace:*
         version: link:../../utils/webSocketUtils
@@ -2732,8 +2735,8 @@ importers:
         specifier: ^4.3.4
         version: 4.4.1(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       express:
         specifier: ^4.22.0
         version: 4.22.1
@@ -2767,9 +2770,6 @@ importers:
       prosemirror-view:
         specifier: ^1.31.0
         version: 1.40.0
-      telemetry:
-        specifier: workspace:*
-        version: link:../../telemetry
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -2777,8 +2777,8 @@ importers:
         specifier: ^4.1.2
         version: 4.1.2
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
       y-prosemirror:
         specifier: ^1.2.3
         version: 1.3.5(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0)(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27)
@@ -2840,6 +2840,9 @@ importers:
 
   packages/agents/montage:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -2849,6 +2852,15 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
+      '@typeagent/image-memory':
+        specifier: workspace:*
+        version: link:../../memory/image
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../../knowPro
       '@typeagent/websocket-utils':
         specifier: workspace:*
         version: link:../../utils/webSocketUtils
@@ -2870,24 +2882,12 @@ importers:
       express-rate-limit:
         specifier: ^7.5.0
         version: 7.5.1(express@4.22.1)
-      image-memory:
-        specifier: workspace:*
-        version: link:../../memory/image
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../knowledgeProcessor
-      knowpro:
-        specifier: workspace:*
-        version: link:../../knowPro
       koffi:
         specifier: ^2.10.1
         version: 2.11.0
       sharp:
         specifier: ^0.33.5
         version: 0.33.5
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -2940,6 +2940,9 @@ importers:
 
   packages/agents/onboarding:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -2958,9 +2961,6 @@ importers:
       dispatcher-node-providers:
         specifier: workspace:*
         version: link:../../dispatcher/nodeProviders
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -2996,8 +2996,8 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
 
   packages/agents/osNotifications:
     dependencies:
@@ -3210,6 +3210,9 @@ importers:
 
   packages/agents/screencapture:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -3219,9 +3222,6 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
     devDependencies:
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
@@ -3253,6 +3253,9 @@ importers:
 
   packages/agents/settings:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -3262,6 +3265,12 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../telemetry
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
@@ -3271,15 +3280,6 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../knowledgeProcessor
-      telemetry:
-        specifier: workspace:*
-        version: link:../../telemetry
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -3311,18 +3311,18 @@ importers:
       '@typeagent/core':
         specifier: workspace:*
         version: link:../../typeagent-core
+      '@typeagent/studio-service':
+        specifier: workspace:*
+        version: link:../../studio-service
       '@typeagent/websocket-utils':
         specifier: workspace:*
         version: link:../../utils/webSocketUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
-      studio-service:
-        specifier: workspace:*
-        version: link:../../studio-service
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
@@ -3561,10 +3561,10 @@ importers:
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
-      telemetry:
+      '@typeagent/telemetry':
         specifier: workspace:*
         version: link:../../telemetry
-      typechat-utils:
+      '@typeagent/typechat-utils':
         specifier: workspace:*
         version: link:../../utils/typechatUtils
     devDependencies:
@@ -3596,8 +3596,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
@@ -3632,15 +3632,15 @@ importers:
       '@typeagent/agent-server-protocol':
         specifier: workspace:*
         version: link:../../../../agentServer/protocol
+      '@typeagent/chat-ui':
+        specifier: workspace:*
+        version: link:../../../../chat-ui
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../../../dispatcher/rpc
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../../../../dispatcher/types
-      chat-ui:
-        specifier: workspace:*
-        version: link:../../../../chat-ui
     devDependencies:
       rimraf:
         specifier: ^6.0.1
@@ -3772,6 +3772,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../agentRpc
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -3784,6 +3787,12 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../dispatcher/rpc
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../telemetry
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../utils/typechatUtils
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -3808,18 +3817,9 @@ importers:
       find-config:
         specifier: ^1.0.0
         version: 1.0.0
-      telemetry:
-        specifier: workspace:*
-        version: link:../telemetry
-      typeagent:
-        specifier: workspace:*
-        version: link:../typeagent
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../utils/typechatUtils
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -3850,10 +3850,13 @@ importers:
     dependencies:
       '@azure/ai-projects':
         specifier: ^2.2.0
-        version: 2.2.0(ws@8.21.0)(zod@3.25.76)
+        version: 2.2.0(ws@8.21.1)(zod@3.25.76)
       '@azure/identity':
         specifier: ^4.10.0
         version: 4.10.0
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -3863,6 +3866,9 @@ importers:
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../telemetry
       async:
         specifier: ^3.2.5
         version: 3.2.6
@@ -3872,12 +3878,6 @@ importers:
       openai:
         specifier: ^6.16.0
         version: 6.41.0(ws@8.21.0)(zod@3.25.76)
-      telemetry:
-        specifier: workspace:*
-        version: link:../telemetry
-      typeagent:
-        specifier: workspace:*
-        version: link:../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -3924,6 +3924,12 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../telemetry
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../utils/typechatUtils
       async:
         specifier: ^3.2.5
         version: 3.2.6
@@ -3936,15 +3942,9 @@ importers:
       regexp.escape:
         specifier: ^2.0.1
         version: 2.0.1
-      telemetry:
-        specifier: workspace:*
-        version: link:../telemetry
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../utils/typechatUtils
     devDependencies:
       '@types/async':
         specifier: ^3.2.24
@@ -4038,8 +4038,8 @@ importers:
         specifier: ^6.0.2
         version: 6.0.5
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       markdown-it:
         specifier: ^14.2.0
         version: 14.2.0
@@ -4095,6 +4095,12 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../telemetry
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../utils/typechatUtils
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -4128,15 +4134,9 @@ importers:
       open:
         specifier: ^10.1.0
         version: 10.1.2
-      telemetry:
-        specifier: workspace:*
-        version: link:../telemetry
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@22.20.1)(typescript@5.4.5)
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../utils/typechatUtils
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
@@ -4190,8 +4190,8 @@ importers:
         specifier: ^16.3.1
         version: 16.5.0
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@types/body-parser':
         specifier: ^1.19.5
@@ -4238,15 +4238,15 @@ importers:
 
   packages/codeProcessor:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
-      knowledge-processor:
+      '@typeagent/knowledge-processor':
         specifier: workspace:*
         version: link:../knowledgeProcessor
-      typeagent:
-        specifier: workspace:*
-        version: link:../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -4462,30 +4462,78 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../agentRpc
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
+      '@typeagent/browser':
+        specifier: workspace:*
+        version: link:../agents/browser
+      '@typeagent/code-agent':
+        specifier: workspace:*
+        version: link:../agents/code
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
+      '@typeagent/discord-agent':
+        specifier: workspace:*
+        version: link:../agents/discord
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
+      '@typeagent/github-cli-agent':
+        specifier: workspace:*
+        version: link:../agents/github-cli
+      '@typeagent/image-agent':
+        specifier: workspace:*
+        version: link:../agents/image
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../knowledgeProcessor
+      '@typeagent/markdown-agent':
+        specifier: workspace:*
+        version: link:../agents/markdown
+      '@typeagent/montage-agent':
+        specifier: workspace:*
+        version: link:../agents/montage
+      '@typeagent/photo-agent':
+        specifier: workspace:*
+        version: link:../agents/photo
+      '@typeagent/screencapture-agent':
+        specifier: workspace:*
+        version: link:../agents/screencapture
+      '@typeagent/studio-agent':
+        specifier: workspace:*
+        version: link:../agents/studio
+      '@typeagent/taskflow-typeagent':
+        specifier: workspace:*
+        version: link:../agents/taskflow
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../telemetry
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../utils/typechatUtils
+      '@typeagent/video-agent':
+        specifier: workspace:*
+        version: link:../agents/video
+      '@typeagent/visualstudio-agent':
+        specifier: workspace:*
+        version: link:../agents/visualStudio
       agent-cache:
         specifier: workspace:*
         version: link:../cache
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher/dispatcher
-      browser-typeagent:
-        specifier: workspace:*
-        version: link:../agents/browser
       calendar:
         specifier: workspace:*
         version: link:../agents/calendar
@@ -4495,18 +4543,12 @@ importers:
       chat-agent:
         specifier: workspace:*
         version: link:../agents/chat
-      code-agent:
-        specifier: workspace:*
-        version: link:../agents/code
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
       desktop-automation:
         specifier: workspace:*
         version: link:../agents/desktop
-      discord-agent:
-        specifier: workspace:*
-        version: link:../agents/discord
       dispatcher-node-providers:
         specifier: workspace:*
         version: link:../dispatcher/nodeProviders
@@ -4519,33 +4561,18 @@ importers:
       file-size:
         specifier: ^1.0.0
         version: 1.0.0
-      github-cli-agent:
-        specifier: workspace:*
-        version: link:../agents/github-cli
       glob:
         specifier: ^13.0.0
         version: 13.0.6
       greeting-agent:
         specifier: workspace:*
         version: link:../agents/greeting
-      image-agent:
-        specifier: workspace:*
-        version: link:../agents/image
       ipconfig-agent:
         specifier: workspace:*
         version: link:../agents/ipconfig
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../knowledgeProcessor
       list-agent:
         specifier: workspace:*
         version: link:../agents/list
-      markdown-agent:
-        specifier: workspace:*
-        version: link:../agents/markdown
-      montage-agent:
-        specifier: workspace:*
-        version: link:../agents/montage
       music:
         specifier: workspace:*
         version: link:../agents/player
@@ -4558,18 +4585,12 @@ importers:
       os-notifications-agent:
         specifier: workspace:*
         version: link:../agents/osNotifications
-      photo-agent:
-        specifier: workspace:*
-        version: link:../agents/photo
       powershell-typeagent:
         specifier: workspace:*
         version: link:../agents/powershell
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
-      screencapture-agent:
-        specifier: workspace:*
-        version: link:../agents/screencapture
       semver:
         specifier: ^7.7.2
         version: 7.8.4
@@ -4579,36 +4600,15 @@ importers:
       string-width:
         specifier: ^7.2.0
         version: 7.2.0
-      studio-agent:
-        specifier: workspace:*
-        version: link:../agents/studio
-      taskflow-typeagent:
-        specifier: workspace:*
-        version: link:../agents/taskflow
-      telemetry:
-        specifier: workspace:*
-        version: link:../telemetry
       timer-agent:
         specifier: workspace:*
         version: link:../agents/timer
-      typeagent:
-        specifier: workspace:*
-        version: link:../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@4.1.13)
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../utils/typechatUtils
       utility-typeagent:
         specifier: workspace:*
         version: link:../agents/utility
-      video-agent:
-        specifier: workspace:*
-        version: link:../agents/video
-      visualstudio-agent:
-        specifier: workspace:*
-        version: link:../agents/visualStudio
       weather-agent:
         specifier: workspace:*
         version: link:../agents/weather
@@ -4619,8 +4619,8 @@ importers:
         specifier: workspace:*
         version: link:../../examples/workflow/adapter
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
       zod:
         specifier: ^4.1.13
         version: 4.1.13
@@ -4691,33 +4691,57 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/azure-ai-foundry':
+        specifier: workspace:*
+        version: link:../../azure-ai-foundry
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
       '@typeagent/completion-ui':
         specifier: workspace:*
         version: link:../../completionUI
+      '@typeagent/conversation-memory':
+        specifier: workspace:*
+        version: link:../../memory/conversation
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../types
+      '@typeagent/image-memory':
+        specifier: workspace:*
+        version: link:../../memory/image
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../../knowPro
+      '@typeagent/taskflow-typeagent':
+        specifier: workspace:*
+        version: link:../../agents/taskflow
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../telemetry
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../../utils/typechatUtils
+      '@typeagent/website-memory':
+        specifier: workspace:*
+        version: link:../../memory/website
       agent-cache:
         specifier: workspace:*
         version: link:../../cache
-      azure-ai-foundry:
-        specifier: workspace:*
-        version: link:../../azure-ai-foundry
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
-      conversation-memory:
-        specifier: workspace:*
-        version: link:../../memory/conversation
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
@@ -4736,15 +4760,6 @@ importers:
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
-      image-memory:
-        specifier: workspace:*
-        version: link:../../memory/image
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../knowledgeProcessor
-      knowpro:
-        specifier: workspace:*
-        version: link:../../knowPro
       open:
         specifier: ^10.1.0
         version: 10.1.2
@@ -4754,24 +4769,9 @@ importers:
       string-width:
         specifier: ^7.2.0
         version: 7.2.0
-      taskflow-typeagent:
-        specifier: workspace:*
-        version: link:../../agents/taskflow
-      telemetry:
-        specifier: workspace:*
-        version: link:../../telemetry
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@4.1.13)
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../../utils/typechatUtils
-      website-memory:
-        specifier: workspace:*
-        version: link:../../memory/website
       zod:
         specifier: ^4.1.13
         version: 4.1.13
@@ -4999,9 +4999,15 @@ importers:
 
   packages/knowPro:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../knowledgeProcessor
       async:
         specifier: ^3.2.5
         version: 3.2.6
@@ -5011,12 +5017,6 @@ importers:
       fast-levenshtein:
         specifier: ^3.0.0
         version: 3.0.0
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../knowledgeProcessor
-      typeagent:
-        specifier: workspace:*
-        version: link:../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -5057,24 +5057,24 @@ importers:
 
   packages/knowProTest:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
-      conversation-memory:
+      '@typeagent/conversation-memory':
         specifier: workspace:*
         version: link:../memory/conversation
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../knowledgeProcessor
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../knowPro
       interactive-app:
         specifier: workspace:*
         version: link:../interactiveApp
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../knowledgeProcessor
-      knowpro:
-        specifier: workspace:*
-        version: link:../knowPro
-      typeagent:
-        specifier: workspace:*
-        version: link:../typeagent
       typechat:
         specifier: 0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -5100,12 +5100,18 @@ importers:
       '@azure-rest/maps-search':
         specifier: ^2.0.0-beta.3
         version: 2.0.0-beta.3
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
       '@typeagent/config':
         specifier: workspace:*
         version: link:../config
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../utils/typechatUtils
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
@@ -5115,15 +5121,9 @@ importers:
       sharp:
         specifier: ^0.33.5
         version: 0.33.5
-      typeagent:
-        specifier: workspace:*
-        version: link:../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../utils/typechatUtils
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -5272,33 +5272,33 @@ importers:
 
   packages/memory/conversation:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../../knowPro
+      '@typeagent/memory-storage':
+        specifier: workspace:*
+        version: link:../storage
+      '@typeagent/textpro':
+        specifier: workspace:*
+        version: link:../../textPro
       async:
         specifier: ^3.2.5
         version: 3.2.6
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../knowledgeProcessor
-      knowpro:
-        specifier: workspace:*
-        version: link:../../knowPro
       mailparser:
         specifier: 3.9.6
         version: 3.9.6
-      memory-storage:
-        specifier: workspace:*
-        version: link:../storage
-      textpro:
-        specifier: workspace:*
-        version: link:../../textPro
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -5348,9 +5348,27 @@ importers:
       '@azure-rest/maps-search':
         specifier: ^2.0.0-beta.3
         version: 2.0.0-beta.3
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../../knowPro
+      '@typeagent/memory-storage':
+        specifier: workspace:*
+        version: link:../storage
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../telemetry
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../../utils/typechatUtils
       better-sqlite3:
         specifier: 12.6.2
         version: 12.6.2
@@ -5360,27 +5378,9 @@ importers:
       get-folder-size:
         specifier: ^5.0.0
         version: 5.0.0
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../knowledgeProcessor
-      knowpro:
-        specifier: workspace:*
-        version: link:../../knowPro
-      memory-storage:
-        specifier: workspace:*
-        version: link:../storage
-      telemetry:
-        specifier: workspace:*
-        version: link:../../telemetry
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../../utils/typechatUtils
     devDependencies:
       '@types/better-sqlite3':
         specifier: 7.6.13
@@ -5415,24 +5415,24 @@ importers:
       '@azure/search-documents':
         specifier: 12.1.0
         version: 12.1.0
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../../knowPro
       better-sqlite3:
         specifier: 12.6.2
         version: 12.6.2
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../knowledgeProcessor
-      knowpro:
-        specifier: workspace:*
-        version: link:../../knowPro
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
     devDependencies:
       '@types/better-sqlite3':
         specifier: 7.6.13
@@ -5467,27 +5467,42 @@ importers:
 
   packages/memory/website:
     dependencies:
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
+      '@typeagent/conversation-memory':
+        specifier: workspace:*
+        version: link:../conversation
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
+      '@typeagent/knowpro':
+        specifier: workspace:*
+        version: link:../../knowPro
+      '@typeagent/memory-storage':
+        specifier: workspace:*
+        version: link:../storage
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../telemetry
       better-sqlite3:
         specifier: 12.6.2
         version: 12.6.2
       cheerio:
         specifier: ^1.0.0
         version: 1.1.0
-      conversation-memory:
-        specifier: workspace:*
-        version: link:../conversation
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       get-folder-size:
         specifier: ^5.0.0
         version: 5.0.0
@@ -5506,21 +5521,6 @@ importers:
       jsdom:
         specifier: ^28.1.0
         version: 28.1.0
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../knowledgeProcessor
-      knowpro:
-        specifier: workspace:*
-        version: link:../../knowPro
-      memory-storage:
-        specifier: workspace:*
-        version: link:../storage
-      telemetry:
-        specifier: workspace:*
-        version: link:../../telemetry
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -5564,12 +5564,12 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../typeagent
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../aiclient
-      typeagent:
-        specifier: workspace:*
-        version: link:../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -5645,6 +5645,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../agentRpc
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
@@ -5660,6 +5663,9 @@ importers:
       '@typeagent/browser-control-rpc':
         specifier: workspace:*
         version: link:../agents/browserControlRpc
+      '@typeagent/chat-ui':
+        specifier: workspace:*
+        version: link:../chat-ui
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
@@ -5675,6 +5681,12 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../dispatcher/types
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../utils/typechatUtils
+      '@typeagent/websocket-channel-server':
+        specifier: workspace:*
+        version: link:../utils/webSocketChannelServer
       '@typeagent/websocket-utils':
         specifier: workspace:*
         version: link:../utils/webSocketUtils
@@ -5684,15 +5696,12 @@ importers:
       ansi_up:
         specifier: ^6.0.2
         version: 6.0.5
-      chat-ui:
-        specifier: workspace:*
-        version: link:../chat-ui
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -5711,21 +5720,12 @@ importers:
       microsoft-cognitiveservices-speech-sdk:
         specifier: ^1.38.0
         version: 1.43.1(supports-color@8.1.1)
-      typeagent:
-        specifier: workspace:*
-        version: link:../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      typechat-utils:
-        specifier: workspace:*
-        version: link:../utils/typechatUtils
-      websocket-channel-server:
-        specifier: workspace:*
-        version: link:../utils/webSocketChannelServer
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@electron-toolkit/tsconfig':
         specifier: ^1.0.1
@@ -5739,6 +5739,9 @@ importers:
       '@playwright/test':
         specifier: ^1.55.0
         version: 1.57.0
+      '@typeagent/browser':
+        specifier: workspace:*
+        version: link:../agents/browser
       '@typeagent/browser-extension':
         specifier: workspace:*
         version: link:../agents/browserExtension
@@ -5754,9 +5757,6 @@ importers:
       agent-server:
         specifier: workspace:*
         version: link:../agentServer/server
-      browser-typeagent:
-        specifier: workspace:*
-        version: link:../agents/browser
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -5821,8 +5821,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -5928,12 +5928,12 @@ importers:
 
   packages/textPro:
     dependencies:
+      '@typeagent/knowledge-processor':
+        specifier: workspace:*
+        version: link:../knowledgeProcessor
       cheerio:
         specifier: 1.0.0-rc.12
         version: 1.0.0-rc.12
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../knowledgeProcessor
       marked:
         specifier: 16.0.0
         version: 16.0.0
@@ -6002,15 +6002,36 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
-      agent-cache:
+      '@typeagent/agent-sdk':
         specifier: workspace:*
-        version: link:../cache
+        version: link:../agentSdk
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../aiclient
+      '@typeagent/common-utils':
+        specifier: workspace:*
+        version: link:../utils/commonUtils
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../telemetry
+      '@typeagent/typechat-utils':
+        specifier: workspace:*
+        version: link:../utils/typechatUtils
+      async:
+        specifier: ^3.2.5
+        version: 3.2.6
+      chalk:
+        specifier: ^5.4.1
+        version: 5.6.2
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
-      grammar-tools-core:
-        specifier: workspace:*
-        version: link:../grammarTools/core
+      regexp.escape:
+        specifier: ^2.0.1
+        version: 2.0.1
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -6018,6 +6039,15 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
+      agent-cache:
+        specifier: workspace:*
+        version: link:../cache
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+      grammar-tools-core:
+        specifier: workspace:*
+        version: link:../grammarTools/core
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@26.1.1)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.4.5))
@@ -6052,8 +6082,8 @@ importers:
         specifier: workspace:*
         version: link:../defaultAgentProvider
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@types/debug':
         specifier: ^4.1.0
@@ -6153,6 +6183,9 @@ importers:
       '@typeagent/aiclient':
         specifier: workspace:*
         version: link:../../aiclient
+      '@typeagent/telemetry':
+        specifier: workspace:*
+        version: link:../../telemetry
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -6165,9 +6198,6 @@ importers:
       exifreader:
         specifier: ^4.39.0
         version: 4.40.3
-      telemetry:
-        specifier: workspace:*
-        version: link:../../telemetry
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
@@ -6206,8 +6236,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
@@ -6253,10 +6283,10 @@ importers:
         version: 1.0.0
       isomorphic-ws:
         specifier: ^5.0.0
-        version: 5.0.0(ws@8.21.0)
+        version: 5.0.0(ws@8.21.1)
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -6337,6 +6367,9 @@ importers:
       '@typeagent/agent-server-protocol':
         specifier: workspace:*
         version: link:../agentServer/protocol
+      '@typeagent/chat-ui':
+        specifier: workspace:*
+        version: link:../chat-ui
       '@typeagent/completion-ui':
         specifier: workspace:*
         version: link:../completionUI
@@ -6358,18 +6391,15 @@ importers:
       ansi_up:
         specifier: ^6.0.6
         version: 6.0.6
-      chat-ui:
-        specifier: workspace:*
-        version: link:../chat-ui
       debug:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
       dompurify:
-        specifier: ^3.4.11
-        version: 3.4.11
+        specifier: ^3.4.12
+        version: 3.4.12
       isomorphic-ws:
         specifier: ^5.0.0
-        version: 5.0.0(ws@8.21.0)
+        version: 5.0.0(ws@8.21.1)
       markdown-it:
         specifier: ^14.2.0
         version: 14.2.0
@@ -6377,8 +6407,8 @@ importers:
         specifier: 1.43.1
         version: 1.43.1(supports-color@8.1.1)
       ws:
-        specifier: ^8.21.0
-        version: 8.21.0
+        specifier: ^8.21.1
+        version: 8.21.1
     devDependencies:
       '@types/debug':
         specifier: ^4.1.0
@@ -12867,8 +12897,8 @@ packages:
     resolution: {integrity: sha1-zDhff3UfHR/GUMITdIBCVFOMfTE=}
     engines: {node: '>= 4'}
 
-  dompurify@3.4.11:
-    resolution: {integrity: sha1-Kci6SWR18nnvQBV4QGhFL7FKBoA=}
+  dompurify@3.4.12:
+    resolution: {integrity: sha1-b6ImXpu9zogsSs5BB2JgUbRI/6g=}
 
   domutils@2.8.0:
     resolution: {integrity: sha1-RDfe9dtuLR9dbuhZvZXKfQIEgTU=}
@@ -18455,6 +18485,18 @@ packages:
       utf-8-validate:
         optional: true
 
+  ws@8.21.1:
+    resolution: {integrity: sha1-BFZQzUsSB4CedUcUYiPDgUqa9YY=}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   wsl-utils@0.1.0:
     resolution: {integrity: sha1-h4PU32cdTVA2W+LuTHGRegVXuqs=}
     engines: {node: '>=18'}
@@ -19332,6 +19374,27 @@ snapshots:
       '@azure/logger': 1.3.0
       '@azure/storage-blob': 12.27.0
       openai: 6.41.0(ws@8.21.0)(zod@3.25.76)
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+      - ws
+      - zod
+
+  '@azure/ai-projects@2.2.0(ws@8.21.1)(zod@3.25.76)':
+    dependencies:
+      '@azure-rest/core-client': 2.4.0
+      '@azure/abort-controller': 2.1.2
+      '@azure/core-auth': 1.10.1
+      '@azure/core-lro': 3.2.0
+      '@azure/core-paging': 1.6.2
+      '@azure/core-rest-pipeline': 1.22.2
+      '@azure/core-sse': 2.2.0
+      '@azure/core-tracing': 1.3.1
+      '@azure/core-util': 1.13.1
+      '@azure/identity': 4.13.1
+      '@azure/logger': 1.3.0
+      '@azure/storage-blob': 12.27.0
+      openai: 6.41.0(ws@8.21.1)(zod@3.25.76)
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -22097,7 +22160,7 @@ snapshots:
       '@types/lodash.debounce': 4.0.9
       '@types/lodash.throttle': 4.1.9
       clsx: 2.1.1
-      dompurify: 3.4.11
+      dompurify: 3.4.12
       lodash.debounce: 4.0.8
       lodash.throttle: 4.1.1
       nanoid: 5.1.5
@@ -26985,7 +27048,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.4.11:
+  dompurify@3.4.12:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -29038,6 +29101,10 @@ snapshots:
     dependencies:
       ws: 8.21.0
 
+  isomorphic-ws@5.0.0(ws@8.21.1):
+    dependencies:
+      ws: 8.21.1
+
   isomorphic.js@0.2.5: {}
 
   istanbul-lib-coverage@3.2.0: {}
@@ -29791,7 +29858,7 @@ snapshots:
       whatwg-encoding: 2.0.0
       whatwg-mimetype: 3.0.0
       whatwg-url: 11.0.0
-      ws: 8.21.0
+      ws: 8.21.1
       xml-name-validator: 4.0.0
     transitivePeerDependencies:
       - bufferutil
@@ -30567,7 +30634,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
       dayjs: 1.11.20
-      dompurify: 3.4.11
+      dompurify: 3.4.12
       es-toolkit: 1.46.1
       katex: 0.16.47
       khroma: 2.1.0
@@ -31244,6 +31311,11 @@ snapshots:
   openai@6.41.0(ws@8.21.0)(zod@3.25.76):
     optionalDependencies:
       ws: 8.21.0
+      zod: 3.25.76
+
+  openai@6.41.0(ws@8.21.1)(zod@3.25.76):
+    optionalDependencies:
+      ws: 8.21.1
       zod: 3.25.76
 
   optionator@0.9.4:
@@ -34611,6 +34683,8 @@ snapshots:
   ws@7.5.11: {}
 
   ws@8.21.0: {}
+
+  ws@8.21.1: {}
 
   wsl-utils@0.1.0:
     dependencies:

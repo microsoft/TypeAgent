@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { ActionResult, ActionTokenUsage } from "@typeagent/agent-sdk";
+import type {
+    ActionResult,
+    ActionTokenUsage,
+    SerializedError,
+} from "@typeagent/agent-sdk";
 import registerDebug from "debug";
 
 export const loopBaseDebug = registerDebug("typeagent:reasoning:loopBase");
@@ -385,12 +389,44 @@ export function estimateReasoningTokens(text: string): number {
  * for actions that set no history text, and surfaces the error text for a failed
  * action so the caller can mark the tool result as an error.
  */
+/**
+ * Render the useful parts of a serialized error for the model: the
+ * `cause` chain (often the real failure - e.g. the HTTP status/body behind
+ * a generic wrapper message) plus any structured `extra` fields. The stack
+ * is omitted here; it rides on the result for the UI but only adds
+ * noise/tokens to the model-facing tool result.
+ */
+function describeErrorDetails(details: SerializedError): string {
+    const lines: string[] = [];
+    let cur: SerializedError | undefined = details.cause;
+    let guard = 0;
+    while (cur !== undefined && guard < 5) {
+        lines.push(`Caused by: ${cur.message}`);
+        cur = cur.cause;
+        guard++;
+    }
+    if (details.extra !== undefined && Object.keys(details.extra).length > 0) {
+        try {
+            lines.push(`Details: ${JSON.stringify(details.extra)}`);
+        } catch {
+            // Non-serializable extras are dropped from the model text.
+        }
+    }
+    return lines.join("\n");
+}
+
 export function buildReasoningActionResult(
     actionResult: ActionResult | undefined,
     capturedDisplay: unknown[],
 ): { text: string; isError: boolean } {
     if (actionResult && "error" in actionResult && actionResult.error) {
-        return { text: `Error: ${actionResult.error}`, isError: true };
+        const detailText = actionResult.errorDetails
+            ? describeErrorDetails(actionResult.errorDetails)
+            : "";
+        const text = detailText
+            ? `Error: ${actionResult.error}\n${detailText}`
+            : `Error: ${actionResult.error}`;
+        return { text, isError: true };
     }
     const historyText =
         actionResult && "historyText" in actionResult

@@ -6,6 +6,7 @@ import {
     ActionResultError,
     ActionResultSuccess,
     ActionResultSuccessNoDisplay,
+    SerializedError,
 } from "../action.js";
 import type {
     QuestionFormField,
@@ -322,10 +323,84 @@ export function createSingleChoiceResult(
     );
 }
 
-export function createActionResultFromError(error: string): ActionResultError {
+export function createActionResultFromError(
+    error: string,
+    errorDetails?: SerializedError,
+): ActionResultError {
     return {
         error,
+        ...(errorDetails !== undefined ? { errorDetails } : {}),
     };
+}
+
+// Max depth when walking an error's `cause` chain / aggregated errors,
+// guarding against cycles and pathologically deep chains.
+const MAX_ERROR_DEPTH = 5;
+
+/**
+ * Convert a thrown value into a JSON-serializable {@link SerializedError}.
+ * `Error` instances lose their `message`/`stack` to `JSON.stringify` (those
+ * props are non-enumerable) and their `cause` chain isn't walked, so failed
+ * actions capture this snapshot instead. Recursively follows `cause` and
+ * `AggregateError.errors`, and collects any extra own-enumerable properties
+ * (a fetch error's `status`, `code`, response `body`, etc.). Non-Error
+ * values become `{ message: String(value) }`.
+ */
+export function serializeError(value: unknown, depth = 0): SerializedError {
+    if (!(value instanceof Error)) {
+        if (value !== null && typeof value === "object") {
+            return { message: jsonSafeString(value) };
+        }
+        return { message: String(value) };
+    }
+
+    const result: SerializedError = { message: value.message };
+    if (value.name) {
+        result.name = value.name;
+    }
+    if (value.stack) {
+        result.stack = value.stack;
+    }
+
+    if (depth < MAX_ERROR_DEPTH) {
+        const cause = (value as { cause?: unknown }).cause;
+        if (cause !== undefined) {
+            result.cause = serializeError(cause, depth + 1);
+        }
+        if (value instanceof AggregateError && Array.isArray(value.errors)) {
+            result.errors = value.errors.map((inner) =>
+                serializeError(inner, depth + 1),
+            );
+        }
+    }
+
+    // `message`/`name`/`stack`/`cause` are non-enumerable on Error, so
+    // Object.keys picks up only custom fields (e.g. HTTP `status`, `body`).
+    // Round-trip each through JSON so the snapshot stays serializable.
+    const extra: Record<string, unknown> = {};
+    for (const key of Object.keys(value)) {
+        if (key === "cause" || key === "errors") {
+            continue;
+        }
+        const raw = (value as unknown as Record<string, unknown>)[key];
+        try {
+            extra[key] = JSON.parse(JSON.stringify(raw));
+        } catch {
+            extra[key] = String(raw);
+        }
+    }
+    if (Object.keys(extra).length > 0) {
+        result.extra = extra;
+    }
+    return result;
+}
+
+function jsonSafeString(value: unknown): string {
+    try {
+        return JSON.stringify(value);
+    } catch {
+        return String(value);
+    }
 }
 
 /**

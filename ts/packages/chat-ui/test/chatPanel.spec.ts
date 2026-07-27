@@ -1210,3 +1210,54 @@ describe("reasoning thinking-block token metric", () => {
         expect(metricsText(root)).not.toContain("Thinking Tokens:");
     });
 });
+
+describe("ChatPanel action result inspector", () => {
+    it("renders the serialized ActionResult in a separate result panel", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("do it", "req-1");
+        panel.addAgentMessage("done", "agent", undefined, undefined, "req-1");
+
+        panel.appendDiagnosticData("req-1", {
+            type: "actionResult",
+            source: "agent",
+            actionIndex: 0,
+            result: { entities: [{ name: "foo", type: ["bar"] }] },
+        });
+
+        const pre = root.querySelector(".chat-message-result pre.chat-json");
+        expect(pre).not.toBeNull();
+        expect(pre!.textContent).toContain("entities");
+        expect(pre!.textContent).toContain("foo");
+    });
+
+    it("ignores diagnostic data that isn't an actionResult payload", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("do it", "req-1");
+        panel.addAgentMessage("done", "agent", undefined, undefined, "req-1");
+
+        panel.appendDiagnosticData("req-1", { type: "trace", foo: 1 });
+
+        const resultPanel = root.querySelector(".chat-message-result");
+        // The panel element exists (created with the bubble) but stays empty
+        // for unrecognized diagnostic shapes.
+        expect(resultPanel?.innerHTML ?? "").toBe("");
+    });
+
+    it("stashes the result when it arrives before the agent bubble exists", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("do it", "req-1");
+        // Diagnostic arrives before any agent bubble for the thread.
+        panel.appendDiagnosticData("req-1", {
+            type: "actionResult",
+            result: { historyText: "later" },
+        });
+        expect(
+            root.querySelector(".chat-message-result")?.innerHTML ?? "",
+        ).toBe("");
+
+        // Creating the bubble applies the stashed result.
+        panel.addAgentMessage("done", "agent", undefined, undefined, "req-1");
+        const pre = root.querySelector(".chat-message-result pre.chat-json");
+        expect(pre?.textContent).toContain("later");
+    });
+});
