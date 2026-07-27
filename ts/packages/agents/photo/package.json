@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/photo-agent",
   "version": "0.0.1",
-  "description": "Photo dispatcher agent",
+  "description": "Agent to take and upload photos",
   "keywords": [
     "typeagent-agent"
   ],

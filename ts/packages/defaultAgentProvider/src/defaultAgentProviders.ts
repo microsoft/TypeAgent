@@ -6,6 +6,7 @@ import {
     AppAgentSource,
     AppAgentConnection,
     AppAgentProviderSetController,
+    InstallableAgentSummary,
     IndexingServiceRegistry,
     DefaultIndexingServiceRegistry,
     DispatcherOptions,
@@ -1339,13 +1340,21 @@ export function createDefaultInstalledAgentSource(
                 }
                 try {
                     const sourceAgents = (await src.listAgents()).map(
-                        ({ ref, defaultAgentName, packageName }) => ({
+                        ({
+                            ref,
+                            defaultAgentName,
+                            packageName,
+                            description,
+                        }) => ({
                             ref,
                             ...(defaultAgentName !== undefined
                                 ? { defaultAgentName }
                                 : {}),
                             ...(packageName !== undefined
                                 ? { packageName }
+                                : {}),
+                            ...(description !== undefined
+                                ? { description }
                                 : {}),
                         }),
                     );
@@ -1520,6 +1529,35 @@ export function createDefaultInstalledAgentSource(
                     }
                 },
             };
+        },
+        // Read-only discovery for reasoning's install suggestions. Delegates to
+        // the same source used by `@package available`, flattening the per-source
+        // groups into installable summaries the reasoning engine can offer. Never
+        // installs; the concrete install path stays behind the `@package` agent.
+        async listAvailableAgents(): Promise<InstallableAgentSummary[]> {
+            const groups = await source.listAvailableAgents();
+            const summaries: InstallableAgentSummary[] = [];
+            for (const group of groups) {
+                for (const agent of group.agents) {
+                    const installName =
+                        agent.defaultAgentName ?? agent.packageName;
+                    if (installName === undefined) {
+                        continue;
+                    }
+                    summaries.push({
+                        installName,
+                        ...(agent.packageName !== undefined
+                            ? { packageName: agent.packageName }
+                            : {}),
+                        ...(agent.description !== undefined
+                            ? { description: agent.description }
+                            : {}),
+                        source: group.source,
+                        installCommand: `@package install ${installName}`,
+                    });
+                }
+            }
+            return summaries;
         },
     };
     return appAgentSource;

@@ -2,7 +2,7 @@
   "name": "powershell-typeagent",
   "version": "0.0.1",
   "private": true,
-  "description": "TypeAgent PowerShell — reusable PowerShell scripts from reasoning traces",
+  "description": "Agent to create and execute PowerShell workflows",
   "keywords": [
     "typeagent-agent"
   ],

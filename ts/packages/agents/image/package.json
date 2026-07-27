@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/image-agent",
   "version": "0.0.1",
-  "description": "Image dispatcher agent",
+  "description": "Agent to create AI images",
   "keywords": [
     "typeagent-agent"
   ],

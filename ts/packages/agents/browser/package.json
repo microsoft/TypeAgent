@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/browser",
   "version": "0.0.1",
-  "description": "",
+  "description": "Agent that allows you control an existing browser window",
   "keywords": [
     "typeagent-agent"
   ],

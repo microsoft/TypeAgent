@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/visualstudio-agent",
   "version": "0.0.1",
-  "description": "TypeAgent agent for Visual Studio (EnvDTE bridge)",
+  "description": "Visual Studio integration for editor, solution, build, and debug actions via the EnvDTE automation API",
   "keywords": [
     "typeagent-agent"
   ],

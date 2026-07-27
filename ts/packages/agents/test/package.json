@@ -2,7 +2,7 @@
   "name": "test-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "Dispatch agent for testing",
+  "description": "Agent to do addition",
   "keywords": [
     "typeagent-agent"
   ],
