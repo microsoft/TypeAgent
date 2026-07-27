@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/studio-agent",
   "version": "0.0.1",
-  "description": "TypeAgent Studio agent — the AI / conversational presenter over the @typeagent/core Studio runtime (inspect, and later run/validate/author)",
+  "description": "TypeAgent Studio agent — the AI / conversational presenter of TypeAgent Studio, driving the author → tune → validate developer loop over the Studio engine. Today it surfaces inspection of Studio's environment, grammar collisions, and event stream; the rest of the loop (sandboxes, run, validate, author) is being added.",
   "keywords": [
     "typeagent-agent"
   ],

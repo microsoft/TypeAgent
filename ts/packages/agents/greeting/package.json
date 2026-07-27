@@ -2,7 +2,7 @@
   "name": "greeting-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "Greeting agent",
+  "description": "Agent to generate greeting messages",
   "keywords": [
     "typeagent-agent"
   ],

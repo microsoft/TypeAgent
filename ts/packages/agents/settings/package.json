@@ -2,7 +2,7 @@
   "name": "settings-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "Windows settings agent",
+  "description": "Agent to manipulate system settings",
   "keywords": [
     "typeagent-agent"
   ],

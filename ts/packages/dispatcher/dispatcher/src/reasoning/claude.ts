@@ -59,6 +59,10 @@ import {
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 import { ScriptRecipeGenerator } from "./scriptRecipeGenerator.js";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
+import {
+    findInstallableAgents,
+    formatInstallableAgents,
+} from "./installableAgents.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 // Separate channel for MCP tool invocations (discover_actions / execute_action)
 // so call counts can be traced without enabling the full messages channel.
@@ -727,6 +731,27 @@ function getClaudeOptions(
         question: z.string(),
         choices: z.array(z.string()).min(2),
     };
+    const findInstallableAgentSchema = {};
+    const findInstallableAgentTool: SdkMcpToolDefinition<
+        typeof findInstallableAgentSchema
+    > = {
+        name: "find_installable_agent",
+        description: [
+            "List agents that are NOT currently installed but can be installed on demand from the configured sources.",
+            "Call this when no active agent (from discover_actions) can fulfill the user's request, to check whether an installable agent could.",
+            "Returns each candidate's name, description, and exact `@package install` command.",
+            "If one clearly matches the request, tell the user it exists and give them the install command - do NOT install it yourself.",
+        ].join("\n"),
+        inputSchema: findInstallableAgentSchema,
+        handler: async () => {
+            const agents = await findInstallableAgents(systemContext);
+            return {
+                content: [
+                    { type: "text", text: formatInstallableAgents(agents) },
+                ],
+            };
+        },
+    };
     const askUserTool: SdkMcpToolDefinition<typeof askUserSchema> = {
         name: "ask_user",
         description: [
@@ -869,6 +894,7 @@ function getClaudeOptions(
                 "- `get_conversation_info`: Get transcript metadata (message count, contributing agents)",
                 "- `read_conversation`: Page through the raw conversation transcript (offset/limit)",
                 "- `get_user_context`: Fresh coarse snapshot of the user's editor (active file, language, cursor/selection ranges, workspace, open editors, the active file's diagnostic messages) and the user's selected text (bounded) when present; use the code agent's read actions for full file contents",
+                "- `find_installable_agent`: List agents that are not installed yet but can be installed on demand. Call it when no active agent can fulfill the request; if a candidate matches, tell the user the exact `@package install` command (never install it yourself)",
                 "- `ask_user`: Ask the user ONE multiple-choice question and block for their answer - only when genuinely blocked on a decision only they can make (see Autonomous Execution Policy)",
                 "- `ask_user_form`: Ask the user SEVERAL questions at once (pick / multiChoice / yesNo, optional free-text) in one form and block for their answers - prefer over repeated `ask_user` when you need more than one answer",
                 "",
@@ -876,6 +902,7 @@ function getClaudeOptions(
                 "",
                 "When the user asks about agent capabilities, use discover_actions first.",
                 "When the user asks to perform an action, discover the schema then execute_action.",
+                "When no active agent can perform the request, call find_installable_agent to check whether an on-demand agent could, and if one matches tell the user the exact install command.",
                 "",
                 ...(config.execution.entityPromptShape === "facets-with-schema"
                     ? [
@@ -1264,6 +1291,7 @@ function getClaudeOptions(
                     getConversationInfoTool,
                     readConversationTool,
                     getUserContextTool,
+                    findInstallableAgentTool,
                     askUserTool,
                     askUserFormTool,
                 ],

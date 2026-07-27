@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/screencapture-agent",
   "version": "0.0.1",
-  "description": "Screen capture and recording dispatcher agent",
+  "description": "Take screenshots and record the screen or specific application windows",
   "keywords": [
     "typeagent-agent"
   ],

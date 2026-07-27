@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/code-agent",
   "version": "0.0.1",
-  "description": "Code dispatcher agent",
+  "description": "Agent for VSCode integration",
   "keywords": [
     "typeagent-agent"
   ],

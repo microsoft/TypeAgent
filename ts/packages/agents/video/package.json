@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/video-agent",
   "version": "0.0.1",
-  "description": "Video dispatcher agent",
+  "description": "Agent to create AI videos",
   "keywords": [
     "typeagent-agent"
   ],
