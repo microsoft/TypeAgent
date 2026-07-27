@@ -6043,7 +6043,7 @@ importers:
         specifier: workspace:*
         version: link:../cache
       esbuild:
-        specifier: ^0.25.0
+        specifier: ^0.25.12
         version: 0.25.12
       grammar-tools-core:
         specifier: workspace:*
