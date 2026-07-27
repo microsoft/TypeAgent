@@ -51,6 +51,9 @@ const DEFAULT_AGENT_SERVER_URL = "ws://localhost:8999";
 /** Time to wait for a new subagent to connect to the agent server. */
 const CONNECT_TIMEOUT_MS = 20_000;
 
+/** Maximum number of concurrently live subagents per session. */
+const MAX_SUBAGENTS = 100;
+
 /**
  * Resolve the agent-server URL a spawned command-executor should connect to.
  * The standalone agent server publishes its own listen URL into
@@ -141,6 +144,11 @@ export class SubagentManager {
         if (this.disposed) {
             throw new Error("SubagentManager has been disposed");
         }
+        if (this.subagents.size >= MAX_SUBAGENTS) {
+            throw new Error(
+                `Cannot create more than ${MAX_SUBAGENTS} subagents`,
+            );
+        }
         const name = options.name.trim();
         if (name.length === 0) {
             throw new Error("Subagent name must not be empty");
@@ -175,6 +183,11 @@ export class SubagentManager {
             );
         }
 
+        if (this.disposed) {
+            await closeQuietly(client);
+            throw new Error("SubagentManager was disposed during connect");
+        }
+
         const info: SubagentInfo = {
             id,
             name,
@@ -202,6 +215,12 @@ export class SubagentManager {
             );
         }
 
+        if (this.disposed) {
+            this.subagents.delete(id);
+            await closeQuietly(client);
+            throw new Error("SubagentManager was disposed during connection");
+        }
+
         info.status = "ready";
         debug(`created ${id} (${name}) conversation=${conversationName}`);
         return { ...info };
@@ -218,12 +237,12 @@ export class SubagentManager {
             !entry.instructionsSent && entry.info.instructions
                 ? `${entry.info.instructions}\n\n${task}`
                 : task;
-        entry.instructionsSent = true;
         debug(`invoke ${id}: ${task}`);
         const result = await entry.client.callTool({
             name: "execute_command",
             arguments: { request },
         });
+        entry.instructionsSent = true;
         const text = extractToolText(result);
         if ((result as { isError?: boolean })?.isError) {
             throw new Error(text || `Subagent '${id}' returned an error`);
