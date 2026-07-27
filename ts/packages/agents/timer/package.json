@@ -2,7 +2,7 @@
   "name": "timer-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "Timer dispatcher agent for setting reminders that fire as agent-initiated messages",
+  "description": "Agent for setting reminders that fire as agent-initiated messages",
   "keywords": [
     "typeagent-agent"
   ],

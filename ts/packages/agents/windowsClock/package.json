@@ -2,7 +2,7 @@
   "name": "windowsclock-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "windowsClock TypeAgent — UI Automation playback",
+  "description": "Windows Clock agent — set alarms, start timers, run the stopwatch, and add world clocks via the built-in Windows Alarms & Clock app.",
   "keywords": [
     "typeagent-agent"
   ],

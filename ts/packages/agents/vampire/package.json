@@ -2,7 +2,7 @@
   "name": "vampire-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "Vampire test agent — deliberately collides with other agents to exercise dispatcher action collision detection",
+  "description": "Test agent that deliberately collides with other agents' actions and grammar so dispatcher collision detection can be exercised on real input. Default-disabled.",
   "keywords": [
     "typeagent-agent"
   ],

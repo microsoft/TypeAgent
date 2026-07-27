@@ -2,7 +2,7 @@
   "name": "email",
   "version": "0.0.1",
   "private": true,
-  "description": "Email dispatcher agent",
+  "description": "Agent integration with MS Graph's email",
   "keywords": [
     "typeagent-agent"
   ],

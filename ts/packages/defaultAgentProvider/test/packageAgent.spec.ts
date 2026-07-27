@@ -631,6 +631,7 @@ describe("@package available", () => {
                             ref: "@x/beta",
                             defaultAgentName: "beta",
                             packageName: "@x/beta",
+                            description: "Beta test agent",
                         },
                     ],
                 },
@@ -642,6 +643,7 @@ describe("@package available", () => {
                             ref: "k-alpha",
                             defaultAgentName: "alpha",
                             packageName: "alpha-pkg",
+                            description: "Alpha test agent",
                         },
                     ],
                 },
@@ -655,10 +657,10 @@ describe("@package available", () => {
         await handler.run(context, { args: {}, flags: {} } as any);
         const text = output();
         expect(text).toContain(
-            "feed (feed)\nName Package\nbeta @x/beta\nzeta @x/zeta",
+            "feed (feed)\nName Package Description\nbeta @x/beta Beta test agent\nzeta @x/zeta —",
         );
         expect(text).toContain(
-            "\ncatalog (catalog)\nName Package\nalpha alpha-pkg",
+            "\ncatalog (catalog)\nName Package Description\nalpha alpha-pkg Alpha test agent",
         );
         expect(text.indexOf("feed")).toBeLessThan(text.indexOf("catalog"));
         expect(text.indexOf("beta")).toBeLessThan(text.indexOf("zeta"));
