@@ -381,6 +381,50 @@ body {
   color: var(--vscode-descriptionForeground);
 }
 
+/* --- "Try it" utterance proof (t4) --------------------------------------- */
+.wz-proof {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--vscode-panel-border, transparent);
+  background: var(
+    --vscode-editorWidget-background,
+    var(--vscode-editor-background)
+  );
+  border-left-width: 3px;
+}
+.wz-proof-pass {
+  border-left-color: var(
+    --vscode-testing-iconPassed,
+    var(--vscode-charts-green, #388a34)
+  );
+}
+.wz-proof-fail {
+  border-left-color: var(
+    --vscode-testing-iconFailed,
+    var(--vscode-charts-red, #be1100)
+  );
+}
+.wz-proof-headline {
+  font-weight: 600;
+}
+.wz-proof-pass .wz-proof-headline {
+  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green, #388a34));
+}
+.wz-proof-fail .wz-proof-headline {
+  color: var(--vscode-testing-iconFailed, var(--vscode-charts-red, #be1100));
+}
+.wz-proof-utterance {
+  margin-top: 4px;
+  font-style: italic;
+  color: var(--vscode-descriptionForeground);
+}
+.wz-proof-detail {
+  margin-top: 4px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.9em;
+}
+
 .wz-center {
   margin: auto;
   color: var(--vscode-descriptionForeground);

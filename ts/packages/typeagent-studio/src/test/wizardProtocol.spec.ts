@@ -21,6 +21,7 @@ test("parseWizardMessage accepts parameterless messages", () => {
         "runRemaining",
         "rerunStale",
         "install",
+        "tryIt",
         "checkHealth",
         "clear",
     ] as const) {

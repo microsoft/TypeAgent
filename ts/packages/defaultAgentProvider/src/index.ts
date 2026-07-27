@@ -15,3 +15,10 @@ export {
     type OnboardingExecutedAction,
     type OnboardingOnlyDispatcherOptions,
 } from "./onboardingDispatcher.js";
+export {
+    createGeneratedAgentTranslator,
+    type GeneratedAgentTranslatorHandle,
+    type GeneratedAgentTranslatorOptions,
+    type GeneratedAgentTranslateResult,
+    type GeneratedAgentResolvedAction,
+} from "./generatedAgentTranslator.js";

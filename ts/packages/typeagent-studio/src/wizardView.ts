@@ -227,6 +227,10 @@ export function openNewAgentWizard(
                 await handleInstall();
                 return;
 
+            case "tryIt":
+                await handleTryIt();
+                return;
+
             case "checkHealth": {
                 const state = await safeSnapshot();
                 await refreshHealth(state);
@@ -300,6 +304,42 @@ export function openNewAgentWizard(
             } else {
                 throw error;
             }
+        }
+        await postState();
+    }
+
+    /**
+     * Prove the installed agent answers a PhraseGen example utterance (t4 —
+     * "Try it"): translate one example through a dispatcher loaded with just the
+     * generated agent and report the resolved action. Translate-only, so nothing
+     * is executed. Surfaces the verdict to the webview and a toast.
+     */
+    async function handleTryIt(): Promise<void> {
+        post({ type: "status", text: "Trying an example utterance…" });
+        try {
+            const result = await runtime.proveActiveSessionUtterance();
+            post({ type: "utteranceProof", result });
+            if (result.answered) {
+                const target =
+                    result.resolvedAction ??
+                    result.resolvedSchema ??
+                    "an action";
+                void vscode.window.showInformationMessage(
+                    `"${result.utterance}" → ${target}` +
+                        (result.matchedExpectedAction
+                            ? " (matched the expected action)."
+                            : "."),
+                );
+            } else {
+                void vscode.window.showWarningMessage(
+                    `The agent did not resolve "${result.utterance}"` +
+                        (result.error ? `: ${result.error}` : "."),
+                );
+            }
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : String(error);
+            post({ type: "error", message });
         }
         await postState();
     }

@@ -19,7 +19,10 @@ import {
     createDefaultWildcardValidatorResolver,
     canValidateWildcards,
 } from "./wildcardValidation.js";
-import { createServiceOnboardingPhaseRunner } from "./onboarding/dispatcherGateway.js";
+import {
+    createServiceOnboardingPhaseRunner,
+    createServiceUtteranceProver,
+} from "./onboarding/dispatcherGateway.js";
 
 /**
  * Candidate repository roots for Studio to inspect, most-specific first. The
@@ -152,6 +155,14 @@ export function getStudioRuntime(repoRoot?: string): StudioRuntime {
                 onboarding: new InMemoryOnboardingBridge({
                     phaseRunner: createServiceOnboardingPhaseRunner(),
                 }),
+                // "Try it" (t4): prove the generated agent answers a PhraseGen
+                // example by translating it against a dispatcher loaded with
+                // just that agent (built lazily per proof, torn down after).
+                proveUtterance: ({ agentName, agentDir, options }) =>
+                    createServiceUtteranceProver({ agentName, agentDir })(
+                        agentName,
+                        options,
+                    ),
             },
         );
         runtimeCache.set(key, runtime);

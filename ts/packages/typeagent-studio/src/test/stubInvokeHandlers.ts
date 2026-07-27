@@ -110,6 +110,14 @@ export function stubInvokeHandlers(
             target: "onboarding",
             reason: "stub",
         }),
+        proveActiveSessionUtterance: async () => ({
+            integrationName: "stub-agent",
+            utterance: "stub utterance",
+            answered: true,
+            resolvedSchema: "stub-agent",
+            resolvedAction: "stubAction",
+            matchedExpectedAction: true,
+        }),
         ...overrides,
     };
 }

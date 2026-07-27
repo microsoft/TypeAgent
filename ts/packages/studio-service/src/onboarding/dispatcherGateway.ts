@@ -28,6 +28,14 @@ import {
     type OnboardingDispatch,
     type OnboardingPhaseOutputs,
 } from "./phaseRunner.js";
+import {
+    createUtteranceProver,
+    type ProveUtteranceOptions,
+    type PhrasesReader,
+    type UtteranceProofResult,
+    type UtteranceTranslate,
+    type UtteranceTranslateOutcome,
+} from "./utteranceProver.js";
 import type {
     OnboardingPhaseName,
     OnboardingState,
@@ -157,4 +165,117 @@ export async function closeOnboardingDispatcher(): Promise<void> {
     } catch {
         // Best-effort teardown.
     }
+}
+
+// ---------------------------------------------------------------------------
+// t4 — "Try it": prove the generated agent answers a PhraseGen example.
+// ---------------------------------------------------------------------------
+
+/** Minimal structural view of the generated-agent translator handle. */
+interface GeneratedAgentTranslatorHandleLike {
+    translateUtterance(text: string): Promise<{
+        actions: { schemaName?: string; actionName?: string }[];
+        error?: string;
+    }>;
+    close(): Promise<void>;
+}
+
+interface DefaultAgentProviderTranslatorModule {
+    createGeneratedAgentTranslator(options: {
+        agentName: string;
+        agentDir: string;
+        hostName?: string;
+    }): Promise<GeneratedAgentTranslatorHandleLike>;
+}
+
+/**
+ * Lazily import `default-agent-provider` and build a translate-only dispatcher
+ * loaded with just the generated agent (see the file header for why the import
+ * is indirected and external). Throws an actionable error in a packaged build
+ * without `node_modules`.
+ */
+async function buildGeneratedAgentTranslator(options: {
+    agentName: string;
+    agentDir: string;
+}): Promise<GeneratedAgentTranslatorHandleLike> {
+    let mod: DefaultAgentProviderTranslatorModule;
+    try {
+        const specifier = "default-agent-provider";
+        mod = (await import(
+            specifier
+        )) as DefaultAgentProviderTranslatorModule;
+    } catch (e) {
+        throw new Error(
+            "Generated-agent translator is unavailable: could not load " +
+                "'default-agent-provider'. This is expected in a packaged " +
+                "build without node_modules; run the extension against a " +
+                `built repo. (${(e as Error).message})`,
+        );
+    }
+    return mod.createGeneratedAgentTranslator({
+        agentName: options.agentName,
+        agentDir: options.agentDir,
+    });
+}
+
+/**
+ * Read the PhraseGen artifact (`phraseGen/phrases.json`) and return its
+ * `phrases` map (action name → example utterances), or undefined when it is
+ * absent or has no phrases.
+ */
+const readPhrases: PhrasesReader = async (integrationName) => {
+    const raw = await readArtifact(integrationName, "phraseGen", "phrases.json");
+    if (raw === undefined) {
+        return undefined;
+    }
+    try {
+        const parsed = JSON.parse(raw) as {
+            phrases?: Record<string, string[]>;
+        };
+        return parsed.phrases ?? undefined;
+    } catch {
+        return undefined;
+    }
+};
+
+/**
+ * Build the service's utterance prover for a specific generated agent. The
+ * returned function takes the same agent name and proves that a PhraseGen
+ * example phrase (or an explicit utterance) resolves to one of the agent's
+ * typed actions. Each proof stands up a translate-only dispatcher for the agent
+ * and tears it down afterward — a "Try it" click is a single utterance.
+ */
+export function createServiceUtteranceProver(options: {
+    agentName: string;
+    agentDir: string;
+}): (
+    integrationName: string,
+    proveOptions?: ProveUtteranceOptions,
+) => Promise<UtteranceProofResult> {
+    const translate: UtteranceTranslate = async (utterance) => {
+        const translator = await buildGeneratedAgentTranslator(options);
+        try {
+            const result = await translator.translateUtterance(utterance);
+            const outcome: UtteranceTranslateOutcome = {
+                actions: result.actions.map((a) => {
+                    const resolved: { schemaName?: string; actionName?: string } =
+                        {};
+                    if (a.schemaName !== undefined) {
+                        resolved.schemaName = a.schemaName;
+                    }
+                    if (a.actionName !== undefined) {
+                        resolved.actionName = a.actionName;
+                    }
+                    return resolved;
+                }),
+            };
+            if (result.error !== undefined) {
+                outcome.error = result.error;
+            }
+            return outcome;
+        } finally {
+            await translator.close();
+        }
+    };
+    return createUtteranceProver({ translate, readPhrases });
 }

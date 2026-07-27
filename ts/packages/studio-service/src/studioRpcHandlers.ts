@@ -222,5 +222,10 @@ export function createStudioInvokeHandlers(
         async routeConversation(repoRoot, prompt) {
             return conn.getRuntime(repoRoot).routeConversation(prompt);
         },
+        async proveActiveSessionUtterance(repoRoot, options) {
+            return conn
+                .getRuntime(repoRoot)
+                .proveActiveSessionUtterance(options ?? undefined);
+        },
     };
 }

@@ -15,6 +15,7 @@
  */
 
 import type { OnboardingPhaseName } from "@typeagent/core/onboardingBridge";
+import type { UtteranceProofResult } from "@typeagent/core/runtime";
 import type { WizardViewModel } from "./wizardViewModel.js";
 
 /** Messages the extension host posts to the webview. */
@@ -25,6 +26,11 @@ export type HostToWizardMessage =
     | { type: "status"; text: string }
     /** A failure for a prior request (optionally scoped to a phase). */
     | { type: "error"; message: string; phase?: OnboardingPhaseName }
+    /**
+     * Result of proving the generated agent answers an utterance (t4 —
+     * "Try it"): the resolved action + answered/matched verdict.
+     */
+    | { type: "utteranceProof"; result: UtteranceProofResult }
     /**
      * Result of revisiting an earlier phase: the downstream phases whose
      * recorded ancestor outputs no longer match and are now stale (F1.5). Empty
@@ -55,6 +61,8 @@ export type WizardToHostMessage =
     | { type: "rerunStale" }
     /** Install the active session's agent into a sandbox (F1.3, gated by F1.4). */
     | { type: "install" }
+    /** Try a PhraseGen example utterance against the installed agent (t4). */
+    | { type: "tryIt" }
     /** Evaluate the packaging health gate and refresh the verdict (F1.4). */
     | { type: "checkHealth" }
     /** Clear the active session and return to the start screen. */
@@ -102,6 +110,7 @@ export function parseWizardMessage(
         case "runRemaining":
         case "rerunStale":
         case "install":
+        case "tryIt":
         case "checkHealth":
         case "clear":
             return { type: msg.type };

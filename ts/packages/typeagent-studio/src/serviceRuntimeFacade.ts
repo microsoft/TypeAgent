@@ -10,6 +10,8 @@ import type {
     StudioCorpusImportRequest,
     StudioCorpusImportResult,
     PackagingHealthGateResult,
+    ProveUtteranceOptions,
+    UtteranceProofResult,
 } from "@typeagent/core/runtime";
 import type {
     OnboardingState,
@@ -89,6 +91,9 @@ export interface OnboardingRuntime {
     routeConversation(
         prompt: string,
     ): Promise<{ target: "onboarding" | "schemaAuthor"; reason: string }>;
+    proveActiveSessionUtterance(
+        options?: ProveUtteranceOptions,
+    ): Promise<UtteranceProofResult>;
 }
 
 const NOT_CONNECTED =
@@ -274,5 +279,11 @@ export class StudioServiceRuntimeFacade
         prompt: string,
     ): Promise<{ target: "onboarding" | "schemaAuthor"; reason: string }> {
         return this.require().routeConversation(prompt);
+    }
+
+    async proveActiveSessionUtterance(
+        options?: ProveUtteranceOptions,
+    ): Promise<UtteranceProofResult> {
+        return this.require().proveActiveSessionUtterance(options);
     }
 }

@@ -19,6 +19,8 @@ import type {
     StudioCorpusImportRequest,
     StudioCorpusImportResult,
     PackagingHealthGateResult,
+    ProveUtteranceOptions,
+    UtteranceProofResult,
 } from "./studioRuntimeCore.js";
 import type {
     OnboardingState,
@@ -286,6 +288,11 @@ export type StudioServiceInvokeFunctions = {
         repoRoot: string | undefined,
         prompt: string,
     ): Promise<{ target: "onboarding" | "schemaAuthor"; reason: string }>;
+    /** Prove the active session's generated agent answers an utterance (t4). */
+    proveActiveSessionUtterance(
+        repoRoot: string | undefined,
+        options?: ProveUtteranceOptions,
+    ): Promise<UtteranceProofResult>;
 };
 
 /** Server → client pushes. */

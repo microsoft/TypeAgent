@@ -19,6 +19,8 @@ import type {
     StudioCorpusImportResult,
     AvailableAgent,
     PackagingHealthGateResult,
+    ProveUtteranceOptions,
+    UtteranceProofResult,
 } from "@typeagent/core/runtime";
 import type {
     OnboardingState,
@@ -508,6 +510,17 @@ export class StudioServiceClient {
         prompt: string,
     ): Promise<{ target: "onboarding" | "schemaAuthor"; reason: string }> {
         return this.rpc.invoke("routeConversation", this.repoRoot, prompt);
+    }
+
+    /** Prove the active session's generated agent answers an utterance (t4). */
+    proveActiveSessionUtterance(
+        options?: ProveUtteranceOptions,
+    ): Promise<UtteranceProofResult> {
+        return this.rpc.invoke(
+            "proveActiveSessionUtterance",
+            this.repoRoot,
+            options,
+        );
     }
 
     close(): void {

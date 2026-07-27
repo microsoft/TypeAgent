@@ -19,6 +19,7 @@
  */
 
 import type { OnboardingPhaseName } from "@typeagent/core/onboardingBridge";
+import type { UtteranceProofResult } from "@typeagent/core/runtime";
 import type {
     HostToWizardMessage,
     WizardToHostMessage,
@@ -51,6 +52,7 @@ let errorText: string | undefined;
 let reconciliation:
     | { restoredPhase: OnboardingPhaseName; stalePhases: OnboardingPhaseName[] }
     | undefined;
+let utteranceProof: UtteranceProofResult | undefined;
 
 restorePersisted();
 
@@ -153,6 +155,12 @@ window.addEventListener("message", (event: MessageEvent) => {
             break;
         case "error":
             errorText = msg.message;
+            render();
+            break;
+        case "utteranceProof":
+            utteranceProof = msg.result;
+            statusText = undefined;
+            errorText = undefined;
             render();
             break;
         case "reconciliation":
@@ -566,9 +574,75 @@ function renderInstallBar(m: WizardViewModel): HTMLElement {
                 `Installed into: ${m.installedSandboxIds.join(", ")}`,
             ),
         );
+
+        const tryActions = el("div", "wz-install-actions");
+        tryActions.appendChild(
+            button(
+                "Try an example utterance",
+                () => {
+                    utteranceProof = undefined;
+                    post({ type: "tryIt" });
+                },
+                { variant: "secondary" },
+            ),
+        );
+        bar.appendChild(tryActions);
+        bar.appendChild(
+            el(
+                "div",
+                "wz-hint",
+                "Translate a PhraseGen example through the installed agent to prove it resolves to an action.",
+            ),
+        );
+
+        if (utteranceProof) {
+            bar.appendChild(renderUtteranceProof(utteranceProof));
+        }
     }
 
     return bar;
+}
+
+/** Render the t4 "Try it" verdict: which action a sample utterance resolved to
+ *  (or why it did not answer). Translate-only, so nothing was executed. */
+function renderUtteranceProof(proof: UtteranceProofResult): HTMLElement {
+    const status = proof.answered ? "pass" : "fail";
+    const banner = el("div", `wz-proof wz-proof-${status}`);
+
+    const headline = proof.answered
+        ? proof.matchedExpectedAction
+            ? "✓ Answered (matched the expected action)"
+            : "✓ Answered"
+        : "✗ Did not answer";
+    banner.appendChild(el("div", "wz-proof-headline", headline));
+
+    banner.appendChild(
+        el("div", "wz-proof-utterance", `Utterance: “${proof.utterance}”`),
+    );
+
+    if (proof.answered) {
+        const target =
+            proof.resolvedAction ?? proof.resolvedSchema ?? "(unnamed action)";
+        banner.appendChild(
+            el("div", "wz-proof-detail", `Resolved to: ${target}`),
+        );
+        if (
+            proof.expectedAction &&
+            proof.expectedAction !== proof.resolvedAction
+        ) {
+            banner.appendChild(
+                el(
+                    "div",
+                    "wz-proof-detail",
+                    `Expected: ${proof.expectedAction}`,
+                ),
+            );
+        }
+    } else if (proof.error) {
+        banner.appendChild(el("div", "wz-proof-detail", proof.error));
+    }
+
+    return banner;
 }
 
 post({ type: "ready" });
