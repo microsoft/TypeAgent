@@ -10,7 +10,11 @@ import {
     readExplanationTestData,
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
-import { fromJsonActions, RequestAction, toJsonActions } from "@typeagent/agent-cache";
+import {
+    fromJsonActions,
+    RequestAction,
+    toJsonActions,
+} from "@typeagent/agent-cache";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
 import {

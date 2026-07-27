@@ -473,7 +473,8 @@ export function createBatchPopulateCommand(
                     // Step 0: Check the cache before translating.
                     // If we already have a construction that matches,
                     // skip the expensive LLM translation + explanation.
-                    let preMatch: import("@typeagent/agent-cache").MatchResult[] = [];
+                    let preMatch: import("@typeagent/agent-cache").MatchResult[] =
+                        [];
                     try {
                         preMatch = cache.match(prompt);
                     } catch {

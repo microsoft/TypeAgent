@@ -18,7 +18,10 @@ import {
 } from "fs";
 import path from "path";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
-import { ConstructionCache, loadConstructionCacheFile } from "@typeagent/agent-cache";
+import {
+    ConstructionCache,
+    loadConstructionCacheFile,
+} from "@typeagent/agent-cache";
 
 // ANSI color codes for terminal output
 const c = {
