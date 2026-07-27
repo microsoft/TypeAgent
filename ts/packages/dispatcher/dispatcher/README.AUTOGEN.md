@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=6d7d56dd4069a1fe1163a09745eb294fe1bc66fdd2dd0f539d71a485e0e015b5 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c42d73fb1a1f201ab835a0bcbc314df5e1da537ba2dbf798b07cc85b351a12df -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a TypeScript library that acts as the central component of the TypeAgent ecosystem. It processes user inputs, translates natural language into structured actions using large language models (LLMs), and coordinates interactions across various application agents. The Dispatcher integrates with multiple front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for building personal agents with natural language interfaces.
+The TypeAgent Dispatcher is a TypeScript library that serves as the core orchestration component of the TypeAgent ecosystem. It processes user inputs, translates natural language into structured actions using large language models (LLMs), and coordinates interactions across various application agents. The Dispatcher is designed to integrate with multiple front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for building personal agents with natural language interfaces.
 
 ## What it does
 
@@ -238,6 +238,6 @@ _10 environment variables referenced from `./src/` (set in `ts/.env` or your she
 
 ---
 
-_Auto-generated against commit `fa4bb9b44db12e2d15b83e03e59f9c7147ed2b50` on `2026-07-27T19:08:36.121Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `33c83792f9a6ab6f17e52ca4856f765a2a056905` on `2026-07-27T20:21:59.625Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
