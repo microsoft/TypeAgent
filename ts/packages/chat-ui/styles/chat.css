@@ -1964,6 +1964,58 @@ table.sc-kv-table.sc-card-fields {
 }
 
 /* =========================================================================
+   Cancelled banner — persistent affordance on a cancelled user bubble.
+   A separate element/class from the transient queue status rail so host
+   queue-snapshot reconciliation (which clears the status rail) leaves it
+   intact. Carries the "⚠ Cancelled" label + an optional Retry button.
+   ========================================================================= */
+.chat-message-cancelled-rail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-height: 22px;
+  padding: 1px 4px 1px 10px;
+  border-radius: 8px 8px 0 0;
+  /* Soft neutral gray block — a de-emphasized/dismissed state, matching the
+     muted "unknown" status-rail gray rather than an alarming red. */
+  background: #c9c9c9;
+}
+/* Square off the top of the content so the banner and body read as one
+   bubble (mirrors the status-rail rule). */
+.chat-message-user:has(> .chat-message-cancelled-rail) .chat-message-content {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+/* Dark label for contrast against the gray block. */
+.chat-cancelled-state {
+  color: #2c2c2c;
+}
+/* Retry button: an auto-width pill (icon + label) rather than the fixed
+   square icon-button used for the jump / remove queue controls. */
+.chat-message-cancelled-rail .chat-retry-button {
+  width: auto;
+  height: 20px;
+  padding: 0 8px 0 6px;
+  gap: 4px;
+  color: #2c2c2c;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+.chat-message-cancelled-rail .chat-retry-button i svg {
+  width: 13px;
+  height: 13px;
+}
+.chat-message-cancelled-rail .chat-retry-button:hover {
+  background: rgba(0, 0, 0, 0.12);
+  color: #2c2c2c;
+}
+.chat-retry-label {
+  line-height: 1;
+}
+
+/* =========================================================================
    ANSI color classes (from ansi_up)
    ========================================================================= */
 

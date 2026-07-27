@@ -10,19 +10,36 @@ import {
     jest,
 } from "@jest/globals";
 import { ChatPanel } from "../src/chatPanel.js";
-import { iconStop, iconJumpQueue, iconX } from "../src/icons.js";
+import { iconStop, iconJumpQueue, iconX, iconRetry } from "../src/icons.js";
 
 // chat-ui is DOM-rendering; these tests run under jsdom (see jest.config.cjs)
 // and assert the DOM produced by the status-rail / roadrunner affordances.
 
-function makePanel(opts?: { onCancel?: (requestId: string) => void }) {
+function makePanel(opts?: {
+    onCancel?: (requestId: string) => void;
+    onSend?: (
+        text: string,
+        attachments: string[] | undefined,
+        requestId: string,
+    ) => void;
+}) {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const panel = new ChatPanel(root, {
         platformAdapter: { handleLinkClick() {} },
         onCancel: opts?.onCancel,
+        onSend: opts?.onSend,
     });
     return { root, panel };
+}
+
+function cancelledRail(
+    root: HTMLElement,
+    requestId: string,
+): HTMLElement | null {
+    return userBubble(root, requestId).querySelector<HTMLElement>(
+        ".chat-message-user > .chat-message-cancelled-rail",
+    );
 }
 
 function userBubble(root: HTMLElement, requestId: string): HTMLElement {
@@ -349,11 +366,119 @@ describe("roadrunner (explained) placement", () => {
 
 describe("icons", () => {
     it("each affordance icon renders an <svg> inside an <i> wrapper", () => {
-        for (const make of [iconStop, iconJumpQueue, iconX]) {
+        for (const make of [iconStop, iconJumpQueue, iconX, iconRetry]) {
             const el = make();
             expect(el.tagName).toBe("I");
             expect(el.querySelector("svg")).not.toBeNull();
         }
+    });
+});
+
+describe("cancelled banner + retry", () => {
+    // Drive a request through the real send path so the panel records the
+    // command for Retry, then simulate the host's cancel completion.
+    function sendAndType(
+        panel: ChatPanel,
+        text: string,
+    ): { requestId: string } {
+        // ChatPanel.send() reads the contenteditable input; type into it.
+        const input = document.querySelector<HTMLElement>(
+            ".user-textarea, [contenteditable]",
+        )!;
+        input.textContent = text;
+        input.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+        );
+        const bubble = document.querySelector<HTMLElement>(
+            ".chat-message-container-user",
+        )!;
+        return { requestId: bubble.dataset.requestId! };
+    }
+
+    it("stamps a persistent Cancelled banner on the user bubble", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("do it", "req-1");
+
+        const stamped = panel.markUserBubbleCancelled("req-1");
+        expect(stamped).toBe(true);
+
+        const rail = cancelledRail(root, "req-1");
+        expect(rail).not.toBeNull();
+        expect(rail!.textContent).toContain("Cancelled");
+    });
+
+    it("returns false and stamps nothing when there is no user bubble", () => {
+        const { root, panel } = makePanel();
+        expect(panel.markUserBubbleCancelled("missing")).toBe(false);
+        expect(root.querySelector(".chat-message-cancelled-rail")).toBeNull();
+    });
+
+    it("completeRequest(cancelled) shows the banner and no duplicate agent bubble", () => {
+        const { root, panel } = makePanel({ onSend: jest.fn() });
+        const { requestId } = sendAndType(panel, "queued command");
+
+        panel.completeRequest(requestId, { cancelled: true });
+
+        // User bubble carries the banner...
+        expect(cancelledRail(root, requestId)).not.toBeNull();
+        // ...and no standalone "⚠ Cancelled" agent bubble was created for a
+        // request that never produced agent output.
+        expect(root.querySelector(".chat-message-container-agent")).toBeNull();
+    });
+
+    it("Retry reuses the existing bubble, re-keyed to a fresh id", () => {
+        const onSend = jest.fn();
+        const { root, panel } = makePanel({ onSend });
+        const { requestId } = sendAndType(panel, "redo this");
+        expect(onSend).toHaveBeenCalledTimes(1);
+
+        panel.completeRequest(requestId, { cancelled: true });
+        const retry = cancelledRail(
+            root,
+            requestId,
+        )!.querySelector<HTMLButtonElement>('[data-action="retry"]');
+        expect(retry).not.toBeNull();
+
+        retry!.click();
+
+        // A second send fired with the same text but a new request id.
+        expect(onSend).toHaveBeenCalledTimes(2);
+        const [firstText, , firstId] = onSend.mock.calls[0];
+        const [secondText, , secondId] = onSend.mock.calls[1];
+        expect(secondText).toBe(firstText);
+        expect(secondId).not.toBe(firstId);
+
+        // The existing bubble is reused (no new bubble added) and re-keyed to
+        // the retry's id, with the Cancelled banner cleared.
+        const bubbles = root.querySelectorAll(".chat-message-container-user");
+        expect(bubbles.length).toBe(1);
+        expect((bubbles[0] as HTMLElement).dataset.requestId).toBe(secondId);
+        expect(root.querySelector(".chat-message-cancelled-rail")).toBeNull();
+        // Display updates now target the reused bubble under the new id.
+        expect(panel.hasUserMessage(secondId as string)).toBe(true);
+        expect(panel.hasUserMessage(firstId as string)).toBe(false);
+    });
+
+    it("a later queue-chip clear leaves the cancelled banner intact", () => {
+        const { root, panel } = makePanel({ onSend: jest.fn() });
+        const { requestId } = sendAndType(panel, "queued command");
+
+        panel.completeRequest(requestId, { cancelled: true });
+        expect(cancelledRail(root, requestId)).not.toBeNull();
+
+        // Simulate a stale queue snapshot reconcile clearing the status rail.
+        panel.setUserBubbleQueueStatus(requestId, null);
+        expect(cancelledRail(root, requestId)).not.toBeNull();
+    });
+
+    it("no Retry button when the sent command is unknown (peer bubble)", () => {
+        const { root, panel } = makePanel({ onSend: jest.fn() });
+        panel.addRemoteUserMessage("peer request", "peer-1");
+
+        expect(panel.markUserBubbleCancelled("peer-1")).toBe(true);
+        const rail = cancelledRail(root, "peer-1");
+        expect(rail).not.toBeNull();
+        expect(rail!.querySelector('[data-action="retry"]')).toBeNull();
     });
 });
 

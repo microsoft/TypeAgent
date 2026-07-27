@@ -73,7 +73,7 @@ import { createWebSpeechProvider } from "./webSpeechProvider.js";
 import { openSettingsPopup, openHelpPopup } from "./popups.js";
 import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
-import { iconX, iconJumpQueue, iconStop } from "./icons.js";
+import { iconX, iconJumpQueue, iconStop, iconRetry } from "./icons.js";
 
 /**
  * How long the transient "sent" acknowledgement stays on the user bubble
@@ -744,6 +744,17 @@ export class ChatPanel {
     // roadrunner icon and tooltip to the correct bubble after the
     // dispatcher reports back. Cleared by clear().
     private userMessageById = new Map<string, HTMLElement>();
+
+    // The command actually submitted for each requestId, keyed by the id
+    // stamped on the user bubble. `command` is what was sent to `onSend`
+    // (may be an @-command); `displayText` is what the bubble shows (the
+    // friendly text for injected commands). Used by the "Retry" affordance
+    // on a cancelled user bubble to re-submit the original request. Cleared
+    // by clear().
+    private sentCommandByRequestId = new Map<
+        string,
+        { command: string; displayText: string; attachments?: string[] }
+    >();
 
     // Timestamp (ms since epoch) when the user sent each requestId. Used
     // to compute the "First Message" elapsed time when the agent's first
@@ -1696,6 +1707,9 @@ export class ChatPanel {
 
         const id = requestId ?? generateRequestId();
         this.addUserMessage(text, id, attachments);
+        // Remember what we sent so a "Retry" on this bubble (should it be
+        // cancelled) can re-submit the identical request.
+        this.rememberSentCommand(id, text, text, attachments);
         // Toggle input controls into "processing" state — swaps the
         // send button for the stop button so the user can cancel an
         // in-flight command. setIdle() is invoked by the host on
@@ -2203,6 +2217,155 @@ export class ChatPanel {
             // getOrCreateAgentContainer) handles the removal + consumed mark.
             this.startSentAckTimer(requestId);
         }
+    }
+
+    /** Record the request submitted under `requestId` so a later Retry can
+     * re-issue it. `command` is what was sent to `onSend`; `displayText` is
+     * what the user bubble shows. */
+    private rememberSentCommand(
+        requestId: string,
+        command: string,
+        displayText: string,
+        attachments?: string[],
+    ): void {
+        this.sentCommandByRequestId.set(requestId, {
+            command,
+            displayText,
+            attachments,
+        });
+    }
+
+    /**
+     * Re-submit a previously cancelled request, reusing its existing user
+     * bubble instead of adding a new one. The bubble is re-keyed to a fresh
+     * request id — a new id is required because host-side cancel guards
+     * suppress display updates for the original, now-cancelled id — its
+     * Cancelled banner is cleared, and it returns to the processing state.
+     * Falls back to a new bubble if the original is gone (e.g. after @clear).
+     * Backs the "Retry" affordance on a cancelled user bubble.
+     */
+    private resendCommand(
+        oldRequestId: string,
+        command: string,
+        displayText: string,
+        attachments?: string[],
+    ): void {
+        const newId = generateRequestId();
+        const container = this.userMessageById.get(oldRequestId);
+        if (container) {
+            container
+                .querySelector(
+                    ".chat-message-user > .chat-message-cancelled-rail",
+                )
+                ?.remove();
+            this.rekeyUserBubble(oldRequestId, newId);
+        } else {
+            this.addUserMessage(displayText, newId, attachments);
+        }
+        this.rememberSentCommand(newId, command, displayText, attachments);
+        this.setProcessing(newId);
+        this.onSend?.(command, attachments, newId);
+    }
+
+    /**
+     * Re-point the user bubble (and its per-request tracking) from `oldId`
+     * to `newId` so a retried request's display updates, metrics, and queue
+     * chips target the same DOM bubble. Stale agent-container associations
+     * for `oldId` are dropped; the retried request starts fresh under `newId`.
+     */
+    private rekeyUserBubble(oldId: string, newId: string): void {
+        const container = this.userMessageById.get(oldId);
+        if (!container) return;
+        container.dataset.requestId = newId;
+        this.userMessageById.delete(oldId);
+        this.userMessageById.set(newId, container);
+        // The retried request becomes the active thread for id-less updates.
+        this.currentUserThreadId = newId;
+        // Reset send-time tracking so "first message" timing reflects the
+        // retry, not the original attempt.
+        this.requestStartByRequestId.delete(oldId);
+        this.requestStartByRequestId.set(newId, Date.now());
+        this.firstMessageMsByRequestId.delete(oldId);
+        this.sentCommandByRequestId.delete(oldId);
+        // Drop any stale agent-container / thread associations for the old id.
+        this.threadContainers.delete(oldId);
+        this.requestAgentContainers.delete(oldId);
+        this.pendingThreadDisplayInfo.delete(oldId);
+        this.lastStepAnchorByThread.delete(oldId);
+        this.clearSentAckTimer(oldId);
+        this.sentAckConsumed.delete(oldId);
+    }
+
+    /**
+     * Stamp a persistent "Cancelled" banner (with a Retry button when the
+     * original command is known) on the user bubble for `requestId`. Returns
+     * true when a bubble existed and was stamped, false otherwise.
+     *
+     * Unlike the transient queue status rail — which the host clears on the
+     * next queue snapshot via setUserBubbleQueueStatus(null) — this banner
+     * lives in its own element (`.chat-message-cancelled-rail`) so queue
+     * reconciliation leaves it intact.
+     */
+    public markUserBubbleCancelled(requestId: string): boolean {
+        const container = this.userMessageById.get(requestId);
+        if (!container) return false;
+        const bodyDiv =
+            container.querySelector<HTMLElement>(".chat-message-user");
+        if (!bodyDiv) return false;
+
+        // A pending "sent" auto-dismiss must not race the banner; drop it and
+        // remove any transient queue rail so the banner takes its place.
+        this.clearSentAckTimer(requestId);
+        bodyDiv.querySelector(":scope > .chat-message-status-rail")?.remove();
+
+        // Idempotent: reuse an existing cancelled rail rather than stacking.
+        let rail = bodyDiv.querySelector<HTMLDivElement>(
+            ":scope > .chat-message-cancelled-rail",
+        );
+        if (!rail) {
+            rail = document.createElement("div");
+            rail.className = "chat-message-cancelled-rail";
+            bodyDiv.insertBefore(rail, bodyDiv.firstChild);
+        }
+        rail.replaceChildren();
+
+        const state = document.createElement("span");
+        state.className = "chat-status-state chat-cancelled-state";
+        // Match the agent bubble's "⚠ Cancelled" wording for consistency.
+        state.textContent = "⚠ Cancelled";
+        rail.appendChild(state);
+
+        // Retry re-issues the original request under a fresh id. Only offered
+        // when we know what was sent (our own messages) and a send path exists.
+        const sent = this.sentCommandByRequestId.get(requestId);
+        if (sent && this.onSend) {
+            const controls = document.createElement("span");
+            controls.className = "chat-status-rail-controls";
+            const retry = document.createElement("button");
+            retry.type = "button";
+            retry.className = "chat-action-button chat-retry-button";
+            retry.dataset.action = "retry";
+            retry.title = "Retry this request";
+            retry.setAttribute("aria-label", "Retry this request");
+            retry.appendChild(iconRetry());
+            const retryLabel = document.createElement("span");
+            retryLabel.className = "chat-retry-label";
+            retryLabel.textContent = "Retry";
+            retry.appendChild(retryLabel);
+            retry.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.resendCommand(
+                    requestId,
+                    sent.command,
+                    sent.displayText,
+                    sent.attachments,
+                );
+            });
+            controls.appendChild(retry);
+            rail.appendChild(controls);
+        }
+        return true;
     }
 
     /**
@@ -3579,6 +3742,7 @@ export class ChatPanel {
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
         this.userMessageById.clear();
+        this.sentCommandByRequestId.clear();
         this.requestStartByRequestId.clear();
         this.firstMessageMsByRequestId.clear();
         this.agentRunningRequestIds.clear();
@@ -3724,28 +3888,35 @@ export class ChatPanel {
                 : undefined);
         const firstMessageMs = this.firstMessageMsByRequestId.get(threadId);
         if (result?.cancelled) {
-            // Mirror Electron's "⚠ Cancelled" status, anchored to the
-            // user bubble (column-reverse: DOM-before = visually-after).
-            // Liveness check guards against detached anchors.
-            const mappedBubble = this.userMessageById.get(threadId);
-            const userBubble =
-                mappedBubble && mappedBubble.parentElement === this.messageDiv
-                    ? mappedBubble
-                    : undefined;
-            // Drop unknown explicit requestIds (post-clear stragglers)
-            // rather than orphan them at the chat bottom.
-            if (!target && requestId !== undefined && !userBubble) {
-                // Orphan: chip already cleared by the queue path.
-            } else {
-                const cancelTarget =
-                    target ??
-                    this.createAgentContainer(
-                        "shell",
-                        this.iconForSource("shell"),
-                        undefined,
-                        userBubble,
-                    );
-                cancelTarget.setMessage(
+            // Stamp a persistent "Cancelled" banner (+ Retry) on the user
+            // bubble so the cancel is visible on the request itself, not only
+            // on a separate agent bubble.
+            const stampedUserBanner = this.markUserBubbleCancelled(threadId);
+            if (target) {
+                // The request already produced an agent bubble before it was
+                // cancelled: mark where it stopped with "⚠ Cancelled". The
+                // user banner (if any) rides alongside it and carries Retry.
+                target.setMessage(
+                    {
+                        type: "text",
+                        content: "⚠ Cancelled",
+                        kind: "status",
+                    },
+                    "shell",
+                    "block",
+                );
+            } else if (!stampedUserBanner && requestId === undefined) {
+                // No user bubble to carry the banner and no explicit request
+                // id (default / ad-hoc thread): fall back to a standalone
+                // "⚠ Cancelled" agent bubble. Orphans (explicit id, no bubble)
+                // are intentionally skipped — the chip was already cleared by
+                // the queue path.
+                this.createAgentContainer(
+                    "shell",
+                    this.iconForSource("shell"),
+                    undefined,
+                    undefined,
+                ).setMessage(
                     {
                         type: "text",
                         content: "⚠ Cancelled",
@@ -3755,6 +3926,9 @@ export class ChatPanel {
                     "block",
                 );
             }
+            // Otherwise the user-bubble banner is the sole cancelled indicator
+            // (no redundant standalone agent bubble for a queued item that was
+            // cancelled before it ran).
         }
         if (result && target) {
             // Agent bubble shows ACTION token usage (the tokens the agent
@@ -4437,6 +4611,7 @@ export class ChatPanel {
         this.historyIndex = -1;
         const id = requestId ?? generateRequestId();
         this.addUserMessage(displayText ?? command, id);
+        this.rememberSentCommand(id, command, displayText ?? command);
         this.onSend?.(command, undefined, id);
     }
 
