@@ -798,6 +798,17 @@
   fill: lightslategray;
 }
 
+/* Pin the whole button cluster (attach / camera / mic / send / stop) to the
+   right edge of the input bar. Putting the auto margin on the FIRST button
+   pushes it plus every button after it to the right, keeping them grouped.
+   On a single line the flex-grow text wrapper already eats the free space so
+   the group sits at the right; when a long message wraps the buttons onto
+   their own row, the auto margin keeps the group on the right instead of
+   clustering it on the left. */
+.chat-input > .chat-input-button:first-of-type {
+  margin-left: auto;
+}
+
 .chat-stop-button {
   /* Match shell: no special color override, just rely on .chat-input-button
      defaults. Increase the glyph size so the ■ fills the 24x24 button. */
