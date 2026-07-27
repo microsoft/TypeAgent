@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/github-cli-agent",
   "version": "0.0.1",
-  "description": "TypeAgent agent for github-cli",
+  "description": "Agent for github-cli",
   "keywords": [
     "typeagent-agent"
   ],

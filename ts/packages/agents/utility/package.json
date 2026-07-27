@@ -2,7 +2,7 @@
   "name": "utility-typeagent",
   "version": "0.0.1",
   "private": true,
-  "description": "TypeAgent Utility — web search, web fetch, and file I/O for compiled task flows",
+  "description": "Utility agent — web search, web fetch, and file I/O for compiled task flows",
   "keywords": [
     "typeagent-agent"
   ],

@@ -2,7 +2,7 @@
   "name": "list-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "List dispatcher agent",
+  "description": "Agent to create and manage lists",
   "keywords": [
     "typeagent-agent"
   ],

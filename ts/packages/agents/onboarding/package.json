@@ -2,7 +2,7 @@
   "name": "onboarding-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "TypeAgent onboarding agent — automates integrating new applications into TypeAgent",
+  "description": "Agent for onboarding new applications and APIs into TypeAgent",
   "keywords": [
     "typeagent-agent"
   ],

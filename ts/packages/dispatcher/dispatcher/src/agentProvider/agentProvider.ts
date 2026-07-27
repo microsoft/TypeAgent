@@ -123,6 +123,37 @@ export interface AppAgentSource {
      * records `controller` for fan-out.
      */
     connect(controller: AppAgentProviderSetController): AppAgentConnection;
+    /**
+     * Optional read-only enumeration of agents that are installable from this
+     * source's configured install sources (feeds / catalogs), used by the
+     * reasoning engine to suggest an install when no active agent can fulfill a
+     * request. It MUST NOT install anything and MUST NOT mutate dispatcher
+     * state; it only reads discovery metadata (typically cache-backed). Omitted
+     * or resolving to `[]` when the source has no discovery.
+     */
+    listAvailableAgents?(): Promise<InstallableAgentSummary[]>;
+}
+
+/**
+ * A read-only summary of one installable agent, surfaced to the reasoning
+ * engine so it can tell the user how to install an agent that could fulfill a
+ * request no active agent handles. Purely advisory — producing it never
+ * installs anything.
+ */
+export interface InstallableAgentSummary {
+    /**
+     * The name to type into `@package install`: the package's declared default
+     * agent name when present, otherwise the package name.
+     */
+    readonly installName: string;
+    /** The npm package name, when known / distinct from {@link installName}. */
+    readonly packageName?: string | undefined;
+    /** The agent's published one-line description, when the feed provides one. */
+    readonly description?: string | undefined;
+    /** The configured install source the agent was discovered from. */
+    readonly source: string;
+    /** The exact command the user can run to install it. */
+    readonly installCommand: string;
 }
 
 /**

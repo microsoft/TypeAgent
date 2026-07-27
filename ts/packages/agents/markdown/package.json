@@ -1,7 +1,7 @@
 {
   "name": "@typeagent/markdown-agent",
   "version": "0.0.1",
-  "description": "Markdown agent",
+  "description": "Agent to create and update markdown files",
   "keywords": [
     "typeagent-agent"
   ],

@@ -2,7 +2,7 @@
   "name": "music",
   "version": "0.0.1",
   "private": true,
-  "description": "",
+  "description": "Agent to play music",
   "keywords": [
     "typeagent-agent"
   ],

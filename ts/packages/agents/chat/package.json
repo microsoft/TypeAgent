@@ -2,7 +2,7 @@
   "name": "chat-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "Chat dispatcher agent",
+  "description": "Agent for conversation and information lookup",
   "keywords": [
     "typeagent-agent"
   ],
