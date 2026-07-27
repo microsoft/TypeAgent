@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=97bd3b93c5b7c24baa622b664e98d638018451c1336e57fb459b10d342a30b75 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=45c18858ee6c0f0a433dff0af65a553c61530c2c6e884ad0dac7a438fabb6704 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-cli — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `agent-cli` package is a command-line interface (CLI) tool for interacting with the TypeAgent system. It provides a variety of commands to facilitate the development, testing, and debugging of interactive agents that use natural language interfaces. The CLI acts as a front-end to the TypeAgent Dispatcher, enabling users to send requests, manage conversations, and test agent behaviors. It supports both interactive and non-interactive workflows, making it a versatile tool for developers working with the TypeAgent ecosystem.
+The `agent-cli` package is a command-line interface (CLI) tool for interacting with the TypeAgent system. It acts as a front-end to the TypeAgent Dispatcher, enabling developers to test, debug, and manage interactive agents that use natural language interfaces. The CLI supports both interactive and non-interactive workflows, making it a versatile tool for working with the TypeAgent ecosystem.
 
 ## What it does
 
@@ -150,6 +150,6 @@ External: `@oclif/core`, `@oclif/plugin-help`, `chalk`, `debug`, `dotenv`, `html
 
 ---
 
-_Auto-generated against commit `d9ee555d43867e97462e8fa147f7ef73b8da05ec` on `2026-07-19T20:27:13.071Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
+_Auto-generated against commit `ff9101e00228c5d0ff34c8dd3f108f46af46b0a6` on `2026-07-23T00:41:03.476Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

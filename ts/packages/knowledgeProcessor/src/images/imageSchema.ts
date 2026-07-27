@@ -4,7 +4,7 @@
 import type {
     PointOfInterest,
     ReverseGeocodeAddressLookup,
-} from "typechat-utils";
+} from "@typeagent/typechat-utils";
 import { KnowledgeResponse } from "../conversation/knowledgeSchema.js";
 
 export type Image = {

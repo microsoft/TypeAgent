@@ -12,7 +12,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import registerDebug from "debug";
-import { createPromptLogger } from "telemetry";
+import { createPromptLogger } from "@typeagent/telemetry";
 
 const promptLogger = createPromptLogger();
 

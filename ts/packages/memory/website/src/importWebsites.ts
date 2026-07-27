@@ -13,7 +13,7 @@ import {
     ExtractionInput,
     ExtractionResult,
 } from "./extraction/index.js";
-import { conversation as kpLib } from "knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import path from "path";
 import fs from "fs";
 import { createRequire } from "module";

@@ -7,7 +7,7 @@ import {
     loadSchema,
     PromptSectionProvider,
     rewriteText,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { PromptSection } from "typechat";
 import { ChatModel } from "@typeagent/aiclient";
 import { AnswerResponse } from "./answerSchema.js";

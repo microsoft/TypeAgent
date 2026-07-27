@@ -12,7 +12,7 @@ import {
 import * as querySchema from "./searchQuerySchema.js";
 import * as querySchema2 from "./searchQuerySchema_v2.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { loadSchema } from "typeagent";
+import { loadSchema } from "@typeagent/agent-runtime";
 import { getTimeRangePromptSectionForConversation } from "./conversation.js";
 import { IConversation } from "./interfaces.js";
 

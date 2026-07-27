@@ -16,16 +16,18 @@ import {
     STATUS_NOTICE_EVENT,
     parseStatusNotice,
     type ConnectionStatus,
-} from "chat-ui";
+} from "@typeagent/chat-ui";
 import type {
     TemplateEditServices,
     DynamicDisplayResult,
     ImageCaptureProvider,
-} from "chat-ui";
+} from "@typeagent/chat-ui";
 import { VsCodeAzureSpeechProvider } from "./azureSpeechProvider.js";
 import { CameraView } from "./cameraView.js";
+import { injectStyle } from "./injectStyle.js";
 import type { SpeechToken } from "@typeagent/agent-server-protocol";
-import chatPanelStyles from "chat-ui/styles";
+import type { QuestionForm, QuestionFormResponse } from "@typeagent/agent-sdk";
+import chatPanelStyles from "@typeagent/chat-ui/styles";
 import completionUiStyles from "@typeagent/completion-ui/styles.css";
 import vscodeThemeStyles from "./vscode-theme.css";
 import { QueueStateMirror } from "@typeagent/dispatcher-types";
@@ -39,20 +41,9 @@ import type {
 // Inject the chat-ui base styles first, then the completion-ui dropdown
 // styles, then the VS Code theme overlay so it can override defaults via
 // --vscode-* CSS variables.
-function injectStyles(css: string): void {
-    const styleEl = document.createElement("style");
-    styleEl.textContent = css;
-    document.head.appendChild(styleEl);
-}
-injectStyles(chatPanelStyles as unknown as string);
-injectStyles(completionUiStyles as unknown as string);
-injectStyles(vscodeThemeStyles as unknown as string);
-
-declare function acquireVsCodeApi(): {
-    postMessage(message: unknown): void;
-    getState(): unknown;
-    setState(state: unknown): void;
-};
+injectStyle(chatPanelStyles as unknown as string);
+injectStyle(completionUiStyles as unknown as string);
+injectStyle(vscodeThemeStyles as unknown as string);
 
 const vscode = acquireVsCodeApi();
 
@@ -193,6 +184,13 @@ const chatPanel = new ChatPanel(rootEl, {
         // for arbitrary URLs in a useful way.
         handleLinkClick: (href: string, _target: string | null) => {
             vscode.postMessage({ type: "openExternal", href });
+        },
+        // Open the message in a new VS Code editor panel (movable / snappable)
+        // rather than an in-page overlay. The extension host owns the panel; it
+        // re-sanitizes the content before rendering.
+        openMessageInWindow: (html: string, title?: string) => {
+            vscode.postMessage({ type: "openMessageWindow", html, title });
+            return true;
         },
     },
     // Mic + camera providers (see WEBVIEW_MEDIA_CAPTURE_SUPPORTED). Both are
@@ -362,6 +360,18 @@ function handleRequestInteraction(
                     type: "question",
                     value,
                 };
+            } else if (interaction.type === "form") {
+                const value = await chatPanel.addQuestionForm(
+                    interaction.form,
+                    {
+                        signal: ac.signal,
+                    },
+                );
+                response = {
+                    interactionId: interaction.interactionId,
+                    type: "form",
+                    value,
+                };
             } else {
                 const value = await chatPanel.proposeActionEdit(
                     interaction.actionTemplates,
@@ -436,6 +446,32 @@ function handleRequestChoice(msg: {
             response,
         });
     })().catch((e) => console.error("[requestChoice] failed", e));
+}
+
+// Render a multi-question form card (ClientIO.requestForm). Like
+// handleRequestChoice, the heading is already shown as the action's
+// displayContent, so `showMessage:false` suppresses the duplicate and
+// `requestId` anchors the controls onto that agent bubble. Replies with the
+// same `choiceResponse` message, carrying a QuestionFormResponse.
+function handleRequestForm(msg: {
+    choiceId: string;
+    form: QuestionForm;
+    requestId?: string;
+}): void {
+    void (async () => {
+        const response: QuestionFormResponse = await chatPanel.addQuestionForm(
+            msg.form,
+            {
+                showMessage: false,
+                requestId: msg.requestId,
+            },
+        );
+        vscode.postMessage({
+            type: "choiceResponse",
+            choiceId: msg.choiceId,
+            response,
+        });
+    })().catch((e) => console.error("[requestForm] failed", e));
 }
 
 // Mirror of dispatcher's queue lifecycle (requestQueued / requestStarted
@@ -1283,6 +1319,9 @@ window.addEventListener("message", (event) => {
             break;
         case "requestChoice":
             handleRequestChoice(msg);
+            break;
+        case "requestForm":
+            handleRequestForm(msg);
             break;
         case "setDynamicDisplay":
             // Register/refresh a live-updating display. chat-ui owns the

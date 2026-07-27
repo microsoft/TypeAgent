@@ -35,9 +35,9 @@ import {
     filterEntitySelection,
 } from "../translation/entityResolution.js";
 import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
-import { ConversationMemory } from "conversation-memory";
-import { SearchSelectExpr } from "knowpro";
-import { conversation as kp } from "knowledge-processor";
+import { ConversationMemory } from "@typeagent/conversation-memory";
+import { SearchSelectExpr } from "@typeagent/knowpro";
+import { conversation as kp } from "@typeagent/knowledge-processor";
 import { getObjectProperty } from "@typeagent/common-utils";
 import { ActionSchemaFile } from "../translation/actionConfigProvider.js";
 import { tryGetActionParametersType } from "../translation/actionSchemaUtils.js";

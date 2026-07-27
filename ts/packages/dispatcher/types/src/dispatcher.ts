@@ -6,6 +6,7 @@ import {
     CompletionGroup,
     DisplayType,
     DynamicDisplay,
+    QuestionFormResponse,
     TemplateSchema,
     TypeAgentAction,
     AfterWildcard,
@@ -71,6 +72,18 @@ export type CompletionUsageStats = {
     // cache), reported separately from prompt_tokens. Optional; undefined =>
     // not reported.
     cached_tokens?: number;
+    // Per-block reasoning ("thinking") token counts - the subset of
+    // completion_tokens the model spent on chain-of-thought, one entry per
+    // reasoning block/turn. Already included in completion_tokens, so these are
+    // reported separately (not added to total_tokens again) to surface a
+    // distinct "Thinking Tokens" figure. Optional; undefined => not reported.
+    thinking_tokens?: number[];
+    // True when thinking_tokens are an approximate estimate rather than a
+    // billed count (e.g. the Claude SDK streams a per-block estimate while
+    // Anthropic bills reasoning inside completion_tokens without a separate
+    // figure). Lets the UI mark the number as approximate. Optional;
+    // absent/false => billed.
+    thinking_tokens_estimated?: boolean;
 };
 
 export type CommandResult = {
@@ -410,11 +423,16 @@ export interface Dispatcher {
      * Respond to a pending choice from an agent.
      * @param choiceId the choice ID returned from ChoiceManager.registerChoice
      * @param response boolean for yesNo, number[] of selected indices for
-     *   multiChoice, or `{ selected, remember }` for pickRemember
+     *   multiChoice, `{ selected, remember }` for pickRemember, or a
+     *   QuestionFormResponse for a multi-question form
      */
     respondToChoice(
         choiceId: string,
-        response: boolean | number[] | { selected: number; remember: boolean },
+        response:
+            | boolean
+            | number[]
+            | { selected: number; remember: boolean }
+            | QuestionFormResponse,
     ): Promise<CommandResult | undefined>;
 
     /**

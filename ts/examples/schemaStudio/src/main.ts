@@ -23,7 +23,7 @@ import {
     writeAllLines,
     dedupeList,
     dedupeLineFile,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { generateActionPhrases, loadActionSchema } from "schema-author";
 import { NodeType, SchemaParser } from "@typeagent/action-schema";
 import { createStudio } from "./studio.js";

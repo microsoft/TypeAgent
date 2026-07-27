@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kp from "knowpro";
-import * as knowLib from "knowledge-processor";
+import * as kp from "@typeagent/knowpro";
+import * as knowLib from "@typeagent/knowledge-processor";
 import { MemoryConsoleWriter } from "../memoryWriter.js";
 import chalk from "chalk";
 import { IMessageMetadata, textLocationToString } from "./knowproCommon.js";
-import * as cm from "conversation-memory";
-import * as im from "image-memory";
+import * as cm from "@typeagent/conversation-memory";
+import * as im from "@typeagent/image-memory";
 
 export class KnowProPrinter extends MemoryConsoleWriter {
     public sortAsc: boolean = true;

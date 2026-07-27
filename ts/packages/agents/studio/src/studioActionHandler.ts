@@ -12,7 +12,7 @@ import {
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import { StudioActions } from "./studioSchema.js";
-import { StudioServiceProxyClient } from "studio-service";
+import { StudioServiceProxyClient } from "@typeagent/studio-service";
 import {
     initializeStudioContext,
     updateStudioContext,

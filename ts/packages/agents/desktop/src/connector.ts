@@ -11,7 +11,7 @@ import { AllDesktopActions } from "./allActionsSchema.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { downloadImage } from "typechat-utils";
+import { downloadImage } from "@typeagent/typechat-utils";
 import { randomUUID } from "crypto";
 
 const debug = registerDebug("typeagent:desktop");

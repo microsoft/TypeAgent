@@ -21,12 +21,12 @@ import { getSpeechToken } from "./speechToken";
 import { createWebSocket, webapi } from "./webSocketAPI";
 import * as jose from "jose";
 import { createChatPanelClient } from "./chatPanelBridge";
-import { ConversationBar } from "chat-ui";
+import { ConversationBar } from "@typeagent/chat-ui";
 
 // Load the shared chat-ui / completion-ui stylesheets. These are injected at
 // runtime (after the static <link> stylesheets in chatView.html) so the
 // ChatPanel is styled by its own CSS rather than the legacy shell rules.
-import "chat-ui/styles";
+import "@typeagent/chat-ui/styles";
 import "@typeagent/completion-ui/styles.css";
 
 export function isElectron(): boolean {

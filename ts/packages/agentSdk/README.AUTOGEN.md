@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=48105684a9b92b1ff4ef770068d9d1fd2f61051473391ae08f643e765f5a933f -->
+<!-- AUTOGEN:DOCS:HASH:sha256=10315ca85773a44f986bc436d4393333c4207682611f4f77bbdcf7fc6a359a70 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/agent-sdk — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The `@typeagent/agent-sdk` package is a foundational TypeScript library in the TypeAgent ecosystem. It provides the core interfaces, types, and utilities required to build and manage Dispatcher Agents. These agents are responsible for handling user commands, executing actions, and managing their lifecycle and context. The package is widely used across the TypeAgent ecosystem and serves as a critical dependency for numerous tools and agents.
+The `@typeagent/agent-sdk` package is a TypeScript library that provides the foundational interfaces, types, and utilities for building Dispatcher Agents in the TypeAgent ecosystem. Dispatcher Agents are responsible for handling user commands, executing actions, and managing their lifecycle and context. This package is a core dependency for many tools and agents within the ecosystem, enabling consistent and extensible agent development.
 
 ## What it does
 
-The `@typeagent/agent-sdk` package enables developers to create and manage Dispatcher Agents by offering a comprehensive set of features:
+The `@typeagent/agent-sdk` package offers a comprehensive set of features to support the creation and management of Dispatcher Agents:
 
 ### Manifest and Instantiation
 
-- **Manifest**: The `AppAgentManifest` defines the agent's metadata, including its emoji, description, and translator configuration. This manifest is the first interaction point between the Dispatcher and the agent.
+- **Manifest**: The `AppAgentManifest` defines metadata about the agent, such as its emoji, description, and translator configuration. This manifest is the first point of interaction between the Dispatcher and the agent.
 - **Instantiation Entry Point**: The `AppAgent` interface is the primary contract that agents implement. The Dispatcher uses the `instantiate` function exported from the `./agent/handlers` module to create an instance of the agent.
 
 ### Lifecycle Management
@@ -158,13 +158,13 @@ External: `debug`, `type-fest`
 - [@typeagent/agent-rpc](../../packages/agentRpc/README.md)
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
+- [@typeagent/browser-extension](../../packages/agents/browserExtension/README.md)
 - [@typeagent/copilot-plugin](../../packages/copilot-plugin/README.md)
 - [@typeagent/dispatcher-rpc](../../packages/dispatcher/rpc/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
 - [@typeagent/echo](../../examples/agentExamples/echo/README.md)
 - [agent-api](../../packages/api/README.md)
-- [agent-cache](../../packages/cache/README.md)
-- _…and 51 more workspace consumers._
+- _…and 52 more workspace consumers._
 
 ### Files of interest
 
@@ -182,6 +182,6 @@ External: `debug`, `type-fest`
 
 ---
 
-_Auto-generated against commit `493ac5696974a3cab9c5528399a245063e7eb727` on `2026-07-18T23:55:00.731Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-sdk docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

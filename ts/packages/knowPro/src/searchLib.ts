@@ -16,7 +16,7 @@ import {
     SearchTermGroupTypes,
     SemanticRef,
 } from "./interfaces.js";
-import * as kpLib from "knowledge-processor";
+import * as kpLib from "@typeagent/knowledge-processor";
 import { PropertyNames } from "./propertyIndex.js";
 
 /**

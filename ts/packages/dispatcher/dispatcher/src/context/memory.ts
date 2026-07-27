@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { conversation } from "knowledge-processor";
+import { conversation } from "@typeagent/knowledge-processor";
 import {
     ConversationMemory,
     ConversationMessage,
     ConversationMessageMeta,
     createConversationMemory,
-} from "conversation-memory";
+} from "@typeagent/conversation-memory";
 
 import {
     changeContextConfig,
@@ -17,11 +17,12 @@ import type {
     ActionContext,
     ActionResult,
     ActionResultActivityContext,
+    AppAction,
     Entity,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import { ExecutableAction, getFullActionName } from "agent-cache";
-import { CachedImageWithDetails } from "typechat-utils";
+import { CachedImageWithDetails } from "@typeagent/typechat-utils";
 import { getAppAgentName } from "../internal.js";
 import {
     CommandHandler,
@@ -42,7 +43,7 @@ import {
     AnswerResponse,
     ConversationSearchResult,
     SearchSelectExpr,
-} from "knowpro";
+} from "@typeagent/knowpro";
 
 const debug = registerDebug("typeagent:dispatcher:memory");
 
@@ -134,6 +135,7 @@ export function addResultToMemory(
     entities?: Entity[],
     additionalInstructions?: string[],
     activityContext?: ActionResultActivityContext,
+    action?: AppAction,
 ) {
     context.chatHistory.addAssistantEntry(
         message,
@@ -141,6 +143,7 @@ export function addResultToMemory(
         entities,
         additionalInstructions,
         activityContext,
+        action,
     );
 
     if (context.actionResultKnowledgeExtraction) {
@@ -216,6 +219,7 @@ export function addActionResultToMemory(
             combinedEntities,
             result.additionalInstructions,
             result.activityContext,
+            executableAction.action,
         );
     }
 }

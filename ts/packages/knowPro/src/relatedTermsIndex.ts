@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections } from "typeagent";
+import { collections } from "@typeagent/agent-runtime";
 import { IConversation, ListIndexingResult, Term } from "./interfaces.js";
 import { IndexingEventHandlers } from "./interfaces.js";
 import { Scored } from "./common.js";
@@ -25,7 +25,7 @@ import {
     TextEmbeddingIndex,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
-import { TextEmbeddingCache } from "knowledge-processor";
+import { TextEmbeddingCache } from "@typeagent/knowledge-processor";
 import { CompiledSearchTerm, CompiledTermGroup } from "./compileLib.js";
 
 export class TermToRelatedTermsMap implements ITermToRelatedTerms {

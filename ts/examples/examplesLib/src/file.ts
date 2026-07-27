@@ -3,7 +3,7 @@
 
 import fs from "fs";
 import path from "path";
-import { isFilePath } from "typeagent";
+import { isFilePath } from "@typeagent/agent-runtime";
 
 export function readBatchFile(filePath: string, commentPrefix = "#"): string[] {
     const text = fs.readFileSync(filePath, "utf-8");

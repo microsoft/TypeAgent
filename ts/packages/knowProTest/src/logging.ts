@@ -6,7 +6,7 @@ import {
     writeObjectToFile,
     writeObjectToUniqueFile,
 } from "./common.js";
-import { changeFileExt, dateTime, ensureDir } from "typeagent";
+import { changeFileExt, dateTime, ensureDir } from "@typeagent/agent-runtime";
 import path from "path";
 
 export class KnowproLog {

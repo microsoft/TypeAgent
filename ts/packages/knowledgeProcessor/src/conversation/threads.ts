@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { asyncArray, NameValue } from "typeagent";
+import { asyncArray, NameValue } from "@typeagent/agent-runtime";
 import { StorageProvider } from "../storageProvider.js";
 import { removeUndefined } from "../setOperations.js";
 import { DateTimeRange } from "./dateTimeSchema.js";

@@ -3,7 +3,7 @@
 
 import { loadConfigSync } from "@typeagent/config";
 import { createLanguageModel } from "typechat";
-import { createTextClassifier, TextClassifier } from "typeagent"; // Adjust the import path accordingly
+import { createTextClassifier, TextClassifier } from "@typeagent/agent-runtime"; // Adjust the import path accordingly
 import { strict as assert } from "assert";
 
 loadConfigSync();

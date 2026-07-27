@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=cdcbd685f650951bf28e2c2e42965e41037acf5108ea5e80ce3dcecec45cd645 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=3ec0c0f6e51762bdc248ede255c7b076911b245d8c914c696b256f62cb48829c -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # website-memory — AI-generated documentation
@@ -12,20 +12,20 @@
 
 ## Overview
 
-The `website-memory` package is a TypeScript library that implements structured Retrieval-Augmented Generation (RAG) for managing website visit memory. It provides tools for importing, organizing, and analyzing website data, such as bookmarks and browsing history, with advanced content extraction and knowledge processing capabilities.
+The `website-memory` package is a TypeScript library designed to implement structured Retrieval-Augmented Generation (RAG) for managing website visit memory. It provides tools for importing, organizing, and analyzing website data, such as bookmarks and browsing history, with advanced content extraction and knowledge processing capabilities.
 
 ## What it does
 
-The `website-memory` package offers a comprehensive set of features for handling website visit data:
+The `website-memory` package provides a range of features for handling website visit data:
 
-- **Data Import**: Import bookmarks and browsing history from popular browsers like Chrome and Edge.
+- **Data Import**: Import bookmarks and browsing history from browsers like Chrome and Edge.
 - **Content Extraction**: Extract structured data from websites using four distinct modes:
   - `basic`: Extracts only URLs and titles.
   - `content`: Extracts full content and AI-processed knowledge.
   - `macros`: Extracts content and detects actions.
   - `full`: Extracts content, actions, and relationships.
 - **Batch Processing**: Process multiple websites concurrently with progress tracking and error handling.
-- **Knowledge Extraction**: Leverage AI models to extract entities, actions, and relationships from website content.
+- **Knowledge Extraction**: Use AI models to extract entities, actions, and relationships from website content.
 - **Indexing and Search**: Build structured data frames for visit frequency, categories, and bookmark organization. Perform semantic searches over website content and metadata.
 - **Graph Management**: Create and update graphs to represent relationships between topics and entities extracted from websites.
 - **Error Handling**: Implements strict error handling with clear messages and fallback mechanisms.
@@ -34,7 +34,7 @@ The package integrates with other components in the TypeAgent ecosystem, such as
 
 ## Setup
 
-To use the `website-memory` package, you need to configure the environment and set up any required dependencies. Follow these steps:
+To use the `website-memory` package, follow these steps to configure the environment and dependencies:
 
 1. **Install Dependencies**: Run `pnpm install` in the package directory to install all required dependencies.
 2. **Set Environment Variables**:
@@ -53,7 +53,7 @@ To use the `website-memory` package, you need to configure the environment and s
      const knowledgeExtractor = kpLib.createKnowledgeExtractor(languageModel);
      ```
 
-For more detailed setup instructions, refer to the hand-written README.
+For additional setup details, refer to the hand-written README.
 
 ## Key Files
 
@@ -68,7 +68,7 @@ The `website-memory` package is organized into several key files, each responsib
 
 ## How to extend
 
-To extend the `website-memory` package, you can follow these steps:
+To extend the `website-memory` package, follow these steps:
 
 1. **Add or Modify Extraction Modes**:
 
@@ -101,7 +101,7 @@ By following these steps, you can effectively extend the `website-memory` packag
 
 ### Entry points
 
-- default → `./dist/index.js` _(not found on disk)_
+- default → [./dist/index.js](./dist/index.js)
 
 ### Dependencies
 
@@ -130,6 +130,6 @@ External: `better-sqlite3`, `cheerio`, `debug`, `dompurify`, `get-folder-size`, 
 
 ---
 
-_Auto-generated against commit `366aaf867a7e8e5d130b6c87a365516bab725269` on `2026-07-07T09:05:05.703Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter website-memory docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter website-memory docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

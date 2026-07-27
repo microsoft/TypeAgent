@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 /**
- * Feedback widget. Mirrors packages/shell/src/renderer/src/feedbackWidget.ts —
- * keep these in sync when changing trigger DOM, popover layout, or the
- * CSS class names so the styling can stay shared between the Electron
- * shell and the Chrome / vscode webview hosts.
+ * Feedback widget. Renders the per-message action row (copy / open-in-window /
+ * rate) plus the feedback popover. Shared by the Electron shell (via chat-ui's
+ * ChatPanel) and the Chrome / vscode webview hosts, so keep the trigger DOM and
+ * CSS class names stable when changing it.
  */
 
 import type {
@@ -16,6 +16,7 @@ import type {
 import {
     iconCheck,
     iconCopy,
+    iconOpenInWindow,
     iconMore,
     iconThumbsDown,
     iconThumbsUp,
@@ -40,6 +41,15 @@ type FeedbackHost = {
     bodyDiv: HTMLElement;
     headerDiv: HTMLElement;
     messageDiv: HTMLElement;
+    /**
+     * Optional host-native "open in new window" (e.g. a movable VS Code editor
+     * panel). When provided, the widget shows the "Open in new window" action;
+     * hosts without it don't show the action at all. Returns true if the host
+     * handled it; a host may decline a specific message (false, e.g. iframe-
+     * backed content that can't be serialized into a window), in which case
+     * nothing happens (there's no in-page fallback).
+     */
+    openInWindow?: () => boolean;
 };
 
 type ActionRow = {
@@ -111,6 +121,26 @@ export class FeedbackWidget {
                 () => this.copyMessage(copyBtn),
             );
             root.appendChild(copyBtn);
+
+            // "Open in new window" is an opt-in, host-native capability: only
+            // render it when the host provides openInWindow (e.g. the VS Code
+            // shell, which opens a movable editor panel). Hosts without it (the
+            // Electron shell, web) show no button. The host may decline a
+            // specific message (returns false, e.g. iframe-backed content that
+            // can't be serialized into a window); there's no in-page fallback,
+            // so the click is simply a no-op in that case.
+            const openInWindow = this.host.openInWindow;
+            if (openInWindow) {
+                const openWindowBtn = makeIconButton(
+                    "open-window",
+                    "Open in new window",
+                    iconOpenInWindow(),
+                    () => {
+                        openInWindow();
+                    },
+                );
+                root.appendChild(openWindowBtn);
+            }
         }
 
         const thumbsUp = makeIconButton(

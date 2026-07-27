@@ -17,20 +17,20 @@
       "name": "list-agent"
     },
     "browser": {
-      "name": "browser-typeagent"
+      "name": "@typeagent/browser"
     },
     "desktop": {
       "name": "desktop-automation"
     },
     "code": {
-      "name": "code-agent"
+      "name": "@typeagent/code-agent"
     },
     "chat": {
       "name": "chat-agent",
       "execMode": "dispatcher"
     },
     "photo": {
-      "name": "photo-agent",
+      "name": "@typeagent/photo-agent",
       "execMode": "separate"
     },
     "greeting": {
@@ -38,17 +38,17 @@
       "execMode": "dispatcher"
     },
     "image": {
-      "name": "image-agent",
+      "name": "@typeagent/image-agent",
       "execMode": "dispatcher"
     },
     "markdown": {
-      "name": "markdown-agent"
+      "name": "@typeagent/markdown-agent"
     },
     "montage": {
-      "name": "montage-agent"
+      "name": "@typeagent/montage-agent"
     },
     "video": {
-      "name": "video-agent",
+      "name": "@typeagent/video-agent",
       "execMode": "dispatcher"
     },
     "settings": {
@@ -59,14 +59,14 @@
       "name": "weather-agent"
     },
     "taskflow": {
-      "name": "taskflow-typeagent",
+      "name": "@typeagent/taskflow-typeagent",
       "execMode": "dispatcher"
     },
     "powershell": {
       "name": "powershell-typeagent"
     },
     "screencapture": {
-      "name": "screencapture-agent",
+      "name": "@typeagent/screencapture-agent",
       "execMode": "separate"
     },
     "workflow": {
@@ -79,7 +79,7 @@
       "name": "onboarding-agent"
     },
     "studio": {
-      "name": "studio-agent"
+      "name": "@typeagent/studio-agent"
     },
     "osNotifications": {
       "name": "os-notifications-agent"
@@ -88,16 +88,16 @@
       "name": "timer-agent"
     },
     "github-cli": {
-      "name": "github-cli-agent"
+      "name": "@typeagent/github-cli-agent"
     },
     "windowsClock": {
       "name": "windowsclock-agent"
     },
     "visualStudio": {
-      "name": "visualstudio-agent"
+      "name": "@typeagent/visualstudio-agent"
     },
     "discord": {
-      "name": "discord-agent"
+      "name": "@typeagent/discord-agent"
     },
     "ipconfig": {
       "name": "ipconfig-agent"

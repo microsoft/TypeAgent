@@ -1,7 +1,6 @@
 {
-  "name": "photo-agent",
+  "name": "@typeagent/photo-agent",
   "version": "0.0.1",
-  "private": true,
   "description": "Photo dispatcher agent",
   "keywords": [
     "typeagent-agent"
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/photoManifest.json",
     "./agent/handlers": "./dist/photoActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "asc": "asc -i ./src/photoSchema.ts -o ./dist/photoSchema.pas.json -t PhotoAction",
     "build": "concurrently npm:tsc npm:asc",

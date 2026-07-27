@@ -19,7 +19,7 @@ import {
     verifyCategoryQueries,
     verifyFolderQueries,
 } from "./verify.js";
-import * as ms from "memory-storage";
+import * as ms from "@typeagent/memory-storage";
 
 describeIf(
     "websiteDataFrames",

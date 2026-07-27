@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=676a72b6c56b7189c65a16f12a236be540ebc2ede9cce94a56c321a368fb1a3e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=8d567a5239b59a6a8cc617b1307d5d2b4bda8fd92144c7ff88020e29e92e903d -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # visualstudio-agent — AI-generated documentation
@@ -12,21 +12,21 @@
 
 ## Overview
 
-The `visualstudio-agent` package integrates TypeAgent with Visual Studio through the EnvDTE automation API. It serves as the Node-side agent, enabling communication between the TypeAgent system and Visual Studio for tasks such as managing solutions, debugging, and performing editor operations. The corresponding host-side Visual Studio extension (VSIX) resides in the `host/` directory.
+The `visualstudio-agent` package integrates TypeAgent with Visual Studio using the EnvDTE automation API. It acts as the Node-side agent, enabling communication between the TypeAgent system and Visual Studio for tasks such as debugging, file operations, and solution management. The corresponding host-side Visual Studio extension (VSIX) resides in the `host/` directory.
 
-This agent facilitates communication between the TypeAgent dispatcher and Visual Studio via WebSocket channels, enabling a wide range of actions such as managing breakpoints, debugging, file operations, and more.
+This agent establishes two WebSocket channels to facilitate communication: one for chat interactions and another for action dispatching. It supports a wide range of actions grouped into categories like debugging, file operations, and build management.
 
 ## What it does
 
-The `visualstudio-agent` provides a bridge between the TypeAgent system and Visual Studio, enabling the execution of various actions within the IDE. These actions are grouped into the following categories:
+The `visualstudio-agent` bridges the TypeAgent system and Visual Studio, enabling the execution of various actions within the IDE. These actions are grouped into the following categories:
 
-- **breakpointsManagement**: Includes actions like `addBreakpoint` and `removeBreakpoint` to manage breakpoints in the Visual Studio debugger.
-- **debuggingControl**: Provides basic debugging controls such as `break`, `go`, `stepInto`, `stepOut`, `stepOver`, `stop`, and `debug`.
-- **fileOperations**: Actions like `openFile`, `closeAll`, and `saveAll` allow for managing files in the editor.
-- **buildAndRun**: Includes solution-wide build and execution actions such as `build`, `clean`, and `run`.
-- **searchAndNavigation**: Actions like `findInFiles`, `findText`, and `gotoLine` enable searching and navigating through code.
-- **commandExecution**: The `executeCommand` action allows the execution of Visual Studio commands via the EnvDTE API.
-- **editActions**: Includes `redo` and `undo` for basic editing operations.
+- **breakpointsManagement**: Manage breakpoints with actions like `addBreakpoint` and `removeBreakpoint`.
+- **debuggingControl**: Control debugging sessions with actions such as `break`, `go`, `stepInto`, `stepOut`, `stepOver`, `stop`, and `debug`.
+- **fileOperations**: Perform file-related tasks like `openFile`, `closeAll`, and `saveAll`.
+- **buildAndRun**: Execute solution-wide build and run tasks with actions like `build`, `clean`, and `run`.
+- **searchAndNavigation**: Search and navigate code using actions like `findInFiles`, `findText`, and `gotoLine`.
+- **commandExecution**: Execute Visual Studio commands via the `executeCommand` action.
+- **editActions**: Perform basic editing operations with `redo` and `undo`.
 
 The agent communicates with the Visual Studio host through two WebSocket channels:
 
@@ -121,7 +121,7 @@ By following this process, you can extend the `visualstudio-agent` to support ad
 ### Entry points
 
 - `./agent/manifest` → [./src/visualStudioManifest.json](./src/visualStudioManifest.json)
-- `./agent/handlers` → `./dist/visualStudioActionHandler.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/visualStudioActionHandler.js](./dist/visualStudioActionHandler.js)
 
 ### Dependencies
 
@@ -162,6 +162,6 @@ _21 actions declared in the schema, none yet implemented in [`./src/visualStudio
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter visualstudio-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

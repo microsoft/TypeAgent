@@ -11,6 +11,7 @@ import {
 import WebSocket, { WebSocketServer } from "ws";
 
 import { connectAgentServer } from "../src/agentServerClient.js";
+import { fakeClientIO } from "./conversation-stubConnection.js";
 
 // Spin up a real ws server that speaks the agent-rpc control channel so the
 // reconnect/rebind path is exercised over the actual wire format.
@@ -185,5 +186,32 @@ describe("connectAgentServer reconnect (rebind)", () => {
         // A closed connection must not be resurrected by a stray reconnect().
         expect(await connection.reconnect()).toBe(false);
         await stub.close();
+    });
+});
+
+describe("connectAgentServer leaveConversation on a dead channel", () => {
+    test("dispatcher.close() resolves instead of throwing after a socket drop", async () => {
+        const stub = await startStubServer([makeInfo("c1", "Shell")]);
+        const connection = await connectAgentServer(stub.url, () => {});
+        try {
+            const conv = await connection.joinConversation(fakeClientIO);
+            expect(conv.conversationId).toBe("c1");
+
+            // Server drops the socket; the client's control channel
+            // disconnects, so a subsequent control rpc rejects with
+            // "Agent channel disconnected".
+            stub.dropSockets();
+            await new Promise((r) => setTimeout(r, 50));
+
+            // dispatcher.close() leaves the conversation. The local channels are
+            // already torn down and the server has vanished, so the moot server
+            // notification must be swallowed rather than bubble up. In the shell
+            // this previously popped an "Error closing instance" dialog on
+            // window close after the agent server had disconnected.
+            await expect(conv.dispatcher.close()).resolves.toBeUndefined();
+        } finally {
+            await connection.close();
+            await stub.close();
+        }
     });
 });

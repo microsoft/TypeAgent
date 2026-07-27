@@ -12,7 +12,11 @@ import type {
     RequestId,
     TemplateEditConfig,
 } from "@typeagent/dispatcher-types";
-import type { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
+import type {
+    DisplayAppendMode,
+    QuestionForm,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
 
 import type { BridgeToWebviewMessage } from "./messages.js";
 import { clientIdOf } from "./requestIds.js";
@@ -275,6 +279,24 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
                 choices,
                 source,
                 checkboxLabel,
+                requestId: clientIdOf(requestId),
+            });
+        },
+        // Forward a multi-question form card to the webview, which renders the
+        // controls onto the request's agent bubble and replies with a
+        // `choiceResponse` carrying a QuestionFormResponse (same return path as
+        // requestChoice).
+        requestForm: (
+            requestId: RequestId,
+            choiceId: string,
+            form: QuestionForm,
+            source: string,
+        ) => {
+            ctx.broadcast({
+                type: "requestForm",
+                choiceId,
+                form,
+                source,
                 requestId: clientIdOf(requestId),
             });
         },

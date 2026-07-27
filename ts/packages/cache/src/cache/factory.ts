@@ -5,7 +5,7 @@ import { getExplainerFactories } from "../explanation/explainerFactories.js";
 import { GenericExplainer } from "../explanation/genericExplainer.js";
 import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import { CacheOptions, AgentCache } from "./cache.js";
-import { Logger } from "telemetry";
+import { Logger } from "@typeagent/telemetry";
 
 const defaultExplainerName = "v5";
 

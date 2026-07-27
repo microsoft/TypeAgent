@@ -18,7 +18,7 @@ import {
     PromptLogger,
     createPromptLogger,
     PromptLoggerOptions,
-} from "telemetry";
+} from "@typeagent/telemetry";
 import { DevTrace } from "./devTrace.js";
 import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
@@ -56,9 +56,9 @@ import {
     AppAgentEvent,
     ActivityContext,
 } from "@typeagent/agent-sdk";
-import { Profiler } from "telemetry";
-import { conversation as Conversation } from "knowledge-processor";
-import { ConversationMemory } from "conversation-memory";
+import { Profiler } from "@typeagent/telemetry";
+import { conversation as Conversation } from "@typeagent/knowledge-processor";
+import { ConversationMemory } from "@typeagent/conversation-memory";
 // Type-only import: the reasoning modules statically import this file, so a
 // runtime import here would create a cycle. subagentManager.ts is a leaf, and
 // `import type` is erased at compile time, so this stays cycle-free.
@@ -127,7 +127,7 @@ import {
 } from "@typeagent/action-grammar";
 import fs from "node:fs";
 import { CosmosClient, PartitionKeyBuilder } from "@azure/cosmos";
-import { CosmosPartitionKeyBuilder } from "telemetry";
+import { CosmosPartitionKeyBuilder } from "@typeagent/telemetry";
 import { DefaultAzureCredential } from "@azure/identity";
 import { DisplayLog } from "../displayLog.js";
 import {
@@ -321,10 +321,13 @@ export type CommandHandlerContext = {
     // The registry path the loaded `collisionRegistry` was built from, so we
     // can detect config changes and reload.
     collisionRegistryPath: string;
-    // Drives the interactive `preference-clarify` card (candidate pick +
-    // "remember this" checkbox). The dispatcher AppAgent's handleChoice
-    // delegates back to this manager.
-    collisionChoiceManager: ChoiceManager;
+    // Shared per-context ChoiceManager for the built-in agents' interactive
+    // choice/form cards. The dispatcher AppAgent's handleChoice uses it for the
+    // collision `preference-clarify` card (candidate pick + "remember this"
+    // checkbox); the system AppAgent's handleChoice uses it for the `@demo`
+    // walkthrough. Callbacks are keyed by unique choiceId, so both agents can
+    // share one manager.
+    choiceManager: ChoiceManager;
     // One-shot resolution overrides as a set of chosen member ids
     // ("schema.action"). Set just before re-running the original request from
     // a clarify pick so the re-translation resolves deterministically to the
@@ -1140,7 +1143,7 @@ export async function initializeCommandHandlerContext(
             ),
             collisionRegistryPath:
                 session.getConfig().collision.preference.registryPath,
-            collisionChoiceManager: new ChoiceManager(),
+            choiceManager: new ChoiceManager(),
             collisionOneShotPicks: new Set(),
             pendingTopicalRoute: undefined,
             conversationSignal: new RingBufferSignalSource(

@@ -183,6 +183,9 @@ function createChatPanelClientIO(): ClientIO {
         requestChoice() {
             // Not supported in extension
         },
+        requestForm() {
+            // Not supported in extension
+        },
         requestInteraction() {
             // Not supported in extension
         },

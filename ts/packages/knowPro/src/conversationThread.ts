@@ -13,7 +13,7 @@ import {
     TextEmbeddingIndex,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
-import { NormalizedEmbedding } from "typeagent";
+import { NormalizedEmbedding } from "@typeagent/agent-runtime";
 
 export interface IConversationThreadData {
     threads?: IThreadDataItem[] | undefined;

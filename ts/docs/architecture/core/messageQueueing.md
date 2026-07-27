@@ -1079,6 +1079,38 @@ When a client reconnects later, it sees an empty (or running-only)
 queue via `JoinConversationResult.queueSnapshot` and the usual
 lifecycle events on subsequent submits.
 
+### 11.5 New request supersedes a stalled interaction
+
+A running entry `blocked on a clientIO interaction`
+(`blockedOn: "interaction"` — e.g. the reasoning loop's `ask_user` /
+`ask_user_form`) holds the command lock and keeps the reasoning
+session from going idle. Because the drain does not advance past a
+`running` head, everything the user submits afterwards would queue
+behind it and make no progress until the interaction / reasoning-loop
+timeout (up to ~20 min) fires on its own.
+
+When the user submits a **new request** while the head is
+`[running, blockedOn=interaction]`, they have chosen to move on
+instead of answering the pending prompt. `SharedDispatcher` therefore
+supersedes the stalled entry before enqueuing the new one
+(`supersedeStalledInteraction`, invoked from the per-connection
+`submitCommand` wrapper). It uses the **same mechanism as §11.4**:
+
+- rejects the head's pending interaction(s) with an `AbortError` (so
+  `command.ts` classifies the unwind as `cancelled: true`),
+- broadcasts `ClientIO.interactionCancelled` so every client drops the
+  now-stale prompt card,
+- calls `cancelRunning(rid, "user")` and fires the head's
+  `AbortController` (the reasoning wraps `sendAndWait` in
+  `withAbortSignal(context.abortSignal)`, so the abort unwinds the loop
+  promptly rather than waiting for `session.idle`).
+
+The new request then enqueues normally and the drain advances to it
+(after any entries already queued ahead of it) once the superseded
+head finishes unwinding. Only a head with `blockedOn: "interaction"`
+is superseded; a head that is actively making progress is left alone
+and the new request queues behind it as usual.
+
 ---
 
 ## 12. Multi-client semantics

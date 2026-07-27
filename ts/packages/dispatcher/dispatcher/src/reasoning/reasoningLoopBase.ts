@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { ActionResult, ActionTokenUsage } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
 
 export const loopBaseDebug = registerDebug("typeagent:reasoning:loopBase");
@@ -163,17 +164,242 @@ export function formatToolResultDisplay(
     return `${label} \`${preview || "(empty)"}\``;
 }
 
-export function formatThinkingDisplay(thinkingText: string): string {
-    const escaped = thinkingText
+// Escape the three HTML-significant characters so text renders literally inside
+// our generated markup. Shared by the thinking, tool-call summary, and tool-call
+// JSON builders below.
+function escapeHtmlText(text: string): string {
+    return text
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
+}
+
+export function formatThinkingDisplay(
+    thinkingText: string,
+    thinkingTokens?: number,
+): string {
+    const escaped = escapeHtmlText(thinkingText);
+    // Carry the per-block token estimate as a data attribute (not in the
+    // summary text). The client moves it into the reasoning step bubble's
+    // metrics row - alongside the other token metrics - rather than the block
+    // header. The value is an approximation (from the reasoning text length),
+    // so the UI marks it with "~".
+    const tokenAttr =
+        thinkingTokens !== undefined && thinkingTokens > 0
+            ? ` data-thinking-tokens="${thinkingTokens}"`
+            : "";
     return [
-        `<details class="reasoning-thinking" open>`,
+        `<details class="reasoning-thinking"${tokenAttr} open>`,
         `<summary>Thinking</summary>`,
         `<pre>${escaped}</pre>`,
         `</details>`,
     ].join("");
+}
+
+// One logged tool call: the tool name and the arguments it was invoked with.
+// Each call renders as a click-to-expand block; a folded run reveals a JSON
+// array of its calls, a single call reveals just its own object.
+export interface ToolCallDetail {
+    tool: string;
+    args: unknown;
+}
+
+// Convert the limited markdown our tool-call display lines use (**bold** and
+// `code`) to HTML so the folded line can be shown inside the summary. The input
+// comes from formatToolCallDisplay (our own strings, not raw user text), so
+// escaping first and then applying these two rules is safe.
+function inlineMarkdownToHtml(text: string): string {
+    return escapeHtmlText(text)
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/`(.+?)`/g, "<code>$1</code>");
+}
+
+/**
+ * Render a logged tool call (single or folded) as a native <details> block that
+ * starts collapsed. The <summary> shows the display line (tool name as inline
+ * code, plus "xN" when folded); expanding it reveals only that call's own JSON -
+ * a single object for one call, an array for a folded run. Using <details> gives
+ * click and keyboard toggling for free and matches the sibling "Thinking" block;
+ * chat-ui only syntax-highlights the JSON the first time the block is opened, and
+ * the disclosure marker is hidden in CSS. Because the block is self-contained
+ * HTML starting with "<", splitActionContent leaves it intact, so the JSON stays
+ * inline and is never hoisted into the enclosing action's JSON view.
+ */
+export function formatToolRun(
+    displayLine: string,
+    details: ToolCallDetail[],
+): string {
+    const payload =
+        details.length === 1
+            ? { tool: details[0].tool, arguments: details[0].args }
+            : details.map((d) => ({ tool: d.tool, arguments: d.args }));
+    let json: string;
+    try {
+        json = JSON.stringify(payload, undefined, 2);
+    } catch {
+        // Arguments should always be JSON-serializable (they arrive as JSON
+        // from the reasoning SDK), but never let a bad payload break the run.
+        json = JSON.stringify(
+            details.length === 1
+                ? { tool: details[0].tool }
+                : details.map((d) => ({ tool: d.tool })),
+        );
+    }
+    return [
+        `<details class="reasoning-tool-call">`,
+        `<summary class="reasoning-tool-call-summary">${inlineMarkdownToHtml(
+            displayLine,
+        )}</summary>`,
+        `<pre class="chat-json reasoning-tool-call-json">${escapeHtmlText(
+            json,
+        )}</pre>`,
+        `</details>`,
+    ].join("");
+}
+
+/**
+ * Collapses runs of identical, back-to-back tool-call lines into a single line
+ * with an "xN" suffix (e.g. three identical calls render as "... x3"). Only
+ * direct neighbors merge: any other display between two identical calls (a
+ * thinking block, streamed text, a tool result, or a different tool call) ends
+ * the run and keeps the calls separate.
+ *
+ * Tool lines are buffered instead of emitted right away, because the count is
+ * not known until the run ends. Callers must:
+ *   - route every tool-call line through tool()
+ *   - call flush() before emitting any non-tool display
+ *   - call flush() once more after the reasoning stream completes
+ *
+ * Every run - single or folded - is emitted as its own click-to-expand block
+ * (see formatToolRun): the summary is the display line ("xN" only when folded)
+ * and the hidden body is that run's own JSON.
+ */
+export class ToolRunFolder {
+    private pending: string | undefined;
+    private count = 0;
+    private details: ToolCallDetail[] = [];
+
+    // `format` turns a raw tool call into its display line; it also serves as
+    // the folding key (identical display = same run). Injected rather than
+    // imported because each reasoning engine formats tool calls differently and
+    // its formatter lives in the engine module (copilot.ts), which depends on
+    // this file, not the other way around.
+    constructor(
+        private readonly emit: (content: string) => void,
+        private readonly format: (toolName: string, args: unknown) => string,
+    ) {}
+
+    // Record a tool call, folding it into the current run when its display line
+    // matches the immediately preceding one. The raw name and arguments are
+    // buffered so the run can reveal the full JSON on demand.
+    tool(toolName: string, args: unknown): void {
+        const display = this.format(toolName, args);
+        if (this.pending === display) {
+            this.count++;
+            this.details.push({ tool: toolName, args });
+            return;
+        }
+        this.flush();
+        this.pending = display;
+        this.count = 1;
+        this.details = [{ tool: toolName, args }];
+    }
+
+    // Emit the buffered run (if any) as a click-to-expand block and reset. A run
+    // of two or more identical calls gets an "xN" summary; a single call shows
+    // its line unchanged. Both reveal their own JSON on click.
+    flush(): void {
+        if (this.pending === undefined) {
+            return;
+        }
+        const line =
+            this.count > 1 ? `${this.pending} x${this.count}` : this.pending;
+        const details = this.details;
+        this.pending = undefined;
+        this.count = 0;
+        this.details = [];
+        this.emit(formatToolRun(line, details));
+    }
+}
+
+/**
+ * Build the reasoning token-usage record reported to the dispatcher (surfaced
+ * as "Action Tokens" in the UI). Returns undefined when no tokens were counted
+ * so the UI shows "not reported" rather than a misleading zero.
+ *
+ * `thinkingTokens` carries the per-turn reasoning ("thinking") token counts -
+ * the subset of completion tokens the model spent on chain-of-thought, one
+ * entry per turn that reported any. They are already included in `outputTokens`,
+ * so they are reported separately (as a per-block breakdown) rather than added
+ * to the total again, letting the UI show a distinct "Thinking Tokens" figure.
+ *
+ * `thinkingTokensEstimated` marks those counts as an approximate estimate rather
+ * than a billed figure (e.g. the Claude SDK only streams a per-block estimate),
+ * so the UI can flag them as approximate.
+ */
+export function reasoningTokenUsage(
+    inputTokens: number,
+    outputTokens: number,
+    cachedTokens: number,
+    thinkingTokens?: number[],
+    thinkingTokensEstimated?: boolean,
+): ActionTokenUsage | undefined {
+    const total = inputTokens + outputTokens + cachedTokens;
+    if (total <= 0) {
+        return undefined;
+    }
+    const perBlock = thinkingTokens?.filter((t) => t > 0) ?? [];
+    return {
+        prompt_tokens: inputTokens,
+        completion_tokens: outputTokens,
+        total_tokens: total,
+        ...(cachedTokens > 0 && { cached_tokens: cachedTokens }),
+        ...(perBlock.length > 0 && { thinking_tokens: perBlock }),
+        ...(perBlock.length > 0 &&
+            thinkingTokensEstimated && { thinking_tokens_estimated: true }),
+    };
+}
+
+/**
+ * Rough token estimate for a reasoning ("thinking") text block, used when the
+ * model provider does not report a billed reasoning-token count (e.g. Anthropic
+ * folds thinking into output_tokens, so Claude-backed sessions expose no
+ * separate figure). Uses the standard ~4-chars-per-token heuristic for English
+ * prose. Approximate only - callers MUST flag the result as an estimate.
+ * Returns 0 for empty/whitespace input.
+ */
+export function estimateReasoningTokens(text: string): number {
+    const trimmed = text?.trim() ?? "";
+    return trimmed.length === 0 ? 0 : Math.ceil(trimmed.length / 4);
+}
+
+/**
+ * Build the text an `execute_action` reasoning tool returns to the model from
+ * the executed action's result plus the display messages captured while it ran.
+ *
+ * Actions carry their substantive, model-facing output in `historyText` - e.g.
+ * webFetch / webSearch return a brief "Fetched N chars" line as displayContent
+ * but the actual page text as historyText. The reasoning loop captures only
+ * display content, so without preferring historyText the model sees the summary
+ * and never the data it asked for. Falls back to the serialized display messages
+ * for actions that set no history text, and surfaces the error text for a failed
+ * action so the caller can mark the tool result as an error.
+ */
+export function buildReasoningActionResult(
+    actionResult: ActionResult | undefined,
+    capturedDisplay: unknown[],
+): { text: string; isError: boolean } {
+    if (actionResult && "error" in actionResult && actionResult.error) {
+        return { text: `Error: ${actionResult.error}`, isError: true };
+    }
+    const historyText =
+        actionResult && "historyText" in actionResult
+            ? actionResult.historyText
+            : undefined;
+    if (typeof historyText === "string" && historyText.trim().length > 0) {
+        return { text: historyText, isError: false };
+    }
+    return { text: JSON.stringify(capturedDisplay), isError: false };
 }
 
 /**
@@ -198,7 +424,10 @@ export async function processReasoningSession(
                     });
                     config.onThinking?.(event.text);
                     display.appendStep(
-                        formatThinkingDisplay(event.text),
+                        formatThinkingDisplay(
+                            event.text,
+                            estimateReasoningTokens(event.text),
+                        ),
                         "html",
                     );
                     break;

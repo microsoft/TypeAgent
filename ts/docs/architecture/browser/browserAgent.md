@@ -66,14 +66,29 @@ New tab opens at nytimes.com
 
 ### Key concepts
 
-| Term               | Meaning                                                                                                                                                          |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Browser agent**  | The Node.js `AppAgent` implementation that handles browser-related actions. Runs inside the dispatcher process.                                                  |
-| **Extension**      | A Chrome MV3 extension with a service worker, content scripts, and side panel UI. Connects to the agent via WebSocket.                                           |
-| **Electron host**  | The TypeAgent shell's main process, which can embed browser tabs as `WebContentsView` instances and control them directly.                                       |
-| **BrowserControl** | The shared TypeScript interface (`browserControl.mts`) that both the extension and Electron host implement. All browser automation flows through this interface. |
-| **WebFlow**        | A recorded, parameterized browser automation script that can be replayed with different inputs.                                                                  |
-| **WebAgent**       | A site-specific agent (crossword, Instacart, commerce) that runs inside the browser page and registers with the dispatcher at runtime.                           |
+| Term               | Meaning                                                                                                                                                         |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Browser agent**  | The Node.js `AppAgent` implementation that handles browser-related actions. Runs inside the dispatcher process.                                                 |
+| **Extension**      | A Chrome MV3 extension with a service worker, content scripts, and side panel UI. Connects to the agent via WebSocket.                                          |
+| **Electron host**  | The TypeAgent shell's main process, which can embed browser tabs as `WebContentsView` instances and control them directly.                                      |
+| **BrowserControl** | The shared TypeScript interface (`browserControl.ts`) that both the extension and Electron host implement. All browser automation flows through this interface. |
+| **WebFlow**        | A recorded, parameterized browser automation script that can be replayed with different inputs.                                                                 |
+| **WebAgent**       | A site-specific agent (crossword, Instacart, commerce) that runs inside the browser page and registers with the dispatcher at runtime.                          |
+
+---
+
+## Package layout
+
+The browser code is split across three packages so lightweight consumers
+(the Electron shell, the utility agent) can depend on the RPC types and
+client without pulling in the heavy agent closure (embeddings, puppeteer,
+the extension build toolchain):
+
+| Package                          | Location                        | Contents                                                                                                                                                                                 |
+| -------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@typeagent/browser-control-rpc` | `agents/browserControlRpc/src/` | Shared browser types (`BrowserControl`, `serviceTypes`), the content-script RPC client, the cross-context HTML reducer, and PDF types. Light: no agent deps.                             |
+| `@typeagent/browser-extension`   | `agents/browserExtension/src/`  | The Chrome (`src/extension/`) + Electron (`src/electron/`) extension source, build scripts, and packaging.                                                                               |
+| `browser-typeagent`              | `agents/browser/src/`           | The core `AppAgent`: action handlers, knowledge/indexing, search, WebFlows, puppeteer, and the PDF viewer (`src/{agent,puppeteer,views}/`). Depends on `@typeagent/browser-control-rpc`. |
 
 ---
 
@@ -404,7 +419,7 @@ RPC response flows back through the chain
 ## BrowserControl interface
 
 Both the extension and Electron host implement `BrowserControl`
-(`browserControl.mts`). This is the contract that makes the agent
+(`browserControl.ts` in `@typeagent/browser-control-rpc`). This is the contract that makes the agent
 backend-agnostic.
 
 ### BrowserControlInvokeFunctions (awaited calls)
@@ -706,14 +721,14 @@ or via the `StartGoalDrivenTask` action in the `browser.webFlows` schema.
 | `browserActionSchema.mts`                      | `agents/browser`           | `BrowserActions` union type (20+ action types)          |
 | `browserSchema.agr`                            | `agents/browser`           | Grammar rules for core browser actions                  |
 | `manifest.json`                                | `agents/browser`           | Agent manifest with sub-schemas                         |
-| `browserControl.mts`                           | `agents/browser/common`    | `BrowserControl` interface definition                   |
-| `serviceTypes.mts`                             | `agents/browser/common`    | RPC function type definitions (3 function groups)       |
+| `browserControl.ts`                            | `agents/browserControlRpc` | `BrowserControl` interface definition                   |
+| `serviceTypes.ts`                              | `agents/browserControlRpc` | RPC function type definitions (3 function groups)       |
 | `agentWebSocketServer.mts`                     | `agents/browser`           | WebSocket server, client management                     |
 | `externalBrowserControlClient.mts`             | `agents/browser`           | RPC proxy wrapping extension's BrowserControl           |
-| `externalBrowserControlServer.ts`              | `agents/browser/extension` | Extension-side RPC server implementing BrowserControl   |
-| `serviceWorker/index.ts`                       | `agents/browser/extension` | Service worker entry, event listeners, initialization   |
-| `serviceWorker/websocket.ts`                   | `agents/browser/extension` | WebSocket connection, channel setup, keep-alive         |
-| `contentScript/index.ts`                       | `agents/browser/extension` | Content script entry, SPA detection, PDF interception   |
+| `externalBrowserControlServer.ts`              | `agents/browserExtension`  | Extension-side RPC server implementing BrowserControl   |
+| `serviceWorker/index.ts`                       | `agents/browserExtension`  | Service worker entry, event listeners, initialization   |
+| `serviceWorker/websocket.ts`                   | `agents/browserExtension`  | WebSocket connection, channel setup, keep-alive         |
+| `contentScript/index.ts`                       | `agents/browserExtension`  | Content script entry, SPA detection, PDF interception   |
 | `browserViewManager.ts`                        | `shell`                    | Electron tab management, CDP setup                      |
 | `browserIpc.ts`                                | `shell`                    | Electron WebSocket bridge to agent                      |
 | `inlineBrowserControl.ts`                      | `shell`                    | Electron BrowserControl implementation                  |
@@ -729,6 +744,11 @@ or via the `StartGoalDrivenTask` action in the `browser.webFlows` schema.
 
 The browser agent contains several subsystems. End-to-end scenario traces
 for each are documented in `browserScenarios.md`:
+
+> **Package ownership of the path prefixes below:** `agent/`, `puppeteer/`,
+> and `views/` live in the core agent package **`browser-typeagent`**
+> (`agents/browser/src/`); `extension/` and `electron/` live in
+> **`@typeagent/browser-extension`** (`agents/browserExtension/src/`).
 
 | Subsystem                       | Source location                                         | Scenario                           |
 | ------------------------------- | ------------------------------------------------------- | ---------------------------------- |

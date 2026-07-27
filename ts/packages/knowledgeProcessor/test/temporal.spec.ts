@@ -3,7 +3,7 @@
 
 import os from "node:os";
 import path from "path";
-import { cleanDir } from "typeagent";
+import { cleanDir } from "@typeagent/agent-runtime";
 import { createTemporalLog } from "../src/temporal.js";
 
 function testRootPath(name: string) {

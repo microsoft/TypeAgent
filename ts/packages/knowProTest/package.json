@@ -29,12 +29,12 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
-    "conversation-memory": "workspace:*",
+    "@typeagent/conversation-memory": "workspace:*",
+    "@typeagent/knowledge-processor": "workspace:*",
+    "@typeagent/knowpro": "workspace:*",
     "interactive-app": "workspace:*",
-    "knowledge-processor": "workspace:*",
-    "knowpro": "workspace:*",
-    "typeagent": "workspace:*",
     "typechat": "0.1.1"
   },
   "devDependencies": {

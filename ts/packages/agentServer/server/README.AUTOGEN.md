@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=dcdaaf81ac5b3038b25930f38dfdf7062ab6282ae8873115aa860e5563ec1988 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6aa3b5cd7693ebc569455f1397c9fcacbf3525b6576cecb29fb988eaecf2b190 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-server — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `agent-server` package is a TypeScript library that implements a long-running WebSocket server for hosting TypeAgent dispatchers. It acts as a central hub for managing client connections, orchestrating conversations, and facilitating communication between clients and agents. The server supports multiple clients and conversations simultaneously, with features like conversation persistence, idle timeouts, and ephemeral conversation cleanup.
+The `agent-server` package is a TypeScript library that implements a long-running WebSocket server for hosting TypeAgent dispatchers. It serves as the central hub for managing client connections, orchestrating conversations, and facilitating communication between clients and agents. The server supports multiple clients and conversations simultaneously, with features like conversation persistence, idle timeouts, and ephemeral conversation cleanup.
 
 ## What it does
 
@@ -152,7 +152,7 @@ External: `@azure/identity`, `better-sqlite3`, `debug`, `dotenv`, `ws`
 
 ### Files of interest
 
-`./src/connectionHandler.ts`, `./src/banner.ts`, `./src/conversationManager.ts`, …and 13 more under `./src/`.
+`./src/connectionHandler.ts`, `./src/banner.ts`, `./src/conversationManager.ts`, …and 14 more under `./src/`.
 
 ### Environment variables
 
@@ -169,6 +169,6 @@ _8 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `d9ee555d43867e97462e8fa147f7ef73b8da05ec` on `2026-07-19T20:27:13.071Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
+_Auto-generated against commit `8f591da77983db53fd4a3e0ca12b58d80aaa3628` on `2026-07-22T20:55:48.144Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
