@@ -95,8 +95,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: "pnpm"
-          cache-dependency-path: ts/pnpm-lock.yaml
 
       - name: Heal conflicted generated files
         if: env.HAS_APP_CREDS == 'true'
