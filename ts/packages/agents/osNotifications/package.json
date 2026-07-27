@@ -2,7 +2,7 @@
   "name": "os-notifications-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "Forwards OS-level notifications (Windows Action Center, Linux freedesktop) into TypeAgent chat as ephemeral toasts/inline messages",
+  "description": "Forwards OS-level notifications (Windows Action Center, Linux freedesktop) into chat. Off by default; opt in via @config agent enable osNotifications.",
   "keywords": [
     "typeagent-agent"
   ],

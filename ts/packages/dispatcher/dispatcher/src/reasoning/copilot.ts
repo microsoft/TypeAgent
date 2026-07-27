@@ -60,6 +60,10 @@ import {
     presentReasoningForm,
     type ReasoningFormArgs,
 } from "./askUserForm.js";
+import {
+    findInstallableAgents,
+    formatInstallableAgents,
+} from "./installableAgents.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -998,6 +1002,27 @@ function getCopilotSessionConfig(
         },
     });
 
+    const findInstallableAgentTool = defineTool("find_installable_agent", {
+        description: [
+            "List agents that are NOT currently installed but can be installed on demand from the configured sources.",
+            "Call this when no active agent (from discover_actions) can fulfill the user's request, to check whether an installable agent could.",
+            "Returns each candidate's name, description, and exact `@package install` command.",
+            "If one clearly matches the request, tell the user it exists and give them the install command - do NOT install it yourself.",
+        ].join("\n"),
+        parameters: {
+            type: "object",
+            properties: {},
+            required: [],
+        },
+        handler: async () => {
+            const agents = await findInstallableAgents(systemContext);
+            return {
+                textResultForLlm: formatInstallableAgents(agents),
+                resultType: "success" as const,
+            };
+        },
+    });
+
     const askUserTool = defineTool("ask_user", {
         description: [
             "Ask the user ONE multiple-choice question and block until they answer.",
@@ -1246,6 +1271,7 @@ function getCopilotSessionConfig(
             readConversationTool,
             getUserContextTool,
             ...subagentTools,
+            findInstallableAgentTool,
             askUserTool,
             askUserFormTool,
         ],
@@ -1265,6 +1291,7 @@ function getCopilotSessionConfig(
                       "stop_subagent",
                   ]
                 : []),
+            "find_installable_agent",
             "ask_user",
             "ask_user_form",
             "github/fs/*",
@@ -1291,6 +1318,7 @@ function getCopilotSessionConfig(
                 "For TypeAgent-specific actions like music playback, calendar management, email:",
                 "- `discover_actions`: Find available TypeAgent actions by schema name",
                 "- `execute_action`: Execute TypeAgent actions conforming to discovered schemas",
+                "- `find_installable_agent`: List agents not installed yet that can be installed on demand. Call it when no active agent can fulfill the request; if a candidate matches, tell the user the exact `@package install` command (never install it yourself)",
                 "",
                 "## Conversation Memory Tools",
                 "- `search_memory`: Recall information from earlier in this or prior conversations",

@@ -215,6 +215,10 @@ export type CommandHandlerContext = {
     // teardown, which deregisters this host from each source's registry without
     // tearing down the shared provider instances.
     readonly appAgentConnections: AppAgentConnection[];
+    // The injected dynamic (installed) agent sources, retained after connect so
+    // read-only consumers (e.g. reasoning's install suggestions) can enumerate
+    // installable agents via each source's optional `listAvailableAgents`.
+    readonly appAgentSources: AppAgentSource[];
     session: Session;
 
     readonly persistDir: string | undefined;
@@ -1071,6 +1075,7 @@ export async function initializeCommandHandlerContext(
             appAgentProviderSetController:
                 undefined as unknown as AppAgentProviderSetControllerImpl,
             appAgentConnections: [],
+            appAgentSources: options?.appAgentSources ?? [],
             session,
             persistDir,
             instanceDir,
