@@ -632,6 +632,11 @@ stages:
                   for dir in "$(Pipeline.Workspace)"/optional-agents-$(platform)-$(arch)/*/; do
                     [ -d "$dir" ] || continue
                     name="$(basename "$dir")"
+                    if ! printf '%s' "$name" | grep -Eq '^[a-z0-9]+([._-][a-z0-9]+)*$'; then
+                      echo "ERROR: '$name' (from $dir) is not a valid universal-package name segment." >&2
+                      echo "Optional-agent bundle folders must be scope-stripped (e.g. 'code-agent') by packageOptionalAgents.mjs." >&2
+                      exit 1
+                    fi
                     echo "Publishing ${name}.${RID} v$(packageVersion)"
                     az artifacts universal publish \
                       --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project \
