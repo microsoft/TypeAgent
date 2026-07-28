@@ -76,16 +76,28 @@ export interface GeneratedAgentTranslatorOptions {
 }
 
 /**
- * The dispatcher's display callbacks receive either a bare string or a
- * `{ content }` envelope whose `content` is a string or string[]. Extract the
- * visible text from either shape.
+ * The dispatcher's clientIO display callbacks (`setDisplay`/`appendDisplay`) do
+ * NOT receive a bare display object — they receive an `IAgentMessage` envelope
+ * `{ message, requestId, source, sourceIcon }` where `message` is either a bare
+ * string (e.g. the `@dispatcher translate` result block) or a
+ * `{ type, content, kind }` display object (status/warning/error). Older callers
+ * also pass a bare string or a `{ content }` object directly. Unwrap `.message`
+ * first, then fall back to `.content` (string or string[]), so we capture the
+ * visible text from any of these shapes.
+ * @internal Exported for unit tests (see generatedAgentTranslator.spec.ts).
  */
-function extractDisplayText(msg: unknown): string {
+export function extractDisplayText(msg: unknown): string {
     if (typeof msg === "string") {
         return msg;
     }
     if (msg === null || typeof msg !== "object") {
         return "";
+    }
+    // Unwrap the IAgentMessage envelope: the actual display payload is under
+    // `.message` (itself a string or a `{ type, content, kind }` object).
+    const message = (msg as { message?: unknown }).message;
+    if (message !== undefined && message !== msg) {
+        return extractDisplayText(message);
     }
     const content = (msg as { content?: unknown }).content;
     if (typeof content === "string") {
@@ -105,8 +117,10 @@ function extractDisplayText(msg: unknown): string {
  * element is an `ExecutableAction` (`{ action: { schemaName, actionName } }`);
  * we tolerate a bare `{ schemaName, actionName }` shape too, in case the
  * display format changes. Returns an empty array when no JSON block is present.
+ *
+ * @internal Exported for unit tests (see generatedAgentTranslator.spec.ts).
  */
-function parseTranslatedActions(
+export function parseTranslatedActions(
     displayText: string,
 ): GeneratedAgentResolvedAction[] {
     const marker = "JSON:\n";
