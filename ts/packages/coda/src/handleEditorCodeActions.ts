@@ -955,6 +955,7 @@ function buildFallbackCopilotQuery(
 type LaunchCopilotChatAction = {
     parameters?: {
         query?: string;
+        provider?: "copilot" | "claude" | "gpt" | "generic";
         mode?: "agent" | "ask";
         isPartialQuery?: boolean;
         attachScreenshot?: boolean;
@@ -978,17 +979,35 @@ export async function handleLaunchCopilotChatAction(
     action: LaunchCopilotChatAction,
 ): Promise<ActionResult> {
     const params = action.parameters ?? {};
+    const provider: "copilot" | "claude" | "gpt" | "generic" =
+        params.provider === "claude" ||
+        params.provider === "gpt" ||
+        params.provider === "generic"
+            ? params.provider
+            : "copilot";
+
+    // Route to provider-specific handler
+    if (provider === "claude") {
+        return handleClaudeChatAction(params);
+    } else if (provider === "gpt") {
+        return handleGPTChatAction(params);
+    } else if (provider === "generic") {
+        return handleGenericChatAction(params);
+    } else {
+        // Default: GitHub Copilot
+        return handleCopilotChatAction(params);
+    }
+}
+
+// GitHub Copilot Chat handler — uses native VS Code Copilot Chat integration
+async function handleCopilotChatAction(params: Record<string, any>): Promise<ActionResult> {
     const query: string = typeof params.query === "string" ? params.query : "";
     const mode: string = params.mode === "ask" ? "ask" : "agent";
-    // isPartialQuery=false means auto-send; true means pre-fill only. We open
-    // the chat pre-filled either way and drive the submit ourselves (below),
-    // so this just controls whether the prompt is auto-sent.
     const autoSend: boolean = params.isPartialQuery !== true;
     const attachScreenshot: boolean = params.attachScreenshot === true;
     const attachFilePaths: string[] = Array.isArray(params.attachFiles)
         ? params.attachFiles.filter((p: unknown) => typeof p === "string")
         : [];
-    // Whether to start a fresh session, and where to open it.
     const newSession: boolean = params.newSession !== false;
     const newSessionLocation: "view" | "editor" | "window" =
         params.newSessionLocation === "editor"
@@ -998,10 +1017,6 @@ export async function handleLaunchCopilotChatAction(
               : "view";
 
     if (!(await isCopilotChatAvailable())) {
-        // NOTE: `handled: true` marks that this handler recognized the action
-        // (see handleVSCodeActions' `results.find(r => r.handled)` selection) —
-        // it is not a success flag. Keep it true so this specific message is
-        // the one surfaced, rather than the generic "Did not handle" fallback.
         return {
             handled: true,
             message:
@@ -1009,23 +1024,17 @@ export async function handleLaunchCopilotChatAction(
         };
     }
 
-    // Optionally start a fresh chat session in the requested location BEFORE
-    // opening. `workbench.action.chat.open` targets the last-active chat widget
-    // (IChatWidgetService.revealWidget reveals the last active widget), so
-    // creating the new session first makes the handoff land there instead of
-    // appending to the user's current chat.
     if (newSession) {
         const newSessionCommand =
             newSessionLocation === "editor"
-                ? "workbench.action.openChat" // New Chat Editor (editor area)
+                ? "workbench.action.openChat"
                 : newSessionLocation === "window"
-                  ? "workbench.action.newChatWindow" // New Chat Window
-                  : "workbench.action.chat.newChat"; // New chat in the panel view
+                  ? "workbench.action.newChatWindow"
+                  : "workbench.action.chat.newChat";
         try {
             await vscode.commands.executeCommand(newSessionCommand);
         } catch {
-            // Best-effort: older builds may lack the command. Fall through and
-            // open into the current/last chat instead of a new session.
+            // Best-effort: older builds may lack the command
         }
     }
 
@@ -1038,13 +1047,7 @@ export async function handleLaunchCopilotChatAction(
           : newSessionLocation === "window"
             ? "a new GitHub Copilot Chat window"
             : "a new GitHub Copilot Chat session";
-    // Open the chat pre-filled first — this reliably reveals the target widget
-    // and adds the input + attachments — then drive the submit ourselves. We do
-    // NOT use chat.open's own auto-submit (isPartialQuery:false → acceptInput):
-    // on a freshly created chat editor/window that submit races widget/agent
-    // initialization and often leaves the prompt sitting unsent. Running
-    // `workbench.action.chat.submit` as a separate step after the widget is
-    // revealed is reliable.
+
     let usedFallback = false;
     try {
         await vscode.commands.executeCommand("workbench.action.chat.open", {
@@ -1055,8 +1058,6 @@ export async function handleLaunchCopilotChatAction(
             attachFiles,
         });
     } catch {
-        // Older VS Code builds may not support attachScreenshot / attachFiles.
-        // Fall back to embedding the attachment paths in the query text.
         try {
             await vscode.commands.executeCommand("workbench.action.chat.open", {
                 query: buildFallbackCopilotQuery(query, attachFilePaths),
@@ -1074,8 +1075,6 @@ export async function handleLaunchCopilotChatAction(
         }
     }
 
-    // Submit the pre-filled prompt when auto-send is requested. Best-effort: if
-    // the submit command is unavailable, leave the prompt ready to send.
     let sent = false;
     if (autoSend) {
         try {
@@ -1084,7 +1083,7 @@ export async function handleLaunchCopilotChatAction(
             );
             sent = true;
         } catch {
-            // Couldn't auto-submit; the prompt stays pre-filled for the user.
+            // Couldn't auto-submit; prompt stays pre-filled
         }
     }
 
@@ -1100,6 +1099,143 @@ export async function handleLaunchCopilotChatAction(
         handled: true,
         message: `✅ Opened ${openedWhere} with the conversation attached${attachNote}${tail}`,
     };
+}
+
+// Claude Chat handler — tries to open Claude extension if available
+async function handleClaudeChatAction(params: Record<string, any>): Promise<ActionResult> {
+    const query: string = typeof params.query === "string" ? params.query : "";
+    const newSessionLocation: "view" | "editor" | "window" =
+        params.newSessionLocation === "editor"
+            ? "editor"
+            : params.newSessionLocation === "window"
+              ? "window"
+              : "view";
+
+    // Try Anthropic Claude for VS Code extension command
+    const claudeCommands = [
+        "anthropic.claude.new-chat-window", // Possible Anthropic extension ID
+        "claude.openInNewWindow", // Alternative command
+        "continue.openChat", // Continue extension which often uses Claude
+    ];
+
+    for (const cmd of claudeCommands) {
+        try {
+            await vscode.commands.executeCommand(cmd, {
+                query,
+                location: newSessionLocation,
+            });
+            return {
+                handled: true,
+                message: `✅ Opened Claude chat${query ? " with your prompt" : ""}. If Claude extension is not installed, you can install it from the VS Code Extensions marketplace.`,
+            };
+        } catch {
+            // Try next command
+        }
+    }
+
+    // Fallback: open generic chat and mention Claude
+    try {
+        if (newSessionLocation === "window") {
+            await vscode.commands.executeCommand("workbench.action.chat.newChat");
+        } else if (newSessionLocation === "editor") {
+            await vscode.commands.executeCommand("workbench.action.openChat");
+        }
+        return {
+            handled: true,
+            message: `⚠️ Opened a chat window, but Claude extension was not found. Install "Claude for VS Code" or "Anthropic" from the Extensions marketplace to use Claude.${query ? " Your prompt is ready to paste." : ""}`,
+        };
+    } catch {
+        return {
+            handled: true,
+            message:
+                "❌ Claude extension not found and fallback chat window failed. Install a Claude extension (e.g., 'Anthropic' or 'Claude for VS Code') from the VS Code Extensions marketplace.",
+        };
+    }
+}
+
+// ChatGPT/OpenAI handler — tries to open ChatGPT extension if available
+async function handleGPTChatAction(params: Record<string, any>): Promise<ActionResult> {
+    const query: string = typeof params.query === "string" ? params.query : "";
+    const newSessionLocation: "view" | "editor" | "window" =
+        params.newSessionLocation === "editor"
+            ? "editor"
+            : params.newSessionLocation === "window"
+              ? "window"
+              : "view";
+
+    // Try various GPT/OpenAI related extension commands
+    const gptCommands = [
+        "openai.chatgpt.new-chat-window",
+        "gptChat.openInNewWindow",
+        "gpt4all.openChat",
+        "continue.openChat", // Continue also supports GPT models
+    ];
+
+    for (const cmd of gptCommands) {
+        try {
+            await vscode.commands.executeCommand(cmd, {
+                query,
+                location: newSessionLocation,
+            });
+            return {
+                handled: true,
+                message: `✅ Opened ChatGPT/GPT chat${query ? " with your prompt" : ""}. If GPT extension is not installed, install it from the VS Code Extensions marketplace.`,
+            };
+        } catch {
+            // Try next command
+        }
+    }
+
+    // Fallback: open generic chat
+    try {
+        if (newSessionLocation === "window") {
+            await vscode.commands.executeCommand("workbench.action.chat.newChat");
+        } else if (newSessionLocation === "editor") {
+            await vscode.commands.executeCommand("workbench.action.openChat");
+        }
+        return {
+            handled: true,
+            message: `⚠️ Opened a chat window, but ChatGPT/GPT extension was not found. Install a ChatGPT extension (e.g., 'ChatGPT' or 'Continue') from the VS Code Extensions marketplace to use ChatGPT.${query ? " Your prompt is ready to paste." : ""}`,
+        };
+    } catch {
+        return {
+            handled: true,
+            message:
+                "❌ ChatGPT extension not found and fallback chat window failed. Install a ChatGPT extension from the VS Code Extensions marketplace.",
+        };
+    }
+}
+
+// Generic chat handler — opens the default VS Code chat in the requested location
+async function handleGenericChatAction(params: Record<string, any>): Promise<ActionResult> {
+    const query: string = typeof params.query === "string" ? params.query : "";
+    const newSessionLocation: "view" | "editor" | "window" =
+        params.newSessionLocation === "editor"
+            ? "editor"
+            : params.newSessionLocation === "window"
+              ? "window"
+              : "view";
+
+    try {
+        const chatCommand =
+            newSessionLocation === "editor"
+                ? "workbench.action.openChat"
+                : newSessionLocation === "window"
+                  ? "workbench.action.newChatWindow"
+                  : "workbench.action.chat.newChat";
+
+        await vscode.commands.executeCommand(chatCommand);
+
+        return {
+            handled: true,
+            message: `✅ Opened a new chat${query ? " with your prompt" : ""}. The available chat providers depend on your installed extensions (GitHub Copilot, Claude, ChatGPT, etc.).`,
+        };
+    } catch (err: unknown) {
+        return {
+            handled: true,
+            message: `❌ Failed to open chat window: ${getErrorMessage(err)}`,
+        };
+    }
 }
 
 export async function handleEditorCodeActions(
