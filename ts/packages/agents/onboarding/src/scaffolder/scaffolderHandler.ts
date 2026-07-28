@@ -842,9 +842,10 @@ function buildSchemaGrammarHandler(name: string, pascalName: string): string {
 }
 
 // Map of TypeAgent workspace packages to their location relative to the
-// monorepo root. Used to emit `file:` deps when scaffolding outside the
-// monorepo (e.g. into a sibling SecretAgents repo) — `workspace:*` only
-// resolves inside the originating pnpm workspace.
+// monorepo root. Used to emit on-disk path deps (`link:` inside the monorepo,
+// `file:` outside) instead of `workspace:*` — a scaffolded agent is built in
+// isolation (`pnpm install --ignore-workspace`, see agentBuild.ts), so there is
+// no workspace in scope for pnpm to resolve a `workspace:*` alias against.
 const TYPEAGENT_WORKSPACE_PACKAGES: Record<string, string> = {
     "@typeagent/agent-sdk": "packages/agentSdk",
     aiclient: "packages/aiclient",
@@ -860,21 +861,26 @@ function getWorkspaceDepValue(
     depName: string,
     targetDir: string | undefined,
 ): string {
-    // If we're scaffolding inside the main TypeAgent workspace, plain
-    // `workspace:*` works. Outside it (e.g. SecretAgents), pnpm cannot
-    // resolve the workspace alias — emit a `file:` path relative to
-    // `targetDir` so install picks up the source on disk.
+    const pkgPath = TYPEAGENT_WORKSPACE_PACKAGES[depName];
+    if (!pkgPath) return "workspace:*"; // unknown — best-effort fallback
+
+    const absolute = path.join(TYPEAGENT_REPO_ROOT, pkgPath);
+    const fromDir = path.resolve(targetDir ?? path.join(AGENTS_DIR, "_"));
+    let rel = path.relative(fromDir, absolute).replace(/\\/g, "/");
+    if (!rel.startsWith(".")) rel = "./" + rel;
+
+    // A freshly scaffolded agent is built in ISOLATION with
+    // `pnpm install --ignore-workspace` (agentBuild.ts) so it never re-resolves
+    // or mutates the workspace lockfile. With no workspace in scope pnpm cannot
+    // resolve `workspace:*`, so we depend on the source package by path even
+    // inside the monorepo. Inside the repo use `link:` — a symlink to the
+    // prebuilt package that reuses its already-resolved dependency graph (a
+    // `file:` copy would instead re-resolve the package's own `workspace:*`
+    // deps, which fails outside a workspace). Outside the repo keep `file:`.
     const insideMonorepo =
         targetDir === undefined ||
         path.resolve(targetDir).startsWith(TYPEAGENT_REPO_ROOT + path.sep);
-    if (insideMonorepo) return "workspace:*";
-
-    const pkgPath = TYPEAGENT_WORKSPACE_PACKAGES[depName];
-    if (!pkgPath) return "workspace:*"; // unknown — best-effort fallback
-    const absolute = path.join(TYPEAGENT_REPO_ROOT, pkgPath);
-    let rel = path.relative(targetDir, absolute).replace(/\\/g, "/");
-    if (!rel.startsWith(".")) rel = "./" + rel;
-    return `file:${rel}`;
+    return insideMonorepo ? `link:${rel}` : `file:${rel}`;
 }
 
 function buildPackageJson(
@@ -942,6 +948,10 @@ function buildPackageJson(
             "@typeagent/action-grammar-compiler": depFor(
                 "@typeagent/action-grammar-compiler",
             ),
+            // The agent is built in isolation (pnpm install --ignore-workspace),
+            // so @types/node is not hoisted from the workspace. tsconfig.base.json
+            // sets `types: ["node"]`, so tsc needs it declared locally.
+            "@types/node": "^22.0.0",
             concurrently: "^9.1.2",
             rimraf: "^6.0.1",
             typescript: "~5.4.5",
