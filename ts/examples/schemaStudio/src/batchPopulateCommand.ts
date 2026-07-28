@@ -28,7 +28,7 @@ import {
     RequestAction,
     createExecutableAction,
     getFullActionName,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import { GenerateSchemaOptions } from "@typeagent/action-schema";
 
 // ANSI color codes for terminal output
@@ -473,7 +473,8 @@ export function createBatchPopulateCommand(
                     // Step 0: Check the cache before translating.
                     // If we already have a construction that matches,
                     // skip the expensive LLM translation + explanation.
-                    let preMatch: import("agent-cache").MatchResult[] = [];
+                    let preMatch: import("@typeagent/agent-cache").MatchResult[] =
+                        [];
                     try {
                         preMatch = cache.match(prompt);
                     } catch {
@@ -562,7 +563,7 @@ export function createBatchPopulateCommand(
 
                         // Step 3: Check if the prompt is now
                         // generalizable via the cache
-                        let matchResult: import("agent-cache").MatchResult[] =
+                        let matchResult: import("@typeagent/agent-cache").MatchResult[] =
                             [];
                         try {
                             matchResult = cache.match(prompt);

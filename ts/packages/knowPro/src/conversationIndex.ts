@@ -20,7 +20,7 @@ import {
     Topic,
 } from "./interfaces.js";
 import { IndexingEventHandlers } from "./interfaces.js";
-import { conversation as kpLib } from "knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { openai } from "@typeagent/aiclient";
 import { extractKnowledgeFromTextBatch } from "./knowledge.js";
 import { facetValueToString } from "./knowledgeLib.js";

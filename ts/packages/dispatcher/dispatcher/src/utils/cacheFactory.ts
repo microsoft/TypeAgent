@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AgentCacheFactory } from "agent-cache";
+import { AgentCacheFactory } from "@typeagent/agent-cache";
 
 const cacheFactory = new AgentCacheFactory();
 

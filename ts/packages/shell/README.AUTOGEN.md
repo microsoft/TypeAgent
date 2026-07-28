@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7959ae9242254859bcf3c0b91fb2e38446304bf0918c5c71012cfb816f27c1a8 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=2938fd8600e6c3e3f9e60156679305ccdbd0ffbdf8c782abb1ace6f9518b1f98 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-shell — AI-generated documentation
@@ -12,27 +12,27 @@
 
 ## Overview
 
-The `agent-shell` package is a TypeScript library that serves as the graphical user interface (GUI) entry point for the TypeAgent ecosystem. Built on Electron, it provides a personal agent interface for handling user requests, performing actions, answering questions, and managing conversations. The shell integrates with other TypeAgent components, such as the dispatcher and agent server, to deliver an interactive and extensible experience. It supports both text and voice input, multi-conversation management, and local or remote operation modes.
+The `agent-shell` package is a TypeScript library that provides the graphical user interface (GUI) for the TypeAgent ecosystem. Built on Electron, it serves as a personal agent interface, enabling users to interact with an extensible set of agents through natural language, perform actions, and manage conversations. The shell supports both local and remote operation modes and integrates with other TypeAgent components, such as the dispatcher and agent server.
 
 ## What it does
 
-The `agent-shell` package offers a range of features to enable interactive and conversational agent experiences:
+The `agent-shell` package offers the following key features:
 
 ### Conversation Management
 
-- **Multi-Conversation Support**: Users can create, switch, rename, and delete conversations. Conversations persist across sessions, and history is replayed on reconnect.
-- **Default Conversation**: Automatically joins a default conversation named `"Shell"` when connected to the agent server. This conversation is persistent and serves as the starting point for interactions.
-- **Commands for Conversation Management**: Users can manage conversations using commands like `/conversation list`, `/conversation new [name]`, `/conversation switch <id|name>`, and more. These commands can also be executed via natural language inputs.
+- **Multi-Conversation Support**: Users can create, switch, rename, and delete conversations. Conversations persist across sessions, with history replayed on reconnect.
+- **Default Conversation**: Automatically joins a persistent default conversation named `"Shell"` when connected to the agent server.
+- **Command-Based Management**: Users can manage conversations using commands like `/conversation list`, `/conversation new [name]`, `/conversation switch <id|name>`, and more. These commands can also be executed via natural language inputs.
 - **Request Queue Management**: Visual indicators for queued and running requests allow users to manage and cancel requests directly from the chat interface.
 
 ### Speech Input
 
-- **Azure Speech Services**: Enables speech-to-text functionality using Azure's cloud-based service.
-- **Local Whisper Service**: Provides an alternative for speech-to-text processing using a local service.
+- **Azure Speech Services**: Provides cloud-based speech-to-text functionality.
+- **Local Whisper Service**: Offers an alternative for speech-to-text processing using a local service.
 
 ### Multi-Client Notifications
 
-- The shell notifies users when other clients join or leave the same conversation, facilitating collaborative interactions.
+- Notifies users when other clients join or leave the same conversation, enabling collaborative interactions.
 
 ### Local Mode
 
@@ -135,27 +135,27 @@ By following these steps, you can effectively contribute to the development and 
 Workspace:
 
 - [@typeagent/agent-rpc](../../packages/agentRpc/README.md)
+- [@typeagent/agent-runtime](../../packages/typeagent/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
 - [@typeagent/aiclient](../../packages/aiclient/README.md)
+- [@typeagent/browser](../../packages/agents/browser/README.md)
 - [@typeagent/browser-control-rpc](../../packages/agents/browserControlRpc/README.md)
 - [@typeagent/browser-extension](../../packages/agents/browserExtension/README.md)
+- [@typeagent/chat-ui](../../packages/chat-ui/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/completion-ui](../../packages/completionUI/README.md)
 - [@typeagent/config](../../packages/config/README.md)
 - [@typeagent/dispatcher-rpc](../../packages/dispatcher/rpc/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
+- [@typeagent/typechat-utils](../../packages/utils/typechatUtils/README.md)
+- [@typeagent/websocket-channel-server](../../packages/utils/webSocketChannelServer/README.md)
 - [@typeagent/websocket-utils](../../packages/utils/webSocketUtils/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [agent-server](../../packages/agentServer/server/README.md)
-- [browser-typeagent](../../packages/agents/browser/README.md)
-- [chat-ui](../../packages/chat-ui/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 - [dispatcher-node-providers](../../packages/dispatcher/nodeProviders/README.md)
-- [typeagent](../../packages/typeagent/README.md)
-- [typechat-utils](../../packages/utils/typechatUtils/README.md)
-- [websocket-channel-server](../../packages/utils/webSocketChannelServer/README.md)
 
 External: `@azure/identity`, `@azure/msal-node-extensions`, `@electron-toolkit/preload`, `ansi_up`, `debug`, `dompurify`, `dotenv`, `electron-updater`, `jose`, `js-yaml`, `markdown-it`, `microsoft-cognitiveservices-speech-sdk`, `typechat`, `ws`
 
@@ -176,6 +176,6 @@ _6 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `8ec451103180b2a383dfb4e1c7f80c1ad50e9d35` on `2026-07-22T00:05:15.961Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `fa4bb9b44db12e2d15b83e03e59f9c7147ed2b50` on `2026-07-27T19:08:36.121Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

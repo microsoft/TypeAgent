@@ -9,7 +9,7 @@
 // extension side.
 
 import DOMPurify from "dompurify";
-import chatPanelStyles from "chat-ui/styles";
+import chatPanelStyles from "@typeagent/chat-ui/styles";
 import vscodeThemeStyles from "./vscode-theme.css";
 import { injectStyle } from "./injectStyle.js";
 

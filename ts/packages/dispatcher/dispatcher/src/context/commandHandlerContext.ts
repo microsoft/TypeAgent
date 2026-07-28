@@ -18,9 +18,9 @@ import {
     PromptLogger,
     createPromptLogger,
     PromptLoggerOptions,
-} from "telemetry";
+} from "@typeagent/telemetry";
 import { DevTrace } from "./devTrace.js";
-import { AgentCache } from "agent-cache";
+import { AgentCache } from "@typeagent/agent-cache";
 import { randomUUID } from "crypto";
 import {
     DispatcherConfig,
@@ -56,9 +56,13 @@ import {
     AppAgentEvent,
     ActivityContext,
 } from "@typeagent/agent-sdk";
-import { Profiler } from "telemetry";
-import { conversation as Conversation } from "knowledge-processor";
-import { ConversationMemory } from "conversation-memory";
+import { Profiler } from "@typeagent/telemetry";
+import { conversation as Conversation } from "@typeagent/knowledge-processor";
+import { ConversationMemory } from "@typeagent/conversation-memory";
+// Type-only import: the reasoning modules statically import this file, so a
+// runtime import here would create a cycle. subagentManager.ts is a leaf, and
+// `import type` is erased at compile time, so this stays cycle-free.
+import type { SubagentManager } from "../reasoning/subagentManager.js";
 import {
     AppAgentManager,
     AppAgentStateInitSettings,
@@ -123,7 +127,7 @@ import {
 } from "@typeagent/action-grammar";
 import fs from "node:fs";
 import { CosmosClient, PartitionKeyBuilder } from "@azure/cosmos";
-import { CosmosPartitionKeyBuilder } from "telemetry";
+import { CosmosPartitionKeyBuilder } from "@typeagent/telemetry";
 import { DefaultAzureCredential } from "@azure/identity";
 import { DisplayLog } from "../displayLog.js";
 import {
@@ -211,6 +215,10 @@ export type CommandHandlerContext = {
     // teardown, which deregisters this host from each source's registry without
     // tearing down the shared provider instances.
     readonly appAgentConnections: AppAgentConnection[];
+    // The injected dynamic (installed) agent sources, retained after connect so
+    // read-only consumers (e.g. reasoning's install suggestions) can enumerate
+    // installable agents via each source's optional `listAvailableAgents`.
+    readonly appAgentSources: AppAgentSource[];
     session: Session;
 
     readonly persistDir: string | undefined;
@@ -272,6 +280,10 @@ export type CommandHandlerContext = {
     noReasoning: boolean;
     isInsideReasoningLoop: boolean; // true while the MCP execute_action handler is dispatching a sub-action
     reasoningSourceIcon?: string | undefined; // engine-specific icon override while inside a reasoning loop
+    // Lazily created by the reasoning loop when execution.subagents is enabled;
+    // owns the spawned command-executor subagent processes for this session and
+    // is disposed on session close.
+    subagentManager?: SubagentManager | undefined;
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
     constructionProvider?: ConstructionProvider | undefined;
@@ -313,10 +325,13 @@ export type CommandHandlerContext = {
     // The registry path the loaded `collisionRegistry` was built from, so we
     // can detect config changes and reload.
     collisionRegistryPath: string;
-    // Drives the interactive `preference-clarify` card (candidate pick +
-    // "remember this" checkbox). The dispatcher AppAgent's handleChoice
-    // delegates back to this manager.
-    collisionChoiceManager: ChoiceManager;
+    // Shared per-context ChoiceManager for the built-in agents' interactive
+    // choice/form cards. The dispatcher AppAgent's handleChoice uses it for the
+    // collision `preference-clarify` card (candidate pick + "remember this"
+    // checkbox); the system AppAgent's handleChoice uses it for the `@demo`
+    // walkthrough. Callbacks are keyed by unique choiceId, so both agents can
+    // share one manager.
+    choiceManager: ChoiceManager;
     // One-shot resolution overrides as a set of chosen member ids
     // ("schema.action"). Set just before re-running the original request from
     // a clarify pick so the re-translation resolves deterministically to the
@@ -1060,6 +1075,7 @@ export async function initializeCommandHandlerContext(
             appAgentProviderSetController:
                 undefined as unknown as AppAgentProviderSetControllerImpl,
             appAgentConnections: [],
+            appAgentSources: options?.appAgentSources ?? [],
             session,
             persistDir,
             instanceDir,
@@ -1083,6 +1099,7 @@ export async function initializeCommandHandlerContext(
             noReasoning: false,
             isInsideReasoningLoop: false,
             reasoningSourceIcon: undefined,
+            subagentManager: undefined,
             pendingToggleTransientAgents: [],
             agentCache: await getAgentCache(
                 session,
@@ -1131,7 +1148,7 @@ export async function initializeCommandHandlerContext(
             ),
             collisionRegistryPath:
                 session.getConfig().collision.preference.registryPath,
-            collisionChoiceManager: new ChoiceManager(),
+            choiceManager: new ChoiceManager(),
             collisionOneShotPicks: new Set(),
             pendingTopicalRoute: undefined,
             conversationSignal: new RingBufferSignalSource(
@@ -1703,6 +1720,16 @@ export async function closeCommandHandlerContext(
 ) {
     // Stop accepting exclusive mutations in this closing session.
     context.appAgentProviderSetController.dispose();
+    // Tear down any reasoning subagents (spawned command-executor processes and
+    // their isolated conversations) before the rest of the session unwinds.
+    if (context.subagentManager) {
+        try {
+            await context.subagentManager.dispose();
+        } catch (e) {
+            debugError(`Failed to dispose subagent manager: ${e}`);
+        }
+        context.subagentManager = undefined;
+    }
     // Drain in-flight/queued entries before tearing down agents.
     try {
         await context.requestQueue.drainAndStop();

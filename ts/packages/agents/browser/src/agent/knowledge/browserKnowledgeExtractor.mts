@@ -9,10 +9,10 @@ import {
     BatchProgress,
     AIModelRequiredError,
     AIExtractionFailedError,
-} from "website-memory";
+} from "@typeagent/website-memory";
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../browserActions.mjs";
-import { conversation as kpLib } from "knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import { openai as ai } from "@typeagent/aiclient";
 import { ActionDetectionAdapter } from "./actionDetectionAdapter.mjs";
 import { ContentSummaryAdapter } from "../indexing/contentSummaryAdapter.mjs";

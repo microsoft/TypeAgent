@@ -6,6 +6,13 @@ import {
     ActionResultError,
     ActionResultSuccess,
     ActionResultSuccessNoDisplay,
+    SerializedError,
+} from "../action.js";
+import type {
+    QuestionFormField,
+    QuestionFormPickField,
+    QuestionFormPickAnswer,
+    QuestionFormResponse,
 } from "../action.js";
 import { ActionContext } from "../agentInterface.js";
 import { DisplayMessageKind, StructuredBlock } from "../display.js";
@@ -222,10 +229,178 @@ export function createPickRememberChoiceResult(
     };
 }
 
-export function createActionResultFromError(error: string): ActionResultError {
+// A multi-question "form" card: one or more questions (single-select,
+// multi-select, or yes/no, optionally with a free-text "Other" escape). The
+// callback receives the whole `QuestionFormResponse` (answers keyed by field
+// id). Like the other choice helpers, the callback's `actionContext` is the
+// LIVE context created when the user submits. `message` is the card heading;
+// each field carries its own prompt. Pass `opts.paged` to render the fields as
+// a Back/Next wizard (one question at a time) instead of all at once.
+export function createQuestionFormResult(
+    choiceManager: ChoiceManager,
+    message: string,
+    fields: QuestionFormField[],
+    onResponse: (
+        response: QuestionFormResponse,
+        actionContext: ActionContext<unknown>,
+    ) => Promise<ActionResult | undefined>,
+    opts?: { displayHtml?: string; paged?: boolean },
+): ActionResultSuccess {
+    const choiceId = choiceManager.registerChoice((response, actionContext) =>
+        onResponse(response as QuestionFormResponse, actionContext),
+    );
+    return {
+        entities: [],
+        displayContent: opts?.displayHtml
+            ? { type: "html", content: opts.displayHtml }
+            : message,
+        // `paged` is only set when requested - exactOptionalPropertyTypes
+        // forbids assigning `paged: undefined` on the pendingChoice.
+        pendingChoice: opts?.paged
+            ? { choiceId, type: "form", message, fields, paged: true }
+            : { choiceId, type: "form", message, fields },
+    };
+}
+
+// Convenience wrapper for the common single-select case: one radio group,
+// optionally with a free-text "Other" escape. Built on top of
+// createQuestionFormResult as a one-field form. The callback receives the
+// picked index (or -1 when the free-text option was used or the card was
+// dismissed) and the typed `text` when free text was entered.
+export function createSingleChoiceResult(
+    choiceManager: ChoiceManager,
+    message: string,
+    choices: string[],
+    onResponse: (
+        selected: number,
+        text: string | undefined,
+        actionContext: ActionContext<unknown>,
+    ) => Promise<ActionResult | undefined>,
+    opts?: {
+        defaultId?: number;
+        allowFreeText?: boolean;
+        freeTextPlaceholder?: string;
+        displayHtml?: string;
+    },
+): ActionResultSuccess {
+    const fieldId = "choice";
+    const field: QuestionFormPickField = {
+        id: fieldId,
+        kind: "pick",
+        // Empty prompt: the card heading (`message`) already labels the single
+        // question, so a per-field prompt would duplicate it.
+        prompt: "",
+        choices,
+    };
+    // exactOptionalPropertyTypes forbids setting an optional property to
+    // `undefined`, so only assign when the caller provided a value.
+    if (opts?.defaultId !== undefined) {
+        field.defaultId = opts.defaultId;
+    }
+    if (opts?.allowFreeText !== undefined) {
+        field.allowFreeText = opts.allowFreeText;
+    }
+    if (opts?.freeTextPlaceholder !== undefined) {
+        field.freeTextPlaceholder = opts.freeTextPlaceholder;
+    }
+    return createQuestionFormResult(
+        choiceManager,
+        message,
+        [field],
+        async (response, actionContext) => {
+            const answer = response.answers[fieldId] as
+                | QuestionFormPickAnswer
+                | undefined;
+            return onResponse(
+                answer?.selected ?? -1,
+                answer?.text,
+                actionContext,
+            );
+        },
+        opts?.displayHtml !== undefined
+            ? { displayHtml: opts.displayHtml }
+            : undefined,
+    );
+}
+
+export function createActionResultFromError(
+    error: string,
+    errorDetails?: SerializedError,
+): ActionResultError {
     return {
         error,
+        ...(errorDetails !== undefined ? { errorDetails } : {}),
     };
+}
+
+// Max depth when walking an error's `cause` chain / aggregated errors,
+// guarding against cycles and pathologically deep chains.
+const MAX_ERROR_DEPTH = 5;
+
+/**
+ * Convert a thrown value into a JSON-serializable {@link SerializedError}.
+ * `Error` instances lose their `message`/`stack` to `JSON.stringify` (those
+ * props are non-enumerable) and their `cause` chain isn't walked, so failed
+ * actions capture this snapshot instead. Recursively follows `cause` and
+ * `AggregateError.errors`, and collects any extra own-enumerable properties
+ * (a fetch error's `status`, `code`, response `body`, etc.). Non-Error
+ * values become `{ message: String(value) }`.
+ */
+export function serializeError(value: unknown, depth = 0): SerializedError {
+    if (!(value instanceof Error)) {
+        if (value !== null && typeof value === "object") {
+            return { message: jsonSafeString(value) };
+        }
+        return { message: String(value) };
+    }
+
+    const result: SerializedError = { message: value.message };
+    if (value.name) {
+        result.name = value.name;
+    }
+    if (value.stack) {
+        result.stack = value.stack;
+    }
+
+    if (depth < MAX_ERROR_DEPTH) {
+        const cause = (value as { cause?: unknown }).cause;
+        if (cause !== undefined) {
+            result.cause = serializeError(cause, depth + 1);
+        }
+        if (value instanceof AggregateError && Array.isArray(value.errors)) {
+            result.errors = value.errors.map((inner) =>
+                serializeError(inner, depth + 1),
+            );
+        }
+    }
+
+    // `message`/`name`/`stack`/`cause` are non-enumerable on Error, so
+    // Object.keys picks up only custom fields (e.g. HTTP `status`, `body`).
+    // Round-trip each through JSON so the snapshot stays serializable.
+    const extra: Record<string, unknown> = {};
+    for (const key of Object.keys(value)) {
+        if (key === "cause" || key === "errors") {
+            continue;
+        }
+        const raw = (value as unknown as Record<string, unknown>)[key];
+        try {
+            extra[key] = JSON.parse(JSON.stringify(raw));
+        } catch {
+            extra[key] = String(raw);
+        }
+    }
+    if (Object.keys(extra).length > 0) {
+        result.extra = extra;
+    }
+    return result;
+}
+
+function jsonSafeString(value: unknown): string {
+    try {
+        return JSON.stringify(value);
+    } catch {
+        return String(value);
+    }
 }
 
 /**

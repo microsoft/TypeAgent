@@ -3,7 +3,7 @@
 
 import fs from "fs";
 import path from "path";
-import { RequestAction } from "agent-cache";
+import { RequestAction } from "@typeagent/agent-cache";
 
 /**
  * Logger for capturing request/action pairs for explanation system testing

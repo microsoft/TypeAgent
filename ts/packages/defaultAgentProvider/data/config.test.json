@@ -2,15 +2,15 @@
   "description": "Test configuration - only includes agents needed for shell integration tests",
   "agents": {
     "calendar": {
-      "name": "calendar",
+      "name": "@typeagent/calendar",
       "execMode": "dispatcher"
     },
     "list": {
-      "name": "list-agent",
+      "name": "@typeagent/list-agent",
       "execMode": "dispatcher"
     },
     "chat": {
-      "name": "chat-agent",
+      "name": "@typeagent/chat-agent",
       "execMode": "dispatcher"
     },
     "greeting": {

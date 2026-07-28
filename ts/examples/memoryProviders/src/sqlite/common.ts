@@ -3,10 +3,10 @@
 
 import Database, * as sqlite from "better-sqlite3";
 import fs from "node:fs";
-import { ValueDataType, ValueType } from "knowledge-processor";
+import { ValueDataType, ValueType } from "@typeagent/knowledge-processor";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { removeFile } from "typeagent";
+import { removeFile } from "@typeagent/agent-runtime";
 export type AssignedId<T> = {
     id: T;
     isNew: boolean;

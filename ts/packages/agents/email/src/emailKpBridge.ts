@@ -8,8 +8,8 @@
  * for keyword indexing and search.
  */
 
-import { EmailMessage } from "graph-utils";
-import { TextChunk, ChunkGroup } from "kp";
+import { EmailMessage } from "@typeagent/graph-utils";
+import { TextChunk, ChunkGroup } from "@typeagent/kp";
 
 /**
  * Convert a batch of EmailMessages into kp TextChunks and ChunkGroups.

@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=b700ecd67acb598b3c80e4ec216b3339b9d5e9cd7d6647aaf5939841325549c9 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=07e7ad577d013e39024ba1c844ba010de79cefca10a0f3359358ba73e0798181 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/aiclient — AI-generated documentation
@@ -12,38 +12,56 @@
 
 ## Overview
 
-The `@typeagent/aiclient` package is a TypeScript library designed to interact with AI APIs, including OpenAI endpoints (both Azure-hosted and OpenAI-hosted) and Bing search APIs. It is primarily used within the TypeAgent project for sample agents and examples, providing tools to manage API settings, authentication, and multi-region endpoint pools.
+The `@typeagent/aiclient` package is a TypeScript library designed to facilitate interactions with various AI APIs, including OpenAI (both Azure-hosted and OpenAI-hosted) and Bing. It is primarily used within the TypeAgent project to support sample agents and examples. The library provides tools for managing API settings, handling authentication, and implementing multi-region endpoint pooling for improved reliability and performance.
 
 ## What it does
 
-The `aiclient` package provides a range of capabilities for interacting with AI services:
+The `aiclient` package provides the following key features:
 
-- **OpenAI API Support**: Includes functionality for accessing OpenAI models hosted on Azure and OpenAI, such as GPT-4 and embedding models.
-- **Bing API Support**: Provides tools for interacting with Bing search APIs.
-- **Multi-region Endpoint Pools**: Implements a mechanism to distribute requests across multiple endpoints, mitigating throttling and ensuring high availability.
-- **Environment-based Configuration**: Reads settings such as API keys and endpoints from environment variables, simplifying integration with existing infrastructure.
-- **Authentication**: Supports Azure identity-based authentication and API key-based authentication.
+- **Integration with AI APIs**:
+
+  - Supports OpenAI models such as GPT-4, embeddings, and image generation, hosted on both Azure and OpenAI.
+  - Includes tools for interacting with Bing search APIs.
+
+- **Multi-region Endpoint Pools**:
+
+  - Automatically discovers and pools endpoints for AI models based on environment variables.
+  - Implements a priority-based selection algorithm to ensure high availability and load distribution.
+  - Handles transient errors (e.g., 429, 5xx) with cooldown mechanisms and retries.
+
+- **Environment-based Configuration**:
+
+  - Reads API settings, such as endpoints and API keys, from environment variables.
+  - Supports custom pool configurations via JSON-based environment variables.
+
+- **Authentication**:
+
+  - Provides Azure identity-based authentication and API key-based authentication.
+
+- **Debug Logging**:
+  - Offers detailed logging for endpoint selection, rotation, and retry behavior, which can be enabled using the `typeagent:pool` namespace.
 
 ### Multi-region Endpoint Pools
 
-The package's endpoint pool mechanism is designed to handle throttling and regional failures gracefully. It rotates requests among endpoints based on priority tiers and health status. Key features include:
+The endpoint pooling mechanism is a core feature of the library, designed to enhance reliability and performance. Key aspects include:
 
-- **Priority-based Selection**: Endpoints are grouped into priority tiers, with the lowest-priority tier containing healthy endpoints being selected.
-- **Cooldown Mechanism**: Endpoints that return transient errors (e.g., 429, 5xx) are temporarily marked as unavailable and excluded from selection.
-- **Custom Pool Configuration**: Users can override the default endpoint discovery and priority settings using environment variables.
+- **Endpoint Discovery**: Scans environment variables to build pools of endpoints for each model and region.
+- **Priority-based Selection**: Groups endpoints into priority tiers and selects the lowest-priority tier with healthy endpoints.
+- **Cooldown Mechanism**: Temporarily marks endpoints as unavailable after transient errors, such as 429 or 5xx responses.
+- **Custom Pool Configuration**: Allows users to override default endpoint discovery and priority settings using JSON-based environment variables.
 
 ### Debugging and Logging
 
-The package includes debug logging capabilities for monitoring endpoint selection, rotation, and retry behavior. Enabling the `typeagent:pool` namespace provides detailed logs for troubleshooting.
+Debug logging can be enabled to monitor endpoint selection, rotation, and retry behavior. Use the `typeagent:pool` namespace for detailed logs.
 
 ## Setup
 
 To use the `@typeagent/aiclient` package, you need to configure the following environment variables:
 
-- **`COPILOT_ALLOW_GET_PROVIDER_ENDPOINT`**: Controls whether the Copilot SDK is allowed to retrieve provider endpoints dynamically.
+- **`COPILOT_ALLOW_GET_PROVIDER_ENDPOINT`**: Determines whether the Copilot SDK can dynamically retrieve provider endpoints.
 - **`TYPEAGENT_COPILOT_SDK_LOG_LEVEL`**: Sets the log level for the Copilot SDK. Valid values include `none`, `error`, `warning`, `info`, `debug`, and `all`.
 
-Additionally, the package relies on a set of environment variables for endpoint pools and API keys. These are dynamically discovered based on the model and region. For example:
+Additionally, the package relies on dynamically discovered environment variables for endpoint pools and API keys. Examples include:
 
 - `AZURE_OPENAI_ENDPOINT_<MODEL>_<REGION>`: Specifies the endpoint for a given model and region.
 - `AZURE_OPENAI_API_KEY_<MODEL>_<REGION>`: Specifies the API key for a given model and region.
@@ -117,17 +135,17 @@ External: `@azure/identity`, `@github/copilot-sdk`, `@huggingface/transformers`,
 
 ### Used by
 
+- [@typeagent/agent-runtime](../../packages/typeagent/README.md)
+- [@typeagent/azure-ai-foundry](../../packages/azure-ai-foundry/README.md)
+- [@typeagent/browser](../../packages/agents/browser/README.md)
+- [@typeagent/conversation-memory](../../packages/memory/conversation/README.md)
+- [@typeagent/core](../../packages/typeagent-core/README.md)
+- [@typeagent/discord-agent](../../packages/agents/discord/README.md)
 - [@typeagent/docs-autogen](../../tools/docsAutogen/README.md)
-- [@typeagent/thoughts](../../packages/mcp/thoughts/README.md)
-- [agent-api](../../packages/api/README.md)
-- [agent-cache](../../packages/cache/README.md)
-- [agent-cli](../../packages/cli/README.md)
-- [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
-- [agent-sdk-wrapper](../../packages/agentSdkWrapper/README.md)
-- [agent-shell](../../packages/shell/README.md)
-- [azure-ai-foundry](../../packages/azure-ai-foundry/README.md)
-- [browser-typeagent](../../packages/agents/browser/README.md)
-- _…and 40 more workspace consumers._
+- [@typeagent/image-agent](../../packages/agents/image/README.md)
+- [@typeagent/image-memory](../../packages/memory/image/README.md)
+- [@typeagent/knowledge-processor](../../packages/knowledgeProcessor/README.md)
+- _…and 41 more workspace consumers._
 
 ### Files of interest
 
@@ -142,6 +160,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `5cbcf613f047f08749d0451296eb1cdc610ae414` on `2026-07-17T18:24:18.404Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/aiclient docs:verify-links` to spot-check._
+_Auto-generated against commit `fa4bb9b44db12e2d15b83e03e59f9c7147ed2b50` on `2026-07-27T19:08:36.121Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/aiclient docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

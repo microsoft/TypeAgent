@@ -16,7 +16,7 @@ import {
     HistoryContext,
     ParamObjectType,
     RequestAction,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import { DispatcherClarifyName } from "../context/dispatcher/dispatcherUtils.js";
 import { AgentMatchCandidate } from "../context/dispatcher/schema/clarifyActionSchema.js";
 import { buildClarifyMultipleAgentMatches } from "./clarifyHelpers.js";
@@ -37,7 +37,7 @@ import { PreferenceMember } from "../context/collisionPreferences.js";
 import {
     CachedImageWithDetails,
     IncrementalJsonValueCallBack,
-} from "typechat-utils";
+} from "@typeagent/typechat-utils";
 import {
     isMultipleAction,
     isPendingRequest,

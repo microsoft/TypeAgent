@@ -6,7 +6,7 @@ import type {
     GrammarValidationResult,
 } from "@typeagent/agent-sdk";
 import type { AgentGrammarRegistry } from "@typeagent/action-grammar";
-import type { AgentCache } from "agent-cache";
+import type { AgentCache } from "@typeagent/agent-cache";
 import { AdversaryScorer } from "./adversaryScorer.mjs";
 import { CollisionDetector } from "./collisionDetector.mjs";
 import { PatternRefiner } from "./patternRefiner.mjs";

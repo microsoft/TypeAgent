@@ -16,7 +16,10 @@ import {
     convertTestDataToExplanationData,
     readExplanationTestData,
 } from "../../../utils/test/explanationTestData.js";
-import { ConstructionStore, printImportConstructionResult } from "agent-cache";
+import {
+    ConstructionStore,
+    printImportConstructionResult,
+} from "@typeagent/agent-cache";
 import { getSessionConstructionDirPath } from "../../session.js";
 import { askYesNoWithContext } from "../../interactiveIO.js";
 import { glob } from "glob";

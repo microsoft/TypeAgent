@@ -8,7 +8,7 @@ import {
     asyncArray,
     dateTime,
     loadSchema,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { Topic, TopicResponse } from "./topicSchema.js";
 import {

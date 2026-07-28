@@ -28,7 +28,7 @@ import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
 import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
-import { conversation as kpLib } from "knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import {
     BooleanOp,
     CompiledTermGroup,
@@ -41,7 +41,7 @@ import {
 } from "./compileLib.js";
 import { isSearchGroupTerm } from "./searchLib.js";
 import { isPropertyTerm } from "./searchLib.js";
-import { NormalizedEmbedding } from "typeagent";
+import { NormalizedEmbedding } from "@typeagent/agent-runtime";
 import { getTimestampedScoredSemanticRefOrdinals } from "./knowledgeLib.js";
 
 /**

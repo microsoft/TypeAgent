@@ -26,10 +26,10 @@ import {
     promptLib,
     lookupAnswersOnWeb,
     WebLookupAnswer,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { PromptSection } from "typechat";
 import * as fs from "fs";
-import { createPromptLogger } from "telemetry";
+import { createPromptLogger } from "@typeagent/telemetry";
 
 const promptLogger = createPromptLogger();
 

@@ -1,7 +1,6 @@
 {
-  "name": "websocket-channel-server",
+  "name": "@typeagent/websocket-channel-server",
   "version": "0.0.1",
-  "private": true,
   "description": "RpcChannel Web socket server.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -34,7 +33,7 @@
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/websocket-utils": "workspace:*",
     "debug": "^4.4.0",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

@@ -8,8 +8,8 @@
  * ===============================================
  */
 
-import * as knowLib from "knowledge-processor";
-import { conversation } from "knowledge-processor";
+import * as knowLib from "@typeagent/knowledge-processor";
+import { conversation } from "@typeagent/knowledge-processor";
 import { openai } from "@typeagent/aiclient";
 import {
     CommandHandler,
@@ -37,7 +37,7 @@ import {
     mathLib,
     NameValue,
     removeDir,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import chalk, { ChalkInstance } from "chalk";
 import { KnowledgeProcessorWriter } from "./knowledgeProcessorWriter.js";
 import { timestampBlocks } from "./importer.js";

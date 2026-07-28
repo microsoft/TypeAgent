@@ -43,6 +43,7 @@ function createTestClientIO(data: IAgentMessage[]): ClientIO {
         openLocalView: async () => {},
         closeLocalView: async () => {},
         requestChoice: () => {},
+        requestForm: () => {},
         requestInteraction: () => {},
         interactionResolved: () => {},
         interactionCancelled: () => {},

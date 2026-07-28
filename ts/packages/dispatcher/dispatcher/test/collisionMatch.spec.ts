@@ -9,7 +9,7 @@ import {
     MatchResult,
     RequestAction,
     createExecutableAction,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

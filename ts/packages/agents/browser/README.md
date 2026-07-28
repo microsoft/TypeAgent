@@ -1,41 +1,24 @@
-# Browser automation extension
+# Browser TypeAgent (core agent)
+
+`browser-typeagent` is the core browser **agent** (`AppAgent`): it handles
+browser-related actions, knowledge extraction/indexing, search and answer
+generation, WebFlows, and the PDF viewer. It runs inside the dispatcher /
+agent-server process and controls a browser through the shared
+`BrowserControl` interface, implemented by either the Chrome/Edge extension
+(`@typeagent/browser-extension`) or the Electron shell's inline browser.
+
+Related packages:
+
+- **`@typeagent/browser-control-rpc`** (`../browserControlRpc`) — shared
+  browser types + content-script RPC client this agent depends on.
+- **`@typeagent/browser-extension`** (`../browserExtension`) — the
+  Chrome/Electron extension. See that package's README to build, install, and
+  run the extension.
 
 ## Build
 
-To build the browser extension, run `pnpm run build` in this folder. For debug support, you can run `pnpm run dev`
-
-## Install
-
-1. Enable developer mode in your browser. For chrome and edge, the steps are:
-
-   - Launch browser
-   - Click on the extensions icon next to the address bar. Select "Manage extensions" at the bottom of the menu.
-   - This launches the extensions page. Enable the developer mode toggle on this page.
-
-2. Build the extension
-3. Load the unpackaged extension
-   - Go to the "manage extensions page" from step #1
-   - Click on "load unpackaged extension". Navigate to the `dist/extension` folder of the browser extension package.
-
-## Running the extension
-
-1. Launch the browser where you installed the extension
-2. Launch the typeagent shell or the typeagent cli. These are integrated with the extension and can send commands. You can issue commands from this interface such as:
-   - open new tab
-   - go to new york times
-   - follow news link
-   - scroll down
-   - go back
-   - etc.
-
-## Chat panel
-
-The extension's chat panel supports the same `@conversation` slash
-commands and natural-language conversation management as the Shell and
-CLI (`new`, `list`, `info`, `switch`, `prev`, `next`, `rename`,
-`delete`). Switching, creating, or moving between conversations clears
-the panel and replays the new conversation's history, so peer activity
-from a Shell or CLI joined to the same conversation is also visible.
+Run `pnpm run build` in this folder (builds the agent, PDF views, and
+puppeteer helpers).
 
 ## Architecture
 

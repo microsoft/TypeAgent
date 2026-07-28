@@ -32,6 +32,16 @@ const debug = registerDebug("typeagent:dispatcher:installSource:feed");
 // The sentinel keyword an app agent declares in its package.json.
 export const AGENT_KEYWORD = "typeagent-agent";
 
+// The npm scopes the feed is enumerated for when neither the source config nor
+// TYPEAGENT_FEED_SCOPES specifies scopes. `@typeagent` holds the first-party
+// agents; `@secretagents` holds agents published from a separate ADO repo that
+// are not in the public GitHub source tree but are discoverable purely from the
+// feed. Bounding enumeration to these scopes also avoids scanning the feed's
+// full upstream-cache of public npm packages. Scopes are lowercase: npm
+// normalizes package names to lowercase, and the enumeration match is
+// case-insensitive (see listScopedPackages).
+export const DEFAULT_FEED_SCOPES = ["@typeagent", "@secretagents"];
+
 const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000; // ~1h
 
 function resolveFeedRegistry(config: FeedSourceConfig): string | undefined {
@@ -49,12 +59,74 @@ function resolveFeedScopes(config: FeedSourceConfig): string[] {
     }
     const raw = process.env.TYPEAGENT_FEED_SCOPES;
     if (!raw) {
-        return [];
+        return [...DEFAULT_FEED_SCOPES];
     }
     return raw
         .split(",")
         .map((scope) => scope.trim())
         .filter((scope) => scope.length > 0);
+}
+
+// Additional Azure Artifacts npm registry URLs whose inventory is enumerated
+// for discovery, in addition to the primary `registry`. Config wins; otherwise
+// TYPEAGENT_FEED_DISCOVERY_REGISTRIES (comma-separated) supplies them.
+function resolveDiscoveryRegistries(config: FeedSourceConfig): string[] {
+    if (config.discoveryRegistries !== undefined) {
+        return config.discoveryRegistries;
+    }
+    const raw = process.env.TYPEAGENT_FEED_DISCOVERY_REGISTRIES;
+    if (!raw) {
+        return [];
+    }
+    return raw
+        .split(",")
+        .map((r) => r.trim())
+        .filter((r) => r.length > 0);
+}
+
+// The set of feeds whose inventory discovery enumerates: the primary feed plus
+// every configured discovery registry, each parsed to its org/project/feed.
+// Throws on an unrecognized discovery registry URL (a config/env mistake the
+// user should see) rather than silently skipping it.
+function discoveryFeedInfos(
+    config: FeedSourceConfig,
+    primaryInfo: AzureFeedInfo,
+): AzureFeedInfo[] {
+    const infos = [primaryInfo];
+    for (const reg of resolveDiscoveryRegistries(config)) {
+        const info = parseAzureFeed(reg);
+        if (info === undefined) {
+            throw new Error(
+                `feed '${config.name}': unrecognized discovery registry URL '${reg}'`,
+            );
+        }
+        infos.push(info);
+    }
+    return infos;
+}
+
+// Enumerate the scoped package inventory across every discovery feed, de-duped
+// by case-insensitive package name (a package present in both the primary feed
+// and an upstream discovery feed — e.g. `@typeagent/echo` — is listed once).
+async function listScopedPackagesAcrossFeeds(
+    infos: AzureFeedInfo[],
+    scopes: string[],
+    token: string,
+    fetchFn: typeof fetch,
+): Promise<string[]> {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    for (const info of infos) {
+        const scoped = await listScopedPackages(info, scopes, token, fetchFn);
+        for (const name of scoped) {
+            const key = name.toLowerCase();
+            if (!seen.has(key)) {
+                seen.add(key);
+                names.push(name);
+            }
+        }
+    }
+    return names;
 }
 
 // Strip a trailing version/range from an npm specifier to get the module name.
@@ -191,6 +263,10 @@ interface FeedAgentPackageInfo {
     readonly packageName: string;
     readonly defaultAgentName?: string;
     readonly latestVersion?: string;
+    // The package's published `description` (from the latest version manifest),
+    // surfaced in `@package available` and used to match a free-text request to
+    // an installable agent. Absent when the manifest declares none.
+    readonly description?: string;
 }
 
 interface AzureFeedInfo {
@@ -281,7 +357,9 @@ function ensureInstallRoot(installDir: string): void {
 }
 
 // Walk the paged Azure DevOps Artifacts packages endpoint, filtered to the
-// configured scopes.
+// configured scopes. Scope matching is case-insensitive: npm normalizes package
+// names to lowercase, but a configured scope may carry other casing (e.g.
+// `@secretAgents` vs the published `@secretagents`).
 async function listScopedPackages(
     info: AzureFeedInfo,
     scopes: string[],
@@ -292,6 +370,7 @@ async function listScopedPackages(
     const top = 100;
     let skip = 0;
     const names: string[] = [];
+    const scopePrefixes = scopes.map((s) => `${s.toLowerCase()}/`);
     // Walk pages to completion.
     for (;;) {
         const url =
@@ -315,8 +394,8 @@ async function listScopedPackages(
             const name = typeof nameValue === "string" ? nameValue : undefined;
             if (
                 name &&
-                (scopes.length === 0 ||
-                    scopes.some((s) => name.startsWith(`${s}/`)))
+                (scopePrefixes.length === 0 ||
+                    scopePrefixes.some((p) => name.toLowerCase().startsWith(p)))
             ) {
                 names.push(name);
             }
@@ -476,7 +555,12 @@ export async function enumerateFeedAgents(
         );
     }
     const scopes = resolveFeedScopes(config);
-    const scoped = await listScopedPackages(info, scopes, token, fetchFn);
+    const scoped = await listScopedPackagesAcrossFeeds(
+        discoveryFeedInfos(config, info),
+        scopes,
+        token,
+        fetchFn,
+    );
     const flags = await Promise.all(
         scoped.map((name) => isAgentPackage(registry, name, token, fetchFn)),
     );
@@ -494,6 +578,19 @@ function defaultAgentNameFromManifest(
     return typeof name === "string" && isLegalAgentName(name)
         ? name
         : undefined;
+}
+
+// Read a package version manifest's `description`, normalized to a non-empty
+// trimmed string (or undefined when absent/blank).
+function descriptionFromManifest(
+    manifest: Record<string, unknown> | undefined,
+): string | undefined {
+    const description = manifest?.description;
+    if (typeof description !== "string") {
+        return undefined;
+    }
+    const trimmed = description.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
 }
 
 // Full descriptor enumeration: the scoped package list narrowed to packages
@@ -517,7 +614,12 @@ async function enumerateFeedAgentDescriptors(
         );
     }
     const scopes = resolveFeedScopes(config);
-    const scoped = await listScopedPackages(info, scopes, token, fetchFn);
+    const scoped = await listScopedPackagesAcrossFeeds(
+        discoveryFeedInfos(config, info),
+        scopes,
+        token,
+        fetchFn,
+    );
     const packuments = await Promise.all(
         scoped.map((name) => fetchPackument(registry, name, token, fetchFn)),
     );
@@ -542,10 +644,15 @@ async function enumerateFeedAgentDescriptors(
             packageName: string;
             defaultAgentName?: string;
             latestVersion?: string;
+            description?: string;
         } = { packageName, latestVersion: latest };
         const defaultAgentName = defaultAgentNameFromManifest(manifest);
         if (defaultAgentName !== undefined) {
             descriptor.defaultAgentName = defaultAgentName;
+        }
+        const description = descriptionFromManifest(manifest);
+        if (description !== undefined) {
+            descriptor.description = description;
         }
         descriptors.push(descriptor);
     }
@@ -823,7 +930,19 @@ export function createFeedSource(
                 ? `${scopes} (env: TYPEAGENT_FEED_SCOPES)`
                 : scopes;
 
-            return `${registryDetail}\n${scopeDetail}`;
+            const discovery = resolveDiscoveryRegistries(config);
+            if (discovery.length === 0) {
+                return `${registryDetail}\n${scopeDetail}`;
+            }
+            const discoveryFromEnv =
+                config.discoveryRegistries === undefined &&
+                process.env.TYPEAGENT_FEED_DISCOVERY_REGISTRIES !== undefined;
+            const discoveryDetail =
+                `discovery: ${discovery.join(", ")}` +
+                (discoveryFromEnv
+                    ? " (env: TYPEAGENT_FEED_DISCOVERY_REGISTRIES)"
+                    : "");
+            return `${registryDetail}\n${scopeDetail}\n${discoveryDetail}`;
         },
         async refresh(): Promise<void> {
             // Fetch fresh descriptors and atomically swap them in on success;
@@ -1057,6 +1176,7 @@ export function createFeedSource(
                 ref: d.packageName,
                 packageName: d.packageName,
                 defaultAgentName: d.defaultAgentName,
+                description: d.description,
             }));
         },
     };

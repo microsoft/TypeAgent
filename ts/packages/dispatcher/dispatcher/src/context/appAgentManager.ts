@@ -38,7 +38,7 @@ import {
     AppAgentStateConfig,
     appAgentStateKeys,
 } from "./appAgentStateConfig.js";
-import { GrammarStore } from "agent-cache";
+import { GrammarStore } from "@typeagent/agent-cache";
 import {
     Grammar,
     grammarFromJson,

@@ -21,7 +21,7 @@ import {
     RequestAction,
     ProcessRequestActionResult,
     printProcessRequestActionResult,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import {
     DeepPartialUndefined,
     getObjectProperty,

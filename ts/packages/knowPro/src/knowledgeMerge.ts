@@ -6,8 +6,8 @@
  * Functions to merge/combine more granular knowledge
  */
 
-import { conversation as kpLib } from "knowledge-processor";
-import { collections } from "typeagent";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
+import { collections } from "@typeagent/agent-runtime";
 import { unionArrays } from "./collections.js";
 import { Scored } from "./common.js";
 import {

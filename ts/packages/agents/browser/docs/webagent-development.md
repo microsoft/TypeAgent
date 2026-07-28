@@ -222,7 +222,7 @@ Compile: `npx agc -i recipeSiteSchema.agr -o recipeSiteSchema.ag.json`
 
 ### 5. Register in the Extension Manifest
 
-Add URL patterns to `src/extension/manifest.json`:
+Add URL patterns to `browserExtension/src/extension/manifest.json`:
 
 ```json
 {
@@ -241,16 +241,16 @@ Add URL patterns to `src/extension/manifest.json`:
 }
 ```
 
-Also add the Electron manifest (`src/electron/manifest.json`) if
+Also add the Electron manifest (`browserExtension/src/electron/manifest.json`) if
 Electron support is needed.
 
 ### 6. Build and Test
 
 ```bash
-cd TypeAgent/ts/packages/agents/browser
+cd TypeAgent/ts/packages/agents/browserExtension
 
 # Build the extension
-npm run build:extension:dev
+npm run build:dev
 
 # Reload in Chrome
 # chrome://extensions → TypeAgent → refresh icon

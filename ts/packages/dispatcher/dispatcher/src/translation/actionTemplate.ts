@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ExecutableAction, FullAction } from "agent-cache";
+import { ExecutableAction, FullAction } from "@typeagent/agent-cache";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import {
     TemplateFieldStringUnion,

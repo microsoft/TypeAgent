@@ -15,7 +15,7 @@ import {
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import chalk from "chalk";
-import { getDefaultExplainerName } from "agent-cache";
+import { getDefaultExplainerName } from "@typeagent/agent-cache";
 import {
     getChatModelMaxConcurrency,
     getChatModelNames,

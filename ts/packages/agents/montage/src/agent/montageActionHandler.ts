@@ -27,15 +27,15 @@ import {
     createActionResultFromError,
     createActionResultFromMarkdownDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
-import * as im from "image-memory";
-import * as kp from "knowpro";
-import { conversation as kpLib } from "knowledge-processor";
+import * as im from "@typeagent/image-memory";
+import * as kp from "@typeagent/knowpro";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import {
     displayError,
     displayStatus,
 } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
-import { createSemanticMap } from "typeagent";
+import { createSemanticMap } from "@typeagent/agent-runtime";
 import {
     TextEmbeddingModel,
     tryCreateEmbeddingModel,

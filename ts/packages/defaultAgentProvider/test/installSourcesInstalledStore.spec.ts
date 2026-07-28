@@ -43,7 +43,7 @@ describe("seedRecordsFromConfig", () => {
         const records = seedRecordsFromConfig();
         // player -> module "music", source "builtin"
         expect(records.player).toBeDefined();
-        expect(records.player.module).toBe("music");
+        expect(records.player.module).toBe("@typeagent/music");
         expect(records.player.path).toBeUndefined();
         expect(records.player.source).toBe("builtin");
         expect(records.player.kind).toBe("npm");

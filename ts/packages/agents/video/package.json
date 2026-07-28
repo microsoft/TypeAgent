@@ -1,8 +1,7 @@
 {
-  "name": "video-agent",
+  "name": "@typeagent/video-agent",
   "version": "0.0.1",
-  "private": true,
-  "description": "Video dispatcher agent",
+  "description": "Agent to create AI videos",
   "keywords": [
     "typeagent-agent"
   ],
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/videoManifest.json",
     "./agent/handlers": "./dist/videoActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "asc": "asc -i ./src/videoActionSchema.ts -o ./dist/videoSchema.pas.json -t VideoAction",
     "build": "concurrently npm:tsc npm:asc",
@@ -30,8 +34,8 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
-    "telemetry": "workspace:*",
-    "typechat-utils": "workspace:*"
+    "@typeagent/telemetry": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*"
   },
   "devDependencies": {
     "@typeagent/action-schema-compiler": "workspace:*",

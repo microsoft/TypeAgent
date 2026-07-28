@@ -15,8 +15,8 @@ import {
     TextBlockType,
     TextIndex,
     TextIndexSettings,
-} from "knowledge-processor";
-import { ValueType, ValueDataType } from "knowledge-processor";
+} from "@typeagent/knowledge-processor";
+import { ValueType, ValueDataType } from "@typeagent/knowledge-processor";
 import {
     asyncArray,
     collections,
@@ -24,9 +24,9 @@ import {
     ScoredItem,
     SemanticIndex,
     VectorStore,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { createVectorTable } from "./vectorTable.js";
-import * as knowLib from "knowledge-processor";
+import * as knowLib from "@typeagent/knowledge-processor";
 
 export type StringTableRow = {
     stringId: number;

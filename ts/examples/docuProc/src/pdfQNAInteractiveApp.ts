@@ -6,8 +6,8 @@ import * as fs from "fs";
 import * as util from "util";
 
 import * as iapp from "interactive-app";
-import * as knowLib from "knowledge-processor";
-import { loadSchema, NameValue, ScoredItem } from "typeagent";
+import * as knowLib from "@typeagent/knowledge-processor";
+import { loadSchema, NameValue, ScoredItem } from "@typeagent/agent-runtime";
 
 import { IndexType, ChunkyIndex } from "./pdfChunkyIndex.js";
 import { QuerySpec, QuerySpecs } from "./pdfDocQuerySchema.js";

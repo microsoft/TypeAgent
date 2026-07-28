@@ -1,12 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getFileExtensionForMimeType } from "typechat-utils";
+import { getFileExtensionForMimeType } from "@typeagent/typechat-utils";
 import {
     DeepPartialUndefined,
     DeepPartialUndefinedAndNull,
 } from "@typeagent/common-utils";
-import { CacheConfig, AgentCache, getDefaultExplainerName } from "agent-cache";
+import {
+    CacheConfig,
+    AgentCache,
+    getDefaultExplainerName,
+} from "@typeagent/agent-cache";
 import { getSessionGrammarStorePath } from "@typeagent/action-grammar";
 import registerDebug from "debug";
 import fs from "node:fs";
@@ -29,7 +33,7 @@ import { ConstructionProvider } from "../agentProvider/agentProvider.js";
 import { MultipleActionConfig } from "../translation/multipleActionSchema.js";
 import { IndexManager } from "./indexManager.js";
 import { IndexingServiceRegistry } from "./indexingServiceRegistry.js";
-import { IndexData } from "image-memory";
+import { IndexData } from "@typeagent/image-memory";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -97,6 +101,13 @@ export type DispatcherConfig = {
         stream: boolean;
         promptConfig: {
             additionalInstructions: boolean;
+            // Include the structured action(s) recently executed in the chat
+            // history in the translation prompt, so the model can see which
+            // requests were already carried out and avoid re-issuing them.
+            recentActions: boolean;
+            // Max number of recently executed actions to include (most recent
+            // ones), 0-100 (0 disables the feature).
+            recentActionsLimit: number;
         };
         switch: {
             fixed: string; // fixed first schema to use, ignore embedding if set
@@ -205,6 +216,15 @@ export type DispatcherConfig = {
         // for environments that prefer explicit setup invocations
         // (CI / scripted / agents-as-libraries).
         setupOnFirstUse: boolean;
+        // Whether the reasoning loop can create and manage subagents. Each
+        // subagent runs as its own spawned command-executor process (its own
+        // action-execution instance in an isolated conversation), driven by the
+        // reasoning model through the create/invoke/list/stop subagent tools.
+        // On by default. Spawning a subagent requires a reachable agent-server
+        // and a built command-executor; when those are missing, create_subagent
+        // returns a clear error instead of affecting normal reasoning. Disable
+        // per session via `@config execution subagents off`.
+        subagents: boolean;
         // Controls how Entity objects are rendered into LLM prompts (translation + reasoning context).
         // "facets" (default): current shape `{id, name, type, facets: [{name, value}, ...]}`.
         // "flat": collapse facets into a `properties` object — `{id, name, type, uniqueId?, properties: {...}}`.
@@ -381,10 +401,16 @@ const defaultSessionConfig: SessionConfig = {
     request: DispatcherName,
     translation: {
         enabled: true,
-        model: "",
+        // Default translation model. "GPT_4_1" resolves to the gpt-4.1
+        // deployment in both config.local.yaml and the CI build-pipeline-kv
+        // config, keeping local dev and CI on the same model. Override per
+        // session with `@config translation model <name>`.
+        model: "GPT_4_1",
         stream: true,
         promptConfig: {
             additionalInstructions: true,
+            recentActions: true,
+            recentActionsLimit: 3,
         },
         switch: {
             fixed: "",
@@ -444,6 +470,7 @@ const defaultSessionConfig: SessionConfig = {
         reasoningHistoryTurns: 10, // recent chat turns injected into the reasoning prompt
         recordUserMessages: true, // record the user's own turns in the transcript
         setupOnFirstUse: true,
+        subagents: true, // reasoning subagents enabled by default
         // Default set based on the entity-shape experiment (bench-results/entity-shape-experiment.md):
         // appending the Entity TS type to the reasoning system prompt produced 4 consistent
         // gains / 0 consistent regressions on a 20-test sample (median of 3 runs).

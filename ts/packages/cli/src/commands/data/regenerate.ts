@@ -27,7 +27,7 @@ import {
     printImportConstructionResult,
     PromptEntity,
     RequestAction,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import { createLimiter, getElapsedString } from "@typeagent/common-utils";
 import {
     getChatModelMaxConcurrency,

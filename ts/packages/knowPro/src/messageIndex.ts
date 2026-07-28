@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-import { generateEmbeddingWithRetry, NormalizedEmbedding } from "typeagent";
+import {
+    generateEmbeddingWithRetry,
+    NormalizedEmbedding,
+} from "@typeagent/agent-runtime";
 import { MessageAccumulator } from "./collections.js";
 import { TextEmbeddingIndexSettings } from "./fuzzyIndex.js";
 import {

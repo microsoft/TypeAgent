@@ -26,7 +26,7 @@ import {
     parseStatusNotice,
     type TemplateEditServices,
     type ConnectionStatus,
-} from "chat-ui";
+} from "@typeagent/chat-ui";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import {
     ClientIO,
@@ -846,8 +846,11 @@ export function createChatPanelClient(
                 );
             });
         },
-        appendDiagnosticData: () => {
-            // Diagnostic data has no ChatPanel surface yet (deferred).
+        appendDiagnosticData: (requestId, data) => {
+            afterReplay(() => {
+                if (isCancelledRequest(ridStr(requestId))) return;
+                chatPanel.appendDiagnosticData(ridStr(requestId), data);
+            });
         },
         setDynamicDisplay: (
             _requestId,
@@ -877,6 +880,12 @@ export function createChatPanelClient(
                 source,
                 templateServices,
             );
+        },
+        askForm: async (_requestId, form, _source) => {
+            // In-process (standalone shell) blocking form interaction. In
+            // connected mode the SharedDispatcher intercepts askForm and drives
+            // this via requestInteraction instead.
+            return chatPanel.addQuestionForm(form);
         },
         notify: (requestId, event, data, source) => {
             switch (event) {
@@ -1005,6 +1014,22 @@ export function createChatPanelClient(
                 console.error("[requestChoice] failed", e, requestId),
             );
         },
+        requestForm: (requestId, choiceId, form, _source) => {
+            void (async () => {
+                // form.message is already rendered as the agent's
+                // displayContent (emitActionResult appends it before requesting
+                // the form), so suppress the duplicate and anchor the controls
+                // onto that agent bubble via requestId.
+                const rid = ridStr(requestId);
+                const response = await chatPanel.addQuestionForm(form, {
+                    showMessage: false,
+                    requestId: rid,
+                });
+                await dispatcher?.respondToChoice(choiceId, response);
+            })().catch((e) =>
+                console.error("[requestForm] failed", e, requestId),
+            );
+        },
         requestInteraction: (interaction: PendingInteractionRequest) => {
             const ac = new AbortController();
             activeInteractions.set(interaction.interactionId, ac);
@@ -1026,6 +1051,16 @@ export function createChatPanelClient(
                         response = {
                             interactionId: interaction.interactionId,
                             type: "question",
+                            value,
+                        };
+                    } else if (interaction.type === "form") {
+                        const value = await chatPanel.addQuestionForm(
+                            interaction.form,
+                            { signal: ac.signal },
+                        );
+                        response = {
+                            interactionId: interaction.interactionId,
+                            type: "form",
                             value,
                         };
                     } else {

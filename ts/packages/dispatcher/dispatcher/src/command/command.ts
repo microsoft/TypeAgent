@@ -4,7 +4,7 @@
 import chalk from "chalk";
 import registerDebug from "debug";
 import { makeClientIOMessage } from "../context/interactiveIO.js";
-import { getDefaultExplainerName } from "agent-cache";
+import { getDefaultExplainerName } from "@typeagent/agent-cache";
 import {
     CommandHandlerContext,
     ensureCommandResult,

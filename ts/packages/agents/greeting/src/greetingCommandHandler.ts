@@ -8,7 +8,7 @@ import {
     ActionResultSuccess,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
-import { createTypeChat } from "typeagent";
+import { createTypeChat } from "@typeagent/agent-runtime";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { randomInt } from "node:crypto";
 import {
@@ -27,7 +27,7 @@ import {
     GreetingAction,
     PersonalizedGreetingAction,
 } from "./greetingActionSchema.js";
-import { conversation as Conversation } from "knowledge-processor";
+import { conversation as Conversation } from "@typeagent/knowledge-processor";
 import { exec } from "child_process";
 import registerDebug from "debug";
 

@@ -10,7 +10,7 @@ import {
     createSchemaInfoProvider,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
-import { printImportConstructionResult } from "agent-cache";
+import { printImportConstructionResult } from "@typeagent/agent-cache";
 import fs from "node:fs";
 import chalk from "chalk";
 import { getDefaultAppAgentProviders } from "default-agent-provider";

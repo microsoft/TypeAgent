@@ -312,6 +312,17 @@ async function getErrorMessage(
     return `${response.status}: ${response.statusText}${bodyMessage ? `: ${bodyMessage}` : ""}${retries !== undefined ? ` Quitting after ${retries} retries` : ""}${timeTaken !== undefined ? ` in ${timeTaken}ms` : ""}`;
 }
 
+// Append the endpoint to a fetch error so failures name which
+// deployment/region was hit (e.g. an Azure "deployment does not exist" 404
+// points at the exact endpoint). The URL carries no secret - the api-key
+// rides in request headers, not the URL.
+function fetchErrorWithEndpoint(
+    endpoint: string,
+    detail: string,
+): Result<Response> {
+    return error(`fetch error: ${detail} (endpoint: ${endpoint})`);
+}
+
 /**
  * fetch that automatically retries transient Http errors
  * @param url
@@ -372,8 +383,9 @@ export async function fetchWithRetry(
                 debugRetry(
                     `giving up on ${host}: ${reason}, status=${result.status}`,
                 );
-                return error(
-                    `fetch error: ${await getErrorMessage(result, retryCount, elapsed)}`,
+                return fetchErrorWithEndpoint(
+                    url,
+                    await getErrorMessage(result, retryCount, elapsed),
                 );
             } else if (debugError.enabled) {
                 debugError(await getErrorMessage(result));
@@ -417,7 +429,7 @@ export async function fetchWithRetry(
         if (isAbortError(e)) {
             throw e;
         }
-        return error(`fetch error: ${e.cause?.message ?? e.message}`);
+        return fetchErrorWithEndpoint(url, e.cause?.message ?? e.message);
     }
 }
 
@@ -600,6 +612,7 @@ export type PoolCallOptions = {
     signal?: AbortSignal | undefined;
 };
 
+// code-complexity-allow: endpoint-pool retry/cooldown flow needs explicit per-status handling.
 async function fetchWithPool(
     pool: EndpointPool,
     method: "POST" | "GET",
@@ -735,8 +748,29 @@ async function fetchWithPool(
                 `pool ${pool.modelKey} ${member.suffix || "<bare>"} threw: ${e?.message ?? e}`,
             );
             markTransientFailure(member);
-            lastError = error(
-                `fetch error: ${e?.cause?.message ?? e?.message ?? String(e)}`,
+            lastError = fetchErrorWithEndpoint(
+                member.settings.endpoint,
+                e?.cause?.message ?? e?.message ?? String(e),
+            );
+            continue;
+        }
+
+        // callFetch can resolve to `undefined` (not only throw) on a dropped
+        // connection; the single-endpoint fetchWithRetry path guards this
+        // explicitly (throwing "fetch: No response"). Without the same guard
+        // here, `response.status` below would throw a raw TypeError ("Cannot
+        // read properties of undefined (reading 'status')") that
+        // isTransientRequestError does NOT match, so it would surface as a hard
+        // failure instead of rotating to the next pool member.
+        // NOTE: this is the suspected (not yet stack-confirmed) source of a rare
+        // intermittent "reading 'status'" failure seen in the translation
+        // reliability tests. If that error recurs, log `response`/`.stack` here
+        // to confirm this is the site.
+        if (response === undefined) {
+            markTransientFailure(member);
+            lastError = fetchErrorWithEndpoint(
+                member.settings.endpoint,
+                "No response",
             );
             continue;
         }
@@ -751,8 +785,13 @@ async function fetchWithPool(
             // the member isn't revisited before the server is ready.
             const retryAfterMs = getRetryAfterMs(response, 0);
             markThrottled(member, retryAfterMs > 0 ? retryAfterMs : undefined);
-            lastError = error(
-                `fetch error: ${await getErrorMessage(response, attempts, Date.now() - startTime)}`,
+            lastError = fetchErrorWithEndpoint(
+                member.settings.endpoint,
+                await getErrorMessage(
+                    response,
+                    attempts,
+                    Date.now() - startTime,
+                ),
             );
             continue;
         }
@@ -761,16 +800,22 @@ async function fetchWithPool(
             // 5xx — transient at the server level. Rotate without extending
             // the 429 exponential.
             markTransientFailure(member);
-            lastError = error(
-                `fetch error: ${await getErrorMessage(response, attempts, Date.now() - startTime)}`,
+            lastError = fetchErrorWithEndpoint(
+                member.settings.endpoint,
+                await getErrorMessage(
+                    response,
+                    attempts,
+                    Date.now() - startTime,
+                ),
             );
             continue;
         }
 
         // Non-transient 4xx (e.g. 401, 403, 400). Don't rotate — the caller
         // gets the same outcome from every endpoint.
-        return error(
-            `fetch error: ${await getErrorMessage(response, attempts, Date.now() - startTime)}`,
+        return fetchErrorWithEndpoint(
+            member.settings.endpoint,
+            await getErrorMessage(response, attempts, Date.now() - startTime),
         );
     }
 }

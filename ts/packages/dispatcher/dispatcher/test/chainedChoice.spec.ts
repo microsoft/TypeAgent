@@ -51,6 +51,13 @@ const handlers = {
                     ),
                 ),
         },
+        fail: {
+            description: "Returns a choice whose callback fails",
+            run: async () =>
+                createYesNoChoiceResult(choiceManager, "fail?", async () => {
+                    throw new Error("choice callback failed");
+                }),
+        },
     },
 } as const;
 
@@ -94,6 +101,7 @@ function makeClientIO(captured: CapturedChoice[]): ClientIO {
         requestChoice: (_requestId, choiceId, _type, message) => {
             captured.push({ choiceId, message });
         },
+        requestForm: () => {},
         requestInteraction: () => {},
         interactionResolved: () => {},
         interactionCancelled: () => {},
@@ -140,4 +148,19 @@ describe("Chained choice cards", () => {
         expect(captured[1].message).toBe("second?");
         expect(captured[1].choiceId).not.toBe(captured[0].choiceId);
     }, 10_000);
+
+    it("propagates choice callback failures without blocking later choices", async () => {
+        await awaitCommand(dispatcher, "@choicechain fail");
+        const choice = captured.at(-1)!;
+
+        await expect(
+            dispatcher.respondToChoice(choice.choiceId, true),
+        ).rejects.toThrow("choice callback failed");
+
+        await awaitCommand(dispatcher, "@choicechain chain");
+        const nextChoice = captured.at(-1)!;
+        await dispatcher.respondToChoice(nextChoice.choiceId, true);
+
+        expect(captured.at(-1)!.message).toBe("second?");
+    });
 });
