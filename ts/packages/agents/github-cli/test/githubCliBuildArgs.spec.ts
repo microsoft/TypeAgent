@@ -135,6 +135,44 @@ describe("buildArgs — prList assignee handling", () => {
     });
 });
 
+describe("buildArgs — prMergedStatus", () => {
+    test("builds a merged PR lookup with head/base filters", () => {
+        const args = buildArgs(
+            action("prMergedStatus", {
+                repo: "microsoft/TypeAgent",
+                branch: "dev/robgruen/dogfooding7",
+                base: "main",
+            }),
+        )!;
+        const joined = args.join(" ");
+        expect(args.slice(0, 2)).toEqual(["pr", "list"]);
+        expect(joined).toContain("--repo microsoft/TypeAgent");
+        expect(joined).toContain("--head dev/robgruen/dogfooding7");
+        expect(joined).toContain("--base main");
+        expect(joined).toContain("--state merged");
+        expect(joined).toContain("--json number,title,url,mergedAt,headRefName,baseRefName");
+    });
+
+    test("defaults limit to 20 and honors explicit limit", () => {
+        const defaultLimit = buildArgs(
+            action("prMergedStatus", {
+                branch: "feature/x",
+                base: "main",
+            }),
+        )!;
+        expect(defaultLimit.join(" ")).toContain("--limit 20");
+
+        const customLimit = buildArgs(
+            action("prMergedStatus", {
+                branch: "feature/x",
+                base: "main",
+                limit: 3,
+            }),
+        )!;
+        expect(customLimit.join(" ")).toContain("--limit 3");
+    });
+});
+
 describe('buildArgs — author handling ("my PRs" / "issues I opened")', () => {
     test("maps prList author @me to --author, not --assignee", () => {
         const args = buildArgs(
