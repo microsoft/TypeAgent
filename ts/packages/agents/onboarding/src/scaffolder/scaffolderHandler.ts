@@ -24,6 +24,7 @@ import { buildCliHandler } from "./cliHandlerTemplate.js";
 import { loadTemplate } from "./templateLoader.js";
 import { generateAgentKeywordFiles } from "./agentKeywordFiles.js";
 import type { KeywordSchemaTarget } from "./agentKeywordFiles.js";
+import { buildScaffoldedAgent } from "../lib/agentBuild.js";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -85,7 +86,7 @@ async function handleScaffoldAgent(
         };
     }
 
-    const schemaTs = await readArtifact(
+    let schemaTs = await readArtifact(
         integrationName,
         "schemaGen",
         "schema.ts",
@@ -116,6 +117,13 @@ async function handleScaffoldAgent(
     // original camelCase form.
     const packageName = `${integrationName.toLowerCase()}-agent`;
     const pascalName = toPascalCase(integrationName);
+
+    // The action-schema compiler (asc) rejects a doc comment attached to the
+    // entry union type ("entry type comments ... are not used for prompts").
+    // SchemaGen commonly emits one directly above `export type <Pascal>Actions`,
+    // which would fail the build; strip it deterministically before scaffolding
+    // so every downstream write (verbatim or sub-grouped) uses the clean form.
+    schemaTs = stripEntryTypeComment(schemaTs, pascalName);
     const targetDir = path.resolve(
         outputDir ?? path.join(AGENTS_DIR, integrationName),
     );
@@ -311,8 +319,6 @@ async function handleScaffoldAgent(
         targetDir,
     );
 
-    await updatePhase(integrationName, "scaffolder", { status: "approved" });
-
     // Onboarding moment: generate committed keyword vectors beside each schema
     // source so the agent ships ready for context-weighted collision resolution.
     // `generateAgentKeywordFiles` never throws - each target that fails is
@@ -362,6 +368,25 @@ async function handleScaffoldAgent(
         keywordNote = parts.join("");
     }
 
+    // Build the scaffolded agent now so the Testing phase — which loads it as
+    // an npm agent provider and imports its compiled `dist/` handler — has
+    // something to run. Packaging later rebuilds idempotently. On failure the
+    // scaffolder phase stays un-approved and the compiler error surfaces to the
+    // wizard (previously this only failed later, at Testing, as an opaque
+    // module-not-found).
+    const buildOutcome = await buildScaffoldedAgent(targetDir);
+    if (!buildOutcome.success) {
+        return {
+            error:
+                `Scaffolded "${integrationName}" but the agent failed to build ` +
+                `(a built agent is required before Testing):\n${buildOutcome.output}`,
+        };
+    }
+
+    await updatePhase(integrationName, "scaffolder", { status: "approved" });
+
+    const buildNote = `\n\n**Build:** ✅ compiled to \`${path.join(targetDir, "dist")}\``;
+
     return createActionResultFromMarkdownDisplay(
         `## Agent scaffolded: ${integrationName}\n\n` +
             `**Output directory:** \`${targetDir}\`\n\n` +
@@ -369,6 +394,7 @@ async function handleScaffoldAgent(
             files.map((f) => `- \`${f}\``).join("\n") +
             subSchemaNote +
             keywordNote +
+            buildNote +
             `\n\n**Next step:** Phase 6 — use \`generateTests\` and \`runTests\` to validate.`,
     );
 }
@@ -515,6 +541,51 @@ function buildMainSchemaWithSubGroups(
         content: out.trimEnd() + "\n",
         isPlaceholder: remainingTypeNames.length === 0,
     };
+}
+
+// Remove a documentation comment attached directly (no blank line) above the
+// entry union `export type <Pascal>Actions = ...`. The action-schema compiler
+// (asc) treats such a comment as an "entry type comment" and errors out
+// because entry-type comments are not used for prompts. Comments separated by
+// a blank line, and comments on individual action types, are preserved.
+export function stripEntryTypeComment(
+    schemaTs: string,
+    pascalName: string,
+): string {
+    const lines = schemaTs.split("\n");
+    const unionRe = new RegExp(
+        `^\\s*export\\s+type\\s+${pascalName}Actions\\b`,
+    );
+    const idx = lines.findIndex((l) => unionRe.test(l));
+    if (idx <= 0) return schemaTs;
+
+    // Walk upward over the comment lines immediately above the union (line
+    // comments or a block comment). Stop at the first blank or code line — a
+    // blank line means the comment is not associated with the entry type.
+    let start = idx;
+    let i = idx - 1;
+    while (i >= 0) {
+        const line = lines[i];
+        if (/^\s*\/\//.test(line)) {
+            start = i;
+            i--;
+            continue;
+        }
+        if (/\*\/\s*$/.test(line)) {
+            let j = i;
+            while (j >= 0 && !/^\s*\/\*/.test(lines[j])) j--;
+            if (j >= 0) {
+                start = j;
+                i = j - 1;
+                continue;
+            }
+        }
+        break;
+    }
+
+    if (start === idx) return schemaTs;
+    lines.splice(start, idx - start);
+    return lines.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
 // Build the main grammar when sub-groups exist by removing any rule whose
