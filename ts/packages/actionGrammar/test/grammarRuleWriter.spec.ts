@@ -311,13 +311,37 @@ describe("Grammar Rule Writer", () => {
     it("with object value", () => {
         validateRoundTrip(`<test> = hello -> { b: true, n: 12, s: "string" };`);
     });
-    it("preserves quoted object property names", () => {
+    it("quotes object property names only when required", () => {
         const grammar =
             `<test> = hello -> ` +
             `{ "display-name": 1, "title": 2, role: 3 };`;
 
         expect(writeGrammarRules(parseGrammarRules("test", grammar))).toBe(
-            `${grammar}\n`,
+            `<test> = hello -> ` +
+                `{ "display-name": 1, title: 2, role: 3 };\n`,
+        );
+        validateRoundTrip(grammar);
+    });
+    it.each([
+        ["empty", "", '""'],
+        ["numeric-leading", "1title", '"1title"'],
+        ["hyphenated", "display-name", '"display-name"'],
+        ["whitespace", "two words", '"two words"'],
+        ["quote", 'say"hi', '"say\\"hi"'],
+        ["backslash", "back\\slash", '"back\\\\slash"'],
+        ["control character", "line\nbreak", '"line\\nbreak"'],
+        ["BMP Unicode", "café", "café"],
+        ["combining continuation", "a\u0301", "a\u0301"],
+        ["leading combining mark", "\u0301a", '"\u0301a"'],
+        ["astral start", "𝒜", '"𝒜"'],
+        ["astral continuation", "a𝒜", '"a𝒜"'],
+        ["underscore", "_private", '"_private"'],
+        ["dollar sign", "$private", '"$private"'],
+    ])("formats %s object property key", (_name, key, expectedKey) => {
+        const grammar = `<test> = hello -> { ${JSON.stringify(key)}: 1 };`;
+
+        expect(writeGrammarRules(parseGrammarRules("test", grammar))).toBe(
+            `<test> = hello -> { ${expectedKey}: 1 };\n`,
         );
         validateRoundTrip(grammar);
     });

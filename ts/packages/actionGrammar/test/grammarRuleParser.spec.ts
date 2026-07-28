@@ -416,13 +416,11 @@ describe("Grammar Rule Parser", () => {
                     {
                         type: "property",
                         key: "type",
-                        keyQuoted: true,
                         value: { type: "literal", value: "greeting" },
                     },
                     {
                         type: "property",
                         key: "count",
-                        keyQuoted: true,
                         value: { type: "literal", value: 1 },
                     },
                 ],
@@ -440,13 +438,11 @@ describe("Grammar Rule Parser", () => {
                     {
                         type: "property",
                         key: "type",
-                        keyQuoted: true,
                         value: { type: "literal", value: "greeting" },
                     },
                     {
                         type: "property",
                         key: "count",
-                        keyQuoted: true,
                         value: { type: "literal", value: 1 },
                     },
                 ],

@@ -7,6 +7,8 @@ import {
     Expr,
     GrammarParseResult,
     isExpressionSpecialChar,
+    isIdContinue,
+    isIdStart,
     isObjectSpread,
     isWhitespace,
     Rule,
@@ -1088,7 +1090,15 @@ function writeValueNode(
                     } else if (elem.value === null) {
                         result.write(elem.key);
                     } else {
-                        const key = elem.keyQuoted
+                        let requiresQuotes = !isIdStart(elem.key[0]);
+                        for (
+                            let i = 1;
+                            !requiresQuotes && i < elem.key.length;
+                            i++
+                        ) {
+                            requiresQuotes = !isIdContinue(elem.key[i]);
+                        }
+                        const key = requiresQuotes
                             ? JSON.stringify(elem.key)
                             : elem.key;
                         result.write(`${key}: `);

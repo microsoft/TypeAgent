@@ -266,9 +266,8 @@ export type ValueNode =
     | VariableValueNode
     | ValueExprNode;
 
-// Parser-time value node types: compiled base types augmented with source-formatting
-// metadata. The compiler strips these before storing into GrammarRule (see
-// grammarCompiler.ts).
+// Parser-time value node types: compiled base types augmented with comment fields.
+// The compiler strips these before storing into GrammarRule (see grammarCompiler.ts).
 //
 // leadingComments:  comments before the value (e.g. after ":" or "[").
 // trailingComments: comments after the value but before the trailing "," or "]"/"}" delimiter.
@@ -290,7 +289,6 @@ type VariableValueNode = CompiledVariableValueNode & {
 export type ObjectProperty = {
     type: "property";
     key: string;
-    keyQuoted?: true | undefined;
     value: ValueNode | null; // null = shorthand: { x } means { x: x }
     leadingComments?: Comment[] | undefined;
     trailingComments?: Comment[] | undefined;
@@ -395,11 +393,11 @@ export type GrammarParseResult = {
 export function isWhitespace(char: string) {
     return /^\s$/.test(char);
 }
-function isIdStart(char: string) {
+export function isIdStart(char: string) {
     return /^\p{ID_Start}$/u.test(char);
 }
 
-function isIdContinue(char: string) {
+export function isIdContinue(char: string) {
     return /^\p{ID_Continue}$/u.test(char);
 }
 // Even some of these are not used yet, include them for future use.
@@ -1006,7 +1004,6 @@ class GrammarRuleParser implements ValueExprParserContext {
             obj.push({
                 type: "property",
                 key: id,
-                ...(isStringLiteral ? { keyQuoted: true as const } : {}),
                 value: v,
                 leadingComments: pendingLeading,
             });
