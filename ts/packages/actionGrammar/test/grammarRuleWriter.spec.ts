@@ -311,6 +311,127 @@ describe("Grammar Rule Writer", () => {
     it("with object value", () => {
         validateRoundTrip(`<test> = hello -> { b: true, n: 12, s: "string" };`);
     });
+    it("quotes object property names only when required", () => {
+        const grammar =
+            `<test> = hello -> ` +
+            `{ "display-name": 1, "title": 2, role: 3 };`;
+
+        expect(writeGrammarRules(parseGrammarRules("test", grammar))).toBe(
+            `<test> = hello -> ` +
+                `{ "display-name": 1, title: 2, role: 3 };\n`,
+        );
+        validateRoundTrip(grammar);
+    });
+    it.each([
+        ["empty", "", '""'],
+        ["numeric-leading", "1title", '"1title"'],
+        ["hyphenated", "display-name", '"display-name"'],
+        ["whitespace", "two words", '"two words"'],
+        ["quote", 'say"hi', '"say\\"hi"'],
+        ["backslash", "back\\slash", '"back\\\\slash"'],
+        ["control character", "line\nbreak", '"line\\nbreak"'],
+        ["BMP Unicode", "café", "café"],
+        ["combining continuation", "a\u0301", "a\u0301"],
+        ["leading combining mark", "\u0301a", '"\u0301a"'],
+        ["astral start", "𝒜", '"𝒜"'],
+        ["astral continuation", "a𝒜", '"a𝒜"'],
+        ["underscore", "_private", '"_private"'],
+        ["dollar sign", "$private", '"$private"'],
+    ])("formats %s object property key", (_name, key, expectedKey) => {
+        const grammar = `<test> = hello -> { ${JSON.stringify(key)}: 1 };`;
+
+        expect(writeGrammarRules(parseGrammarRules("test", grammar))).toBe(
+            `<test> = hello -> { ${expectedKey}: 1 };\n`,
+        );
+        validateRoundTrip(grammar);
+    });
+    it("canonicalizes object property keys", () => {
+        const input = String.raw`<Start> = camel -> { "camelCase": 1 };
+<Start> = digits -> { "with123": 2 };
+<Start> = latin -> { "café": 3 };
+<Start> = greek -> { "Δelta": 4 };
+<Start> = cyrillic -> { "ключ": 5 };
+<Start> = cjk -> { "标题": 6 };
+<Start> = keywordtrue -> { "true": 7 };
+<Start> = keywordnull -> { "null": 8 };
+<Start> = hyphen -> { "display-name": 9 };
+<Start> = spaces -> { "two words": 10 };
+<Start> = empty -> { "": 11 };
+<Start> = numeric -> { "1title": 12 };
+<Start> = dot -> { "a.b": 13 };
+<Start> = slash -> { "a/b": 14 };
+<Start> = colon -> { "a:b": 15 };
+<Start> = comma -> { "a,b": 16 };
+<Start> = quote -> { "say\"hi": 17 };
+<Start> = backslash -> { "back\\slash": 18 };
+<Start> = tab -> { "tab\tkey": 19 };
+<Start> = backspace -> { "back\bkey": 20 };
+<Start> = formfeed -> { "form\ffeed": 21 };
+<Start> = nul -> { "nul\u0000key": 22 };
+<Start> = emojisuffix -> { "emoji😀": 23 };
+<Start> = emojistart -> { "😀emoji": 24 };
+<Start> = underscore -> { "_private": 25 };
+<Start> = dollar -> { "$private": 26 };
+<Start> = astralstart -> { "𝒜": 27 };
+<Start> = astralcontinue -> { "a𝒜": 28 };
+<Start> = internalunderscore -> { "a_b": 29 };
+<Start> = middledot -> { "a·b": 30 };
+<Start> = dollarcontinue -> { "a$b": 31 };
+<Start> = unicodeescape -> { "\u0061lpha": 32 };
+<Start> = unicodeaccent -> { "\u00E9clair": 33 };
+<Start> = unicodenumeric -> { "\u0031st": 34 };
+<Start> = escapedslash -> { "a\/b": 35 };
+<Start> = hexhyphen -> { "\x2Ddash": 36 };
+<Start> = nulshort -> { "\0nul": 37 };
+<Start> = singleplain -> { 'plain': 38 };
+<Start> = singledash -> { 'has-dash': 39 };
+<Start> = apostrophe -> { 'it\'s': 40 };`;
+        const expected = String.raw`<Start> = camel -> { camelCase: 1 };
+<Start> = digits -> { with123: 2 };
+<Start> = latin -> { café: 3 };
+<Start> = greek -> { Δelta: 4 };
+<Start> = cyrillic -> { ключ: 5 };
+<Start> = cjk -> { 标题: 6 };
+<Start> = keywordtrue -> { true: 7 };
+<Start> = keywordnull -> { null: 8 };
+<Start> = hyphen -> { "display-name": 9 };
+<Start> = spaces -> { "two words": 10 };
+<Start> = empty -> { "": 11 };
+<Start> = numeric -> { "1title": 12 };
+<Start> = dot -> { "a.b": 13 };
+<Start> = slash -> { "a/b": 14 };
+<Start> = colon -> { "a:b": 15 };
+<Start> = comma -> { "a,b": 16 };
+<Start> = quote -> { "say\"hi": 17 };
+<Start> = backslash -> { "back\\slash": 18 };
+<Start> = tab -> { "tab\tkey": 19 };
+<Start> = backspace -> { "back\bkey": 20 };
+<Start> = formfeed -> { "form\ffeed": 21 };
+<Start> = nul -> { "nul\u0000key": 22 };
+<Start> = emojisuffix -> { "emoji😀": 23 };
+<Start> = emojistart -> { "😀emoji": 24 };
+<Start> = underscore -> { "_private": 25 };
+<Start> = dollar -> { "$private": 26 };
+<Start> = astralstart -> { "𝒜": 27 };
+<Start> = astralcontinue -> { "a𝒜": 28 };
+<Start> = internalunderscore -> { a_b: 29 };
+<Start> = middledot -> { a·b: 30 };
+<Start> = dollarcontinue -> { "a$b": 31 };
+<Start> = unicodeescape -> { alpha: 32 };
+<Start> = unicodeaccent -> { éclair: 33 };
+<Start> = unicodenumeric -> { "1st": 34 };
+<Start> = escapedslash -> { "a/b": 35 };
+<Start> = hexhyphen -> { "-dash": 36 };
+<Start> = nulshort -> { "\u0000nul": 37 };
+<Start> = singleplain -> { plain: 38 };
+<Start> = singledash -> { "has-dash": 39 };
+<Start> = apostrophe -> { "it's": 40 };`;
+
+        expect(writeGrammarRules(parseGrammarRules("test", input))).toBe(
+            `${expected}\n`,
+        );
+        validateRoundTrip(input);
+    });
     it("with object spread value", () => {
         validateRoundTrip(
             `<test> = hello $(x:<other>) -> { ...x, extra: 1 };\n<other> = world -> { a: 2 };`,
