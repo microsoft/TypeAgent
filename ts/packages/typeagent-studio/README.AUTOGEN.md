@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=5c07aaa01d4fc4d31a64ee153b125dcdc1932f194009a5d80bcc221b4421d671 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4e87b20ad522007f8a5af57b21565fbe047594514d9a4e12196cfb118d972ab0 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent-studio — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `typeagent-studio` package is a TypeScript library that powers the Visual Studio Code extension for the TypeAgent developer experience. It provides tools for authoring, debugging, and optimizing TypeAgent agents, including schema and grammar tuning, compare-and-replay regression detection, trace investigation, and live observation. This package is a critical component for developers working with TypeAgent agents, offering a rich set of commands and views to streamline the development and debugging process.
+The `typeagent-studio` package is a TypeScript library that powers the Visual Studio Code extension for the TypeAgent developer experience. It provides tools for authoring, debugging, and optimizing TypeAgent agents, including schema and grammar tuning, compare-and-replay regression detection, trace investigation, and live observation. This package is essential for developers working with TypeAgent agents, offering a rich set of commands, views, and utilities to streamline the development and debugging process.
 
 ## What it does
 
@@ -172,6 +172,6 @@ External: `debug`, `ws`
 
 ---
 
-_Auto-generated against commit `59cbbc5f415e861717a2bdb75ffa0459ceb5c4c7` on `2026-07-29T18:12:59.352Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent-studio docs:verify-links` to spot-check._
+_Auto-generated against commit `16b2ff3ac32747642a0ad2694df92f93a6aed1b5` on `2026-07-29T20:02:30.650Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent-studio docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
