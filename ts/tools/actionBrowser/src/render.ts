@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { Catalog } from "./types.js";
+import type { Catalog, CommandInfo } from "./types.js";
 import { orderedCategories } from "./categories.js";
 import { escapeHtml } from "./util.js";
 
@@ -42,7 +42,8 @@ interface TreeNode {
     phrasings?: string[];
     // command-only
     host?: string;
-    group?: boolean;
+    // Full invocation path minus the leading `@` (e.g. `config agent enable`).
+    full?: string;
     args?: { name: string; optional: boolean; description: string }[];
     flags?: {
         name: string;
@@ -116,60 +117,94 @@ function commandDisplayPath(host: string, path: string): string {
 }
 
 function buildCommandsTree(catalog: Catalog): TreeNode {
-    // Host -> group (first path segment) -> command.
-    const hosts = new Map<string, Map<string, TreeNode[]>>();
+    // Group by host, then expand each host's flat command list into a deep tree
+    // keyed by the command path so `config` -> `agent` -> `enable` become
+    // nested, zoomable boxes instead of one flat wall of commands.
+    const byHost = new Map<string, CommandInfo[]>();
     for (const command of catalog.commands) {
-        // A bare `@<host>` command has no sub-path; file it under a group named
-        // for the host so every host keeps the same host/group/command depth.
-        const groupName =
-            command.path === "" ? command.host : command.path.split(" ")[0];
-        let groups = hosts.get(command.host);
-        if (groups === undefined) {
-            groups = new Map();
-            hosts.set(command.host, groups);
-        }
-        let list = groups.get(groupName);
+        let list = byHost.get(command.host);
         if (list === undefined) {
             list = [];
-            groups.set(groupName, list);
+            byHost.set(command.host, list);
         }
-        list.push({
-            kind: "command",
-            name: commandDisplayPath(command.host, command.path),
-            host: command.host,
-            description: command.description,
-            group: command.group,
-            args: command.args.map((a) => ({
-                name: a.name,
-                optional: a.optional,
-                description: a.description,
-            })),
-            flags: command.flags.map((f) => ({
-                name: f.name,
-                char: f.char,
-                default: f.default,
-                description: f.description,
-            })),
-        });
+        list.push(command);
     }
-    const children: TreeNode[] = [...hosts.entries()]
+    const children = [...byHost.entries()]
         .sort(
             (a, b) => hostRank(a[0]) - hostRank(b[0]) || a[0].localeCompare(b[0]),
         )
-        .map(([host, groups]) => ({
-            kind: "host" as const,
-            name: host,
-            children: [...groups.entries()]
-                .sort((a, b) => a[0].localeCompare(b[0]))
-                .map(([name, commands]) => ({
-                    kind: "group" as const,
-                    name,
-                    children: commands.sort((a, b) =>
-                        a.name.localeCompare(b.name),
-                    ),
-                })),
-        }));
+        .map(([host, commands]) => buildHostTree(host, commands));
     return { kind: "root", name: "Commands", children };
+}
+
+// Expand one host's commands into a nested tree. Each path segment becomes a
+// node; a node that ends up with sub-commands is a zoomable group, otherwise a
+// leaf command. The dispatcher also emits every intermediate node, so a group's
+// own description/parameters land on the matching node.
+function buildHostTree(host: string, commands: CommandInfo[]): TreeNode {
+    const hostNode: TreeNode = { kind: "host", name: host, children: [] };
+    const nodeByKey = new Map<string, TreeNode>([["", hostNode]]);
+
+    function ensureNode(segments: string[]): TreeNode {
+        if (segments.length === 0) {
+            return hostNode;
+        }
+        const key = segments.join("\n");
+        let node = nodeByKey.get(key);
+        if (node === undefined) {
+            node = {
+                kind: "command",
+                name: segments[segments.length - 1],
+                host,
+                full: commandDisplayPath(host, segments.join(" ")),
+                children: [],
+            };
+            nodeByKey.set(key, node);
+            ensureNode(segments.slice(0, -1)).children!.push(node);
+        }
+        return node;
+    }
+
+    for (const command of commands) {
+        // A bare `@<host>` command (no sub-path) becomes a single leaf named
+        // for the host.
+        const segments =
+            command.path === "" ? [host] : command.path.split(" ");
+        const node = ensureNode(segments);
+        node.host = host;
+        node.full = commandDisplayPath(host, command.path);
+        node.description = command.description;
+        node.args = command.args.map((a) => ({
+            name: a.name,
+            optional: a.optional,
+            description: a.description,
+        }));
+        node.flags = command.flags.map((f) => ({
+            name: f.name,
+            char: f.char,
+            default: f.default,
+            description: f.description,
+        }));
+    }
+
+    // A node with children is a group; one without is a leaf command.
+    function finalize(node: TreeNode): void {
+        const kids = node.children;
+        if (kids !== undefined && kids.length > 0) {
+            if (node.kind !== "host") {
+                node.kind = "group";
+            }
+            kids.sort((a, b) => a.name.localeCompare(b.name));
+            kids.forEach(finalize);
+        } else {
+            if (node.kind !== "host") {
+                node.kind = "command";
+            }
+            delete node.children;
+        }
+    }
+    finalize(hostNode);
+    return hostNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -376,7 +411,11 @@ const APP = `
   }
 
   function displayName(node){
-    if(node.kind==='command') return '@'+node.name;
+    if(node.kind==='command' || node.kind==='group'){
+      // Browsing shows the path segment (the breadcrumb carries the context);
+      // search shows the full '@command' since results have no breadcrumb.
+      return (state.query && node.full) ? '@'+node.full : node.name;
+    }
     if(node.kind==='action' && state.query && node.agent) return node.agent+' · '+node.name;
     return (node.emoji?node.emoji+' ':'')+node.name;
   }
@@ -385,7 +424,7 @@ const APP = `
     if(node.kind==='category') return c+(c===1?' agent':' agents');
     if(node.kind==='host'){ var n=node._value||c; return n+(n===1?' command':' commands'); }
     if(node.kind==='agent') return c+(c===1?' action':' actions');
-    if(node.kind==='group') return c+(c===1?' command':' commands');
+    if(node.kind==='group'){ var g=node._value||c; return g+(g===1?' command':' commands'); }
     return '';
   }
 
@@ -427,7 +466,8 @@ const APP = `
     var nameHtml='<span class="lbl-name" style="font-size:'+Math.round(sz.name)+'px">'+esc(displayName(node))+'</span>';
     var subHtml=(sub && sz.showSub)?'<span class="lbl-sub" style="font-size:'+Math.round(sz.sub)+'px">'+esc(sub)+'</span>':'';
     el.innerHTML='<div class="'+lblCls+'">'+nameHtml+subHtml+'</div>';
-    var t = node.kind==='action'&&node.agent ? node.agent+' · '+node.name : displayName(node);
+    var t = node.kind==='action'&&node.agent ? node.agent+' · '+node.name
+      : (node.full ? '@'+node.full : displayName(node));
     el.title = t + (node.description?' — '+node.description:'');
     if(role==='tile'){
       if(vertical){ el.classList.add('vert'); }
@@ -441,10 +481,10 @@ const APP = `
   }
 
   function onCellClick(node, el){
-    // Agents and command groups open a details dialog (a treemap of their
-    // actions/commands would be meaningless without usage data); categories
-    // zoom in; leaves (reached via search) open the side panel.
-    if(node.kind==='agent' || node.kind==='group'){ openActionsDialog(node); return; }
+    // Agents open a details dialog (their actions have no sub-structure to zoom
+    // into). Categories, command hosts, and command groups zoom in; leaves
+    // open the side panel.
+    if(node.kind==='agent'){ openActionsDialog(node); return; }
     if(node.children && node.children.length){
       var r=el._layout;
       state.path.push(node);
@@ -532,7 +572,7 @@ const APP = `
   }
 
   function buildHay(node){
-    var parts=[node.name, node.description||'', node.agent||''];
+    var parts=[node.name, node.full||'', node.description||'', node.agent||''];
     if(node.parameters) node.parameters.forEach(function(p){parts.push(p.name,p.description||'');});
     if(node.phrasings) parts=parts.concat(node.phrasings);
     if(node.args) node.args.forEach(function(a){parts.push(a.name,a.description||'');});
@@ -620,7 +660,7 @@ const APP = `
   function openPanel(node){
     if(node.kind!=='action' && node.kind!=='command') return;
     var kicker = node.kind==='action' ? esc(node.agent||'')+' · '+esc(node.schema||'') : esc(node.host||'system')+' command';
-    var title = node.kind==='command' ? '@'+esc(node.name) : esc(node.name);
+    var title = node.kind==='command' ? '@'+esc(node.full||node.name) : esc(node.name);
     document.getElementById('panelBody').innerHTML='<div class="p-kicker">'+kicker+'</div><h2 class="p-title">'+title+'</h2>'+detailHtml(node);
     document.getElementById('panel').classList.add('open');
     document.getElementById('backdrop').classList.add('show');
