@@ -965,6 +965,42 @@ type LaunchCopilotChatAction = {
     };
 };
 
+type ChatSessionLocation = "view" | "editor" | "window";
+
+function resolveChatSessionLocation(value: unknown): ChatSessionLocation {
+    if (value === "editor" || value === "window") {
+        return value;
+    }
+    return "view";
+}
+
+function getChatOpenCommand(location: ChatSessionLocation): string {
+    switch (location) {
+        case "editor":
+            return "workbench.action.openChat";
+        case "window":
+            return "workbench.action.newChatWindow";
+        default:
+            return "workbench.action.chat.newChat";
+    }
+}
+
+function describeCopilotChatTarget(
+    newSession: boolean,
+    location: ChatSessionLocation,
+): string {
+    if (!newSession) {
+        return "GitHub Copilot Chat";
+    }
+    if (location === "editor") {
+        return "a new GitHub Copilot Chat editor";
+    }
+    if (location === "window") {
+        return "a new GitHub Copilot Chat window";
+    }
+    return "a new GitHub Copilot Chat session";
+}
+
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
@@ -1011,12 +1047,9 @@ async function handleCopilotChatAction(
         ? params.attachFiles.filter((p: unknown) => typeof p === "string")
         : [];
     const newSession: boolean = params.newSession !== false;
-    const newSessionLocation: "view" | "editor" | "window" =
-        params.newSessionLocation === "editor"
-            ? "editor"
-            : params.newSessionLocation === "window"
-              ? "window"
-              : "view";
+    const newSessionLocation = resolveChatSessionLocation(
+        params.newSessionLocation,
+    );
 
     if (!(await isCopilotChatAvailable())) {
         return {
@@ -1027,12 +1060,7 @@ async function handleCopilotChatAction(
     }
 
     if (newSession) {
-        const newSessionCommand =
-            newSessionLocation === "editor"
-                ? "workbench.action.openChat"
-                : newSessionLocation === "window"
-                  ? "workbench.action.newChatWindow"
-                  : "workbench.action.chat.newChat";
+        const newSessionCommand = getChatOpenCommand(newSessionLocation);
         try {
             await vscode.commands.executeCommand(newSessionCommand);
         } catch {
@@ -1042,13 +1070,10 @@ async function handleCopilotChatAction(
 
     const attachFiles = attachFilePaths.map((p) => vscode.Uri.file(p));
 
-    const openedWhere = !newSession
-        ? "GitHub Copilot Chat"
-        : newSessionLocation === "editor"
-          ? "a new GitHub Copilot Chat editor"
-          : newSessionLocation === "window"
-            ? "a new GitHub Copilot Chat window"
-            : "a new GitHub Copilot Chat session";
+    const openedWhere = describeCopilotChatTarget(
+        newSession,
+        newSessionLocation,
+    );
 
     let usedFallback = false;
     try {
@@ -1108,12 +1133,9 @@ async function handleClaudeChatAction(
     params: Record<string, any>,
 ): Promise<ActionResult> {
     const query: string = typeof params.query === "string" ? params.query : "";
-    const newSessionLocation: "view" | "editor" | "window" =
-        params.newSessionLocation === "editor"
-            ? "editor"
-            : params.newSessionLocation === "window"
-              ? "window"
-              : "view";
+    const newSessionLocation = resolveChatSessionLocation(
+        params.newSessionLocation,
+    );
 
     // Try Anthropic Claude for VS Code extension command
     const claudeCommands = [
@@ -1164,12 +1186,9 @@ async function handleGPTChatAction(
     params: Record<string, any>,
 ): Promise<ActionResult> {
     const query: string = typeof params.query === "string" ? params.query : "";
-    const newSessionLocation: "view" | "editor" | "window" =
-        params.newSessionLocation === "editor"
-            ? "editor"
-            : params.newSessionLocation === "window"
-              ? "window"
-              : "view";
+    const newSessionLocation = resolveChatSessionLocation(
+        params.newSessionLocation,
+    );
 
     // Try various GPT/OpenAI related extension commands
     const gptCommands = [
@@ -1221,22 +1240,14 @@ async function handleGenericChatAction(
     params: Record<string, any>,
 ): Promise<ActionResult> {
     const query: string = typeof params.query === "string" ? params.query : "";
-    const newSessionLocation: "view" | "editor" | "window" =
-        params.newSessionLocation === "editor"
-            ? "editor"
-            : params.newSessionLocation === "window"
-              ? "window"
-              : "view";
+    const newSessionLocation = resolveChatSessionLocation(
+        params.newSessionLocation,
+    );
 
     try {
-        const chatCommand =
-            newSessionLocation === "editor"
-                ? "workbench.action.openChat"
-                : newSessionLocation === "window"
-                  ? "workbench.action.newChatWindow"
-                  : "workbench.action.chat.newChat";
-
-        await vscode.commands.executeCommand(chatCommand);
+        await vscode.commands.executeCommand(
+            getChatOpenCommand(newSessionLocation),
+        );
 
         return {
             handled: true,
