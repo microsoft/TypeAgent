@@ -201,9 +201,7 @@ async function buildGeneratedAgentTranslator(options: {
     let mod: DefaultAgentProviderTranslatorModule;
     try {
         const specifier = "default-agent-provider";
-        mod = (await import(
-            specifier
-        )) as DefaultAgentProviderTranslatorModule;
+        mod = (await import(specifier)) as DefaultAgentProviderTranslatorModule;
     } catch (e) {
         throw new Error(
             "Generated-agent translator is unavailable: could not load " +
@@ -224,7 +222,11 @@ async function buildGeneratedAgentTranslator(options: {
  * absent or has no phrases.
  */
 const readPhrases: PhrasesReader = async (integrationName) => {
-    const raw = await readArtifact(integrationName, "phraseGen", "phrases.json");
+    const raw = await readArtifact(
+        integrationName,
+        "phraseGen",
+        "phrases.json",
+    );
     if (raw === undefined) {
         return undefined;
     }
@@ -258,8 +260,10 @@ export function createServiceUtteranceProver(options: {
             const result = await translator.translateUtterance(utterance);
             const outcome: UtteranceTranslateOutcome = {
                 actions: result.actions.map((a) => {
-                    const resolved: { schemaName?: string; actionName?: string } =
-                        {};
+                    const resolved: {
+                        schemaName?: string;
+                        actionName?: string;
+                    } = {};
                     if (a.schemaName !== undefined) {
                         resolved.schemaName = a.schemaName;
                     }

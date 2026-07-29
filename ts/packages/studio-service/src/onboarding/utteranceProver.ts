@@ -150,7 +150,9 @@ function noPhrasesError(integrationName: string): Error {
  * name and proves that a PhraseGen example phrase resolves to one of the
  * agent's typed actions.
  */
-export function createUtteranceProver(deps: UtteranceProverDeps): (
+export function createUtteranceProver(
+    deps: UtteranceProverDeps,
+): (
     integrationName: string,
     options?: ProveUtteranceOptions,
 ) => Promise<UtteranceProofResult> {
@@ -164,7 +166,10 @@ export function createUtteranceProver(deps: UtteranceProverDeps): (
             if (phrases === undefined || Object.keys(phrases).length === 0) {
                 throw noPhrasesError(integrationName);
             }
-            const selected = selectExamplePhrase(phrases, options.expectedAction);
+            const selected = selectExamplePhrase(
+                phrases,
+                options.expectedAction,
+            );
             if (selected === undefined) {
                 throw noPhrasesError(integrationName);
             }
@@ -185,12 +190,17 @@ export function createUtteranceProver(deps: UtteranceProverDeps): (
         // 3. Interpret the resolution. A benign translator error (clarify /
         // cancelled / unknown) means the agent did not answer — surface it, but
         // do not throw: "did not answer" is a valid, reportable verdict.
-        const resolved = firstTypedAction(outcome.actions, options.agentSchemaNames);
+        const resolved = firstTypedAction(
+            outcome.actions,
+            options.agentSchemaNames,
+        );
         if (resolved === undefined) {
             return {
                 ...base,
                 answered: false,
-                ...(outcome.error !== undefined ? { error: outcome.error } : {}),
+                ...(outcome.error !== undefined
+                    ? { error: outcome.error }
+                    : {}),
             };
         }
 
