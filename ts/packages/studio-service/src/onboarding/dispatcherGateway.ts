@@ -72,7 +72,7 @@ let handlePromise: Promise<OnboardingDispatcherHandleLike> | undefined;
  */
 async function getHandle(): Promise<OnboardingDispatcherHandleLike> {
     if (handlePromise === undefined) {
-        handlePromise = (async () => {
+        const pending = (async () => {
             let mod: DefaultAgentProviderOnboardingModule;
             try {
                 // Indirect the specifier through a variable so TypeScript does
@@ -91,6 +91,15 @@ async function getHandle(): Promise<OnboardingDispatcherHandleLike> {
             }
             return mod.createOnboardingOnlyDispatcher();
         })();
+        // Don't cache a failed attempt: a transient error (e.g. a dev-time
+        // module-resolution hiccup) should be retryable on the next call
+        // rather than wedging onboarding until the service restarts.
+        void pending.catch(() => {
+            if (handlePromise === pending) {
+                handlePromise = undefined;
+            }
+        });
+        handlePromise = pending;
     }
     return handlePromise;
 }

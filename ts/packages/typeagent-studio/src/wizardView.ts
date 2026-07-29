@@ -51,8 +51,8 @@ function getInstallHealthGatePolicy(): InstallHealthGatePolicy {
 
 /**
  * Open (or reveal) the singleton New Agent wizard panel. Driven entirely by the
- * in-process `runtime`; the panel keeps its context while hidden so navigating
- * away and back doesn't drop the walked-phase state.
+ * service-backed {@link OnboardingRuntime}; the panel keeps its context while
+ * hidden so navigating away and back doesn't drop the walked-phase state.
  */
 export function openNewAgentWizard(
     context: vscode.ExtensionContext,
@@ -172,6 +172,7 @@ export function openNewAgentWizard(
             case "runPhase": {
                 post({ type: "status", text: `Running ${message.phase}…` });
                 await runtime.runPhaseOnActiveSession(message.phase);
+                post({ type: "status", text: `Ran ${message.phase}.` });
                 await postState();
                 return;
             }
@@ -219,6 +220,10 @@ export function openNewAgentWizard(
                     text: `Re-running ${stale.join(", ")}…`,
                 });
                 await runtime.rerunPhasesOnActiveSession(stale);
+                post({
+                    type: "status",
+                    text: `Re-ran ${stale.join(", ")}.`,
+                });
                 await postState();
                 return;
             }
@@ -305,6 +310,7 @@ export function openNewAgentWizard(
                 throw error;
             }
         }
+        post({ type: "status", text: `Installed into ${sandboxId}.` });
         await postState();
     }
 

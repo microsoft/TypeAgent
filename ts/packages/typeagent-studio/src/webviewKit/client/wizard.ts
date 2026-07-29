@@ -154,6 +154,7 @@ window.addEventListener("message", (event: MessageEvent) => {
             break;
         case "error":
             errorText = msg.message;
+            statusText = undefined;
             render();
             break;
         case "utteranceProof":

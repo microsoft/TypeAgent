@@ -6,7 +6,7 @@
 // and by the Packaging phase (as an idempotent rebuild before distribution).
 
 import { spawn } from "child_process";
-import { existsSync, readFileSync } from "fs";
+import { readFileSync } from "fs";
 import path from "path";
 
 export interface CommandOutcome {
@@ -29,11 +29,14 @@ function findFeedRegistry(startDir: string): string | undefined {
     // eslint-disable-next-line no-constant-condition
     while (true) {
         const npmrc = path.join(dir, ".npmrc");
-        if (existsSync(npmrc)) {
+        try {
             const match = readFileSync(npmrc, "utf-8").match(
                 /^\s*registry\s*=\s*(\S+)/m,
             );
             if (match) return match[1];
+        } catch {
+            // Best-effort: an unreadable .npmrc (absent, permissions, transient
+            // IO) just means "keep walking up", not a build failure.
         }
         const parent = path.dirname(dir);
         if (parent === dir) return undefined;

@@ -7,11 +7,10 @@
  *
  * Pure data + narrowing only — no `vscode` or DOM dependency, and only *type*
  * imports from `@typeagent/core` — so both the extension host bundle and the
- * browser client bundle import it, and it is unit testable. The host owns the
- * in-process Studio runtime (onboarding is the one surface still driven in
- * process) and turns each webview request into a runtime call, posting the
- * resulting {@link WizardViewModel} back; the webview never touches the runtime
- * directly.
+ * browser client bundle import it, and it is unit testable. The host forwards
+ * each webview request to the standalone Studio service (where onboarding runs)
+ * and posts the resulting {@link WizardViewModel} back; the webview never
+ * touches the runtime directly.
  */
 
 import type { OnboardingPhaseName } from "@typeagent/core/onboardingBridge";
