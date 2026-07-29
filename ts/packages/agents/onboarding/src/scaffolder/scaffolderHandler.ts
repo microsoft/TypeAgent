@@ -21,6 +21,7 @@ import {
 } from "../lib/workspace.js";
 import type { ApiSurface } from "../discovery/discoveryHandler.js";
 import { buildCliHandler } from "./cliHandlerTemplate.js";
+import { buildRestHandler, filterRestActions } from "./restHandlerTemplate.js";
 import { loadTemplate } from "./templateLoader.js";
 import { generateAgentKeywordFiles } from "./agentKeywordFiles.js";
 import type { KeywordSchemaTarget } from "./agentKeywordFiles.js";
@@ -726,7 +727,7 @@ function buildManifest(
     return manifest;
 }
 
-async function buildHandler(
+export async function buildHandler(
     name: string,
     pascalName: string,
     pattern: AgentPattern = "schema-grammar",
@@ -739,6 +740,27 @@ async function buildHandler(
     if (cliActions && cliActions.length > 0) {
         const cliCommand = cliActions[0].sourceUrl!.split(":")[1];
         return await buildCliHandler(name, pascalName, cliCommand, cliActions);
+    }
+
+    // If discovery data has a resolved OpenAPI base URL, generate a real
+    // fetch-based REST handler for the patterns that model a direct REST
+    // integration (schema-grammar is the default when a caller doesn't
+    // specify a pattern). Explicit non-REST patterns (websocket-bridge,
+    // native-platform, etc.) keep their own dedicated builders even if an
+    // apiSurface happens to be attached.
+    if (
+        apiSurface?.baseUrl &&
+        (pattern === "schema-grammar" || pattern === "external-api")
+    ) {
+        const restActions = filterRestActions(apiSurface.actions);
+        if (restActions.length > 0) {
+            return await buildRestHandler(
+                name,
+                pascalName,
+                apiSurface.baseUrl,
+                restActions,
+            );
+        }
     }
 
     switch (pattern) {

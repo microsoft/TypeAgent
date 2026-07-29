@@ -42,6 +42,8 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "test": "npm run test:local",
+    "test:local": "tsx --test test/*.spec.ts",
     "tsc": "tsc -b"
   },
   "dependencies": {
@@ -64,6 +66,7 @@
     "copyfiles": "^2.4.1",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
+    "tsx": "^4.21.0",
     "typescript": "~5.4.5",
     "ws": "^8.21.1"
   },

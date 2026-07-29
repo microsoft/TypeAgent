@@ -49,6 +49,9 @@ export type DiscoveredParameter = {
     type: string;
     description?: string;
     required?: boolean;
+    // Where the parameter lives on the wire (OpenAPI `in`, or "body" for a
+    // request-body property). Only set by the parseOpenApiSpec arm.
+    in?: "path" | "query" | "header" | "cookie" | "body";
 };
 
 export type DiscoveredEntity = {
@@ -66,6 +69,10 @@ export type ApiSurface = {
     approved?: boolean;
     approvedAt?: string;
     approvedActions?: string[];
+    // Absolute http/https base URL resolved from the OpenAPI spec's
+    // `servers[0].url` (parseOpenApiSpec arm only). Unset when it cannot be
+    // resolved to a well-formed http/https URL (see resolveOpenApiBaseUrl).
+    baseUrl?: string;
 };
 
 // TypeChat translator for structured CLI help extraction
@@ -359,6 +366,167 @@ function isInternalAction(name: string): boolean {
     return false;
 }
 
+// Resolve an OpenAPI 3 spec's base URL to an absolute http/https URL, or
+// return undefined when it cannot be resolved deterministically (Swagger 2
+// host/basePath/schemes, malformed/local, or missing server variable
+// defaults are all left unset — the REST handler generator then falls back
+// to the stub handler rather than emitting a malformed request).
+export function resolveOpenApiBaseUrl(
+    spec: any,
+    specSource: string,
+    fetchedUrl?: string,
+): string | undefined {
+    const specIsHttp = /^https?:\/\//i.test(specSource);
+    // Prefer the post-redirect URL (only meaningful when we actually fetched
+    // over http/https); otherwise fall back to the original specSource.
+    const specLocation = specIsHttp ? (fetchedUrl ?? specSource) : undefined;
+
+    const rawServerUrl: string | undefined = spec?.servers?.[0]?.url;
+
+    if (!rawServerUrl) {
+        // No `servers` entry — fall back to the origin of the spec's own
+        // location, but only when that location is itself http/https.
+        if (!specLocation) return undefined;
+        try {
+            return new URL(specLocation).origin;
+        } catch {
+            return undefined;
+        }
+    }
+
+    // Substitute server variables ({var}) from servers[0].variables[var].default.
+    // If any referenced variable lacks a default, bail out rather than emit
+    // a malformed URL containing a literal "{var}".
+    const variables = spec.servers[0].variables ?? {};
+    let substituted = rawServerUrl;
+    const varNames = [...rawServerUrl.matchAll(/\{([^}]+)\}/g)].map(
+        (m) => m[1],
+    );
+    for (const varName of varNames) {
+        const def = variables?.[varName]?.default;
+        if (def === undefined || def === null) return undefined;
+        substituted = substituted.replaceAll(`{${varName}}`, String(def));
+    }
+
+    if (/^https?:\/\//i.test(substituted)) {
+        // Absolute — use as-is (preserving any path component).
+        try {
+            const u = new URL(substituted);
+            // Strip a trailing slash only; keep the rest of the path intact.
+            return u.toString().replace(/\/$/, "");
+        } catch {
+            return undefined;
+        }
+    }
+
+    // Relative server URL (e.g. "/v3") — resolve against the spec's own
+    // fetched location, only when that location is http/https.
+    if (!specLocation) return undefined;
+    try {
+        return new URL(substituted, specLocation).toString().replace(/\/$/, "");
+    } catch {
+        return undefined;
+    }
+}
+
+// Extract discovered actions from a parsed OpenAPI 3 (or Swagger 2 —
+// unsupported, will simply yield no actions since `spec.paths` items won't
+// have the shape below) spec document. Pure/synchronous so it can be unit
+// tested without going through the workspace-state-backed action handler.
+export function extractOpenApiActions(
+    spec: any,
+    specSource: string,
+): DiscoveredAction[] {
+    const actions: DiscoveredAction[] = [];
+    const paths = spec.paths ?? {};
+    for (const [pathStr, pathItem] of Object.entries(paths) as [
+        string,
+        any,
+    ][]) {
+        // Deterministic inline-OpenAPI-3 subset only — a `$ref`'d path item
+        // (shared path referencing a component) is out of scope for v1.
+        if (pathItem?.$ref) continue;
+
+        const pathLevelParams: any[] = Array.isArray(pathItem?.parameters)
+            ? pathItem.parameters
+            : [];
+
+        for (const method of [
+            "get",
+            "post",
+            "put",
+            "patch",
+            "delete",
+        ] as const) {
+            const op = pathItem?.[method];
+            if (!op) continue;
+
+            const name =
+                op.operationId ??
+                `${method}${pathStr.replace(/[^a-zA-Z0-9]/g, "_")}`;
+            const camelName = name.replace(
+                /_([a-z])/g,
+                (_: string, c: string) => c.toUpperCase(),
+            );
+
+            // Merge path-level parameters (shared across all operations on
+            // this path) with operation-level parameters, keyed by
+            // (name, in) — operation-level entries override path-level ones.
+            const opLevelParams: any[] = Array.isArray(op.parameters)
+                ? op.parameters
+                : [];
+            const mergedByKey = new Map<string, any>();
+            for (const p of [...pathLevelParams, ...opLevelParams]) {
+                // Inline params only — skip `$ref`'d parameters (out of
+                // scope for v1 deterministic generation).
+                if (!p || p.$ref || !p.name) continue;
+                mergedByKey.set(`${p.in ?? "query"}:${p.name}`, p);
+            }
+
+            const parameters: DiscoveredParameter[] = Array.from(
+                mergedByKey.values(),
+            ).map((p: any) => ({
+                name: p.name,
+                type: p.schema?.type ?? "string",
+                description: p.description,
+                required: p.required ?? false,
+                in: p.in,
+            }));
+
+            // Also include request body fields as parameters
+            const requestBody =
+                op.requestBody?.content?.["application/json"]?.schema;
+            if (requestBody?.properties) {
+                for (const [propName, propSchema] of Object.entries(
+                    requestBody.properties,
+                ) as [string, any][]) {
+                    parameters.push({
+                        name: propName,
+                        type: propSchema.type ?? "string",
+                        description: propSchema.description,
+                        required:
+                            requestBody.required?.includes(propName) ?? false,
+                        in: "body",
+                    });
+                }
+            }
+
+            actions.push({
+                name: camelName,
+                description:
+                    op.summary ??
+                    op.description ??
+                    `${method.toUpperCase()} ${pathStr}`,
+                method: method.toUpperCase(),
+                path: pathStr,
+                parameters,
+                sourceUrl: specSource,
+            });
+        }
+    }
+    return actions;
+}
+
 async function handleParseOpenApiSpec(
     integrationName: string,
     specSource: string,
@@ -374,6 +542,9 @@ async function handleParseOpenApiSpec(
 
     // Fetch the spec (URL or file path)
     let specContent: string;
+    // Post-redirect URL when specSource is fetched over http/https; used to
+    // resolve a relative `servers[0].url` against the *actual* spec location.
+    let fetchedUrl: string | undefined;
     try {
         if (
             specSource.startsWith("http://") ||
@@ -385,6 +556,7 @@ async function handleParseOpenApiSpec(
                     error: `Failed to fetch spec: ${response.status} ${response.statusText}`,
                 };
             }
+            fetchedUrl = response.url || specSource;
             specContent = await response.text();
         } else {
             const fs = await import("fs/promises");
@@ -411,75 +583,15 @@ async function handleParseOpenApiSpec(
     }
 
     // Extract actions from OpenAPI paths
-    const actions: DiscoveredAction[] = [];
-    const paths = spec.paths ?? {};
-    for (const [pathStr, pathItem] of Object.entries(paths) as [
-        string,
-        any,
-    ][]) {
-        for (const method of [
-            "get",
-            "post",
-            "put",
-            "patch",
-            "delete",
-        ] as const) {
-            const op = pathItem?.[method];
-            if (!op) continue;
+    const actions: DiscoveredAction[] = extractOpenApiActions(spec, specSource);
 
-            const name =
-                op.operationId ??
-                `${method}${pathStr.replace(/[^a-zA-Z0-9]/g, "_")}`;
-            const camelName = name.replace(
-                /_([a-z])/g,
-                (_: string, c: string) => c.toUpperCase(),
-            );
-
-            const parameters: DiscoveredParameter[] = (op.parameters ?? []).map(
-                (p: any) => ({
-                    name: p.name,
-                    type: p.schema?.type ?? "string",
-                    description: p.description,
-                    required: p.required ?? false,
-                }),
-            );
-
-            // Also include request body fields as parameters
-            const requestBody =
-                op.requestBody?.content?.["application/json"]?.schema;
-            if (requestBody?.properties) {
-                for (const [propName, propSchema] of Object.entries(
-                    requestBody.properties,
-                ) as [string, any][]) {
-                    parameters.push({
-                        name: propName,
-                        type: propSchema.type ?? "string",
-                        description: propSchema.description,
-                        required:
-                            requestBody.required?.includes(propName) ?? false,
-                    });
-                }
-            }
-
-            actions.push({
-                name: camelName,
-                description:
-                    op.summary ??
-                    op.description ??
-                    `${method.toUpperCase()} ${pathStr}`,
-                method: method.toUpperCase(),
-                path: pathStr,
-                parameters,
-                sourceUrl: specSource,
-            });
-        }
-    }
-
+    const resolvedBaseUrl = resolveOpenApiBaseUrl(spec, specSource, fetchedUrl);
     const surface: ApiSurface = {
         integrationName,
         discoveredAt: new Date().toISOString(),
         source: specSource,
         actions,
+        ...(resolvedBaseUrl !== undefined ? { baseUrl: resolvedBaseUrl } : {}),
     };
 
     await writeArtifactJson(
