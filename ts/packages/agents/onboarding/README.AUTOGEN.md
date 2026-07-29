@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7c4e6ad34c5147f429539978bbc54753b1344fede45208b9bb8b28686bf44a5e -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c6d754b9d61ad6caa1ee458bb898841b6958f38d182502b2daba8bc0870b52ba -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # onboarding-agent — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `onboarding-agent` is a TypeAgent application agent that automates the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each managed by a sub-agent. This agent is designed to streamline the onboarding process by generating the necessary artifacts and configurations for new integrations. It is particularly effective when used with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
+The `onboarding-agent` is a TypeAgent application agent designed to automate the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each managed by a sub-agent. This agent simplifies the onboarding process by generating the necessary artifacts and configurations for new integrations. It is particularly effective when used with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
 
 ## What it does
 
@@ -135,7 +135,7 @@ External: `debug`, `typechat`
 - [./src/discovery/discoverySchema.ts](./src/discovery/discoverySchema.ts)
 - [./src/grammarGen/grammarGenHandler.ts](./src/grammarGen/grammarGenHandler.ts)
 - [./src/grammarGen/grammarGenSchema.agr](./src/grammarGen/grammarGenSchema.agr)
-- _…and 85 more under `./src/`._
+- _…and 86 more under `./src/`._
 
 ### Agent surface
 
@@ -164,6 +164,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/onboa
 
 ---
 
-_Auto-generated against commit `c97eb42726a9196c7ac72138faa0777c5cbc1aab` on `2026-07-18T09:48:36.613Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `c76977e7c741a867eeab64b934df5da582064952` on `2026-07-29T05:39:35.369Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

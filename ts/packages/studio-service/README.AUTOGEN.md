@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c9e6de9a0fdf0d7cb460c756d775cd78b8eef2a55a4b05d4d5c00f742bd764b5 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=5a236adfdc4c92433379673a40bd54ca36a787848b9f79fce8e6a089c2e74075 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # studio-service — AI-generated documentation
@@ -12,19 +12,19 @@
 
 ## Overview
 
-The `studio-service` package is a standalone, per-workspace host for the TypeAgent Studio runtime (`@typeagent/core/runtime`) and its typed `agent-rpc` service channel. It is designed to operate within a developer's workspace, providing a dedicated environment for managing workspace state and facilitating communication between the Studio runtime and its clients. This service is typically launched by the `typeagent-studio` extension or the `typeagent-studio serve` CLI.
+The `studio-service` package is a standalone, per-workspace host for the TypeAgent Studio runtime (`@typeagent/core/runtime`) and its typed `agent-rpc` service channel. It operates within a developer's workspace, providing a dedicated environment for managing workspace state and facilitating communication between the Studio runtime and its clients. This service is typically launched by the `typeagent-studio` extension or the `typeagent-studio serve` CLI.
 
 ## What it does
 
-The `studio-service` package provides the following key functionalities:
+The `studio-service` package provides the following core functionalities:
 
-- **Studio Runtime Hosting**: It runs the Studio runtime, which is responsible for managing the state of the developer's workspace and executing actions within it.
-- **Typed Service Channel**: The package establishes a typed `agent-rpc` service channel, enabling structured communication between the Studio runtime and its clients, such as the `studio` agent and the `typeagent-studio` extension.
-- **Workspace State Management**: The service uses a file-backed `StudioWorkspaceState` implementation to persist runtime state across service restarts, ensuring continuity and durability.
-- **Service Discovery and Registration**: The service includes mechanisms for announcing its availability, discovering its port and token, and enabling clients to connect securely.
-- **Proxy Client**: A lightweight proxy client is provided for the `studio` agent to forward read-only actions to the standalone Studio service.
+- **Studio Runtime Hosting**: It runs the Studio runtime, which manages the state of the developer's workspace and executes actions within it.
+- **Typed Service Channel**: Establishes a typed `agent-rpc` service channel for structured communication between the Studio runtime and its clients, such as the `studio` agent and the `typeagent-studio` extension.
+- **Workspace State Management**: Implements a file-backed `StudioWorkspaceState` to persist runtime state across service restarts, ensuring continuity and durability.
+- **Service Discovery and Registration**: Includes mechanisms for announcing the service's availability, discovering its port and token, and enabling secure client connections.
+- **Proxy Client**: Provides a lightweight proxy client for the `studio` agent to forward read-only actions to the standalone Studio service.
 
-The service supports a range of actions, including workspace state management and communication with the Studio runtime. These actions are exposed through typed `agent-rpc` handlers defined in [studioRpcHandlers.ts](./src/studioRpcHandlers.ts).
+The service supports a range of actions related to workspace state management and runtime communication. These actions are exposed through typed `agent-rpc` handlers defined in [studioRpcHandlers.ts](./src/studioRpcHandlers.ts).
 
 ## Setup
 
@@ -32,7 +32,7 @@ To configure and run the `studio-service` package, you need to set the following
 
 - `TYPEAGENT_STUDIO_REPO_ROOT`: Specifies the root directory of the repository that the Studio service should inspect. If this variable is not set, the service defaults to using the current working directory. You can set this variable in your shell or in a `.env` file located in the `ts/` directory.
 
-Once the environment variable is set, you can launch the service using the `typeagent-studio serve` CLI or programmatically via its API. For more details on the setup process, refer to the hand-written README.
+Once the environment variable is set, you can launch the service using the `typeagent-studio serve` CLI or programmatically via its API. For additional details, refer to the hand-written README.
 
 ## Key Files
 
@@ -87,7 +87,7 @@ External: `debug`, `ws`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/main.ts`, `./src/fileWorkspaceState.ts`, …and 8 more under `./src/`.
+`./src/index.ts`, `./src/main.ts`, `./src/fileWorkspaceState.ts`, …and 11 more under `./src/`.
 
 ### Environment variables
 
@@ -97,6 +97,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `fbf54a8aff55bd1ef482ad8fbf2064bc3d38486c` on `2026-07-17T05:44:32.534Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter studio-service docs:verify-links` to spot-check._
+_Auto-generated against commit `c76977e7c741a867eeab64b934df5da582064952` on `2026-07-29T05:39:35.369Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter studio-service docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

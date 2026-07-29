@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=7553eb832fec82464301785691d6822d248e5ac63cf2c00bb6e9e03627b7d0d0 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=6b2a0e37ff45fef08760849123c36fefa2f22ae8656f8e82201f5f300e3b81ce -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent-studio — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The `typeagent-studio` package is a TypeScript library that provides the developer experience for working with TypeAgent agents within Visual Studio Code. It offers tools for authoring, debugging, and optimizing agents, with features such as schema and grammar tuning, compare-and-replay regression detection, trace investigation, and live observation. This package is designed to support developers in creating and refining TypeAgent agents efficiently.
+The `typeagent-studio` package is a TypeScript library that powers the Visual Studio Code extension for the TypeAgent developer experience. It provides tools for authoring, debugging, and optimizing TypeAgent agents, including schema and grammar tuning, compare-and-replay regression detection, trace investigation, and live observation. This package is central to the workflow of developers working with TypeAgent agents, offering a rich set of commands and views to streamline the development process.
 
 ## What it does
 
-The `typeagent-studio` package integrates with Visual Studio Code to deliver a comprehensive set of tools for managing and debugging TypeAgent agents. These tools are accessible through commands and views, enabling developers to perform tasks such as onboarding, sandbox management, corpus replay, and collision detection.
+The `typeagent-studio` package integrates with Visual Studio Code to deliver a comprehensive suite of tools for managing and debugging TypeAgent agents. These tools are accessible through commands in the command palette and specialized views in the **TypeAgent Studio** activity-bar container.
 
 ### Commands
 
-The package provides a wide range of commands accessible via the VS Code command palette. These commands are grouped into several categories:
+The package provides a wide range of commands, grouped into several categories:
 
 - **Onboarding and Sandbox Management**:
 
@@ -168,10 +168,10 @@ External: `debug`, `ws`
 
 ### Files of interest
 
-`./src/baseTreeProvider.ts`, `./src/collisionsPresentation.ts`, `./src/collisionsSource.ts`, …and 70 more under `./src/`.
+`./src/baseTreeProvider.ts`, `./src/collisionsPresentation.ts`, `./src/collisionsSource.ts`, …and 75 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `38f6b8e5cb0688da34e930559899bb2ea7bb0aca` on `2026-07-21T01:16:36.018Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent-studio docs:verify-links` to spot-check._
+_Auto-generated against commit `c76977e7c741a867eeab64b934df5da582064952` on `2026-07-29T05:39:35.369Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent-studio docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

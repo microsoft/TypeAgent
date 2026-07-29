@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=f66d060c2d28196c6ce519d1f47eae3a71746ffdfb788d747d9c0f0657ff6ce1 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=cff07b01a77814673ebe7d670bbf56f594f69d7d0c87bbe1e766f6e72dcfe15a -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # default-agent-provider — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent framework. It is a core component used by the shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents and configurations are available to support the TypeAgent ecosystem, including test agents and dispatcher configurations.
+The `default-agent-provider` package is a TypeScript library that acts as the default agent provider for the TypeAgent framework. It is a foundational component used by the shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents, configurations, and dispatcher options are available to support the TypeAgent ecosystem.
 
 ## What it does
 
-The `default-agent-provider` package provides a centralized mechanism for managing agents and their configurations. Its primary responsibilities include:
+The `default-agent-provider` package provides a centralized mechanism for managing agents and their configurations. Its key responsibilities include:
 
 - **Default Agent Providers**: Functions like `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` supply pre-configured agent providers and construction mechanisms for initializing agents.
 - **Agent Source Management**: The `getDefaultAppAgentSource` function manages the connected app-agent source, including the installed-agent record store and the host-owned `@package` agent.
@@ -27,13 +27,13 @@ The `default-agent-provider` package provides a centralized mechanism for managi
 
 The package includes test agents, such as the `vampire` agent, which are used to evaluate dispatcher subsystems like action collision detection. These agents are disabled by default in production but can be enabled for testing purposes via session configuration.
 
-### Collision Testing
-
-The package also includes operational scripts for testing dispatcher functionality and agent behavior under various scenarios, such as action collision detection and optimization pipelines. These scripts are located in the `collisions` directory and are primarily used for internal testing and debugging.
-
 ### Managing Non-Bundled Agents
 
-Some agents, such as `androidMobile` and `vampire`, are not included in the default provider profile. These agents can be installed on demand using the `@package` commands. The catalog source entries for these agents are defined in [../agents/agents.catalog.json](../agents/agents.catalog.json).
+Some agents, such as `androidMobile` and `vampire`, are not included in the default provider profile. These agents can be installed on demand using the `@package` commands. Catalog source entries for these agents are defined in [../agents/agents.catalog.json](../agents/agents.catalog.json).
+
+### Collision Testing
+
+The package includes operational scripts for testing dispatcher functionality and agent behavior under various scenarios, such as action collision detection and optimization pipelines. These scripts are located in the `collisions` directory and are primarily used for internal testing and debugging.
 
 ## Setup
 
@@ -127,6 +127,7 @@ Workspace:
 - [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/config](../../packages/config/README.md)
+- [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
 - [agent-cache](../../packages/cache/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [browser-typeagent](../../packages/agents/browser/README.md)
@@ -182,7 +183,7 @@ External: `@modelcontextprotocol/sdk`, `@modelcontextprotocol/server-filesystem`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/collisions/expandedCorpusRunner.ts`, `./src/collisions/listModels.ts`, …and 45 more under `./src/`.
+`./src/index.ts`, `./src/collisions/expandedCorpusRunner.ts`, `./src/collisions/listModels.ts`, …and 48 more under `./src/`.
 
 ### Environment variables
 
@@ -195,6 +196,6 @@ _4 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `5fc3c615e8d9fa175d635713c0ef64d7bda1ae1d` on `2026-07-15T22:53:07.031Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
+_Auto-generated against commit `c76977e7c741a867eeab64b934df5da582064952` on `2026-07-29T05:39:35.369Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

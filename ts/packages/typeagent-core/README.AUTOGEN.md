@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=faebf55cfb42c442b2dc848552d5244e97ab031b12a269bec8b501548f89d4ef -->
+<!-- AUTOGEN:DOCS:HASH:sha256=35e2ac0d9ff352f080cdf5497fd50d553cd4b2e59d467669abd41083e374eb99 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/core — AI-generated documentation
@@ -12,15 +12,15 @@
 
 ## Overview
 
-The `@typeagent/core` package is a foundational TypeScript library that provides shared functionality for the TypeAgent Studio ecosystem. It acts as the core engine for various extensions and subsystems, supporting features such as sandbox lifecycle management, federated corpus handling, structured event streaming, feedback collection, health monitoring, collision detection, corpus replay, and onboarding workflows. This package is a critical dependency for other components in the TypeAgent ecosystem, including `typeagent-studio`, `agr-language`, and `vscode-shell`.
+The `@typeagent/core` package is a foundational TypeScript library that provides shared functionality for the TypeAgent Studio ecosystem. It serves as the core engine for various extensions and subsystems, enabling features such as sandbox lifecycle management, federated corpus handling, structured event streaming, feedback collection, health monitoring, collision detection, corpus replay, and onboarding workflows. This package is a critical dependency for other components in the TypeAgent ecosystem, including `typeagent-studio`, `agr-language`, and `vscode-shell`.
 
 ## What it does
 
-The `@typeagent/core` package is organized into modular subsystems, each designed to address a specific aspect of the TypeAgent Studio platform. These subsystems include:
+The `@typeagent/core` package is modular, with each subsystem addressing a specific aspect of the TypeAgent Studio platform. Key subsystems include:
 
-- **Events**: Provides structured event stream management, enabling the creation, logging, and dispatching of events. This is essential for tracking system activities and interactions.
-- **Sandbox**: Manages the lifecycle of sandboxes, including their creation, destruction, and state management. Sandboxes are isolated environments used for executing agents and other processes.
-- **Corpus**: Offers tools for managing federated corpora, including file-based corpus services, JSONL utilities, and unique identifier generation for corpus entries. This subsystem is essential for organizing and accessing large datasets.
+- **Events**: Manages structured event streams, enabling the creation, logging, and dispatching of events. This is essential for tracking system activities and interactions.
+- **Sandbox**: Handles the lifecycle of sandboxes, including their creation, destruction, and state management. Sandboxes are isolated environments used for executing agents and other processes.
+- **Corpus**: Provides tools for managing federated corpora, including file-based corpus services, JSONL utilities, and unique identifier generation for corpus entries. This subsystem is critical for organizing and accessing large datasets.
 - **Feedback**: Implements mechanisms for collecting and processing user feedback, which can be used to improve system behavior and user experience.
 - **Health**: Features a rule engine for monitoring the health of the system, ensuring stability and identifying potential issues.
 - **Collisions**: Detects and manages collision events, supporting both dispatcher-based and grammar-based collision detection. This is particularly useful for identifying and resolving conflicts in agent grammars.
@@ -135,6 +135,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `38f6b8e5cb0688da34e930559899bb2ea7bb0aca` on `2026-07-21T01:16:36.018Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/core docs:verify-links` to spot-check._
+_Auto-generated against commit `c76977e7c741a867eeab64b934df5da582064952` on `2026-07-29T05:39:35.369Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/core docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
