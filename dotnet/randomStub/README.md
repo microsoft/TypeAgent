@@ -53,8 +53,20 @@ dotnet build dotnet/randomStub/randomStub.csproj -c Release
 ## Deploy for a demo
 
 The onboarding Discovery phase runs the bare command name, so `randomstub` must
-be resolvable on the `PATH` of the process running the Studio service. Publish a
-single-file binary and drop it in a directory that is already on your `PATH`:
+be resolvable on the `PATH` of the process running the Studio service.
+
+**One command** (builds, publishes, and copies the binary to a PATH dir):
+
+```
+node dotnet/randomStub/deploy.mjs
+```
+
+By default it deploys to the npm global bin dir (already on `PATH`). Use
+`--to <dir>` to target a specific directory, or `--print-target` to see where it
+would land. The script is cross-platform (win/linux/osx) and picks the right RID
+automatically.
+
+**Manual** (equivalent to what the script does):
 
 ```
 dotnet publish dotnet/randomStub/randomStub.csproj -c Release -r win-x64 \
