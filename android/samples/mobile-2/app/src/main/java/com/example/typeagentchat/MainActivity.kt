@@ -103,6 +103,7 @@ private fun ChatApp(
 ) {
     val messages by webSocketManager.messages.collectAsState()
     val connectionStatus by webSocketManager.connectionStatus.collectAsState()
+    val pendingYesNoPrompt by webSocketManager.pendingYesNoPrompt.collectAsState()
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
@@ -194,7 +195,10 @@ private fun ChatApp(
                 canSend = canSend,
                 onSend = { submitMessage() },
                 isVoiceInputAvailable = voiceInput.isAvailable,
-                onVoiceInputClick = voiceInput.onStartRequested
+                onVoiceInputClick = voiceInput.onStartRequested,
+                pendingYesNoPrompt = pendingYesNoPrompt,
+                onConfirmYes = { webSocketManager.respondToPendingYesNo(true) },
+                onConfirmNo = { webSocketManager.respondToPendingYesNo(false) }
             )
         }
     }
@@ -313,7 +317,10 @@ private fun ChatInputBar(
     canSend: Boolean,
     onSend: () -> Unit,
     isVoiceInputAvailable: Boolean,
-    onVoiceInputClick: () -> Unit
+    onVoiceInputClick: () -> Unit,
+    pendingYesNoPrompt: PendingYesNoPrompt?,
+    onConfirmYes: () -> Unit,
+    onConfirmNo: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -385,6 +392,24 @@ private fun ChatInputBar(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            if (pendingYesNoPrompt != null) {
+                Text(
+                    text = pendingYesNoPrompt.prompt,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(onClick = onConfirmYes) {
+                        Text("Yes")
+                    }
+                    TextButton(onClick = onConfirmNo) {
+                        Text("No")
+                    }
+                }
             }
         }
     }
@@ -509,8 +534,9 @@ private fun MessageBubble(message: Message) {
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold
                 )
-                Text(
+                ChatMessageText(
                     text = message.text,
+                    format = message.format,
                     color = textColor,
                     style = MaterialTheme.typography.bodyLarge
                 )
