@@ -1000,7 +1000,9 @@ export async function handleLaunchCopilotChatAction(
 }
 
 // GitHub Copilot Chat handler — uses native VS Code Copilot Chat integration
-async function handleCopilotChatAction(params: Record<string, any>): Promise<ActionResult> {
+async function handleCopilotChatAction(
+    params: Record<string, any>,
+): Promise<ActionResult> {
     const query: string = typeof params.query === "string" ? params.query : "";
     const mode: string = params.mode === "ask" ? "ask" : "agent";
     const autoSend: boolean = params.isPartialQuery !== true;
@@ -1102,7 +1104,9 @@ async function handleCopilotChatAction(params: Record<string, any>): Promise<Act
 }
 
 // Claude Chat handler — tries to open Claude extension if available
-async function handleClaudeChatAction(params: Record<string, any>): Promise<ActionResult> {
+async function handleClaudeChatAction(
+    params: Record<string, any>,
+): Promise<ActionResult> {
     const query: string = typeof params.query === "string" ? params.query : "";
     const newSessionLocation: "view" | "editor" | "window" =
         params.newSessionLocation === "editor"
@@ -1136,7 +1140,9 @@ async function handleClaudeChatAction(params: Record<string, any>): Promise<Acti
     // Fallback: open generic chat and mention Claude
     try {
         if (newSessionLocation === "window") {
-            await vscode.commands.executeCommand("workbench.action.chat.newChat");
+            await vscode.commands.executeCommand(
+                "workbench.action.chat.newChat",
+            );
         } else if (newSessionLocation === "editor") {
             await vscode.commands.executeCommand("workbench.action.openChat");
         }
@@ -1154,7 +1160,9 @@ async function handleClaudeChatAction(params: Record<string, any>): Promise<Acti
 }
 
 // ChatGPT/OpenAI handler — tries to open ChatGPT extension if available
-async function handleGPTChatAction(params: Record<string, any>): Promise<ActionResult> {
+async function handleGPTChatAction(
+    params: Record<string, any>,
+): Promise<ActionResult> {
     const query: string = typeof params.query === "string" ? params.query : "";
     const newSessionLocation: "view" | "editor" | "window" =
         params.newSessionLocation === "editor"
@@ -1189,7 +1197,9 @@ async function handleGPTChatAction(params: Record<string, any>): Promise<ActionR
     // Fallback: open generic chat
     try {
         if (newSessionLocation === "window") {
-            await vscode.commands.executeCommand("workbench.action.chat.newChat");
+            await vscode.commands.executeCommand(
+                "workbench.action.chat.newChat",
+            );
         } else if (newSessionLocation === "editor") {
             await vscode.commands.executeCommand("workbench.action.openChat");
         }
@@ -1207,7 +1217,9 @@ async function handleGPTChatAction(params: Record<string, any>): Promise<ActionR
 }
 
 // Generic chat handler — opens the default VS Code chat in the requested location
-async function handleGenericChatAction(params: Record<string, any>): Promise<ActionResult> {
+async function handleGenericChatAction(
+    params: Record<string, any>,
+): Promise<ActionResult> {
     const query: string = typeof params.query === "string" ? params.query : "";
     const newSessionLocation: "view" | "editor" | "window" =
         params.newSessionLocation === "editor"
