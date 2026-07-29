@@ -30,12 +30,12 @@
   },
   "dependencies": {
     "@elastic/elasticsearch": "^9.3.4",
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/config": "workspace:*",
+    "@typeagent/knowledge-processor": "workspace:*",
     "better-sqlite3": "12.6.2",
     "debug": "^4.4.0",
-    "knowledge-processor": "workspace:*",
-    "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AgentCache, getDefaultExplainerName } from "agent-cache";
+import { AgentCache, getDefaultExplainerName } from "@typeagent/agent-cache";
 import { getImportedCache } from "./constructionCacheTestCommon.js";
 
 const explainer = getDefaultExplainerName();

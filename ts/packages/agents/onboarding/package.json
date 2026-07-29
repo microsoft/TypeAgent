@@ -2,7 +2,7 @@
   "name": "onboarding-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "TypeAgent onboarding agent — automates integrating new applications into TypeAgent",
+  "description": "Agent for onboarding new applications and APIs into TypeAgent",
   "keywords": [
     "typeagent-agent"
   ],
@@ -45,13 +45,13 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "debug": "^4.3.4",
     "dispatcher-node-providers": "workspace:*",
-    "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {
@@ -65,7 +65,7 @@
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5",
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "engines": {
     "node": ">=22"

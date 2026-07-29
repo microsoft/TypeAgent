@@ -11,10 +11,10 @@ import {
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import { conversation as kpLib } from "knowledge-processor";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
 import * as kpTest from "knowpro-test";
-import * as kp from "knowpro";
-import * as cm from "conversation-memory";
+import * as kp from "@typeagent/knowpro";
+import * as cm from "@typeagent/conversation-memory";
 import chalk from "chalk";
 import { getTextOrFile } from "examples-lib";
 import * as fs from "fs";

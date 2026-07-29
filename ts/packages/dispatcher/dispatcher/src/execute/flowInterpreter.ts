@@ -9,8 +9,8 @@ import {
 import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 import { type CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { executeAction } from "./actionHandlers.js";
-import { toExecutableActions } from "agent-cache";
-import type { FullAction, ParamObjectType } from "agent-cache";
+import { toExecutableActions } from "@typeagent/agent-cache";
+import type { FullAction, ParamObjectType } from "@typeagent/agent-cache";
 
 // ── Flow definition types ────────────────────────────────────────────────────
 

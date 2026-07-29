@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatPanel } from "chat-ui";
-import "chat-ui/styles";
+import { ChatPanel } from "@typeagent/chat-ui";
+import "@typeagent/chat-ui/styles";
 
 import { vsPlatformAdapter } from "./platformAdapter.js";
 import { awaitCommand } from "@typeagent/dispatcher-types";

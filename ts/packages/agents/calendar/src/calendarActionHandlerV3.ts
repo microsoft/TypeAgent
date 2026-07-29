@@ -43,7 +43,7 @@ import {
     getAvailableProviders,
     GoogleCalendarClient,
     probeGraphConfig,
-} from "graph-utils";
+} from "@typeagent/graph-utils";
 import {
     getNWeeksDateRangeISO,
     generateQueryFromFuzzyDay,
@@ -52,7 +52,7 @@ import {
     getDateRelativeToDayV2,
     parseFuzzyDateString,
     parseTimeString,
-} from "typechat-utils";
+} from "@typeagent/typechat-utils";
 import chalk from "chalk";
 import registerDebug from "debug";
 

@@ -1,7 +1,6 @@
 {
-  "name": "agent-cache",
+  "name": "@typeagent/agent-cache",
   "version": "0.0.1",
-  "private": true,
   "description": "Construction cache for TypeAgent requests",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -40,13 +39,13 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/telemetry": "workspace:*",
+    "@typeagent/typechat-utils": "workspace:*",
     "async": "^3.2.5",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "regexp.escape": "^2.0.1",
-    "telemetry": "workspace:*",
-    "typechat": "^0.1.1",
-    "typechat-utils": "workspace:*"
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "@types/async": "^3.2.24",

@@ -12,7 +12,7 @@ import {
     SearchOptions,
     asyncArray,
     collections,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { SourceTextBlock, TextBlock } from "../text.js";
 import {
     Conversation,

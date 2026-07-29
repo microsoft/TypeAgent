@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { conversation } from "knowledge-processor";
+import { conversation } from "@typeagent/knowledge-processor";
 import chalk, { ChalkInstance } from "chalk";
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 
 type ListOptions = {
     title?: string | undefined;

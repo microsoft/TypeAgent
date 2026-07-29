@@ -28,6 +28,7 @@ export function silentClientIO(overrides: Partial<ClientIO> = {}): ClientIO {
         openLocalView: noopAsync,
         closeLocalView: noopAsync,
         requestChoice: noop,
+        requestForm: noop,
         requestInteraction: noop,
         interactionResolved: noop,
         interactionCancelled: noop,

@@ -10,7 +10,7 @@ import type {
 } from "agent-dispatcher";
 import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
 import type { ConversationInfo } from "@typeagent/agent-server-client";
-import type { ConnectionStatus } from "chat-ui";
+import type { ConnectionStatus } from "@typeagent/chat-ui";
 
 export type { ShellUserSettings };
 

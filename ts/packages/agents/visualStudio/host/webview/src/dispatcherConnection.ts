@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Adapted from packages/agents/browser/src/extension/serviceWorker/dispatcherConnection.ts
+// Adapted from packages/agents/browserExtension/src/extension/serviceWorker/dispatcherConnection.ts
 // for the Visual Studio WebView2 panel. WebView2 is a single browser context (no
 // service worker), so the ClientIO callbacks call into ChatPanel directly rather
 // than forwarding via chrome.runtime.
@@ -23,7 +23,7 @@ import {
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
-import type { ChatPanel } from "chat-ui";
+import type { ChatPanel } from "@typeagent/chat-ui";
 import type { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 
 const DEFAULT_AGENT_SERVER_URL = AGENT_SERVER_DEFAULT_URL;
@@ -251,6 +251,9 @@ function createChatPanelClientIO(chatPanel: ChatPanel): ClientIO {
             /* not supported in VSIX */
         },
         requestChoice() {
+            /* not supported in VSIX */
+        },
+        requestForm() {
             /* not supported in VSIX */
         },
         requestInteraction() {

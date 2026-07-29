@@ -1,14 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as knowLib from "knowledge-processor";
-import { conversation, IndexingStats } from "knowledge-processor";
+import * as knowLib from "@typeagent/knowledge-processor";
+import { conversation, IndexingStats } from "@typeagent/knowledge-processor";
 import {
     InteractiveIo,
     millisecondsToString,
     StopWatch,
 } from "interactive-app";
-import { collections, dateTime } from "typeagent";
+import { collections, dateTime } from "@typeagent/agent-runtime";
 import { MemoryConsoleWriter } from "../memoryWriter.js";
 import chalk, { ChalkInstance } from "chalk";
 import { pathToFileURL } from "url";

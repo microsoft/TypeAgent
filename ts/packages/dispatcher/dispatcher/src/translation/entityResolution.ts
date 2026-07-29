@@ -7,9 +7,9 @@ import {
     validateType,
 } from "@typeagent/action-schema";
 import { Result, success, error } from "typechat";
-import { createJsonTranslatorWithValidator } from "typechat-utils";
+import { createJsonTranslatorWithValidator } from "@typeagent/typechat-utils";
 
-import { FullAction } from "agent-cache";
+import { FullAction } from "@typeagent/agent-cache";
 import registerDebug from "debug";
 import { Entity } from "@typeagent/agent-sdk";
 const debugActionEntities = registerDebug(

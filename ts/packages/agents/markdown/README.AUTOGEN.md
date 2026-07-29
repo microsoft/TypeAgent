@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=a8cae0a90f91e864a24f2278847850510ca200ef711d4f446303f2ce9047b5c1 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=735cce73f8151e25677525870454d1d8c0c989835cb3f5078e348663c1256748 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # markdown-agent — AI-generated documentation
@@ -12,26 +12,23 @@
 
 ## Overview
 
-The `markdown-agent` is a TypeAgent application agent designed to handle the creation, editing, and management of markdown documents. It supports a variety of use cases, including real-time collaboration, AI-assisted updates, and advanced markdown processing. The agent is particularly suited for working with GitHub-flavored markdown and integrates with several libraries, such as `@milkdown/core` and `@typeagent/aiclient`, to provide enhanced functionality.
-
-This package is part of the TypeAgent monorepo and serves as a sample implementation for exploring markdown editing scenarios.
+The `markdown-agent` is a TypeAgent application agent designed to handle markdown document creation, editing, and management. It supports a variety of use cases, including real-time collaboration, AI-assisted updates, and advanced markdown processing. This package is part of the TypeAgent monorepo and serves as a sample implementation for exploring markdown editing scenarios, particularly with GitHub-flavored markdown.
 
 ## What it does
 
-The `markdown-agent` provides a set of actions to facilitate markdown document management. These actions include:
+The `markdown-agent` provides a set of actions to manage markdown documents effectively. These actions include:
 
 - **`createDocument`**: Creates a new markdown document with a specified name.
 - **`openDocument`**: Opens an existing markdown document for editing.
 - **`updateDocument`**: Updates a document by performing operations such as inserting, deleting, replacing, or formatting text.
 - **`streamingUpdateDocument`**: Enables real-time updates to a document using AI streaming support, allowing for dynamic and interactive editing.
 
-The agent leverages a combination of tools and libraries to deliver its functionality:
+### Key Features
 
-- **Markdown processing**: Utilizes `@milkdown/core` and related plugins for rendering and editing markdown content.
-- **Real-time collaboration**: Employs Yjs for collaborative editing, enabling multiple users to work on the same document simultaneously.
-- **AI-assisted updates**: Integrates with AI models via `@typeagent/aiclient` to provide intelligent suggestions and real-time content updates.
-
-These features make the `markdown-agent` a versatile tool for both individual and collaborative markdown editing workflows.
+1. **Markdown Processing**: The agent uses the `@milkdown` library and its plugins for rendering and editing markdown content. It supports both CommonMark and GitHub-flavored markdown.
+2. **Real-Time Collaboration**: The agent integrates with Yjs to enable multiple users to collaborate on the same document in real time.
+3. **AI-Assisted Updates**: By leveraging `@typeagent/aiclient`, the agent provides intelligent suggestions and real-time content updates powered by AI models.
+4. **Advanced Document Operations**: The agent supports a variety of document operations, including inserting, deleting, replacing, and formatting content. These operations are defined in the [markdownOperationSchema.ts](./src/agent/markdownOperationSchema.ts) file.
 
 ## Setup
 
@@ -40,7 +37,7 @@ To configure the `markdown-agent`, you need to set the following environment var
 - **`MARKDOWN_FILE`**: Specifies the path to the markdown file to be edited. This can be an absolute or relative path.
 - **`TYPEAGENT_MARKDOWN_ROOT`**: Defines the root directory for markdown files. This is used as the base directory for file operations.
 
-You can set these variables in your shell or in the `ts/.env` file. For additional details on obtaining and configuring these values, refer to the hand-written README.
+These variables can be set in your shell or in the `ts/.env` file. For more details on obtaining and configuring these values, refer to the hand-written README.
 
 ## Key Files
 
@@ -48,11 +45,11 @@ The `markdown-agent` is implemented across several key files, each responsible f
 
 ### Manifest
 
-- **[markdownManifest.json](./src/agent/markdownManifest.json)**: This file contains metadata about the agent, including its description, supported actions, and schema details. It also specifies the emoji identifier for the agent and the schema file used for action validation.
+- **[markdownManifest.json](./src/agent/markdownManifest.json)**: Contains metadata about the agent, including its description, supported actions, and schema details. It also specifies the emoji identifier for the agent and the schema file used for action validation.
 
 ### Action Handlers
 
-- **[markdownActionHandler.ts](./src/agent/markdownActionHandler.ts)**: This file implements the core logic for handling actions such as `createDocument`, `openDocument`, `updateDocument`, and `streamingUpdateDocument`. It serves as the main entry point for executing and validating actions.
+- **[markdownActionHandler.ts](./src/agent/markdownActionHandler.ts)**: Implements the core logic for handling actions such as `createDocument`, `openDocument`, `updateDocument`, and `streamingUpdateDocument`. This file serves as the main entry point for executing and validating actions.
 
 ### Schemas
 
@@ -61,7 +58,7 @@ The `markdown-agent` is implemented across several key files, each responsible f
 
 ### Translator
 
-- **[translator.ts](./src/agent/translator.ts)**: This file integrates AI models and translates user actions into document operations. It is a critical component for enabling AI-assisted updates and real-time collaboration.
+- **[translator.ts](./src/agent/translator.ts)**: Integrates AI models and translates user actions into document operations. It is a critical component for enabling AI-assisted updates and real-time collaboration.
 
 ### Collaboration Manager
 
@@ -103,7 +100,7 @@ By following these steps, you can enhance the `markdown-agent` to support additi
 ### Entry points
 
 - `./agent/manifest` → [./src/agent/markdownManifest.json](./src/agent/markdownManifest.json)
-- `./agent/handlers` → `./dist/agent/markdownActionHandler.js` _(not found on disk)_
+- `./agent/handlers` → [./dist/agent/markdownActionHandler.js](./dist/agent/markdownActionHandler.js)
 
 ### Dependencies
 
@@ -135,6 +132,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `44b34a9ac8794b6f90489ff7e55fe57283c34960` on `2026-07-13T09:04:14.089Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter markdown-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter markdown-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

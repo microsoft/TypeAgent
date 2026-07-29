@@ -22,7 +22,7 @@ import {
     readExplanationTestData,
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
-import { fromJsonActions, RequestAction } from "agent-cache";
+import { fromJsonActions, RequestAction } from "@typeagent/agent-cache";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
 import {
@@ -31,7 +31,7 @@ import {
     compileGrammarToNFA,
     matchGrammarWithNFA,
 } from "@typeagent/action-grammar";
-import { convertConstructionsToGrammar } from "agent-cache/grammar";
+import { convertConstructionsToGrammar } from "@typeagent/agent-cache/grammar";
 import path from "path";
 
 // ── Data loading ─────────────────────────────────────────────────────────────

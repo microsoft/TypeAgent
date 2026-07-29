@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createConversationSettings, createKnowledgeExtractor } from "knowpro";
+import {
+    createConversationSettings,
+    createKnowledgeExtractor,
+} from "@typeagent/knowpro";
 import {
     createTestChatModel,
     createTestEmbeddingModel,

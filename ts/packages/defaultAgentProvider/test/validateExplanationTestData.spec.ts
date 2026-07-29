@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
-import { fromJsonActions, RequestAction } from "agent-cache";
+import { fromJsonActions, RequestAction } from "@typeagent/agent-cache";
 import {
     getCacheFactory,
     readExplanationTestData,

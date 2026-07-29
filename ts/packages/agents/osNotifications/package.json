@@ -1,8 +1,7 @@
 {
-  "name": "os-notifications-agent",
+  "name": "@typeagent/os-notifications-agent",
   "version": "0.0.1",
-  "private": true,
-  "description": "Forwards OS-level notifications (Windows Action Center, Linux freedesktop) into TypeAgent chat as ephemeral toasts/inline messages",
+  "description": "Forwards OS-level notifications (Windows Action Center, Linux freedesktop) into chat. Off by default; opt in via @config agent enable osNotifications.",
   "keywords": [
     "typeagent-agent"
   ],
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/osNotificationsManifest.json",
     "./agent/handlers": "./dist/osNotificationsActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "agc": "agc -i ./src/osNotificationsSchema.agr -o ./dist/osNotificationsSchema.ag.json",
     "asc": "asc -i ./src/osNotificationsSchema.ts -o ./dist/osNotificationsSchema.pas.json -t OsNotificationsActions",

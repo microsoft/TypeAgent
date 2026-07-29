@@ -3,7 +3,7 @@
 
 import { ChatModelWithStreaming, openai } from "@typeagent/aiclient";
 import registerDebug from "debug";
-import { createTypeChat, loadSchema } from "typeagent";
+import { createTypeChat, loadSchema } from "@typeagent/agent-runtime";
 import {
     SpeechProcessingAction,
     UserExpression,

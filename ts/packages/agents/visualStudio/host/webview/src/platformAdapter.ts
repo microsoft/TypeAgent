@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { PlatformAdapter } from "chat-ui";
+import type { PlatformAdapter } from "@typeagent/chat-ui";
 
 // WebView2 exposes window.chrome.webview.postMessage for posting JSON to the host.
 // The C# host (ChatToolWindowControl.OnWebMessageReceived) opens external URLs

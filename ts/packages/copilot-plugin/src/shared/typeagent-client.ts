@@ -69,6 +69,7 @@ export function createClientIO(callbacks: DisplayCallbacks): ClientIO {
         async openLocalView(): Promise<void> {},
         async closeLocalView(): Promise<void> {},
         requestChoice(): void {},
+        requestForm(): void {},
         takeAction(): void {},
         shutdown(): void {},
         async question(): Promise<number> {

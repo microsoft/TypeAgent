@@ -137,8 +137,16 @@ function renderTableBlock(block: TableBlock): string {
     return parts.join("");
 }
 
-function renderMarkdownToHtml(text: string): string {
-    const md = new MarkdownIt({ html: true });
+// Shared MarkdownIt factory. `html: true` lets agents embed raw HTML (it is
+// sanitized at the sink in setContent). `linkify: true` turns bare URLs into
+// clickable links. Fuzzy matching is disabled so only strings with an
+// explicit scheme (http://, https://, mailto:, ...) auto-link: bare tokens
+// that merely look like domains - filenames such as `README.md`, package
+// names, or `example.com` in prose - stay plain text. Links open in a new tab;
+// the click is routed to the host by the platform adapter in setContent().
+function createMarkdownRenderer(): MarkdownIt {
+    const md = new MarkdownIt({ html: true, linkify: true });
+    md.linkify.set({ fuzzyLink: false, fuzzyEmail: false, fuzzyIP: false });
     type LinkOpenRenderRule = NonNullable<typeof md.renderer.rules.link_open>;
     const defaultRender: LinkOpenRenderRule =
         md.renderer.rules.link_open ??
@@ -148,8 +156,66 @@ function renderMarkdownToHtml(text: string): string {
         tokens[idx].attrSet("target", "_blank");
         return defaultRender(tokens, idx, options, env, self);
     };
-    const rendered = md.render(text);
+    return md;
+}
+
+function renderMarkdownToHtml(text: string): string {
+    const rendered = createMarkdownRenderer().render(text);
     return ansiUpMarkdownToHtml.ansi_to_html(rendered);
+}
+
+// One shared, scheme-only linkifier (fuzzy matching disabled), reused for
+// plain-text rendering so text and markdown auto-link identically. markdown-it
+// bundles and configures linkify-it internally, so we borrow its instance
+// rather than depend on linkify-it directly.
+const sharedLinkify = createMarkdownRenderer().linkify;
+
+// Wrap bare URLs in an element's text nodes with anchors. Operates on text
+// nodes only - never on tag or attribute content - and skips text already
+// inside an anchor, so it is safe to run over already-rendered content and
+// never double-wraps. Anchors are built with the DOM (no innerHTML) and the
+// linkifier only matches explicit http/https/mailto schemes, so the href is
+// always a safe URL. The caller wires the platform-adapter click handler
+// afterwards.
+function linkifyTextNodes(root: HTMLElement): void {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            return node.parentElement?.closest("a")
+                ? NodeFilter.FILTER_REJECT
+                : NodeFilter.FILTER_ACCEPT;
+        },
+    });
+    const textNodes: Text[] = [];
+    let current: Node | null;
+    while ((current = walker.nextNode())) {
+        textNodes.push(current as Text);
+    }
+    for (const node of textNodes) {
+        const text = node.nodeValue ?? "";
+        const matches = sharedLinkify.match(text);
+        if (!matches || matches.length === 0) {
+            continue;
+        }
+        const frag = document.createDocumentFragment();
+        let last = 0;
+        for (const match of matches) {
+            if (match.index > last) {
+                frag.appendChild(
+                    document.createTextNode(text.slice(last, match.index)),
+                );
+            }
+            const anchor = document.createElement("a");
+            anchor.setAttribute("href", match.url);
+            anchor.setAttribute("target", "_blank");
+            anchor.textContent = match.text;
+            frag.appendChild(anchor);
+            last = match.lastIndex;
+        }
+        if (last < text.length) {
+            frag.appendChild(document.createTextNode(text.slice(last)));
+        }
+        node.parentNode?.replaceChild(frag, node);
+    }
 }
 
 function renderTextBlock(
@@ -499,20 +565,7 @@ function processContent(
                     /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
             });
         case "markdown": {
-            const md = new MarkdownIt({
-                html: true,
-            });
-            // Links in the chat windows should open in a new tab.
-            const defaultRender =
-                md.renderer.rules.link_open ||
-                function (tokens, idx, options, _env, self) {
-                    return self.renderToken(tokens, idx, options);
-                };
-            md.renderer.rules.link_open = (tokens, idx, ...args) => {
-                tokens[idx].attrSet("target", "_blank");
-                return defaultRender(tokens, idx, ...args);
-            };
-
+            const md = createMarkdownRenderer();
             const renderedMarkdown = inline
                 ? md.renderInline(content)
                 : md.render(content);
@@ -799,6 +852,14 @@ export function setContent(
             ALLOWED_URI_REGEXP:
                 /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
         });
+
+        // Plain-text content authors no links of its own, so bare URLs would
+        // otherwise render as dead text. Wrap them in anchors here (markdown
+        // and html author their own links). Runs before the click-handler
+        // pass below so the new anchors get the platform-adapter handler.
+        if (type === "text") {
+            linkifyTextNodes(contentElm);
+        }
 
         // Add click handlers for all links — delegated to platform adapter
         const allLinks = contentElm.querySelectorAll("a[href]");

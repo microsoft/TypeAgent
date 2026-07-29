@@ -35,7 +35,7 @@ import {
     loadConstructionCacheFile,
     type ConstructionCache,
     type MatchResult,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import { normalizeAction } from "./replayActionShape.js";
 import type { ConstructionCacheEntryDto } from "./resolutionTrace.js";
 

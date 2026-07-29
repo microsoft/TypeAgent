@@ -7,7 +7,7 @@ import {
     ExecutableAction,
     FullAction,
     RequestAction,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import { getActionTemplateEditConfig } from "./actionTemplate.js";
 import {
     type CommandHandlerContext,

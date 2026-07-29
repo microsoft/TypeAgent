@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import assert from "assert";
-import { ChatUserInterface, MessageSourceRole } from "typeagent";
+import { ChatUserInterface, MessageSourceRole } from "@typeagent/agent-runtime";
 import { error, PromptSection, Result, success } from "typechat";
 
 /**

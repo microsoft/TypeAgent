@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=d80f9cff5bbc7127e980fb0fa3354f9348c52ef5e6c4af1b4c6f9ecfcb13304c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=49339682363669abb9eb1a2fce4052e99402d7ea3bf648113caa0803634d6b15 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # vscode-shell — AI-generated documentation
@@ -12,16 +12,16 @@
 
 ## Overview
 
-The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, providing a chat-based interface for interacting with TypeAgent conversations. It allows users to manage conversations directly within the editor through a side panel and editor tabs, all backed by a running TypeAgent agent server.
+The `vscode-shell` package integrates the TypeAgent shell chat into Visual Studio Code, providing a chat interface directly within the editor. This extension allows users to interact with TypeAgent conversations through a side panel or editor tabs, enabling efficient communication and conversation management.
 
 ## What it does
 
-The `vscode-shell` package enables a rich chat interface within Visual Studio Code to interact with the TypeAgent ecosystem. Its key features include:
+The `vscode-shell` package provides a range of features for interacting with TypeAgent conversations in Visual Studio Code. Key capabilities include:
 
 - **Chat Interface**:
 
   - A **Chat** side panel accessible from the activity bar.
-  - Support for multiple editor-tab chats, each representing a separate conversation.
+  - Support for multiple editor-tab chats, each representing a distinct conversation.
 
 - **Command Palette Integration**:
 
@@ -158,22 +158,22 @@ Workspace:
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/agent-server-protocol](../../packages/agentServer/protocol/README.md)
+- [@typeagent/chat-ui](../../packages/chat-ui/README.md)
 - [@typeagent/completion-ui](../../packages/completionUI/README.md)
 - [@typeagent/core](../../packages/typeagent-core/README.md)
 - [@typeagent/dispatcher-rpc](../../packages/dispatcher/rpc/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
 - [@typeagent/websocket-utils](../../packages/utils/webSocketUtils/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
-- [chat-ui](../../packages/chat-ui/README.md)
 
 External: `ansi_up`, `debug`, `dompurify`, `isomorphic-ws`, `markdown-it`, `microsoft-cognitiveservices-speech-sdk`, `ws`
 
 ### Files of interest
 
-`./src/webview/main.ts`, `./src/agentServerBridge.ts`, `./src/bridge/clientIO.ts`, …and 11 more under `./src/`.
+`./src/webview/main.ts`, `./src/agentServerBridge.ts`, `./src/bridge/clientIO.ts`, …and 14 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `4f7693322e181137049b7af9ff36387934d81930` on `2026-07-21T08:52:40.173Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
+_Auto-generated against commit `33c83792f9a6ab6f17e52ca4856f765a2a056905` on `2026-07-27T20:21:59.625Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter vscode-shell docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

@@ -6,7 +6,7 @@ import {
     FullAction,
     getFullActionName,
     PromptEntity,
-} from "agent-cache";
+} from "@typeagent/agent-cache";
 import {
     type CommandHandlerContext,
     getCommandResult,
@@ -26,13 +26,14 @@ import {
     createActionResult,
     actionResultToString,
     createActionResultFromError,
+    serializeError,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
     displayError,
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { IncrementalJsonValueCallBack } from "typechat-utils";
+import { IncrementalJsonValueCallBack } from "@typeagent/typechat-utils";
 import { ProfileNames } from "../utils/profileNames.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import {
@@ -264,7 +265,8 @@ export async function executeAction(
         ) {
             throw new DOMException("The operation was aborted.", "AbortError");
         }
-        result = createActionResultFromError(e.message);
+        const details = serializeError(e);
+        result = createActionResultFromError(details.message, details);
     }
     // If the agent ran to completion but a cancel arrived while it was executing,
     // discard the result and treat this as a cancellation.
@@ -307,6 +309,32 @@ export async function executeAction(
 // not the system agent that owns the @config command. Without this, the
 // yes/no choice card's response is routed to the wrong agent's
 // handleChoice, and the registered callback never fires.
+// Build a JSON-safe snapshot of an ActionResult for the dev inspector.
+// `displayContent` is already rendered as the message bubble, so we record
+// only its shape (not the potentially large HTML) to keep the payload small.
+// The round-trip guarantees the result can't carry anything that breaks the
+// diagnostic transport.
+function projectActionResultForDiagnostics(result: ActionResult): unknown {
+    const { displayContent, ...rest } = result as ActionResult & {
+        displayContent?: unknown;
+    };
+    const snapshot: Record<string, unknown> = { ...rest };
+    if (displayContent !== undefined) {
+        snapshot.displayContentType =
+            typeof displayContent === "object" && displayContent !== null
+                ? ((displayContent as { type?: unknown }).type ?? "object")
+                : typeof displayContent;
+    }
+    try {
+        return JSON.parse(JSON.stringify(snapshot));
+    } catch {
+        return {
+            note: "result not serializable",
+            error: "error" in result ? result.error : undefined,
+        };
+    }
+}
+
 export function emitActionResult(
     result: ActionResult,
     actionContext: ActionContext<unknown>,
@@ -316,6 +344,22 @@ export function emitActionResult(
     actionIndex: number,
     schemaName: string,
 ): void {
+    // Dev inspector: ship a serialized snapshot of the whole result (success
+    // or error - entities, historyText, tokenUsage, errorDetails) over the
+    // diagnostic side-channel so a client can show it in a panel separate
+    // from the action JSON. Emitted before the error early-return below so
+    // failures are captured too. Best-effort: never let it break execution.
+    try {
+        systemContext.clientIO.appendDiagnosticData(requestId, {
+            type: "actionResult",
+            source: appAgentName,
+            schemaName,
+            actionIndex,
+            result: projectActionResultForDiagnostics(result),
+        });
+    } catch {
+        // Diagnostics are best-effort; ignore transport errors.
+    }
     if (result.error !== undefined) {
         if (!("fallbackToReasoning" in result) || !result.fallbackToReasoning) {
             displayError(result.error, actionContext);
@@ -343,6 +387,15 @@ export function emitActionResult(
             acc.cached_tokens =
                 (acc.cached_tokens ?? 0) + result.tokenUsage.cached_tokens;
         }
+        if (result.tokenUsage.thinking_tokens !== undefined) {
+            acc.thinking_tokens = [
+                ...(acc.thinking_tokens ?? []),
+                ...result.tokenUsage.thinking_tokens,
+            ];
+        }
+        if (result.tokenUsage.thinking_tokens_estimated) {
+            acc.thinking_tokens_estimated = true;
+        }
         commandResult.actionTokenUsage = acc;
     }
     if (result.displayContent !== undefined) {
@@ -364,15 +417,32 @@ export function emitActionResult(
             requestId,
             actionIndex,
         });
-        systemContext.clientIO.requestChoice(
-            requestId,
-            pc.choiceId,
-            pc.type,
-            pc.message,
-            pc.type === "yesNo" ? [] : pc.choices,
-            schemaName,
-            pc.type === "pickRemember" ? pc.checkboxLabel : undefined,
-        );
+        if (pc.type === "form") {
+            // Only include optionals when set - exactOptionalPropertyTypes
+            // forbids assigning `undefined` to QuestionForm's optional props.
+            systemContext.clientIO.requestForm(
+                requestId,
+                pc.choiceId,
+                {
+                    fields: pc.fields,
+                    ...(pc.message !== undefined
+                        ? { message: pc.message }
+                        : {}),
+                    ...(pc.paged !== undefined ? { paged: pc.paged } : {}),
+                },
+                schemaName,
+            );
+        } else {
+            systemContext.clientIO.requestChoice(
+                requestId,
+                pc.choiceId,
+                pc.type,
+                pc.message,
+                pc.type === "yesNo" ? [] : pc.choices,
+                schemaName,
+                pc.type === "pickRemember" ? pc.checkboxLabel : undefined,
+            );
+        }
     }
 }
 

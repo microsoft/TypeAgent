@@ -10,7 +10,7 @@ import {
 } from "./electronTypes.js"; // Custom APIs for renderer
 import { QueueSnapshot } from "agent-dispatcher";
 import type { ManageConversationPayload } from "@typeagent/agent-server-client/conversation";
-import type { ConnectionStatus } from "chat-ui";
+import type { ConnectionStatus } from "@typeagent/chat-ui";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import {
     createDispatcherRpcClient,

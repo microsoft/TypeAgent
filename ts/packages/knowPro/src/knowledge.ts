@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { conversation as kpLib } from "knowledge-processor";
-import { async, asyncArray, loadSchema } from "typeagent";
+import { conversation as kpLib } from "@typeagent/knowledge-processor";
+import { async, asyncArray, loadSchema } from "@typeagent/agent-runtime";
 import {
     createJsonTranslator,
     error,

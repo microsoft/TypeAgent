@@ -48,7 +48,7 @@ import {
     parseActionSchemaSource,
     type SchemaConfig,
 } from "@typeagent/action-schema";
-import { GrammarStoreImpl, type MatchResult } from "agent-cache";
+import { GrammarStoreImpl, type MatchResult } from "@typeagent/agent-cache";
 import {
     resolveAgentPackageDir,
     resolveAgentRoots,

@@ -1,8 +1,7 @@
 {
-  "name": "email",
+  "name": "@typeagent/email",
   "version": "0.0.1",
-  "private": true,
-  "description": "Email dispatcher agent",
+  "description": "Agent integration with MS Graph's email",
   "keywords": [
     "typeagent-agent"
   ],
@@ -19,6 +18,11 @@
     "./agent/manifest": "./src/emailManifest.json",
     "./agent/handlers": "./dist/emailActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
   "scripts": {
     "asc": "asc -i ./src/emailActionsSchema.ts -o ./dist/emailSchema.pas.json -t EmailAction",
     "build": "concurrently npm:tsc npm:asc",
@@ -29,13 +33,13 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.150",
+    "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
+    "@typeagent/graph-utils": "workspace:*",
+    "@typeagent/kp": "workspace:*",
     "chalk": "^5.4.1",
-    "debug": "^4.4.0",
-    "graph-utils": "workspace:*",
-    "kp": "workspace:*",
-    "typeagent": "workspace:*"
+    "debug": "^4.4.0"
   },
   "devDependencies": {
     "@typeagent/action-schema-compiler": "workspace:*",

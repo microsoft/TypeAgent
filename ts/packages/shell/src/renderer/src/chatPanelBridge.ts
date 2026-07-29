@@ -26,7 +26,7 @@ import {
     parseStatusNotice,
     type TemplateEditServices,
     type ConnectionStatus,
-} from "chat-ui";
+} from "@typeagent/chat-ui";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import {
     ClientIO,
@@ -48,7 +48,6 @@ import {
 } from "agent-dispatcher/helpers/completion";
 import {
     Client,
-    NotifyCommands,
     SearchMenuItem,
     ShellUserSettings,
     SpeechToken,
@@ -66,15 +65,6 @@ import {
 import { CameraView } from "./cameraView";
 import { getTTSProviders, getTTSVoices } from "./tts/tts";
 import { enumerateMicrophones } from "./speech";
-
-// Buffered @notify entries surfaced via `@notify show`.
-type NotificationEntry = {
-    event: string;
-    source: string;
-    data: any;
-    read: boolean;
-    requestId: RequestId | string | undefined;
-};
 
 /**
  * Normalize a dispatcher RequestId (object or string) to the string key the
@@ -252,7 +242,6 @@ export function createChatPanelClient(
         requestId: string;
     }> = [];
     let settings: ShellUserSettings = defaultUserSettings;
-    const notifications: NotificationEntry[] = [];
 
     // Replay gate: history replay (triggered by `dispatcher-initialized`)
     // runs asynchronously while the main process may already be streaming
@@ -857,8 +846,11 @@ export function createChatPanelClient(
                 );
             });
         },
-        appendDiagnosticData: () => {
-            // Diagnostic data has no ChatPanel surface yet (deferred).
+        appendDiagnosticData: (requestId, data) => {
+            afterReplay(() => {
+                if (isCancelledRequest(ridStr(requestId))) return;
+                chatPanel.appendDiagnosticData(ridStr(requestId), data);
+            });
         },
         setDynamicDisplay: (
             _requestId,
@@ -889,6 +881,12 @@ export function createChatPanelClient(
                 templateServices,
             );
         },
+        askForm: async (_requestId, form, _source) => {
+            // In-process (standalone shell) blocking form interaction. In
+            // connected mode the SharedDispatcher intercepts askForm and drives
+            // this via requestInteraction instead.
+            return chatPanel.addQuestionForm(form);
+        },
         notify: (requestId, event, data, source) => {
             switch (event) {
                 case "explained":
@@ -908,7 +906,7 @@ export function createChatPanelClient(
                     );
                     break;
                 case "showNotifications":
-                    handleShowNotifications(data);
+                    chatPanel.showNotifications(data);
                     break;
                 case STATUS_NOTICE_EVENT: {
                     // Persistent, dismissible server/status notice rendered as
@@ -923,13 +921,7 @@ export function createChatPanelClient(
                 case AppAgentEvent.Error:
                 case AppAgentEvent.Warning:
                 case AppAgentEvent.Info:
-                    notifications.push({
-                        event,
-                        source,
-                        data,
-                        read: false,
-                        requestId,
-                    });
+                    chatPanel.recordNotification(event, source, data);
                     break;
                 case AppAgentEvent.Inline:
                     if (source === "osNotifications") {
@@ -945,13 +937,7 @@ export function createChatPanelClient(
                         break;
                     }
                     chatPanel.showInline(data, source);
-                    notifications.push({
-                        event,
-                        source,
-                        data,
-                        read: false,
-                        requestId,
-                    });
+                    chatPanel.recordNotification(event, source, data);
                     break;
                 case AppAgentEvent.Toast:
                     if (source === "osNotifications") {
@@ -963,13 +949,7 @@ export function createChatPanelClient(
                         break;
                     }
                     chatPanel.showToast(data, source);
-                    notifications.push({
-                        event,
-                        source,
-                        data,
-                        read: false,
-                        requestId,
-                    });
+                    chatPanel.recordNotification(event, source, data);
                     break;
                 case "osDismiss":
                     // The OS notification left the action center — drop the
@@ -1034,6 +1014,22 @@ export function createChatPanelClient(
                 console.error("[requestChoice] failed", e, requestId),
             );
         },
+        requestForm: (requestId, choiceId, form, _source) => {
+            void (async () => {
+                // form.message is already rendered as the agent's
+                // displayContent (emitActionResult appends it before requesting
+                // the form), so suppress the duplicate and anchor the controls
+                // onto that agent bubble via requestId.
+                const rid = ridStr(requestId);
+                const response = await chatPanel.addQuestionForm(form, {
+                    showMessage: false,
+                    requestId: rid,
+                });
+                await dispatcher?.respondToChoice(choiceId, response);
+            })().catch((e) =>
+                console.error("[requestForm] failed", e, requestId),
+            );
+        },
         requestInteraction: (interaction: PendingInteractionRequest) => {
             const ac = new AbortController();
             activeInteractions.set(interaction.interactionId, ac);
@@ -1055,6 +1051,16 @@ export function createChatPanelClient(
                         response = {
                             interactionId: interaction.interactionId,
                             type: "question",
+                            value,
+                        };
+                    } else if (interaction.type === "form") {
+                        const value = await chatPanel.addQuestionForm(
+                            interaction.form,
+                            { signal: ac.signal },
+                        );
+                        response = {
+                            interactionId: interaction.interactionId,
+                            type: "form",
                             value,
                         };
                     } else {
@@ -1185,42 +1191,6 @@ export function createChatPanelClient(
             afterReplay(() => reconcileQueueChips(previous, snapshot));
         },
     };
-
-    function handleShowNotifications(data: NotifyCommands) {
-        switch (data) {
-            case NotifyCommands.Clear:
-                notifications.length = 0;
-                break;
-            case NotifyCommands.ShowAll:
-            case NotifyCommands.ShowUnread: {
-                const showAll = data === NotifyCommands.ShowAll;
-                const items = notifications.filter((n) => showAll || !n.read);
-                const html = items.length
-                    ? `<ul>${items
-                          .map((n) => {
-                              n.read = true;
-                              return `<li class="notification-${n.event}">${n.event} ${String(n.data)}</li>`;
-                          })
-                          .join("")}</ul>`
-                    : "No notifications.";
-                chatPanel.showInline({ type: "html", content: html }, "shell");
-                break;
-            }
-            case NotifyCommands.ShowSummary: {
-                const unread = notifications.filter((n) => !n.read).length;
-                chatPanel.showInline(
-                    {
-                        type: "html",
-                        content: `There are <b>${unread}</b> unread and <b>${notifications.length}</b> total notifications.`,
-                    },
-                    "shell",
-                );
-                break;
-            }
-            default:
-                break;
-        }
-    }
 
     function handleTakeAction(action: string, data: unknown) {
         try {

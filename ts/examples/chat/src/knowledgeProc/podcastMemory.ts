@@ -7,8 +7,8 @@
  * ===============================================
  */
 
-import { conversation } from "knowledge-processor";
-import * as knowLib from "knowledge-processor";
+import { conversation } from "@typeagent/knowledge-processor";
+import * as knowLib from "@typeagent/knowledge-processor";
 import {
     KnowledgeProcessorContext,
     ReservedConversationNames,
@@ -49,11 +49,11 @@ import {
     isFilePath,
     NameValue,
     removeDir,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { runImportQueue } from "./importer.js";
 import chalk from "chalk";
-import * as kp from "knowpro";
-import * as cm from "conversation-memory";
+import * as kp from "@typeagent/knowpro";
+import * as cm from "@typeagent/conversation-memory";
 import {
     addToConversation,
     createIndexingEventHandler,

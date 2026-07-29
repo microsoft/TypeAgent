@@ -2,8 +2,10 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
+import { createWebviewNonce } from "@typeagent/core/webview";
 import { ChatViewProvider } from "./chatViewProvider.js";
 import { AgentServerBridge } from "./agentServerBridge.js";
+import { stampedWebviewUri } from "./webviewResources.js";
 
 interface ChatEntry {
     bridge: AgentServerBridge;
@@ -39,6 +41,8 @@ export function activate(context: vscode.ExtensionContext): void {
         restoreSessionId: sidebarRestoreId,
         // Sidebar-only default; tab panels stay ephemeral.
         defaultSessionName: "VS Code",
+        onOpenMessageWindow: (html, title) =>
+            openMessageWindowPanel(context, html, title),
     });
 
     // Persist the sidebar's current session so reopening VS Code rejoins it
@@ -516,6 +520,22 @@ function refreshStatusBar(): void {
     statusBarItem.show();
 }
 
+/**
+ * Theme-aware tab icon for our webview panels. VS Code renders a custom SVG
+ * panel icon literally - it doesn't recolor `currentColor` the way it does for
+ * ThemeIcons - so the default (currentColor) robot renders black and is
+ * invisible on dark themes. Pair it with a light-colored variant for dark
+ * themes.
+ */
+function panelIcon(context: vscode.ExtensionContext): {
+    light: vscode.Uri;
+    dark: vscode.Uri;
+} {
+    const icon = (name: string) =>
+        vscode.Uri.joinPath(context.extensionUri, "media", "icons", name);
+    return { light: icon("typeagent.svg"), dark: icon("typeagent-dark.svg") };
+}
+
 function openNewChatPanel(
     context: vscode.ExtensionContext,
     provider: ChatViewProvider,
@@ -557,6 +577,78 @@ function openNewChatPanel(
     });
 }
 
+/**
+ * Open a message's rendered content in a standalone editor panel (a movable /
+ * snappable new window) for easier reading. The panel HTML is static; the
+ * content is delivered over postMessage and re-sanitized in the webview
+ * (messageWindow.ts), so no HTML is constructed from the message on the
+ * extension side.
+ */
+function openMessageWindowPanel(
+    context: vscode.ExtensionContext,
+    html: string,
+    title?: string,
+): void {
+    const panel = vscode.window.createWebviewPanel(
+        "vscode-shell.messageWindow",
+        title && title.trim() ? title : "TypeAgent Message",
+        vscode.ViewColumn.Beside,
+        {
+            enableScripts: true,
+            localResourceRoots: [
+                vscode.Uri.joinPath(context.extensionUri, "dist"),
+                vscode.Uri.joinPath(context.extensionUri, "media"),
+            ],
+        },
+    );
+    panel.iconPath = panelIcon(context);
+
+    const webview = panel.webview;
+    const asUri = (...parts: string[]) =>
+        stampedWebviewUri(webview, context.extensionUri, ...parts);
+    const scriptUri = asUri("dist", "messageWindow.js");
+    const styleUri = asUri("media", "chat.css");
+    const codiconUri = asUri("media", "codicon.css");
+    const nonce = createWebviewNonce();
+
+    // Register the listener before setting the HTML so we can't miss the
+    // webview's initial "messageWindowReady".
+    const sub = webview.onDidReceiveMessage((msg) => {
+        if (msg?.type === "messageWindowReady") {
+            void webview.postMessage({ type: "messageWindowContent", html });
+        } else if (
+            msg?.type === "openExternal" &&
+            typeof msg.href === "string"
+        ) {
+            void vscode.env.openExternal(vscode.Uri.parse(msg.href));
+        }
+    });
+    panel.onDidDispose(() => sub.dispose());
+
+    webview.html = /* html */ `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'none';
+                   style-src ${webview.cspSource} 'unsafe-inline';
+                   script-src 'nonce-${nonce}';
+                   img-src ${webview.cspSource} data:;
+                   font-src ${webview.cspSource};
+                   form-action 'none';
+                   base-uri 'none';">
+    <link href="${codiconUri}" rel="stylesheet">
+    <link href="${styleUri}" rel="stylesheet">
+    <title>TypeAgent Message</title>
+</head>
+<body class="chat-message-window-standalone">
+    <div id="message-window-root" class="chat-message-window-page chat-message-content"></div>
+    <script nonce="${nonce}" src="${scriptUri}"></script>
+</body>
+</html>`;
+}
+
 function attachChatPanel(
     context: vscode.ExtensionContext,
     provider: ChatViewProvider,
@@ -567,18 +659,15 @@ function attachChatPanel(
         restoreSessionId?: string;
     },
 ): void {
-    panel.iconPath = vscode.Uri.joinPath(
-        context.extensionUri,
-        "media",
-        "icons",
-        "typeagent.svg",
-    );
+    panel.iconPath = panelIcon(context);
 
     const bridge = new AgentServerBridge({
         ownsStatusBar: false,
         ephemeralSessionName: opts.ephemeralSessionName,
         displayName: opts.displayName,
         restoreSessionId: opts.restoreSessionId,
+        onOpenMessageWindow: (html, title) =>
+            openMessageWindowPanel(context, html, title),
     });
 
     const entry: ChatEntry = {

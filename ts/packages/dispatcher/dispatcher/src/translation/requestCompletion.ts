@@ -3,7 +3,11 @@
 
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
-import { ExecutableAction, getPropertyInfo, MatchOptions } from "agent-cache";
+import {
+    ExecutableAction,
+    getPropertyInfo,
+    MatchOptions,
+} from "@typeagent/agent-cache";
 import {
     CompletionDirection,
     CompletionGroup,

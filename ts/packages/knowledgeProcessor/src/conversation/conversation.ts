@@ -10,7 +10,7 @@ import {
     createObjectFolder,
     dateTime,
     removeDir,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 import { TextBlock, SourceTextBlock, TextBlockType } from "../text.js";
 import { Topic } from "./topicSchema.js";
 import { TextStore, createTextStore } from "../textStore.js";

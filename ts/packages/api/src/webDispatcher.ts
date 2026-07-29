@@ -23,7 +23,7 @@ import {
 import WebSocket from "ws";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import registerDebug from "debug";
-import { FullAction } from "agent-cache";
+import { FullAction } from "@typeagent/agent-cache";
 
 const debug = registerDebug("typeagent:webserver:api");
 registerDebug.enable("typeagent:webserver:*");

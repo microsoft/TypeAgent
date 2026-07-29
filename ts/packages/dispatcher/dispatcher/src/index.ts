@@ -22,6 +22,7 @@ export type {
     AppAgentProviderSetController,
     AppAgentSource,
     AppAgentConnection,
+    InstallableAgentSummary,
     ConstructionProvider,
 } from "./agentProvider/agentProvider.js";
 export type {

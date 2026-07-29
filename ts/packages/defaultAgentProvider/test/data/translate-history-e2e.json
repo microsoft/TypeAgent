@@ -229,7 +229,12 @@
             "type": ["list"],
             "facets": [{ "name": "items", "value": ["eggs"] }]
           }
-        ]
+        ],
+        "action": {
+          "schemaName": "list",
+          "actionName": "addItems",
+          "parameters": { "items": ["eggs"], "listName": "grocery" }
+        }
       }
     },
     {

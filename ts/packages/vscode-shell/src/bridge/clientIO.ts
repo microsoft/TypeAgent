@@ -12,7 +12,11 @@ import type {
     RequestId,
     TemplateEditConfig,
 } from "@typeagent/dispatcher-types";
-import type { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
+import type {
+    DisplayAppendMode,
+    QuestionForm,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
 
 import type { BridgeToWebviewMessage } from "./messages.js";
 import { clientIdOf } from "./requestIds.js";
@@ -184,7 +188,13 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
                 seq,
             });
         },
-        appendDiagnosticData: () => {},
+        appendDiagnosticData: (requestId: RequestId, data: unknown) => {
+            ctx.broadcast({
+                type: "appendDiagnosticData",
+                requestId: clientIdOf(requestId),
+                data,
+            });
+        },
         // Live-updating display (agent set ActionResult.dynamicDisplayId).
         // Forward to the webview, which registers a refresh timer via chat-ui's
         // ChatPanel.setDynamicDisplay and polls back for fresh content through
@@ -278,6 +288,24 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
                 requestId: clientIdOf(requestId),
             });
         },
+        // Forward a multi-question form card to the webview, which renders the
+        // controls onto the request's agent bubble and replies with a
+        // `choiceResponse` carrying a QuestionFormResponse (same return path as
+        // requestChoice).
+        requestForm: (
+            requestId: RequestId,
+            choiceId: string,
+            form: QuestionForm,
+            source: string,
+        ) => {
+            ctx.broadcast({
+                type: "requestForm",
+                choiceId,
+                form,
+                source,
+                requestId: clientIdOf(requestId),
+            });
+        },
         // Forward server-driven interactive prompts (dev-mode action
         // confirmation via `@config dev on --confirm`, or agent questions) to
         // the webview, which renders them and replies with an
@@ -310,6 +338,20 @@ export function createBridgeClientIO(ctx: BridgeClientIOContext): ClientIO {
                         );
                     },
                 );
+            } else if (action === "open-folder") {
+                // The dispatcher's @open command resolves a folder path and
+                // asks the client to reveal it. Open the folder in the OS file
+                // manager via the platform's default handler.
+                const folder = typeof data === "string" ? data : "";
+                if (folder) {
+                    Promise.resolve(
+                        vscode.env.openExternal(vscode.Uri.file(folder)),
+                    ).then(undefined, (e: any) => {
+                        vscode.window.showErrorMessage(
+                            `Unable to open folder '${folder}': ${e?.message ?? String(e)}`,
+                        );
+                    });
+                }
             }
         },
         shutdown: () => {},

@@ -6,6 +6,8 @@ import {
     DisplayAppendMode,
     DisplayContent,
     MessageContent,
+    QuestionForm,
+    QuestionFormFieldAnswer,
 } from "@typeagent/agent-sdk";
 import {
     getContentForType,
@@ -336,6 +338,104 @@ function createConsoleClientIO(
                 console.error(chalk.red(`Choice error: ${err}`));
             });
         },
+        // Multi-question form — prompt each field in turn, then respond with a
+        // QuestionFormResponse keyed by field id.
+        requestForm(
+            _requestId: RequestId,
+            choiceId: string,
+            form: QuestionForm,
+            source: string,
+        ): void {
+            // code-complexity-allow: multi-field form UI handler; branches over field kind and free-text option
+            (async () => {
+                if (form.message) {
+                    displayContent(
+                        `${chalk.cyan(`[${source}]`)} ${form.message}`,
+                    );
+                }
+                const answers: Record<string, QuestionFormFieldAnswer> = {};
+                for (const field of form.fields) {
+                    if (field.prompt) {
+                        displayContent(chalk.bold(field.prompt));
+                    }
+                    if (field.kind === "yesNo") {
+                        const input = await question(`(y/n) `, rl);
+                        answers[field.id] = {
+                            kind: "yesNo",
+                            value:
+                                input.toLowerCase() === "y" ||
+                                input.toLowerCase() === "yes",
+                        };
+                        continue;
+                    }
+                    // pick / multiChoice — numbered list, plus an "Other" entry
+                    // when the field offers a free-text escape.
+                    for (let i = 0; i < field.choices.length; i++) {
+                        displayContent(`  ${i + 1}. ${field.choices[i]}`);
+                    }
+                    const otherNumber = field.allowFreeText
+                        ? field.choices.length + 1
+                        : -1;
+                    if (field.allowFreeText) {
+                        displayContent(
+                            `  ${otherNumber}. Other (type a value)`,
+                        );
+                    }
+                    if (field.kind === "pick") {
+                        const input = await question(
+                            `Enter choice number: `,
+                            rl,
+                        );
+                        const n = parseInt(input.trim(), 10);
+                        if (field.allowFreeText && n === otherNumber) {
+                            const text = await question(`Enter value: `, rl);
+                            answers[field.id] = {
+                                kind: "pick",
+                                selected: -1,
+                                text,
+                            };
+                        } else {
+                            answers[field.id] = {
+                                kind: "pick",
+                                selected:
+                                    !isNaN(n) &&
+                                    n >= 1 &&
+                                    n <= field.choices.length
+                                        ? n - 1
+                                        : (field.defaultId ?? -1),
+                            };
+                        }
+                    } else {
+                        const input = await question(
+                            `Enter choice numbers (comma-separated): `,
+                            rl,
+                        );
+                        const nums = input
+                            .split(",")
+                            .map((s) => parseInt(s.trim(), 10))
+                            .filter((n) => !isNaN(n));
+                        const selected = nums
+                            .filter((n) => n >= 1 && n <= field.choices.length)
+                            .map((n) => n - 1);
+                        let text: string | undefined;
+                        if (field.allowFreeText && nums.includes(otherNumber)) {
+                            text = await question(`Enter value: `, rl);
+                        }
+                        answers[field.id] =
+                            text !== undefined
+                                ? { kind: "multiChoice", selected, text }
+                                : { kind: "multiChoice", selected };
+                    }
+                }
+                if (dispatcherRef?.current) {
+                    await dispatcherRef.current.respondToChoice(choiceId, {
+                        answers,
+                    });
+                }
+            })().catch((err) => {
+                console.error(chalk.red(`Form error: ${err}`));
+            });
+        },
         // Async deferred pattern stubs (used by server, no-op in console)
         requestInteraction(): void {
             // Console does not support deferred interactions
@@ -558,31 +658,34 @@ export async function processCommands<T>(
         ".typeagent",
         "command_history.json",
     );
-    if (fs.existsSync(historyFile)) {
-        const hh = JSON.parse(
-            fs.readFileSync(historyFile, { encoding: "utf-8" }),
-        );
-        history = hh.commands;
+    let rl: readline.promises.Interface | undefined;
+    if (inputs === undefined) {
+        if (fs.existsSync(historyFile)) {
+            const hh = JSON.parse(
+                fs.readFileSync(historyFile, { encoding: "utf-8" }),
+            );
+            history = hh.commands;
+        }
+
+        rl = createInterface({
+            input: process.stdin,
+            output: process.stdout,
+            history,
+            terminal: true,
+        });
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
     }
-
-    const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout,
-        history,
-        terminal: true,
-    });
-
-    process.stdin.setRawMode(true);
-    process.stdin.resume();
 
     while (true) {
         const prompt =
             typeof interactivePrompt === "function"
                 ? await interactivePrompt(context)
                 : interactivePrompt;
-        const request = inputs
-            ? getNextInput(prompt, inputs)
-            : await question(promptColor(prompt), rl, history);
+        const request =
+            inputs !== undefined
+                ? getNextInput(prompt, inputs)
+                : await question(promptColor(prompt), rl, history);
         if (request.length) {
             if (
                 request.toLowerCase() === "quit" ||
@@ -602,10 +705,12 @@ export async function processCommands<T>(
         console.log("");
 
         // save command history
-        fs.writeFileSync(
-            historyFile,
-            JSON.stringify({ commands: (rl as any).history }),
-        );
+        if (rl !== undefined) {
+            fs.writeFileSync(
+                historyFile,
+                JSON.stringify({ commands: (rl as any).history }),
+            );
+        }
     }
 }
 

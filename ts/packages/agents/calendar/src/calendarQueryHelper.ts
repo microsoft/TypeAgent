@@ -7,13 +7,13 @@ import {
     getISODayStartTime,
     getISODayEndTime,
     parseFuzzyDateString,
-} from "typechat-utils";
+} from "@typeagent/typechat-utils";
 import {
     getCurrentWeekDates,
     getCurrentMonthDates,
     getNextDaysDates,
     getNWeeksDateRangeISO,
-} from "graph-utils";
+} from "@typeagent/graph-utils";
 
 export function generateEventReferenceCriteria(
     eventReference: EventReference,

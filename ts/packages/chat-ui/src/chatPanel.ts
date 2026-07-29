@@ -12,6 +12,12 @@
 import DOMPurify from "dompurify";
 import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 import type {
+    QuestionForm,
+    QuestionFormField,
+    QuestionFormFieldAnswer,
+    QuestionFormResponse,
+} from "@typeagent/agent-sdk";
+import type {
     PhaseTiming,
     CompletionUsageStats,
     NotifyExplainedData,
@@ -35,6 +41,7 @@ import {
     type ConnectionActionHandler,
 } from "./connectionStatus.js";
 import { type StatusNotice, type StatusNoticeLevel } from "./statusNotice.js";
+import { createBellIconSvg } from "./icons.js";
 
 // Restrictive sanitize config used at .innerHTML sinks below. The HTML
 // passed in is built from values that, while in practice come from
@@ -72,7 +79,7 @@ import { createWebSpeechProvider } from "./webSpeechProvider.js";
 import { openSettingsPopup, openHelpPopup } from "./popups.js";
 import { TemplateEditor, type TemplateEditServices } from "./templateEditor.js";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
-import { iconX, iconJumpQueue, iconStop } from "./icons.js";
+import { iconX, iconJumpQueue, iconStop, iconRetry } from "./icons.js";
 
 /**
  * How long the transient "sent" acknowledgement stays on the user bubble
@@ -504,6 +511,28 @@ export interface ChatPanelOptions {
         target: "user" | "agent",
         permanent: boolean,
     ) => void;
+    /**
+     * Optional hook letting the host render the collapsed status-notice
+     * affordance in its own chrome (e.g. a bell next to the connection
+     * indicator in the conversation bar) instead of ChatPanel's floating
+     * bell. Called whenever the set of collapsed notices changes, with a
+     * badge describing the count + highest severity, or `undefined` when
+     * nothing is collapsed. Return `true` to signal the host displayed it;
+     * when it returns anything else, ChatPanel falls back to its own bell.
+     */
+    onStatusNoticeBadgeChange?: (
+        badge: StatusNoticeBadge | undefined,
+    ) => boolean | void;
+}
+
+/**
+ * Describes the set of currently-collapsed status notices for hosts that
+ * render the collapsed affordance themselves (see
+ * `ChatPanelOptions.onStatusNoticeBadgeChange`).
+ */
+export interface StatusNoticeBadge {
+    count: number;
+    level: StatusNoticeLevel;
 }
 
 /**
@@ -547,6 +576,20 @@ export class ChatPanel {
      * the underlying OS notification leaves the action center (osDismiss).
      */
     private notificationContainers = new Map<string, AgentMessageContainer>();
+    /** Upper bound on {@link notifications}; oldest entries drop past this. */
+    private static readonly MAX_BUFFERED_NOTIFICATIONS = 500;
+    /**
+     * Buffered `@notify` entries surfaced via `@notify show` / `@notify info`.
+     * Populated by {@link recordNotification}; read, marked-read, or emptied by
+     * {@link showNotifications}. The chat `@clear` ({@link clear}) leaves it
+     * intact; only `@notify clear` empties it.
+     */
+    private notifications: Array<{
+        event: string;
+        source: string;
+        data: unknown;
+        read: boolean;
+    }> = [];
     /**
      * For reasoning "step" bubbles: the div of the most recently committed
      * step bubble per thread. New step/temporary bubbles anchor on it so
@@ -607,18 +650,29 @@ export class ChatPanel {
         { source: string; sourceIcon?: string; action?: unknown }
     >();
     /**
+     * Per-thread serialized ActionResult stashed when the dispatcher's
+     * diagnostic arrives before the thread's container exists; consumed by
+     * getOrCreateAgentContainer when it creates the container.
+     */
+    private pendingThreadResult = new Map<string, unknown>();
+    /**
      * Floating overlay surface for showToast() — fixed-positioned above the
      * chat in rootElement, lazily created on first toast.
      */
     private toastStack: HTMLDivElement | undefined;
     /**
-     * Bottom-right overlay hosting persistent status notices (see
-     * showStatusNotice). Lazily created on first notice; distinct from the
-     * transient toastStack so the two never fight for the same corner.
+     * Overlay hosting persistent status notices (see showStatusNotice).
+     * Lazily created on first notice; distinct from the transient toastStack
+     * so the two never fight for the same corner. Anchored bottom-right.
      */
     private statusNoticeLayer: HTMLDivElement | undefined;
     /** Active status notices keyed by id -> their root element. */
     private statusNotices = new Map<string, HTMLElement>();
+    /**
+     * Top-right bell that collapsed status notices minimize into. Lazily
+     * created on first minimize; hidden whenever nothing is collapsed.
+     */
+    private statusNoticeBell: HTMLButtonElement | undefined;
     private commandHistory: string[] = [];
     private historyIndex = -1;
     /** Local user's display name + initial used in user-bubble headers. */
@@ -703,6 +757,17 @@ export class ChatPanel {
     // dispatcher reports back. Cleared by clear().
     private userMessageById = new Map<string, HTMLElement>();
 
+    // The command actually submitted for each requestId, keyed by the id
+    // stamped on the user bubble. `command` is what was sent to `onSend`
+    // (may be an @-command); `displayText` is what the bubble shows (the
+    // friendly text for injected commands). Used by the "Retry" affordance
+    // on a cancelled user bubble to re-submit the original request. Cleared
+    // by clear().
+    private sentCommandByRequestId = new Map<
+        string,
+        { command: string; displayText: string; attachments?: string[] }
+    >();
+
     // Timestamp (ms since epoch) when the user sent each requestId. Used
     // to compute the "First Message" elapsed time when the agent's first
     // bubble for that request is created. Cleared on completeRequest().
@@ -761,6 +826,15 @@ export class ChatPanel {
         target: "user" | "agent",
         permanent: boolean,
     ) => void;
+    /**
+     * Host hook to render the collapsed status-notice badge in its own chrome.
+     * Settable post-construction (e.g. by the Electron host once it has both
+     * the ChatPanel and the ConversationBar in scope). See
+     * ChatPanelOptions.onStatusNoticeBadgeChange.
+     */
+    public onStatusNoticeBadgeChange?: (
+        badge: StatusNoticeBadge | undefined,
+    ) => boolean | void;
     private developerMode = false;
     // Input-bar affordances created only when the matching provider exists.
     private micButton?: HTMLButtonElement;
@@ -793,6 +867,7 @@ export class ChatPanel {
         this.settingsPanel = options.settingsPanel;
         this.helpPanel = options.helpPanel;
         this.onDeleteMessage = options.onDeleteMessage;
+        this.onStatusNoticeBadgeChange = options.onStatusNoticeBadgeChange;
 
         // Web-native default: when the host doesn't inject a speech provider,
         // fall back to the browser's Web Speech API so the mic button works
@@ -898,6 +973,7 @@ export class ChatPanel {
         this.setupContextMenu();
         this.setupProviderAffordances();
         this.setupImageLightbox();
+        this.setupReasoningToolCall();
     }
 
     /**
@@ -917,6 +993,42 @@ export class ChatPanel {
             if (rect.width < 32 && rect.height < 32) return;
             this.openImageLightbox(img.currentSrc || img.src);
         });
+    }
+
+    /**
+     * Lazily syntax-highlight a logged tool-call block the first time it opens.
+     * The reasoning engine renders every tool call (single or folded) as a native
+     * <details class="reasoning-tool-call"> holding only that call's own JSON (an
+     * object for one call, an array for a folded run). The <details>/<summary>
+     * handles show/hide plus keyboard toggling on its own; we only highlight the
+     * <pre> once, when it first becomes visible, so it reads like the clickable
+     * action JSON view (same highlightJson tokens). The `toggle` event does not
+     * bubble, so we listen in the capture phase to keep a single delegated
+     * listener. Each block owns its JSON inline, independent of the enclosing
+     * action's JSON view. Shared by the Electron and VS Code shells.
+     */
+    private setupReasoningToolCall() {
+        this.messageDiv.addEventListener(
+            "toggle",
+            (e) => {
+                const details = e.target as HTMLElement | null;
+                if (
+                    !details?.classList?.contains("reasoning-tool-call") ||
+                    !(details as HTMLDetailsElement).open
+                ) {
+                    return;
+                }
+                const pre = details.querySelector<HTMLElement>(
+                    "pre.reasoning-tool-call-json",
+                );
+                if (!pre || pre.dataset.highlighted === "true") return;
+                // The <pre> starts as raw (escaped) JSON text; its textContent is
+                // the un-escaped JSON, which highlightJson re-escapes.
+                pre.innerHTML = sanitize(highlightJson(pre.textContent ?? ""));
+                pre.dataset.highlighted = "true";
+            },
+            true,
+        );
     }
 
     /**
@@ -1608,7 +1720,7 @@ export class ChatPanel {
         } else {
             this.textInput.textContent = "";
         }
-        this.sendButton.disabled = !this.textInput.textContent?.trim();
+        this.updateSendButtonState();
         // Place the caret at the end of the recalled text so the user
         // can continue editing from where the input ends, rather than
         // leaving it stuck at the start of the input box.
@@ -1644,6 +1756,9 @@ export class ChatPanel {
 
         const id = requestId ?? generateRequestId();
         this.addUserMessage(text, id, attachments);
+        // Remember what we sent so a "Retry" on this bubble (should it be
+        // cancelled) can re-submit the identical request.
+        this.rememberSentCommand(id, text, text, attachments);
         // Toggle input controls into "processing" state — swaps the
         // send button for the stop button so the user can cancel an
         // in-flight command. setIdle() is invoked by the host on
@@ -1822,11 +1937,17 @@ export class ChatPanel {
      */
     private clearAgentRunning(threadId: string): void {
         this.agentRunningRequestIds.delete(threadId);
-        this.threadContainers.get(threadId)?.clearRunning();
+        // The request finished: collapse every step's reasoning "Thinking"
+        // block (including the last, still-expanded one) so completed reasoning
+        // minimizes.
+        const current = this.threadContainers.get(threadId);
+        current?.clearRunning();
+        current?.collapseReasoning();
         const all = this.requestAgentContainers.get(threadId);
         if (all) {
             for (const container of all) {
                 container.clearRunning();
+                container.collapseReasoning();
             }
         }
     }
@@ -2153,6 +2274,155 @@ export class ChatPanel {
         }
     }
 
+    /** Record the request submitted under `requestId` so a later Retry can
+     * re-issue it. `command` is what was sent to `onSend`; `displayText` is
+     * what the user bubble shows. */
+    private rememberSentCommand(
+        requestId: string,
+        command: string,
+        displayText: string,
+        attachments?: string[],
+    ): void {
+        this.sentCommandByRequestId.set(requestId, {
+            command,
+            displayText,
+            attachments,
+        });
+    }
+
+    /**
+     * Re-submit a previously cancelled request, reusing its existing user
+     * bubble instead of adding a new one. The bubble is re-keyed to a fresh
+     * request id — a new id is required because host-side cancel guards
+     * suppress display updates for the original, now-cancelled id — its
+     * Cancelled banner is cleared, and it returns to the processing state.
+     * Falls back to a new bubble if the original is gone (e.g. after @clear).
+     * Backs the "Retry" affordance on a cancelled user bubble.
+     */
+    private resendCommand(
+        oldRequestId: string,
+        command: string,
+        displayText: string,
+        attachments?: string[],
+    ): void {
+        const newId = generateRequestId();
+        const container = this.userMessageById.get(oldRequestId);
+        if (container) {
+            container
+                .querySelector(
+                    ".chat-message-user > .chat-message-cancelled-rail",
+                )
+                ?.remove();
+            this.rekeyUserBubble(oldRequestId, newId);
+        } else {
+            this.addUserMessage(displayText, newId, attachments);
+        }
+        this.rememberSentCommand(newId, command, displayText, attachments);
+        this.setProcessing(newId);
+        this.onSend?.(command, attachments, newId);
+    }
+
+    /**
+     * Re-point the user bubble (and its per-request tracking) from `oldId`
+     * to `newId` so a retried request's display updates, metrics, and queue
+     * chips target the same DOM bubble. Stale agent-container associations
+     * for `oldId` are dropped; the retried request starts fresh under `newId`.
+     */
+    private rekeyUserBubble(oldId: string, newId: string): void {
+        const container = this.userMessageById.get(oldId);
+        if (!container) return;
+        container.dataset.requestId = newId;
+        this.userMessageById.delete(oldId);
+        this.userMessageById.set(newId, container);
+        // The retried request becomes the active thread for id-less updates.
+        this.currentUserThreadId = newId;
+        // Reset send-time tracking so "first message" timing reflects the
+        // retry, not the original attempt.
+        this.requestStartByRequestId.delete(oldId);
+        this.requestStartByRequestId.set(newId, Date.now());
+        this.firstMessageMsByRequestId.delete(oldId);
+        this.sentCommandByRequestId.delete(oldId);
+        // Drop any stale agent-container / thread associations for the old id.
+        this.threadContainers.delete(oldId);
+        this.requestAgentContainers.delete(oldId);
+        this.pendingThreadDisplayInfo.delete(oldId);
+        this.lastStepAnchorByThread.delete(oldId);
+        this.clearSentAckTimer(oldId);
+        this.sentAckConsumed.delete(oldId);
+    }
+
+    /**
+     * Stamp a persistent "Cancelled" banner (with a Retry button when the
+     * original command is known) on the user bubble for `requestId`. Returns
+     * true when a bubble existed and was stamped, false otherwise.
+     *
+     * Unlike the transient queue status rail — which the host clears on the
+     * next queue snapshot via setUserBubbleQueueStatus(null) — this banner
+     * lives in its own element (`.chat-message-cancelled-rail`) so queue
+     * reconciliation leaves it intact.
+     */
+    public markUserBubbleCancelled(requestId: string): boolean {
+        const container = this.userMessageById.get(requestId);
+        if (!container) return false;
+        const bodyDiv =
+            container.querySelector<HTMLElement>(".chat-message-user");
+        if (!bodyDiv) return false;
+
+        // A pending "sent" auto-dismiss must not race the banner; drop it and
+        // remove any transient queue rail so the banner takes its place.
+        this.clearSentAckTimer(requestId);
+        bodyDiv.querySelector(":scope > .chat-message-status-rail")?.remove();
+
+        // Idempotent: reuse an existing cancelled rail rather than stacking.
+        let rail = bodyDiv.querySelector<HTMLDivElement>(
+            ":scope > .chat-message-cancelled-rail",
+        );
+        if (!rail) {
+            rail = document.createElement("div");
+            rail.className = "chat-message-cancelled-rail";
+            bodyDiv.insertBefore(rail, bodyDiv.firstChild);
+        }
+        rail.replaceChildren();
+
+        const state = document.createElement("span");
+        state.className = "chat-status-state chat-cancelled-state";
+        // Match the agent bubble's "⚠ Cancelled" wording for consistency.
+        state.textContent = "⚠ Cancelled";
+        rail.appendChild(state);
+
+        // Retry re-issues the original request under a fresh id. Only offered
+        // when we know what was sent (our own messages) and a send path exists.
+        const sent = this.sentCommandByRequestId.get(requestId);
+        if (sent && this.onSend) {
+            const controls = document.createElement("span");
+            controls.className = "chat-status-rail-controls";
+            const retry = document.createElement("button");
+            retry.type = "button";
+            retry.className = "chat-action-button chat-retry-button";
+            retry.dataset.action = "retry";
+            retry.title = "Retry this request";
+            retry.setAttribute("aria-label", "Retry this request");
+            retry.appendChild(iconRetry());
+            const retryLabel = document.createElement("span");
+            retryLabel.className = "chat-retry-label";
+            retryLabel.textContent = "Retry";
+            retry.appendChild(retryLabel);
+            retry.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.resendCommand(
+                    requestId,
+                    sent.command,
+                    sent.displayText,
+                    sent.attachments,
+                );
+            });
+            controls.appendChild(retry);
+            rail.appendChild(controls);
+        }
+        return true;
+    }
+
     /**
      * Start the one-shot timer that auto-dismisses the transient "sent"
      * acknowledgement on the user bubble for `requestId`. No-op if a timer is
@@ -2435,6 +2705,7 @@ export class ChatPanel {
                 requestId,
             );
             tempContainer.setMessage(content, source, "temporary");
+            tempContainer.renderReasoningThinkingMetric();
             this.scrollToBottom();
             return;
         }
@@ -2489,6 +2760,10 @@ export class ChatPanel {
                 source.startsWith("dispatcher.reasoningAction")
             ) {
                 stepContainer.overrideSource(source, sourceIcon);
+                // Also covers a reused existing bubble (e.g. a generic
+                // "Executing action" temporary) that never passed through the
+                // reasoning detection in getOrCreateAgentContainer.
+                stepContainer.markReasoning();
             }
             if (requestId) {
                 const start = this.requestStartByRequestId.get(requestId);
@@ -2499,6 +2774,10 @@ export class ChatPanel {
             // setMessage("block") flushes the streamed "temporary" content, so
             // the reused bubble shows the finalized phase exactly once.
             stepContainer.setMessage(content, source, "block");
+            // Reasoning "Thinking" step bubbles report their per-block token
+            // estimate in the metrics row (like the other token metrics),
+            // not in the block header.
+            stepContainer.renderReasoningThinkingMetric();
             // Keep the "working" rail on the CURRENT step bubble (the request
             // is still in progress) while clearing it from any PRIOR step
             // bubbles for this thread, so only the latest phase reads as
@@ -2508,6 +2787,7 @@ export class ChatPanel {
                 for (const prior of priorSteps) {
                     if (prior !== stepContainer) {
                         prior.clearRunning();
+                        prior.collapseReasoning();
                     }
                 }
             }
@@ -2578,8 +2858,17 @@ export class ChatPanel {
         requestId: string | undefined,
     ): AgentMessageContainer {
         const threadId = this.resolveThreadId(requestId);
+        // A reasoning display carries a "dispatcher.reasoningAction.*" source;
+        // mark the bubble so its working rail reads as reasoning (purple)
+        // whether the content streams (temporary), commits as a step, or
+        // arrives as a block.
+        const isReasoning =
+            source?.startsWith("dispatcher.reasoningAction") ?? false;
         const existing = this.threadContainers.get(threadId);
         if (existing) {
+            if (isReasoning) {
+                existing.markReasoning();
+            }
             return existing;
         }
         // sourceIcon="🤖"). Without this, the bubble would be created with
@@ -2618,6 +2907,9 @@ export class ChatPanel {
             anchor,
         );
         this.threadContainers.set(threadId, container);
+        if (isReasoning) {
+            container.markReasoning();
+        }
         container.div.dataset.requestId = threadId;
         if (this.developerMode) {
             this.attachDeleteControl(container.div, threadId, "agent");
@@ -2656,6 +2948,11 @@ export class ChatPanel {
             container.setActionData(pending.action);
         }
         this.pendingThreadDisplayInfo.delete(threadId);
+        const pendingResult = this.pendingThreadResult.get(threadId);
+        if (pendingResult !== undefined) {
+            container.setActionResultData(pendingResult);
+            this.pendingThreadResult.delete(threadId);
+        }
         return container;
     }
 
@@ -2748,12 +3045,11 @@ export class ChatPanel {
 
     /**
      * Show a persistent status notice: a bottom-right toast that stays until
-     * dismissed (unlike showToast's 5s auto-hide). The dismiss (×) collapses
-     * it to a small pinned pill in the same corner; clicking the pill
-     * re-expands it. Re-calling with the same `id` replaces the notice (e.g. a
-     * reconnect re-sending it). An optional action button runs `actionCommand`
-     * through the chat input, so the affordance works identically in every
-     * host with no extra wiring.
+     * dismissed. The minimize (×) collapses it into the top-right bell as an
+     * unread item; clicking the bell re-opens every collapsed notice. Calling
+     * with an existing `id` replaces that notice. An optional action button
+     * runs `actionCommand` through the chat input, so the affordance works
+     * identically in every host with no extra wiring.
      */
     public showStatusNotice(notice: StatusNotice): void {
         if (!notice || !notice.id) {
@@ -2841,29 +3137,116 @@ export class ChatPanel {
             toast.appendChild(actions);
         }
 
-        // Collapsed pill (hidden until minimized via the .collapsed class).
-        const pill = document.createElement("button");
-        pill.type = "button";
-        pill.className = "csn-pill";
-        pill.title = `${notice.title} — click to expand`;
-        pill.setAttribute("aria-label", `${notice.title} — click to expand`);
-        const dot = document.createElement("span");
-        dot.className = "csn-dot";
-        pill.appendChild(dot);
-        const pillLabel = document.createElement("span");
-        pillLabel.className = "csn-pill-label";
-        pillLabel.textContent = notice.title;
-        pill.appendChild(pillLabel);
-
-        minBtn.addEventListener("click", () => root.classList.add("collapsed"));
-        pill.addEventListener("click", () =>
-            root.classList.remove("collapsed"),
+        // Minimize collapses the toast into the top-right bell.
+        minBtn.addEventListener("click", () =>
+            this.collapseStatusNoticeToBell(root),
         );
 
         root.appendChild(toast);
-        root.appendChild(pill);
         layer.appendChild(root);
         this.statusNotices.set(notice.id, root);
+        // The notice shows expanded; refresh the bell's unread count.
+        this.updateStatusNoticeBell();
+    }
+
+    // Bell glyph. Static, non-user SVG literal — safe to assign as innerHTML.
+    private ensureStatusNoticeBell(): HTMLButtonElement {
+        if (!this.statusNoticeBell) {
+            const bell = document.createElement("button");
+            bell.type = "button";
+            bell.className = "chat-status-bell";
+            bell.style.display = "none";
+            const icon = createBellIconSvg();
+            icon.setAttribute("width", "16");
+            icon.setAttribute("height", "16");
+            icon.setAttribute("aria-hidden", "true");
+            bell.appendChild(icon);
+            const badge = document.createElement("span");
+            badge.className = "chat-status-bell-badge";
+            bell.appendChild(badge);
+            bell.addEventListener("click", () => this.expandAllStatusNotices());
+            (this.messageDiv.parentElement ?? this.rootElement).appendChild(
+                bell,
+            );
+            this.statusNoticeBell = bell;
+        }
+        return this.statusNoticeBell;
+    }
+
+    // Collapse a notice into the bell (hides the toast, bumps the unread count).
+    private collapseStatusNoticeToBell(root: HTMLElement): void {
+        root.classList.add("collapsed");
+        this.updateStatusNoticeBell();
+    }
+
+    // Re-open every collapsed notice and clear the bell.
+    public expandAllStatusNotices(): void {
+        for (const root of this.statusNotices.values()) {
+            root.classList.remove("collapsed");
+        }
+        this.updateStatusNoticeBell();
+    }
+
+    // Sync the collapsed-notice affordance (host badge or, failing that, the
+    // floating bell) with the set of currently-collapsed notices.
+    private updateStatusNoticeBell(): void {
+        const collapsed = [...this.statusNotices.values()].filter((r) =>
+            r.classList.contains("collapsed"),
+        );
+        const badge: StatusNoticeBadge | undefined =
+            collapsed.length === 0
+                ? undefined
+                : {
+                      count: collapsed.length,
+                      level: collapsed.some((r) =>
+                          r.classList.contains("level-error"),
+                      )
+                          ? "error"
+                          : collapsed.some((r) =>
+                                  r.classList.contains("level-warning"),
+                              )
+                            ? "warning"
+                            : "info",
+                  };
+
+        // Prefer a host-rendered badge (e.g. a bell next to the connection
+        // indicator). If the host handles it, keep the floating bell hidden.
+        let handled = false;
+        if (this.onStatusNoticeBadgeChange) {
+            try {
+                handled = this.onStatusNoticeBadgeChange(badge) === true;
+            } catch (e) {
+                console.error("onStatusNoticeBadgeChange callback failed", e);
+            }
+        }
+        if (handled) {
+            if (this.statusNoticeBell) {
+                this.statusNoticeBell.style.display = "none";
+            }
+            return;
+        }
+
+        // Fallback: ChatPanel's own floating bell.
+        if (!badge) {
+            if (this.statusNoticeBell) {
+                this.statusNoticeBell.style.display = "none";
+            }
+            return;
+        }
+        const bell = this.ensureStatusNoticeBell();
+        bell.classList.remove("level-info", "level-warning", "level-error");
+        bell.classList.add(`level-${badge.level}`);
+        const badgeEl = bell.querySelector(".chat-status-bell-badge");
+        if (badgeEl) {
+            badgeEl.textContent = String(badge.count);
+        }
+        const label =
+            badge.count === 1
+                ? "1 status notification — click to open"
+                : `${badge.count} status notifications — click to open`;
+        bell.title = label;
+        bell.setAttribute("aria-label", label);
+        bell.style.display = "inline-flex";
     }
 
     /** Remove a status notice by id, or all of them when `id` is omitted. */
@@ -2877,9 +3260,18 @@ export class ChatPanel {
             this.statusNotices.get(id)?.remove();
             this.statusNotices.delete(id);
         }
-        if (this.statusNotices.size === 0 && this.statusNoticeLayer) {
-            this.statusNoticeLayer.remove();
-            this.statusNoticeLayer = undefined;
+        if (this.statusNotices.size === 0) {
+            if (this.statusNoticeLayer) {
+                this.statusNoticeLayer.remove();
+                this.statusNoticeLayer = undefined;
+            }
+            if (this.statusNoticeBell) {
+                this.statusNoticeBell.remove();
+                this.statusNoticeBell = undefined;
+            }
+        } else {
+            // A removed notice may have been the only collapsed one.
+            this.updateStatusNoticeBell();
         }
     }
 
@@ -2977,6 +3369,71 @@ export class ChatPanel {
     }
 
     /**
+     * Buffer a notification for later retrieval via {@link showNotifications}.
+     * Hosts call this from their notify-event adapter for
+     * toast/inline/info/warning/error events so the notification center has
+     * content to summarize. Purely UI state — no host dependency. The buffer
+     * is capped at {@link ChatPanel.MAX_BUFFERED_NOTIFICATIONS}; once full the
+     * oldest entry is dropped so it can't grow without bound.
+     */
+    public recordNotification(
+        event: string,
+        source: string,
+        data: unknown,
+    ): void {
+        this.notifications.push({ event, source, data, read: false });
+        if (this.notifications.length > ChatPanel.MAX_BUFFERED_NOTIFICATIONS) {
+            this.notifications.splice(
+                0,
+                this.notifications.length -
+                    ChatPanel.MAX_BUFFERED_NOTIFICATIONS,
+            );
+        }
+    }
+
+    /**
+     * Render the buffered notification center inline in response to `@notify`
+     * commands. `command` is the dispatcher NotifyCommands value, which arrives
+     * as a bare string: "summarize" | "clear" | "unread" | "all". Kept as
+     * literals here so chat-ui needn't depend on the dispatcher (node) package.
+     */
+    public showNotifications(command: unknown): void {
+        switch (command) {
+            case "clear":
+                this.notifications.length = 0;
+                break;
+            case "all":
+            case "unread": {
+                const showAll = command === "all";
+                const items = this.notifications.filter(
+                    (n) => showAll || !n.read,
+                );
+                const content = items.length
+                    ? `<ul style="margin: 0; padding-left: 1.2em; list-style-position: inside;">${items
+                          .map((n) => {
+                              n.read = true;
+                              const event = escapeHtml(n.event);
+                              return `<li class="notification-${event}">${event} ${escapeHtml(String(n.data))}</li>`;
+                          })
+                          .join("")}</ul>`
+                    : "No notifications.";
+                this.showInline({ type: "html", content });
+                break;
+            }
+            case "summarize": {
+                const unread = this.notifications.filter((n) => !n.read).length;
+                this.showInline({
+                    type: "html",
+                    content: `There are <b>${unread}</b> unread and <b>${this.notifications.length}</b> total notifications.`,
+                });
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    /**
      * Add a non-conversational system message styled distinctly from agent
      * messages (no avatar, no source label, no timestamp). Use for `@`-config
      * confirmations, session lifecycle events, and similar host notices.
@@ -3018,6 +3475,7 @@ export class ChatPanel {
         this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
+        this.pendingThreadResult.clear();
         this.agentRunningRequestIds.clear();
         this.clearAllSentAck();
 
@@ -3055,6 +3513,7 @@ export class ChatPanel {
         this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
+        this.pendingThreadResult.clear();
         this.userMessageById.clear();
         this.scrollToBottom();
     }
@@ -3089,6 +3548,7 @@ export class ChatPanel {
         this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
+        this.pendingThreadResult.clear();
         this.agentRunningRequestIds.clear();
         this.clearAllSentAck();
         this.suppressFirstMessageTracking = true;
@@ -3127,6 +3587,7 @@ export class ChatPanel {
         this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
+        this.pendingThreadResult.clear();
         this.userMessageById.clear();
         this.scrollToBottom();
 
@@ -3341,6 +3802,30 @@ export class ChatPanel {
         });
     }
 
+    /**
+     * Receive dev diagnostic data from the dispatcher. Only the tagged
+     * "actionResult" payload (emitted after every action) feeds the
+     * per-bubble result inspector; other diagnostic shapes are ignored.
+     * Attaches to the thread's current bubble, or stashes for the next one.
+     */
+    public appendDiagnosticData(requestId: string | undefined, data: unknown) {
+        if (
+            typeof data !== "object" ||
+            data === null ||
+            (data as { type?: unknown }).type !== "actionResult"
+        ) {
+            return;
+        }
+        const result = (data as { result?: unknown }).result;
+        const threadId = this.resolveThreadId(requestId);
+        const target = this.threadContainers.get(threadId);
+        if (target) {
+            target.setActionResultData(result);
+            return;
+        }
+        this.pendingThreadResult.set(threadId, result);
+    }
+
     /** Returns true if a user-message bubble for `requestId` already exists. */
     public hasUserMessage(requestId: string): boolean {
         return this.userMessageById.has(requestId);
@@ -3366,7 +3851,9 @@ export class ChatPanel {
         this.requestAgentContainers.clear();
         this.currentUserThreadId = undefined;
         this.pendingThreadDisplayInfo.clear();
+        this.pendingThreadResult.clear();
         this.userMessageById.clear();
+        this.sentCommandByRequestId.clear();
         this.requestStartByRequestId.clear();
         this.firstMessageMsByRequestId.clear();
         this.agentRunningRequestIds.clear();
@@ -3510,30 +3997,48 @@ export class ChatPanel {
             (requestContainers.length > 0
                 ? requestContainers[requestContainers.length - 1]
                 : undefined);
+        // For a reasoning thread with a trail of "Thinking"/tool steps, give
+        // the final answer step a gap separating it from the reasoning above.
+        // Target the last committed STEP (the answer), not the newest
+        // container, which can be a post-answer status block (e.g. copilot's
+        // "Task flow registered").
+        const answerStep = requestContainers.find(
+            (c) => c.div === this.lastStepAnchorByThread.get(threadId),
+        );
+        if (requestContainers.length > 1 && answerStep?.isReasoning()) {
+            answerStep.setReasoningAnswer(true);
+        }
         const firstMessageMs = this.firstMessageMsByRequestId.get(threadId);
         if (result?.cancelled) {
-            // Mirror Electron's "⚠ Cancelled" status, anchored to the
-            // user bubble (column-reverse: DOM-before = visually-after).
-            // Liveness check guards against detached anchors.
-            const mappedBubble = this.userMessageById.get(threadId);
-            const userBubble =
-                mappedBubble && mappedBubble.parentElement === this.messageDiv
-                    ? mappedBubble
-                    : undefined;
-            // Drop unknown explicit requestIds (post-clear stragglers)
-            // rather than orphan them at the chat bottom.
-            if (!target && requestId !== undefined && !userBubble) {
-                // Orphan: chip already cleared by the queue path.
-            } else {
-                const cancelTarget =
-                    target ??
-                    this.createAgentContainer(
-                        "shell",
-                        this.iconForSource("shell"),
-                        undefined,
-                        userBubble,
-                    );
-                cancelTarget.setMessage(
+            // Stamp a persistent "Cancelled" banner (+ Retry) on the user
+            // bubble so the cancel is visible on the request itself, not only
+            // on a separate agent bubble.
+            const stampedUserBanner = this.markUserBubbleCancelled(threadId);
+            if (target) {
+                // The request already produced an agent bubble before it was
+                // cancelled: mark where it stopped with "⚠ Cancelled". The
+                // user banner (if any) rides alongside it and carries Retry.
+                target.setMessage(
+                    {
+                        type: "text",
+                        content: "⚠ Cancelled",
+                        kind: "status",
+                    },
+                    "shell",
+                    "block",
+                );
+            } else if (!stampedUserBanner && requestId === undefined) {
+                // No user bubble to carry the banner and no explicit request
+                // id (default / ad-hoc thread): fall back to a standalone
+                // "⚠ Cancelled" agent bubble. Orphans (explicit id, no bubble)
+                // are intentionally skipped — the chip was already cleared by
+                // the queue path.
+                this.createAgentContainer(
+                    "shell",
+                    this.iconForSource("shell"),
+                    undefined,
+                    undefined,
+                ).setMessage(
                     {
                         type: "text",
                         content: "⚠ Cancelled",
@@ -3543,6 +4048,9 @@ export class ChatPanel {
                     "block",
                 );
             }
+            // Otherwise the user-bubble banner is the sole cancelled indicator
+            // (no redundant standalone agent bubble for a queued item that was
+            // cancelled before it ran).
         }
         if (result && target) {
             // Agent bubble shows ACTION token usage (the tokens the agent
@@ -3663,7 +4171,9 @@ export class ChatPanel {
             // request's existing agent bubble (the one already showing the
             // agent's displayContent / prompt) so the message and the choice
             // buttons render as a single card instead of two stacked boxes.
-            const container = this.choicePromptContainer(opts?.requestId);
+            const { container, created } = this.choicePromptContainer(
+                opts?.requestId,
+            );
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -3690,6 +4200,12 @@ export class ChatPanel {
             // answered, or the server cancelled/timed out the interaction).
             const onAbort = () => {
                 cleanup();
+                // Drop the whole card (heading included) when we minted a fresh
+                // system container, so a cancelled / superseded prompt leaves
+                // no stale heading behind.
+                if (created) {
+                    container.div.remove();
+                }
                 reject(
                     signal?.reason ?? new DOMException("Aborted", "AbortError"),
                 );
@@ -3759,7 +4275,9 @@ export class ChatPanel {
             // See addChoicePrompt: a requestId anchors the panel onto the
             // request's existing agent bubble so the prompt and the pick /
             // remember controls share one card.
-            const container = this.choicePromptContainer(opts?.requestId);
+            const { container, created } = this.choicePromptContainer(
+                opts?.requestId,
+            );
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -3829,6 +4347,9 @@ export class ChatPanel {
             // answered, or the server cancelled/timed out the interaction).
             const onAbort = () => {
                 cleanup();
+                if (created) {
+                    container.div.remove();
+                }
                 reject(
                     signal?.reason ?? new DOMException("Aborted", "AbortError"),
                 );
@@ -3869,6 +4390,441 @@ export class ChatPanel {
     }
 
     /**
+     * Render a multi-question form card: one or more questions (single-select
+     * radios, multi-select checkboxes, or yes/no), each optionally offering a
+     * free-text "Other: ___" escape. Resolves with a `QuestionFormResponse`
+     * keyed by field id (or `{ cancelled: true }` when dismissed). Maps from
+     * ClientIO.requestForm.
+     *
+     * When `form.paged` is set the fields render as a wizard - one question at
+     * a time with Back / Next navigation and a "Question X of N" progress
+     * label - and the response is returned only when the user clicks Finish on
+     * the last step. Answers persist across navigation, so going Back
+     * re-hydrates a previously entered value. Otherwise every field renders on
+     * one card with a single Submit.
+     *
+     * Set `opts.showMessage = false` to render only the form controls without
+     * the heading - used by hosts that already display the agent's
+     * `displayContent` separately (the shell renders it before requesting the
+     * form, so repeating `form.message` here would duplicate it).
+     */
+    public addQuestionForm(
+        form: QuestionForm,
+        opts?: {
+            signal?: AbortSignal;
+            showMessage?: boolean;
+            requestId?: string;
+        },
+    ): Promise<QuestionFormResponse> {
+        return new Promise<QuestionFormResponse>((resolve, reject) => {
+            const signal = opts?.signal;
+            // The host may abort before we even render (e.g. another connected
+            // client answered the broadcast interaction first).
+            if (signal?.aborted) {
+                reject(
+                    signal.reason ?? new DOMException("Aborted", "AbortError"),
+                );
+                return;
+            }
+
+            const { container, created } = this.choicePromptContainer(
+                opts?.requestId,
+            );
+            if (opts?.showMessage !== false && form.message) {
+                container.setMessage(
+                    { type: "text", content: form.message },
+                    undefined,
+                    undefined,
+                );
+            }
+
+            const panelDiv = document.createElement("div");
+            panelDiv.className = "question-form-panel";
+
+            const makeOption = (
+                type: "radio" | "checkbox",
+                name: string,
+                text: string,
+                checked: boolean,
+            ) => {
+                const label = document.createElement("label");
+                label.className = "question-form-choice";
+                const input = document.createElement("input");
+                input.type = type;
+                if (type === "radio") {
+                    input.name = name;
+                }
+                input.checked = checked;
+                label.appendChild(input);
+                const span = document.createElement("span");
+                span.textContent = text;
+                label.appendChild(span);
+                return { label, input };
+            };
+
+            // An "Other: ___" row: a radio/checkbox paired with a text box.
+            // Touching the text box selects the control so a typed value counts.
+            const makeOther = (
+                type: "radio" | "checkbox",
+                name: string,
+                placeholder?: string,
+            ) => {
+                const label = document.createElement("label");
+                label.className = "question-form-choice question-form-other";
+                const control = document.createElement("input");
+                control.type = type;
+                if (type === "radio") {
+                    control.name = name;
+                }
+                label.appendChild(control);
+                const span = document.createElement("span");
+                span.textContent = "Other:";
+                label.appendChild(span);
+                const text = document.createElement("input");
+                text.type = "text";
+                text.className = "question-form-other-input";
+                if (placeholder) {
+                    text.placeholder = placeholder;
+                }
+                const select = () => {
+                    control.checked = true;
+                };
+                text.addEventListener("focus", select);
+                text.addEventListener("input", select);
+                label.appendChild(text);
+                return { label, control, text };
+            };
+
+            // Build one field's DOM, restoring `saved` if provided, and return
+            // a collector that reads its current answer. Shared by the
+            // all-at-once layout and the paged wizard (which re-hydrates each
+            // field from saved answers when navigating Back/Next).
+            const buildField = (
+                field: QuestionFormField,
+                fieldIndex: number,
+                saved: QuestionFormFieldAnswer | undefined,
+            ): {
+                node: HTMLElement;
+                collect: () => QuestionFormFieldAnswer;
+            } => {
+                const fieldDiv = document.createElement("div");
+                fieldDiv.className = "question-form-field";
+                if (field.prompt) {
+                    const promptEl = document.createElement("div");
+                    promptEl.className = "question-form-prompt";
+                    promptEl.textContent = field.prompt;
+                    fieldDiv.appendChild(promptEl);
+                }
+                const groupName = `qf-${fieldIndex}-${Date.now()}`;
+
+                if (field.kind === "yesNo") {
+                    const savedYes =
+                        saved?.kind === "yesNo"
+                            ? saved.value
+                            : field.defaultValue === true;
+                    const yes = makeOption("radio", groupName, "Yes", savedYes);
+                    const no = makeOption("radio", groupName, "No", !savedYes);
+                    fieldDiv.appendChild(yes.label);
+                    fieldDiv.appendChild(no.label);
+                    return {
+                        node: fieldDiv,
+                        collect: () => ({
+                            kind: "yesNo",
+                            value: yes.input.checked,
+                        }),
+                    };
+                }
+
+                if (field.kind === "pick") {
+                    const savedPick =
+                        saved?.kind === "pick" ? saved : undefined;
+                    const radios: HTMLInputElement[] = [];
+                    field.choices.forEach((choice, i) => {
+                        const checked =
+                            savedPick !== undefined
+                                ? savedPick.selected === i
+                                : field.defaultId !== undefined
+                                  ? field.defaultId === i
+                                  : i === 0;
+                        const { label, input } = makeOption(
+                            "radio",
+                            groupName,
+                            choice,
+                            checked,
+                        );
+                        input.dataset.index = String(i);
+                        radios.push(input);
+                        fieldDiv.appendChild(label);
+                    });
+                    let other:
+                        | { control: HTMLInputElement; text: HTMLInputElement }
+                        | undefined;
+                    if (field.allowFreeText) {
+                        const o = makeOther(
+                            "radio",
+                            groupName,
+                            field.freeTextPlaceholder,
+                        );
+                        other = { control: o.control, text: o.text };
+                        if (
+                            savedPick?.selected === -1 &&
+                            savedPick.text !== undefined
+                        ) {
+                            o.control.checked = true;
+                            o.text.value = savedPick.text;
+                        }
+                        fieldDiv.appendChild(o.label);
+                    }
+                    return {
+                        node: fieldDiv,
+                        collect: () => {
+                            if (other?.control.checked) {
+                                return {
+                                    kind: "pick",
+                                    selected: -1,
+                                    text: other.text.value,
+                                };
+                            }
+                            const picked = radios.find((r) => r.checked);
+                            return {
+                                kind: "pick",
+                                selected: picked
+                                    ? parseInt(picked.dataset.index!, 10)
+                                    : -1,
+                            };
+                        },
+                    };
+                }
+
+                // multiChoice
+                const savedMulti =
+                    saved?.kind === "multiChoice" ? saved : undefined;
+                const boxes: HTMLInputElement[] = [];
+                field.choices.forEach((choice, i) => {
+                    const checked =
+                        savedMulti !== undefined
+                            ? savedMulti.selected.includes(i)
+                            : (field.defaultIds?.includes(i) ?? false);
+                    const { label, input } = makeOption(
+                        "checkbox",
+                        groupName,
+                        choice,
+                        checked,
+                    );
+                    input.dataset.index = String(i);
+                    boxes.push(input);
+                    fieldDiv.appendChild(label);
+                });
+                let other:
+                    | { control: HTMLInputElement; text: HTMLInputElement }
+                    | undefined;
+                if (field.allowFreeText) {
+                    const o = makeOther(
+                        "checkbox",
+                        groupName,
+                        field.freeTextPlaceholder,
+                    );
+                    other = { control: o.control, text: o.text };
+                    if (
+                        savedMulti?.text !== undefined &&
+                        savedMulti.text.length > 0
+                    ) {
+                        o.control.checked = true;
+                        o.text.value = savedMulti.text;
+                    }
+                    fieldDiv.appendChild(o.label);
+                }
+                return {
+                    node: fieldDiv,
+                    collect: () => {
+                        const selected = boxes
+                            .filter((b) => b.checked)
+                            .map((b) => parseInt(b.dataset.index!, 10));
+                        const typed =
+                            other?.control.checked && other.text.value
+                                ? other.text.value
+                                : undefined;
+                        return typed !== undefined
+                            ? { kind: "multiChoice", selected, text: typed }
+                            : { kind: "multiChoice", selected };
+                    },
+                };
+            };
+
+            let keyHandler: (e: KeyboardEvent) => void;
+
+            const cleanup = () => {
+                panelDiv.remove();
+                document.removeEventListener("keydown", keyHandler);
+                signal?.removeEventListener("abort", onAbort);
+            };
+
+            const cancel = () => {
+                cleanup();
+                resolve({ answers: {}, cancelled: true });
+            };
+
+            // Allow the host to dismiss the form externally (another client
+            // answered, or the server cancelled/timed out the interaction).
+            const onAbort = () => {
+                cleanup();
+                // Drop the whole card (heading included) when we minted a fresh
+                // system container, so a cancelled / superseded form leaves no
+                // stale heading behind.
+                if (created) {
+                    container.div.remove();
+                }
+                reject(
+                    signal?.reason ?? new DOMException("Aborted", "AbortError"),
+                );
+            };
+
+            if (form.paged) {
+                // Wizard: one question at a time with Back / Next navigation.
+                // Answers persist in `answers` so navigating Back re-hydrates a
+                // previously entered value; the whole set is returned on Finish.
+                const answers: Record<string, QuestionFormFieldAnswer> = {};
+                let step = 0;
+                let collectCurrent: (() => QuestionFormFieldAnswer) | undefined;
+
+                const saveCurrent = () => {
+                    if (collectCurrent) {
+                        answers[form.fields[step].id] = collectCurrent();
+                    }
+                };
+
+                const bodyDiv = document.createElement("div");
+                panelDiv.appendChild(bodyDiv);
+
+                const navDiv = document.createElement("div");
+                navDiv.className = "question-form-nav";
+                const progressEl = document.createElement("span");
+                progressEl.className = "question-form-progress";
+
+                const navButtons = document.createElement("div");
+                navButtons.className = "question-form-nav-buttons";
+                const backBtn = document.createElement("button");
+                backBtn.className = "choice-button";
+                backBtn.textContent = "Back";
+                const nextBtn = document.createElement("button");
+                nextBtn.className = "choice-button question-form-next";
+                const cancelBtn = document.createElement("button");
+                cancelBtn.className = "choice-button";
+                cancelBtn.textContent = "Cancel (Del)";
+                cancelBtn.addEventListener("click", () => cancel());
+                navButtons.appendChild(backBtn);
+                navButtons.appendChild(nextBtn);
+                navButtons.appendChild(cancelBtn);
+
+                navDiv.appendChild(progressEl);
+                navDiv.appendChild(navButtons);
+                panelDiv.appendChild(navDiv);
+
+                const renderStep = () => {
+                    bodyDiv.replaceChildren();
+                    const field = form.fields[step];
+                    const built = buildField(field, step, answers[field.id]);
+                    collectCurrent = built.collect;
+                    bodyDiv.appendChild(built.node);
+                    progressEl.textContent = `Question ${step + 1} of ${
+                        form.fields.length
+                    }`;
+                    backBtn.disabled = step === 0;
+                    nextBtn.textContent =
+                        step === form.fields.length - 1 ? "Finish" : "Next";
+                };
+
+                backBtn.addEventListener("click", () => {
+                    if (step === 0) {
+                        return;
+                    }
+                    saveCurrent();
+                    step--;
+                    renderStep();
+                });
+                nextBtn.addEventListener("click", () => {
+                    saveCurrent();
+                    if (step === form.fields.length - 1) {
+                        cleanup();
+                        resolve({ answers });
+                        return;
+                    }
+                    step++;
+                    renderStep();
+                });
+
+                keyHandler = (e: KeyboardEvent) => {
+                    // Don't hijack Enter/Delete while typing a free-text value.
+                    const inText =
+                        e.target instanceof HTMLInputElement &&
+                        e.target.type === "text";
+                    if (inText) {
+                        return;
+                    }
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        nextBtn.click();
+                    } else if (e.key === "Delete") {
+                        e.preventDefault();
+                        cancel();
+                    }
+                };
+
+                renderStep();
+            } else {
+                // All-at-once: every field on one card, single Submit.
+                const collectors: Array<() => QuestionFormFieldAnswer> = [];
+                form.fields.forEach((field, i) => {
+                    const built = buildField(field, i, undefined);
+                    collectors.push(built.collect);
+                    panelDiv.appendChild(built.node);
+                });
+
+                const submit = () => {
+                    const answers: Record<string, QuestionFormFieldAnswer> = {};
+                    form.fields.forEach((field, i) => {
+                        answers[field.id] = collectors[i]();
+                    });
+                    cleanup();
+                    resolve({ answers });
+                };
+
+                keyHandler = (e: KeyboardEvent) => {
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        submit();
+                    } else if (e.key === "Delete") {
+                        e.preventDefault();
+                        cancel();
+                    }
+                };
+
+                const buttonDiv = document.createElement("div");
+                buttonDiv.className = "checkbox-buttons";
+
+                const submitBtn = document.createElement("button");
+                submitBtn.className = "choice-button";
+                submitBtn.textContent = "Submit (Enter)";
+                submitBtn.addEventListener("click", () => submit());
+
+                const cancelBtn = document.createElement("button");
+                cancelBtn.className = "choice-button";
+                cancelBtn.textContent = "Cancel (Del)";
+                cancelBtn.addEventListener("click", () => cancel());
+
+                buttonDiv.appendChild(submitBtn);
+                buttonDiv.appendChild(cancelBtn);
+                panelDiv.appendChild(buttonDiv);
+            }
+
+            signal?.addEventListener("abort", onAbort, { once: true });
+            document.addEventListener("keydown", keyHandler);
+            container.appendElement(panelDiv);
+            this.scrollToBottom();
+        });
+    }
+
+    /**
      * Show a Yes/No prompt and return the user's choice.
      *
      * Set `opts.showMessage = false` to render only the Yes/No buttons
@@ -3886,7 +4842,7 @@ export class ChatPanel {
             // See addChoicePrompt: a requestId anchors the Yes/No buttons onto
             // the request's existing agent bubble so the prompt message and
             // the buttons render as a single card.
-            const container = this.choicePromptContainer(opts?.requestId);
+            const { container } = this.choicePromptContainer(opts?.requestId);
             if (opts?.showMessage !== false) {
                 container.setMessage(
                     { type: "text", content: message },
@@ -4225,6 +5181,7 @@ export class ChatPanel {
         this.historyIndex = -1;
         const id = requestId ?? generateRequestId();
         this.addUserMessage(displayText ?? command, id);
+        this.rememberSentCommand(id, command, displayText ?? command);
         this.onSend?.(command, undefined, id);
     }
 
@@ -4727,16 +5684,47 @@ export class ChatPanel {
      * fresh system container when there is no requestId or no bubble yet
      * (e.g. a bare `ClientIO.question` with no preceding displayContent).
      */
-    private choicePromptContainer(requestId?: string): AgentMessageContainer {
+    // Resolve the container a prompt card should render into. `created` is true
+    // when a fresh system card was minted (so an abort can remove the whole
+    // card, heading included) and false when an existing agent bubble is reused
+    // (leave it in place - only the controls are removed).
+    private choicePromptContainer(requestId?: string): {
+        container: AgentMessageContainer;
+        created: boolean;
+    } {
+        const threadId = this.resolveThreadId(requestId);
+        // Reuse the request's open agent bubble when one exists (non-blocking
+        // requestChoice/requestForm append their buttons onto the agent's
+        // prompt bubble). Gated on an explicit requestId to preserve prior
+        // behavior for anonymous prompts.
         if (requestId !== undefined) {
-            const existing = this.threadContainers.get(
-                this.resolveThreadId(requestId),
-            );
+            const existing = this.threadContainers.get(threadId);
             if (existing) {
-                return existing;
+                return { container: existing, created: false };
             }
         }
-        return this.createAgentContainer("system", "");
+        // No open bubble. If this thread has committed reasoning-step bubbles
+        // (chained via lastStepAnchorByThread - populated only by "step" mode),
+        // anchor the prompt card right after the last step and advance the
+        // anchor so the reasoning's follow-up step chains BELOW the card.
+        // Without this a blocking interaction card (e.g. reasoning's ask_user)
+        // falls to the default insertion anchor and the follow-up step renders
+        // above it, so the question appears after its own answer.
+        const lastStep = this.lastStepAnchorByThread.get(threadId);
+        if (lastStep?.parentElement === this.messageDiv) {
+            const container = this.createAgentContainer(
+                "system",
+                "",
+                undefined,
+                lastStep,
+            );
+            this.lastStepAnchorByThread.set(threadId, container.div);
+            return { container, created: true };
+        }
+        return {
+            container: this.createAgentContainer("system", ""),
+            created: true,
+        };
     }
 
     private createAgentContainer(
@@ -4970,17 +5958,23 @@ class AgentMessageContainer {
     private readonly messageDiv: HTMLDivElement;
     private readonly bodyDiv: HTMLDivElement;
     private readonly detailsDiv: HTMLDivElement;
+    private readonly resultDiv: HTMLDivElement;
     private readonly metricsDiv: HTMLDivElement;
     private readonly nameSpan: HTMLSpanElement;
     private readonly iconDiv: HTMLDivElement;
     private readonly timestampDiv: HTMLDivElement;
     private feedbackWidget?: FeedbackWidget;
     private statusRail?: HTMLDivElement;
+    private reasoning = false;
+    private readonly collapsedReasoning = new WeakSet<HTMLDetailsElement>();
     private lastAppendMode?: DisplayAppendMode;
     // Mirrors the shell's swapContent pattern: when action JSON is set,
     // clicking the agent name toggles the message body between the
     // rendered response and a <pre> of the action JSON.
     private actionDataHtml?: string;
+    // Serialized ActionResult JSON (success or error) shown in a panel
+    // separate from the action JSON, toggled by clicking the agent icon.
+    private actionResultHtml?: string;
     private savedMessageHtml?: string;
     // When setActionData receives an action with schemaName/actionName,
     // we display "schema.action" as the bubble title instead of the raw
@@ -5029,10 +6023,16 @@ class AgentMessageContainer {
         this.timestampDiv = timestampDiv;
         this.div.appendChild(timestampDiv);
 
-        // Icon
+        // Icon. Clicking it toggles the serialized ActionResult panel (when
+        // result data has been attached) - a separate affordance from the
+        // agent name, which toggles the action JSON.
         this.iconDiv = document.createElement("div");
         this.iconDiv.className = "agent-icon";
         this.iconDiv.textContent = icon;
+        this.iconDiv.addEventListener("click", () => {
+            if (this.actionResultHtml === undefined) return;
+            this.toggleResultData();
+        });
         this.div.appendChild(this.iconDiv);
 
         // Message body
@@ -5048,6 +6048,13 @@ class AgentMessageContainer {
         this.detailsDiv = document.createElement("div");
         this.detailsDiv.className = "chat-message-details";
         bodyDiv.appendChild(this.detailsDiv);
+
+        // Collapsible ActionResult inspector (hidden by default). Separate
+        // from detailsDiv so the resolved action JSON and its result can be
+        // inspected independently. Fed via appendDiagnosticData.
+        this.resultDiv = document.createElement("div");
+        this.resultDiv.className = "chat-message-details chat-message-result";
+        bodyDiv.appendChild(this.resultDiv);
 
         // Metrics strip (hidden by default, revealed on hover via CSS).
         // Starts empty so the hover area collapses to zero height until
@@ -5114,6 +6121,26 @@ class AgentMessageContainer {
         } else {
             leftLines.push(`${actionLabel} Tokens: <b>not reported</b>`);
         }
+        // Thinking (reasoning) tokens: the subset of completion tokens the
+        // model spent on chain-of-thought, tabulated per reasoning block. Shown
+        // as a total, with a per-block breakdown when there is more than one
+        // block. Only reasoning engines that expose it report this; when absent
+        // the line is omitted entirely.
+        if (
+            tokenUsage?.thinking_tokens !== undefined &&
+            tokenUsage.thinking_tokens.length > 0
+        ) {
+            const blocks = tokenUsage.thinking_tokens;
+            const thinkingTotal = blocks.reduce((sum, n) => sum + n, 0);
+            const breakdown = blocks.length > 1 ? ` (${blocks.join("+")})` : "";
+            // A leading "~" marks an approximate figure: some engines (e.g.
+            // Claude) only expose a streamed per-block estimate, not a billed
+            // reasoning-token count.
+            const approx = tokenUsage.thinking_tokens_estimated ? "~" : "";
+            leftLines.push(
+                `Thinking Tokens: <b>${approx}${thinkingTotal}</b>${breakdown}`,
+            );
+        }
         if (phase?.marks) {
             for (const [key, value] of Object.entries(phase.marks)) {
                 const avg = value.duration / Math.max(value.count, 1);
@@ -5140,6 +6167,35 @@ class AgentMessageContainer {
         } else {
             this.div.classList.remove("chat-message-has-metrics");
         }
+    }
+
+    /**
+     * When this bubble's content is a reasoning "Thinking" block that carries a
+     * per-block token estimate (a `data-thinking-tokens` attribute on the
+     * `<details>`), surface it in the metrics row as "Thinking Tokens: ~N" -
+     * the same place the aggregate token metrics appear - rather than in the
+     * block header. Reasoning step bubbles otherwise have an empty metrics row.
+     * The value is an approximation derived from the reasoning text, hence "~".
+     */
+    public renderReasoningThinkingMetric() {
+        const details = this.messageDiv.querySelector<HTMLElement>(
+            ".reasoning-thinking[data-thinking-tokens]",
+        );
+        if (details === null) {
+            return;
+        }
+        const raw = details.dataset.thinkingTokens;
+        const tokens = raw !== undefined ? parseInt(raw, 10) : NaN;
+        if (!Number.isFinite(tokens) || tokens <= 0) {
+            return;
+        }
+        this.metricsDiv.innerHTML = sanitize(
+            `<div class="metrics-details">` +
+                `<div>Thinking Tokens: <b>~${tokens}</b></div>` +
+                `<div></div><div></div>` +
+                `</div>`,
+        );
+        this.div.classList.add("chat-message-has-metrics");
     }
 
     /**
@@ -5223,6 +6279,26 @@ class AgentMessageContainer {
     private toggleActionData() {
         if (this.actionDataHtml === undefined) return;
         this.detailsDiv.classList.toggle("chat-details-visible");
+    }
+
+    /**
+     * Attach a serialized ActionResult (success or error) to this bubble.
+     * Rendered as pretty-printed JSON in a panel separate from the action
+     * JSON; clicking the agent icon toggles it.
+     */
+    public setActionResultData(result: unknown) {
+        if (result === undefined || result === null) return;
+        const json = JSON.stringify(result, undefined, 2);
+        const html = `<pre class="chat-json">${highlightJson(json)}</pre>`;
+        this.resultDiv.innerHTML = sanitize(html);
+        this.actionResultHtml = html;
+        this.iconDiv.classList.add("clickable");
+        this.iconDiv.title = "Click to show / hide action result";
+    }
+
+    private toggleResultData() {
+        if (this.actionResultHtml === undefined) return;
+        this.resultDiv.classList.toggle("chat-details-visible");
     }
 
     public setMessage(
@@ -5381,9 +6457,28 @@ class AgentMessageContainer {
                 bodyDiv: this.messageDiv,
                 headerDiv: this.timestampDiv,
                 messageDiv: this.messageDiv,
+                openInWindow: this.platformAdapter.openMessageInWindow
+                    ? () => this.openMessageInWindow()
+                    : undefined,
             },
             controller,
             variant,
+        );
+    }
+
+    // Ask the host to open this message in a new window. Messages backed by an
+    // <iframe> (script-driven image/video/settings displays) don't survive
+    // re-sanitization in a separate panel, so decline them; there's no in-page
+    // fallback, so the button is simply inert for those.
+    private openMessageInWindow(): boolean {
+        if (this.messageDiv.querySelector("iframe")) {
+            return false;
+        }
+        return (
+            this.platformAdapter.openMessageInWindow?.(
+                this.messageDiv.innerHTML,
+                this.nameSpan.textContent ?? undefined,
+            ) ?? false
         );
     }
 
@@ -5422,6 +6517,11 @@ class AgentMessageContainer {
         // Ensure the rail reads as "running" even if it was previously showing
         // the muted "unknown" state (setUnknown reuses this same rail element).
         rail.dataset.status = "running";
+        if (this.reasoning) {
+            rail.dataset.variant = "reasoning";
+        } else {
+            delete rail.dataset.variant;
+        }
         const stateZone = rail.querySelector<HTMLElement>(
             ":scope > .chat-status-state-zone",
         )!;
@@ -5461,6 +6561,55 @@ class AgentMessageContainer {
     public clearRunning() {
         this.statusRail?.remove();
         this.statusRail = undefined;
+    }
+
+    /**
+     * Mark this bubble as part of a reasoning ("Thinking") flow so its working
+     * rail reads as reasoning (light purple) rather than a generic running
+     * request (blue). Updates an already-rendered rail immediately, since the
+     * rail is stamped before the reasoning source is known.
+     */
+    public markReasoning() {
+        this.reasoning = true;
+        if (this.statusRail) {
+            this.statusRail.dataset.variant = "reasoning";
+        }
+    }
+
+    /** Whether this bubble belongs to a reasoning ("Thinking") flow. */
+    public isReasoning(): boolean {
+        return this.reasoning;
+    }
+
+    /**
+     * Collapse this step's reasoning "Thinking" blocks once it is no longer
+     * active (superseded by the next step, or the request completed) so
+     * finished reasoning minimizes while the active step stays expanded. Each
+     * block is collapsed at most once - tracked per element - so a block the
+     * user manually re-opens is not re-collapsed by a later pass, while a block
+     * added after an earlier collapse still minimizes.
+     */
+    public collapseReasoning() {
+        this.bodyDiv
+            .querySelectorAll<HTMLDetailsElement>(
+                "details.reasoning-thinking[open]",
+            )
+            .forEach((details) => {
+                if (this.collapsedReasoning.has(details)) {
+                    return;
+                }
+                this.collapsedReasoning.add(details);
+                details.removeAttribute("open");
+            });
+    }
+
+    /**
+     * Tag this reasoning step as the final prose answer rather than a
+     * "Thinking"/tool trail step, so it renders with a gap separating it from
+     * the reasoning above it.
+     */
+    public setReasoningAnswer(isAnswer: boolean) {
+        this.div.classList.toggle("chat-reasoning-answer", isAnswer);
     }
 
     /**
@@ -5533,6 +6682,13 @@ class AgentMessageContainer {
             text = (content.content as string[]).join("\n");
         }
         if (!text) return undefined;
+
+        // Content that is already a self-contained HTML block (the reasoning
+        // engine's <details> thinking and batched-tool blocks) is
+        // pre-structured: any JSON inside is intentional markup, not a trailing
+        // action payload to hoist into the details panel. Splitting it at a
+        // "{"/"[" line would tear the <details>/<pre> apart mid-element.
+        if (text.trimStart().startsWith("<")) return undefined;
 
         // Strip ANSI to find the JSON boundary
         const stripped = text.replace(/\x1b\[[0-9;]*m/g, "");

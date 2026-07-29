@@ -2,14 +2,14 @@
 // Licensed under the MIT License.
 
 import type * as sqlite from "better-sqlite3";
-import * as kp from "knowpro";
+import * as kp from "@typeagent/knowpro";
 import {
     NormalizedEmbedding,
     ScoredItem,
     createTopNList,
     createTopNListAll,
     dotProduct,
-} from "typeagent";
+} from "@typeagent/agent-runtime";
 
 export type EmbeddingOrdinal = number;
 

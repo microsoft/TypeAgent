@@ -4,6 +4,7 @@
 import * as vscode from "vscode";
 import { createWebviewNonce } from "@typeagent/core/webview";
 import { AgentServerBridge } from "./agentServerBridge.js";
+import { stampedWebviewUri } from "./webviewResources.js";
 
 /**
  * Provides the chat webview for the sidebar (uses primary bridge) and
@@ -89,39 +90,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private _getHtmlForWebview(webview: vscode.Webview): string {
-        const scriptPath = vscode.Uri.joinPath(
+        const scriptUri = stampedWebviewUri(
+            webview,
             this._extensionUri,
             "dist",
             "webview.js",
         );
-        const stylePath = vscode.Uri.joinPath(
+        const styleUri = stampedWebviewUri(
+            webview,
             this._extensionUri,
             "media",
             "chat.css",
         );
-        const codiconPath = vscode.Uri.joinPath(
+        const codiconUri = stampedWebviewUri(
+            webview,
             this._extensionUri,
             "media",
             "codicon.css",
         );
-        // Append each bundle's mtime as a query string so VS Code's
-        // webview cache doesn't serve a stale resource after a deploy.
-        // The base URI is the same after a rebuild, so without this the
-        // browser re-uses the cached copy across "Reload Window". Use a
-        // separate stamp per file so a CSS-only change still invalidates
-        // the CSS cache (deriving both from the JS mtime would mask
-        // CSS-only deploys).
-        const fs: typeof import("fs") = require("fs");
-        const stamp = (uri: vscode.Uri): number => {
-            try {
-                return fs.statSync(uri.fsPath).mtimeMs | 0;
-            } catch {
-                return Date.now();
-            }
-        };
-        const scriptUri = `${webview.asWebviewUri(scriptPath)}?v=${stamp(scriptPath)}`;
-        const styleUri = `${webview.asWebviewUri(stylePath)}?v=${stamp(stylePath)}`;
-        const codiconUri = `${webview.asWebviewUri(codiconPath)}?v=${stamp(codiconPath)}`;
         const nonce = createWebviewNonce();
 
         return /* html */ `<!DOCTYPE html>

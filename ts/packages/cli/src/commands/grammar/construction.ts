@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { convertConstructionFileToGrammar } from "agent-cache/grammar";
+import { convertConstructionFileToGrammar } from "@typeagent/agent-cache/grammar";
 import fs from "node:fs";
 export default class ConstructionsCommand extends Command {
     static description = "Generate grammar from construction file";
