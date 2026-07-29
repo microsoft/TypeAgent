@@ -1,7 +1,8 @@
 # randomStub
 
-A tiny, dependency-free demo CLI used to exercise **TypeAgent Studio**'s "New
-Agent" onboarding end to end, locally and offline.
+A tiny demo CLI — built with [System.CommandLine](https://learn.microsoft.com/dotnet/standard/commandline/)
+— used to exercise **TypeAgent Studio**'s "New Agent" onboarding end to end,
+locally and offline.
 
 It exists so a demo can reliably run every onboarding phase against a real tool
 without needing network access, credentials, or a third-party service:
@@ -39,12 +40,15 @@ paper
 
 The onboarding help crawler's subcommand parser only recognises the `Commands:`
 block when its lines are separated by `\n`. On Windows, .NET's `Console` defaults
-to `\r\n`, which would make the crawler see only the first subcommand, so
-`Program.cs` sets `Console.Out.NewLine = "\n"`.
+to `\r\n`, which would make the crawler see only the first subcommand. So
+`Program.cs` routes every output path — both the command actions' `Console`
+writes and System.CommandLine's own help/error rendering (via an
+`InvocationConfiguration`) — through writers whose `NewLine` is forced to `\n`.
 
 ## Build
 
-Requires the .NET SDK. Builds offline (framework-dependent, `net8.0`):
+Requires the .NET SDK. The first build restores the `System.CommandLine` NuGet
+package; after that it builds offline (framework-dependent, `net8.0`):
 
 ```
 dotnet build dotnet/randomStub/randomStub.csproj -c Release

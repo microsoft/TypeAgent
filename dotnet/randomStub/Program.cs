@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// randomstub - a tiny, dependency-free demo CLI for TypeAgent Studio onboarding.
+// randomstub - a tiny demo CLI for TypeAgent Studio onboarding.
 //
 // Purpose: give the onboarding pipeline a real, self-contained tool to exercise
 // end to end, offline. The Discovery phase (crawlCliHelp) reads the `--help`
@@ -9,135 +9,116 @@
 // real answer (e.g. "give me a random number between 1 and 10"), so the
 // "Try it" step proves the agent runs rather than just parses help.
 //
-// Two invocation shapes:
-//   randomstub --help            -> top-level help with a "Commands:" section
-//   randomstub <sub> --help      -> per-subcommand help with a "Flags:" section
-//   randomstub <sub> [flags]     -> actually runs and prints a result
+// The command surface is defined with System.CommandLine so the `--help` output
+// has the standard, real-world shape (Description / Usage / Commands / Options)
+// that a user onboarding an actual CLI would hit -- a more faithful exercise of
+// the Discovery crawler than a hand-rolled help string.
 //
-// IMPORTANT: help text must use LF ("\n") line endings. The crawler's
+// Two invocation shapes the crawler and the generated agent rely on:
+//   randomstub --help            -> top-level help with a "Commands:" section
+//   randomstub <sub> --help      -> per-subcommand help with an "Options:" section
+//   randomstub <sub> [options]   -> actually runs and prints a result
+//
+// IMPORTANT: help/output must use LF ("\n") line endings. The crawler's
 // subcommand parser only recognises the "Commands:" block when its lines are
-// LF-separated; Windows CRLF makes it see just the first entry. .NET defaults
-// Console newlines to Environment.NewLine (CRLF on Windows), so we force LF.
-Console.Out.NewLine = "\n";
+// LF-separated; Windows CRLF can make it see just the first entry. .NET defaults
+// console newlines to Environment.NewLine (CRLF on Windows), so we route every
+// output path -- the command actions' Console.Write* calls and System.CommandLine's
+// own help/error rendering (via the InvocationConfiguration below) -- through
+// writers whose NewLine is forced to "\n".
 
-// The crawler appends a help flag; route on the first non-flag argument.
-string? sub = args.FirstOrDefault(a => !a.StartsWith('-'));
-bool wantsHelp = args.Contains("--help") || args.Contains("-h");
+using System.CommandLine;
 
-return sub switch
+StreamWriter stdout = new(Console.OpenStandardOutput()) { NewLine = "\n", AutoFlush = true };
+StreamWriter stderr = new(Console.OpenStandardError()) { NewLine = "\n", AutoFlush = true };
+Console.SetOut(stdout);
+Console.SetError(stderr);
+
+// ── number ───────────────────────────────────────────────────────────────────
+Option<int> minOption = new("--min")
 {
-    null => TopHelp(),
-    "number" => wantsHelp ? NumberHelp() : RunNumber(),
-    "dice" => wantsHelp ? DiceHelp() : RunDice(),
-    "pick" => wantsHelp ? PickHelp() : RunPick(),
-    _ => Unknown(sub),
+    Description = "Inclusive lower bound",
+    Required = true,
+};
+Option<int> maxOption = new("--max")
+{
+    Description = "Inclusive upper bound",
+    Required = true,
+};
+Option<int?> numberSeedOption = new("--seed")
+{
+    Description = "Optional seed for reproducible output",
 };
 
-// ── Help text ────────────────────────────────────────────────────────────────
-
-int TopHelp()
+Command numberCommand = new(
+    "number",
+    "Generate a random integer between a minimum and maximum");
+numberCommand.Options.Add(minOption);
+numberCommand.Options.Add(maxOption);
+numberCommand.Options.Add(numberSeedOption);
+numberCommand.SetAction(parseResult =>
 {
-    Console.WriteLine("randomstub - a tiny demo randomness CLI");
-    Console.WriteLine();
-    Console.WriteLine("USAGE");
-    Console.WriteLine("  randomstub <command> [flags]");
-    Console.WriteLine();
-    Console.WriteLine("Commands:");
-    Console.WriteLine("  number   Generate a random integer between a minimum and maximum");
-    Console.WriteLine("  dice     Roll one or more dice and report the rolls and their total");
-    Console.WriteLine("  pick     Pick a random item from a comma-separated list of choices");
-    return 0;
-}
-
-int NumberHelp()
-{
-    Console.WriteLine("randomstub number - Generate a random integer between a minimum and maximum");
-    Console.WriteLine();
-    Console.WriteLine("USAGE");
-    Console.WriteLine("  randomstub number --min <n> --max <m> [--seed <s>]");
-    Console.WriteLine();
-    Console.WriteLine("Flags:");
-    Console.WriteLine("  --min    integer   Inclusive lower bound (required)");
-    Console.WriteLine("  --max    integer   Inclusive upper bound (required)");
-    Console.WriteLine("  --seed   integer   Optional seed for reproducible output");
-    return 0;
-}
-
-int DiceHelp()
-{
-    Console.WriteLine("randomstub dice - Roll one or more dice and report the rolls and their total");
-    Console.WriteLine();
-    Console.WriteLine("USAGE");
-    Console.WriteLine("  randomstub dice [--sides <n>] [--count <k>] [--seed <s>]");
-    Console.WriteLine();
-    Console.WriteLine("Flags:");
-    Console.WriteLine("  --sides  integer   Number of sides per die (default 6)");
-    Console.WriteLine("  --count  integer   Number of dice to roll (default 1)");
-    Console.WriteLine("  --seed   integer   Optional seed for reproducible output");
-    return 0;
-}
-
-int PickHelp()
-{
-    Console.WriteLine("randomstub pick - Pick a random item from a comma-separated list of choices");
-    Console.WriteLine();
-    Console.WriteLine("USAGE");
-    Console.WriteLine("  randomstub pick --from <a,b,c> [--seed <s>]");
-    Console.WriteLine();
-    Console.WriteLine("Flags:");
-    Console.WriteLine("  --from   string    Comma-separated list of choices (required)");
-    Console.WriteLine("  --seed   integer   Optional seed for reproducible output");
-    return 0;
-}
-
-// ── Commands ─────────────────────────────────────────────────────────────────
-
-int RunNumber()
-{
-    if (!TryGetInt("--min", out int min))
-    {
-        return Fail("Error: --min <integer> is required.");
-    }
-
-    if (!TryGetInt("--max", out int max))
-    {
-        return Fail("Error: --max <integer> is required.");
-    }
-
+    int min = parseResult.GetValue(minOption);
+    int max = parseResult.GetValue(maxOption);
     if (min > max)
     {
-        return Fail($"Error: --min ({min}) must not be greater than --max ({max}).");
+        Console.Error.WriteLine(
+            $"Error: --min ({min}) must not be greater than --max ({max}).");
+        return 1;
     }
 
-    Random rng = CreateRng();
-    // Random.Next's upper bound is exclusive; add 1 so --max is inclusive.
+    Random rng = CreateRng(parseResult.GetValue(numberSeedOption));
+    // Random.NextDouble scales to an inclusive [min, max] range; add 1 to the
+    // span so --max is reachable, and clamp the NextDouble() == 1.0 corner case.
     long span = (long)max - min + 1;
     int value = min + (int)(rng.NextDouble() * span);
     if (value > max)
     {
-        value = max; // guard against the NextDouble() == 1.0 corner case
+        value = max;
     }
 
     Console.WriteLine(value);
     return 0;
-}
+});
 
-int RunDice()
+// ── dice ─────────────────────────────────────────────────────────────────────
+Option<int> sidesOption = new("--sides")
 {
-    int sides = TryGetInt("--sides", out int s) ? s : 6;
-    int count = TryGetInt("--count", out int c) ? c : 1;
+    Description = "Number of sides per die (default 6)",
+    DefaultValueFactory = _ => 6,
+};
+Option<int> countOption = new("--count")
+{
+    Description = "Number of dice to roll (default 1)",
+    DefaultValueFactory = _ => 1,
+};
+Option<int?> diceSeedOption = new("--seed")
+{
+    Description = "Optional seed for reproducible output",
+};
 
+Command diceCommand = new(
+    "dice",
+    "Roll one or more dice and report the rolls and their total");
+diceCommand.Options.Add(sidesOption);
+diceCommand.Options.Add(countOption);
+diceCommand.Options.Add(diceSeedOption);
+diceCommand.SetAction(parseResult =>
+{
+    int sides = parseResult.GetValue(sidesOption);
+    int count = parseResult.GetValue(countOption);
     if (sides < 2)
     {
-        return Fail($"Error: --sides ({sides}) must be at least 2.");
+        Console.Error.WriteLine($"Error: --sides ({sides}) must be at least 2.");
+        return 1;
     }
-
     if (count < 1)
     {
-        return Fail($"Error: --count ({count}) must be at least 1.");
+        Console.Error.WriteLine($"Error: --count ({count}) must be at least 1.");
+        return 1;
     }
 
-    Random rng = CreateRng();
+    Random rng = CreateRng(parseResult.GetValue(diceSeedOption));
     int[] rolls = new int[count];
     int total = 0;
     for (int i = 0; i < count; i++)
@@ -149,54 +130,53 @@ int RunDice()
     Console.WriteLine($"Rolls: {string.Join(", ", rolls)}");
     Console.WriteLine($"Total: {total}");
     return 0;
-}
+});
 
-int RunPick()
+// ── pick ─────────────────────────────────────────────────────────────────────
+Option<string> fromOption = new("--from")
 {
-    string? from = GetFlag("--from");
-    if (string.IsNullOrWhiteSpace(from))
-    {
-        return Fail("Error: --from <a,b,c> is required.");
-    }
+    Description = "Comma-separated list of choices",
+    Required = true,
+};
+Option<int?> pickSeedOption = new("--seed")
+{
+    Description = "Optional seed for reproducible output",
+};
 
-    string[] choices = from
-        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+Command pickCommand = new(
+    "pick",
+    "Pick a random item from a comma-separated list of choices");
+pickCommand.Options.Add(fromOption);
+pickCommand.Options.Add(pickSeedOption);
+pickCommand.SetAction(parseResult =>
+{
+    string from = parseResult.GetValue(fromOption) ?? string.Empty;
+    string[] choices = from.Split(
+        ',',
+        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     if (choices.Length == 0)
     {
-        return Fail("Error: --from did not contain any choices.");
+        Console.Error.WriteLine("Error: --from did not contain any choices.");
+        return 1;
     }
 
-    Random rng = CreateRng();
+    Random rng = CreateRng(parseResult.GetValue(pickSeedOption));
     Console.WriteLine(choices[rng.Next(choices.Length)]);
     return 0;
-}
+});
 
-int Unknown(string name)
+// ── root ─────────────────────────────────────────────────────────────────────
+RootCommand rootCommand = new("randomstub - a tiny demo randomness CLI");
+rootCommand.Subcommands.Add(numberCommand);
+rootCommand.Subcommands.Add(diceCommand);
+rootCommand.Subcommands.Add(pickCommand);
+
+InvocationConfiguration config = new()
 {
-    Console.Error.WriteLine($"Unknown command: {name}");
-    Console.Error.WriteLine("Run 'randomstub --help' to see available commands.");
-    return 1;
-}
+    Output = stdout,
+    Error = stderr,
+};
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+return rootCommand.Parse(args).Invoke(config);
 
-Random CreateRng() => TryGetInt("--seed", out int seed) ? new Random(seed) : new Random();
-
-string? GetFlag(string name)
-{
-    int i = Array.IndexOf(args, name);
-    return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
-}
-
-bool TryGetInt(string name, out int value)
-{
-    value = 0;
-    string? raw = GetFlag(name);
-    return raw is not null && int.TryParse(raw, out value);
-}
-
-int Fail(string message)
-{
-    Console.Error.WriteLine(message);
-    return 1;
-}
+static Random CreateRng(int? seed) => seed is int s ? new Random(s) : new Random();
