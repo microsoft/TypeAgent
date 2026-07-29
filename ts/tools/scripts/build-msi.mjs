@@ -86,11 +86,15 @@ if (stagedPluginDir) console.log(`   Plugin dir:     ${stagedPluginDir}`);
 // public container in standalone scenarios.
 if (shellBaseUrl || shellStorage) {
     console.log(`   Shell base URL: ${shellBaseUrl || "(none)"}`);
-    console.log(`   Shell storage:  ${shellStorage || "(none)"}/${shellContainer || "(none)"}`);
+    console.log(
+        `   Shell storage:  ${shellStorage || "(none)"}/${shellContainer || "(none)"}`,
+    );
     console.log(`   Shell channel:  ${shellChannel}`);
 }
 if (shellFeed && shellPackage) {
-    console.log(`   Shell feed:     ${shellFeed} / ${shellPackage} v${shellFeedVersion || "(latest)"}`);
+    console.log(
+        `   Shell feed:     ${shellFeed} / ${shellPackage} v${shellFeedVersion || "(latest)"}`,
+    );
 }
 
 if (rid !== "win32-x64") {

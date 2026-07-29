@@ -255,11 +255,11 @@ runs these deferred, impersonated custom actions (each **non-fatal** so a hiccup
 never rolls back the agent-server install; issues surface as warnings + the
 ExitDialog reminder):
 
-| Action | Property gate | What it does |
-| ------ | ------------- | ------------ |
-| `InstallPrereqs` | — | Runs `install-prereqs.ps1`: installs `claude` (`@anthropic-ai/claude-code`) and `copilot` (`@github/copilot`) via `npm i -g` when missing, and warns if Node < 22. Mirrors `install-typeagent.ps1`. |
-| `StartAgentServer` | `STARTSERVER=1` (default) | `node typeagent-serve.mjs start` — starts the daemon. |
-| `EnableAutostart` | `AUTOSTART=1` (default) | `node typeagent-serve.mjs autostart enable` — registers a per-user logon Scheduled Task. Removed on uninstall (`DisableAutostart`). |
+| Action             | Property gate             | What it does                                                                                                                                                                                        |
+| ------------------ | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `InstallPrereqs`   | —                         | Runs `install-prereqs.ps1`: installs `claude` (`@anthropic-ai/claude-code`) and `copilot` (`@github/copilot`) via `npm i -g` when missing, and warns if Node < 22. Mirrors `install-typeagent.ps1`. |
+| `StartAgentServer` | `STARTSERVER=1` (default) | `node typeagent-serve.mjs start` — starts the daemon.                                                                                                                                               |
+| `EnableAutostart`  | `AUTOSTART=1` (default)   | `node typeagent-serve.mjs autostart enable` — registers a per-user logon Scheduled Task. Removed on uninstall (`DisableAutostart`).                                                                 |
 
 ```powershell
 # Skip starting/autostarting the daemon (e.g. provisioning happens later)
@@ -282,12 +282,12 @@ fresh machine without extra input. If a build ships with no location and
 `SHELL=1` is requested, the `ShellLocationMissing` action **aborts loudly** with
 a clear message rather than silently skipping.
 
-| Property         | Values / example                                      | Default          | Notes                                                                        |
-| ---------------- | ----------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------- |
-| `SHELL`          | `0`, `1`                                              | `0`              | `1` enables the optional shell download + silent install.                    |
-| `SHELLCHANNEL`   | `lkg`, `test`, `ci`                                   | build default (`lkg`) | electron-updater channel to read (`<channel>-<arch>.yml`).            |
-| `SHELLSTORAGE`   | Azure Storage account name                            | build default    | Used with the Azure CLI (`az login`) to read the shell blobs.                |
-| `SHELLCONTAINER` | Azure Storage container name                          | build default    | Defaults to `SHELLSTORAGE` if omitted.                                       |
+| Property         | Values / example                                      | Default                                        | Notes                                                                        |
+| ---------------- | ----------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- |
+| `SHELL`          | `0`, `1`                                              | `0`                                            | `1` enables the optional shell download + silent install.                    |
+| `SHELLCHANNEL`   | `lkg`, `test`, `ci`                                   | build default (`lkg`)                          | electron-updater channel to read (`<channel>-<arch>.yml`).                   |
+| `SHELLSTORAGE`   | Azure Storage account name                            | build default                                  | Used with the Azure CLI (`az login`) to read the shell blobs.                |
+| `SHELLCONTAINER` | Azure Storage container name                          | build default                                  | Defaults to `SHELLSTORAGE` if omitted.                                       |
 | `SHELLBASEURL`   | `https://<account>.blob.core.windows.net/<container>` | build default (derived from storage/container) | Anonymous HTTPS base for a **public** container; when set, `az` is not used. |
 
 ```powershell
