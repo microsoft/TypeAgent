@@ -666,8 +666,8 @@ export interface AgentLocation {
 }
 
 /**
- * Options for proving that a generated agent answers an utterance (t4 —
- * "Try it"). All optional: with none given, a deterministic PhraseGen example
+ * Options for proving that a generated agent answers an utterance via
+ * "Try it". All optional: with none given, a deterministic PhraseGen example
  * phrase is chosen and any resolved typed action counts as answered.
  */
 export interface ProveUtteranceOptions {
@@ -738,7 +738,7 @@ export interface StudioRuntime {
     getActiveOnboardingSession(): Promise<OnboardingState>;
     /**
      * Prove that the active session's generated agent answers an utterance
-     * (t4 — "Try it"): translate a PhraseGen example phrase (or an explicit
+     * ("Try it"): translate a PhraseGen example phrase (or an explicit
      * utterance) against a dispatcher loaded with just that agent and report
      * the resolved action, WITHOUT executing it. Requires a `proveUtterance`
      * resolver to be configured on the runtime (the standalone service injects
@@ -991,8 +991,8 @@ export interface CreateStudioRuntimeOptions {
         artifactPath: string,
     ) => Promise<PackagingHealthGateResult>;
     /**
-     * Resolver that proves a generated agent answers an utterance (t4 —
-     * "Try it"). Injected so the standalone service can back it with a
+     * Resolver that proves a generated agent answers an utterance via
+     * "Try it". Injected so the standalone service can back it with a
      * translate-only dispatcher loaded with just the generated agent; absent in
      * the dependency-light default, where `proveActiveSessionUtterance` throws.
      */

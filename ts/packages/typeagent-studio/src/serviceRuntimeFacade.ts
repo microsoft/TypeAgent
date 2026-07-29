@@ -40,7 +40,7 @@ export interface HealthSource {
 }
 
 /**
- * The onboarding surface the New Agent wizard (F1.1) and the onboarding command
+ * The onboarding surface the New Agent wizard and the onboarding command
  * palette consume. It mirrors the onboarding subset of the service's
  * `StudioRuntime`, but every method is **async** — onboarding now runs in the
  * standalone Studio service (where the real sandboxes live, so installs no
@@ -181,7 +181,7 @@ export class StudioServiceRuntimeFacade
         return this.require().replayResolutionTrace(request);
     }
 
-    // --- Onboarding / New Agent wizard (F1.x). All route to the service, whose
+    // --- Onboarding / New Agent wizard. All route to the service, whose
     // injected phaseRunner runs the onboarding agent in that process. Mutations
     // (and reads) reject with a clear "not connected" message when the service
     // socket is momentarily down — the wizard treats a failed snapshot as "no

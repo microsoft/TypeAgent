@@ -2,11 +2,10 @@
 // Licensed under the MIT License.
 
 /**
- * Onboarding-only dispatcher for TypeAgent Studio's "onboarding channelization"
- * (DESIGN.md §3.1/§3.5). The Studio service stands one of these up lazily on
- * first wizard use — "just like another sandbox" — loading ONLY the
- * `onboarding-agent` so there is little chance of action collision with other
- * agents.
+ * Onboarding-only dispatcher for the Studio service. The service stands one of
+ * these up lazily on first wizard use — "just like another sandbox" — loading
+ * ONLY the `onboarding-agent` so there is little chance of action collision
+ * with other agents.
  *
  * This module lives in `default-agent-provider` because that package already
  * depends on `agent-dispatcher`, `dispatcher-node-providers`, and

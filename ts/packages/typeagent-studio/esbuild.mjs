@@ -171,7 +171,7 @@ const traceViewerConfig = {
 
 /**
  * The New Agent wizard webview client bundle. Same browser-only constraints as
- * the other webview clients; hosts the seven onboarding phases (J1 / Gate A).
+ * the other webview clients; hosts the seven onboarding phases.
  * @type {import('esbuild').BuildOptions}
  */
 const wizardConfig = {

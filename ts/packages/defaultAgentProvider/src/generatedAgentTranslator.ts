@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 /**
- * Generated-agent translator for TypeAgent Studio's "Try it" affordance (t4 —
- * prove the generated agent answers an utterance).
+ * Generated-agent translator for TypeAgent Studio's "Try it" affordance:
+ * prove the generated agent answers an utterance.
  *
- * After a generated agent is scaffolded, built, and installed (t3), the wizard
+ * After a generated agent is scaffolded, built, and installed, the wizard
  * lets the user try one of the example phrases produced at PhraseGen. This
  * module stands up a dispatcher that loads ONLY the generated agent (by its
  * on-disk path) and TRANSLATES an utterance WITHOUT executing it — resolving

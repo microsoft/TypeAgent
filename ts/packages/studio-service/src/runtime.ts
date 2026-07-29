@@ -155,7 +155,7 @@ export function getStudioRuntime(repoRoot?: string): StudioRuntime {
                 onboarding: new InMemoryOnboardingBridge({
                     phaseRunner: createServiceOnboardingPhaseRunner(),
                 }),
-                // "Try it" (t4): prove the generated agent answers a PhraseGen
+                // "Try it": prove the generated agent answers a PhraseGen
                 // example by translating it against a dispatcher loaded with
                 // just that agent (built lazily per proof, torn down after).
                 proveUtterance: ({ agentName, agentDir, options }) =>

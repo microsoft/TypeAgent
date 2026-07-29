@@ -345,7 +345,7 @@ export class StudioServiceClient {
         return this.rpc.invoke("restoreSandboxes", this.repoRoot);
     }
 
-    // --- Onboarding / New Agent wizard (F1.x) ---
+    // --- Onboarding / New Agent wizard ---
 
     /** Start a New Agent onboarding session from a natural-language seed. */
     startOnboarding(seed: {
@@ -405,7 +405,7 @@ export class StudioServiceClient {
         );
     }
 
-    /** Phases marked stale because an upstream phase re-ran (F1.5). */
+    /** Phases marked stale because an upstream phase re-ran. */
     listStalePhasesOnActiveSession(): Promise<OnboardingPhaseName[]> {
         return this.rpc.invoke("listStalePhasesOnActiveSession", this.repoRoot);
     }
@@ -421,7 +421,7 @@ export class StudioServiceClient {
         );
     }
 
-    /** Force-rerun the given phases in order (F1.5 reconciliation). */
+    /** Force-rerun the given phases in order (reconciliation). */
     rerunPhasesOnActiveSession(phases: OnboardingPhaseName[]): Promise<{
         state: OnboardingState;
         rerunPhases: OnboardingPhaseName[];
@@ -433,7 +433,7 @@ export class StudioServiceClient {
         );
     }
 
-    /** Restore a phase's prior outputs and report the stale downstream (F1.5). */
+    /** Restore a phase's prior outputs and report the stale downstream. */
     restorePhaseOnActiveSession(
         phase: OnboardingPhaseName,
     ): Promise<RestorePhaseResult> {
@@ -452,7 +452,7 @@ export class StudioServiceClient {
         );
     }
 
-    /** Evaluate the packaging health gate for the active session (F1.4). */
+    /** Evaluate the packaging health gate for the active session. */
     evaluatePackagingHealthGateForActiveSession(): Promise<PackagingHealthGateResult> {
         return this.rpc.invoke(
             "evaluatePackagingHealthGateForActiveSession",
@@ -479,7 +479,7 @@ export class StudioServiceClient {
         );
     }
 
-    /** Install the active session's agent into a sandbox (F1.3). */
+    /** Install the active session's agent into a sandbox. */
     installLastSessionToSandbox(
         sandboxId?: string,
         options?: { skipHealthGate?: boolean },
@@ -492,7 +492,7 @@ export class StudioServiceClient {
         );
     }
 
-    /** Install a specific artifact into a sandbox (F1.3). */
+    /** Install a specific artifact into a sandbox. */
     installArtifactToSandbox(
         artifactPath: string,
         sandboxId?: string,
@@ -505,14 +505,14 @@ export class StudioServiceClient {
         );
     }
 
-    /** Route a conversational prompt to onboarding vs. schema author (F1.2). */
+    /** Route a conversational prompt to onboarding vs. schema author. */
     routeConversation(
         prompt: string,
     ): Promise<{ target: "onboarding" | "schemaAuthor"; reason: string }> {
         return this.rpc.invoke("routeConversation", this.repoRoot, prompt);
     }
 
-    /** Prove the active session's generated agent answers an utterance (t4). */
+    /** Prove the active session's generated agent answers an utterance. */
     proveActiveSessionUtterance(
         options?: ProveUtteranceOptions,
     ): Promise<UtteranceProofResult> {

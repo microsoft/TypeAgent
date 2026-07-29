@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Browser-neutral view model for the New Agent wizard (F1.1).
+ * Browser-neutral view model for the New Agent wizard.
  *
  * Maps the headless {@link OnboardingState} into the exact shape the webview
  * renders: an ordered list of the seven phases with per-phase status/runnability,
@@ -25,7 +25,7 @@ import type {
 /** Packaging health-gate verdict, mirrored from the runtime's gate status. */
 export type WizardHealthStatus = "pass" | "warn" | "fail" | "unavailable";
 
-/** A packaging health verdict surfaced next to the install control (F1.4). */
+/** A packaging health verdict surfaced next to the install control. */
 export interface WizardHealthView {
     status: WizardHealthStatus;
     summary: string;

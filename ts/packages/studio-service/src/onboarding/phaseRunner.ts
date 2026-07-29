@@ -4,8 +4,8 @@
 /**
  * Onboarding phase-runner adapter.
  *
- * This is the orchestration half of "onboarding channelization" (DESIGN.md
- * §3.1/§3.5): it turns a Studio wizard phase into the concrete sequence of
+ * This is the orchestration half of onboarding channelization: it turns a
+ * Studio wizard phase into the concrete sequence of
  * `onboarding-agent` actions that produce the on-disk artifacts, keyed to the
  * session's chosen agent name. The heavy machinery (an onboarding-only
  * dispatcher) is injected as a plain {@link OnboardingDispatch} function so this

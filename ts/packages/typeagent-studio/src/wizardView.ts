@@ -2,13 +2,13 @@
 // Licensed under the MIT License.
 
 /**
- * The New Agent wizard webview (F1.1) — the entry door for J1 ("stand up a new
- * agent"). It hosts the `onboarding` agent's seven phases (Discovery → PhraseGen
+ * The New Agent wizard webview — the entry door for standing up a new
+ * agent. It hosts the `onboarding` agent's seven phases (Discovery → PhraseGen
  * → SchemaGen → GrammarGen → Scaffolder → Testing → Packaging) as one revisitable
  * panel: the developer describes the agent in plain English, walks the phases,
- * revisits an earlier one (which marks downstream phases stale for reconciliation
- * — F1.5), and installs the result into a sandbox (F1.3) once the packaging
- * health gate is satisfied (F1.4).
+ * revisits an earlier one (which marks downstream phases stale for
+ * reconciliation), and installs the result into a sandbox once the packaging
+ * health gate is satisfied.
  *
  * Onboarding runs in the standalone Studio service (where the real sandboxes
  * live, so installs no longer split-brain). This host calls the service over the
@@ -268,8 +268,8 @@ export function openNewAgentWizard(
     }
 
     /**
-     * Install the active session into the default sandbox (F1.3), honoring the
-     * packaging health gate (F1.4). On a gate failure under the "enforce"
+     * Install the active session into the default sandbox, honoring the
+     * packaging health gate. On a gate failure under the "enforce"
      * policy, offer an explicit modal bypass rather than silently proceeding.
      */
     async function handleInstall(): Promise<void> {
@@ -309,8 +309,8 @@ export function openNewAgentWizard(
     }
 
     /**
-     * Prove the installed agent answers a PhraseGen example utterance (t4 —
-     * "Try it"): translate one example through a dispatcher loaded with just the
+     * Prove the installed agent answers a PhraseGen example utterance
+     * ("Try it"): translate one example through a dispatcher loaded with just the
      * generated agent and report the resolved action. Translate-only, so nothing
      * is executed. Surfaces the verdict to the webview and a toast.
      */

@@ -168,7 +168,7 @@ export async function closeOnboardingDispatcher(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// t4 — "Try it": prove the generated agent answers a PhraseGen example.
+// "Try it": prove the generated agent answers a PhraseGen example.
 // ---------------------------------------------------------------------------
 
 /** Minimal structural view of the generated-agent translator handle. */

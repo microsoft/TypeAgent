@@ -13,9 +13,8 @@
  * The panel is one revisitable surface for the seven onboarding phases: a start
  * screen collects a plain-English description; once a session is active the
  * developer walks a phase stepper, revisits an earlier phase (which surfaces a
- * reconciliation banner for the now-stale downstream phases — F1.5), and
- * installs the result into a sandbox once the packaging health gate is happy
- * (F1.3 / F1.4).
+ * reconciliation banner for the now-stale downstream phases), and
+ * installs the result into a sandbox once the packaging health gate is happy.
  */
 
 import type { OnboardingPhaseName } from "@typeagent/core/onboardingBridge";
@@ -603,7 +602,7 @@ function renderInstallBar(m: WizardViewModel): HTMLElement {
     return bar;
 }
 
-/** Render the t4 "Try it" verdict: which action a sample utterance resolved to
+/** Render the "Try it" verdict: which action a sample utterance resolved to
  *  (or why it did not answer). Translate-only, so nothing was executed. */
 function renderUtteranceProof(proof: UtteranceProofResult): HTMLElement {
     const status = proof.answered ? "pass" : "fail";

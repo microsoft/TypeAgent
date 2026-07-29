@@ -199,7 +199,7 @@ export type StudioServiceInvokeFunctions = {
     /** Re-create sandboxes from the agent runtime's persisted snapshot. */
     restoreSandboxes(repoRoot?: string): Promise<void>;
 
-    // --- Onboarding / New Agent wizard (F1.x). Mutating: runs the onboarding
+    // --- Onboarding / New Agent wizard. Mutating: runs the onboarding
     // agent in the SERVICE process via the injected phaseRunner, so installs
     // land in the real service sandboxes (not a split-brain in-process copy).
     // Repo-scoped like the rest; the "active session" is per-workspace runtime
@@ -232,7 +232,7 @@ export type StudioServiceInvokeFunctions = {
         repoRoot: string | undefined,
         phase: OnboardingPhaseName,
     ): Promise<PhaseStatus>;
-    /** Phases marked stale because an upstream phase re-ran (F1.5). */
+    /** Phases marked stale because an upstream phase re-ran. */
     listStalePhasesOnActiveSession(
         repoRoot?: string,
     ): Promise<OnboardingPhaseName[]>;
@@ -241,7 +241,7 @@ export type StudioServiceInvokeFunctions = {
         state: OnboardingState;
         completedPhases: OnboardingPhaseName[];
     }>;
-    /** Force-rerun the given phases in order (F1.5 reconciliation). */
+    /** Force-rerun the given phases in order (reconciliation). */
     rerunPhasesOnActiveSession(
         repoRoot: string | undefined,
         phases: OnboardingPhaseName[],
@@ -249,7 +249,7 @@ export type StudioServiceInvokeFunctions = {
         state: OnboardingState;
         rerunPhases: OnboardingPhaseName[];
     }>;
-    /** Restore a phase's prior outputs and report the stale downstream (F1.5). */
+    /** Restore a phase's prior outputs and report the stale downstream. */
     restorePhaseOnActiveSession(
         repoRoot: string | undefined,
         phase: OnboardingPhaseName,
@@ -258,7 +258,7 @@ export type StudioServiceInvokeFunctions = {
     resolveInstallArtifactPathForActiveSession(
         repoRoot?: string,
     ): Promise<string>;
-    /** Evaluate the packaging health gate for the active session (F1.4). */
+    /** Evaluate the packaging health gate for the active session. */
     evaluatePackagingHealthGateForActiveSession(
         repoRoot?: string,
     ): Promise<PackagingHealthGateResult>;
@@ -271,24 +271,24 @@ export type StudioServiceInvokeFunctions = {
         repoRoot: string | undefined,
         artifactPath: string,
     ): Promise<PackagingHealthGateResult>;
-    /** Install the active session's agent into a sandbox (F1.3). */
+    /** Install the active session's agent into a sandbox. */
     installLastSessionToSandbox(
         repoRoot: string | undefined,
         sandboxId?: string,
         options?: { skipHealthGate?: boolean },
     ): Promise<{ sessionId: string; artifactPath: string }>;
-    /** Install a specific artifact into a sandbox (F1.3). */
+    /** Install a specific artifact into a sandbox. */
     installArtifactToSandbox(
         repoRoot: string | undefined,
         artifactPath: string,
         sandboxId?: string,
     ): Promise<{ sessionId: string; artifactPath: string }>;
-    /** Route a conversational prompt to onboarding vs. schema author (F1.2). */
+    /** Route a conversational prompt to onboarding vs. schema author. */
     routeConversation(
         repoRoot: string | undefined,
         prompt: string,
     ): Promise<{ target: "onboarding" | "schemaAuthor"; reason: string }>;
-    /** Prove the active session's generated agent answers an utterance (t4). */
+    /** Prove the active session's generated agent answers an utterance. */
     proveActiveSessionUtterance(
         repoRoot: string | undefined,
         options?: ProveUtteranceOptions,

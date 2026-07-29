@@ -2,10 +2,9 @@
 // Licensed under the MIT License.
 
 /**
- * Utterance-proof adapter (t4 — "prove the generated agent answers an
- * utterance").
+ * Utterance-proof adapter: prove the generated agent answers an utterance.
  *
- * After a generated agent is installed (t3), the wizard's "Try it" affordance
+ * After a generated agent is installed, the wizard's "Try it" affordance
  * takes one of the example phrases produced by the PhraseGen phase and confirms
  * the just-built agent actually understands it: the phrase is run through a
  * dispatcher that has ONLY the generated agent loaded, and we check that the

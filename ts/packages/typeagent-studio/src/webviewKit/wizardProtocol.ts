@@ -27,13 +27,13 @@ export type HostToWizardMessage =
     /** A failure for a prior request (optionally scoped to a phase). */
     | { type: "error"; message: string; phase?: OnboardingPhaseName }
     /**
-     * Result of proving the generated agent answers an utterance (t4 —
-     * "Try it"): the resolved action + answered/matched verdict.
+     * Result of proving the generated agent answers an utterance via
+     * "Try it": the resolved action + answered/matched verdict.
      */
     | { type: "utteranceProof"; result: UtteranceProofResult }
     /**
      * Result of revisiting an earlier phase: the downstream phases whose
-     * recorded ancestor outputs no longer match and are now stale (F1.5). Empty
+     * recorded ancestor outputs no longer match and are now stale. Empty
      * when nothing downstream needed reconciliation.
      */
     | {
@@ -54,16 +54,16 @@ export type WizardToHostMessage =
     | { type: "runRemaining" }
     /**
      * Revisit an earlier, already-complete phase: move the cursor back to it and
-     * mark any now-inconsistent downstream phases stale (F1.5). Does not re-run.
+     * mark any now-inconsistent downstream phases stale. Does not re-run.
      */
     | { type: "restorePhase"; phase: OnboardingPhaseName }
     /** Re-run every phase currently marked stale, in order. */
     | { type: "rerunStale" }
-    /** Install the active session's agent into a sandbox (F1.3, gated by F1.4). */
+    /** Install the active session's agent into a sandbox (gated by the health check). */
     | { type: "install" }
-    /** Try a PhraseGen example utterance against the installed agent (t4). */
+    /** Try a PhraseGen example utterance against the installed agent. */
     | { type: "tryIt" }
-    /** Evaluate the packaging health gate and refresh the verdict (F1.4). */
+    /** Evaluate the packaging health gate and refresh the verdict. */
     | { type: "checkHealth" }
     /** Clear the active session and return to the start screen. */
     | { type: "clear" };
