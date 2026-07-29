@@ -345,8 +345,13 @@ export function openNewAgentWizard(
     }
 
     // Kick off an initial render for the reveal case (an already-open panel that
-    // is re-revealed keeps its retained context and re-`ready`s itself).
-    void postState();
+    // is re-revealed keeps its retained context and re-`ready`s itself). Guard
+    // the rejection: `listPhases()` rejects with NOT_CONNECTED during the brief
+    // window before the service socket is up, and an unguarded `void` would
+    // surface as an unhandled rejection.
+    postState().catch((error) => {
+        postError(error instanceof Error ? error.message : String(error));
+    });
 }
 
 async function confirmHealthGateBypass(message: string): Promise<boolean> {
