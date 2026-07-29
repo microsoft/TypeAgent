@@ -3,9 +3,9 @@
 	"tasks": [
     {
       "type": "shell",
-      "command": "pnpm --filter typeagent-studio build",
+      "command": "node esbuild.mjs",
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}/packages/typeagent-studio"
       },
       "problemMatcher": [],
       "label": "build typeagent-studio",
