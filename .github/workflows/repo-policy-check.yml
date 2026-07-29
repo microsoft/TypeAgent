@@ -30,9 +30,43 @@ jobs:
         name: Install pnpm
         with:
           package_json_file: ts/package.json
-          run_install: |
-            - args: [--frozen-lockfile, --strict-peer-dependencies, --ignore-scripts]
-              cwd: ts
+      # Match other TS workflows: pin Node and cache the pnpm store so this
+      # lightweight policy job does not re-download the full monorepo on every run.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: "pnpm"
+          cache-dependency-path: ts/pnpm-lock.yaml
+      - name: Install dependencies
+        working-directory: ts
+        env:
+          # Large native tarballs (copilot, claude-agent-sdk, onnxruntime,
+          # app-builder-bin) occasionally stall on the public registry and abort
+          # the whole install (merge_group job 90699021484). Give downloads more
+          # time/retries than pnpm's defaults.
+          npm_config_fetch_timeout: "600000"
+          npm_config_fetch_retries: "5"
+        run: |
+          # pnpm-workspace.yaml lists both x64 and arm64 so local installs work
+          # on Apple Silicon and Intel. That forces every CI install to also pull
+          # arm64 native packages on ubuntu-latest, which is wasted work for this
+          # job and has timed out under registry pressure. Restrict to the runner.
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const path = "pnpm-workspace.yaml";
+            const src = fs.readFileSync(path, "utf8");
+            const dst = src.replace(
+              /supportedArchitectures:\n  cpu:\n    - x64\n    - arm64\n/,
+              "supportedArchitectures:\n  os:\n    - linux\n  cpu:\n    - x64\n  libc:\n    - glibc\n",
+            );
+            if (dst === src) {
+              throw new Error(
+                "failed to patch supportedArchitectures for CI install",
+              );
+            }
+            fs.writeFileSync(path, dst);
+          '
+          pnpm install --frozen-lockfile --strict-peer-dependencies --ignore-scripts
       - name: Check Repo Policy
         run: |
           node ts/tools/scripts/repo-policy-check.mjs
