@@ -16,6 +16,9 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { readFileSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { Dispatcher, IAgentMessage } from "@typeagent/agent-server-client";
@@ -27,6 +30,42 @@ import {
     TYPEAGENT_URL,
 } from "../shared/typeagent-client.js";
 import { extractMessageText } from "../shared/message-formatter.js";
+
+// ── Config ───────────────────────────────────────────────────────────────────
+
+interface PluginConfig {
+    mode?: "direct" | "mcp" | "bypass";
+    [key: string]: unknown;
+}
+
+function getConfigDir(): string {
+    return (
+        process.env.TYPEAGENT_PLUGIN_DATA ??
+        process.env.CLAUDE_PLUGIN_DATA ??
+        join(homedir(), ".typeagent-copilot")
+    );
+}
+
+function getConfigPath(): string {
+    return join(getConfigDir(), "config.json");
+}
+
+function readConfig(): PluginConfig | undefined {
+    try {
+        return JSON.parse(readFileSync(getConfigPath(), "utf-8"));
+    } catch {
+        return undefined;
+    }
+}
+
+function isBypassMode(): boolean {
+    const envMode = process.env.TYPEAGENT_MODE;
+    if (envMode === "bypass") {
+        return true;
+    }
+    const config = readConfig();
+    return config?.mode === "bypass";
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -86,10 +125,19 @@ class TypeAgentMcpServer {
     async start(): Promise<void> {
         const transport = new StdioServerTransport();
         await this.server.connect(transport);
-        log(`TypeAgent MCP server started (target: ${TYPEAGENT_URL})`);
+        if (isBypassMode()) {
+            log("TypeAgent is in bypass mode — MCP tools are disabled");
+        } else {
+            log(`TypeAgent MCP server started (target: ${TYPEAGENT_URL})`);
+        }
     }
 
     private registerTools(): void {
+        // Skip tool registration if bypass mode is enabled
+        if (isBypassMode()) {
+            log("Skipping tool registration — bypass mode is active");
+            return;
+        }
         this.server.registerTool(
             "typeagent-processCommand",
             {
