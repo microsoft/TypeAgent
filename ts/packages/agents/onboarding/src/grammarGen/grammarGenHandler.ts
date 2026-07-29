@@ -173,8 +173,7 @@ async function handleGenerateGrammar(
  * The `.agr` compiler supports `$(name:word)`, `$(name:wildcard)`, and
  * `$(name:<SubRule>)`, but NOT an inline alternation type such as
  * `$(name:(celsius|fahrenheit))` — `agc` rejects it with
- * "Unexpected character '('. Type name expected." (confirmed in
- * packages/agents/code/src/codeSchema.agr's note). The grammar prompt now
+ * "Unexpected character '('. Type name expected." The grammar prompt now
  * steers the model toward sub-rules, but LLM output is not guaranteed, so as a
  * deterministic safety net we rewrite any remaining inline-union captures to
  * `$(name:word)`. Union values are single spoken tokens, so `word` compiles and
@@ -271,9 +270,9 @@ function outputPropIsBound(
 /**
  * Deterministically drop output-object properties that reference a name the
  * rule's pattern never captured. This is the single most common LLM grammar
- * error (observed across live weather + geocoding runs): the model lists a
- * schema's OPTIONAL fields (e.g. `countryCode`, `language`, `details`) in the
- * `parameters` object without capturing them, and the compiler rejects it with
+ * error: the model lists a schema's OPTIONAL fields (e.g. `countryCode`,
+ * `language`, `details`) in the `parameters` object without capturing them,
+ * and the compiler rejects it with
  * "Variable X referenced in the value but not defined in the rule". Optional
  * fields are safe to omit, so we strip the unbound references here rather than
  * spend repair-loop attempts on them. If a stripped field was actually required
@@ -311,7 +310,8 @@ export function stripUnboundOutputReferences(grammarContent: string): string {
 }
 
 /**
- * the bug patterns observed in the visualStudio onboarding run (2026-05-03):
+ * Lightweight pre-flight validator for generated `.agr` content. Checks for
+ * grammar patterns that are known to cause compile failures:
  *   - function calls in output objects (e.g. `parseInt(line)`)
  *   - output keys referencing captures that weren't bound in the rule pattern
  *   - dashes/special chars in literal phrases
