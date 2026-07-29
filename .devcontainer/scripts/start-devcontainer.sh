@@ -24,6 +24,7 @@ Options:
   --rebuild                      Rebuild image and recreate container before startup
   --clean                        Remove container and associated Docker volumes
   --reset                        Rebuild image and clean volumes (--rebuild + --clean)
+  --use-corepack                 Use Corepack to install the packageManager pnpm version
   --ssh                          After startup, run setup-ssh-access.sh
   --insecure-local               Pass through to setup-ssh-access.sh (implies --ssh)
   -h, --help                     Show this help text
@@ -33,6 +34,7 @@ Examples:
   $(basename "$0") --ssh
   $(basename "$0") --recreate --ssh
   $(basename "$0") --rebuild
+  $(basename "$0") --use-corepack
   $(basename "$0") --config vnc
   $(basename "$0") --config agent
 EOF
@@ -59,6 +61,7 @@ REBUILD=0
 CLEAN_VOLUMES=0
 SETUP_SSH=0
 INSECURE_LOCAL=0
+USE_COREPACK=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -104,6 +107,10 @@ while [[ $# -gt 0 ]]; do
             CLEAN_VOLUMES=1
             shift
             ;;
+        --use-corepack)
+            USE_COREPACK=1
+            shift
+            ;;
         --ssh)
             SETUP_SSH=1
             shift
@@ -135,6 +142,10 @@ fi
 
 HOST_GIT_USER_NAME=$(read_git_identity user.name)
 HOST_GIT_USER_EMAIL=$(read_git_identity user.email)
+HOST_NPM_REGISTRY=$(npm config get registry 2>/dev/null || true)
+if [[ -z "$HOST_NPM_REGISTRY" ]] || [[ "$HOST_NPM_REGISTRY" == "undefined" ]]; then
+    HOST_NPM_REGISTRY="https://registry.npmjs.org/"
+fi
 
 if [[ -n "$HOST_GIT_USER_NAME" ]]; then
     export LOCAL_GIT_USER_NAME="$HOST_GIT_USER_NAME"
@@ -144,6 +155,9 @@ if [[ -n "$HOST_GIT_USER_EMAIL" ]]; then
     export LOCAL_GIT_USER_EMAIL="$HOST_GIT_USER_EMAIL"
     log "Using host git user.email from ~/.gitconfig"
 fi
+export NPM_CONFIG_REGISTRY="$HOST_NPM_REGISTRY"
+log "Using registry from host npm config"
+export TYPEAGENT_USE_COREPACK="$USE_COREPACK"
 
 UP_CMD=("${DEVCONTAINER_CMD[@]}" up --workspace-folder "$WORKSPACE_FOLDER")
 if [[ -n "$CONFIG_PATH" ]]; then

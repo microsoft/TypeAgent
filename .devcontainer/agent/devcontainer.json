@@ -1,6 +1,11 @@
 {
   "name": "TypeAgent Development (Agent Worktrees)",
-  "build": { "dockerfile": "../Dockerfile" },
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "args": {
+      "NPM_CONFIG_REGISTRY": "${localEnv:NPM_CONFIG_REGISTRY}"
+    }
+  },
 
   // Variant of the standard devcontainer where the container sees the
   // workspace at the SAME absolute path as the host. This lets VS Code's
@@ -143,7 +148,9 @@
 
   "containerEnv": {
     "LOCAL_GIT_USER_NAME": "${localEnv:LOCAL_GIT_USER_NAME}",
-    "LOCAL_GIT_USER_EMAIL": "${localEnv:LOCAL_GIT_USER_EMAIL}"
+    "LOCAL_GIT_USER_EMAIL": "${localEnv:LOCAL_GIT_USER_EMAIL}",
+    "TYPEAGENT_USE_COREPACK": "${localEnv:TYPEAGENT_USE_COREPACK}",
+    "NPM_CONFIG_REGISTRY": "${localEnv:NPM_CONFIG_REGISTRY}"
   },
 
   "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",

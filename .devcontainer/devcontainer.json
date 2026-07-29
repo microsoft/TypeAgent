@@ -1,6 +1,11 @@
 {
   "name": "TypeAgent Development",
-  "build": { "dockerfile": "Dockerfile" },
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      "NPM_CONFIG_REGISTRY": "${localEnv:NPM_CONFIG_REGISTRY}"
+    }
+  },
 
   // Multi-arch base image (linux/amd64 and linux/arm64) so this configuration
   // works on Apple Silicon as well as x86_64 hosts.
@@ -75,7 +80,9 @@
 
   "containerEnv": {
     "LOCAL_GIT_USER_NAME": "${localEnv:LOCAL_GIT_USER_NAME}",
-    "LOCAL_GIT_USER_EMAIL": "${localEnv:LOCAL_GIT_USER_EMAIL}"
+    "LOCAL_GIT_USER_EMAIL": "${localEnv:LOCAL_GIT_USER_EMAIL}",
+    "TYPEAGENT_USE_COREPACK": "${localEnv:TYPEAGENT_USE_COREPACK}",
+    "NPM_CONFIG_REGISTRY": "${localEnv:NPM_CONFIG_REGISTRY}"
     // For Codespaces, set these as repository secrets:
     // - AZURE_OPENAI_API_KEY
     // - AZURE_OPENAI_ENDPOINT

@@ -105,33 +105,6 @@ echo ""
 # Navigate to TypeScript workspace
 cd "$TS_DIR"
 
-# Enable pnpm
-echo ""
-echo "Enabling corepack and pnpm..."
-if command -v corepack &> /dev/null; then
-    corepack enable || echo "Warning: corepack enable failed"
-    # Use the pnpm version pinned in package.json (packageManager field)
-    corepack install || echo "Warning: corepack install failed"
-else
-    echo "Warning: corepack not found, checking for pnpm..."
-    if ! command -v pnpm &> /dev/null; then
-        echo "Installing pnpm via npm..."
-        npm install -g pnpm || { echo "Failed to install pnpm"; exit 1; }
-    fi
-fi
-
-# Verify pnpm is available
-if ! command -v pnpm &> /dev/null; then
-    echo "Error: pnpm is not available after setup"
-    exit 1
-fi
-
-echo "pnpm version: $(pnpm --version)"
-
-# Point pnpm store at the Docker named volume so it persists across rebuilds
-pnpm config set store-dir /home/codespace/.local/share/pnpm/store --global
-echo "pnpm store-dir: $(pnpm store path)"
-
 echo ""
 echo "Installing system libraries required by TypeAgent..."
 # libsecret is required by keytar / native credential storage used by some
@@ -192,6 +165,41 @@ if [[ -z "$CURRENT_GIT_NAME" && -z "$DESIRED_GIT_NAME" ]] || \
     echo "    git config --global user.name  \"Your Name\""
     echo "    git config --global user.email \"you@example.com\""
 fi
+
+# Enable pnpm
+echo ""
+echo "Installing pnpm..."
+PACKAGE_MANAGER=$(node -p "require('./package.json').packageManager")
+if [[ "$PACKAGE_MANAGER" != pnpm@* ]]; then
+    echo "Error: package.json packageManager does not specify pnpm: $PACKAGE_MANAGER" >&2
+    exit 1
+fi
+PNPM_VERSION=${PACKAGE_MANAGER#pnpm@}
+PNPM_VERSION=${PNPM_VERSION%%+sha512.*}
+
+if [[ "${TYPEAGENT_USE_COREPACK:-0}" == "1" ]] && command -v corepack &> /dev/null; then
+    corepack enable || echo "Warning: corepack enable failed"
+    # Use the pnpm version pinned in package.json (packageManager field)
+    corepack install || echo "Warning: corepack install failed"
+else
+    if [[ "${TYPEAGENT_USE_COREPACK:-0}" == "1" ]]; then
+        echo "Warning: corepack not found, falling back to npm..."
+    fi
+    echo "Installing pnpm@$PNPM_VERSION via npm..."
+    npm install -g "pnpm@$PNPM_VERSION" || { echo "Failed to install pnpm@$PNPM_VERSION"; exit 1; }
+fi
+
+# Verify pnpm is available
+if ! command -v pnpm &> /dev/null; then
+    echo "Error: pnpm is not available after setup"
+    exit 1
+fi
+
+echo "pnpm version: $(pnpm --version)"
+
+# Point pnpm store at the Docker named volume so it persists across rebuilds
+pnpm config set store-dir /home/codespace/.local/share/pnpm/store --global
+echo "pnpm store-dir: $(pnpm store path)"
 
 # Install dependencies
 echo ""
