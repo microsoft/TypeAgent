@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-17T18:06:54.320Z",
+  "generatedAt": "2026-07-29T05:59:05.244Z",
   "agents": [
     {
       "name": "browser",
@@ -1113,6 +1113,64 @@
               "description": "Get a summary of pending source-control (git) changes in the workspace: per-repository branch, working-tree changes, and staged changes.",
               "parameters": [],
               "phrasings": []
+            },
+            {
+              "actionName": "launchCopilotChat",
+              "description": "Launch a new chat window with GitHub Copilot, Claude, or other chat providers This creates a new chat session in the specified location.",
+              "parameters": [
+                {
+                  "name": "query",
+                  "type": "string",
+                  "optional": true,
+                  "description": "Optional initial query/prompt to send to the chat"
+                },
+                {
+                  "name": "provider",
+                  "type": "\"copilot\" | \"claude\" | \"gpt\" | \"generic\"",
+                  "optional": true,
+                  "description": "Chat provider: \"copilot\" (GitHub Copilot, default), \"claude\" (Claude/Anthropic), \"gpt\" (ChatGPT/OpenAI), or \"generic\" for any available chat extension"
+                },
+                {
+                  "name": "newSessionLocation",
+                  "type": "\"window\" | \"editor\" | \"view\"",
+                  "optional": true,
+                  "description": "Where to open the new session: \"window\" (new chat window, default), \"editor\" (new chat editor in editor area), or \"view\" (chat panel/side view)"
+                },
+                {
+                  "name": "mode",
+                  "type": "\"agent\" | \"ask\"",
+                  "optional": true,
+                  "description": "Copilot chat mode: \"agent\" (can edit workspace) or \"ask\" (conversational only) Note: not all providers support all modes"
+                },
+                {
+                  "name": "isPartialQuery",
+                  "type": "boolean",
+                  "optional": true,
+                  "description": "Whether to pre-fill but not auto-submit the query"
+                },
+                {
+                  "name": "attachScreenshot",
+                  "type": "boolean",
+                  "optional": true,
+                  "description": "Whether to attach a screenshot of focused VS Code window"
+                },
+                {
+                  "name": "attachFiles",
+                  "type": "string[]",
+                  "optional": true,
+                  "description": "Absolute paths to files to attach to the chat request"
+                }
+              ],
+              "phrasings": [
+                "'editor'",
+                "'view'",
+                "'window'",
+                "'create' 'chat'",
+                "'chat'",
+                "'chatgpt'",
+                "'claude'",
+                "'copilot'"
+              ]
             },
             {
               "actionName": "launchVSCode",
@@ -5149,7 +5207,7 @@
           "actions": [
             {
               "actionName": "clarifyMissingParameter",
-              "description": "The user request is for an action, but some of the parameter is not specified or cannot be infer from the context. Ask the user for clarification for the missing parameter of an known action. Don't clarify unknown action.",
+              "description": "The user request is for a known action, but a required parameter is missing entirely: the user gave no value for it, and no pronoun, reference, or memory points at one. Ask the user to supply the missing parameter. Don't clarify \"unknown\" action. If the value IS referred to but can't be resolved (e.g. \"the one we talked about\", \"it\", \"that file\", \"the one from before\"), use ClarifyUnresolvedReference instead.",
               "parameters": [
                 {
                   "name": "request",
@@ -5230,7 +5288,7 @@
             },
             {
               "actionName": "clarifyUnresolvedReference",
-              "description": "The user request is for an action, but parameters are referring to unresolved pronouns or references that is not found in the request or recent chat context.",
+              "description": "The user request is for a known action and does not refer to the parameter's value directly, but rather through a pronoun, reference, or memory that can't be resolved directly from the request or chat history (e.g. \"from the movie we talked about yesterday\", \"print that file\", \"it\"). Ask the user what the reference points to.",
               "parameters": [
                 {
                   "name": "request",
@@ -5328,6 +5386,12 @@
                   "type": "string",
                   "optional": false,
                   "description": "The original user request"
+                },
+                {
+                  "name": "reason",
+                  "type": "string",
+                  "optional": true,
+                  "description": "Why this request needs multi-step reasoning instead of a single known action. Name the action(s) or schema that came closest and say what made a direct translation insufficient. Be specific: this is used to find gaps in the action schemas."
                 },
                 {
                   "name": "attemptedAction",
@@ -6016,7 +6080,7 @@
                   "name": "repo",
                   "type": "string",
                   "optional": true,
-                  "description": ""
+                  "description": "owner/repo. Omitting this defaults to the current repository."
                 },
                 {
                   "name": "state",
@@ -6333,6 +6397,37 @@
                   "type": "string",
                   "optional": true,
                   "description": ""
+                }
+              ],
+              "phrasings": []
+            },
+            {
+              "actionName": "prMergedStatus",
+              "description": "Check whether a branch has already been merged into a base branch. Example: User: did dev/robgruen/dogfooding7 get merged into main? Agent: { actionName: \"prMergedStatus\", parameters: { branch: \"dev/robgruen/dogfooding7\", base: \"main\" } }",
+              "parameters": [
+                {
+                  "name": "branch",
+                  "type": "string",
+                  "optional": false,
+                  "description": "Source branch to check (PR head branch)."
+                },
+                {
+                  "name": "base",
+                  "type": "string",
+                  "optional": true,
+                  "description": "Target base branch. Defaults to \"main\" when omitted."
+                },
+                {
+                  "name": "repo",
+                  "type": "string",
+                  "optional": true,
+                  "description": "OWNER/REPO slug (e.g. \"microsoft/TypeAgent\"). Omit to use current repo."
+                },
+                {
+                  "name": "limit",
+                  "type": "number",
+                  "optional": true,
+                  "description": "Maximum number of merged PR matches to inspect."
                 }
               ],
               "phrasings": []
@@ -7049,6 +7144,15 @@
                 }
               ],
               "phrasings": []
+            },
+            {
+              "actionName": "listLists",
+              "description": "use this action to show the user which lists exist, for example, \"what lists are there?\", \"show me my lists\", \"what lists do I have?\"",
+              "parameters": [],
+              "phrasings": [
+                "what lists",
+                "list lists"
+              ]
             },
             {
               "actionName": "removeItems",
@@ -8566,7 +8670,7 @@
       "schemas": [
         {
           "schemaName": "player",
-          "description": "Music Player agent that lets you search for, play and control music.",
+          "description": "Music Player agent to play and control music. Use it to play, start, put on, queue, or listen to a specific song, artist, album, genre, or playlist (named or described by mood, e.g. 'chill music for studying'); control playback (pause, resume, skip/next, previous, shuffle, repeat, volume); choose the playback device; and browse, search, or manage playlists and favorites.",
           "defaultEnabled": true,
           "transient": false,
           "actions": [
@@ -8827,7 +8931,7 @@
             },
             {
               "actionName": "previous",
-              "description": "previous track User: play the last song again",
+              "description": "previous track",
               "parameters": [],
               "phrasings": []
             },
@@ -9566,7 +9670,7 @@
             },
             {
               "actionName": "listRules",
-              "description": "",
+              "description": "Lists the active grammar rules for the supplied agent.",
               "parameters": [
                 {
                   "name": "agentName",
@@ -10675,8 +10779,871 @@
       ]
     }
   ],
-  "systemCommands": [
+  "commands": [
     {
+      "host": "browser",
+      "path": "actions",
+      "description": "Manage page actions (match, record, infer, author)",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "actions infer",
+      "description": "Analyze page and infer new actions that can be automated",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "actions match",
+      "description": "Discover available actions on the current web page",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "actions record",
+      "description": "Record a new browser action by capturing user interactions",
+      "group": false,
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "optional": false,
+          "description": "Name for the action to record"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "actions stop",
+      "description": "Stop operations",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "actions stop recording",
+      "description": "Stop recording and create a WebFlow",
+      "group": false,
+      "args": [
+        {
+          "name": "description",
+          "type": "string",
+          "optional": true,
+          "description": "Description of what the recorded action does"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "ask",
+      "description": "Ask a question about the current web page using extracted knowledge",
+      "group": false,
+      "args": [
+        {
+          "name": "question",
+          "type": "string",
+          "optional": false,
+          "description": "Question to ask about the page"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "auto",
+      "description": "Run the browser automation",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "auto close",
+      "description": "Close the new Web Content view",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "auto launch",
+      "description": "Launch a browser session",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "auto launch hidden",
+      "description": "Open a hidden/headless browser instance",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "auto launch standalone",
+      "description": "Open a standalone browser instance",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "close",
+      "description": "Close the new Web Content view",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "external",
+      "description": "Toggle external browser control",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "external off",
+      "description": "Disable external browser control",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "external on",
+      "description": "Enable external browser control",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "extractKnowledge",
+      "description": "Extract knowledge from the current web page",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "learn",
+      "description": "Learn a new action by demonstrating or describing it",
+      "group": false,
+      "args": [
+        {
+          "name": "goal",
+          "type": "string",
+          "optional": false,
+          "description": "The goal to accomplish (what the action should do)"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "lookup",
+      "description": "Configure how internet lookups are answered (browser vs Azure AI Search)",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "lookup mode",
+      "description": "Set the internet lookup mode: off (browser), api, or mcp",
+      "group": false,
+      "args": [
+        {
+          "name": "mode",
+          "type": "string",
+          "optional": false,
+          "description": "off | api | mcp"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "lookup status",
+      "description": "Show the current internet lookup mode",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "open",
+      "description": "Show a new Web Content view",
+      "group": false,
+      "args": [
+        {
+          "name": "site",
+          "type": "string",
+          "optional": false,
+          "description": "Alias or URL for the site of the open."
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "resolver",
+      "description": "Toggle URL resolver methods",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "resolver history",
+      "description": "Toggle history resolver",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "resolver keyword",
+      "description": "Toggle keyword resolver",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "resolver list",
+      "description": "List all available URL resolvers",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "search",
+      "description": "List search providers",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "search add",
+      "description": "Adds a new search provider",
+      "group": false,
+      "args": [
+        {
+          "name": "provider",
+          "type": "string",
+          "optional": false,
+          "description": "The name of the search provider to add."
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "optional": false,
+          "description": "The URL of the search provider to add. '%s' will be replaced with the search parameter."
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "search import",
+      "description": "Imports the search providers from the specified browser",
+      "group": false,
+      "args": [
+        {
+          "name": "browser",
+          "type": "string",
+          "optional": false,
+          "description": "The name of the browser to import search providers from: [Edge | Chrome]."
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "search list",
+      "description": "Lists browser agent search providers",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "search remove",
+      "description": "Removes the selected search provider",
+      "group": false,
+      "args": [
+        {
+          "name": "provider",
+          "type": "string",
+          "optional": false,
+          "description": "The name of the search provider to remove."
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "search set",
+      "description": "Sets the active search provider",
+      "group": false,
+      "args": [
+        {
+          "name": "provider",
+          "type": "string",
+          "optional": false,
+          "description": "The name of the search provider to set as active."
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "browser",
+      "path": "search show",
+      "description": "Shows the details of the selected search provider",
+      "group": false,
+      "args": [
+        {
+          "name": "provider",
+          "type": "string",
+          "optional": false,
+          "description": "The name of the search provider to show details for."
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "calendar",
+      "path": "google-auth",
+      "description": "Complete Google Calendar OAuth flow with authorization code",
+      "group": false,
+      "args": [
+        {
+          "name": "code",
+          "type": "string",
+          "optional": false,
+          "description": "Authorization code from Google OAuth redirect"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "calendar",
+      "path": "login",
+      "description": "Log into calendar service",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "calendar",
+      "path": "logout",
+      "description": "Log out of calendar service",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "dispatcher",
+      "path": "explain",
+      "description": "Explain a translated request with action",
+      "group": false,
+      "args": [
+        {
+          "name": "requestAction",
+          "type": "string",
+          "optional": false,
+          "description": "Request to explain"
+        }
+      ],
+      "flags": [
+        {
+          "name": "repeat",
+          "char": "",
+          "type": "string",
+          "default": "1",
+          "description": "Number of times to repeat the explanation"
+        },
+        {
+          "name": "filterValueInRequest",
+          "char": "",
+          "type": "string",
+          "default": "false",
+          "description": "Filter reference value for the explanation"
+        },
+        {
+          "name": "filterReference",
+          "char": "",
+          "type": "string",
+          "default": "false",
+          "description": "Filter reference words"
+        },
+        {
+          "name": "concurrency",
+          "char": "",
+          "type": "string",
+          "default": "5",
+          "description": "Number of concurrent requests"
+        }
+      ]
+    },
+    {
+      "host": "dispatcher",
+      "path": "match",
+      "description": "Match a request",
+      "group": false,
+      "args": [
+        {
+          "name": "request",
+          "type": "string",
+          "optional": false,
+          "description": "Request to match"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "dispatcher",
+      "path": "reason",
+      "description": "Reason about a request",
+      "group": false,
+      "args": [
+        {
+          "name": "request",
+          "type": "string",
+          "optional": false,
+          "description": "Request to reason about"
+        }
+      ],
+      "flags": [
+        {
+          "name": "engine",
+          "char": "",
+          "type": "string",
+          "default": "",
+          "description": "Reasoning engine to use: claude, copilot, or none"
+        }
+      ]
+    },
+    {
+      "host": "dispatcher",
+      "path": "reasoning",
+      "description": "Reason about a request",
+      "group": false,
+      "args": [
+        {
+          "name": "request",
+          "type": "string",
+          "optional": false,
+          "description": "Request to reason about"
+        }
+      ],
+      "flags": [
+        {
+          "name": "engine",
+          "char": "",
+          "type": "string",
+          "default": "",
+          "description": "Reasoning engine to use: claude, copilot, or none"
+        }
+      ]
+    },
+    {
+      "host": "dispatcher",
+      "path": "request",
+      "description": "Translate and explain a request",
+      "group": false,
+      "args": [
+        {
+          "name": "request",
+          "type": "string",
+          "optional": true,
+          "description": "Request to translate"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "dispatcher",
+      "path": "translate",
+      "description": "Translate a request",
+      "group": false,
+      "args": [
+        {
+          "name": "request",
+          "type": "string",
+          "optional": false,
+          "description": "Request to translate"
+        }
+      ],
+      "flags": [
+        {
+          "name": "history",
+          "char": "",
+          "type": "string",
+          "default": "false",
+          "description": "Use history in translation"
+        }
+      ]
+    },
+    {
+      "host": "email",
+      "path": "google-auth",
+      "description": "Complete Google Gmail OAuth flow with authorization code",
+      "group": false,
+      "args": [
+        {
+          "name": "code",
+          "type": "string",
+          "optional": false,
+          "description": "Authorization code from Google OAuth redirect"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "email",
+      "path": "index",
+      "description": "Build keyword index from inbox emails for fast search",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "email",
+      "path": "login",
+      "description": "Log into email service",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "email",
+      "path": "logout",
+      "description": "Log out of email service",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "clear",
+      "description": "Clear playback queue",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "folder",
+      "description": "Show current music folder",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "list",
+      "description": "List audio files in music folder",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "mute",
+      "description": "Toggle mute",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "next",
+      "description": "Play next track",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "pause",
+      "description": "Pause playback",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "play",
+      "description": "Play an audio file or resume playback",
+      "group": false,
+      "args": [
+        {
+          "name": "file",
+          "type": "string",
+          "optional": true,
+          "description": "File name or path to play (optional - plays first file if not specified)"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "prev",
+      "description": "Play previous track",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "queue",
+      "description": "Show playback queue",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "resume",
+      "description": "Resume playback",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "setfolder",
+      "description": "Set the music folder path",
+      "group": false,
+      "args": [
+        {
+          "name": "path",
+          "type": "string",
+          "optional": false,
+          "description": "Path to the music folder"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "shuffle",
+      "description": "Toggle shuffle mode",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "status",
+      "description": "Show local player status",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "stop",
+      "description": "Stop playback",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "localPlayer",
+      "path": "volume",
+      "description": "Set volume level (0-100)",
+      "group": false,
+      "args": [
+        {
+          "name": "level",
+          "type": "string",
+          "optional": false,
+          "description": "Volume level (0-100)"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "osNotifications",
+      "path": "sync",
+      "description": "Re-emit currently-present OS notifications through the agent pipeline. Windows only — Linux/macOS do not expose existing notifications.",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "osNotifications",
+      "path": "test",
+      "description": "Inject a synthetic notification through the agent pipeline (filters, rate limit, dismiss tracking) — useful for verifying the agent end-to-end without an OS notification source.",
+      "group": false,
+      "args": [
+        {
+          "name": "message",
+          "type": "string",
+          "optional": true,
+          "description": "Notification body text (defaults to 'Hello World!')"
+        }
+      ],
+      "flags": [
+        {
+          "name": "app",
+          "char": "",
+          "type": "string",
+          "default": "test",
+          "description": "App name to attach to the synthetic notification (matched against allowList/blockList)"
+        },
+        {
+          "name": "title",
+          "char": "",
+          "type": "string",
+          "default": "Test",
+          "description": "Notification title (defaults to 'Test')"
+        }
+      ]
+    },
+    {
+      "host": "player",
+      "path": "spotify",
+      "description": "Configure spotify integration",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "player",
+      "path": "spotify load",
+      "description": "Load spotify user data",
+      "group": false,
+      "args": [
+        {
+          "name": "file",
+          "type": "string",
+          "optional": false,
+          "description": "File to load"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "player",
+      "path": "spotify login",
+      "description": "Login to Spotify",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "player",
+      "path": "spotify logout",
+      "description": "Logout from Spotify",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "powershell",
+      "path": "delete",
+      "description": "Delete a PowerShell flow by name",
+      "group": false,
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "optional": false,
+          "description": "Name of the PowerShell flow to delete"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "powershell",
+      "path": "import",
+      "description": "Import a PowerShell script as a reusable PowerShell flow",
+      "group": false,
+      "args": [
+        {
+          "name": "filePath",
+          "type": "string",
+          "optional": false,
+          "description": "Path to the .ps1 file to import"
+        }
+      ],
+      "flags": [
+        {
+          "name": "actionName",
+          "char": "",
+          "type": "string",
+          "default": "",
+          "description": "Override the generated action name"
+        }
+      ]
+    },
+    {
+      "host": "powershell",
+      "path": "list",
+      "description": "List all registered PowerShell flows",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "powershell",
+      "path": "run",
+      "description": "Execute a PowerShell flow by name",
+      "group": false,
+      "args": [
+        {
+          "name": "flowName",
+          "type": "string",
+          "optional": false,
+          "description": "Name of the PowerShell flow to execute"
+        }
+      ],
+      "flags": [
+        {
+          "name": "flowParametersJson",
+          "char": "",
+          "type": "string",
+          "default": "",
+          "description": "JSON string of parameters, e.g. '{\"path\":\"C:\\\\Users\"}'"
+        }
+      ]
+    },
+    {
+      "host": "powershell",
+      "path": "show",
+      "description": "Show details of a PowerShell flow",
+      "group": false,
+      "args": [
+        {
+          "name": "flowName",
+          "type": "string",
+          "optional": false,
+          "description": "Name of the PowerShell flow to show"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "system",
       "path": "action",
       "description": "Execute an action",
       "group": false,
@@ -10712,6 +11679,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "clear",
       "description": "Clear the console",
       "group": true,
@@ -10719,6 +11687,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "clear deep",
       "description": "Clear the console and wipe chat history, reasoning, activity, and persistent display log so nothing replays on rejoin",
       "group": false,
@@ -10726,6 +11695,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "collision",
       "description": "Inspect collision detection telemetry and run static collision analyses",
       "group": true,
@@ -10733,6 +11703,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "collision corpus",
       "description": "Generate phrase corpora, probe through the embedding ranker, and build the collision-hotspot visualizations",
       "group": true,
@@ -10740,6 +11711,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "collision corpus generate",
       "description": "Generate an LLM-authored phrase corpus for every action in this dispatcher's loaded schemas (slow: ~12 min for the full set)",
       "group": false,
@@ -10790,6 +11762,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision corpus probe",
       "description": "Replay a phrase corpus through the embedding ranker and classify each phrase as CLEAN / TIGHT / MISROUTE",
       "group": false,
@@ -10840,6 +11813,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision corpus reanalyze",
       "description": "Re-classify saved probe results with prefix-aware action matching (recovers misroutes that were just naming differences)",
       "group": false,
@@ -10876,6 +11850,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision corpus recovery",
       "description": "Decompose MISROUTE results by where the correct target ranks among the top-K candidates (which fix lever applies?)",
       "group": false,
@@ -10905,6 +11880,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision corpus run",
       "description": "Run the full corpus pipeline (generate → probe → reanalyze → visualize) with consistent file naming",
       "group": false,
@@ -10976,6 +11952,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision corpus translate",
       "description": "Replay a phrase corpus through the LLM translator (cache/grammar/exec/fuzzy off) and classify each phrase as CLEAN / MISROUTE / CLARIFY / INVALID / ERROR. Distinct from 'corpus probe' — that one runs the embedding ranker; this runs the actual translator.",
       "group": false,
@@ -11054,6 +12031,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision corpus visualize",
       "description": "Build an interactive HTML visualization of misroute hotspots from reclassified probe results, overlaid with a cross-schema similarity scan",
       "group": false,
@@ -11125,6 +12103,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision corpus visualize-recovery",
       "description": "Build an interactive HTML visualization of recovery-rank analysis (which fix lever applies, per action and per agent)",
       "group": false,
@@ -11161,6 +12140,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision events",
       "description": "Show recent collision events captured in the current session's ring buffer",
       "group": false,
@@ -11183,6 +12163,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision keywords",
       "description": "Inspect/tune contextSelector keyword vectors, or backfill the committed keyword files.",
       "group": true,
@@ -11197,6 +12178,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "collision keywords backfill",
       "description": "Backfill/refresh committed keyword files for agent actions. Lexical by default; --llm uses the preferred LLM distillation pass.",
       "group": false,
@@ -11226,6 +12208,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision list-strategies",
       "description": "List the named strategies available for `@collision similar -s <name>`",
       "group": false,
@@ -11233,6 +12216,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "collision neighborhoods",
       "description": "Build neighborhoods directly from translator misroute edges and write a persisted JSON index plus an HTML viz.",
       "group": false,
@@ -11290,6 +12274,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision optimize",
       "description": "Optimize translator-collision neighborhoods: propose verified schema/manifest fixes, accumulate cross-run evidence about which lever and mechanism work for which collision class.",
       "group": true,
@@ -11297,6 +12282,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "collision optimize browse",
       "description": "Generate browse.html for one or more optimization-run-* directories. Walks the run, writes a sortable case index plus a self-contained case.html per case showing every attempt with before/after diffs.",
       "group": false,
@@ -11326,6 +12312,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision optimize distill",
       "description": "Distill winning attempts in patterns.jsonl into candidate schemaGuidelines additions. Groups winners by (mechanism, guidelineHook), calls the LLM with the current schemaGuidelines as context, writes schemaGuidelines.candidates.md for operator review.",
       "group": false,
@@ -11348,6 +12335,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision optimize explore",
       "description": "Run the optimize loop on the top-N collision neighborhoods. Writes an attempts archive under <workdir>/optimization-run-<ts>/.",
       "group": false,
@@ -11426,6 +12414,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision optimize list-levers",
       "description": "List all registered optimization levers with their description, consumes, and probeType.",
       "group": false,
@@ -11433,6 +12422,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "collision optimize patterns",
       "description": "Mine patterns.jsonl across all accumulated optimize runs. Emits patterns.{json,html} with three groupings (mechanism × pattern, per-lever, lever-effectiveness) plus classifier agreement.",
       "group": false,
@@ -11483,6 +12473,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision optimize run",
       "description": "Run the full optimize pipeline (neighborhoods → explore → validate → patterns → distill) with --from gating. Each step's predecessor must exist before it runs.",
       "group": false,
@@ -11554,6 +12545,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision optimize validate",
       "description": "Stack all winners from an optimization run and re-probe the full baseline corpus. Emits optimization-impact.{json,html} with cross-neighborhood regression flags.",
       "group": false,
@@ -11604,6 +12596,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision preferences",
       "description": "Inspect and edit Tier-1 collision preferences (used by the preference-clarify strategy)",
       "group": true,
@@ -11611,6 +12604,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "collision preferences clear",
       "description": "Remove every stored collision preference",
       "group": false,
@@ -11618,6 +12612,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "collision preferences list",
       "description": "List stored collision preferences (Tier-1)",
       "group": false,
@@ -11625,6 +12620,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "collision preferences remove",
       "description": "Remove a stored collision preference by key (see `@collision preferences list`)",
       "group": false,
@@ -11639,6 +12635,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "collision preferences set",
       "description": "Set an explicit collision preference: among a candidate set, always pick the chosen option",
       "group": false,
@@ -11659,6 +12656,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "collision probe",
       "description": "Probe what action(s) a hand-crafted utterance would route to via the embedding ranker (top-K with cosine deltas)",
       "group": false,
@@ -11702,6 +12700,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "collision similar",
       "description": "Find semantically similar actions across agents (multi-vector embedding similarity, clusters by default)",
       "group": false,
@@ -11759,6 +12758,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "config",
       "description": "Configuration commands",
       "group": true,
@@ -11766,6 +12766,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config action",
       "description": "Toggle agent actions",
       "group": false,
@@ -11802,6 +12803,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "config agent",
       "description": "Manage agents (enable/disable, setup, refresh)",
       "group": true,
@@ -11838,6 +12840,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "config agent refresh",
       "description": "Re-check an agent's readiness state (or all agents)",
       "group": false,
@@ -11852,6 +12855,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config agent setup",
       "description": "Run setup for an agent that needs configuration before use",
       "group": false,
@@ -11866,6 +12870,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config cache",
       "description": "Configure cache behavior",
       "group": true,
@@ -11873,6 +12878,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config cache grammarSystem",
       "description": "Set grammar system (completionBased or nfa)",
       "group": false,
@@ -11887,6 +12893,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config cache useDFA",
       "description": "Enable or disable DFA matching within the NFA grammar system (faster; requires grammarSystem=nfa)",
       "group": false,
@@ -11901,6 +12908,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision",
       "description": "Configure action collision detection",
       "group": true,
@@ -11908,6 +12916,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision contextSelector",
       "description": "Configure the context-weighted resolution tier (deterministic topical tiebreaker on the grammar path)",
       "group": true,
@@ -11915,6 +12924,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision contextSelector decay",
       "description": "Get/set contextSelector decay (per-turn recency decay lambda (0 < lambda <= 1))",
       "group": false,
@@ -11929,6 +12939,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision contextSelector detect",
       "description": "Toggle context-weighted resolution (contextSelector)",
       "group": true,
@@ -11936,6 +12947,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision contextSelector detect off",
       "description": "Turn off context-weighted resolution (contextSelector)",
       "group": false,
@@ -11943,6 +12955,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision contextSelector detect on",
       "description": "Turn on context-weighted resolution (contextSelector)",
       "group": false,
@@ -11950,6 +12963,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision contextSelector margin",
       "description": "Get/set contextSelector margin (clear-winner margin the winner must beat the runner-up by)",
       "group": false,
@@ -11964,6 +12978,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision contextSelector minMass",
       "description": "Get/set contextSelector minMass (evidence gate: min winner matched mass)",
       "group": false,
@@ -11978,6 +12993,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision contextSelector minUniqueTokens",
       "description": "Get/set contextSelector minUniqueTokens (evidence gate: min distinct distinguishing tokens the winner must match)",
       "group": false,
@@ -11992,6 +13008,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision contextSelector windowTurns",
       "description": "Get/set contextSelector windowTurns (ring-buffer look-back N over recent user turns)",
       "group": false,
@@ -12006,6 +13023,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision fuzzy",
       "description": "Configure fuzzy collision detection",
       "group": true,
@@ -12013,6 +13031,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision fuzzy detect",
       "description": "Toggle fuzzy collision detection",
       "group": true,
@@ -12020,6 +13039,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision fuzzy detect off",
       "description": "Turn off fuzzy collision detection",
       "group": false,
@@ -12027,6 +13047,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision fuzzy detect on",
       "description": "Turn on fuzzy collision detection",
       "group": false,
@@ -12034,6 +13055,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision fuzzy strategy",
       "description": "Set fuzzy resolution strategy (one of: first-match, score-rank, priority, user-clarify, preference-clarify)",
       "group": false,
@@ -12048,6 +13070,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision grammarMatch",
       "description": "Configure grammarMatch collision detection",
       "group": true,
@@ -12055,6 +13078,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision grammarMatch detect",
       "description": "Toggle grammarMatch collision detection",
       "group": true,
@@ -12062,6 +13086,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision grammarMatch detect off",
       "description": "Turn off grammarMatch collision detection",
       "group": false,
@@ -12069,6 +13094,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision grammarMatch detect on",
       "description": "Turn on grammarMatch collision detection",
       "group": false,
@@ -12076,6 +13102,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision grammarMatch strategy",
       "description": "Set grammarMatch resolution strategy (one of: first-match, score-rank, priority, user-clarify, preference-clarify)",
       "group": false,
@@ -12090,6 +13117,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision llmSelect",
       "description": "Configure llmSelect collision detection",
       "group": true,
@@ -12097,6 +13125,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision llmSelect detect",
       "description": "Toggle llmSelect collision detection",
       "group": true,
@@ -12104,6 +13133,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision llmSelect detect off",
       "description": "Turn off llmSelect collision detection",
       "group": false,
@@ -12111,6 +13141,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision llmSelect detect on",
       "description": "Turn on llmSelect collision detection",
       "group": false,
@@ -12118,6 +13149,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision llmSelect strategy",
       "description": "Set llmSelect resolution strategy (one of: first-match, score-rank, priority, user-clarify, preference-clarify)",
       "group": false,
@@ -12132,6 +13164,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision preference",
       "description": "Configure the preference-clarify strategy (Tier-1 preferences + Tier-2 registry)",
       "group": true,
@@ -12139,6 +13172,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision preference enabled",
       "description": "Toggle preference-clarify resolution",
       "group": true,
@@ -12146,6 +13180,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision preference enabled off",
       "description": "Turn off preference-clarify resolution",
       "group": false,
@@ -12153,6 +13188,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision preference enabled on",
       "description": "Turn on preference-clarify resolution",
       "group": false,
@@ -12160,6 +13196,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision preference registry",
       "description": "Set the filesystem path to the known-ambiguous neighborhoods registry (neighborhoods.json). Empty string clears it.",
       "group": false,
@@ -12174,6 +13211,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision preference registryFirst",
       "description": "Toggle registry-first detection (scan all embedding candidates against the neighborhood registry, independent of the score-delta detector)",
       "group": true,
@@ -12181,6 +13219,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision preference registryFirst off",
       "description": "Turn off registry-first detection (scan all embedding candidates against the neighborhood registry, independent of the score-delta detector)",
       "group": false,
@@ -12188,6 +13227,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision preference registryFirst on",
       "description": "Turn on registry-first detection (scan all embedding candidates against the neighborhood registry, independent of the score-delta detector)",
       "group": false,
@@ -12195,6 +13235,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision preference remember",
       "description": "Set how learned preferences are captured for the `preference-clarify` strategy. Empty argument shows the current value.",
       "group": false,
@@ -12209,6 +13250,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision preference source",
       "description": "Set which ambiguity source feeds the `preference-clarify` strategy. Empty argument shows the current value.",
       "group": false,
@@ -12223,6 +13265,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision priority",
       "description": "Set priorityOrder (comma-separated agent names) used by the `priority` resolution strategy. Empty argument shows the current value.",
       "group": false,
@@ -12237,6 +13280,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision show",
       "description": "Show the current collision detection config",
       "group": false,
@@ -12244,6 +13288,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision static",
       "description": "Configure static collision detection",
       "group": true,
@@ -12251,6 +13296,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision static detect",
       "description": "Toggle static collision detection",
       "group": true,
@@ -12258,6 +13304,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision static detect off",
       "description": "Turn off static collision detection",
       "group": false,
@@ -12265,6 +13312,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision static detect on",
       "description": "Turn on static collision detection",
       "group": false,
@@ -12272,6 +13320,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision static strategy",
       "description": "Set static resolution strategy (one of: warn, error)",
       "group": false,
@@ -12286,6 +13335,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision telemetry",
       "description": "Configure collision telemetry",
       "group": true,
@@ -12293,6 +13343,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision telemetry debugLog",
       "description": "Toggle collision telemetry debug log",
       "group": true,
@@ -12300,6 +13351,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision telemetry debugLog off",
       "description": "Turn off collision telemetry debug log",
       "group": false,
@@ -12307,6 +13359,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision telemetry debugLog on",
       "description": "Turn on collision telemetry debug log",
       "group": false,
@@ -12314,6 +13367,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision telemetry emit",
       "description": "Toggle collision telemetry ring buffer",
       "group": true,
@@ -12321,6 +13375,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision telemetry emit off",
       "description": "Turn off collision telemetry ring buffer",
       "group": false,
@@ -12328,6 +13383,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision telemetry emit on",
       "description": "Turn on collision telemetry ring buffer",
       "group": false,
@@ -12335,6 +13391,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config collision telemetry experimentId",
       "description": "Set the experimentId tag attached to every emitted collision event. Empty string clears it.",
       "group": false,
@@ -12349,6 +13406,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config command",
       "description": "Toggle agent commands",
       "group": false,
@@ -12385,6 +13443,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "config dev",
       "description": "Toggle development mode",
       "group": true,
@@ -12392,6 +13451,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config dev off",
       "description": "Turn off development mode",
       "group": false,
@@ -12399,6 +13459,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config dev on",
       "description": "Turn on development mode (records conversation + translation data)",
       "group": false,
@@ -12414,6 +13475,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "config execution",
       "description": "Execution configuration",
       "group": true,
@@ -12421,6 +13483,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution activity",
       "description": "Toggle activity context",
       "group": true,
@@ -12428,6 +13491,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution activity off",
       "description": "Turn off activity context",
       "group": false,
@@ -12435,6 +13499,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution activity on",
       "description": "Turn on activity context",
       "group": false,
@@ -12442,6 +13507,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution conversationAnswer",
       "description": "How conversation questions are answered: 'lookup' (conversation-memory lookup, reasoning as fallback), 'reasoning-first' (reasoning agent primary, lookup as fallback), or 'reasoning-only' (remove the lookup action; reasoning handles conversation Q&A)",
       "group": false,
@@ -12456,6 +13522,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution entityPromptShape",
       "description": "Shape used when serializing Entity objects into LLM prompts",
       "group": false,
@@ -12470,6 +13537,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution planReuse",
       "description": "Enable or disable workflow plan reuse for reasoning actions",
       "group": false,
@@ -12484,6 +13552,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution reasoning",
       "description": "Set reasoning engine",
       "group": false,
@@ -12498,6 +13567,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution reasoningEffort",
       "description": "Set the Copilot reasoning effort (low, medium, high, xhigh). Only applies to models that support it. Omit to show the current value.",
       "group": false,
@@ -12512,6 +13582,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution reasoningHistory",
       "description": "Number of recent conversation turns included as context in the reasoning prompt",
       "group": false,
@@ -12526,6 +13597,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution reasoningModel",
       "description": "Set the Copilot reasoning model (e.g. claude-opus-4.8). Omit to show the current value.",
       "group": false,
@@ -12540,6 +13612,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution recordUserMessages",
       "description": "Toggle record the user's own messages in the conversation transcript (chat history)",
       "group": true,
@@ -12547,6 +13620,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution recordUserMessages off",
       "description": "Turn off record the user's own messages in the conversation transcript (chat history)",
       "group": false,
@@ -12554,6 +13628,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution recordUserMessages on",
       "description": "Turn on record the user's own messages in the conversation transcript (chat history)",
       "group": false,
@@ -12561,6 +13636,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution scriptReuse",
       "description": "Enable or disable PowerShell script reuse for reasoning actions",
       "group": false,
@@ -12575,6 +13651,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution setupOnFirstUse",
       "description": "Toggle auto-run agent setup on first use (otherwise emit a hint to run @config agent setup)",
       "group": true,
@@ -12582,6 +13659,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution setupOnFirstUse off",
       "description": "Turn off auto-run agent setup on first use (otherwise emit a hint to run @config agent setup)",
       "group": false,
@@ -12589,6 +13667,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config execution setupOnFirstUse on",
       "description": "Turn on auto-run agent setup on first use (otherwise emit a hint to run @config agent setup)",
       "group": false,
@@ -12596,6 +13675,31 @@
       "flags": []
     },
     {
+      "host": "system",
+      "path": "config execution subagents",
+      "description": "Toggle allow the reasoning loop to create and manage subagents (each with its own command-executor process)",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "system",
+      "path": "config execution subagents off",
+      "description": "Turn off allow the reasoning loop to create and manage subagents (each with its own command-executor process)",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "system",
+      "path": "config execution subagents on",
+      "description": "Turn on allow the reasoning loop to create and manage subagents (each with its own command-executor process)",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "system",
       "path": "config explainer",
       "description": "Explainer configuration",
       "group": true,
@@ -12603,6 +13707,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer async",
       "description": "Toggle asynchronous explanation",
       "group": true,
@@ -12610,6 +13715,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer async off",
       "description": "Turn off asynchronous explanation",
       "group": false,
@@ -12617,6 +13723,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer async on",
       "description": "Turn on asynchronous explanation",
       "group": false,
@@ -12624,6 +13731,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter",
       "description": "Toggle explanation filter",
       "group": true,
@@ -12631,6 +13739,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter multiple",
       "description": "Toggle explanation filter multiple actions",
       "group": true,
@@ -12638,6 +13747,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter multiple off",
       "description": "Turn off explanation filter multiple actions",
       "group": false,
@@ -12645,6 +13755,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter multiple on",
       "description": "Turn on explanation filter multiple actions",
       "group": false,
@@ -12652,6 +13763,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter off",
       "description": "Turn off all explanation filters",
       "group": false,
@@ -12659,6 +13771,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter on",
       "description": "Turn on all explanation filters",
       "group": false,
@@ -12666,6 +13779,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter reference",
       "description": "Toggle reference filter",
       "group": true,
@@ -12673,6 +13787,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter reference list",
       "description": "Toggle explainer filter reference using word lists",
       "group": true,
@@ -12680,6 +13795,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter reference list off",
       "description": "Turn off explainer filter reference using word lists",
       "group": false,
@@ -12687,6 +13803,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter reference list on",
       "description": "Turn on explainer filter reference using word lists",
       "group": false,
@@ -12694,6 +13811,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter reference off",
       "description": "Turn off all explanation reference filters",
       "group": false,
@@ -12701,6 +13819,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter reference on",
       "description": "Turn on all explanation reference filters",
       "group": false,
@@ -12708,6 +13827,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter reference translate",
       "description": "Toggle explainer filter reference by translate without context",
       "group": true,
@@ -12715,6 +13835,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter reference translate off",
       "description": "Turn off explainer filter reference by translate without context",
       "group": false,
@@ -12722,6 +13843,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter reference translate on",
       "description": "Turn on explainer filter reference by translate without context",
       "group": false,
@@ -12729,6 +13851,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter reference value",
       "description": "Toggle explainer filter reference by value in the request",
       "group": true,
@@ -12736,6 +13859,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter reference value off",
       "description": "Turn off explainer filter reference by value in the request",
       "group": false,
@@ -12743,6 +13867,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer filter reference value on",
       "description": "Turn on explainer filter reference by value in the request",
       "group": false,
@@ -12750,6 +13875,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer model",
       "description": "Set model",
       "group": false,
@@ -12772,6 +13898,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "config explainer name",
       "description": "Set explainer",
       "group": false,
@@ -12786,6 +13913,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer off",
       "description": "Turn off explanation",
       "group": false,
@@ -12793,6 +13921,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config explainer on",
       "description": "Turn on explanation",
       "group": false,
@@ -12800,6 +13929,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config log",
       "description": "Toggle logging",
       "group": true,
@@ -12807,6 +13937,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config log db",
       "description": "Toggle logging",
       "group": true,
@@ -12814,6 +13945,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config log db off",
       "description": "Turn off logging",
       "group": false,
@@ -12821,6 +13953,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config log db on",
       "description": "Turn on logging",
       "group": false,
@@ -12828,6 +13961,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config match",
       "description": "Configure match behavior",
       "group": true,
@@ -12835,6 +13969,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config match grammar",
       "description": "Toggle grammar cache usage",
       "group": true,
@@ -12842,6 +13977,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config match grammar off",
       "description": "Turn off grammar cache usage",
       "group": false,
@@ -12849,6 +13985,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config match grammar on",
       "description": "Turn on grammar cache usage",
       "group": false,
@@ -12856,6 +13993,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config modelProvider",
       "description": "Show or set the active model provider (azure | openai | ollama | copilot)",
       "group": false,
@@ -12876,6 +14014,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config request",
       "description": "Set the agent that handle natural language requests",
       "group": false,
@@ -12890,6 +14029,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config schema",
       "description": "Toggle agent schemas",
       "group": false,
@@ -12926,6 +14066,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "config scrub",
       "description": "Toggle outbound secret scrubbing",
       "group": true,
@@ -12933,6 +14074,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config scrub off",
       "description": "Turn off outbound secret scrubbing",
       "group": false,
@@ -12940,6 +14082,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config scrub on",
       "description": "Turn on outbound secret scrubbing",
       "group": false,
@@ -12947,6 +14090,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation",
       "description": "Translation configuration",
       "group": true,
@@ -12954,6 +14098,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation entity",
       "description": "Entity translation configuration",
       "group": true,
@@ -12961,6 +14106,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation entity clarify",
       "description": "Toggle entity clarification",
       "group": true,
@@ -12968,6 +14114,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation entity clarify off",
       "description": "Turn off entity clarification",
       "group": false,
@@ -12975,6 +14122,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation entity clarify on",
       "description": "Turn on entity clarification",
       "group": false,
@@ -12982,6 +14130,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation entity filter",
       "description": "Toggle entity filter using LLM",
       "group": true,
@@ -12989,6 +14138,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation entity filter off",
       "description": "Turn off entity filter using LLM",
       "group": false,
@@ -12996,6 +14146,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation entity filter on",
       "description": "Turn on entity filter using LLM",
       "group": false,
@@ -13003,6 +14154,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation entity resolve",
       "description": "Toggle entity resolution",
       "group": true,
@@ -13010,6 +14162,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation entity resolve off",
       "description": "Turn off entity resolution",
       "group": false,
@@ -13017,6 +14170,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation entity resolve on",
       "description": "Turn on entity resolution",
       "group": false,
@@ -13024,6 +14178,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation history",
       "description": "Configure chat history usage in translation",
       "group": true,
@@ -13031,6 +14186,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation history limit",
       "description": "Set the limit of chat history usage in translation",
       "group": false,
@@ -13045,6 +14201,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation history off",
       "description": "Turn off history",
       "group": false,
@@ -13052,6 +14209,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation history on",
       "description": "Turn on history",
       "group": false,
@@ -13059,6 +14217,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation model",
       "description": "Set model",
       "group": false,
@@ -13081,6 +14240,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "config translation multi",
       "description": "multiple actions",
       "group": true,
@@ -13088,6 +14248,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation multi off",
       "description": "Turn off multiple action translation",
       "group": false,
@@ -13095,6 +14256,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation multi on",
       "description": "Turn on multiple action translation",
       "group": false,
@@ -13102,6 +14264,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation multi pending",
       "description": "Toggle pending request in multiple action",
       "group": true,
@@ -13109,6 +14272,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation multi pending off",
       "description": "Turn off pending request in multiple action",
       "group": false,
@@ -13116,6 +14280,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation multi pending on",
       "description": "Turn on pending request in multiple action",
       "group": false,
@@ -13123,6 +14288,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation multi result",
       "description": "Toggle result id in multiple action",
       "group": true,
@@ -13130,6 +14296,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation multi result off",
       "description": "Turn off result id in multiple action",
       "group": false,
@@ -13137,6 +14304,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation multi result on",
       "description": "Turn on result id in multiple action",
       "group": false,
@@ -13144,6 +14312,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation off",
       "description": "Turn off translation",
       "group": false,
@@ -13151,6 +14320,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation on",
       "description": "Turn on translation",
       "group": false,
@@ -13158,6 +14328,46 @@
       "flags": []
     },
     {
+      "host": "system",
+      "path": "config translation recentActions",
+      "description": "Include recently executed actions in translation history",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "system",
+      "path": "config translation recentActions limit",
+      "description": "Set the max number of recently executed actions included in translation history (0-100, 0 = off)",
+      "group": false,
+      "args": [
+        {
+          "name": "limit",
+          "type": "number",
+          "optional": false,
+          "description": "Number of actions (0-100, 0 = off)"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "system",
+      "path": "config translation recentActions off",
+      "description": "Turn off recently executed actions in translation",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "system",
+      "path": "config translation recentActions on",
+      "description": "Turn on recently executed actions in translation",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "system",
       "path": "config translation schema",
       "description": "Action schema configuration",
       "group": true,
@@ -13165,6 +14375,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation schema generation",
       "description": "Generated action schema",
       "group": true,
@@ -13172,6 +14383,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation schema generation json",
       "description": "Toggle use generate json schema if model supports it",
       "group": true,
@@ -13179,6 +14391,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation schema generation json off",
       "description": "Turn off use generate json schema if model supports it",
       "group": false,
@@ -13186,6 +14399,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation schema generation json on",
       "description": "Turn on use generate json schema if model supports it",
       "group": false,
@@ -13193,6 +14407,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation schema generation jsonFunc",
       "description": "Toggle use generate json schema function if model supports it",
       "group": true,
@@ -13200,6 +14415,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation schema generation jsonFunc off",
       "description": "Turn off use generate json schema function if model supports it",
       "group": false,
@@ -13207,6 +14423,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation schema generation jsonFunc on",
       "description": "Turn on use generate json schema function if model supports it",
       "group": false,
@@ -13214,6 +14431,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation schema generation off",
       "description": "Turn off generated action schema",
       "group": false,
@@ -13221,6 +14439,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation schema generation on",
       "description": "Turn on generated action schema",
       "group": false,
@@ -13228,6 +14447,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation schema optimize",
       "description": "Optimize schema",
       "group": true,
@@ -13235,6 +14455,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation schema optimize actions",
       "description": "Set number of actions to use for initial translation",
       "group": false,
@@ -13249,6 +14470,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation schema optimize off",
       "description": "Turn off schema optimization",
       "group": false,
@@ -13256,6 +14478,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation schema optimize on",
       "description": "Turn on schema optimization",
       "group": false,
@@ -13263,6 +14486,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation stream",
       "description": "Toggle streaming translation",
       "group": true,
@@ -13270,6 +14494,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation stream off",
       "description": "Turn off streaming translation",
       "group": false,
@@ -13277,6 +14502,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation stream on",
       "description": "Turn on streaming translation",
       "group": false,
@@ -13284,6 +14510,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation switch",
       "description": "auto switch schemas",
       "group": true,
@@ -13291,6 +14518,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation switch embedding",
       "description": "Toggle Use embedding for initial pick of schema",
       "group": true,
@@ -13298,6 +14526,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation switch embedding off",
       "description": "Turn off Use embedding for initial pick of schema",
       "group": false,
@@ -13305,6 +14534,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation switch embedding on",
       "description": "Turn on Use embedding for initial pick of schema",
       "group": false,
@@ -13312,6 +14542,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation switch fix",
       "description": "Set a fixed schema disable switching",
       "group": false,
@@ -13326,6 +14557,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation switch inline",
       "description": "Toggle inject inline switch",
       "group": true,
@@ -13333,6 +14565,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation switch inline off",
       "description": "Turn off inject inline switch",
       "group": false,
@@ -13340,6 +14573,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation switch inline on",
       "description": "Turn on inject inline switch",
       "group": false,
@@ -13347,6 +14581,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation switch off",
       "description": "Turn off switch schema",
       "group": false,
@@ -13354,6 +14589,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation switch on",
       "description": "Turn on switch schema",
       "group": false,
@@ -13361,6 +14597,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation switch search",
       "description": "Toggle search switch",
       "group": true,
@@ -13368,6 +14605,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation switch search off",
       "description": "Turn off search switch",
       "group": false,
@@ -13375,6 +14613,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "config translation switch search on",
       "description": "Turn on search switch",
       "group": false,
@@ -13382,6 +14621,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const",
       "description": "Command to manage the construction store",
       "group": true,
@@ -13389,6 +14629,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const auto",
       "description": "Toggle construction auto save",
       "group": true,
@@ -13396,6 +14637,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const auto off",
       "description": "Turn off construction auto save",
       "group": false,
@@ -13403,6 +14645,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const auto on",
       "description": "Turn on construction auto save",
       "group": false,
@@ -13410,6 +14653,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const builtin",
       "description": "Toggle construction built-in cache",
       "group": true,
@@ -13417,6 +14661,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const builtin off",
       "description": "Turn off construction built-in cache",
       "group": false,
@@ -13424,6 +14669,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const builtin on",
       "description": "Turn on construction built-in cache",
       "group": false,
@@ -13431,6 +14677,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const delete",
       "description": "Delete a construction by id",
       "group": false,
@@ -13451,6 +14698,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const import",
       "description": "Import constructions from test data",
       "group": false,
@@ -13473,6 +14721,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "const info",
       "description": "Show current construction store info",
       "group": false,
@@ -13480,6 +14729,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const list",
       "description": "List constructions",
       "group": false,
@@ -13530,6 +14780,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "const load",
       "description": "Load a construction store from disk",
       "group": false,
@@ -13544,6 +14795,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const merge",
       "description": "Toggle construction merge",
       "group": true,
@@ -13551,6 +14803,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const merge off",
       "description": "Turn off construction merge",
       "group": false,
@@ -13558,6 +14811,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const merge on",
       "description": "Turn on construction merge",
       "group": false,
@@ -13565,6 +14819,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const new",
       "description": "Create a new construction store",
       "group": false,
@@ -13579,6 +14834,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const off",
       "description": "Disable construction store",
       "group": false,
@@ -13586,6 +14842,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const prune",
       "description": "Prune out of date construction from the cache",
       "group": false,
@@ -13593,6 +14850,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const save",
       "description": "Save construction store to disk",
       "group": false,
@@ -13607,6 +14865,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const wildcard",
       "description": "wildcard matching",
       "group": true,
@@ -13614,6 +14873,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const wildcard entity",
       "description": "Toggle entity wildcard matching",
       "group": true,
@@ -13621,6 +14881,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const wildcard entity off",
       "description": "Turn off entity wildcard matching",
       "group": false,
@@ -13628,6 +14889,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const wildcard entity on",
       "description": "Turn on entity wildcard matching",
       "group": false,
@@ -13635,6 +14897,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const wildcard off",
       "description": "Turn off wildcard matching",
       "group": false,
@@ -13642,6 +14905,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "const wildcard on",
       "description": "Turn on wildcard matching",
       "group": false,
@@ -13649,6 +14913,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "conversation",
       "description": "Conversation management commands",
       "group": true,
@@ -13656,6 +14921,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "conversation delete",
       "description": "Delete a conversation by name",
       "group": false,
@@ -13670,6 +14936,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "conversation help",
       "description": "Show conversation command help",
       "group": false,
@@ -13677,6 +14944,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "conversation info",
       "description": "Show info about the current conversation",
       "group": false,
@@ -13684,6 +14952,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "conversation list",
       "description": "List all conversations",
       "group": false,
@@ -13691,6 +14960,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "conversation new",
       "description": "Create a new conversation, optionally with a name",
       "group": false,
@@ -13705,6 +14975,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "conversation next",
       "description": "Switch to the next conversation in the list (wraps around)",
       "group": false,
@@ -13712,6 +14983,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "conversation prev",
       "description": "Switch to the previous conversation in the list (wraps around)",
       "group": false,
@@ -13719,6 +14991,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "conversation rename",
       "description": "Rename a conversation. With one argument, renames the current conversation; with two, renames the named conversation.",
       "group": false,
@@ -13739,6 +15012,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "conversation switch",
       "description": "Switch to a conversation by name (defaults to the next conversation in the list)",
       "group": false,
@@ -13753,6 +15027,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "copilot",
       "description": "GitHub Copilot session commands",
       "group": true,
@@ -13760,6 +15035,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "copilot fix",
       "description": "Hand the current conversation to GitHub Copilot Chat in VS Code to diagnose and fix",
       "group": false,
@@ -13824,6 +15100,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "copilot import",
       "description": "Import GitHub Copilot Chat sessions as conversation mirrors",
       "group": false,
@@ -13831,6 +15108,30 @@
       "flags": []
     },
     {
+      "host": "system",
+      "path": "copilot login",
+      "description": "Sign in to GitHub Copilot via the browser device flow",
+      "group": false,
+      "args": [],
+      "flags": [
+        {
+          "name": "host",
+          "char": "",
+          "type": "string",
+          "default": "https://github.com",
+          "description": "GitHub host URL (e.g. https://example.ghe.com for Enterprise Cloud with data residency)"
+        },
+        {
+          "name": "no-open",
+          "char": "",
+          "type": "boolean",
+          "default": "false",
+          "description": "Do not auto-open the verification URL in a browser (the code and URL are still shown in chat)"
+        }
+      ]
+    },
+    {
+      "host": "system",
       "path": "debug",
       "description": "Start node inspector",
       "group": false,
@@ -13838,6 +15139,31 @@
       "flags": []
     },
     {
+      "host": "system",
+      "path": "demo",
+      "description": "Interactive TypeAgent demos",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "system",
+      "path": "demo questionCards",
+      "description": "Walk the interactive question types (single-select, multi-select, yes/no, free-text). Add --paged for a one-at-a-time Back/Next wizard.",
+      "group": false,
+      "args": [],
+      "flags": [
+        {
+          "name": "paged",
+          "char": "p",
+          "type": "boolean",
+          "default": "false",
+          "description": "Render one question at a time with Back / Next navigation"
+        }
+      ]
+    },
+    {
+      "host": "system",
       "path": "describe",
       "description": "Describe what an agent or action can do (installed-but-disabled agents included)",
       "group": false,
@@ -13866,6 +15192,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "display",
       "description": "Send text to display",
       "group": false,
@@ -13902,6 +15229,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "env",
       "description": "Environment variable commands",
       "group": true,
@@ -13909,6 +15237,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "env all",
       "description": "Echos environment variables to the user interface.",
       "group": false,
@@ -13916,6 +15245,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "env get",
       "description": "Echos the value of a named environment variable to the user interface",
       "group": false,
@@ -13930,6 +15260,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "exit",
       "description": "Exit the program",
       "group": false,
@@ -13937,6 +15268,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "feedback",
       "description": "Inspect and export user-feedback entries",
       "group": true,
@@ -13944,6 +15276,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "feedback count",
       "description": "Show the total number of feedback entries.",
       "group": false,
@@ -13951,6 +15284,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "feedback export",
       "description": "Export user-feedback entries to a local file (JSON or JSONL).",
       "group": false,
@@ -13980,6 +15314,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "feedback filter",
       "description": "Filter feedback by rating, category, and/or date range.",
       "group": false,
@@ -14030,6 +15365,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "feedback list",
       "description": "List recent user-feedback entries (most recent first).",
       "group": false,
@@ -14052,6 +15388,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "feedback top",
       "description": "Aggregate user feedback — counts by rating and category.",
       "group": false,
@@ -14067,6 +15404,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "grammar",
       "description": "Grammar rule and collision commands",
       "group": true,
@@ -14074,6 +15412,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "grammar clear",
       "description": "Clear stored grammar rules (optionally for a specific agent)",
       "group": false,
@@ -14088,6 +15427,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "grammar collisions",
       "description": "Scan all loaded agent grammars for cross-agent collisions, with concrete witness inputs",
       "group": false,
@@ -14103,6 +15443,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "grammar delete",
       "description": "Delete a stored grammar rule by ID",
       "group": false,
@@ -14117,6 +15458,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "grammar list",
       "description": "List grammar rules learned at runtime (optionally filtered by agent)",
       "group": false,
@@ -14131,6 +15473,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "grammar show",
       "description": "Show a stored grammar rule by ID",
       "group": false,
@@ -14145,6 +15488,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "help",
       "description": "Show help",
       "group": false,
@@ -14167,6 +15511,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "history",
       "description": "History commands",
       "group": true,
@@ -14174,6 +15519,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "history clear",
       "description": "Clear the history",
       "group": false,
@@ -14189,6 +15535,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "history delete",
       "description": "Delete a specific message from the chat history",
       "group": false,
@@ -14203,6 +15550,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "history entities",
       "description": "History entity commands",
       "group": true,
@@ -14210,6 +15558,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "history entities delete",
       "description": "Delete entities from the chat history (working memory).",
       "group": false,
@@ -14224,6 +15573,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "history entities list",
       "description": "Shows all of the entities currently in 'working memory.'",
       "group": false,
@@ -14231,6 +15581,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "history insert",
       "description": "Insert messages to chat history",
       "group": false,
@@ -14245,6 +15596,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "history list",
       "description": "List history",
       "group": false,
@@ -14252,6 +15604,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "history save",
       "description": "Save the chat history to a file",
       "group": false,
@@ -14266,6 +15619,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "index",
       "description": "Indexing commands",
       "group": true,
@@ -14273,6 +15627,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "index create",
       "description": "Create a new index",
       "group": false,
@@ -14299,6 +15654,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "index delete",
       "description": "Delete an index",
       "group": false,
@@ -14313,6 +15669,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "index info",
       "description": "Show index details",
       "group": false,
@@ -14327,6 +15684,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "index list",
       "description": "List indexes",
       "group": false,
@@ -14334,6 +15692,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "memory",
       "description": "Memory commands",
       "group": true,
@@ -14341,6 +15700,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "memory answer",
       "description": "Answer a question using conversation memory",
       "group": false,
@@ -14391,6 +15751,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "memory legacy",
       "description": "Toggle legacy",
       "group": true,
@@ -14398,6 +15759,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "memory legacy off",
       "description": "Turn off legacy",
       "group": false,
@@ -14405,6 +15767,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "memory legacy on",
       "description": "Turn on legacy",
       "group": false,
@@ -14412,6 +15775,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "memory query",
       "description": "Search conversation memory",
       "group": false,
@@ -14462,6 +15826,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "memory search",
       "description": "Answer a question using conversation memory",
       "group": false,
@@ -14512,6 +15877,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "notify",
       "description": "Notify commands",
       "group": true,
@@ -14519,6 +15885,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "notify clear",
       "description": "Clears notifications",
       "group": false,
@@ -14526,6 +15893,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "notify info",
       "description": "Shows the number of notifications available",
       "group": false,
@@ -14533,6 +15901,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "notify show",
       "description": "Show notifications",
       "group": true,
@@ -14540,6 +15909,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "notify show all",
       "description": "Shows all notifications",
       "group": false,
@@ -14547,6 +15917,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "notify show unread",
       "description": "Shows unread notifications",
       "group": false,
@@ -14554,6 +15925,37 @@
       "flags": []
     },
     {
+      "host": "system",
+      "path": "notify status",
+      "description": "Fire a persistent status notice (a toast that collapses to the notification bell) to verify the chat-ui affordance without a stale server",
+      "group": false,
+      "args": [
+        {
+          "name": "message",
+          "type": "string",
+          "optional": true,
+          "description": "Notice body text"
+        }
+      ],
+      "flags": [
+        {
+          "name": "level",
+          "char": "",
+          "type": "string",
+          "default": "warning",
+          "description": "Severity accent: info | warning | error"
+        },
+        {
+          "name": "restart",
+          "char": "",
+          "type": "boolean",
+          "default": "false",
+          "description": "Include a 'Restart server' action button (runs @server restart when clicked)"
+        }
+      ]
+    },
+    {
+      "host": "system",
       "path": "notify test",
       "description": "Fire a synthetic notification through the channel — for verifying chat rendering without an agent",
       "group": false,
@@ -14576,6 +15978,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "open",
       "description": "Shortcut for opening system related folders",
       "group": false,
@@ -14590,6 +15993,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "ports",
       "description": "Lists ports registered by agents and the number of clients connected to each.",
       "group": false,
@@ -14597,6 +16001,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "random",
       "description": "Random request commands",
       "group": true,
@@ -14604,6 +16009,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "random offline",
       "description": "Issues a random request from a dataset of pre-generated requests.",
       "group": false,
@@ -14611,6 +16017,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "random online",
       "description": "Uses the LLM to generate random requests.",
       "group": false,
@@ -14618,6 +16025,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "run",
       "description": "Run a command script file",
       "group": false,
@@ -14632,6 +16040,23 @@
       "flags": []
     },
     {
+      "host": "system",
+      "path": "server",
+      "description": "Manage the agent server",
+      "group": true,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "system",
+      "path": "server restart",
+      "description": "Restart the agent server so it loads rebuilt code",
+      "group": false,
+      "args": [],
+      "flags": []
+    },
+    {
+      "host": "system",
       "path": "session",
       "description": "Session commands",
       "group": true,
@@ -14639,6 +16064,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "session clear",
       "description": "Delete all data on the current sessions, keeping current settings",
       "group": false,
@@ -14646,6 +16072,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "session delete",
       "description": "Delete a session. If no session is specified, delete the current session and start a new session.\n-a to delete all sessions",
       "group": false,
@@ -14668,6 +16095,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "session info",
       "description": "Show info about the current session",
       "group": false,
@@ -14675,6 +16103,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "session list",
       "description": "List all sessions. The current session is marked green.",
       "group": false,
@@ -14682,6 +16111,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "session new",
       "description": "Create a new empty session",
       "group": false,
@@ -14704,6 +16134,7 @@
       ]
     },
     {
+      "host": "system",
       "path": "session open",
       "description": "Open an existing session",
       "group": false,
@@ -14718,6 +16149,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "session reset",
       "description": "Reset config on session and keep the data",
       "group": false,
@@ -14725,6 +16157,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "settings",
       "description": "Persistent user settings",
       "group": true,
@@ -14732,6 +16165,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "settings conversation",
       "description": "Conversation settings",
       "group": true,
@@ -14739,6 +16173,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "settings conversation resume",
       "description": "Set whether to resume the last conversation on startup (true/false)",
       "group": false,
@@ -14753,6 +16188,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "settings reset",
       "description": "Reset all settings to defaults",
       "group": false,
@@ -14760,6 +16196,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "settings server",
       "description": "Server startup settings",
       "group": true,
@@ -14767,6 +16204,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "settings server hidden",
       "description": "Set whether the AgentServer starts hidden (true/false)",
       "group": false,
@@ -14781,6 +16219,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "settings server idleTimeout",
       "description": "Set idle timeout in seconds (0 to disable)",
       "group": false,
@@ -14795,6 +16234,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "settings show",
       "description": "Show all persistent user settings",
       "group": false,
@@ -14802,6 +16242,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "settings ui",
       "description": "UI settings",
       "group": true,
@@ -14809,6 +16250,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "settings ui autoComplete",
       "description": "Set whether inline autocompletion is enabled in the CLI (true/false)",
       "group": false,
@@ -14823,6 +16265,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "shutdown",
       "description": "Shut down the agent server and exit",
       "group": false,
@@ -14830,6 +16273,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "token",
       "description": "Get LLM token usage statistics for this session.",
       "group": true,
@@ -14837,6 +16281,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "token details",
       "description": "Gets detailed LLM usage statistics.",
       "group": false,
@@ -14844,6 +16289,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "token summary",
       "description": "Get overall LLM usage statistics.",
       "group": false,
@@ -14851,6 +16297,7 @@
       "flags": []
     },
     {
+      "host": "system",
       "path": "trace",
       "description": "Enable or disable trace namespaces",
       "group": false,
@@ -14875,7 +16322,7 @@
   ],
   "counts": {
     "agents": 32,
-    "actions": 553,
-    "commands": 325
+    "actions": 556,
+    "commands": 410
   }
 }

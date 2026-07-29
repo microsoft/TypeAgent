@@ -61,7 +61,17 @@ export interface CommandFlag {
 }
 
 export interface CommandInfo {
-    /** Space-separated command path, e.g. "config agent". */
+    /**
+     * Host that provides the command: "system" for the built-in, unprefixed
+     * commands (`@config`) or an agent name for prefixed commands (`shell`
+     * for `@shell …`).
+     */
+    host: string;
+    /**
+     * Space-separated command path within the host's namespace, e.g.
+     * "config agent". Empty for a host that exposes a single bare `@<host>`
+     * command.
+     */
     path: string;
     description: string;
     /** True when the entry is a command group (has sub-commands). */
@@ -80,6 +90,7 @@ export interface Catalog {
     /** ISO timestamp of when the catalog was generated. */
     generatedAt: string;
     agents: AgentInfo[];
-    systemCommands: CommandInfo[];
+    /** Every `@command`, across the system host and each agent host. */
+    commands: CommandInfo[];
     counts: CatalogCounts;
 }
