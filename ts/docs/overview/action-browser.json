@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-29T06:23:57.548Z",
+  "generatedAt": "2026-07-29T14:39:02.927Z",
   "agents": [
     {
       "name": "browser",
@@ -9305,6 +9305,35 @@
       ]
     },
     {
+      "name": "selfhelp",
+      "category": "Other",
+      "emoji": "💡",
+      "description": "Help agent that answers questions about TypeAgent itself: what it is, how it works, how to set up and use its agents, commands, and features.",
+      "schemas": [
+        {
+          "schemaName": "selfhelp",
+          "description": "Answers questions the user is asking ABOUT the TypeAgent system they are using: what TypeAgent is, how it works, what its agents/commands/features do, how to install or configure something (e.g. the browser extension, internet lookup modes, enabling an agent), how to accomplish a task within TypeAgent, and why a TypeAgent feature is behaving a certain way. Use ONLY for meta questions about the TypeAgent product/app itself. Do NOT use for general-knowledge questions, web lookups, or performing a task in another domain such as playing music, sending email, editing code, or controlling a browser.",
+          "defaultEnabled": true,
+          "transient": false,
+          "actions": [
+            {
+              "actionName": "answerTypeAgentQuestion",
+              "description": "Answer a question the user is asking about TypeAgent itself - what it is, how it works, how to set up or use one of its agents/commands/features, or why a TypeAgent feature is behaving a certain way. Only use this for questions about the TypeAgent product; not for general knowledge or for performing a task in another domain.",
+              "parameters": [
+                {
+                  "name": "question",
+                  "type": "string",
+                  "optional": false,
+                  "description": "The user's original question about TypeAgent, verbatim."
+                }
+              ],
+              "phrasings": []
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "settings",
       "category": "System & Devices",
       "emoji": "⚙️",
@@ -11638,6 +11667,21 @@
           "type": "string",
           "optional": false,
           "description": "Name of the PowerShell flow to show"
+        }
+      ],
+      "flags": []
+    },
+    {
+      "host": "selfhelp",
+      "path": "ask",
+      "description": "Ask a question about TypeAgent (what it is, how it works, how to set it up).",
+      "group": false,
+      "args": [
+        {
+          "name": "question",
+          "type": "string",
+          "optional": false,
+          "description": "Your question about TypeAgent."
         }
       ],
       "flags": []
@@ -14933,7 +14977,10 @@
           "description": "Name of the conversation to delete"
         }
       ],
-      "flags": []
+      "flags": [],
+      "action": {
+        "actionName": "deleteConversation"
+      }
     },
     {
       "host": "system",
@@ -14949,7 +14996,10 @@
       "description": "Show info about the current conversation",
       "group": false,
       "args": [],
-      "flags": []
+      "flags": [],
+      "action": {
+        "actionName": "showConversationInfo"
+      }
     },
     {
       "host": "system",
@@ -14957,7 +15007,10 @@
       "description": "List all conversations",
       "group": false,
       "args": [],
-      "flags": []
+      "flags": [],
+      "action": {
+        "actionName": "listConversation"
+      }
     },
     {
       "host": "system",
@@ -14972,7 +15025,10 @@
           "description": "Name for the new conversation (optional)"
         }
       ],
-      "flags": []
+      "flags": [],
+      "action": {
+        "actionName": "newConversation"
+      }
     },
     {
       "host": "system",
@@ -14980,7 +15036,10 @@
       "description": "Switch to the next conversation in the list (wraps around)",
       "group": false,
       "args": [],
-      "flags": []
+      "flags": [],
+      "action": {
+        "actionName": "nextConversation"
+      }
     },
     {
       "host": "system",
@@ -14988,7 +15047,10 @@
       "description": "Switch to the previous conversation in the list (wraps around)",
       "group": false,
       "args": [],
-      "flags": []
+      "flags": [],
+      "action": {
+        "actionName": "prevConversation"
+      }
     },
     {
       "host": "system",
@@ -15009,7 +15071,10 @@
           "description": "New name when renaming a specific conversation"
         }
       ],
-      "flags": []
+      "flags": [],
+      "action": {
+        "actionName": "renameConversation"
+      }
     },
     {
       "host": "system",
@@ -15024,7 +15089,10 @@
           "description": "Name of the conversation to switch to (omit to cycle to the next)"
         }
       ],
-      "flags": []
+      "flags": [],
+      "action": {
+        "actionName": "switchConversation"
+      }
     },
     {
       "host": "system",
@@ -15532,7 +15600,10 @@
           "default": "true",
           "description": "Clear the current activity context"
         }
-      ]
+      ],
+      "action": {
+        "actionName": "clearHistory"
+      }
     },
     {
       "host": "system",
@@ -15547,7 +15618,10 @@
           "description": "Chat history index to delete."
         }
       ],
-      "flags": []
+      "flags": [],
+      "action": {
+        "actionName": "deleteHistory"
+      }
     },
     {
       "host": "system",
@@ -15601,7 +15675,10 @@
       "description": "List history",
       "group": false,
       "args": [],
-      "flags": []
+      "flags": [],
+      "action": {
+        "actionName": "listHistory"
+      }
     },
     {
       "host": "system",
@@ -16321,8 +16398,8 @@
     }
   ],
   "counts": {
-    "agents": 32,
-    "actions": 556,
-    "commands": 410
+    "agents": 33,
+    "actions": 557,
+    "commands": 411
   }
 }

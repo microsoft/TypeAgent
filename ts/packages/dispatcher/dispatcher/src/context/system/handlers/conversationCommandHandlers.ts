@@ -6,6 +6,7 @@ import type {
     CompletionGroups,
     PartialParsedCommandParams,
     SessionContext,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -17,19 +18,20 @@ import {
     getRequestId,
 } from "../../commandHandlerContext.js";
 import { ManageConversationPayload } from "../manageConversationPayload.js";
+import { ConversationAction } from "../schema/conversationActionSchema.js";
+import { executeConversationAction } from "../action/conversationActionHandler.js";
 
-// Each handler dispatches the same "manage-conversation" client action
-// emitted by the natural-language conversationActionHandler — so the CLI
-// and Shell already know how to render the result.
-function dispatchManageConversation(
+// A @conversation command runs its equivalent conversation action, so the
+// subcommand-to-payload mapping lives only in executeConversationAction and the
+// two paths cannot drift. Each handler's `action` property records that
+// equivalence for tooling such as the action browser.
+function runConversationAction(
     context: ActionContext<CommandHandlerContext>,
-    payload: ManageConversationPayload,
-): void {
-    const systemContext = context.sessionContext.agentContext;
-    systemContext.clientIO.takeAction(
-        getRequestId(systemContext),
-        "manage-conversation",
-        payload,
+    action: ConversationAction,
+) {
+    return executeConversationAction(
+        action as TypeAgentAction<ConversationAction>,
+        context,
     );
 }
 
@@ -64,6 +66,7 @@ function completeConversationName(
 class ConversationNewCommandHandler implements CommandHandler {
     public readonly description =
         "Create a new conversation, optionally with a name";
+    public readonly action = "newConversation";
     public readonly parameters = {
         args: {
             name: {
@@ -77,30 +80,37 @@ class ConversationNewCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const { name } = params.args;
-        dispatchManageConversation(
-            context,
-            name ? { subcommand: "new", name } : { subcommand: "new" },
-        );
+        return runConversationAction(context, {
+            actionName: "newConversation",
+            parameters: name !== undefined ? { name } : {},
+        });
     }
 }
 
 class ConversationListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List all conversations";
+    public readonly action = "listConversation";
     public async run(context: ActionContext<CommandHandlerContext>) {
-        dispatchManageConversation(context, { subcommand: "list" });
+        return runConversationAction(context, {
+            actionName: "listConversation",
+        });
     }
 }
 
 class ConversationInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show info about the current conversation";
+    public readonly action = "showConversationInfo";
     public async run(context: ActionContext<CommandHandlerContext>) {
-        dispatchManageConversation(context, { subcommand: "info" });
+        return runConversationAction(context, {
+            actionName: "showConversationInfo",
+        });
     }
 }
 
 class ConversationSwitchCommandHandler implements CommandHandler {
     public readonly description =
         "Switch to a conversation by name (defaults to the next conversation in the list)";
+    public readonly action = "switchConversation";
     public readonly parameters = {
         args: {
             name: {
@@ -115,9 +125,13 @@ class ConversationSwitchCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const { name } = params.args;
-        dispatchManageConversation(
+        // With no name, cycle to the next conversation (a CLI convenience the
+        // switchConversation action does not have).
+        return runConversationAction(
             context,
-            name ? { subcommand: "switch", name } : { subcommand: "next" },
+            name
+                ? { actionName: "switchConversation", parameters: { name } }
+                : { actionName: "nextConversation" },
         );
     }
     public async getCompletion(
@@ -132,22 +146,29 @@ class ConversationSwitchCommandHandler implements CommandHandler {
 class ConversationPrevCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Switch to the previous conversation in the list (wraps around)";
+    public readonly action = "prevConversation";
     public async run(context: ActionContext<CommandHandlerContext>) {
-        dispatchManageConversation(context, { subcommand: "prev" });
+        return runConversationAction(context, {
+            actionName: "prevConversation",
+        });
     }
 }
 
 class ConversationNextCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Switch to the next conversation in the list (wraps around)";
+    public readonly action = "nextConversation";
     public async run(context: ActionContext<CommandHandlerContext>) {
-        dispatchManageConversation(context, { subcommand: "next" });
+        return runConversationAction(context, {
+            actionName: "nextConversation",
+        });
     }
 }
 
 class ConversationRenameCommandHandler implements CommandHandler {
     public readonly description =
         "Rename a conversation. With one argument, renames the current conversation; with two, renames the named conversation.";
+    public readonly action = "renameConversation";
     public readonly parameters = {
         args: {
             nameOrNewName: {
@@ -165,15 +186,18 @@ class ConversationRenameCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const { nameOrNewName, newName } = params.args;
-        const payload: ManageConversationPayload =
+        return runConversationAction(
+            context,
             newName !== undefined
                 ? {
-                      subcommand: "rename",
-                      name: nameOrNewName,
-                      newName,
+                      actionName: "renameConversation",
+                      parameters: { name: nameOrNewName, newName },
                   }
-                : { subcommand: "rename", newName: nameOrNewName };
-        dispatchManageConversation(context, payload);
+                : {
+                      actionName: "renameConversation",
+                      parameters: { newName: nameOrNewName },
+                  },
+        );
     }
     public async getCompletion(
         context: SessionContext<CommandHandlerContext>,
@@ -188,6 +212,7 @@ class ConversationRenameCommandHandler implements CommandHandler {
 
 class ConversationDeleteCommandHandler implements CommandHandler {
     public readonly description = "Delete a conversation by name";
+    public readonly action = "deleteConversation";
     public readonly parameters = {
         args: {
             name: {
@@ -199,9 +224,9 @@ class ConversationDeleteCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        dispatchManageConversation(context, {
-            subcommand: "delete",
-            name: params.args.name,
+        return runConversationAction(context, {
+            actionName: "deleteConversation",
+            parameters: { name: params.args.name },
         });
     }
     public async getCompletion(
@@ -216,7 +241,14 @@ class ConversationDeleteCommandHandler implements CommandHandler {
 class ConversationHelpCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show conversation command help";
     public async run(context: ActionContext<CommandHandlerContext>) {
-        dispatchManageConversation(context, { subcommand: "help" });
+        // No equivalent action; ask the client to render command help.
+        const systemContext = context.sessionContext.agentContext;
+        const payload: ManageConversationPayload = { subcommand: "help" };
+        systemContext.clientIO.takeAction(
+            getRequestId(systemContext),
+            "manage-conversation",
+            payload,
+        );
     }
 }
 

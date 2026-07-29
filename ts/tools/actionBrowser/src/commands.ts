@@ -7,7 +7,12 @@ import {
     type CommandHandlerContext,
 } from "agent-dispatcher/internal";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
-import type { CommandArg, CommandFlag, CommandInfo } from "./types.js";
+import type {
+    CommandActionLink,
+    CommandArg,
+    CommandFlag,
+    CommandInfo,
+} from "./types.js";
 
 // Command descriptor tables are walked structurally: each node may carry a
 // `description`, a `commands` map of sub-handlers, a `defaultSubCommand` (an
@@ -18,6 +23,7 @@ interface HandlerNode {
     description?: unknown;
     commands?: Record<string, HandlerNode> | undefined;
     defaultSubCommand?: HandlerNode | string | undefined;
+    action?: string | { schema?: unknown; actionName?: unknown } | undefined;
     parameters?:
         | {
               args?: Record<string, ParameterDef> | undefined;
@@ -99,6 +105,7 @@ function collectHostCommands(
     if (node.commands !== undefined && typeof node.commands === "object") {
         walk(host, node, [], out);
     } else {
+        const action = normalizeActionLink(node.action);
         out.push({
             host,
             path: "",
@@ -107,6 +114,7 @@ function collectHostCommands(
             group: false,
             args: extractArgs(node.parameters),
             flags: extractFlags(node.parameters),
+            ...(action ? { action } : {}),
         });
     }
 }
@@ -136,6 +144,7 @@ function walk(
                 ? child.defaultSubCommand
                 : undefined;
         const params = child.parameters ?? defaultSub?.parameters;
+        const action = normalizeActionLink(child.action);
         out.push({
             host,
             path: currentPath.join(" "),
@@ -144,11 +153,32 @@ function walk(
             group: hasSub,
             args: extractArgs(params),
             flags: extractFlags(params),
+            ...(action ? { action } : {}),
         });
         if (hasSub) {
             walk(host, child, currentPath, out);
         }
     }
+}
+
+// Normalize a handler's declared `action` (a bare actionName or a
+// {schema, actionName} pair) into the catalog's link shape.
+function normalizeActionLink(
+    action: HandlerNode["action"],
+): CommandActionLink | undefined {
+    if (typeof action === "string") {
+        return action ? { actionName: action } : undefined;
+    }
+    if (
+        action !== null &&
+        typeof action === "object" &&
+        typeof action.actionName === "string"
+    ) {
+        return typeof action.schema === "string"
+            ? { schema: action.schema, actionName: action.actionName }
+            : { actionName: action.actionName };
+    }
+    return undefined;
 }
 
 function extractArgs(params: HandlerNode["parameters"]): CommandArg[] {

@@ -44,6 +44,8 @@ interface TreeNode {
     host?: string;
     // Full invocation path minus the leading `@` (e.g. `config agent enable`).
     full?: string;
+    // actionName of the equivalent agent action, when the handler declares one.
+    actionName?: string;
     args?: { name: string; optional: boolean; description: string }[];
     flags?: {
         name: string;
@@ -131,7 +133,8 @@ function buildCommandsTree(catalog: Catalog): TreeNode {
     }
     const children = [...byHost.entries()]
         .sort(
-            (a, b) => hostRank(a[0]) - hostRank(b[0]) || a[0].localeCompare(b[0]),
+            (a, b) =>
+                hostRank(a[0]) - hostRank(b[0]) || a[0].localeCompare(b[0]),
         )
         .map(([host, commands]) => buildHostTree(host, commands));
     return { kind: "root", name: "Commands", children };
@@ -168,11 +171,13 @@ function buildHostTree(host: string, commands: CommandInfo[]): TreeNode {
     for (const command of commands) {
         // A bare `@<host>` command (no sub-path) becomes a single leaf named
         // for the host.
-        const segments =
-            command.path === "" ? [host] : command.path.split(" ");
+        const segments = command.path === "" ? [host] : command.path.split(" ");
         const node = ensureNode(segments);
         node.host = host;
         node.full = commandDisplayPath(host, command.path);
+        if (command.action) {
+            node.actionName = command.action.actionName;
+        }
         node.description = command.description;
         node.args = command.args.map((a) => ({
             name: a.name,
@@ -286,6 +291,14 @@ h1{margin:0;font-size:17px;}
 .p-list{margin:0;padding-left:18px;}
 .p-list li{margin:3px 0;}
 .p-list code{background:#0c111b;padding:1px 5px;border-radius:5px;}
+/* cross-links between a command and its equivalent action */
+.p-xlink{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 12px;}
+.p-xlabel{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+.p-link{appearance:none;border:1px solid var(--line);background:var(--chip);color:var(--chip-fg);font-family:ui-monospace,Consolas,monospace;font-size:13px;padding:3px 10px;border-radius:999px;cursor:pointer;}
+.p-link:hover{border-color:var(--accent);}
+.p-xnote{color:var(--muted);font-family:ui-monospace,Consolas,monospace;font-size:13px;}
+.cov-chip{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap;align-self:center;}
+.cell.linked::after{content:'\\21c4';position:absolute;top:4px;right:6px;font-size:11px;color:#fff;opacity:.75;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.6);}
 /* nested containers (root view: agents shown inside their category) */
 .cell.container{cursor:pointer;}
 .cell .lbl.hdr{position:absolute;left:0;right:0;top:0;bottom:auto;height:auto;flex-direction:row;flex-wrap:nowrap;align-items:baseline;gap:8px;padding:5px 11px;overflow:hidden;}
@@ -361,6 +374,15 @@ const APP = `
 
   computeValue(DATA.agents); computeValue(DATA.commands);
   assignHues(DATA.agents); assignHues(DATA.commands);
+
+  // Cross-reference actions with the commands declared equivalent to them, and
+  // tally how many commands carry a natural-language action.
+  var actionIndex={}, commandsForAction={}, commandLeafCount=0, commandLinkedCount=0;
+  (function walk(n){ if(n.kind==='action'){ actionIndex[n.agent+'\\n'+n.name]=n; } if(n.children) n.children.forEach(walk); })(DATA.agents);
+  (function walk(n){
+    if(n.kind==='command'){ commandLeafCount++; if(n.actionName){ commandLinkedCount++; var k=n.host+'\\n'+n.actionName; (commandsForAction[k]||(commandsForAction[k]=[])).push(n); } }
+    if(n.children) n.children.forEach(walk);
+  })(DATA.commands);
 
   var state = { mode:'agents', path:[DATA.agents], query:'' };
 
@@ -445,7 +467,7 @@ const APP = `
   function buildCell(c, role, idx, n){
     var node=c.node;
     var el=document.createElement('div');
-    el.className='cell '+role+' k-'+node.kind;
+    el.className='cell '+role+' k-'+node.kind+(node.actionName?' linked':'');
     el._layout=c;
     if(role==='container'){
       var h=node._hue==null?210:node._hue;
@@ -569,6 +591,11 @@ const APP = `
       if(i<state.path.length-1 || state.query){ var s=document.createElement('span'); s.className='crumb-sep'; s.textContent='›'; crumbEl.appendChild(s); }
     });
     if(state.query){ var r=document.createElement('span'); r.className='crumb crumb-static'; r.textContent='Results: “'+state.query+'”'; crumbEl.appendChild(r); }
+    if(state.mode==='commands' && !state.query){
+      var cov=document.createElement('span'); cov.className='cov-chip';
+      cov.textContent=commandLinkedCount+' / '+commandLeafCount+' commands have an action';
+      crumbEl.appendChild(cov);
+    }
   }
 
   function buildHay(node){
@@ -657,11 +684,35 @@ const APP = `
     return html;
   }
 
+  // Cross-link chips between a command and its equivalent action. Targets are
+  // stashed by index because the panel body is set via innerHTML.
+  var panelLinkTargets=[];
+  function panelLinkChip(node){
+    var i=panelLinkTargets.push(node)-1;
+    var label=node.kind==='command'?'@'+(node.full||node.name):node.name;
+    return '<button class="p-link" data-link="'+i+'">'+esc(label)+'</button>';
+  }
+  function crossLinkHtml(node){
+    if(node.kind==='command' && node.actionName){
+      var a=actionIndex[node.host+'\\n'+node.actionName];
+      return '<div class="p-xlink"><span class="p-xlabel">Same as action</span>'+(a?panelLinkChip(a):'<span class="p-xnote">'+esc(node.actionName)+'</span>')+'</div>';
+    }
+    if(node.kind==='action'){
+      var cs=commandsForAction[node.agent+'\\n'+node.name];
+      if(cs&&cs.length){
+        var chips=''; for(var i=0;i<cs.length;i++){ chips+=panelLinkChip(cs[i]); }
+        return '<div class="p-xlink"><span class="p-xlabel">Same as command'+(cs.length>1?'s':'')+'</span>'+chips+'</div>';
+      }
+    }
+    return '';
+  }
+
   function openPanel(node){
     if(node.kind!=='action' && node.kind!=='command') return;
+    panelLinkTargets=[];
     var kicker = node.kind==='action' ? esc(node.agent||'')+' · '+esc(node.schema||'') : esc(node.host||'system')+' command';
     var title = node.kind==='command' ? '@'+esc(node.full||node.name) : esc(node.name);
-    document.getElementById('panelBody').innerHTML='<div class="p-kicker">'+kicker+'</div><h2 class="p-title">'+title+'</h2>'+detailHtml(node);
+    document.getElementById('panelBody').innerHTML='<div class="p-kicker">'+kicker+'</div><h2 class="p-title">'+title+'</h2>'+crossLinkHtml(node)+detailHtml(node);
     document.getElementById('panel').classList.add('open');
     document.getElementById('backdrop').classList.add('show');
   }
@@ -743,6 +794,10 @@ const APP = `
 
   document.getElementById('panelClose').addEventListener('click', closePanel);
   document.getElementById('backdrop').addEventListener('click', closePanel);
+  document.getElementById('panelBody').addEventListener('click', function(ev){
+    var b=ev.target.closest?ev.target.closest('.p-link[data-link]'):null;
+    if(b){ var t=panelLinkTargets[+b.getAttribute('data-link')]; if(t) openPanel(t); }
+  });
 
   // actions dialog wiring
   document.getElementById('dlgClose').addEventListener('click', closeDialog);

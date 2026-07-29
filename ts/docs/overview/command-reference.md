@@ -35,6 +35,27 @@ Usage: `@action [--naturalLanguage <string>] [--parameters <json>] <schemaName> 
 - --parameters &lt;json&gt; : Action parameter
 - --naturalLanguage &lt;string&gt; : Natural language phrase to associate with this action for cache population
 
+## @describe - Describe what an agent or action can do (installed-but-disabled agents included)
+
+Usage: `@describe [-a|--all] <name> [<actionName>]`
+
+### Arguments:
+
+- &lt;name&gt; - Agent name, or (if no action given) action name (type: string)
+- &lt;actionName&gt; - (optional) Action name, when `name` is an agent (type: string)
+
+### Flags:
+
+- --all -a : Show the full action table instead of the top 10 (default: false)
+
+## @demo questionCards - Walk the interactive question types (single-select, multi-select, yes/no, free-text). Add --paged for a one-at-a-time Back/Next wizard.
+
+Usage: `@demo questionCards [-p|--paged]`
+
+### Flags:
+
+- --paged -p : Render one question at a time with Back / Next navigation (default: false)
+
 ## @session new - Create a new empty session
 
 Usage: `@session new [--persist] [--keep]`
@@ -86,6 +107,8 @@ Usage: `@session info`
 
 Usage: `@conversation new [<name>]`
 
+Equivalent action: [`system.conversation.newConversation`](../../packages/dispatcher/dispatcher/src/context/system/schema/conversationActionSchema.ts)
+
 ### Arguments:
 
 - &lt;name&gt; - (optional) Name for the new conversation (optional) (type: string)
@@ -94,13 +117,19 @@ Usage: `@conversation new [<name>]`
 
 Usage: `@conversation list`
 
+Equivalent action: [`system.conversation.listConversation`](../../packages/dispatcher/dispatcher/src/context/system/schema/conversationActionSchema.ts)
+
 ## @conversation info - Show info about the current conversation
 
 Usage: `@conversation info`
 
+Equivalent action: [`system.conversation.showConversationInfo`](../../packages/dispatcher/dispatcher/src/context/system/schema/conversationActionSchema.ts)
+
 ## @conversation switch - Switch to a conversation by name (defaults to the next conversation in the list)
 
 Usage: `@conversation switch [<name>]`
+
+Equivalent action: [`system.conversation.switchConversation`](../../packages/dispatcher/dispatcher/src/context/system/schema/conversationActionSchema.ts)
 
 ### Arguments:
 
@@ -110,13 +139,19 @@ Usage: `@conversation switch [<name>]`
 
 Usage: `@conversation prev`
 
+Equivalent action: [`system.conversation.prevConversation`](../../packages/dispatcher/dispatcher/src/context/system/schema/conversationActionSchema.ts)
+
 ## @conversation next - Switch to the next conversation in the list (wraps around)
 
 Usage: `@conversation next`
 
+Equivalent action: [`system.conversation.nextConversation`](../../packages/dispatcher/dispatcher/src/context/system/schema/conversationActionSchema.ts)
+
 ## @conversation rename - Rename a conversation. With one argument, renames the current conversation; with two, renames the named conversation.
 
 Usage: `@conversation rename <nameOrNewName> [<newName>]`
+
+Equivalent action: [`system.conversation.renameConversation`](../../packages/dispatcher/dispatcher/src/context/system/schema/conversationActionSchema.ts)
 
 ### Arguments:
 
@@ -126,6 +161,8 @@ Usage: `@conversation rename <nameOrNewName> [<newName>]`
 ## @conversation delete - Delete a conversation by name
 
 Usage: `@conversation delete <name>`
+
+Equivalent action: [`system.conversation.deleteConversation`](../../packages/dispatcher/dispatcher/src/context/system/schema/conversationActionSchema.ts)
 
 ### Arguments:
 
@@ -138,6 +175,33 @@ Usage: `@conversation help`
 ## @copilot import - Import GitHub Copilot Chat sessions as conversation mirrors
 
 Usage: `@copilot import`
+
+## @copilot fix - Hand the current conversation to GitHub Copilot Chat in VS Code to diagnose and fix
+
+Usage: `@copilot fix [--location <string>] [--reuse-session] [--no-send] [--target <string>] [--dev-captures <string>] [--no-screenshot] [--mode <string>] [<instructions>]`
+
+### Arguments:
+
+- &lt;instructions&gt; - (optional) Optional extra instructions to include in the Copilot prompt (type: string)
+
+### Flags:
+
+- --mode &lt;string&gt; : Copilot chat mode: 'agent' (can edit the workspace) or 'ask' (default: agent)
+- --no-screenshot : Do not attach a screenshot of the VS Code window (default: false)
+- --dev-captures &lt;string&gt; : Include developer-mode translation captures: 'auto' (when developer mode is on), 'on', or 'off' (default: auto)
+- --target &lt;string&gt; : Copilot target (reserved; only native GitHub Copilot is supported) (default: native)
+- --no-send : Pre-fill the Copilot prompt but do not auto-submit it (review before sending) (default: false)
+- --reuse-session : Send into the current Copilot Chat session instead of starting a new one (default: false)
+- --location &lt;string&gt; : Where to open the new session: 'editor' (new chat editor), 'view' (chat panel), or 'window' (separate chat window) (default: editor)
+
+## @copilot login - Sign in to GitHub Copilot via the browser device flow
+
+Usage: `@copilot login [--no-open] [--host <string>]`
+
+### Flags:
+
+- --host &lt;string&gt; : GitHub host URL (e.g. https://example.ghe.com for Enterprise Cloud with data residency) (default: https://github.com)
+- --no-open : Do not auto-open the verification URL in a browser (the code and URL are still shown in chat) (default: false)
 
 ## @collision events - Show recent collision events captured in the current session's ring buffer
 
@@ -474,9 +538,13 @@ Usage: `@grammar collisions [--json <string>]`
 
 Usage: `@history list`
 
+Equivalent action: [`system.history.listHistory`](../../packages/dispatcher/dispatcher/src/context/system/schema/historyActionSchema.ts)
+
 ## @history clear - Clear the history
 
 Usage: `@history clear [--activity]`
+
+Equivalent action: [`system.history.clearHistory`](../../packages/dispatcher/dispatcher/src/context/system/schema/historyActionSchema.ts)
 
 ### Flags:
 
@@ -485,6 +553,8 @@ Usage: `@history clear [--activity]`
 ## @history delete - Delete a specific message from the chat history
 
 Usage: `@history delete <index>`
+
+Equivalent action: [`system.history.deleteHistory`](../../packages/dispatcher/dispatcher/src/context/system/schema/historyActionSchema.ts)
 
 ### Arguments:
 
@@ -764,6 +834,14 @@ Usage: `@config request <appAgentName>`
 
 - &lt;appAgentName&gt; - name of the agent (type: string)
 
+## @config scrub on - Turn on outbound secret scrubbing
+
+Usage: `@config scrub on`
+
+## @config scrub off - Turn off outbound secret scrubbing
+
+Usage: `@config scrub off`
+
 ## @config match grammar on - Turn on grammar cache usage
 
 Usage: `@config match grammar on`
@@ -887,6 +965,22 @@ Usage: `@config translation history limit <limit>`
 ### Arguments:
 
 - &lt;limit&gt; - Number of actions (type: number)
+
+## @config translation recentActions on - Turn on recently executed actions in translation
+
+Usage: `@config translation recentActions on`
+
+## @config translation recentActions off - Turn off recently executed actions in translation
+
+Usage: `@config translation recentActions off`
+
+## @config translation recentActions limit - Set the max number of recently executed actions included in translation history (0-100, 0 = off)
+
+Usage: `@config translation recentActions limit <limit>`
+
+### Arguments:
+
+- &lt;limit&gt; - Number of actions (0-100, 0 = off) (type: number)
 
 ## @config translation stream on - Turn on streaming translation
 
@@ -1054,27 +1148,43 @@ Usage: `@config execution activity off`
 
 ## @config execution reasoning - Set reasoning engine
 
-Usage: `@config execution reasoning <engine>`
+Usage: `@config execution reasoning [<engine>]`
 
 ### Arguments:
 
-- &lt;engine&gt; - Reasoning engine to use (claude, copilot, or none) (type: string)
+- &lt;engine&gt; - (optional) Reasoning engine to use (claude, copilot, or none). Omit to show the current engine. (type: string)
+
+## @config execution reasoningModel - Set the Copilot reasoning model (e.g. claude-opus-4.8). Omit to show the current value.
+
+Usage: `@config execution reasoningModel [<model>]`
+
+### Arguments:
+
+- &lt;model&gt; - (optional) Model identifier for Copilot reasoning. Omit to show the current value. (type: string)
+
+## @config execution reasoningEffort - Set the Copilot reasoning effort (low, medium, high, xhigh). Only applies to models that support it. Omit to show the current value.
+
+Usage: `@config execution reasoningEffort [<effort>]`
+
+### Arguments:
+
+- &lt;effort&gt; - (optional) 'low', 'medium', 'high', or 'xhigh'. Omit to show the current value. (type: string)
 
 ## @config execution conversationAnswer - How conversation questions are answered: 'lookup' (conversation-memory lookup, reasoning as fallback), 'reasoning-first' (reasoning agent primary, lookup as fallback), or 'reasoning-only' (remove the lookup action; reasoning handles conversation Q&A)
 
-Usage: `@config execution conversationAnswer <strategy>`
+Usage: `@config execution conversationAnswer [<strategy>]`
 
 ### Arguments:
 
-- &lt;strategy&gt; - 'lookup' (default), 'reasoning-first', or 'reasoning-only' (type: string)
+- &lt;strategy&gt; - (optional) 'lookup' (default), 'reasoning-first', or 'reasoning-only'. Omit to show the current strategy. (type: string)
 
 ## @config execution reasoningHistory - Number of recent conversation turns included as context in the reasoning prompt
 
-Usage: `@config execution reasoningHistory <turns>`
+Usage: `@config execution reasoningHistory [<turns>]`
 
 ### Arguments:
 
-- &lt;turns&gt; - Number of recent conversation turns to include (e.g. 4). 0 disables history. Larger values give the reasoning agent more context at the cost of a bigger prompt. (type: number)
+- &lt;turns&gt; - (optional) Number of recent conversation turns to include (e.g. 4). 0 disables history. Omit to show the current value. (type: number)
 
 ## @config execution recordUserMessages on - Turn on record the user's own messages in the conversation transcript (chat history)
 
@@ -1086,27 +1196,27 @@ Usage: `@config execution recordUserMessages off`
 
 ## @config execution planReuse - Enable or disable workflow plan reuse for reasoning actions
 
-Usage: `@config execution planReuse <mode>`
+Usage: `@config execution planReuse [<mode>]`
 
 ### Arguments:
 
-- &lt;mode&gt; - Plan reuse mode: 'enabled' to cache and reuse workflow plans, 'disabled' for standard reasoning (type: string)
+- &lt;mode&gt; - (optional) Plan reuse mode: 'enabled' to cache and reuse workflow plans, 'disabled' for standard reasoning. Omit to show the current value. (type: string)
 
 ## @config execution scriptReuse - Enable or disable PowerShell script reuse for reasoning actions
 
-Usage: `@config execution scriptReuse <mode>`
+Usage: `@config execution scriptReuse [<mode>]`
 
 ### Arguments:
 
-- &lt;mode&gt; - Script reuse mode: 'enabled' to capture and reuse PowerShell scripts, 'disabled' for standard reasoning (type: string)
+- &lt;mode&gt; - (optional) Script reuse mode: 'enabled' to capture and reuse PowerShell scripts, 'disabled' for standard reasoning. Omit to show the current value. (type: string)
 
 ## @config execution entityPromptShape - Shape used when serializing Entity objects into LLM prompts
 
-Usage: `@config execution entityPromptShape <shape>`
+Usage: `@config execution entityPromptShape [<shape>]`
 
 ### Arguments:
 
-- &lt;shape&gt; - 'facets' (default, name+value array), 'flat' (collapse facets into a properties object), or 'facets-with-schema' (facets + append the Entity TS type to the reasoning system prompt) (type: string)
+- &lt;shape&gt; - (optional) 'facets' (default, name+value array), 'flat' (collapse facets into a properties object), or 'facets-with-schema' (facets + append the Entity TS type to the reasoning system prompt). Omit to show the current value. (type: string)
 
 ## @config execution setupOnFirstUse on - Turn on auto-run agent setup on first use (otherwise emit a hint to run @config agent setup)
 
@@ -1115,6 +1225,14 @@ Usage: `@config execution setupOnFirstUse on`
 ## @config execution setupOnFirstUse off - Turn off auto-run agent setup on first use (otherwise emit a hint to run @config agent setup)
 
 Usage: `@config execution setupOnFirstUse off`
+
+## @config execution subagents on - Turn on allow the reasoning loop to create and manage subagents (each with its own command-executor process)
+
+Usage: `@config execution subagents on`
+
+## @config execution subagents off - Turn off allow the reasoning loop to create and manage subagents (each with its own command-executor process)
+
+Usage: `@config execution subagents off`
 
 ## @config modelProvider - Show or set the active model provider (azure | openai | ollama | copilot)
 
@@ -1446,6 +1564,10 @@ Usage: `@exit`
 
 Usage: `@shutdown`
 
+## @server restart - Restart the agent server so it loads rebuilt code
+
+Usage: `@server restart`
+
 ## @random online - Uses the LLM to generate random requests.
 
 Usage: `@random online`
@@ -1473,6 +1595,19 @@ Usage: `@notify test [--mode <string>] <message>`
 ### Flags:
 
 - --mode &lt;string&gt; : Render mode: toast | inline | info | warning | error (default: toast)
+
+## @notify status - Fire a persistent status notice (a toast that collapses to the notification bell) to verify the chat-ui affordance without a stale server
+
+Usage: `@notify status [--restart] [--level <string>] [<message>]`
+
+### Arguments:
+
+- &lt;message&gt; - (optional) Notice body text (type: string)
+
+### Flags:
+
+- --level &lt;string&gt; : Severity accent: info | warning | error (default: warning)
+- --restart : Include a 'Restart server' action button (runs @server restart when clicked) (default: false)
 
 ## @notify show unread - Shows unread notifications
 
@@ -1742,6 +1877,18 @@ Usage: `@browser actions stop recording [<description>]`
 ### Arguments:
 
 - &lt;description&gt; - (optional) Description of what the recorded action does (type: string)
+
+## @browser lookup status - Show the current internet lookup mode
+
+Usage: `@browser lookup status`
+
+## @browser lookup mode - Set the internet lookup mode: off (browser), api, or mcp
+
+Usage: `@browser lookup mode <mode>`
+
+### Arguments:
+
+- &lt;mode&gt; - off | api | mcp (type: string)
 
 ## @browser search list - Lists browser agent search providers
 
@@ -2094,3 +2241,19 @@ Usage: `@powershell import [--actionName <string>] <filePath>`
 ### Flags:
 
 - --actionName &lt;string&gt; : Override the generated action name
+
+## @selfhelp - Ask a question about TypeAgent (what it is, how it works, how to set it up).
+
+Usage: `@selfhelp <question>`
+
+### Arguments:
+
+- &lt;question&gt; - Your question about TypeAgent. (type: string)
+
+## @selfhelp ask - Ask a question about TypeAgent (what it is, how it works, how to set it up).
+
+Usage: `@selfhelp ask <question>`
+
+### Arguments:
+
+- &lt;question&gt; - Your question about TypeAgent. (type: string)

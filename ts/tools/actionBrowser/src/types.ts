@@ -60,6 +60,13 @@ export interface CommandFlag {
     description: string;
 }
 
+/** The agent action a command is equivalent to (declared on the handler). */
+export interface CommandActionLink {
+    /** Schema that declares the action; omitted when unambiguous in the agent. */
+    schema?: string;
+    actionName: string;
+}
+
 export interface CommandInfo {
     /**
      * Host that provides the command: "system" for the built-in, unprefixed
@@ -78,6 +85,12 @@ export interface CommandInfo {
     group: boolean;
     args: CommandArg[];
     flags: CommandFlag[];
+    /**
+     * The agent action this command is equivalent to, when the handler declares
+     * one. Enables cross-linking a typed command with its natural-language
+     * action (and tracking which commands still lack one).
+     */
+    action?: CommandActionLink;
 }
 
 export interface CatalogCounts {
