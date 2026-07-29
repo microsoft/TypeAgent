@@ -142,7 +142,10 @@ function buildSwitchCases(actions: DiscoveredAction[]): string {
                 `            query[${JSON.stringify(p.name)}] = ${paramValueExpr(p.name)};`,
             );
         }
-        if (method !== "DELETE" && bodyParams.length > 0) {
+        if (
+            ["POST", "PUT", "PATCH"].includes(method) &&
+            bodyParams.length > 0
+        ) {
             lines.push(`            const body: Record<string, unknown> = {`);
             for (const p of bodyParams) {
                 lines.push(
@@ -170,16 +173,47 @@ function buildSwitchCases(actions: DiscoveredAction[]): string {
  * `path`. Used by scaffolderHandler to decide whether to route to the REST
  * generator at all.
  */
+/**
+ * Returns the subset of `actions` this generator can actually handle:
+ * actions from the parseOpenApiSpec arm with a recognized HTTP method and a
+ * `path`. Used by scaffolderHandler to decide whether to route to the REST
+ * generator at all.
+ *
+ * Also excludes any action whose path template contains a `{placeholder}`
+ * that has no corresponding resolved (non-`$ref`) path parameter — this can
+ * happen if a path param used an unsupported `$ref` shape (e.g. an external
+ * file reference) that discoveryHandler.ts's local-ref resolution couldn't
+ * follow. Emitting a handler for such an action would substitute the
+ * literal string "undefined" into the request URL at runtime; safer to
+ * fall back to the stub handler for that action than to silently build a
+ * broken request.
+ */
 export function filterRestActions(
     actions: DiscoveredAction[] | undefined,
 ): DiscoveredAction[] {
     if (!actions) return [];
-    return actions.filter(
-        (a) =>
-            !!a.path &&
-            !!a.method &&
-            HTTP_METHODS_WITH_HANDLER.has(a.method.toUpperCase()),
-    );
+    return actions.filter((a) => {
+        if (
+            !a.path ||
+            !a.method ||
+            !HTTP_METHODS_WITH_HANDLER.has(a.method.toUpperCase())
+        ) {
+            return false;
+        }
+        const pathParamNames = new Set(
+            [...a.path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]),
+        );
+        if (pathParamNames.size === 0) return true;
+        const resolvedPathParamNames = new Set(
+            (a.parameters ?? [])
+                .filter((p) => p.in === "path")
+                .map((p) => p.name),
+        );
+        for (const placeholder of pathParamNames) {
+            if (!resolvedPathParamNames.has(placeholder)) return false;
+        }
+        return true;
+    });
 }
 
 export async function buildRestHandler(

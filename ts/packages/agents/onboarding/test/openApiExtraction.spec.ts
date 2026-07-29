@@ -138,7 +138,7 @@ describe("extractOpenApiActions", () => {
         assert.equal(actions[0].name, "getReal");
     });
 
-    test("skips $ref'd parameters", () => {
+    test("skips an unresolvable $ref'd parameter (no matching components.parameters entry)", () => {
         const spec = {
             openapi: "3.0.0",
             paths: {
@@ -152,6 +152,78 @@ describe("extractOpenApiActions", () => {
         };
         const actions = extractOpenApiActions(spec, "spec.json");
         assert.equal(actions[0].parameters?.length, 0);
+    });
+
+    test("resolves a local #/components/parameters/* $ref path parameter inline (Fix 1 regression)", () => {
+        const spec = {
+            openapi: "3.0.0",
+            components: {
+                parameters: {
+                    BookId: {
+                        name: "bookId",
+                        in: "path",
+                        required: true,
+                        schema: { type: "string" },
+                    },
+                },
+            },
+            paths: {
+                "/books/{bookId}": {
+                    get: {
+                        operationId: "get_book",
+                        parameters: [
+                            { $ref: "#/components/parameters/BookId" },
+                        ],
+                    },
+                },
+            },
+        };
+        const actions = extractOpenApiActions(spec, "spec.json");
+        assert.equal(actions.length, 1);
+        const bookIdParam = actions[0].parameters?.find(
+            (p) => p.name === "bookId",
+        );
+        assert.ok(
+            bookIdParam,
+            "expected the $ref'd path parameter to be resolved and merged, not dropped",
+        );
+        assert.equal(bookIdParam?.in, "path");
+        assert.equal(bookIdParam?.required, true);
+    });
+
+    test("path-level $ref parameter resolves and merges the same as an inline path-level parameter", () => {
+        const spec = {
+            openapi: "3.0.0",
+            components: {
+                parameters: {
+                    BookId: {
+                        name: "bookId",
+                        in: "path",
+                        required: true,
+                        schema: { type: "string" },
+                    },
+                },
+            },
+            paths: {
+                "/books/{bookId}": {
+                    parameters: [{ $ref: "#/components/parameters/BookId" }],
+                    get: { operationId: "get_book" },
+                    delete: { operationId: "delete_book" },
+                },
+            },
+        };
+        const actions = extractOpenApiActions(spec, "spec.json");
+        assert.equal(actions.length, 2);
+        for (const action of actions) {
+            const bookIdParam = action.parameters?.find(
+                (p) => p.name === "bookId",
+            );
+            assert.ok(
+                bookIdParam,
+                `expected ${action.name} to carry the path-level $ref'd bookId parameter`,
+            );
+            assert.equal(bookIdParam?.in, "path");
+        }
     });
 });
 
@@ -221,6 +293,16 @@ describe("resolveOpenApiBaseUrl", () => {
 
     test("leaves baseUrl unset for a local file spec source with no servers entry", () => {
         const baseUrl = resolveOpenApiBaseUrl({}, "./local-spec.json");
+        assert.equal(baseUrl, undefined);
+    });
+
+    test("leaves baseUrl unset when servers[0].url is an absolute non-http(s) scheme (Fix 3 regression)", () => {
+        const spec = { servers: [{ url: "ws://api.example.com/v1" }] };
+        const baseUrl = resolveOpenApiBaseUrl(
+            spec,
+            "https://api.example.com/openapi.json",
+            "https://api.example.com/openapi.json",
+        );
         assert.equal(baseUrl, undefined);
     });
 });

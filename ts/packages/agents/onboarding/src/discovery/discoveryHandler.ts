@@ -423,10 +423,35 @@ export function resolveOpenApiBaseUrl(
     // fetched location, only when that location is http/https.
     if (!specLocation) return undefined;
     try {
-        return new URL(substituted, specLocation).toString().replace(/\/$/, "");
+        const resolved = new URL(substituted, specLocation);
+        // `substituted` might itself be an absolute non-http(s) URL (e.g.
+        // "ws://...", "ftp://...") that didn't match the earlier
+        // http(s)-prefix check; guard the http/https-only guarantee here
+        // too rather than relying solely on the regex test above.
+        if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
+            return undefined;
+        }
+        return resolved.toString().replace(/\/$/, "");
     } catch {
         return undefined;
     }
+}
+
+// Resolve a local `#/components/parameters/<Name>` JSON-pointer reference
+// against the (already-parsed) spec document. Only this narrow, common
+// shape is supported (deterministic inline-OpenAPI-3 subset, v1) — any
+// other pointer shape (external file refs, `#/definitions/...` from
+// Swagger 2, deeper paths) returns undefined and the caller treats the
+// parameter as unresolvable.
+function resolveLocalParameterRef(spec: any, ref: string): any | undefined {
+    const match = /^#\/components\/parameters\/([^/]+)$/.exec(ref);
+    if (!match) return undefined;
+    const resolved = spec?.components?.parameters?.[match[1]];
+    // A resolved entry could itself be a `$ref` (unlikely, but guard against
+    // infinite loops / unsupported indirection) — only accept a fully
+    // inline parameter object.
+    if (!resolved || resolved.$ref) return undefined;
+    return resolved;
 }
 
 // Extract discovered actions from a parsed OpenAPI 3 (or Swagger 2 —
@@ -476,9 +501,19 @@ export function extractOpenApiActions(
                 ? op.parameters
                 : [];
             const mergedByKey = new Map<string, any>();
-            for (const p of [...pathLevelParams, ...opLevelParams]) {
-                // Inline params only — skip `$ref`'d parameters (out of
-                // scope for v1 deterministic generation).
+            for (const raw of [...pathLevelParams, ...opLevelParams]) {
+                if (!raw) continue;
+                // Resolve local `#/components/parameters/*` refs inline —
+                // these are extremely common for path params in real-world
+                // specs (e.g. the GitHub REST spec references nearly every
+                // path parameter this way), so treating them as "$ref,
+                // therefore skip" would silently drop the parameter and
+                // leave the generated handler substituting `undefined` into
+                // the URL. Any other `$ref` shape (external files, deeper
+                // pointers) stays unresolved/out of v1 scope and is skipped.
+                const p = raw.$ref
+                    ? resolveLocalParameterRef(spec, raw.$ref)
+                    : raw;
                 if (!p || p.$ref || !p.name) continue;
                 mergedByKey.set(`${p.in ?? "query"}:${p.name}`, p);
             }
