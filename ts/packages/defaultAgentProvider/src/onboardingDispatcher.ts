@@ -142,6 +142,31 @@ function toResult(result: CommandResult): OnboardingDispatchResult {
 }
 
 /**
+ * Build the `@action` text command that the dispatcher parses back into a typed
+ * action. This is the ONLY interface the dispatcher exposes (there is no
+ * structured-action entry point), so the JSON parameters have to survive the
+ * command tokenizer.
+ *
+ * We single-quote the JSON payload so spaces inside string values (e.g. the
+ * user's free-text agent description) stay in one token. The tokenizer treats a
+ * bare `'` as the token terminator and does NOT unescape `\'` on the way out
+ * (`stripQuoteFromToken`), so we cannot rely on backslash-escaping. Instead we
+ * make the payload contain no literal single quote at all: every `'` in the
+ * JSON only ever occurs inside a string value, and JSON permits it to be written
+ * as the `\u0027` escape, which `JSON.parse` decodes back to `'`. The result is
+ * both tokenizer-safe (no interior `'`) and valid JSON, for arbitrary text
+ * including apostrophes, double quotes, and backslashes.
+ */
+export function buildActionCommand(
+    schema: string,
+    actionName: string,
+    parameters: Record<string, unknown>,
+): string {
+    const params = JSON.stringify(parameters).replace(/'/g, "\\u0027");
+    return `@action ${schema} ${actionName} --parameters '${params}'`;
+}
+
+/**
  * Build an onboarding-only dispatcher and return a plain-data handle over it.
  * Actions run in-process (`execMode: "dispatcher"`); translation is enabled
  * (Discovery needs it), while cache and explanation are off. Action
@@ -200,13 +225,7 @@ export async function createOnboardingOnlyDispatcher(
                     error: `Unknown onboarding action "${actionName}"`,
                 });
             }
-            // Single-quote the JSON so the command parser treats it as one arg.
-            // Onboarding parameters (integration names, action names) never
-            // contain single quotes.
-            const params = JSON.stringify(parameters);
-            return submit(
-                `@action ${schema} ${actionName} --parameters '${params}'`,
-            );
+            return submit(buildActionCommand(schema, actionName, parameters));
         },
         async close() {
             await dispatcher.close();
