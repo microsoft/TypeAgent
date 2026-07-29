@@ -3,20 +3,20 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=5a236adfdc4c92433379673a40bd54ca36a787848b9f79fce8e6a089c2e74075 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=604c14fc940ccc8e41cbe6dbf1fd5e2026b15e5b20f7833e253b7b3332deb964 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# studio-service — AI-generated documentation
+# @typeagent/studio-service — AI-generated documentation
 
 > 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
-The `studio-service` package is a standalone, per-workspace host for the TypeAgent Studio runtime (`@typeagent/core/runtime`) and its typed `agent-rpc` service channel. It operates within a developer's workspace, providing a dedicated environment for managing workspace state and facilitating communication between the Studio runtime and its clients. This service is typically launched by the `typeagent-studio` extension or the `typeagent-studio serve` CLI.
+The `@typeagent/studio-service` package is a standalone, per-workspace host for the TypeAgent Studio runtime (`@typeagent/core/runtime`) and its typed `agent-rpc` service channel. It is designed to operate within a developer's workspace, providing a dedicated environment for managing workspace state and facilitating communication between the Studio runtime and its clients. This service is typically launched by the `typeagent-studio` extension or the `typeagent-studio serve` CLI.
 
 ## What it does
 
-The `studio-service` package provides the following core functionalities:
+The `studio-service` package provides several key functionalities:
 
 - **Studio Runtime Hosting**: It runs the Studio runtime, which manages the state of the developer's workspace and executes actions within it.
 - **Typed Service Channel**: Establishes a typed `agent-rpc` service channel for structured communication between the Studio runtime and its clients, such as the `studio` agent and the `typeagent-studio` extension.
@@ -83,7 +83,7 @@ External: `debug`, `ws`
 
 ### Used by
 
-- studio-agent
+- [@typeagent/studio-agent](../../packages/agents/studio/README.md)
 
 ### Files of interest
 
@@ -97,6 +97,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `c76977e7c741a867eeab64b934df5da582064952` on `2026-07-29T05:39:35.369Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter studio-service docs:verify-links` to spot-check._
+_Auto-generated against commit `59cbbc5f415e861717a2bdb75ffa0459ceb5c4c7` on `2026-07-29T18:12:59.352Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/studio-service docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

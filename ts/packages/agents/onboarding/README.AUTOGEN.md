@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c6d754b9d61ad6caa1ee458bb898841b6958f38d182502b2daba8bc0870b52ba -->
+<!-- AUTOGEN:DOCS:HASH:sha256=fdab124847eb14b535d90d95ac3c3fc4214a8b22c01d3d808909b3d6e435b5d7 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # onboarding-agent — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `onboarding-agent` is a TypeAgent application agent designed to automate the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each managed by a sub-agent. This agent simplifies the onboarding process by generating the necessary artifacts and configurations for new integrations. It is particularly effective when used with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
+The `onboarding-agent` is a TypeAgent application agent that automates the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each managed by a sub-agent. This agent simplifies the onboarding process by generating the necessary artifacts and configurations for new integrations. It is particularly effective when used with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
 
 ## What it does
 
@@ -109,12 +109,12 @@ Workspace:
 
 - [@typeagent/action-grammar-compiler](../../../packages/actionGrammarCompiler/README.md)
 - [@typeagent/action-schema-compiler](../../../packages/actionSchemaCompiler/README.md)
+- [@typeagent/agent-runtime](../../../packages/typeagent/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
 - [@typeagent/aiclient](../../../packages/aiclient/README.md)
 - [@typeagent/dispatcher-types](../../../packages/dispatcher/types/README.md)
 - [agent-dispatcher](../../../packages/dispatcher/dispatcher/README.md)
 - [dispatcher-node-providers](../../../packages/dispatcher/nodeProviders/README.md)
-- [typeagent](../../../packages/typeagent/README.md)
 
 External: `debug`, `typechat`
 
@@ -164,6 +164,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/onboa
 
 ---
 
-_Auto-generated against commit `c76977e7c741a867eeab64b934df5da582064952` on `2026-07-29T05:39:35.369Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `59cbbc5f415e861717a2bdb75ffa0459ceb5c4c7` on `2026-07-29T18:12:59.352Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
