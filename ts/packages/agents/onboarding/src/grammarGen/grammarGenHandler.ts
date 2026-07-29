@@ -544,20 +544,20 @@ async function compileGrammarFile(
         const proc = spawn("agc", ["-i", grammarPath, "-o", outputPath], {
             stdio: ["ignore", "pipe", "pipe"],
             env,
+            windowsHide: true,
             shell: true,
         });
 
         let stdout = "";
         let stderr = "";
-        proc.stdout?.on("data", (d: Buffer) => {
-            stdout += d.toString();
-        });
-        proc.stderr?.on("data", (d: Buffer) => {
-            stderr += d.toString();
-        });
-
-        proc.on("close", (code) => {
-            resolve({
+        let settled = false;
+        const finish = (outcome: CompileOutcome) => {
+            if (settled) return;
+            settled = true;
+            resolve(outcome);
+        };
+        const finishWithCode = (code: number | null) =>
+            finish({
                 ok: code === 0,
                 code,
                 stdout,
@@ -568,10 +568,28 @@ async function compileGrammarFile(
                     "No output from compiler."
                 ).trim(),
             });
+
+        proc.stdout?.on("data", (d: Buffer) => {
+            stdout += d.toString();
+        });
+        proc.stderr?.on("data", (d: Buffer) => {
+            stderr += d.toString();
+        });
+
+        // Fast path: stdout/stderr fully flushed and pipes closed cleanly.
+        proc.on("close", (code) => finishWithCode(code));
+
+        // Safety net: `agc` runs through a shell on Windows, so a grandchild can
+        // inherit and hold the stdout/stderr pipes open after the process itself
+        // has exited — in which case `"close"` never fires and this compile would
+        // hang forever (wedging the whole GrammarGen phase). Resolve on `"exit"`
+        // after a brief grace period for any trailing `"close"`.
+        proc.on("exit", (code) => {
+            setTimeout(() => finishWithCode(code), 500);
         });
 
         proc.on("error", (err) => {
-            resolve({
+            finish({
                 ok: false,
                 code: null,
                 stdout: "",

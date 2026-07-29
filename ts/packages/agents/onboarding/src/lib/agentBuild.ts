@@ -48,6 +48,17 @@ function findFeedRegistry(startDir: string): string | undefined {
  * `COREPACK_ENABLE_DOWNLOAD_PROMPT=0` is forced so a `pnpm` invocation through
  * a corepack shim never blocks the headless onboarding dispatcher on an
  * interactive "download pnpm?" prompt.
+ *
+ * Resolution keys off the process `"exit"` event (the child has terminated),
+ * NOT `"close"` (all inherited stdio pipes have hit EOF). The generated build
+ * script is `concurrently npm:tsc npm:asc npm:agc`, a parallel fan-out; on
+ * Windows (`shell: true`) each tool runs through cmd/conhost and inherits the
+ * spawned shell's stdout/stderr pipes. If any of those grandchildren leaks or
+ * lingers on a pipe handle after the shell itself has exited, `"close"` never
+ * fires — so a `"close"`-only wait hangs FOREVER even though the build already
+ * finished and wrote `dist/`. We instead resolve on `"exit"`, giving `"close"`
+ * a short grace window first so the normal (fast, clean) path still captures
+ * fully-flushed output; a `windowsHide` flag avoids transient console windows.
  */
 export async function runCommand(
     cmd: string,
@@ -59,10 +70,18 @@ export async function runCommand(
             cwd,
             stdio: ["ignore", "pipe", "pipe"],
             shell: process.platform === "win32",
+            windowsHide: true,
             env: { ...process.env, COREPACK_ENABLE_DOWNLOAD_PROMPT: "0" },
         });
 
         let output = "";
+        let settled = false;
+        const finish = (result: CommandOutcome) => {
+            if (settled) return;
+            settled = true;
+            resolve(result);
+        };
+
         proc.stdout?.on("data", (d: Buffer) => {
             output += d.toString();
         });
@@ -70,12 +89,23 @@ export async function runCommand(
             output += d.toString();
         });
 
+        // Fast path: everything flushed and pipes closed cleanly.
         proc.on("close", (code) => {
-            resolve({ success: code === 0, output });
+            finish({ success: code === 0, output });
+        });
+
+        // Safety net: the child has terminated. Allow a brief grace period for a
+        // trailing `"close"` (to capture last flushed output); if a leaked
+        // grandchild pipe keeps `"close"` from ever firing, resolve anyway so the
+        // build step can never hang indefinitely.
+        proc.on("exit", (code) => {
+            setTimeout(() => {
+                finish({ success: code === 0, output });
+            }, 500);
         });
 
         proc.on("error", (err) => {
-            resolve({ success: false, output: err.message });
+            finish({ success: false, output: err.message });
         });
     });
 }
