@@ -26,7 +26,6 @@ export interface CommandOutcome {
  */
 function findFeedRegistry(startDir: string): string | undefined {
     let dir = path.resolve(startDir);
-    // eslint-disable-next-line no-constant-condition
     while (true) {
         const npmrc = path.join(dir, ".npmrc");
         try {

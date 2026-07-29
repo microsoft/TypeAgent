@@ -440,7 +440,7 @@ function jsonBlock(title: string, json: string): HTMLElement {
     return details;
 }
 
-function renderDetail(m: WizardViewModel): HTMLElement {
+function renderDetail(_m: WizardViewModel): HTMLElement {
     const pane = el("div", "wz-detail");
     const phase = selectedPhase ? phaseByName(selectedPhase) : undefined;
     if (!phase) {
