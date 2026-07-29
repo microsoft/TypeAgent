@@ -122,7 +122,6 @@ export type DispatcherConfig = {
         };
         schema: {
             generation: {
-                enabled: boolean;
                 jsonSchema: boolean;
                 jsonSchemaFunction: boolean;
                 jsonSchemaWithTs: boolean; // only applies when jsonSchema or jsonSchemaFunction is true
@@ -429,7 +428,6 @@ const defaultSessionConfig: SessionConfig = {
         },
         schema: {
             generation: {
-                enabled: true,
                 jsonSchema: false,
                 jsonSchemaFunction: false,
                 jsonSchemaWithTs: false,
