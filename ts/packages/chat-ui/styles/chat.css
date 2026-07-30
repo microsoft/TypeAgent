@@ -2130,10 +2130,198 @@ table.sc-kv-table.sc-card-fields {
   cursor: help;
 }
 
+/* =========================================================================
+   Explained popover (click the roadrunner)
+   ========================================================================= */
+
+/* While the popover is open, lift the whole message container above its
+   neighbors. The container's entrance-animation `transform` makes it a
+   stacking context, so the popover's own z-index can't escape it; elevating
+   the container is what actually puts the popover on top of sibling bubbles. */
+.chat-message-container-user.chat-explained-elevated {
+  z-index: 30;
+}
+
+/* Anchored to the bubble body (which doesn't clip overflow) and floated above
+   the bubble's top-right so it never covers the command text or the
+   bottom-anchored metrics strip. */
+.chat-explained-popover {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: 360px;
+  box-sizing: border-box;
+  padding: 8px 10px 9px;
+  border: 1px solid var(--chat-conversation-border, rgba(0, 0, 0, 0.2));
+  border-radius: 8px;
+  background-color: var(--chat-conversation-popover-background, #fffdf5);
+  color: var(--chat-conversation-foreground, #202020);
+  box-shadow: 0 4px 14px var(--chat-conversation-popover-shadow, rgba(0, 0, 0, 0.18));
+  font-size: 12px;
+  text-align: left;
+  cursor: default;
+}
+
+.chat-explained-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.chat-explained-popover-title {
+  font-weight: 600;
+}
+
+.chat-explained-popover-close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+  color: inherit;
+}
+
+.chat-explained-row {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 8px;
+  margin: 3px 0;
+}
+
+.chat-explained-key {
+  color: var(--chat-conversation-muted-foreground, gray);
+  font-weight: 600;
+}
+
+.chat-explained-maphead {
+  margin-top: 6px;
+}
+
+.chat-explained-val {
+  overflow-wrap: anywhere;
+}
+
+.chat-explained-mono {
+  font-family: var(--monospace-font, ui-monospace, Menlo, Consolas, monospace);
+  white-space: pre-wrap;
+}
+
+.chat-explained-map {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  margin-top: 3px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background-color: var(--chat-conversation-list-hover-background, rgba(0, 0, 0, 0.04));
+}
+
+.chat-explained-mapname {
+  font-family: var(--monospace-font, ui-monospace, Menlo, Consolas, monospace);
+  color: var(--chat-conversation-muted-foreground, #555);
+  overflow-wrap: anywhere;
+}
+
+.chat-explained-mapval {
+  overflow-wrap: anywhere;
+}
+
+.chat-explained-foot {
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid
+    var(
+      --chat-conversation-separator-color,
+      var(--chat-conversation-border, rgba(0, 0, 0, 0.1))
+    );
+  color: var(--chat-conversation-muted-foreground, gray);
+  font-size: 11px;
+}
+
+/* Color language: each sub-phrase category (politeness, action, entity, ...)
+   gets a color (assigned inline from a palette). A phrase word and its
+   matching generalized-form marker share that color; construction literals
+   stay neutral. */
+.chat-explained-phrase {
+  color: inherit;
+}
+
+.chat-explained-literal {
+  color: var(--chat-conversation-muted-foreground, gray);
+}
+
+.chat-explained-marker {
+  font-weight: 600;
+}
+
+.chat-explained-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 4px 0 2px;
+  padding-left: 92px;
+  font-size: 10.5px;
+  color: var(--chat-conversation-muted-foreground, gray);
+}
+
+.chat-explained-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-explained-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
+  box-shadow: 0 0 0 1px var(--chat-conversation-border, rgba(0, 0, 0, 0.15));
+}
+
+.chat-explained-gens {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-top: 3px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  max-height: 148px;
+  overflow: auto;
+  background-color: var(--chat-conversation-list-hover-background, rgba(0, 0, 0, 0.04));
+}
+
+.chat-explained-gen {
+  font-family: var(--monospace-font, ui-monospace, Menlo, Consolas, monospace);
+  color: var(--chat-conversation-foreground, #333);
+  white-space: nowrap;
+}
+
+.chat-explained-more {
+  margin-top: 5px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--chat-conversation-link-active-foreground, #1a73e8);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.chat-explained-more:hover {
+  opacity: 0.8;
+}
+
 /* Tooltip is hosted on the bubble body (which doesn't clip overflow) and
    floats just above the bubble's top-right on hover so it never covers the
    command text or the bottom-anchored metrics strip. */
-.chat-message-explained[data-expl]:has(
+.chat-message-explained[data-expl]:not(.chat-explained-open):has(
     .chat-message-explained-icon:hover
   )::after {
   content: attr(data-expl);

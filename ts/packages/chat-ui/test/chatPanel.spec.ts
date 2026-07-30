@@ -615,6 +615,296 @@ describe("roadrunner (explained) placement", () => {
     });
 });
 
+describe("roadrunner (explained) popover", () => {
+    it("opens a popover with the rule and mapping on click, toggles closed", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("play something by adele", "req-1");
+
+        panel.notifyExplained("req-1", {
+            fromCache: "construction",
+            fromUser: false,
+            time: "12:00:00 PM",
+            detail: {
+                source: "construction",
+                phrase: "play something by adele",
+                action: "player.playArtist",
+                rule: "play something by <artist>",
+                mapping: [{ name: "artist", value: "adele" }],
+            },
+        });
+
+        const bubble = userBubble(root, "req-1");
+        const icon = bubble.querySelector<HTMLElement>(
+            ".chat-message-explained-icon",
+        )!;
+        expect(icon.getAttribute("role")).toBe("button");
+
+        // No popover until clicked.
+        expect(bubble.querySelector(".chat-explained-popover")).toBeNull();
+
+        icon.click();
+        const popover = bubble.querySelector<HTMLElement>(
+            ".chat-explained-popover",
+        );
+        expect(popover).not.toBeNull();
+        expect(popover!.textContent).toContain("play something by <artist>");
+        expect(popover!.textContent).toContain("player.playArtist");
+        expect(popover!.textContent).toContain("artist");
+        expect(popover!.textContent).toContain("adele");
+        // The container is lifted above sibling bubbles while open so the
+        // popover isn't painted under a neighbor.
+        expect(bubble.classList.contains("chat-explained-elevated")).toBe(true);
+
+        // Clicking the icon again closes it.
+        icon.click();
+        expect(bubble.querySelector(".chat-explained-popover")).toBeNull();
+        expect(bubble.classList.contains("chat-explained-elevated")).toBe(
+            false,
+        );
+    });
+
+    it("shows the generalized form for a model translation", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("set a 5 minute timer", "req-2");
+
+        panel.notifyExplained("req-2", {
+            fromCache: false,
+            fromUser: false,
+            time: "12:01:00 PM",
+            detail: {
+                source: "model",
+                phrase: "set a 5 minute timer",
+                action: "timer.createTimer",
+                rule: "set a <duration> timer",
+                mapping: [{ name: "duration", value: "5 minutes" }],
+            },
+        });
+
+        const icon = userBubble(root, "req-2").querySelector<HTMLElement>(
+            ".chat-message-explained-icon",
+        )!;
+        icon.click();
+        const popover = userBubble(root, "req-2").querySelector<HTMLElement>(
+            ".chat-explained-popover",
+        )!;
+        expect(popover.textContent).toContain("Generalized by the model");
+        expect(popover.textContent).toContain("set a <duration> timer");
+
+        // The <duration> marker is colored distinctly from the literal words.
+        const markers = popover.querySelectorAll(".chat-explained-marker");
+        expect(markers.length).toBe(1);
+        expect(markers[0].textContent).toBe("<duration>");
+        expect(
+            popover.querySelectorAll(".chat-explained-literal").length,
+        ).toBeGreaterThan(0);
+    });
+
+    it("colors phrase words to match their generalized-form markers", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("please list all of the conversations", "req-c");
+
+        panel.notifyExplained("req-c", {
+            fromCache: false,
+            fromUser: false,
+            time: "12:04:00 PM",
+            detail: {
+                source: "model",
+                phrase: "please list all of the conversations",
+                action: "system.conversation.listConversation",
+                rule: "<politeness>?<M:action><politeness>?",
+                segments: [
+                    { text: "please", category: "politeness" },
+                    {
+                        text: "list all of the conversations",
+                        category: "action",
+                    },
+                ],
+            },
+        });
+
+        const bubble = userBubble(root, "req-c");
+        bubble
+            .querySelector<HTMLElement>(".chat-message-explained-icon")!
+            .click();
+        const popover = bubble.querySelector<HTMLElement>(
+            ".chat-explained-popover",
+        )!;
+
+        // Phrase words are split into per-category colored spans.
+        const phraseSpans = popover
+            .querySelector<HTMLElement>(".chat-explained-phrase")!
+            .querySelectorAll<HTMLElement>("span");
+        expect(phraseSpans.length).toBe(2);
+        const politenessColor = phraseSpans[0].style.color;
+        const actionColor = phraseSpans[1].style.color;
+        expect(politenessColor).toBeTruthy();
+        expect(actionColor).toBeTruthy();
+        expect(politenessColor).not.toBe(actionColor);
+
+        // Each marker matches the color of the phrase words it generalizes.
+        const markers = popover.querySelectorAll<HTMLElement>(
+            ".chat-explained-marker",
+        );
+        expect(markers.length).toBe(3);
+        expect(markers[0].style.color).toBe(politenessColor); // <politeness>?
+        expect(markers[1].style.color).toBe(actionColor); // <M:action>
+        expect(markers[2].style.color).toBe(politenessColor); // <politeness>?
+    });
+
+    it("picks a lighter category palette on a dark surface", () => {
+        const markerColorForSurface = (surfaceTextColor: string) => {
+            const { root, panel } = makePanel();
+            panel.addUserMessage("list all", "r");
+            // The popover picks its palette from the bubble's resolved text
+            // color (light text => dark theme).
+            userBubble(root, "r").querySelector<HTMLElement>(
+                ".chat-message-user",
+            )!.style.color = surfaceTextColor;
+            panel.notifyExplained("r", {
+                fromCache: false,
+                fromUser: false,
+                time: "t",
+                detail: {
+                    source: "model",
+                    phrase: "list all",
+                    action: "a.b",
+                    rule: "<M:action>",
+                    segments: [{ text: "list all", category: "action" }],
+                },
+            });
+            userBubble(root, "r")
+                .querySelector<HTMLElement>(".chat-message-explained-icon")!
+                .click();
+            return userBubble(root, "r").querySelector<HTMLElement>(
+                ".chat-explained-marker",
+            )!.style.color;
+        };
+
+        const onLight = markerColorForSurface("rgb(32, 32, 32)");
+        const onDark = markerColorForSurface("rgb(240, 240, 240)");
+        expect(onLight).toBeTruthy();
+        expect(onDark).toBeTruthy();
+        expect(onLight).not.toBe(onDark);
+    });
+
+    it("shows 3 generalizations then reveals the rest via load more", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("list all of the conversations", "req-g");
+
+        const action = {
+            text: "list all of the conversations",
+            category: "action",
+        };
+        panel.notifyExplained("req-g", {
+            fromCache: false,
+            fromUser: false,
+            time: "12:03:00 PM",
+            detail: {
+                source: "model",
+                phrase: "list all of the conversations",
+                action: "system.conversation.listConversation",
+                rule: "<politeness>?<M:action><politeness>?",
+                segments: [action],
+                generalizations: [
+                    [{ text: "show all of the conversations", category: "action" }],
+                    [{ text: "display all of the conversations", category: "action" }],
+                    [{ text: "get all of the conversations", category: "action" }],
+                    [{ text: "please", category: "politeness" }, action],
+                    [action, { text: "please", category: "politeness" }],
+                ],
+            },
+        });
+
+        const bubble = userBubble(root, "req-g");
+        bubble
+            .querySelector<HTMLElement>(".chat-message-explained-icon")!
+            .click();
+        const popover = bubble.querySelector<HTMLElement>(
+            ".chat-explained-popover",
+        )!;
+
+        // Only the first 3 are shown; the link offers the remaining 2.
+        const gens = () =>
+            popover.querySelectorAll<HTMLElement>(".chat-explained-gen");
+        expect(gens().length).toBe(3);
+        const more = popover.querySelector<HTMLElement>(".chat-explained-more")!;
+        expect(more.textContent).toBe("load 2 more");
+
+        more.click();
+        expect(gens().length).toBe(5);
+        expect(popover.querySelector(".chat-explained-more")).toBeNull();
+
+        // Samples are colored: the "please" politeness word and the action
+        // words carry distinct colors, matching the phrase legend.
+        const politenessSample = gens()[3];
+        const spans = politenessSample.querySelectorAll<HTMLElement>("span");
+        expect(spans.length).toBe(2);
+        expect(spans[0].style.color).toBeTruthy();
+        expect(spans[1].style.color).toBeTruthy();
+        expect(spans[0].style.color).not.toBe(spans[1].style.color);
+    });
+
+    it("still opens a popover with the provenance line when no detail is sent", () => {
+        const { root, panel } = makePanel();
+        panel.addUserMessage("what's on my calendar?", "req-3");
+
+        panel.notifyExplained("req-3", {
+            fromCache: "grammar",
+            fromUser: false,
+            time: "12:02:00 PM",
+        });
+
+        const icon = userBubble(root, "req-3").querySelector<HTMLElement>(
+            ".chat-message-explained-icon",
+        )!;
+        icon.click();
+        const popover = userBubble(root, "req-3").querySelector<HTMLElement>(
+            ".chat-explained-popover",
+        )!;
+        expect(popover).not.toBeNull();
+        expect(popover.textContent).toContain("Translated by grammar");
+    });
+
+    it("re-attaches the roadrunner on history replay", () => {
+        const { root, panel } = makePanel();
+        panel.replayHistory([
+            { kind: "user", text: "play adele", requestId: "req-h" },
+            {
+                kind: "explained",
+                requestId: "req-h",
+                data: {
+                    fromCache: "construction",
+                    fromUser: false,
+                    time: "12:00:00 PM",
+                    detail: {
+                        source: "construction",
+                        phrase: "play adele",
+                        action: "player.playArtist",
+                        rule: "play <artist>",
+                        mapping: [{ name: "artist", value: "adele" }],
+                    },
+                },
+            },
+        ]);
+
+        const bubble = userBubble(root, "req-h");
+        const icon = bubble.querySelector<HTMLElement>(
+            ".chat-message-explained-icon",
+        );
+        expect(icon).not.toBeNull();
+
+        // The click-to-open popover still works after replay clears the
+        // userMessageById map.
+        icon!.click();
+        const popover = bubble.querySelector<HTMLElement>(
+            ".chat-explained-popover",
+        );
+        expect(popover).not.toBeNull();
+        expect(popover!.textContent).toContain("play <artist>");
+        expect(bubble.classList.contains("chat-explained-elevated")).toBe(true);
+    });
+});
+
 describe("attachment send state", () => {
     it("keeps an image-only message sendable after leaving command history", async () => {
         const root = document.createElement("div");

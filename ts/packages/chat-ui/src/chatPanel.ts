@@ -22,6 +22,7 @@ import type {
     CompletionUsageStats,
     NotifyExplainedData,
     ExplainedDetail,
+    ExplainedSegment,
     RequestId,
     UserFeedbackCategory,
     UserFeedbackEntry,
@@ -102,6 +103,7 @@ export const DEFAULT_AVATAR_MAP: Readonly<Record<string, string>> = {
     calendar: "📅",
     chat: "💬",
     code: "⚛️",
+    conversation: "💬",
     desktop: "🪟",
     dispatcher: "🤖",
     email: "📩",
@@ -193,6 +195,7 @@ export type HistoryEntry =
           parsePhase?: PhaseTiming;
           firstMessageMs?: number;
       }
+    | { kind: "explained"; requestId: string; data: NotifyExplainedData }
     | { kind: "system"; text: string };
 
 /**
@@ -3769,6 +3772,12 @@ export class ChatPanel {
                     });
                 }
                 break;
+            case "explained":
+                // Re-attach the roadrunner icon + click-to-open popover to the
+                // replayed user bubble (the "explained" notify is persisted so
+                // it survives conversation rehydration).
+                this.notifyExplained(entry.requestId, entry.data);
+                break;
         }
     }
 
@@ -3861,6 +3870,7 @@ export class ChatPanel {
         this.pendingThreadDisplayInfo.clear();
         this.pendingThreadResult.clear();
         this.userMessageById.clear();
+        this.explainedById.clear();
         this.sentCommandByRequestId.clear();
         this.requestStartByRequestId.clear();
         this.firstMessageMsByRequestId.clear();
@@ -3901,6 +3911,10 @@ export class ChatPanel {
         const container = this.userMessageById.get(requestId);
         if (!container) return;
 
+        // Keep the payload so the click-to-open popover can render the
+        // triggered rule / generalized form and its parameter mapping.
+        this.explainedById.set(requestId, data);
+
         const cachePart = data.fromCache
             ? `Translated by ${data.fromCache}`
             : "Translated by model";
@@ -3933,15 +3947,446 @@ export class ChatPanel {
         iconHost.classList.add("chat-message-explained-host");
         tooltipHost.classList.add("chat-message-explained");
         tooltipHost.setAttribute("data-expl", message);
-        iconHost.appendChild(iconRoadrunner(color));
+
+        const icon = iconRoadrunner(color);
+        // The roadrunner is now an interactive control: clicking it opens a
+        // popover explaining how the phrase was resolved. Keep the hover
+        // tooltip (the provenance line) as a quick-glance affordance.
+        icon.setAttribute("role", "button");
+        icon.setAttribute("tabindex", "0");
+        icon.setAttribute("aria-label", "Show translation explanation");
+        icon.style.cursor = "pointer";
+        icon.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.toggleExplainedPopover(requestId, tooltipHost, icon);
+        });
+        icon.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                this.toggleExplainedPopover(requestId, tooltipHost, icon);
+            }
+        });
+        iconHost.appendChild(icon);
     }
 
     /**
-     * Update the roadrunner color and tooltip on the "grammarRule" follow-up
-     * notification. If a rule wasn't cached, recolors the icon and extends
-     * the tooltip; succeeded rules leave the icon as-is. Mirrors the shell's
-     * MessageContainer.updateGrammarResult.
+     * Toggle the explanation popover for a user bubble. Clicking the
+     * roadrunner opens a card describing how the phrase was resolved: either
+     * the triggered grammar rule / construction and the parameter mapping, or
+     * the generalized form the model produced. Clicking the icon again (or
+     * outside the popover, or pressing Escape) closes it.
      */
+    private toggleExplainedPopover(
+        requestId: string,
+        host: HTMLElement,
+        anchor: HTMLElement,
+    ) {
+        // The message container carries a `transform` (entrance animation),
+        // which traps the popover's z-index inside the bubble's own stacking
+        // context. Elevate the whole container while the popover is open so it
+        // paints above neighboring bubbles. Derive it from the DOM (not
+        // userMessageById, which is cleared after history replay).
+        const container = host.closest<HTMLElement>(
+            ".chat-message-container-user",
+        );
+        const existing = host.querySelector(".chat-explained-popover");
+        if (existing) {
+            existing.remove();
+            host.classList.remove("chat-explained-open");
+            container?.classList.remove("chat-explained-elevated");
+            return;
+        }
+        const data = this.explainedById.get(requestId);
+        if (!data) return;
+
+        const popover = this.buildExplainedPopover(data, host);
+        const close = () => {
+            popover.remove();
+            host.classList.remove("chat-explained-open");
+            container?.classList.remove("chat-explained-elevated");
+            document.removeEventListener("keydown", onKey, true);
+            document.removeEventListener("mousedown", onOutside, true);
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                close();
+            }
+        };
+        const onOutside = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (!popover.contains(target) && !anchor.contains(target)) {
+                close();
+            }
+        };
+
+        const closeBtn = popover.querySelector<HTMLElement>(
+            ".chat-explained-popover-close",
+        );
+        closeBtn?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            close();
+        });
+
+        host.appendChild(popover);
+        host.classList.add("chat-explained-open");
+        container?.classList.add("chat-explained-elevated");
+        // Defer listener registration so the opening click doesn't
+        // immediately trigger the outside-click handler.
+        setTimeout(() => {
+            document.addEventListener("keydown", onKey, true);
+            document.addEventListener("mousedown", onOutside, true);
+        }, 0);
+    }
+
+    /**
+     * Render the explanation popover card for an "explained" payload. When the
+     * dispatcher supplied structured `detail`, show the phrase, the resolved
+     * action, the rule / generalized form, and the parameter mapping;
+     * otherwise fall back to the provenance line. `surface` is a themed,
+     * in-DOM element used to pick a light- or dark-appropriate category
+     * palette.
+     */
+    private buildExplainedPopover(
+        data: NotifyExplainedData,
+        surface: HTMLElement,
+    ): HTMLElement {
+        const dark = ChatPanel.isDarkSurface(surface);
+        const popover = document.createElement("div");
+        popover.className = "chat-explained-popover";
+
+        const header = document.createElement("div");
+        header.className = "chat-explained-popover-header";
+        const title = document.createElement("span");
+        title.className = "chat-explained-popover-title";
+        const detail = data.detail;
+        title.textContent =
+            detail === undefined || detail.source === "model"
+                ? "Generalized by the model"
+                : detail.source === "grammar"
+                  ? "Matched a grammar rule"
+                  : "Matched a cached construction";
+        header.appendChild(title);
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "chat-explained-popover-close";
+        closeBtn.setAttribute("aria-label", "Close");
+        closeBtn.textContent = "×";
+        header.appendChild(closeBtn);
+        popover.appendChild(header);
+
+        const addRow = (label: string, value: string, mono = false) => {
+            const row = document.createElement("div");
+            row.className = "chat-explained-row";
+            const key = document.createElement("div");
+            key.className = "chat-explained-key";
+            key.textContent = label;
+            const val = document.createElement("div");
+            val.className = mono
+                ? "chat-explained-val chat-explained-mono"
+                : "chat-explained-val";
+            val.textContent = value;
+            row.appendChild(key);
+            row.appendChild(val);
+            popover.appendChild(row);
+        };
+
+        if (detail) {
+            // Assign a stable color per sub-phrase category (politeness,
+            // action, entity, ...) so a phrase word and its matching
+            // generalized-form marker share a color.
+            const colors = this.buildCategoryColors(
+                detail.segments,
+                detail.rule,
+                detail.generalizations,
+                dark,
+            );
+
+            const phraseRow = document.createElement("div");
+            phraseRow.className = "chat-explained-row";
+            const phraseKey = document.createElement("div");
+            phraseKey.className = "chat-explained-key";
+            phraseKey.textContent = "Phrase";
+            const phraseVal = document.createElement("div");
+            phraseVal.className = "chat-explained-val chat-explained-phrase";
+            if (detail.segments && detail.segments.length > 0) {
+                this.appendColoredSegments(phraseVal, detail.segments, colors);
+            } else {
+                phraseVal.textContent = detail.phrase;
+            }
+            phraseRow.appendChild(phraseKey);
+            phraseRow.appendChild(phraseVal);
+            popover.appendChild(phraseRow);
+
+            addRow("Action", detail.action, true);
+            if (detail.rule) {
+                const ruleRow = document.createElement("div");
+                ruleRow.className = "chat-explained-row";
+                const ruleKey = document.createElement("div");
+                ruleKey.className = "chat-explained-key";
+                ruleKey.textContent =
+                    detail.source === "model" ? "Generalized form" : "Rule";
+                const ruleVal = document.createElement("div");
+                ruleVal.className = "chat-explained-val chat-explained-mono";
+                // Each <...> marker is colored to match the phrase words it
+                // generalizes (same category color).
+                this.appendGeneralizedForm(ruleVal, detail.rule, colors);
+                ruleRow.appendChild(ruleKey);
+                ruleRow.appendChild(ruleVal);
+                popover.appendChild(ruleRow);
+
+                if (colors.size > 0) {
+                    const legend = document.createElement("div");
+                    legend.className = "chat-explained-legend";
+                    for (const [category, color] of colors) {
+                        const item = document.createElement("span");
+                        item.className = "chat-explained-legend-item";
+                        const swatch = document.createElement("span");
+                        swatch.className = "chat-explained-swatch";
+                        swatch.style.backgroundColor = color;
+                        item.appendChild(swatch);
+                        item.appendChild(document.createTextNode(category));
+                        legend.appendChild(item);
+                    }
+                    popover.appendChild(legend);
+                }
+            }
+
+            if (detail.mapping && detail.mapping.length > 0) {
+                const mapLabel = document.createElement("div");
+                mapLabel.className = "chat-explained-key chat-explained-maphead";
+                mapLabel.textContent = "Mapping";
+                popover.appendChild(mapLabel);
+                const table = document.createElement("div");
+                table.className = "chat-explained-map";
+                for (const m of detail.mapping) {
+                    const name = document.createElement("div");
+                    name.className = "chat-explained-mapname";
+                    name.textContent = m.name;
+                    const value = document.createElement("div");
+                    value.className = "chat-explained-mapval";
+                    value.textContent = m.value;
+                    table.appendChild(name);
+                    table.appendChild(value);
+                }
+                popover.appendChild(table);
+            }
+
+            if (detail.generalizations && detail.generalizations.length > 0) {
+                this.appendGeneralizations(
+                    popover,
+                    detail.generalizations,
+                    colors,
+                );
+            }
+        }
+
+        // Always include the provenance line at the foot for context.
+        const foot = document.createElement("div");
+        foot.className = "chat-explained-foot";
+        const cachePart = data.fromCache
+            ? `Translated by ${data.fromCache}`
+            : "Translated by model";
+        foot.textContent =
+            data.error === undefined
+                ? `${cachePart} · explained at ${data.time}`
+                : `${cachePart} · ${data.error}`;
+        popover.appendChild(foot);
+
+        return popover;
+    }
+
+    /**
+     * Category color palettes for the explained popover. The light palette is
+     * darker/saturated to read on light surfaces; the dark palette is brighter
+     * to read on dark surfaces. Same length so a category keeps its slot.
+     */
+    private static readonly EXPLAINED_PALETTE_LIGHT = [
+        "#1a7f37", // green
+        "#9126c4", // purple
+        "#1667b8", // blue
+        "#c2410c", // orange
+        "#0e7490", // teal
+        "#be185d", // magenta
+        "#8a6d00", // gold
+        "#5b21b6", // indigo
+    ];
+    private static readonly EXPLAINED_PALETTE_DARK = [
+        "#4ade80", // green
+        "#c084fc", // purple
+        "#60a5fa", // blue
+        "#fb923c", // orange
+        "#22d3ee", // cyan
+        "#f472b6", // pink
+        "#fcd34d", // yellow
+        "#a78bfa", // violet
+    ];
+
+    /**
+     * Whether `el` renders on a dark surface, by luminance of its resolved
+     * (themed) text color: light text implies a dark background. Used to pick
+     * the category palette so colors stay legible under both host themes.
+     */
+    private static isDarkSurface(el: HTMLElement): boolean {
+        const match = getComputedStyle(el)
+            .color.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
+        if (!match) return false;
+        const luminance =
+            (0.299 * +match[1] + 0.587 * +match[2] + 0.114 * +match[3]) / 255;
+        return luminance > 0.55;
+    }
+
+    /**
+     * The category name inside a generalized-form marker, e.g. "<M:action>" ->
+     * "action", "<politeness>?" -> "politeness".
+     */
+    private static markerCategory(token: string): string {
+        return token
+            .replace(/^</, "")
+            .replace(/>\??$/, "")
+            .replace(/^M:/, "");
+    }
+
+    /**
+     * Assign a stable color per sub-phrase category, drawn first from the
+     * phrase segments (in order) then any extra categories that appear only in
+     * the rule markers or the sample rephrasings, so every place a category
+     * appears shares one color.
+     */
+    private buildCategoryColors(
+        segments: ExplainedDetail["segments"],
+        rule: string | undefined,
+        generalizations: ExplainedDetail["generalizations"],
+        dark: boolean,
+    ): Map<string, string> {
+        const palette = dark
+            ? ChatPanel.EXPLAINED_PALETTE_DARK
+            : ChatPanel.EXPLAINED_PALETTE_LIGHT;
+        const colors = new Map<string, string>();
+        const assign = (category: string | undefined) => {
+            if (category && !colors.has(category)) {
+                colors.set(category, palette[colors.size % palette.length]);
+            }
+        };
+        for (const seg of segments ?? []) assign(seg.category);
+        if (rule) {
+            for (const token of rule.match(/<[^>]+>\??/g) ?? []) {
+                assign(ChatPanel.markerCategory(token));
+            }
+        }
+        for (const gen of generalizations ?? []) {
+            if (Array.isArray(gen)) {
+                for (const seg of gen) assign(seg?.category);
+            }
+        }
+        return colors;
+    }
+
+    /**
+     * Render per-category-colored segment spans (a phrase or a sample
+     * rephrasing) into `container`, separated by spaces.
+     */
+    private appendColoredSegments(
+        container: HTMLElement,
+        segments: ExplainedSegment[],
+        colors: Map<string, string>,
+    ) {
+        segments.forEach((seg, i) => {
+            if (i > 0) container.appendChild(document.createTextNode(" "));
+            const span = document.createElement("span");
+            span.textContent = seg?.text ?? "";
+            span.style.color = colors.get(seg?.category) ?? "";
+            container.appendChild(span);
+        });
+    }
+
+    /**
+     * Render a generalized-form string into `container`, splitting `<...>`
+     * markers from the literal text and coloring each marker to match the
+     * phrase words it generalizes (via the category color map).
+     */
+    private appendGeneralizedForm(
+        container: HTMLElement,
+        form: string,
+        colors: Map<string, string>,
+    ) {
+        const markerRe = /<[^>]+>\??/g;
+        let last = 0;
+        let match: RegExpExecArray | null;
+        const addLiteral = (text: string) => {
+            if (!text) return;
+            const span = document.createElement("span");
+            span.className = "chat-explained-literal";
+            span.textContent = text;
+            container.appendChild(span);
+        };
+        while ((match = markerRe.exec(form)) !== null) {
+            addLiteral(form.slice(last, match.index));
+            const span = document.createElement("span");
+            span.className = "chat-explained-marker";
+            span.textContent = match[0];
+            span.style.color =
+                colors.get(ChatPanel.markerCategory(match[0])) ?? "";
+            container.appendChild(span);
+            last = match.index + match[0].length;
+        }
+        addLiteral(form.slice(last));
+    }
+
+    /**
+     * Render the "also matches" list of same-meaning rephrasings, each colored
+     * by category like the phrase. Shows the first few and reveals the rest
+     * behind a "load more" link.
+     */
+    private appendGeneralizations(
+        popover: HTMLElement,
+        gens: NonNullable<ExplainedDetail["generalizations"]>,
+        colors: Map<string, string>,
+    ) {
+        const INITIAL = 3;
+        const label = document.createElement("div");
+        label.className = "chat-explained-key chat-explained-maphead";
+        label.textContent = "Also matches";
+        popover.appendChild(label);
+
+        const list = document.createElement("div");
+        list.className = "chat-explained-gens";
+        popover.appendChild(list);
+
+        const moreLink = document.createElement("button");
+        moreLink.type = "button";
+        moreLink.className = "chat-explained-more";
+        popover.appendChild(moreLink);
+
+        let shown = 0;
+        const reveal = (count: number) => {
+            const end = Math.min(shown + count, gens.length);
+            for (let i = shown; i < end; i++) {
+                const item = document.createElement("div");
+                item.className = "chat-explained-gen";
+                const gen = gens[i];
+                if (typeof gen === "string") {
+                    item.textContent = gen;
+                } else if (Array.isArray(gen)) {
+                    this.appendColoredSegments(item, gen, colors);
+                }
+                list.appendChild(item);
+            }
+            shown = end;
+            const remaining = gens.length - shown;
+            if (remaining <= 0) {
+                moreLink.remove();
+            } else {
+                moreLink.textContent = `load ${remaining} more`;
+            }
+        };
+        moreLink.addEventListener("click", (e) => {
+            e.stopPropagation();
+            reveal(gens.length);
+        });
+        reveal(INITIAL);
+    }
+
+
     public updateGrammarResult(
         requestId: string,
         success: boolean,

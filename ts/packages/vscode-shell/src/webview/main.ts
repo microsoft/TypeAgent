@@ -788,6 +788,15 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
                 });
                 break;
             }
+            case "notify": {
+                // Persisted "explained" notifications restore the roadrunner
+                // icon + click-to-open popover on replayed user bubbles.
+                const rid = e.notificationId ?? e.requestId;
+                if (e.event === "explained" && rid) {
+                    out.push({ kind: "explained", requestId: rid, data: e.data });
+                }
+                break;
+            }
         }
     }
     return out;
