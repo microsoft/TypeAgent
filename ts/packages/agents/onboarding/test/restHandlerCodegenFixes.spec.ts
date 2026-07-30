@@ -11,6 +11,11 @@
 //   - Fix 2: a GET (or HEAD) action with body-typed parameters must never
 //     emit a `body` argument to callRest, since fetch throws for
 //     GET/HEAD requests carrying a body.
+//   - Fix 3: the callRest helper must only set fetch's `body` when a request
+//     body exists (conditional spread), never `body: requestBody` where
+//     requestBody is `string | undefined` — that fails TS2379 under the
+//     repo's `exactOptionalPropertyTypes`, so a scaffolded REST agent would
+//     not compile in-workspace.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -109,4 +114,32 @@ test("HEAD-like semantics aside, DELETE with body-typed parameters still never e
     const caseMatch = /case "deleteBook": \{([\s\S]*?)\n {8}\}/.exec(source);
     assert.ok(caseMatch, "expected a generated case for deleteBook");
     assert.doesNotMatch(caseMatch![1], /const body/);
+});
+
+test("callRest sets fetch's body only when present, never body: requestBody (Fix 3 regression)", async () => {
+    const actions: DiscoveredAction[] = [
+        {
+            name: "getBook",
+            method: "GET",
+            path: "/books/{bookId}",
+            parameters: [
+                { name: "bookId", type: "string", required: true, in: "path" },
+            ],
+        },
+    ];
+    const source = await buildRestHandler(
+        "bookApi",
+        "BookApi",
+        "https://api.example.com/v1",
+        actions,
+    );
+
+    // Must NOT unconditionally pass `body: requestBody` (requestBody is
+    // `string | undefined`) — that fails TS2379 under exactOptionalPropertyTypes.
+    assert.doesNotMatch(source, /\n\s*body: requestBody,/);
+    // Must conditionally include body only when a request body exists.
+    assert.match(
+        source,
+        /\.\.\.\(requestBody !== undefined \? \{ body: requestBody \} : \{\}\)/,
+    );
 });
