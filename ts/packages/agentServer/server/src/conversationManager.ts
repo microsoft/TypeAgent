@@ -151,7 +151,7 @@ export type ConversationManager = {
         conversationId: string,
         connectionId: string,
     ): Promise<void>;
-    listConversations(name?: string): ConversationInfo[];
+    listConversations(name?: string): Promise<ConversationInfo[]>;
     renameConversation(
         conversationId: string,
         newName: string,
@@ -364,6 +364,33 @@ export async function createConversationManager(
 
     function getConversationPersistDir(conversationId: string): string {
         return path.join(conversationsDir, conversationId);
+    }
+
+    // Count the user requests recorded in a conversation's persisted display
+    // log. Reads from disk so idle conversations (no live dispatcher) report a
+    // count too; the log is flushed after each turn, so this trails by at most
+    // the in-flight request. Returns 0 when the log is missing or unreadable.
+    async function countUserMessages(conversationId: string): Promise<number> {
+        const filePath = path.join(
+            getConversationPersistDir(conversationId),
+            DISPLAY_LOG_FILE_NAME,
+        );
+        try {
+            const data = await fs.promises.readFile(filePath, "utf-8");
+            const parsed = JSON.parse(data);
+            if (!Array.isArray(parsed)) {
+                return 0;
+            }
+            let count = 0;
+            for (const entry of parsed as DisplayLogEntry[]) {
+                if (entry?.type === "user-request") {
+                    count++;
+                }
+            }
+            return count;
+        } catch {
+            return 0;
+        }
     }
 
     function ensureDispatcher(
@@ -631,6 +658,7 @@ export async function createConversationManager(
                 name: resolvedName,
                 clientCount: 0,
                 createdAt,
+                messageCount: 0,
             };
         },
 
@@ -893,7 +921,7 @@ export async function createConversationManager(
             );
         },
 
-        listConversations(name?: string): ConversationInfo[] {
+        async listConversations(name?: string): Promise<ConversationInfo[]> {
             const result: ConversationInfo[] = [];
             for (const record of conversations.values()) {
                 const recordName = record.name ?? "";
@@ -908,6 +936,9 @@ export async function createConversationManager(
                     name: recordName,
                     clientCount: record.sharedDispatcher?.clientCount ?? 0,
                     createdAt: record.createdAt,
+                    messageCount: await countUserMessages(
+                        record.conversationId,
+                    ),
                     ...(record.source !== undefined
                         ? { source: record.source }
                         : {}),

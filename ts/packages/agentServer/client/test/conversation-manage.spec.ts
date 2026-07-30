@@ -682,7 +682,7 @@ describe("manageNew — collision against current", () => {
 });
 
 describe("manageRename — result fidelity", () => {
-    test("returned conversation preserves real createdAt + clientCount", async () => {
+    test("returned conversation preserves real createdAt + clientCount + messageCount", async () => {
         const conn = makeStubConnection({
             list: [
                 {
@@ -690,6 +690,7 @@ describe("manageRename — result fidelity", () => {
                     name: "Old",
                     createdAt: "2026-05-15T10:00:00Z",
                     clientCount: 7,
+                    messageCount: 42,
                 },
             ],
         });
@@ -706,6 +707,7 @@ describe("manageRename — result fidelity", () => {
         if (result.kind === "ok" && result.conversation) {
             expect(result.conversation.createdAt).toBe("2026-05-15T10:00:00Z");
             expect(result.conversation.clientCount).toBe(7);
+            expect(result.conversation.messageCount).toBe(42);
             // and the new Date parse works (no Invalid Date corruption)
             expect(
                 isNaN(new Date(result.conversation.createdAt).getTime()),

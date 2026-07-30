@@ -19,8 +19,9 @@ export function makeInfo(
     name: string,
     createdAt: string = "2026-01-01T00:00:00Z",
     clientCount: number = 0,
+    messageCount: number = 0,
 ): ConversationInfo {
-    return { conversationId: id, name, createdAt, clientCount };
+    return { conversationId: id, name, createdAt, clientCount, messageCount };
 }
 
 export type StubCallLog = {

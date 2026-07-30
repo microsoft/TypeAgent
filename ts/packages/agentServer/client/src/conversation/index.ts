@@ -50,3 +50,5 @@ export {
     type ManageConversationContext,
     type ConversationActionResult,
 } from "./manage.js";
+
+export { renderConversationActionResult } from "./render.js";

@@ -121,6 +121,7 @@ type ConversationInfo = {
   name: string;
   clientCount: number;
   createdAt: string;
+  messageCount: number; // user requests recorded in the display log
 };
 ```
 
