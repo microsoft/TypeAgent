@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=0a9c11031f55ea15e59051402e35dbfe45a58c55d871149368bfcf7d96d25ee9 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=295d261046d7ab24f4d61ba0cb30f56f6504816733f95a05fd69f7ceceee1a91 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # onboarding-agent — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `onboarding-agent` is a TypeAgent application agent designed to automate the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each producing specific artifacts and configurations. This agent is particularly effective when used with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
+The `onboarding-agent` is a TypeAgent application agent that automates the process of integrating new applications and APIs into the TypeAgent ecosystem. It organizes the onboarding workflow into seven distinct phases, each producing specific artifacts and configurations. This agent is particularly effective when used with AI orchestrators like Claude Code or GitHub Copilot, which can drive the onboarding process via TypeAgent's MCP interface.
 
 ## What it does
 
@@ -164,6 +164,6 @@ _4 actions implemented by this agent, parsed deterministically from `./src/onboa
 
 ---
 
-_Auto-generated against commit `16b2ff3ac32747642a0ad2694df92f93a6aed1b5` on `2026-07-29T20:02:30.650Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
+_Auto-generated against commit `f2da006115d3e22abf26bf9edf349cb5798a07b9` on `2026-07-30T00:24:23.361Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter onboarding-agent docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

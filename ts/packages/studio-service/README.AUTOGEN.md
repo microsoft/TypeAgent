@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=604c14fc940ccc8e41cbe6dbf1fd5e2026b15e5b20f7833e253b7b3332deb964 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=a66843bd232a098389958c65b0440183063965eed7d11c91bee98505ee3db2b7 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # @typeagent/studio-service — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `@typeagent/studio-service` package is a standalone, per-workspace host for the TypeAgent Studio runtime (`@typeagent/core/runtime`) and its typed `agent-rpc` service channel. It is designed to operate within a developer's workspace, providing a dedicated environment for managing workspace state and facilitating communication between the Studio runtime and its clients. This service is typically launched by the `typeagent-studio` extension or the `typeagent-studio serve` CLI.
+The `@typeagent/studio-service` package serves as the standalone, per-workspace host for the TypeAgent Studio runtime (`@typeagent/core/runtime`) and its typed `agent-rpc` service channel. It is designed to operate within a developer's workspace, providing a dedicated environment for managing workspace state and facilitating communication between the Studio runtime and its clients. This service is typically launched by the `typeagent-studio` extension or the `typeagent-studio serve` CLI.
 
 ## What it does
 
-The `studio-service` package provides several key functionalities:
+The `studio-service` package provides the following core functionalities:
 
 - **Studio Runtime Hosting**: It runs the Studio runtime, which manages the state of the developer's workspace and executes actions within it.
 - **Typed Service Channel**: Establishes a typed `agent-rpc` service channel for structured communication between the Studio runtime and its clients, such as the `studio` agent and the `typeagent-studio` extension.
@@ -97,6 +97,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `59cbbc5f415e861717a2bdb75ffa0459ceb5c4c7` on `2026-07-29T18:12:59.352Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/studio-service docs:verify-links` to spot-check._
+_Auto-generated against commit `f2da006115d3e22abf26bf9edf349cb5798a07b9` on `2026-07-30T00:24:23.361Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/studio-service docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
