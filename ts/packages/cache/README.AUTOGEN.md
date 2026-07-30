@@ -3,28 +3,28 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=e9d5c7a706c1e87cd03d30cca526aebe289f829885cd0345f27e0b3258cb14aa -->
+<!-- AUTOGEN:DOCS:HASH:sha256=e95b080714181f9d7cd1ee1d45d0d2f600d3e9164337a3e31e62fa836a6bbf3d -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# agent-cache — AI-generated documentation
+# @typeagent/agent-cache — AI-generated documentation
 
 > 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
-The `agent-cache` package is a TypeScript library that provides a construction cache for handling TypeAgent requests. It is designed to optimize the processing of user requests by caching parsed grammar and rules, referred to as "constructions." These constructions enable the system to perform local translations of user requests, bypassing the need for repeated interactions with external Large Language Models (LLMs). This reduces latency and improves overall system efficiency.
+The `@typeagent/agent-cache` package is a TypeScript library that provides a construction cache for TypeAgent requests. It is a core component of the TypeAgent ecosystem, designed to optimize the handling of user requests by caching parsed grammar and rules, referred to as "constructions." These constructions enable local processing of user requests, reducing reliance on external Large Language Models (LLMs) and improving system efficiency.
 
 ## What it does
 
-The `agent-cache` package plays a critical role in the TypeAgent ecosystem by managing the explanation and caching of user request transformations. Its primary capabilities include:
+The `agent-cache` package focuses on managing the explanation and caching of user request transformations. Its key functionalities include:
 
-- **Request Explanation**: The package uses actions like `explainRequest` to analyze and explain how user requests are transformed into actions. This explanation is then used to generate constructions.
+- **Request Explanation**: Actions like `explainRequest` analyze and explain how user requests are transformed into actions. These explanations are used to generate constructions.
 - **Construction Caching**: Constructions derived from user requests are stored using actions like `cacheConstruction`. These cached constructions can be reused for similar requests, reducing the need for repeated LLM queries.
 - **Local Request Translation**: Cached constructions allow the system to translate user requests locally, bypassing the LLM and improving response times.
-- **Cache Management**: The package provides tools for managing construction caches, such as loading pre-existing cache files with the `loadConstructionCacheFile` action.
-- **Support for Multiple Explainers**: The package supports multiple explainers, each with its own validator and construction creator. This enables experimentation with different explanation and translation approaches.
+- **Cache Management**: Tools are provided for managing construction caches, such as loading pre-existing cache files with the `loadConstructionCacheFile` action.
+- **Support for Multiple Explainers**: The package supports multiple explainers, each with its own validator and construction creator. This allows experimentation with different explanation and translation approaches.
 
-By leveraging these features, `agent-cache` enhances the efficiency and scalability of the TypeAgent system.
+By leveraging these features, `agent-cache` enhances the efficiency and scalability of the TypeAgent system, enabling faster and more reliable processing of user requests.
 
 ## Setup
 
@@ -39,9 +39,9 @@ To use the `agent-cache` package, follow these steps:
      - `@typeagent/agent-sdk`
      - `@typeagent/aiclient`
      - `@typeagent/common-utils`
-     - `telemetry`
+     - `@typeagent/telemetry`
+     - `@typeagent/typechat-utils`
      - `test-lib`
-     - `typechat-utils`
    - Ensure the following external dependencies are installed:
      - `async`
      - `chalk`
@@ -144,15 +144,16 @@ Workspace:
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
-- [telemetry](../../packages/telemetry/README.md)
+- [@typeagent/telemetry](../../packages/telemetry/README.md)
+- [@typeagent/typechat-utils](../../packages/utils/typechatUtils/README.md)
 - [test-lib](../../packages/testLib/README.md)
-- [typechat-utils](../../packages/utils/typechatUtils/README.md)
 
 External: `async`, `chalk`, `debug`, `regexp.escape`, `typechat`
 
 ### Used by
 
 - [@typeagent/core](../../packages/typeagent-core/README.md)
+- [@typeagent/desktop-automation](../../packages/agents/desktop/README.md)
 - [agent-api](../../packages/api/README.md)
 - [agent-cache-explorer](../../packages/cacheExplorer/README.md)
 - [agent-cli](../../packages/cli/README.md)
@@ -160,7 +161,6 @@ External: `async`, `chalk`, `debug`, `regexp.escape`, `typechat`
 - [agent-sdk-wrapper](../../packages/agentSdkWrapper/README.md)
 - [cache-rest-endpoint](../../examples/cacheRESTEndpoint/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
-- [desktop-automation](../../packages/agents/desktop/README.md)
 - schema-studio
 
 ### Files of interest
@@ -179,6 +179,6 @@ External: `async`, `chalk`, `debug`, `regexp.escape`, `typechat`
 
 ---
 
-_Auto-generated against commit `8192acc149ab6f52296dcc71202b20253b6a3089` on `2026-07-22T05:16:33.340Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cache docs:verify-links` to spot-check._
+_Auto-generated against commit `5018562335eded84b16dedcbb8e86d59b538a978` on `2026-07-30T06:29:20.146Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/agent-cache docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

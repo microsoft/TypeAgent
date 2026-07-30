@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=45c18858ee6c0f0a433dff0af65a553c61530c2c6e884ad0dac7a438fabb6704 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=4319304a7d7ca65efdcd580d363427cd4205b19575f5de59974b053f1b8827f7 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-cli — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `agent-cli` package is a command-line interface (CLI) tool for interacting with the TypeAgent system. It acts as a front-end to the TypeAgent Dispatcher, enabling developers to test, debug, and manage interactive agents that use natural language interfaces. The CLI supports both interactive and non-interactive workflows, making it a versatile tool for working with the TypeAgent ecosystem.
+The `agent-cli` package is a command-line interface (CLI) tool for interacting with the TypeAgent system. It serves as a front-end to the TypeAgent Dispatcher, enabling developers to test, debug, and manage interactive agents that use natural language interfaces. The CLI supports both interactive and non-interactive workflows, making it a versatile tool for working with the TypeAgent ecosystem.
 
 ## What it does
 
-The `agent-cli` package provides several subcommands, each tailored to specific use cases:
+The `agent-cli` package provides several subcommands, each designed for specific use cases:
 
 - **`connect`**: The default subcommand, which starts an interactive session with the TypeAgent Dispatcher. Users can send natural language requests, receive responses, and manage conversations in real time. This mode is ideal for testing and debugging agent behavior.
 - **`run`**: Executes dispatcher commands non-interactively. This includes:
@@ -129,18 +129,18 @@ Workspace:
 
 - [@typeagent/action-grammar](../../packages/actionGrammar/README.md)
 - [@typeagent/action-schema](../../packages/actionSchema/README.md)
+- [@typeagent/agent-cache](../../packages/cache/README.md)
 - [@typeagent/agent-sdk](../../packages/agentSdk/README.md)
 - [@typeagent/agent-server-client](../../packages/agentServer/client/README.md)
 - [@typeagent/aiclient](../../packages/aiclient/README.md)
 - [@typeagent/common-utils](../../packages/utils/commonUtils/README.md)
 - [@typeagent/config](../../packages/config/README.md)
 - [@typeagent/dispatcher-types](../../packages/dispatcher/types/README.md)
-- [agent-cache](../../packages/cache/README.md)
+- [@typeagent/telemetry](../../packages/telemetry/README.md)
+- [@typeagent/typechat-utils](../../packages/utils/typechatUtils/README.md)
 - [agent-dispatcher](../../packages/dispatcher/dispatcher/README.md)
 - [default-agent-provider](../../packages/defaultAgentProvider/README.md)
 - [interactive-app](../../packages/interactiveApp/README.md)
-- [telemetry](../../packages/telemetry/README.md)
-- [typechat-utils](../../packages/utils/typechatUtils/README.md)
 
 External: `@oclif/core`, `@oclif/plugin-help`, `chalk`, `debug`, `dotenv`, `html-to-text`, `marked`, `marked-terminal`, `open`, `ts-node`
 
@@ -150,6 +150,6 @@ External: `@oclif/core`, `@oclif/plugin-help`, `chalk`, `debug`, `dotenv`, `html
 
 ---
 
-_Auto-generated against commit `ff9101e00228c5d0ff34c8dd3f108f46af46b0a6` on `2026-07-23T00:41:03.476Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
+_Auto-generated against commit `5018562335eded84b16dedcbb8e86d59b538a978` on `2026-07-30T06:29:20.146Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-cli docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
