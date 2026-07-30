@@ -194,5 +194,92 @@ describeForEachMatcher(
                 "plus",
             ]);
         });
+
+        // --- Non-breaking / additive-only guards ---
+
+        it("grouped (<Owner>)? is unchanged (pre-existing supported form)", () => {
+            const g = loadGrammarRules("test.agr", groupedGrammar);
+            expect(testMatchGrammar(g, "show files")).toStrictEqual([
+                "grouped",
+            ]);
+            expect(testMatchGrammar(g, "show alice files")).toStrictEqual([
+                "grouped",
+            ]);
+            expect(testMatchGrammar(g, "show charlie files")).toStrictEqual([]);
+        });
+
+        it("required rule refs without quantifiers stay required", () => {
+            const g = loadGrammarRules(
+                "test.agr",
+                `
+                <App> = outlook | teams | edge;
+                <Start> = open <App> -> "app";
+                `,
+            );
+            expect(testMatchGrammar(g, "open")).toStrictEqual([]);
+            expect(testMatchGrammar(g, "open outlook")).toStrictEqual(["app"]);
+            expect(testMatchGrammar(g, "open notepad")).toStrictEqual([]);
+        });
+
+        it("pre-existing (the)? string groups are unchanged", () => {
+            const g = loadGrammarRules(
+                "test.agr",
+                `
+                <Start> = open (the)? output panel -> "panel";
+                `,
+            );
+            expect(testMatchGrammar(g, "open output panel")).toStrictEqual([
+                "panel",
+            ]);
+            expect(testMatchGrammar(g, "open the output panel")).toStrictEqual([
+                "panel",
+            ]);
+            expect(testMatchGrammar(g, "open a output panel")).toStrictEqual([]);
+        });
+
+        it("group quantifiers ()? / ()* / ()+ stay independent of bare-ref fix", () => {
+            const g = loadGrammarRules(
+                "test.agr",
+                `
+                <Start> =
+                    mute (notifications)? -> "opt"
+                  | tag (bug | feature)* -> "star"
+                  | need (reviewer)+ -> "plus"
+                ;
+                `,
+            );
+            expect(testMatchGrammar(g, "mute")).toStrictEqual(["opt"]);
+            expect(testMatchGrammar(g, "mute notifications")).toStrictEqual([
+                "opt",
+            ]);
+            expect(testMatchGrammar(g, "tag")).toStrictEqual(["star"]);
+            expect(testMatchGrammar(g, "tag bug feature")).toStrictEqual([
+                "star",
+            ]);
+            expect(testMatchGrammar(g, "need")).toStrictEqual([]);
+            expect(testMatchGrammar(g, "need reviewer")).toStrictEqual(["plus"]);
+        });
+
+        it("wrong tails still fail when an optional rule ref is skipped or taken", () => {
+            const g = loadGrammarRules(
+                "test.agr",
+                `
+                <Polite> = please | can you;
+                <Start> = <Polite>? delete the production database -> "ok";
+                `,
+            );
+            expect(
+                testMatchGrammar(g, "delete the production database"),
+            ).toStrictEqual(["ok"]);
+            expect(
+                testMatchGrammar(g, "please delete the production database"),
+            ).toStrictEqual(["ok"]);
+            expect(
+                testMatchGrammar(g, "please delete the staging database"),
+            ).toStrictEqual([]);
+            expect(
+                testMatchGrammar(g, "open the production database"),
+            ).toStrictEqual([]);
+        });
     },
 );
