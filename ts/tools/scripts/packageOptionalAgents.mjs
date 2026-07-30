@@ -7,7 +7,7 @@
  * self-contained, installable bundles — Option 3 from
  * codeDocs .../2026-06-11_typeagent-plugin-agent-distribution.
  *
- * The lean service profile (config.<profile>.json) drops some agents; this packs
+ * The lean inbox profile (config.<profile>.json) drops some agents; this packs
  * each dropped agent so users can reinstall it on demand. Each agent is produced
  * via `pnpm deploy` (a folder with the agent + its full dep closure bundled in
  * node_modules, and its manifest/grammar data files intact), then foreign-arch
@@ -21,7 +21,7 @@
  * (M1) required.
  *
  * Usage (from ts/):
- *   node tools/scripts/packageOptionalAgents.mjs --out <dir> [--profile service]
+ *   node tools/scripts/packageOptionalAgents.mjs --out <dir> [--profile inbox]
  *        [--agents code-agent,markdown-agent] [--platform win32] [--arch x64]
  *        [--skip-prune]
  */
@@ -35,7 +35,7 @@ const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const tsRoot = path.resolve(scriptsDir, "..", "..");
 
 function parseArgs(argv) {
-    const args = { profile: "service", skipPrune: false };
+    const args = { profile: "inbox", skipPrune: false };
     for (let i = 2; i < argv.length; i++) {
         const a = argv[i];
         if (a === "--out") args.out = argv[++i];
