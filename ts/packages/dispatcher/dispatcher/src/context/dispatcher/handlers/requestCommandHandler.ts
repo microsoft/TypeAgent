@@ -354,8 +354,7 @@ function buildExplainedDetail(
             .join(", "),
         rule,
         mapping: mapping.length > 0 ? mapping : undefined,
-        segments:
-            segments && segments.length > 0 ? segments : undefined,
+        segments: segments && segments.length > 0 ? segments : undefined,
         generalizations:
             generalizations && generalizations.length > 0
                 ? generalizations
