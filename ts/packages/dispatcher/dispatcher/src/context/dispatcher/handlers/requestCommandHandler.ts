@@ -857,7 +857,7 @@ export class RequestCommandHandler implements CommandHandler {
             // `preference-clarify` feature is meant to render its own
             // interactive pick + "remember" card via executeActions, so it
             // must NOT be diverted to reasoning.
-            let reasoningHandled = await tryReasoningFallback(
+            const reasoningHandled = await tryReasoningFallback(
                 systemContext,
                 context,
                 request,

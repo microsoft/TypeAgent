@@ -103,7 +103,7 @@ async function answerCommandQuestion(
         ["selfhelp"],
     );
     chatModel.completionCallback = (_params, data) => {
-        const usage = (data as any)?.usage;
+        const usage = data?.usage;
         if (usage) {
             tokenUsage.prompt_tokens += usage.prompt_tokens ?? 0;
             tokenUsage.completion_tokens += usage.completion_tokens ?? 0;

@@ -1037,14 +1037,14 @@ export async function handleLaunchCopilotChatAction(
 
 // GitHub Copilot Chat handler — uses native VS Code Copilot Chat integration
 async function handleCopilotChatAction(
-    params: Record<string, any>,
+    params: Record<string, unknown>,
 ): Promise<ActionResult> {
     const query: string = typeof params.query === "string" ? params.query : "";
     const mode: string = params.mode === "ask" ? "ask" : "agent";
     const autoSend: boolean = params.isPartialQuery !== true;
     const attachScreenshot: boolean = params.attachScreenshot === true;
     const attachFilePaths: string[] = Array.isArray(params.attachFiles)
-        ? params.attachFiles.filter((p: unknown) => typeof p === "string")
+        ? params.attachFiles.filter((p: unknown): p is string => typeof p === "string")
         : [];
     const newSession: boolean = params.newSession !== false;
     const newSessionLocation = resolveChatSessionLocation(
@@ -1130,7 +1130,7 @@ async function handleCopilotChatAction(
 
 // Claude Chat handler — tries to open Claude extension if available
 async function handleClaudeChatAction(
-    params: Record<string, any>,
+    params: Record<string, unknown>,
 ): Promise<ActionResult> {
     const query: string = typeof params.query === "string" ? params.query : "";
     const newSessionLocation = resolveChatSessionLocation(
@@ -1183,7 +1183,7 @@ async function handleClaudeChatAction(
 
 // ChatGPT/OpenAI handler — tries to open ChatGPT extension if available
 async function handleGPTChatAction(
-    params: Record<string, any>,
+    params: Record<string, unknown>,
 ): Promise<ActionResult> {
     const query: string = typeof params.query === "string" ? params.query : "";
     const newSessionLocation = resolveChatSessionLocation(
@@ -1237,7 +1237,7 @@ async function handleGPTChatAction(
 
 // Generic chat handler — opens the default VS Code chat in the requested location
 async function handleGenericChatAction(
-    params: Record<string, any>,
+    params: Record<string, unknown>,
 ): Promise<ActionResult> {
     const query: string = typeof params.query === "string" ? params.query : "";
     const newSessionLocation = resolveChatSessionLocation(
