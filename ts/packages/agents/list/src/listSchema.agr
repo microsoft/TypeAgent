@@ -72,7 +72,18 @@
 };
 
 // createList - create a new list
+//
+// The alternatives come in two word orders: "<name> list" (name before the
+// literal "list") and "list (named|called) <name>" (name after). Both are
+// common phrasings and must each be listed explicitly since the grammar has
+// no way to make "list" optionally precede or follow the wildcard.
 <CreateList> = create (a)? (new)? $(listName:wildcard) list -> {
+    actionName: "createList",
+    parameters: {
+        listName
+    }
+}
+  | create (a)? (new)? list (named | called) $(listName:wildcard) -> {
     actionName: "createList",
     parameters: {
         listName
@@ -84,7 +95,19 @@
         listName
     }
 }
+  | (can you)? make (me)? (a)? (new)? list (named | called) $(listName:wildcard) -> {
+    actionName: "createList",
+    parameters: {
+        listName
+    }
+}
   | start (a)? (new)? $(listName:wildcard) list -> {
+    actionName: "createList",
+    parameters: {
+        listName
+    }
+}
+  | start (a)? (new)? list (named | called) $(listName:wildcard) -> {
     actionName: "createList",
     parameters: {
         listName
@@ -148,6 +171,53 @@
     parameters: {
         listName
     }
+}
+  | clear (everything)? (all items)? from (the)? (my)? $(listName:wildcard) list -> {
+    actionName: "clearList",
+    parameters: {
+        listName
+    }
+};
+
+// deleteList - permanently remove a list itself, not just its items.
+// Distinguished from <ClearList>'s "delete ... from ... list" alternative by
+// the absence of "from": "delete the grocery list" deletes the list, while
+// "delete everything from the grocery list" (has "from") clears it.
+<DeleteList> = (can you)? delete (the)? (my)? $(listName:wildcard) list -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | (can you)? delete (the)? (my)? list (named | called) $(listName:wildcard) -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | (can you)? remove (the)? (my)? $(listName:wildcard) list -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | (can you)? remove (the)? (my)? list (named | called) $(listName:wildcard) -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | get rid of (the)? (my)? $(listName:wildcard) list -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
+}
+  | get rid of (the)? (my)? list (named | called) $(listName:wildcard) -> {
+    actionName: "deleteList",
+    parameters: {
+        listName
+    }
 };
 
 // listLists - show which lists exist
@@ -160,6 +230,14 @@
   | (what | which) lists (do | are)? (i | we | there)? (have)? -> {
     actionName: "listLists",
     parameters: {}
+}
+  | is there (a)? list (available)? -> {
+    actionName: "listLists",
+    parameters: {}
+}
+  | do (i | we) have (a | any) (list | lists) -> {
+    actionName: "listLists",
+    parameters: {}
 };
 
 import { ListAction } from "./listSchema.ts";
@@ -169,4 +247,5 @@ import { ListAction } from "./listSchema.ts";
   | <CreateList>
   | <GetList>
   | <ClearList>
+  | <DeleteList>
   | <ListLists>;

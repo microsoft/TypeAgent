@@ -17,6 +17,7 @@ import { WeatherAction } from "./weatherSchema.ts";
 // Weather Pattern Rules
 <CurrentWeatherPatterns> =
     what's the weather like
+  | what is the weather
   | check the current conditions
   | current weather
   | get current weather

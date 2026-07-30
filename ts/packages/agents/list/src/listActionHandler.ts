@@ -185,6 +185,10 @@ class MemoryListCollection {
         return this.lists.get(name);
     }
 
+    deleteList(name: string): boolean {
+        return this.lists.delete(name);
+    }
+
     getListNames(): string[] {
         return Array.from(this.lists.keys());
     }
@@ -451,6 +455,21 @@ async function handleListAction(
                 displayText,
             );
             result.entities = getEntities(listName);
+            break;
+        }
+        case "deleteList": {
+            const store = getStore(listContext);
+            const listName = action.parameters.listName;
+            // Validate the list exists before deleting (throws a clear,
+            // consistent "not found" error like the other list-name actions).
+            getList(listContext, listName);
+            store.deleteList(listName);
+            await store.save();
+            displayText = `Deleted list: ${listName}`;
+            result = createActionResultFromTextDisplay(
+                displayText,
+                displayText,
+            );
             break;
         }
         case "startEditList": {
