@@ -2163,6 +2163,15 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
                 );
             },
         ),
+        reasoningForwardActions: getToggleHandlerTable(
+            "let the reasoning agent forward client actions (e.g. @conversation switch) to the client instead of capturing them",
+            async (context, enable) => {
+                await changeContextConfig(
+                    { execution: { reasoningForwardActions: enable } },
+                    context,
+                );
+            },
+        ),
     },
 };
 

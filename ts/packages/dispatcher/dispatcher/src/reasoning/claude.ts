@@ -516,6 +516,12 @@ function getClaudeOptions(
 
             const result: IAgentMessage[] = [];
             const savedClientIO = systemContext.clientIO;
+            // When enabled, client-forwarding actions (e.g. @conversation
+            // switch's manage-conversation) reach the real client instead of
+            // nullClientIO's "not supported"; off keeps capture-only.
+            const forwardActions =
+                systemContext.session.getConfig().execution
+                    .reasoningForwardActions;
             const capturingClientIO: ClientIO = {
                 ...nullClientIO,
                 setDisplay: (message) => {
@@ -534,6 +540,13 @@ function getClaudeOptions(
                 appendDiagnosticData: (requestId, data) => {
                     savedClientIO.appendDiagnosticData(requestId, data);
                 },
+                ...(forwardActions
+                    ? {
+                          takeAction: (
+                              ...args: Parameters<ClientIO["takeAction"]>
+                          ) => savedClientIO.takeAction(...args),
+                      }
+                    : {}),
             };
             systemContext.isInsideReasoningLoop = true;
             let actionResult: ActionResult | undefined;
