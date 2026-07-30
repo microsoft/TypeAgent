@@ -420,9 +420,7 @@ function handleRequestChoice(msg: {
     void (async () => {
         const opts = { showMessage: false, requestId: msg.requestId };
         let response:
-            | boolean
-            | number[]
-            | { selected: number; remember: boolean };
+            boolean | number[] | { selected: number; remember: boolean };
         if (msg.choiceType === "yesNo") {
             response = await chatPanel.askYesNo(msg.message, undefined, opts);
         } else if (msg.choiceType === "pickRemember") {
@@ -793,7 +791,11 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
                 // icon + click-to-open popover on replayed user bubbles.
                 const rid = e.notificationId ?? e.requestId;
                 if (e.event === "explained" && rid) {
-                    out.push({ kind: "explained", requestId: rid, data: e.data });
+                    out.push({
+                        kind: "explained",
+                        requestId: rid,
+                        data: e.data,
+                    });
                 }
                 break;
             }

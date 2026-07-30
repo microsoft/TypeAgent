@@ -806,9 +806,24 @@ describe("roadrunner (explained) popover", () => {
                 rule: "<politeness>?<M:action><politeness>?",
                 segments: [action],
                 generalizations: [
-                    [{ text: "show all of the conversations", category: "action" }],
-                    [{ text: "display all of the conversations", category: "action" }],
-                    [{ text: "get all of the conversations", category: "action" }],
+                    [
+                        {
+                            text: "show all of the conversations",
+                            category: "action",
+                        },
+                    ],
+                    [
+                        {
+                            text: "display all of the conversations",
+                            category: "action",
+                        },
+                    ],
+                    [
+                        {
+                            text: "get all of the conversations",
+                            category: "action",
+                        },
+                    ],
                     [{ text: "please", category: "politeness" }, action],
                     [action, { text: "please", category: "politeness" }],
                 ],
@@ -827,7 +842,9 @@ describe("roadrunner (explained) popover", () => {
         const gens = () =>
             popover.querySelectorAll<HTMLElement>(".chat-explained-gen");
         expect(gens().length).toBe(3);
-        const more = popover.querySelector<HTMLElement>(".chat-explained-more")!;
+        const more = popover.querySelector<HTMLElement>(
+            ".chat-explained-more",
+        )!;
         expect(more.textContent).toBe("load 2 more");
 
         more.click();

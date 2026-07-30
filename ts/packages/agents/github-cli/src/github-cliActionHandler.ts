@@ -1461,8 +1461,7 @@ export function buildStructuredListResult(
                 header: "Repo",
                 value: (i) => {
                     const repo = i.repository as
-                        | Record<string, unknown>
-                        | undefined;
+                        Record<string, unknown> | undefined;
                     return (
                         (repo?.nameWithOwner as string | undefined) ??
                         (repo?.name as string | undefined) ??
@@ -1521,8 +1520,7 @@ export function buildStructuredListResult(
         const markdownList = items
             .map((pr) => {
                 const repo = pr.repository as
-                    | Record<string, unknown>
-                    | undefined;
+                    Record<string, unknown> | undefined;
                 const repoFull =
                     (repo?.nameWithOwner as string | undefined) ??
                     (repo?.name as string | undefined) ??
@@ -1657,8 +1655,7 @@ export function buildStructuredDependabotResult(
             type: "badge",
             value: (a): TableCell => {
                 const adv = a.security_advisory as
-                    | Record<string, unknown>
-                    | undefined;
+                    Record<string, unknown> | undefined;
                 const sev = String(adv?.severity ?? "unknown").toUpperCase();
                 return { text: sev, badge: severityBadge(sev) };
             },
@@ -1679,8 +1676,7 @@ export function buildStructuredDependabotResult(
             type: "link",
             value: (a): TableCell => {
                 const adv = a.security_advisory as
-                    | Record<string, unknown>
-                    | undefined;
+                    Record<string, unknown> | undefined;
                 return {
                     text: String(adv?.summary ?? ""),
                     href: String(a.html_url ?? ""),

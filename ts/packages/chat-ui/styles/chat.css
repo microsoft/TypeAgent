@@ -2158,7 +2158,8 @@ table.sc-kv-table.sc-card-fields {
   border-radius: 8px;
   background-color: var(--chat-conversation-popover-background, #fffdf5);
   color: var(--chat-conversation-foreground, #202020);
-  box-shadow: 0 4px 14px var(--chat-conversation-popover-shadow, rgba(0, 0, 0, 0.18));
+  box-shadow: 0 4px 14px
+    var(--chat-conversation-popover-shadow, rgba(0, 0, 0, 0.18));
   font-size: 12px;
   text-align: left;
   cursor: default;
@@ -2218,7 +2219,10 @@ table.sc-kv-table.sc-card-fields {
   margin-top: 3px;
   padding: 4px 6px;
   border-radius: 6px;
-  background-color: var(--chat-conversation-list-hover-background, rgba(0, 0, 0, 0.04));
+  background-color: var(
+    --chat-conversation-list-hover-background,
+    rgba(0, 0, 0, 0.04)
+  );
 }
 
 .chat-explained-mapname {
@@ -2293,7 +2297,10 @@ table.sc-kv-table.sc-card-fields {
   border-radius: 6px;
   max-height: 148px;
   overflow: auto;
-  background-color: var(--chat-conversation-list-hover-background, rgba(0, 0, 0, 0.04));
+  background-color: var(
+    --chat-conversation-list-hover-background,
+    rgba(0, 0, 0, 0.04)
+  );
 }
 
 .chat-explained-gen {

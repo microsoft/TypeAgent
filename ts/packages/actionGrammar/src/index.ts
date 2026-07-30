@@ -25,10 +25,7 @@ export type {
     FileLoader,
 } from "./grammarCompiler.js";
 export { defaultFileLoader } from "./defaultFileLoader.js";
-export {
-    buildGrammarSourceMap,
-    findMatchedRule,
-} from "./grammarSourceMap.js";
+export { buildGrammarSourceMap, findMatchedRule } from "./grammarSourceMap.js";
 export type {
     GrammarSourceMap,
     GrammarRuleRange,

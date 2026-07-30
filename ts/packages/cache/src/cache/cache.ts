@@ -322,8 +322,7 @@ export class AgentCache {
                 );
             }
             let constructionResult:
-                | { added: boolean; message: string }
-                | undefined;
+                { added: boolean; message: string } | undefined;
             if (generateConstruction && explanation.success) {
                 const construction = explanation.construction;
                 let added = false;
@@ -401,9 +400,8 @@ export class AgentCache {
 
                             // Import populateCache dynamically to avoid circular dependencies
                             debug(`Importing populateCache...`);
-                            const { populateCache } = await import(
-                                "@typeagent/action-grammar/generation"
-                            );
+                            const { populateCache } =
+                                await import("@typeagent/action-grammar/generation");
                             debug(`populateCache imported successfully`);
 
                             debug(

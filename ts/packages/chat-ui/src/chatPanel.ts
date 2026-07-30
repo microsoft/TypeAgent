@@ -151,7 +151,12 @@ export interface DynamicDisplayResult {
 // pulling dispatcher-types in; the rationale is stale now that
 // dispatcher-types is a small types package with minimal dependencies (just
 // @typeagent/agent-sdk, which chat-ui already depends on).
-export type { PhaseTiming, CompletionUsageStats, NotifyExplainedData, ExplainedDetail };
+export type {
+    PhaseTiming,
+    CompletionUsageStats,
+    NotifyExplainedData,
+    ExplainedDetail,
+};
 
 /**
  * One entry in a session history transcript replayed via
@@ -4153,7 +4158,8 @@ export class ChatPanel {
 
             if (detail.mapping && detail.mapping.length > 0) {
                 const mapLabel = document.createElement("div");
-                mapLabel.className = "chat-explained-key chat-explained-maphead";
+                mapLabel.className =
+                    "chat-explained-key chat-explained-maphead";
                 mapLabel.textContent = "Mapping";
                 popover.appendChild(mapLabel);
                 const table = document.createElement("div");
@@ -4227,8 +4233,9 @@ export class ChatPanel {
      * the category palette so colors stay legible under both host themes.
      */
     private static isDarkSurface(el: HTMLElement): boolean {
-        const match = getComputedStyle(el)
-            .color.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
+        const match = getComputedStyle(el).color.match(
+            /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i,
+        );
         if (!match) return false;
         const luminance =
             (0.299 * +match[1] + 0.587 * +match[2] + 0.114 * +match[3]) / 255;
@@ -4240,10 +4247,7 @@ export class ChatPanel {
      * "action", "<politeness>?" -> "politeness".
      */
     private static markerCategory(token: string): string {
-        return token
-            .replace(/^</, "")
-            .replace(/>\??$/, "")
-            .replace(/^M:/, "");
+        return token.replace(/^</, "").replace(/>\??$/, "").replace(/^M:/, "");
     }
 
     /**
@@ -4385,7 +4389,6 @@ export class ChatPanel {
         });
         reveal(INITIAL);
     }
-
 
     public updateGrammarResult(
         requestId: string,

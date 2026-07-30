@@ -358,8 +358,7 @@ function buildExplainedDetail(
             .join(", "),
         rule,
         mapping: mapping.length > 0 ? mapping : undefined,
-        segments:
-            segments && segments.length > 0 ? segments : undefined,
+        segments: segments && segments.length > 0 ? segments : undefined,
         generalizations:
             generalizations && generalizations.length > 0
                 ? generalizations
@@ -432,9 +431,7 @@ function findMatchedGrammarRule(
         requestAction.request,
         primary.actionName,
     );
-    return matched
-        ? { rule: matched.text, segments: matched.segments }
-        : {};
+    return matched ? { rule: matched.text, segments: matched.segments } : {};
 }
 
 // Derive example same-meaning rephrasings from a V5 explanation, each broken
@@ -593,7 +590,10 @@ async function requestExplain(
         let rule: string | undefined;
         let segments: ExplainedSegment[] | undefined;
         if (fromCache === "grammar") {
-            ({ rule, segments } = findMatchedGrammarRule(context, requestAction));
+            ({ rule, segments } = findMatchedGrammarRule(
+                context,
+                requestAction,
+            ));
         } else {
             rule = translationResult.ruleText;
         }

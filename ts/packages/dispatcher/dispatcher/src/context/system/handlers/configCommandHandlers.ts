@@ -969,9 +969,7 @@ class ConfigModelSetCommandHandler implements CommandHandler {
     }
 }
 
-class ConfigTranslationNumberOfInitialActionsCommandHandler
-    implements CommandHandler
-{
+class ConfigTranslationNumberOfInitialActionsCommandHandler implements CommandHandler {
     public readonly description =
         "Set number of actions to use for initial translation";
     public readonly parameters = {
@@ -1878,11 +1876,7 @@ class ConfigExecutionReasoningEffortCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const effort = params.args.effort as
-            | "low"
-            | "medium"
-            | "high"
-            | "xhigh"
-            | undefined;
+            "low" | "medium" | "high" | "xhigh" | undefined;
         const current =
             context.sessionContext.agentContext.session.getConfig().execution
                 .reasoningEffort;
@@ -1971,9 +1965,7 @@ class ConfigExecutionScriptReuseCommandHandler implements CommandHandler {
     }
 }
 
-class ConfigExecutionConversationAnswerCommandHandler
-    implements CommandHandler
-{
+class ConfigExecutionConversationAnswerCommandHandler implements CommandHandler {
     public readonly description =
         "How conversation questions are answered: 'lookup' (conversation-memory lookup, reasoning as fallback), 'reasoning-first' (reasoning agent primary, lookup as fallback), or 'reasoning-only' (remove the lookup action; reasoning handles conversation Q&A)";
     public readonly parameters = {
@@ -1994,10 +1986,7 @@ class ConfigExecutionConversationAnswerCommandHandler
     ) {
         const systemContext = context.sessionContext.agentContext;
         const strategy = params.args.strategy as
-            | "lookup"
-            | "reasoning-first"
-            | "reasoning-only"
-            | undefined;
+            "lookup" | "reasoning-first" | "reasoning-only" | undefined;
         if (strategy === undefined) {
             return displayResult(
                 `Conversation answer strategy is '${systemContext.session.getConfig().execution.conversationAnswer}'`,
@@ -2095,10 +2084,7 @@ class ConfigExecutionEntityPromptShapeCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const shape = params.args.shape as
-            | "facets"
-            | "flat"
-            | "facets-with-schema"
-            | undefined;
+            "facets" | "flat" | "facets-with-schema" | undefined;
         if (shape === undefined) {
             return displayResult(
                 `Entity prompt shape is '${context.sessionContext.agentContext.session.getConfig().execution.entityPromptShape}'`,
@@ -3032,11 +3018,7 @@ function getCollisionPointHandlers(point: CollisionPoint): CommandHandlerTable {
 // carries the per-field validation (integer/range) so a bad value is rejected
 // rather than silently corrupting the decision math.
 type ContextSelectorNumericField =
-    | "windowTurns"
-    | "decay"
-    | "minUniqueTokens"
-    | "minMass"
-    | "margin";
+    "windowTurns" | "decay" | "minUniqueTokens" | "minMass" | "margin";
 
 type NumericFieldSpec = {
     description: string;

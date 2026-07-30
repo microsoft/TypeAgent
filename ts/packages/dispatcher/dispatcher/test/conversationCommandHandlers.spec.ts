@@ -17,9 +17,8 @@ jest.unstable_mockModule("../src/context/commandHandlerContext.js", () => ({
     getRequestId: jest.fn(() => mockRequestId),
 }));
 
-const { getConversationCommandHandlers } = await import(
-    "../src/context/system/handlers/conversationCommandHandlers.js"
-);
+const { getConversationCommandHandlers } =
+    await import("../src/context/system/handlers/conversationCommandHandlers.js");
 
 const commands = getConversationCommandHandlers().commands;
 

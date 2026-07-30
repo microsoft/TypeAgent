@@ -115,12 +115,7 @@ export type ChangeEditorLayoutAction = {
 };
 
 export type CodeFileLanguage =
-    | "html"
-    | "css"
-    | "json"
-    | "python"
-    | "javaScript"
-    | "typeScript";
+    "html" | "css" | "json" | "python" | "javaScript" | "typeScript";
 
 // Create a new code file (Python, JavaScript, TypeScript, HTML, CSS, JSON, etc.) in the editor.
 //

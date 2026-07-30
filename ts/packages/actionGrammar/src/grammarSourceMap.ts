@@ -55,7 +55,10 @@ export function buildGrammarSourceMap(
         files[fileId] = text;
     }
 
-    const startsByFile = new Map<string, { ruleId: string; offset: number }[]>();
+    const startsByFile = new Map<
+        string,
+        { ruleId: string; offset: number }[]
+    >();
     for (const [ruleId, pos] of collector.rulePositions) {
         const arr = startsByFile.get(pos.fileId) ?? [];
         arr.push({ ruleId, offset: pos.offset });

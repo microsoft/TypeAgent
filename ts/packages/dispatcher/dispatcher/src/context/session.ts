@@ -155,10 +155,7 @@ export type DispatcherConfig = {
             // Shape-agnostic: if the entity schema grows a new field, the LLM's
             // path guess resolves automatically — no code change here.
             pathNavigation:
-                | "off"
-                | "throw"
-                | "fallback-to-name"
-                | "passthrough";
+                "off" | "throw" | "fallback-to-name" | "passthrough";
         };
     };
 
@@ -347,9 +344,7 @@ export type CollisionConfig = {
     priorityOrder: string;
     // What user-clarify does inside a MultipleAction batch.
     multipleActionBehavior:
-        | "downgrade-to-priority"
-        | "pause-and-prompt"
-        | "abort";
+        "downgrade-to-priority" | "pause-and-prompt" | "abort";
     telemetry: {
         emit: boolean;
         debugLog: boolean;

@@ -54,14 +54,14 @@ Tag scoping IS supported: `createTagSearchTermGroup(tags)` →
 
 ## Design decisions
 
-| # | Decision | Rationale |
-|---|----------|-----------|
-| 1 | Fuzzy name = **hybrid lexical + embedding** | Lexical nails exact/typo; embeddings catch semantic. Embedding pattern already exists in repo. |
-| 2 | Content search = **one unified knowPro index across all conversations**, messages tagged by `conversationId` | Cross-conversation search without spinning up N dispatchers. Accept double-indexing (per-conversation **and** unified); storage is cheap. |
-| 3 | **Split** the surface: `@conversation find <name>` (fuzzy) + `@conversation search <query>` (content), separate actions | Distinct intents; can unify later. |
-| 4 | **Connected mode only** for now | Standalone unification is a bigger, separate effort. |
-| 5 | Per-conversation index = **source of truth**; unified index = **derived/rebuildable** | Append-only means hard delete must drop the per-conversation dir; unified index is compacted by rebuild. |
-| 6 | Unified-index compaction (reclaim tombstones) triggered **on idle-conversation timeout** + a startup safety check | The idle-eviction moment is contention-free; startup covers the "never idle again" case. |
+| #   | Decision                                                                                                                | Rationale                                                                                                                                 |
+| --- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Fuzzy name = **hybrid lexical + embedding**                                                                             | Lexical nails exact/typo; embeddings catch semantic. Embedding pattern already exists in repo.                                            |
+| 2   | Content search = **one unified knowPro index across all conversations**, messages tagged by `conversationId`            | Cross-conversation search without spinning up N dispatchers. Accept double-indexing (per-conversation **and** unified); storage is cheap. |
+| 3   | **Split** the surface: `@conversation find <name>` (fuzzy) + `@conversation search <query>` (content), separate actions | Distinct intents; can unify later.                                                                                                        |
+| 4   | **Connected mode only** for now                                                                                         | Standalone unification is a bigger, separate effort.                                                                                      |
+| 5   | Per-conversation index = **source of truth**; unified index = **derived/rebuildable**                                   | Append-only means hard delete must drop the per-conversation dir; unified index is compacted by rebuild.                                  |
+| 6   | Unified-index compaction (reclaim tombstones) triggered **on idle-conversation timeout** + a startup safety check       | The idle-eviction moment is contention-free; startup covers the "never idle again" case.                                                  |
 
 ## Target architecture
 
@@ -158,7 +158,7 @@ and [programNameIndex.ts](../../../packages/agents/desktop/src/programNameIndex.
     unconditionally. Population uses `extractKnowledge: true` by default
     (content search resolves through extracted knowledge, so production must
     extract; configurable via `createConversationSearchIndex(dir, {
-    extractKnowledge })`). Wired into `ConversationManager`:
+extractKnowledge })`). Wired into `ConversationManager`:
     created at startup, **tombstoned on delete**, closed on shutdown, and
     exposed via `indexConversationMessage()` + `searchConversationContent()`
     (the seams slices 3/4 call). Unit tests: `conversationSearchIndex.spec.ts`
@@ -180,7 +180,7 @@ and [programNameIndex.ts](../../../packages/agents/desktop/src/programNameIndex.
     user turn (`addUserMessageToHistory`) and assistant turn (`addResultToMemory`),
     **ungated by the knowledge-extraction flags** — which matters because connected
     mode sets `requestKnowledgeExtraction: false` / `actionResultKnowledgeExtraction:
-    false`, so the per-conversation memory tee is off there but the unified index
+false`, so the per-conversation memory tee is off there but the unified index
     still populates. `ConversationManager.ensureDispatcher` injects the sink,
     closing over the conversation id, so each dispatcher's turns land in the unified
     index tagged `conv:<id>`. Read-only Copilot mirrors never replay through the
