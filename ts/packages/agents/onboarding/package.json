@@ -65,6 +65,7 @@
     "copyfiles": "^2.4.1",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
+    "typescript": "~5.4.5",
     "ws": "^8.21.1"
   },
   "engines": {
