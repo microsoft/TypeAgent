@@ -75,6 +75,54 @@ export type ApiSurface = {
     baseUrl?: string;
 };
 
+// Minimal structural model of the subset of an OpenAPI 3 document this handler
+// reads. Deliberately partial (every field optional) since specs are parsed
+// from untrusted JSON — the extraction code guards each access rather than
+// assuming a valid/complete document.
+type OpenApiRef = { $ref?: string };
+type OpenApiSchema = {
+    type?: string;
+    description?: string;
+    properties?: Record<string, OpenApiSchema>;
+    required?: string[];
+} & OpenApiRef;
+type OpenApiParameter = {
+    name?: string;
+    in?: string;
+    description?: string;
+    required?: boolean;
+    schema?: OpenApiSchema;
+} & OpenApiRef;
+type OpenApiRequestBody = {
+    content?: Record<string, { schema?: OpenApiSchema }>;
+};
+type OpenApiOperation = {
+    operationId?: string;
+    summary?: string;
+    description?: string;
+    parameters?: OpenApiParameter[];
+    requestBody?: OpenApiRequestBody;
+};
+type OpenApiPathItem = {
+    parameters?: OpenApiParameter[];
+    get?: OpenApiOperation;
+    post?: OpenApiOperation;
+    put?: OpenApiOperation;
+    patch?: OpenApiOperation;
+    delete?: OpenApiOperation;
+} & OpenApiRef;
+type OpenApiServer = {
+    url?: string;
+    variables?: Record<string, { default?: string | number }>;
+};
+type OpenApiSpec = {
+    openapi?: string;
+    swagger?: string;
+    paths?: Record<string, OpenApiPathItem>;
+    components?: { parameters?: Record<string, OpenApiParameter> };
+    servers?: OpenApiServer[];
+};
+
 // TypeChat translator for structured CLI help extraction
 function createCliDiscoveryTranslator(): TypeChatJsonTranslator<CliDiscoveryResult> {
     const model = getDiscoveryModel();
@@ -372,7 +420,7 @@ function isInternalAction(name: string): boolean {
 // defaults are all left unset — the REST handler generator then falls back
 // to the stub handler rather than emitting a malformed request).
 export function resolveOpenApiBaseUrl(
-    spec: any,
+    spec: OpenApiSpec,
     specSource: string,
     fetchedUrl?: string,
 ): string | undefined {
@@ -397,7 +445,7 @@ export function resolveOpenApiBaseUrl(
     // Substitute server variables ({var}) from servers[0].variables[var].default.
     // If any referenced variable lacks a default, bail out rather than emit
     // a malformed URL containing a literal "{var}".
-    const variables = spec.servers[0].variables ?? {};
+    const variables = spec.servers?.[0]?.variables ?? {};
     let substituted = rawServerUrl;
     const varNames = [...rawServerUrl.matchAll(/\{([^}]+)\}/g)].map(
         (m) => m[1],
@@ -443,7 +491,10 @@ export function resolveOpenApiBaseUrl(
 // other pointer shape (external file refs, `#/definitions/...` from
 // Swagger 2, deeper paths) returns undefined and the caller treats the
 // parameter as unresolvable.
-function resolveLocalParameterRef(spec: any, ref: string): any | undefined {
+function resolveLocalParameterRef(
+    spec: OpenApiSpec,
+    ref: string,
+): OpenApiParameter | undefined {
     const match = /^#\/components\/parameters\/([^/]+)$/.exec(ref);
     if (!match) return undefined;
     const resolved = spec?.components?.parameters?.[match[1]];
@@ -460,51 +511,58 @@ function resolveLocalParameterRef(spec: any, ref: string): any | undefined {
 // parameter isn't dropped; any other `$ref` shape (external files, deeper
 // pointers) stays unresolved and is skipped.
 function mergeOperationParameters(
-    spec: any,
-    pathLevelParams: any[],
-    op: any,
+    spec: OpenApiSpec,
+    pathLevelParams: OpenApiParameter[],
+    op: OpenApiOperation,
 ): DiscoveredParameter[] {
-    const opLevelParams: any[] = Array.isArray(op.parameters)
+    const opLevelParams: OpenApiParameter[] = Array.isArray(op.parameters)
         ? op.parameters
         : [];
-    const mergedByKey = new Map<string, any>();
+    const mergedByKey = new Map<string, OpenApiParameter>();
     for (const raw of [...pathLevelParams, ...opLevelParams]) {
         if (!raw) continue;
         const p = raw.$ref ? resolveLocalParameterRef(spec, raw.$ref) : raw;
         if (!p || p.$ref || !p.name) continue;
         mergedByKey.set(`${p.in ?? "query"}:${p.name}`, p);
     }
-    return Array.from(mergedByKey.values()).map((p: any) => ({
-        name: p.name,
-        type: p.schema?.type ?? "string",
-        description: p.description,
-        required: p.required ?? false,
-        in: p.in,
-    }));
+    return Array.from(mergedByKey.values()).map(
+        (p): DiscoveredParameter =>
+            ({
+                name: p.name,
+                type: p.schema?.type ?? "string",
+                description: p.description,
+                required: p.required ?? false,
+                in: p.in,
+                // The guard loop above guarantees `name` is set and `in` is a
+                // valid OpenAPI location; assert the mapping since the source
+                // fields are optional/loosely typed on the parsed spec.
+            }) as DiscoveredParameter,
+    );
 }
 
 // Map an operation's JSON request-body properties to `in: "body"` parameters.
-function extractBodyParameters(op: any): DiscoveredParameter[] {
+function extractBodyParameters(op: OpenApiOperation): DiscoveredParameter[] {
     const requestBody = op.requestBody?.content?.["application/json"]?.schema;
     if (!requestBody?.properties) return [];
-    return (Object.entries(requestBody.properties) as [string, any][]).map(
-        ([propName, propSchema]): DiscoveredParameter => ({
-            name: propName,
-            type: propSchema.type ?? "string",
-            description: propSchema.description,
-            required: requestBody.required?.includes(propName) ?? false,
-            in: "body",
-        }),
+    return Object.entries(requestBody.properties).map(
+        ([propName, propSchema]): DiscoveredParameter =>
+            ({
+                name: propName,
+                type: propSchema.type ?? "string",
+                description: propSchema.description,
+                required: requestBody.required?.includes(propName) ?? false,
+                in: "body",
+            }) as DiscoveredParameter,
     );
 }
 
 // Build a single DiscoveredAction from one path/method/operation.
 function buildActionForOperation(
-    spec: any,
+    spec: OpenApiSpec,
     pathStr: string,
-    pathLevelParams: any[],
+    pathLevelParams: OpenApiParameter[],
     method: string,
-    op: any,
+    op: OpenApiOperation,
     specSource: string,
 ): DiscoveredAction {
     const name =
@@ -535,20 +593,19 @@ const OPENAPI_HTTP_METHODS = ["get", "post", "put", "patch", "delete"] as const;
 // have the shape below) spec document. Pure/synchronous so it can be unit
 // tested without going through the workspace-state-backed action handler.
 export function extractOpenApiActions(
-    spec: any,
+    spec: OpenApiSpec,
     specSource: string,
 ): DiscoveredAction[] {
     const actions: DiscoveredAction[] = [];
-    const paths = spec.paths ?? {};
-    for (const [pathStr, pathItem] of Object.entries(paths) as [
-        string,
-        any,
-    ][]) {
+    const paths: Record<string, OpenApiPathItem> = spec.paths ?? {};
+    for (const [pathStr, pathItem] of Object.entries(paths)) {
         // Deterministic inline-OpenAPI-3 subset only — a `$ref`'d path item
         // (shared path referencing a component) is out of scope for v1.
         if (pathItem?.$ref) continue;
 
-        const pathLevelParams: any[] = Array.isArray(pathItem?.parameters)
+        const pathLevelParams: OpenApiParameter[] = Array.isArray(
+            pathItem?.parameters,
+        )
             ? pathItem.parameters
             : [];
 
@@ -611,7 +668,7 @@ async function handleParseOpenApiSpec(
         };
     }
 
-    let spec: any;
+    let spec: OpenApiSpec;
     try {
         spec = JSON.parse(specContent);
     } catch {
