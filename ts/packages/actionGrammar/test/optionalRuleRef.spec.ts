@@ -234,7 +234,9 @@ describeForEachMatcher(
             expect(testMatchGrammar(g, "open the output panel")).toStrictEqual([
                 "panel",
             ]);
-            expect(testMatchGrammar(g, "open a output panel")).toStrictEqual([]);
+            expect(testMatchGrammar(g, "open a output panel")).toStrictEqual(
+                [],
+            );
         });
 
         it("group quantifiers ()? / ()* / ()+ stay independent of bare-ref fix", () => {
@@ -257,7 +259,9 @@ describeForEachMatcher(
                 "star",
             ]);
             expect(testMatchGrammar(g, "need")).toStrictEqual([]);
-            expect(testMatchGrammar(g, "need reviewer")).toStrictEqual(["plus"]);
+            expect(testMatchGrammar(g, "need reviewer")).toStrictEqual([
+                "plus",
+            ]);
         });
 
         it("wrong tails still fail when an optional rule ref is skipped or taken", () => {
