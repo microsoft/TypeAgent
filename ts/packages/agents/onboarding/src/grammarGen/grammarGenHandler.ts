@@ -11,6 +11,8 @@ import {
     ActionResult,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromMarkdownDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { createJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
 import { GrammarGenActions } from "./grammarGenSchema.js";
 import {
     loadState,
@@ -48,6 +50,18 @@ export async function executeGrammarGenAction(
 // the phase on the first compile error.
 const MAX_GRAMMAR_ATTEMPTS = 4;
 
+// TypeChat response envelope for grammar generation. A valid `{ grammar }` shape
+// says nothing about whether the grammar actually compiles — that is what the
+// agc compile→repair loop below validates. This type just lets the LLM call go
+// through TypeChat (typed extraction + a shape-repair pass) like the rest of the
+// codebase, rather than a raw model.complete.
+type GrammarGenResponse = { grammar: string };
+
+const GRAMMAR_GEN_RESPONSE_SCHEMA = `export type GrammarGenResponse = {
+    // The full .agr grammar file content.
+    grammar: string;
+};`;
+
 async function handleGenerateGrammar(
     integrationName: string,
 ): Promise<ActionResult> {
@@ -83,6 +97,19 @@ async function handleGenerateGrammar(
     await updatePhase(integrationName, "grammarGen", { status: "in-progress" });
 
     const model = getGrammarGenModel();
+    // Route the grammar-gen call through TypeChat for consistency with the rest
+    // of the codebase's structured LLM calls: it gives us typed, validated
+    // extraction of the `{ grammar }` envelope plus a shape-repair pass. Our
+    // prompts already carry the full instructions (including the JSON contract),
+    // so suppress TypeChat's default schema-framed request prompt and drive the
+    // call entirely from our own prompt sections.
+    const validator = createTypeScriptJsonValidator<GrammarGenResponse>(
+        GRAMMAR_GEN_RESPONSE_SCHEMA,
+        "GrammarGenResponse",
+    );
+    const translator = createJsonTranslator(model, validator);
+    translator.createRequestPrompt = () => "";
+
     let messages = buildGrammarPrompt(
         integrationName,
         surface,
@@ -96,13 +123,13 @@ async function handleGenerateGrammar(
 
     for (let attempt = 1; attempt <= MAX_GRAMMAR_ATTEMPTS; attempt++) {
         attempts = attempt;
-        const result = await model.complete(messages);
+        const result = await translator.translate("", messages);
         if (!result.success) {
             return { error: `Grammar generation failed: ${result.message}` };
         }
 
         grammarContent = stripUnboundOutputReferences(
-            rewriteInlineUnionCaptures(extractGrammarContent(result.data)),
+            rewriteInlineUnionCaptures(result.data.grammar.trim()),
         );
         await writeArtifact(
             integrationName,
@@ -767,33 +794,4 @@ function buildGrammarRepairPrompt(
                 `Return the corrected full grammar in the JSON format described above.`,
         },
     ];
-}
-
-function extractGrammarContent(llmResponse: string): string {
-    let body = llmResponse.trim();
-
-    // Strip an outer markdown fence (any language tag) before attempting JSON
-    // parse. Without this, a response like ```json\n{ "grammar": "..." }\n```
-    // fails JSON.parse on the literal backticks.
-    const outerFence = body.match(/^```[a-zA-Z]*\s*\n?([\s\S]*?)\n?```\s*$/);
-    if (outerFence) body = outerFence[1].trim();
-
-    try {
-        const parsed = JSON.parse(body);
-        if (parsed && typeof parsed.grammar === "string") {
-            return parsed.grammar.trim();
-        }
-    } catch {
-        // Fall through to template-literal salvage.
-    }
-
-    // Salvage backtick-template-literal style: { "grammar": `...` }.
-    const tmplMatch = body.match(/["']?grammar["']?\s*:\s*`([\s\S]*?)`\s*[,}]/);
-    if (tmplMatch) return tmplMatch[1].trim();
-
-    // Inner agr fence (no JSON wrapper).
-    const agrFence = body.match(/```(?:agr)\s*\n([\s\S]*?)```/);
-    if (agrFence) return agrFence[1].trim();
-
-    return body;
 }
