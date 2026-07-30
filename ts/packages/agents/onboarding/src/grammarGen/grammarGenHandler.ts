@@ -268,16 +268,57 @@ function outputPropIsBound(
 }
 
 /**
+ * Collect the capture names bound on every match path — those appearing at
+ * least once outside any optional `(...)?` group. A name captured only inside
+ * an optional group is conditionally bound, which agc rejects if the output
+ * references it, so it is treated here as unbound.
+ */
+function collectUnconditionalCaptures(patternPart: string): Set<string> {
+    // Swap each capture token for a parenthesis-free marker so the remaining
+    // parentheses are unambiguously grouping parens.
+    const names: string[] = [];
+    let work = patternPart.replace(
+        /\$\((\w+)\s*:[^)]*\)/g,
+        (_full, name: string) => {
+            names.push(name);
+            return `\uE000${names.length - 1}\uE000`;
+        },
+    );
+
+    // Reduce innermost groups outward. An optional group drops the markers
+    // inside it (conditionally bound); a required group is unwrapped, leaving
+    // its markers in place for the surrounding context.
+    const groupRe = /\(([^()]*)\)(\?)?/;
+    let m: RegExpExecArray | null;
+    while ((m = groupRe.exec(work)) !== null) {
+        const inner = m[1];
+        const optional = m[2] === "?";
+        const replacement = optional
+            ? inner.replace(/\uE000\d+\uE000/g, " ")
+            : inner;
+        work =
+            work.slice(0, m.index) +
+            replacement +
+            work.slice(m.index + m[0].length);
+    }
+
+    const captures = new Set<string>();
+    for (const mk of work.matchAll(/\uE000(\d+)\uE000/g)) {
+        captures.add(names[Number(mk[1])]);
+    }
+    return captures;
+}
+
+/**
  * Deterministically drop output-object properties that reference a name the
- * rule's pattern never captured. This is the single most common LLM grammar
- * error: the model lists a schema's OPTIONAL fields (e.g. `countryCode`,
- * `language`, `details`) in the `parameters` object without capturing them,
- * and the compiler rejects it with
- * "Variable X referenced in the value but not defined in the rule". Optional
- * fields are safe to omit, so we strip the unbound references here rather than
- * spend repair-loop attempts on them. If a stripped field was actually required
- * by the schema, the compile-repair loop's "missing property" diagnostic drives
- * the model to capture it on the next pass.
+ * rule's pattern does not bind on every match path. LLM grammars frequently
+ * list a schema's OPTIONAL fields in the `parameters` object without binding
+ * them unconditionally — either not capturing them at all, or capturing them
+ * only inside an optional `(...)?` group. agc rejects both with "Variable X
+ * referenced in the value but not defined in the rule". Optional fields are
+ * safe to omit, so the unbound references are stripped here rather than
+ * spending repair-loop attempts on them; a genuinely required field is
+ * re-driven by the compiler's "missing property" diagnostic on the next pass.
  */
 export function stripUnboundOutputReferences(grammarContent: string): string {
     const ruleRegex = /(<\w+>\s*[:=][\s\S]*?;)/g;
@@ -286,10 +327,7 @@ export function stripUnboundOutputReferences(grammarContent: string): string {
         if (arrowIdx < 0) return block;
         const patternPart = block.slice(0, arrowIdx);
 
-        const captures = new Set<string>();
-        const capRegex = /\$\((\w+)\s*:[^)]*\)/g;
-        let c: RegExpExecArray | null;
-        while ((c = capRegex.exec(patternPart)) !== null) captures.add(c[1]);
+        const captures = collectUnconditionalCaptures(patternPart);
 
         return block.replace(
             /parameters\s*:\s*\{([\s\S]*?)\}/g,

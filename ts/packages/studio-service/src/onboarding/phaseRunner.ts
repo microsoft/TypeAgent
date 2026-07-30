@@ -345,49 +345,72 @@ async function runDiscovery(
     }
     const executed = namesOrFallback(started, "startOnboarding");
 
-    // 2. Translate the free-text description into a source action (crawlDocUrl /
-    // parseOpenApiSpec / crawlCliHelp) via natural language; the handler writes
-    // discovery/api-surface.json. This is best-effort: NL is nondeterministic
-    // and may report a benign "cancelled" (the LLM asked to clarify or re-picked
-    // startOnboarding) — that is NOT a hard failure, so we don't throw here. The
-    // artifact check plus the deterministic fallback below are the real gate; the
-    // translation error is only surfaced if neither produces a surface (so a
-    // genuine auth/key error is not swallowed).
-    const translated = await deps.dispatch({
-        kind: "utterance",
-        text: buildDiscoveryUtterance(integrationName, session.description),
-    });
-    executed.push(...translated.actions.map((a) => a.actionName));
+    // Extract any concrete API source (spec URL / doc URL / CLI) from the
+    // description once, up front — it drives both the deterministic spec route
+    // (step 2) and the fallback (step 4).
+    const deterministicSource = extractDiscoverySource(
+        integrationName,
+        session.description,
+    );
 
-    // 3. Confirm a source was actually discovered by reading the on-disk
-    // artifact. The dispatcher's reported `actions` are unreliable in the
-    // service's silent/headless mode (empty even when the crawl ran), so
-    // api-surface.json is the source of truth.
-    let count = await discoveredActionCount(session, deps);
+    // 2. A structured OpenAPI/Swagger spec is deterministically parseable, so
+    // route it straight to parseOpenApiSpec instead of the nondeterministic NL
+    // step below. The NL utterance ("Crawl the API documentation…") biases the
+    // dispatcher to pick crawlDocUrl even for a spec URL; crawlDocUrl LLM-extracts
+    // REST-shaped actions but never resolves the spec's base URL, so the
+    // scaffolder can't emit a real REST handler (it silently falls back to a
+    // stub). Doc-URL and CLI sources still benefit from the LLM, so they keep the
+    // NL-first path.
+    let count = 0;
+    if (deterministicSource?.actionName === "parseOpenApiSpec") {
+        const parsed = await deps.dispatch(deterministicSource);
+        if (parsed.error) {
+            throw new Error(`parseOpenApiSpec failed: ${parsed.error}`);
+        }
+        executed.push(...namesOrFallback(parsed, "parseOpenApiSpec"));
+        count = await discoveredActionCount(session, deps);
+    }
+
+    // 3. Otherwise translate the free-text description into a source action
+    // (crawlDocUrl / parseOpenApiSpec / crawlCliHelp) via natural language; the
+    // handler writes discovery/api-surface.json. This is best-effort: NL is
+    // nondeterministic and may report a benign "cancelled" (the LLM asked to
+    // clarify or re-picked startOnboarding) — that is NOT a hard failure, so we
+    // don't throw here. The artifact check plus the deterministic fallback below
+    // are the real gate; the translation error is only surfaced if neither
+    // produces a surface (so a genuine auth/key error is not swallowed).
+    let translated: OnboardingDispatchOutcome | undefined;
     if (count === 0) {
-        // NL translation did not produce a surface (it re-picked startOnboarding,
-        // asked to clarify, or was cancelled). Fall back to a deterministic
-        // extraction of the source from the description and dispatch the typed
-        // crawl action directly.
-        const fallback = extractDiscoverySource(
-            integrationName,
-            session.description,
-        );
-        if (fallback !== undefined) {
-            const crawled = await deps.dispatch(fallback);
+        translated = await deps.dispatch({
+            kind: "utterance",
+            text: buildDiscoveryUtterance(integrationName, session.description),
+        });
+        executed.push(...translated.actions.map((a) => a.actionName));
+        count = await discoveredActionCount(session, deps);
+    }
+
+    // 4. Confirm a source was actually discovered by reading the on-disk
+    // artifact (the dispatcher's reported `actions` are unreliable in the
+    // service's silent/headless mode). If none, fall back to dispatching the
+    // deterministically-extracted crawl action directly.
+    if (count === 0) {
+        if (deterministicSource !== undefined) {
+            const crawled = await deps.dispatch(deterministicSource);
             if (crawled.error) {
                 throw new Error(
-                    `${fallback.actionName} failed: ${crawled.error}`,
+                    `${deterministicSource.actionName} failed: ${crawled.error}`,
                 );
             }
-            executed.push(...namesOrFallback(crawled, fallback.actionName));
+            executed.push(
+                ...namesOrFallback(crawled, deterministicSource.actionName),
+            );
             count = await discoveredActionCount(session, deps);
         }
         if (count === 0) {
             // Neither NL nor the deterministic fallback produced an API surface.
             // If NL reported an error (e.g. an auth/key failure), surface it;
             // otherwise the description simply carried no crawlable source.
-            if (translated.error) {
+            if (translated?.error) {
                 throw new Error(
                     `Discovery translation failed: ${translated.error}`,
                 );

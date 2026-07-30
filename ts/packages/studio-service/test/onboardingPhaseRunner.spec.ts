@@ -125,6 +125,67 @@ describe("createOnboardingPhaseRunner", () => {
         expect(out.generatedAt).toBe(1000);
     });
 
+    it("routes an OpenAPI spec URL straight to parseOpenApiSpec, skipping NL", async () => {
+        // A structured spec is deterministically parseable and must NOT be routed
+        // through the nondeterministic NL step, which biases to crawlDocUrl and
+        // never resolves the spec's base URL (leaving the scaffolder unable to
+        // emit a real REST handler).
+        const { dispatch, steps } = recordingDispatch(echoAction);
+        const run = createOnboardingPhaseRunner({
+            dispatch,
+            readArtifact: apiSurface(3),
+            now: () => 2000,
+        });
+
+        const out = (await run(
+            makeSession({
+                agentName: "petstore",
+                description:
+                    "Pet store API. Parse the OpenAPI spec at https://petstore.swagger.io/v2/swagger.json",
+            }),
+            "Discovery",
+            undefined,
+        )) as OnboardingPhaseOutputs;
+
+        // startOnboarding, then parseOpenApiSpec dispatched DIRECTLY (no
+        // utterance), then approveApiSurface.
+        expect(steps.some((s) => s.kind === "utterance")).toBe(false);
+        expect(steps[1]).toEqual({
+            kind: "action",
+            actionName: "parseOpenApiSpec",
+            parameters: {
+                integrationName: "petstore",
+                specSource: "https://petstore.swagger.io/v2/swagger.json",
+            },
+        });
+        expect(out.actions).toEqual([
+            "startOnboarding",
+            "parseOpenApiSpec",
+            "approveApiSurface",
+        ]);
+    });
+
+    it("throws when the deterministic parseOpenApiSpec route errors", async () => {
+        const { dispatch } = recordingDispatch((step) =>
+            step.kind === "action" && step.actionName === "parseOpenApiSpec"
+                ? { actions: [], error: "bad spec" }
+                : echoAction(step),
+        );
+        const run = createOnboardingPhaseRunner({
+            dispatch,
+            readArtifact: noArtifacts,
+        });
+        await expect(
+            run(
+                makeSession({
+                    description: "Spec at https://api.example.com/openapi.json",
+                }),
+                "Discovery",
+                undefined,
+            ),
+        ).rejects.toThrow(/parseOpenApiSpec failed: bad spec/);
+    });
+
     it("reports the translated source action name in the Discovery outputs", async () => {
         for (const src of DISCOVERY_SOURCE_ACTIONS) {
             const { dispatch } = recordingDispatch((step) =>
