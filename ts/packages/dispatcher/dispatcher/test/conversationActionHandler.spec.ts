@@ -69,12 +69,20 @@ describe("executeConversationAction delegates to @conversation commands", () => 
         expectCommand('@conversation new "my work project"');
     });
 
-    it("escapes embedded quotes in conversation names", async () => {
+    it("uses single-quoted tokens when names contain double quotes", async () => {
         await run({
             actionName: "newConversation",
             parameters: { name: 'fix "bug"' },
         });
-        expectCommand('@conversation new "fix \\"bug\\""');
+        expectCommand(`@conversation new 'fix "bug"'`);
+    });
+
+    it("escapes when names contain both quote types", async () => {
+        await run({
+            actionName: "newConversation",
+            parameters: { name: `Sam's "playlist"` },
+        });
+        expectCommand(`@conversation new "Sam's \\"playlist\\""`);
     });
 
     it("listConversation runs list", async () => {
