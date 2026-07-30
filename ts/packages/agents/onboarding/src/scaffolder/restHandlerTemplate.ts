@@ -1,23 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// REST handler template generator — the fetch-based twin of
-// cliHandlerTemplate.ts. Produces a complete TypeScript action handler that
-// issues real HTTP requests against a base URL captured from an OpenAPI 3
-// spec's `servers[0].url` (see discoveryHandler.ts's parseOpenApiSpec arm).
+// Generates a fetch-based TypeScript action handler that issues HTTP requests
+// against a base URL resolved from an OpenAPI 3 spec. Called by
+// scaffolderHandler when the API surface has a resolved `baseUrl` and actions
+// carrying an HTTP method and `path`.
 //
-// Called by scaffolderHandler when the API surface has a resolved
-// `baseUrl` and HTTP-method actions with a `path` (parseOpenApiSpec arm
-// only — crawlDocUrl's LLM-guessed method/path is out of scope).
-//
-// v1 limitations (see restHandler.template header comment too):
+// v1 limitations:
 //   - scalar path/query params only (no arrays/objects, no style/explode)
-//   - header/cookie params are unsupported: required ones fail the action,
-//     optional ones are silently dropped
+//   - header/cookie params: required ones fail the action, optional ones are
+//     dropped
 //   - no auth (no Authorization / api-key headers)
 //   - DELETE requests never carry a body
-//   - `$ref`-based params/bodies/path-items are skipped upstream in
-//     discoveryHandler.ts, so they never reach this generator
 
 import type { DiscoveredAction } from "../discovery/discoveryHandler.js";
 import fs from "fs/promises";
@@ -41,11 +35,9 @@ const HTTP_METHODS_WITH_HANDLER = new Set([
     "DELETE",
 ]);
 
-// Deterministic wire-name -> camelCase transform. Mirrors the transform
-// SchemaGen's LLM prompt asks the model to apply to parameter names
-// (schemaGenHandler.ts), so `book_id` / `book-id` on the wire becomes the
-// `bookId` the LLM is expected to populate in `action.parameters`. Exotic
-// LLM renames outside this transform are a known v1 limitation.
+// Deterministic wire-name -> camelCase transform, matching how parameter
+// names are renamed during SchemaGen, so `book_id`/`book-id` on the wire maps
+// to the `bookId` populated in `action.parameters`.
 function toCamel(wireName: string): string {
     return wireName.replace(/[-_]+([A-Za-z0-9])/g, (_, c: string) =>
         c.toUpperCase(),
@@ -168,25 +160,11 @@ function buildSwitchCases(actions: DiscoveredAction[]): string {
 }
 
 /**
- * Returns the subset of `actions` this generator can actually handle:
- * actions from the parseOpenApiSpec arm with a recognized HTTP method and a
- * `path`. Used by scaffolderHandler to decide whether to route to the REST
- * generator at all.
- */
-/**
- * Returns the subset of `actions` this generator can actually handle:
- * actions from the parseOpenApiSpec arm with a recognized HTTP method and a
- * `path`. Used by scaffolderHandler to decide whether to route to the REST
- * generator at all.
- *
- * Also excludes any action whose path template contains a `{placeholder}`
- * that has no corresponding resolved (non-`$ref`) path parameter — this can
- * happen if a path param used an unsupported `$ref` shape (e.g. an external
- * file reference) that discoveryHandler.ts's local-ref resolution couldn't
- * follow. Emitting a handler for such an action would substitute the
- * literal string "undefined" into the request URL at runtime; safer to
- * fall back to the stub handler for that action than to silently build a
- * broken request.
+ * Returns the subset of `actions` this generator can handle: those with a
+ * recognized HTTP method and a `path` whose every `{placeholder}` has a
+ * resolved path parameter. An action with an unresolved placeholder is
+ * excluded so the caller falls back to the stub handler instead of emitting a
+ * request with a literal "undefined" in the URL.
  */
 export function filterRestActions(
     actions: DiscoveredAction[] | undefined,

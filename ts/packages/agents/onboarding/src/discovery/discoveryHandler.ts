@@ -503,14 +503,11 @@ export function extractOpenApiActions(
             const mergedByKey = new Map<string, any>();
             for (const raw of [...pathLevelParams, ...opLevelParams]) {
                 if (!raw) continue;
-                // Resolve local `#/components/parameters/*` refs inline —
-                // these are extremely common for path params in real-world
-                // specs (e.g. the GitHub REST spec references nearly every
-                // path parameter this way), so treating them as "$ref,
-                // therefore skip" would silently drop the parameter and
-                // leave the generated handler substituting `undefined` into
-                // the URL. Any other `$ref` shape (external files, deeper
-                // pointers) stays unresolved/out of v1 scope and is skipped.
+                // Resolve local `#/components/parameters/*` refs inline so a
+                // referenced parameter isn't dropped (which would leave the
+                // generated handler substituting `undefined` into the URL).
+                // Any other `$ref` shape (external files, deeper pointers)
+                // stays unresolved and is skipped.
                 const p = raw.$ref
                     ? resolveLocalParameterRef(spec, raw.$ref)
                     : raw;
