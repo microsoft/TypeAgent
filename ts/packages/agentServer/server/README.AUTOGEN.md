@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=da07518a7a40888acd4d6c8bc2bd3e95c7e667e7d15dd45326a7d6e52a75406f -->
+<!-- AUTOGEN:DOCS:HASH:sha256=699a22cf38727f060a3bc2436869a1c983600c3824d3a05c3033b36870e7953f -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-server — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `agent-server` package is a TypeScript library that implements a long-running WebSocket server for hosting TypeAgent dispatchers. It acts as the central hub for managing client connections, orchestrating conversations, and facilitating communication between clients and agents. The server supports multiple clients and conversations simultaneously, with features such as conversation persistence, idle timeouts, and ephemeral conversation cleanup.
+The `agent-server` package is a TypeScript library that implements a long-running WebSocket server for hosting TypeAgent dispatchers. It serves as the central hub for managing client connections, orchestrating conversations, and facilitating communication between clients and agents. The server supports multiple clients and conversations simultaneously, with features such as conversation persistence, idle timeouts, and ephemeral conversation cleanup.
 
 ## What it does
 
@@ -171,6 +171,6 @@ _9 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `fa4bb9b44db12e2d15b83e03e59f9c7147ed2b50` on `2026-07-27T19:08:36.121Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
+_Auto-generated against commit `5018562335eded84b16dedcbb8e86d59b538a978` on `2026-07-30T06:29:20.146Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-server docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

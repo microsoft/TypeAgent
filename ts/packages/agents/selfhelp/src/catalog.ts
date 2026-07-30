@@ -298,19 +298,19 @@ type ScoredAction = {
     s: number;
 };
 
+type GroupSelection = {
+    commands: Map<string, CatalogCommand>;
+    actions: Map<string, CatalogAction>;
+};
+
 const MAX_ENTRIES = 24;
 
-// Keyword-overlap prefilter: the full catalog (~500 actions) is too large to
-// hand the model wholesale, so select the entries most relevant to the question,
-// keeping each command together with its linked action.
-export function selectRelevantGroups(
+function collectScoredEntries(
     index: CatalogIndex,
-    question: string,
-): HostGroup[] {
-    const queryTokens = [...new Set(tokenize(question))];
-    const { catalog } = index;
-
+    queryTokens: string[],
+): (ScoredCommand | ScoredAction)[] {
     const scored: (ScoredCommand | ScoredAction)[] = [];
+    const { catalog } = index;
     for (const command of catalog.commands) {
         const s = score(queryTokens, commandText(index, command));
         if (s > 0) {
@@ -333,58 +333,93 @@ export function selectRelevantGroups(
         }
     }
     scored.sort((a, b) => b.s - a.s);
+    return scored;
+}
 
-    const groups = new Map<
-        string,
-        {
-            commands: Map<string, CatalogCommand>;
-            actions: Map<string, CatalogAction>;
+function ensureGroup(
+    groups: Map<string, GroupSelection>,
+    host: string,
+): GroupSelection {
+    let group = groups.get(host);
+    if (!group) {
+        group = { commands: new Map(), actions: new Map() };
+        groups.set(host, group);
+    }
+    return group;
+}
+
+function addCommandSelection(
+    index: CatalogIndex,
+    groups: Map<string, GroupSelection>,
+    item: ScoredCommand,
+): void {
+    const group = ensureGroup(groups, item.host);
+    group.commands.set(item.command.path, item.command);
+    const link = item.command.action;
+    if (!link) {
+        return;
+    }
+    const action = lookupAction(index, item.host, link.actionName);
+    if (action) {
+        group.actions.set(action.actionName, action);
+    }
+}
+
+function addActionSelection(
+    index: CatalogIndex,
+    groups: Map<string, GroupSelection>,
+    item: ScoredAction,
+): void {
+    const group = ensureGroup(groups, item.host);
+    group.actions.set(item.action.actionName, item.action);
+    for (const command of index.catalog.commands) {
+        if (
+            command.host === item.host &&
+            command.action?.actionName === item.action.actionName
+        ) {
+            group.commands.set(command.path, command);
         }
-    >();
-    const ensure = (host: string) => {
-        let g = groups.get(host);
-        if (!g) {
-            g = { commands: new Map(), actions: new Map() };
-            groups.set(host, g);
-        }
-        return g;
-    };
+    }
+}
+
+function describeHosts(catalog: Catalog): Map<string, string> {
+    return new Map(
+        catalog.agents.map((agent) => [agent.name, agent.description]),
+    );
+}
+
+// Keyword-overlap prefilter: the full catalog (~500 actions) is too large to
+// hand the model wholesale, so select the entries most relevant to the question,
+// keeping each command together with its linked action.
+export function selectRelevantGroups(
+    index: CatalogIndex,
+    question: string,
+): HostGroup[] {
+    const queryTokens = [...new Set(tokenize(question))];
+    const { catalog } = index;
+    const scored = collectScoredEntries(index, queryTokens);
+    const groups = new Map<string, GroupSelection>();
 
     for (const item of scored.slice(0, MAX_ENTRIES)) {
-        const g = ensure(item.host);
         if (item.kind === "command") {
-            g.commands.set(item.command.path, item.command);
-            const link = item.command.action;
-            if (link) {
-                const action = lookupAction(index, item.host, link.actionName);
-                if (action) {
-                    g.actions.set(action.actionName, action);
-                }
-            }
-        } else {
-            g.actions.set(item.action.actionName, item.action);
-            for (const command of catalog.commands) {
-                if (
-                    command.host === item.host &&
-                    command.action?.actionName === item.action.actionName
-                ) {
-                    g.commands.set(command.path, command);
-                }
-            }
+            addCommandSelection(index, groups, item);
+            continue;
         }
+        addActionSelection(index, groups, item);
     }
 
     // Nothing matched: offer a compact list of every command so the model can
     // still find one or state plainly that none apply.
     if (groups.size === 0) {
         for (const command of catalog.commands) {
-            ensure(command.host).commands.set(command.path, command);
+            ensureGroup(groups, command.host).commands.set(
+                command.path,
+                command,
+            );
         }
     }
 
-    const descByHost = new Map(
-        catalog.agents.map((a) => [a.name, a.description]),
-    );
+    const descByHost = describeHosts(catalog);
     return [...groups.entries()].map(([host, g]) => ({
         host,
         description: descByHost.get(host) ?? "",

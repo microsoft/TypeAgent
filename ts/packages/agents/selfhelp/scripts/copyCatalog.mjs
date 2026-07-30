@@ -34,4 +34,4 @@ if (!existsSync(src)) {
 
 mkdirSync(destDir, { recursive: true });
 copyFileSync(src, dest);
-console.log(`copyCatalog: wrote ${dest}`);
+console.warn(`copyCatalog: wrote ${dest}`);

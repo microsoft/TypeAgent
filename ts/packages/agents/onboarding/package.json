@@ -45,6 +45,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",

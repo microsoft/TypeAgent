@@ -210,7 +210,7 @@ export type BridgeToWebviewMessage =
               actionTokenUsage?: any;
               // notify (persisted "explained")
               event?: string;
-              data?: any;
+              data?: unknown;
               notificationId?: string;
           }>;
       }

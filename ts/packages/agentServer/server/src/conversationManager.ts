@@ -451,7 +451,6 @@ export async function createConversationManager(
                 : {}),
         };
     }
-
     function ensureDispatcher(
         record: ConversationRecord,
     ): Promise<SharedDispatcher> {

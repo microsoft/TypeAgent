@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=f6f2a80afb1441f85f2a757c3138508f3bc895307d0f49cf62e96dd21c6be64c -->
+<!-- AUTOGEN:DOCS:HASH:sha256=1929c79632767b3215b1a1857c4636951999a3e987817d54d748352259afcbbb -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-coda — AI-generated documentation
@@ -12,19 +12,19 @@
 
 ## Overview
 
-The `agent-coda` package is a TypeScript library that powers the Coda Operated Assistance (CODA) system, a voice-controlled coding assistant for Visual Studio Code (VSCode). It integrates with the TypeAgent shell or CLI to enable developers to perform coding tasks and manage their workspace using natural language commands. This package is designed to enhance accessibility and streamline workflows by enabling hands-free interaction with the VSCode environment.
+The `agent-coda` package is a TypeScript library that powers the Coda Operated Assistance (CODA) system, a voice-controlled coding assistant designed for Visual Studio Code (VSCode). It integrates with the TypeAgent shell or CLI to enable developers to perform coding tasks and manage their workspace using natural language commands. This package enhances accessibility and productivity by enabling hands-free interaction with the VSCode environment.
 
 ## What it does
 
-The `agent-coda` package provides a wide range of actions that allow users to interact with VSCode through voice commands. These actions are grouped into several categories:
+The `agent-coda` package provides a suite of actions that allow users to interact with VSCode through voice commands. These actions are categorized as follows:
 
-- **File and Code Management**: Actions like `createFile`, `openFile`, and `getFileContent` allow users to create, open, and manage files. Additional actions such as `getSelection` and `getDiagnostics` provide insights into the current state of the editor.
-- **Editor Layout and Navigation**: The `changeEditorColumns` action enables users to adjust the editor layout (e.g., single, double, or triple columns). Other actions facilitate navigation and management of open editors and workspace folders.
-- **Extension Management**: Actions such as `checkExtensionAvailable` and `fetchTopExtensions` allow users to search for, install, and manage VSCode extensions.
-- **Debugging**: The `startDebugging` action enables users to initiate debugging sessions with specific configurations.
-- **Workbench Operations**: Actions like `handleWorkBenchActions` allow users to manage workspace folders, open files, and perform other workbench-related tasks.
+- **File and Code Management**: Actions like `createFile`, `openFile`, and `getFileContent` enable users to create, open, and manage files. Additional actions such as `getSelection` and `getDiagnostics` provide insights into the current state of the editor.
+- **Editor Layout and Navigation**: The `changeEditorColumns` action allows users to adjust the editor layout (e.g., single, double, or triple columns). Other actions facilitate navigation and management of open editors and workspace folders.
+- **Extension Management**: Actions such as `checkExtensionAvailable` and `fetchTopExtensions` enable users to search for, install, and manage VSCode extensions.
+- **Debugging**: The `startDebugging` action allows users to initiate debugging sessions with specific configurations.
+- **Workbench Operations**: Actions like `handleWorkBenchActions` enable users to manage workspace folders, open files, and perform other workbench-related tasks.
 
-These capabilities enable developers to perform common development tasks hands-free, enhancing productivity and accessibility.
+These capabilities allow developers to perform common development tasks hands-free, improving accessibility and streamlining workflows.
 
 ## Setup
 
@@ -71,7 +71,7 @@ The `agent-coda` extension is designed to work in conjunction with the TypeAgent
 
 The `agent-coda` package is organized into several key files, each responsible for specific functionalities:
 
-- [codeUtils.ts](./src/codeUtils.ts): Contains utility functions for code manipulation, such as ensuring proper syntax closures and generating documentation comments.
+- [codeUtils.ts](./src/codeUtils.ts): Provides utility functions for code manipulation, such as ensuring proper syntax closures and generating documentation comments.
 - [commandAliasMgr.ts](./src/commandAliasMgr.ts): Manages command aliases to simplify the recognition and execution of voice commands.
 - [extension.ts](./src/extension.ts): The main entry point for the VSCode extension, responsible for activation, command registration, and initializing WebSocket connections.
 - [handleDebugActions.ts](./src/handleDebugActions.ts): Implements debugging-related actions, such as starting debugging sessions with specific configurations.
@@ -137,6 +137,6 @@ _2 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `5a7bdd3625eef42d75702c9fd9f0dadb7cb10410` on `2026-07-29T05:15:39.538Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-coda docs:verify-links` to spot-check._
+_Auto-generated against commit `95c8336eb7cd853020fc28cbc98b6380676e73f3` on `2026-07-30T17:32:13.295Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-coda docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

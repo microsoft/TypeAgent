@@ -16,8 +16,9 @@ jest.unstable_mockModule("../src/command/command.js", () => ({
     processCommandNoLock: mockProcessCommandNoLock,
 }));
 
-const { executeConversationAction } =
-    await import("../src/context/system/action/conversationActionHandler.js");
+const { executeConversationAction } = await import(
+    "../src/context/system/action/conversationActionHandler.js"
+);
 
 const agentContext = { id: "agent-context" } as any;
 function makeContext() {
