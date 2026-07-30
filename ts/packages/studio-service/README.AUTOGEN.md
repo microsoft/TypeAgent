@@ -3,16 +3,16 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=1552dbfec1180e9144d1e55033638d934dec7593615ad7643d171d6bebb56fea -->
+<!-- AUTOGEN:DOCS:HASH:sha256=a66843bd232a098389958c65b0440183063965eed7d11c91bee98505ee3db2b7 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
-# studio-service — AI-generated documentation
+# @typeagent/studio-service — AI-generated documentation
 
 > 🤖 **AI-authored documentation**, regenerated daily and validated for length, tone, and link integrity. Cross-check against the deterministic Reference section below before relying on specifics. Hand-written context from [`./README.md`](./README.md) was provided to the model as authoritative source. May lag the working tree by up to 24h — see the staleness footer at the end of this file.
 
 ## Overview
 
-The `studio-service` package is a standalone, per-workspace host for the TypeAgent Studio runtime (`@typeagent/core/runtime`) and its typed `agent-rpc` service channel. It is designed to operate within a developer's workspace, providing a dedicated environment for managing workspace state and facilitating communication between the Studio runtime and its clients. This service is typically launched by the `typeagent-studio` extension or the `typeagent-studio serve` CLI.
+The `@typeagent/studio-service` package serves as the standalone, per-workspace host for the TypeAgent Studio runtime (`@typeagent/core/runtime`) and its typed `agent-rpc` service channel. It is designed to operate within a developer's workspace, providing a dedicated environment for managing workspace state and facilitating communication between the Studio runtime and its clients. This service is typically launched by the `typeagent-studio` extension or the `typeagent-studio serve` CLI.
 
 ## What it does
 
@@ -32,7 +32,7 @@ To configure and run the `studio-service` package, you need to set the following
 
 - `TYPEAGENT_STUDIO_REPO_ROOT`: Specifies the root directory of the repository that the Studio service should inspect. If this variable is not set, the service defaults to using the current working directory. You can set this variable in your shell or in a `.env` file located in the `ts/` directory.
 
-Once the environment variable is set, you can launch the service using the `typeagent-studio serve` CLI or programmatically via its API. For more details, refer to the hand-written README.
+Once the environment variable is set, you can launch the service using the `typeagent-studio serve` CLI or programmatically via its API. For additional details, refer to the hand-written README.
 
 ## Key Files
 
@@ -83,11 +83,11 @@ External: `debug`, `ws`
 
 ### Used by
 
-- studio-agent
+- [@typeagent/studio-agent](../../packages/agents/studio/README.md)
 
 ### Files of interest
 
-`./src/index.ts`, `./src/main.ts`, `./src/fileWorkspaceState.ts`, …and 8 more under `./src/`.
+`./src/index.ts`, `./src/main.ts`, `./src/fileWorkspaceState.ts`, …and 11 more under `./src/`.
 
 ### Environment variables
 
@@ -97,6 +97,6 @@ _1 environment variable referenced from `./src/` (set in `ts/.env` or your shell
 
 ---
 
-_Auto-generated against commit `6bea19a9ee02598644b1ac3ab67c705dcc495832` on `2026-07-22T11:19:17.632Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter studio-service docs:verify-links` to spot-check._
+_Auto-generated against commit `f2da006115d3e22abf26bf9edf349cb5798a07b9` on `2026-07-30T00:24:23.361Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter @typeagent/studio-service docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
