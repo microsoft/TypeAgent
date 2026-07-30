@@ -134,9 +134,9 @@ export function createConversationNameIndex(
                     embeddingModel!,
                     entry.name,
                 );
-            } catch (e: any) {
+            } catch (e: unknown) {
                 debugError(
-                    `Could not embed name for ${conversationId}: ${e?.message}`,
+                    `Could not embed name for ${conversationId}: ${e instanceof Error ? e.message : String(e)}`,
                 );
             }
         }
@@ -191,8 +191,8 @@ export function createConversationNameIndex(
         let queryEmbedding: NormalizedEmbedding;
         try {
             queryEmbedding = await generateEmbedding(embeddingModel, query);
-        } catch (e: any) {
-            debugError(`Could not embed query "${query}": ${e?.message}`);
+        } catch (e: unknown) {
+            debugError(`Could not embed query "${query}": ${e instanceof Error ? e.message : String(e)}`);
             return;
         }
         // Pull a few extra candidates beyond maxMatches so the lexical/embedding

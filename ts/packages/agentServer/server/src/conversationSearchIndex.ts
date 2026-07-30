@@ -215,9 +215,9 @@ export async function createConversationSearchIndex(
             { dirPath, baseFileName: UNIFIED_MEMORY_BASENAME },
             false,
         );
-    } catch (e: any) {
+    } catch (e: unknown) {
         debugError(
-            `Unified content search disabled (memory init failed): ${e?.message}`,
+            `Unified content search disabled (memory init failed): ${e instanceof Error ? e.message : String(e)}`,
         );
         memory = undefined;
     }

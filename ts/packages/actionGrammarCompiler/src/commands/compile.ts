@@ -131,6 +131,6 @@ export default class Compile extends Command {
             mapOutput,
             JSON.stringify(buildGrammarSourceMap(debugCollector)),
         );
-        console.log(`Grammar source map written: ${mapOutput}`);
+        this.log(`Grammar source map written: ${mapOutput}`);
     }
 }
