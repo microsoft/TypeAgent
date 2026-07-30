@@ -383,7 +383,9 @@ function addActionSelection(
 }
 
 function describeHosts(catalog: Catalog): Map<string, string> {
-    return new Map(catalog.agents.map((agent) => [agent.name, agent.description]));
+    return new Map(
+        catalog.agents.map((agent) => [agent.name, agent.description]),
+    );
 }
 
 // Keyword-overlap prefilter: the full catalog (~500 actions) is too large to
@@ -410,7 +412,10 @@ export function selectRelevantGroups(
     // still find one or state plainly that none apply.
     if (groups.size === 0) {
         for (const command of catalog.commands) {
-            ensureGroup(groups, command.host).commands.set(command.path, command);
+            ensureGroup(groups, command.host).commands.set(
+                command.path,
+                command,
+            );
         }
     }
 

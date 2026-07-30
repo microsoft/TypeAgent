@@ -466,12 +466,7 @@ function shouldBypassTranslationForReasoning(
     if (systemContext.noReasoning) {
         return false;
     }
-    const reasoningPrefixes = [
-        "learn:",
-        "dev:",
-        "remember how to ",
-        "record ",
-    ];
+    const reasoningPrefixes = ["learn:", "dev:", "remember how to ", "record "];
     const lowerRequest = request.trimStart().toLowerCase();
     return (
         process.env.CLAUDE_FORCE_REASONING === "1" ||
