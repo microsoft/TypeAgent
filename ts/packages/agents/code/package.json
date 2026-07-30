@@ -84,7 +84,8 @@
             "src/codeSchema.agr"
           ],
           "outputGlobs": [
-            "dist/codeSchema.ag.json"
+            "dist/codeSchema.ag.json",
+            "dist/codeSchema.ag.map.json"
           ]
         }
       },
@@ -97,7 +98,8 @@
             "src/vscode/debugActionsSchema.agr"
           ],
           "outputGlobs": [
-            "dist/debugSchema.ag.json"
+            "dist/debugSchema.ag.json",
+            "dist/debugSchema.ag.map.json"
           ]
         }
       },
@@ -110,7 +112,8 @@
             "src/vscode/displayActionsSchema.agr"
           ],
           "outputGlobs": [
-            "dist/displaySchema.ag.json"
+            "dist/displaySchema.ag.json",
+            "dist/displaySchema.ag.map.json"
           ]
         }
       },
@@ -123,7 +126,8 @@
             "src/vscode/extensionsActionsSchema.agr"
           ],
           "outputGlobs": [
-            "dist/extensionSchema.ag.json"
+            "dist/extensionSchema.ag.json",
+            "dist/extensionSchema.ag.map.json"
           ]
         }
       },
@@ -136,7 +140,8 @@
             "src/vscode/generalActionsSchema.agr"
           ],
           "outputGlobs": [
-            "dist/generalSchema.ag.json"
+            "dist/generalSchema.ag.json",
+            "dist/generalSchema.ag.map.json"
           ]
         }
       },
@@ -149,7 +154,8 @@
             "src/vscode/vscodeConversationActionsSchema.agr"
           ],
           "outputGlobs": [
-            "dist/vscodeShellSchema.ag.json"
+            "dist/vscodeShellSchema.ag.json",
+            "dist/vscodeShellSchema.ag.map.json"
           ]
         }
       },
@@ -162,7 +168,8 @@
             "src/vscode/workbenchCommandActionsSchema.agr"
           ],
           "outputGlobs": [
-            "dist/workbenchSchema.ag.json"
+            "dist/workbenchSchema.ag.json",
+            "dist/workbenchSchema.ag.map.json"
           ]
         }
       },

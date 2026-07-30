@@ -8,7 +8,9 @@ import {
     grammarToJson,
     loadGrammarRulesNoThrow,
     recommendedOptimizations,
+    buildGrammarSourceMap,
     SchemaLoader,
+    DebugInfoCollector,
 } from "@typeagent/action-grammar";
 import { parseSchemaSource } from "@typeagent/action-schema";
 import type { SchemaTypeDefinition } from "@typeagent/action-schema";
@@ -76,16 +78,27 @@ export default class Compile extends Command {
         const errors: string[] = [];
         const warnings: string[] = [];
         const schemaLoader = createFileSchemaLoader();
+        // Collect source positions + text so we can emit a source-map side-car
+        // (partIds survive optimization, so they align with the emitted .ag.json).
+        const debugCollector: DebugInfoCollector = {
+            partPositions: new Map(),
+            rulePositions: new Map(),
+            partRules: new Map(),
+            partLabels: new Map(),
+            fileContents: new Map(),
+            filePaths: new Map(),
+        };
         const grammar = loadGrammarRulesNoThrow(
             flags.input,
             undefined,
             errors,
             warnings,
             flags.debug
-                ? { startValueRequired: true, schemaLoader }
+                ? { startValueRequired: true, schemaLoader, debugCollector }
                 : {
                       startValueRequired: true,
                       schemaLoader,
+                      debugCollector,
                       optimizations: recommendedOptimizations,
                   },
         );
@@ -108,5 +121,16 @@ export default class Compile extends Command {
         }
         fs.writeFileSync(flags.output, JSON.stringify(grammarToJson(grammar)));
         console.log(`Action grammar written: ${flags.output}`);
+
+        // Emit the source-map side-car next to the compiled grammar. The
+        // compiled .ag.json is left untouched.
+        const mapOutput = flags.output.endsWith(".ag.json")
+            ? `${flags.output.slice(0, -".ag.json".length)}.ag.map.json`
+            : `${flags.output}.map.json`;
+        fs.writeFileSync(
+            mapOutput,
+            JSON.stringify(buildGrammarSourceMap(debugCollector)),
+        );
+        console.log(`Grammar source map written: ${mapOutput}`);
     }
 }

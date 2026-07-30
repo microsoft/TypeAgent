@@ -67,7 +67,8 @@
             "src/utilitySchema.agr"
           ],
           "outputGlobs": [
-            "dist/utilitySchema.ag.json"
+            "dist/utilitySchema.ag.json",
+            "dist/utilitySchema.ag.map.json"
           ]
         }
       },
