@@ -39,11 +39,11 @@ echo ""
 # (e.g. `pnpm install` -> EACCES on ts/node_modules).
 echo "Fixing ownership of mounted volume directories..."
 VOLUME_PATHS=(
-    "/home/codespace/.local/share/pnpm"
-    "/home/codespace/.local/share/pnpm/store"
-    "/home/codespace/.claude"
-    "/home/codespace/.copilot"
-    "/home/codespace/.vscode-server"
+    "$HOME/.local/share/pnpm"
+    "$HOME/.local/share/pnpm/store"
+    "$HOME/.claude"
+    "$HOME/.copilot"
+    "$HOME/.vscode-server"
 )
 # Discover the workspace ts/node_modules path dynamically (works for worktrees
 # and for variants that mount the workspace outside /workspaces, e.g. the
@@ -78,7 +78,7 @@ TS_DIR=$(resolve_ts_workspace)
 echo "Looking for TypeScript workspace..."
 if [[ -n "$TS_DIR" ]]; then
     echo "Found: $TS_DIR"
-    # VOLUME_PATHS+=("$TS_DIR/node_modules")
+    VOLUME_PATHS+=("$TS_DIR/node_modules")
 else
     echo "Error: Could not find TypeScript workspace directory (expected ts/)" >&2
     echo "Checked: git repo root, current directory, containerWorkspaceFolder, /workspaces" >&2
@@ -89,7 +89,7 @@ fi
 
 for p in "${VOLUME_PATHS[@]}"; do
     if [[ -e "$p" ]]; then
-        if sudo chown -R codespace:codespace "$p"; then
+        if sudo chown -R "$(id -u):$(id -g)" "$p"; then
             echo "  chowned $p"
         else
             if [[ "$p" == *"/pnpm/store" ]] || [[ "$p" == *"/node_modules" ]]; then
@@ -196,7 +196,7 @@ if ! npm config set registry "$EFFECTIVE_NPM_REGISTRY" --global; then
 fi
 # Ensure pnpm's expected home/bin paths exist and are on PATH for this script.
 # This avoids global/bin-dir errors in non-interactive shells.
-export PNPM_HOME="${PNPM_HOME:-/home/codespace/.local/share/pnpm}"
+export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
 mkdir -p "$PNPM_HOME/bin"
 export PATH="$PNPM_HOME/bin:$PATH"
 
@@ -228,19 +228,29 @@ fi
 echo "pnpm registry: $(pnpm config get registry)"
 
 # Keep PATH stable for later interactive shells as well.
-if [[ -f /home/codespace/.bashrc ]] && ! grep -q 'export PNPM_HOME=/home/codespace/.local/share/pnpm' /home/codespace/.bashrc; then
+if [[ -f "$HOME/.bashrc" ]] && ! grep -q 'PNPM_HOME' "$HOME/.bashrc"; then
     {
         echo ''
         echo '# pnpm home (set by TypeAgent post-create)'
-        echo 'export PNPM_HOME=/home/codespace/.local/share/pnpm'
+        echo "export PNPM_HOME=$HOME/.local/share/pnpm"
         echo 'export PATH="$PNPM_HOME/bin:$PATH"'
-    } >> /home/codespace/.bashrc
+    } >> "$HOME/.bashrc"
 fi
 
 # Point pnpm store at the Docker named volume so it persists across rebuilds
-pnpm config set store-dir /home/codespace/.local/share/pnpm/store --global
+pnpm config set store-dir "$HOME/.local/share/pnpm/store" --global
 echo "pnpm store-dir: $(pnpm store path)"
 
+# Install dependencies
+echo ""
+echo "Installing pnpm dependencies..."
+echo "This may take a few minutes on first run..."
+if ! pnpm install; then
+    echo ""
+    echo "Error: pnpm install failed." >&2
+    echo "This is often due to network issues or missing system dependencies." >&2
+    exit 1
+fi
 
 # - Security hardening: restrict sudo to a minimal allowlist
 # During post-create we needed unrestricted root access to install

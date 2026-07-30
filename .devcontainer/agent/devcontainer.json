@@ -3,7 +3,8 @@
   "build": {
     "dockerfile": "../Dockerfile",
     "args": {
-      "NPM_CONFIG_REGISTRY": "${localEnv:NPM_CONFIG_REGISTRY}"
+      "NPM_CONFIG_REGISTRY": "${localEnv:NPM_CONFIG_REGISTRY}",
+      "USERNAME": "${localEnv:USER}"
     }
   },
 
@@ -23,9 +24,10 @@
   // host. Use ../devcontainer.json (the default config) for Codespaces.
   //
   // Prerequisites on the host:
-  //   - Your host user's UID matches the `codespace` user inside the
-  //     container. `updateRemoteUserUID` below handles the common case
-  //     by re-chowning `codespace` to your host UID on first start.
+  //   - $USER must be set in your local environment (it always is on Linux/macOS).
+  //     The container user is created with the same name and re-chowned to your
+  //     UID/GID by `updateRemoteUserUID` on first start, so file ownership on
+  //     the bind-mounted source tree is transparent.
   //   - The sibling `<repo>.worktrees` directory must exist on the host
   //     before container start (Docker bind-mount requirement). The
   //     `initializeCommand` below creates it automatically.
@@ -55,13 +57,11 @@
       "installZsh": true,
       "configureZshAsDefaultShell": true,
       "installOhMyZsh": true,
-      "username": "codespace",
-      "userUid": "1001",
-      "userGid": "1001"
+      "username": "automatic"
     }
   },
 
-  // Re-chown the `codespace` user to the host user's UID/GID on container
+  // Re-chown the container user to the host user's UID/GID on container
   // start so the bind-mounted source tree (owned by the host user) is
   // writable from inside the container.
   "updateRemoteUserUID": true,
@@ -133,17 +133,17 @@
     // sides.
     "source=${localWorkspaceFolder}.worktrees,target=${localWorkspaceFolder}.worktrees,type=bind,consistency=cached",
     // Global pnpm store - shared across containers for fast installs.
-    "source=pnpm-global-store,target=/home/codespace/.local/share/pnpm/store,type=volume",
+    "source=pnpm-global-store,target=/home/${localEnv:USER}/.local/share/pnpm/store,type=volume",
     // Per-container node_modules stays on a named volume. We deliberately
     // do NOT bind-mount this to the host: native modules (better-sqlite3,
     // etc.) are compiled for the container's libc/arch and would clash
     // with anything the host has built.
     "source=typeagent-node_modules-${devcontainerId},target=${containerWorkspaceFolder}/ts/node_modules,type=volume",
-    "source=claude-code-config-${devcontainerId},target=/home/codespace/.claude,type=volume",
-    "source=copilot-cli-config-${devcontainerId},target=/home/codespace/.copilot,type=volume",
+    "source=claude-code-config-${devcontainerId},target=/home/${localEnv:USER}/.claude,type=volume",
+    "source=copilot-cli-config-${devcontainerId},target=/home/${localEnv:USER}/.copilot,type=volume",
     // VS Code server data (extensions, settings cache, workspace storage, history)
     // so editor state survives container recreate.
-    "source=vscode-server-${devcontainerId},target=/home/codespace/.vscode-server,type=volume"
+    "source=vscode-server-${devcontainerId},target=/home/${localEnv:USER}/.vscode-server,type=volume"
   ],
 
   "containerEnv": {
@@ -177,7 +177,7 @@
     }
   },
 
-  "remoteUser": "codespace",
+  "remoteUser": "${localEnv:USER}",
 
   "hostRequirements": {
     "cpus": 4,
