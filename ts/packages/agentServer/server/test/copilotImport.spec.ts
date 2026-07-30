@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { afterEach, describe, expect, test } from "@jest/globals";
+import { afterEach, describe, expect, jest, test } from "@jest/globals";
 import Database from "better-sqlite3";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -505,6 +505,55 @@ describe("importCopilotSessions", () => {
                     },
                 ]),
             );
+        } finally {
+            await manager.close();
+        }
+    });
+
+    test("indexes imported turns into the unified content search index", async () => {
+        const dbPath = await createSeededStore([
+            {
+                id: "sess-idx",
+                summary: "gym playlist",
+                createdAt: "2026-06-01T10:00:00.000Z",
+                updatedAt: "2026-06-01T10:30:00.000Z",
+                turns: [
+                    {
+                        turnIndex: 0,
+                        userMessage: "build a workout playlist",
+                        assistantResponse: "Added upbeat gym music.",
+                        timestamp: "2026-06-01T10:00:00.000Z",
+                    },
+                    {
+                        turnIndex: 1,
+                        userMessage: null,
+                        assistantResponse: "Anything else?",
+                        timestamp: "2026-06-01T10:05:00.000Z",
+                    },
+                ],
+            },
+        ]);
+        const baseDir = await createTempDir();
+        const manager = await createManager(baseDir);
+        const indexed: {
+            id: string;
+            text: string;
+            sender: string | undefined;
+        }[] = [];
+        jest.spyOn(manager, "indexConversationMessage").mockImplementation(
+            (id, text, sender) => indexed.push({ id, text, sender }),
+        );
+        try {
+            const result = await importCopilotSessions(manager, { dbPath });
+            expect(result.imported).toBe(1);
+            const id = (await manager.listConversations())[0].conversationId;
+            // Both roles indexed in turn order; the null user message is
+            // skipped, not indexed as empty.
+            expect(indexed).toEqual([
+                { id, text: "build a workout playlist", sender: "user" },
+                { id, text: "Added upbeat gym music.", sender: "assistant" },
+                { id, text: "Anything else?", sender: "assistant" },
+            ]);
         } finally {
             await manager.close();
         }

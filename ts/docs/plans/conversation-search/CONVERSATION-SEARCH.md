@@ -1,8 +1,9 @@
 # Conversation Search — Design & Plan
 
 Status: **in progress** — slice 1 complete (fuzzy name find, all clients); slice
-2 landed (unified tagged index scaffolding + wiring + unit tests). Next: slice 3
-(population). Last updated: 2026-07-29.
+2 landed (unified tagged index scaffolding + wiring + unit tests); slice 3
+landed (population: live tee + Copilot batch-append). Next: slice 4 (content
+search surface). Last updated: 2026-07-30.
 
 ## Goal
 
@@ -173,6 +174,25 @@ and [programNameIndex.ts](../../../packages/agents/desktop/src/programNameIndex.
     latency when slice 3 wires real population.
 - **Slice 3 — population.** Tee live turns (inject sink + conversationId into the
   per-conversation dispatcher); batch-append on `@copilot import` (incremental).
+  - **DONE:** Added a host-injected `ConversationContentSink` to the dispatcher
+    (`commandHandlerContext.ts` type + `DispatcherOptions` + `CommandHandlerContext`,
+    threaded in `initializeCommandHandlerContext`). `memory.ts` calls it on every
+    user turn (`addUserMessageToHistory`) and assistant turn (`addResultToMemory`),
+    **ungated by the knowledge-extraction flags** — which matters because connected
+    mode sets `requestKnowledgeExtraction: false` / `actionResultKnowledgeExtraction:
+    false`, so the per-conversation memory tee is off there but the unified index
+    still populates. `ConversationManager.ensureDispatcher` injects the sink,
+    closing over the conversation id, so each dispatcher's turns land in the unified
+    index tagged `conv:<id>`. Read-only Copilot mirrors never replay through the
+    live tee, so `mirrorImporter` batch-calls `indexConversationMessage` for each
+    imported turn's user/assistant text, gated on `created` (no double-index on
+    re-import). Test: `copilotImport.spec.ts` asserts imported turns are indexed in
+    order with null messages skipped.
+  - **Deferred:** a dispatcher-level unit test of the live tee — importing
+    `memory.ts` in isolation trips a pre-existing `memory.ts`↔`systemAgent.ts`
+    circular-init TDZ (`systemAgent` calls `getMemoryCommandHandlers()` at module
+    top level). The tee call sites are one-liners; coverage rests on the Copilot
+    test (seam), the full build (type threading), and the slice-2 rank tests.
 - **Slice 4 — content search surface.** `@conversation search` command +
   `searchConversation` action + `.agr`; CLI; group/rank by conversation.
 - **Later** — unify the two commands if desired; standalone Shell support.

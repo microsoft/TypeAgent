@@ -489,6 +489,17 @@ export async function createConversationManager(
                                     failed: r.failed,
                                 }),
                             ),
+                        // Tee this conversation's live turns into the unified
+                        // content index, tagged by its id, so cross-
+                        // conversation search can find it. Independent of the
+                        // per-conversation memory (which connected mode leaves
+                        // unextracted).
+                        conversationContentSink: (text, sender) =>
+                            manager.indexConversationMessage(
+                                record.conversationId,
+                                text,
+                                sender,
+                            ),
                     }),
                 )
                 .then((dispatcher) => {
