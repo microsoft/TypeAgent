@@ -1,8 +1,8 @@
 # Conversation Search — Design & Plan
 
-Status: **in progress** — slice 1 complete (backend + in-chat surface across
-Shell, VS Code shell, and CLI; find-then-switch). Next: slice 2 (unified index).
-Last updated: 2026-07-29.
+Status: **in progress** — slice 1 complete (fuzzy name find, all clients); slice
+2 landed (unified tagged index scaffolding + wiring + unit tests). Next: slice 3
+(population). Last updated: 2026-07-29.
 
 ## Goal
 
@@ -148,6 +148,29 @@ and [programNameIndex.ts](../../../packages/agents/desktop/src/programNameIndex.
 - **Slice 2 — unified index scaffolding.** Create/open the
   `ConversationManager`-owned unified `ConversationMemory`; tagged `append`;
   tombstone-on-delete; compaction hook on idle timeout + startup.
+  - **DONE:** `conversationSearchIndex.ts` — one `ConversationMemory` at
+    `conversations/_unified/`, each message tagged `conv:<conversationId>`
+    (plain-string knowPro `MessageTag`); `search()` runs `searchWithLanguage`,
+    reads the tag back off each matched message, and groups/ranks by
+    conversation via the pure, unit-tested `rankConversationMatches`. Index is
+    **inert** (no-op / empty) when no model provider is configured, so it wires
+    unconditionally. Population uses `extractKnowledge: true` by default
+    (content search resolves through extracted knowledge, so production must
+    extract; configurable via `createConversationSearchIndex(dir, {
+    extractKnowledge })`). Wired into `ConversationManager`:
+    created at startup, **tombstoned on delete**, closed on shutdown, and
+    exposed via `indexConversationMessage()` + `searchConversationContent()`
+    (the seams slices 3/4 call). Unit tests: `conversationSearchIndex.spec.ts`
+    (grouping, tombstone filtering, untagged skip, snippet/conversation caps) —
+    pure `rankConversationMatches`, no LLM.
+  - **Deferred:** compaction/rebuild (needs population sources — lands with
+    slice 3); reliable live end-to-end test. A live test was prototyped and
+    removed: `searchWithLanguage` makes an LLM query-translation call per
+    search, so any live search test is LLM-latency-bound and flaky.
+    Empirically, extraction-off search returns no hits (content search needs
+    extracted knowledge) and extraction-on ingest+search exceeded 5 min in this
+    env. Coverage stays on the offline unit tests; revisit extraction-on
+    latency when slice 3 wires real population.
 - **Slice 3 — population.** Tee live turns (inject sink + conversationId into the
   per-conversation dispatcher); batch-append on `@copilot import` (incremental).
 - **Slice 4 — content search surface.** `@conversation search` command +

@@ -28,6 +28,10 @@ import {
     ConversationNameIndex,
     createConversationNameIndex,
 } from "./conversationNameIndex.js";
+import {
+    ConversationContentMatch,
+    createConversationSearchIndex,
+} from "./conversationSearchIndex.js";
 import { importCopilotSessions } from "./copilot/mirrorImporter.js";
 import { lockInstanceDir } from "agent-dispatcher/internal";
 
@@ -165,6 +169,24 @@ export type ConversationManager = {
         query: string,
         maxMatches?: number,
     ): Promise<ConversationMatch[]>;
+    /**
+     * Index a conversation message into the unified content-search index
+     * (tagged by conversation id). Populated by callers as turns arrive.
+     */
+    indexConversationMessage(
+        conversationId: string,
+        text: string,
+        sender?: string,
+    ): void;
+    /**
+     * Cross-conversation content search: rank conversations by how well their
+     * indexed messages match the query. Returns [] when the unified index has
+     * no model provider configured.
+     */
+    searchConversationContent(
+        query: string,
+        maxMatches?: number,
+    ): Promise<ConversationContentMatch[]>;
     renameConversation(
         conversationId: string,
         newName: string,
@@ -676,6 +698,12 @@ export async function createConversationManager(
     }
     void conversationNameIndex.prime();
 
+    // Unified content-search index across all conversations, tagged by
+    // conversation id. Inert when no model provider is configured.
+    const conversationSearchIndex = await createConversationSearchIndex(
+        path.join(conversationsDir, "_unified"),
+    );
+
     const manager: ConversationManager = {
         async createConversation(
             name: string,
@@ -1012,6 +1040,27 @@ export async function createConversationManager(
             return result;
         },
 
+        indexConversationMessage(
+            conversationId: string,
+            text: string,
+            sender?: string,
+        ): void {
+            conversationSearchIndex.addMessage(conversationId, text, sender);
+        },
+
+        async searchConversationContent(
+            query: string,
+            maxMatches: number = 10,
+        ): Promise<ConversationContentMatch[]> {
+            // Drop hits for conversations that vanished from the registry
+            // (belt-and-suspenders; the index also tombstones on delete).
+            const matches = await conversationSearchIndex.search(
+                query,
+                maxMatches,
+            );
+            return matches.filter((m) => conversations.has(m.conversationId));
+        },
+
         async renameConversation(
             conversationId: string,
             newName: string,
@@ -1051,6 +1100,7 @@ export async function createConversationManager(
 
             conversations.delete(conversationId);
             conversationNameIndex.remove(conversationId);
+            conversationSearchIndex.tombstone(conversationId);
 
             // Remove persist directory
             const persistDir = getConversationPersistDir(conversationId);
@@ -1079,6 +1129,7 @@ export async function createConversationManager(
             }
             await Promise.all(promises);
             await saveMetadata();
+            await conversationSearchIndex.close();
             await unlockInstanceDir();
             debugConversation("ConversationManager closed");
         },
