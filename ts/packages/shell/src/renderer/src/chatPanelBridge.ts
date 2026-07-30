@@ -1475,6 +1475,21 @@ export function createChatPanelClient(
             chatPanel.setDemoPaused(state === "paused");
         },
         reconnectStatusChanged(status: ConnectionStatus | undefined): void {
+            // Retract the "stale-build" notice when the connection drops
+            // (status defined), not when it returns. The notice describes the
+            // server we were connected to, so a stuck "Restarting..." toast
+            // must not outlive that link. Clearing on disconnect keeps the
+            // reconnected server's join-time push authoritative: a fresh
+            // successor stays silent (nothing to show) and a still-stale one
+            // re-pushes the notice, which arrives after this retract and
+            // renders correctly. Doing it here rather than on reconnect avoids
+            // racing that push - the Electron shell reuses its connection
+            // across reconnects (unlike vscode-shell's fresh connect), so the
+            // server's join-time retract can be dropped, and this makes the
+            // clear independent of it. Idempotent once the notice is gone.
+            if (status !== undefined) {
+                chatPanel.clearStatusNotice("stale-build");
+            }
             chatPanel.setConnectionStatus(status, (action) => {
                 // Manual recovery from the "stopped" banner — main owns the
                 // retry / server-start logic.
