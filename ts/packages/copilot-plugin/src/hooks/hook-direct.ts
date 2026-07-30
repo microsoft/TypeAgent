@@ -88,12 +88,27 @@ export async function handleDirect(input: HookInput): Promise<HookOutput> {
             return {};
         }
 
-        const responseContent =
-            responseCollector.messages.length > 0
-                ? responseCollector.messages.join("\n\n")
-                : result?.lastError
-                  ? `TypeAgent recognized the action but encountered an error: ${result.lastError}`
-                  : "Request processed successfully.";
+        // Debug: Log result details when action is recognized
+        console.error("DEBUG: Action recognized", {
+            prompt: input.prompt.substring(0, 100),
+            hasLastError: !!result?.lastError,
+            lastError: result?.lastError,
+            messageCount: responseCollector.messages.length,
+            actionNames: result?.actions?.map((a) => a.actionName),
+        });
+
+        // Check for failure indicators:
+        // 1. Action failed (result.lastError is set)
+        // 2. No messages were collected, indicating the action couldn't execute
+        if (result?.lastError || responseCollector.messages.length === 0) {
+            console.error("DEBUG: Returning unhandled due to error condition", {
+                hasLastError: !!result?.lastError,
+                hasMessages: responseCollector.messages.length > 0,
+            });
+            return {};
+        }
+
+        const responseContent = responseCollector.messages.join("\n\n");
 
         return {
             handled: true,

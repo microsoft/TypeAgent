@@ -18,6 +18,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "resolve-node.ps1")
+
 function Test-Command {
     param([Parameter(Mandatory = $true)][string]$Name)
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
@@ -124,5 +126,11 @@ if ($Uninstall) {
     $args += "--uninstall"
 }
 
-& node @args
+$nodeExe = Resolve-NodeExe
+if (-not $nodeExe) {
+    Write-Host "[TypeAgent] Registration failed. Node.js was not found (needed to run register-plugin.mjs)."
+    exit 1
+}
+
+& $nodeExe @args
 exit $LASTEXITCODE
