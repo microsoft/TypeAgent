@@ -262,11 +262,12 @@ fi
 # (e.g. apt-get -o hook injection, chown on /etc/shadow).
 echo ""
 echo "Hardening sudo access..."
-SUDOERS_FILE="/etc/sudoers.d/codespace-restricted"
-sudo tee "$SUDOERS_FILE" > /dev/null << 'SUDOERS'
-# Restricted sudo for the codespace user (post-setup hardening).
+CURRENT_USER=$(id -un)
+SUDOERS_FILE="/etc/sudoers.d/${CURRENT_USER}-restricted"
+sudo tee "$SUDOERS_FILE" > /dev/null <<SUDOERS
+# Restricted sudo for the container user (post-setup hardening).
 # Only allow managing the SSH service — nothing else.
-codespace ALL=(root) NOPASSWD: /usr/sbin/service ssh start, \
+$CURRENT_USER ALL=(root) NOPASSWD: /usr/sbin/service ssh start, \
     /usr/sbin/service ssh stop, \
     /usr/sbin/service ssh restart, \
     /usr/sbin/service ssh status, \
@@ -279,8 +280,14 @@ sudo chmod 0440 "$SUDOERS_FILE"
 # Remove the blanket rule that grants unrestricted root.  The common-utils
 # devcontainer feature writes it to /etc/sudoers.d/codespace (filename
 # matches the username).
-if [[ -f /etc/sudoers.d/codespace ]]; then
-    sudo rm /etc/sudoers.d/codespace
+REMOVED_BROAD_RULE=0
+for broad_rule in "/etc/sudoers.d/$CURRENT_USER" /etc/sudoers.d/codespace; do
+    if [[ -f "$broad_rule" ]]; then
+        sudo rm "$broad_rule"
+        REMOVED_BROAD_RULE=1
+    fi
+done
+if [[ $REMOVED_BROAD_RULE -eq 1 ]]; then
     echo "  Removed blanket NOPASSWD:ALL rule"
 fi
 echo "  Sudo restricted to: service ssh/sshd only"
