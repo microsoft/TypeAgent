@@ -50,8 +50,9 @@ jest.unstable_mockModule("readline", () => ({
 
 // ── Dynamic import of the module under test (after the mock is installed) ──
 
-const { handleConversationCommand } =
-    await import("../src/conversationCommands.js");
+const { handleConversationCommand } = await import(
+    "../src/conversationCommands.js"
+);
 type ConversationCommandContext =
     import("../src/conversationCommands.js").ConversationCommandContext;
 

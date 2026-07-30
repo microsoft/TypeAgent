@@ -186,7 +186,8 @@ export interface AgentServerConnectOptions {
  * Reads: `TYPEAGENT_TUNNEL_TOKEN`
  */
 export function getConnectOptionsFromEnv():
-    AgentServerConnectOptions | undefined {
+    | AgentServerConnectOptions
+    | undefined {
     const token = process.env.TYPEAGENT_TUNNEL_TOKEN;
     if (!token) return undefined;
     return {
