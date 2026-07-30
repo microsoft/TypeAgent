@@ -1044,7 +1044,9 @@ async function handleCopilotChatAction(
     const autoSend: boolean = params.isPartialQuery !== true;
     const attachScreenshot: boolean = params.attachScreenshot === true;
     const attachFilePaths: string[] = Array.isArray(params.attachFiles)
-        ? params.attachFiles.filter((p: unknown): p is string => typeof p === "string")
+        ? params.attachFiles.filter(
+              (p: unknown): p is string => typeof p === "string",
+          )
         : [];
     const newSession: boolean = params.newSession !== false;
     const newSessionLocation = resolveChatSessionLocation(
