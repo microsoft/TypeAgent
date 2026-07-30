@@ -45,6 +45,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-runtime": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/aiclient": "workspace:*",
@@ -52,8 +53,7 @@
     "agent-dispatcher": "workspace:*",
     "debug": "^4.3.4",
     "dispatcher-node-providers": "workspace:*",
-    "typechat": "^0.1.1",
-    "typescript": "~5.4.5"
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "@typeagent/action-grammar-compiler": "workspace:*",

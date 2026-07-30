@@ -2940,6 +2940,9 @@ importers:
 
   packages/agents/onboarding:
     dependencies:
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../../actionSchema
       '@typeagent/agent-runtime':
         specifier: workspace:*
         version: link:../../typeagent
@@ -2964,9 +2967,6 @@ importers:
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
     devDependencies:
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
