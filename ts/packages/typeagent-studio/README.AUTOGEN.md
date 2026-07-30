@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=4e87b20ad522007f8a5af57b21565fbe047594514d9a4e12196cfb118d972ab0 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=c09caf5e44d2f22fd29e89916c76dda51694647e3aded0ae54bde0d1090b869b -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # typeagent-studio — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The `typeagent-studio` package is a TypeScript library that powers the Visual Studio Code extension for the TypeAgent developer experience. It provides tools for authoring, debugging, and optimizing TypeAgent agents, including schema and grammar tuning, compare-and-replay regression detection, trace investigation, and live observation. This package is essential for developers working with TypeAgent agents, offering a rich set of commands, views, and utilities to streamline the development and debugging process.
+The `typeagent-studio` package is a TypeScript library that powers the Visual Studio Code extension for the TypeAgent developer experience. It provides tools for authoring, debugging, and optimizing TypeAgent agents, including schema and grammar tuning, compare-and-replay regression detection, trace investigation, and live observation. This package is a critical component for developers working with TypeAgent agents, offering a rich set of commands, views, and utilities to streamline the development and debugging process.
 
 ## What it does
 
@@ -168,10 +168,10 @@ External: `debug`, `ws`
 
 ### Files of interest
 
-`./src/baseTreeProvider.ts`, `./src/collisionsPresentation.ts`, `./src/collisionsSource.ts`, …and 75 more under `./src/`.
+`./src/baseTreeProvider.ts`, `./src/collisionsPresentation.ts`, `./src/collisionsSource.ts`, …and 76 more under `./src/`.
 
 ---
 
-_Auto-generated against commit `16b2ff3ac32747642a0ad2694df92f93a6aed1b5` on `2026-07-29T20:02:30.650Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent-studio docs:verify-links` to spot-check._
+_Auto-generated against commit `ae7dedc2a2df4e1a827120062324ff0ceb180f36` on `2026-07-30T05:26:29.385Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter typeagent-studio docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
