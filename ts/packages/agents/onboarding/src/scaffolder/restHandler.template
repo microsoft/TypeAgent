@@ -16,23 +16,17 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
+    truncateText,
 } from "@typeagent/agent-sdk/helpers/action";
 import { {{PASCAL_NAME}}Actions } from "./{{NAME}}Schema.js";
 
 const BASE_URL = {{BASE_URL}};
-const MAX_RESPONSE_CHARS = 4000;
-
-function truncate(text: string): string {
-    return text.length > MAX_RESPONSE_CHARS
-        ? text.slice(0, MAX_RESPONSE_CHARS) + "\n…(truncated)"
-        : text;
-}
 
 function formatResponseBody(text: string): string {
     try {
-        return truncate(JSON.stringify(JSON.parse(text), null, 2));
+        return truncateText(JSON.stringify(JSON.parse(text), null, 2));
     } catch {
-        return truncate(text);
+        return truncateText(text);
     }
 }
 
@@ -65,7 +59,7 @@ async function callRest(
     });
     const text = await res.text();
     if (!res.ok) {
-        throw new Error(`${res.status} ${res.statusText}: ${truncate(text)}`);
+        throw new Error(`${res.status} ${res.statusText}: ${truncateText(text)}`);
     }
     return formatResponseBody(text);
 }
