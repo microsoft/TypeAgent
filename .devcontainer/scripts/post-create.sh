@@ -78,7 +78,7 @@ TS_DIR=$(resolve_ts_workspace)
 echo "Looking for TypeScript workspace..."
 if [[ -n "$TS_DIR" ]]; then
     echo "Found: $TS_DIR"
-    VOLUME_PATHS+=("$TS_DIR/node_modules")
+    # VOLUME_PATHS+=("$TS_DIR/node_modules")
 else
     echo "Error: Could not find TypeScript workspace directory (expected ts/)" >&2
     echo "Checked: git repo root, current directory, containerWorkspaceFolder, /workspaces" >&2
@@ -176,6 +176,29 @@ if [[ "$PACKAGE_MANAGER" != pnpm@* ]]; then
 fi
 PNPM_VERSION=${PACKAGE_MANAGER#pnpm@}
 PNPM_VERSION=${PNPM_VERSION%%+sha512.*}
+# Ensure npm/pnpm use the host-provided registry inside the container.
+EFFECTIVE_NPM_REGISTRY="${NPM_CONFIG_REGISTRY:-}"
+if [[ -z "$EFFECTIVE_NPM_REGISTRY" ]]; then
+    EFFECTIVE_NPM_REGISTRY=$(npm config get registry 2>/dev/null || true)
+fi
+if [[ -z "$EFFECTIVE_NPM_REGISTRY" ]] || [[ "$EFFECTIVE_NPM_REGISTRY" == "undefined" ]]; then
+    EFFECTIVE_NPM_REGISTRY="https://registry.npmjs.org/"
+fi
+case "$EFFECTIVE_NPM_REGISTRY" in
+    */) ;;
+    *) EFFECTIVE_NPM_REGISTRY="${EFFECTIVE_NPM_REGISTRY}/" ;;
+esac
+export NPM_CONFIG_REGISTRY="$EFFECTIVE_NPM_REGISTRY"
+export npm_config_registry="$EFFECTIVE_NPM_REGISTRY"
+echo "Using npm registry: $EFFECTIVE_NPM_REGISTRY"
+if ! npm config set registry "$EFFECTIVE_NPM_REGISTRY" --global; then
+    echo "  warn: failed to persist npm registry"
+fi
+# Ensure pnpm's expected home/bin paths exist and are on PATH for this script.
+# This avoids global/bin-dir errors in non-interactive shells.
+export PNPM_HOME="${PNPM_HOME:-/home/codespace/.local/share/pnpm}"
+mkdir -p "$PNPM_HOME/bin"
+export PATH="$PNPM_HOME/bin:$PATH"
 
 if [[ "${TYPEAGENT_USE_COREPACK:-0}" == "1" ]] && command -v corepack &> /dev/null; then
     corepack enable || echo "Warning: corepack enable failed"
@@ -186,7 +209,9 @@ else
         echo "Warning: corepack not found, falling back to npm..."
     fi
     echo "Installing pnpm@$PNPM_VERSION via npm..."
-    npm install -g "pnpm@$PNPM_VERSION" || { echo "Failed to install pnpm@$PNPM_VERSION"; exit 1; }
+    npm install -g "pnpm@$PNPM_VERSION" --registry "$EFFECTIVE_NPM_REGISTRY" || { echo "Failed to install pnpm@$PNPM_VERSION"; exit 1; }
+    # pnpm setup is interactive-shell oriented and may fail in post-create.
+    # We manage PNPM_HOME/PATH directly in this script instead.
 fi
 
 # Verify pnpm is available
@@ -197,20 +222,25 @@ fi
 
 echo "pnpm version: $(pnpm --version)"
 
+if ! pnpm config set registry "$EFFECTIVE_NPM_REGISTRY" --global; then
+    echo "  warn: failed to persist pnpm registry"
+fi
+echo "pnpm registry: $(pnpm config get registry)"
+
+# Keep PATH stable for later interactive shells as well.
+if [[ -f /home/codespace/.bashrc ]] && ! grep -q 'export PNPM_HOME=/home/codespace/.local/share/pnpm' /home/codespace/.bashrc; then
+    {
+        echo ''
+        echo '# pnpm home (set by TypeAgent post-create)'
+        echo 'export PNPM_HOME=/home/codespace/.local/share/pnpm'
+        echo 'export PATH="$PNPM_HOME/bin:$PATH"'
+    } >> /home/codespace/.bashrc
+fi
+
 # Point pnpm store at the Docker named volume so it persists across rebuilds
 pnpm config set store-dir /home/codespace/.local/share/pnpm/store --global
 echo "pnpm store-dir: $(pnpm store path)"
 
-# Install dependencies
-echo ""
-echo "Installing pnpm dependencies..."
-echo "This may take a few minutes on first run..."
-if ! pnpm install; then
-    echo ""
-    echo "Error: pnpm install failed." >&2
-    echo "This is often due to network issues or missing system dependencies." >&2
-    exit 1
-fi
 
 # - Security hardening: restrict sudo to a minimal allowlist
 # During post-create we needed unrestricted root access to install
