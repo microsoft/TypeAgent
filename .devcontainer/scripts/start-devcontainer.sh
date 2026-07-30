@@ -133,6 +133,10 @@ done
 if ! command -v docker >/dev/null 2>&1; then
     fail "docker is required"
 fi
+# Verify the Docker daemon is actually running (not just installed)
+if ! docker info >/dev/null 2>&1; then
+    fail "Docker is not running. Start Docker Desktop or Docker Engine and try again."
+fi
 
 if command -v devcontainer >/dev/null 2>&1; then
     DEVCONTAINER_CMD=(devcontainer)
