@@ -14,10 +14,7 @@ import { loadGrammarRules } from "../src/grammarLoader.js";
 import { writeGrammarRules } from "../src/grammarRuleWriter.js";
 import { describeForEachMatcher } from "./testUtils.js";
 
-function defNamed(
-    ast: ReturnType<typeof parseGrammarRules>,
-    name: string,
-) {
+function defNamed(ast: ReturnType<typeof parseGrammarRules>, name: string) {
     return ast.definitions.find((d) => d.definitionName.name === name)!;
 }
 
