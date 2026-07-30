@@ -150,7 +150,9 @@ describe("buildArgs — prMergedStatus", () => {
         expect(joined).toContain("--head dev/robgruen/dogfooding7");
         expect(joined).toContain("--base main");
         expect(joined).toContain("--state merged");
-        expect(joined).toContain("--json number,title,url,mergedAt,headRefName,baseRefName");
+        expect(joined).toContain(
+            "--json number,title,url,mergedAt,headRefName,baseRefName",
+        );
     });
 
     test("defaults limit to 20 and honors explicit limit", () => {
