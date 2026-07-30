@@ -21,6 +21,7 @@ import type {
     PhaseTiming,
     CompletionUsageStats,
     NotifyExplainedData,
+    ExplainedDetail,
     RequestId,
     UserFeedbackCategory,
     UserFeedbackEntry,
@@ -116,6 +117,7 @@ export const DEFAULT_AVATAR_MAP: Readonly<Record<string, string>> = {
     photo: "📷",
     player: "🎧",
     scriptflow: "🔁",
+    selfhelp: "💡",
     settings: "⚙️",
     shell: "🐚",
     spelunker: "⛏",
@@ -147,7 +149,7 @@ export interface DynamicDisplayResult {
 // pulling dispatcher-types in; the rationale is stale now that
 // dispatcher-types is a small types package with minimal dependencies (just
 // @typeagent/agent-sdk, which chat-ui already depends on).
-export type { PhaseTiming, CompletionUsageStats, NotifyExplainedData };
+export type { PhaseTiming, CompletionUsageStats, NotifyExplainedData, ExplainedDetail };
 
 /**
  * One entry in a session history transcript replayed via
@@ -756,6 +758,12 @@ export class ChatPanel {
     // roadrunner icon and tooltip to the correct bubble after the
     // dispatcher reports back. Cleared by clear().
     private userMessageById = new Map<string, HTMLElement>();
+
+    // The most recent "explained" payload per requestId, captured by
+    // notifyExplained so the click-to-open roadrunner popover can render the
+    // triggered rule / generalized form and its parameter mapping. Cleared by
+    // clear().
+    private explainedById = new Map<string, NotifyExplainedData>();
 
     // The command actually submitted for each requestId, keyed by the id
     // stamped on the user bubble. `command` is what was sent to `onSend`
