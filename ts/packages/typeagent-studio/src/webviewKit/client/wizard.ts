@@ -24,6 +24,7 @@ import type {
     WizardToHostMessage,
 } from "../wizardProtocol.js";
 import type { WizardViewModel, WizardPhaseView } from "../wizardViewModel.js";
+import { el, clear, button } from "./domHelpers.js";
 
 interface VsCodeApi {
     postMessage(message: WizardToHostMessage): void;
@@ -54,40 +55,6 @@ let reconciliation:
 let utteranceProof: UtteranceProofResult | undefined;
 
 restorePersisted();
-
-// --- DOM helpers ---------------------------------------------------------
-
-function el(tag: string, className?: string, text?: string): HTMLElement {
-    const node = document.createElement(tag);
-    if (className) {
-        node.className = className;
-    }
-    if (text !== undefined) {
-        node.textContent = text;
-    }
-    return node;
-}
-
-function clear(node: HTMLElement): void {
-    while (node.firstChild) {
-        node.removeChild(node.firstChild);
-    }
-}
-
-function button(
-    label: string,
-    onClick: () => void,
-    opts: { variant?: "primary" | "secondary"; disabled?: boolean } = {},
-): HTMLButtonElement {
-    const btn = document.createElement("button");
-    btn.className = `wz-btn wz-btn-${opts.variant ?? "secondary"}`;
-    btn.textContent = label;
-    btn.disabled = opts.disabled ?? false;
-    if (!btn.disabled) {
-        btn.addEventListener("click", onClick);
-    }
-    return btn;
-}
 
 // --- Host messaging ------------------------------------------------------
 

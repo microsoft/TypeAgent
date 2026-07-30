@@ -2964,6 +2964,9 @@ importers:
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
     devDependencies:
       '@typeagent/action-grammar-compiler':
         specifier: workspace:*
@@ -2992,9 +2995,6 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
       ws:
         specifier: ^8.21.1
         version: 8.21.1

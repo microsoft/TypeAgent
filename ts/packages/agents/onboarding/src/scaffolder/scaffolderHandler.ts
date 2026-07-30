@@ -28,6 +28,7 @@ import { buildScaffoldedAgent } from "../lib/agentBuild.js";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
+import ts from "typescript";
 
 // Sub-schema group type matching discovery/sub-schema-groups.json
 type SubSchemaGroup = {
@@ -548,44 +549,55 @@ function buildMainSchemaWithSubGroups(
 // (asc) treats such a comment as an "entry type comment" and errors out
 // because entry-type comments are not used for prompts. Comments separated by
 // a blank line, and comments on individual action types, are preserved.
+//
+// Uses the TypeScript parser to locate the entry type alias (robust against
+// formatting/whitespace variants that a source-text regex would mishandle),
+// then strips only the contiguous comment block that abuts the declaration.
 export function stripEntryTypeComment(
     schemaTs: string,
     pascalName: string,
 ): string {
-    const lines = schemaTs.split("\n");
-    const unionRe = new RegExp(
-        `^\\s*export\\s+type\\s+${pascalName}Actions\\b`,
+    const entryName = `${pascalName}Actions`;
+    const source = ts.createSourceFile(
+        "schema.ts",
+        schemaTs,
+        ts.ScriptTarget.Latest,
+        /* setParentNodes */ true,
     );
-    const idx = lines.findIndex((l) => unionRe.test(l));
-    if (idx <= 0) return schemaTs;
 
-    // Walk upward over the comment lines immediately above the union (line
-    // comments or a block comment). Stop at the first blank or code line — a
-    // blank line means the comment is not associated with the entry type.
-    let start = idx;
-    let i = idx - 1;
-    while (i >= 0) {
-        const line = lines[i];
-        if (/^\s*\/\//.test(line)) {
-            start = i;
-            i--;
-            continue;
-        }
-        if (/\*\/\s*$/.test(line)) {
-            let j = i;
-            while (j >= 0 && !/^\s*\/\*/.test(lines[j])) j--;
-            if (j >= 0) {
-                start = j;
-                i = j - 1;
-                continue;
-            }
-        }
-        break;
+    const alias = source.statements.find(
+        (s): s is ts.TypeAliasDeclaration =>
+            ts.isTypeAliasDeclaration(s) && s.name.text === entryName,
+    );
+    if (alias === undefined) return schemaTs;
+
+    const declStart = alias.getStart(source, /* includeJsDocComment */ false);
+    const comments =
+        ts.getLeadingCommentRanges(schemaTs, alias.getFullStart()) ?? [];
+    if (comments.length === 0) return schemaTs;
+
+    // Walk the leading comments from the one nearest the declaration upward,
+    // keeping those with no blank line between them and the following token. A
+    // blank line marks the boundary of the comment block that "belongs" to the
+    // entry type, so anything above it (e.g. the file header) is preserved.
+    const hasBlankLine = (text: string) =>
+        (text.match(/\n/g)?.length ?? 0) >= 2;
+
+    let blockStart = -1;
+    let nextStart = declStart;
+    for (let i = comments.length - 1; i >= 0; i--) {
+        const c = comments[i];
+        if (hasBlankLine(schemaTs.slice(c.end, nextStart))) break;
+        blockStart = c.pos;
+        nextStart = c.pos;
     }
+    if (blockStart < 0) return schemaTs;
 
-    if (start === idx) return schemaTs;
-    lines.splice(start, idx - start);
-    return lines.join("\n").replace(/\n{3,}/g, "\n\n");
+    // Drop the attached comment block (trimming any indentation left on its
+    // first line), then collapse the blank-line run the removal may create.
+    const before = schemaTs.slice(0, blockStart).replace(/[ \t]+$/, "");
+    const after = schemaTs.slice(declStart);
+    return (before + after).replace(/\n{3,}/g, "\n\n");
 }
 
 // Build the main grammar when sub-groups exist by removing any rule whose
