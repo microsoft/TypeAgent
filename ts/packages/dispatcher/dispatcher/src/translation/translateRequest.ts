@@ -166,15 +166,13 @@ export function getTranslatorForSchema(
             .map((actionConfig) => actionConfig.schemaName)
             .join(",")}`,
     );
-    const generateOptions = config.schema.generation.enabled
-        ? {
-              exact: !config.schema.optimize.enabled,
-              jsonSchema: config.schema.generation.jsonSchema,
-              jsonSchemaFunction: config.schema.generation.jsonSchemaFunction,
-              jsonSchemaWithTs: config.schema.generation.jsonSchemaWithTs,
-              jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
-          }
-        : null;
+    const generateOptions = {
+        exact: !config.schema.optimize.enabled,
+        jsonSchema: config.schema.generation.jsonSchema,
+        jsonSchemaFunction: config.schema.generation.jsonSchemaFunction,
+        jsonSchemaWithTs: config.schema.generation.jsonSchemaWithTs,
+        jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
+    };
     const newTranslator = loadAgentJsonTranslator(
         actionConfigs,
         switchActionConfigs,

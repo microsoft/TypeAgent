@@ -1386,23 +1386,6 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                 generation: {
                     description: "Generated action schema",
                     commands: {
-                        ...getToggleCommandHandlers(
-                            "generated action schema",
-                            async (context, enable: boolean) => {
-                                await changeContextConfig(
-                                    {
-                                        translation: {
-                                            schema: {
-                                                generation: {
-                                                    enabled: enable,
-                                                },
-                                            },
-                                        },
-                                    },
-                                    context,
-                                );
-                            },
-                        ),
                         json: getToggleHandlerTable(
                             "use generate json schema if model supports it",
                             async (context, enable: boolean) => {
