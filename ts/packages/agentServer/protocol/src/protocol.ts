@@ -25,6 +25,12 @@ export type ConversationInfo = {
     clientCount: number;
     createdAt: string; // ISO 8601
     /**
+     * Number of user requests recorded in the conversation's display log - a
+     * rough measure of how much activity it holds. Computed server-side; 0 for
+     * a brand-new conversation.
+     */
+    messageCount: number;
+    /**
      * Where this conversation came from. Omitted for native TypeAgent
      * conversations; set to `"copilot"` for imported mirrors. Clients use it to
      * badge the conversation and (together with {@link readOnly}) decide whether

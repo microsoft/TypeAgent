@@ -11,6 +11,11 @@ import {
     equalNormalizedObject,
     toFullActions,
 } from "@typeagent/agent-cache";
+import type {
+    ExplainedDetail,
+    ExplainedMapping,
+    ExplainedSegment,
+} from "@typeagent/dispatcher-types";
 
 import {
     type CommandHandlerContext,
@@ -297,6 +302,335 @@ function getExplainerOptions(
     };
 }
 
+// Flatten action parameters into dotted-path rows for the explained popover,
+// e.g. { artist: { name: "Adele" } } -> [{ name: "artist.name", value: "Adele" }].
+function flattenExplainedParams(
+    value: unknown,
+    prefix: string,
+    rows: ExplainedMapping[],
+) {
+    if (value !== null && typeof value === "object") {
+        if (Array.isArray(value)) {
+            value.forEach((v, i) =>
+                flattenExplainedParams(v, `${prefix}[${i}]`, rows),
+            );
+            return;
+        }
+        for (const [key, v] of Object.entries(value)) {
+            flattenExplainedParams(v, prefix ? `${prefix}.${key}` : key, rows);
+        }
+        return;
+    }
+    rows.push({ name: prefix, value: String(value) });
+}
+
+// Assemble the detail payload backing the roadrunner popover: the user phrase,
+// the resolved action(s), the rule/generalized-form text, and the extracted
+// parameter mapping.
+function buildExplainedDetail(
+    source: ExplainedDetail["source"],
+    requestAction: RequestAction,
+    rule: string | undefined,
+    segments?: ExplainedSegment[] | undefined,
+    generalizations?: ExplainedSegment[][] | undefined,
+): ExplainedDetail {
+    const actions = toFullActions(requestAction.actions);
+    const multi = actions.length > 1;
+    const mapping: ExplainedMapping[] = [];
+    actions.forEach((action, i) => {
+        if (action.parameters !== undefined) {
+            flattenExplainedParams(
+                action.parameters,
+                multi ? `[${i}]` : "",
+                mapping,
+            );
+        }
+    });
+    return {
+        source,
+        phrase: requestAction.request,
+        action: actions
+            .map((a) => `${a.schemaName}.${a.actionName}`)
+            .join(", "),
+        rule,
+        mapping: mapping.length > 0 ? mapping : undefined,
+        segments: segments && segments.length > 0 ? segments : undefined,
+        generalizations:
+            generalizations && generalizations.length > 0
+                ? generalizations
+                : undefined,
+    };
+}
+
+// Break a V5 explanation's sub-phrases into { text, category } segments so the
+// client can color each phrase word by its role and match it to the same-color
+// marker in the generalized form. Best-effort and shape-tolerant.
+function buildSegments(explanationData: unknown): ExplainedSegment[] {
+    const data = explanationData as {
+        subPhrases?: { text?: unknown; category?: unknown }[];
+    };
+    if (!Array.isArray(data?.subPhrases)) return [];
+    const segments: ExplainedSegment[] = [];
+    for (const sp of data.subPhrases) {
+        if (typeof sp?.text === "string" && typeof sp?.category === "string") {
+            segments.push({ text: sp.text, category: sp.category });
+        }
+    }
+    return segments;
+}
+
+// Derive example same-meaning rephrasings from a V5 explanation, each broken
+// into per-category segments (so the client can color them like the phrase):
+// substitute each non-property sub-phrase's synonyms, and add the explainer's
+// polite prefix/suffix variants. Best-effort and shape-tolerant.
+function buildGeneralizations(
+    phrase: string,
+    baseSegments: ExplainedSegment[],
+    explanationData: unknown,
+): ExplainedSegment[][] {
+    const data = explanationData as {
+        subPhrases?: { synonyms?: unknown }[];
+        politePrefixes?: unknown[];
+        politeSuffixes?: unknown[];
+    };
+    const variants: ExplainedSegment[][] = [];
+    baseSegments.forEach((segment, i) => {
+        const synonyms = Array.isArray(data?.subPhrases?.[i]?.synonyms)
+            ? (data.subPhrases[i].synonyms as unknown[])
+            : [];
+        for (const synonym of synonyms) {
+            if (typeof synonym !== "string" || synonym === segment.text) {
+                continue;
+            }
+            variants.push(
+                baseSegments.map((s, j) =>
+                    j === i ? { text: synonym, category: s.category } : s,
+                ),
+            );
+        }
+    });
+    for (const prefix of data?.politePrefixes ?? []) {
+        if (typeof prefix === "string" && prefix.trim()) {
+            variants.push([
+                { text: prefix.trim(), category: "politeness" },
+                ...baseSegments,
+            ]);
+        }
+    }
+    for (const suffix of data?.politeSuffixes ?? []) {
+        if (typeof suffix === "string" && suffix.trim()) {
+            variants.push([
+                ...baseSegments,
+                { text: suffix.trim(), category: "politeness" },
+            ]);
+        }
+    }
+    // Dedupe (case-insensitive by joined text) and drop the original.
+    const seen = new Set<string>([phrase.toLowerCase()]);
+    const result: ExplainedSegment[][] = [];
+    for (const variant of variants) {
+        const key = variant
+            .map((s) => s.text)
+            .join(" ")
+            .toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push(variant);
+        if (result.length >= 24) break; // cap persisted list size
+    }
+    return result;
+}
+
+async function cacheUserAttachments(
+    systemContext: CommandHandlerContext,
+    attachments?: string[],
+): Promise<CachedImageWithDetails[]> {
+    const cachedAttachments: CachedImageWithDetails[] = [];
+    if (!attachments || systemContext.session.sessionDirPath === undefined) {
+        return cachedAttachments;
+    }
+    for (const attachment of attachments) {
+        const [attachmentName, tags]: [string, ExifReader.Tags] =
+            await systemContext.session.storeUserSuppliedFile(attachment);
+        cachedAttachments.push(
+            new CachedImageWithDetails(tags, attachmentName, attachment),
+        );
+    }
+    return cachedAttachments;
+}
+
+function shouldBypassTranslationForReasoning(
+    request: string,
+    systemContext: CommandHandlerContext,
+): boolean {
+    if (systemContext.noReasoning) {
+        return false;
+    }
+    const reasoningPrefixes = ["learn:", "dev:", "remember how to ", "record "];
+    const lowerRequest = request.trimStart().toLowerCase();
+    return (
+        process.env.CLAUDE_FORCE_REASONING === "1" ||
+        reasoningPrefixes.some((prefix) => lowerRequest.startsWith(prefix))
+    );
+}
+
+function recordRequestContext(
+    context: ActionContext<CommandHandlerContext>,
+    systemContext: CommandHandlerContext,
+    request: string,
+    cachedAttachments: CachedImageWithDetails[],
+    history: ReturnType<typeof getHistoryContext>,
+): void {
+    context.actionIO.appendDiagnosticData({
+        type: "translationContext",
+        entities: history?.entities ?? [],
+        activityContext: history?.activityContext,
+    });
+    if (systemContext.session.getConfig().execution.recordUserMessages) {
+        addUserMessageToHistory(systemContext, request, cachedAttachments);
+    }
+    if (systemContext.userRequestKnowledgeExtraction === true) {
+        addRequestToMemory(systemContext, request);
+    }
+}
+
+async function interpretRequestWithLogging(
+    context: ActionContext<CommandHandlerContext>,
+    systemContext: CommandHandlerContext,
+    request: string,
+    cachedAttachments: CachedImageWithDetails[],
+    history: ReturnType<typeof getHistoryContext>,
+): Promise<InterpretResult> {
+    try {
+        return await interpretRequest(
+            context,
+            request,
+            cachedAttachments,
+            history,
+        );
+    } catch (e: any) {
+        if (systemContext.userRequestKnowledgeExtraction === true) {
+            addResultToMemory(
+                systemContext,
+                `Error translating request '${request}': ${e.message}`,
+                DispatcherName,
+            );
+        }
+        systemContext?.logger?.logEvent("request:exception", {
+            request,
+            message: e.message,
+            stack: e.stack,
+        });
+        throw e;
+    }
+}
+
+function canUseInteractiveCollisionClarify(
+    systemContext: CommandHandlerContext,
+): boolean {
+    return (
+        systemContext.session.getConfig().collision.preference.enabled &&
+        systemContext.session.getConfig().collision.preference.remember !==
+            "never"
+    );
+}
+
+function needsReasoningFallback(
+    requestAction: RequestAction,
+    systemContext: CommandHandlerContext,
+): boolean {
+    const interactiveCollisionClarify =
+        canUseInteractiveCollisionClarify(systemContext);
+    return requestAction.actions.some(
+        ({ action }) =>
+            isUnknownAction(action) ||
+            (action.schemaName === DispatcherClarifyName &&
+                !(
+                    interactiveCollisionClarify &&
+                    action.actionName === "clarifyMultipleAgentMatches"
+                )),
+    );
+}
+
+async function tryReasoningFallback(
+    systemContext: CommandHandlerContext,
+    context: ActionContext<CommandHandlerContext>,
+    request: string,
+    requestAction: RequestAction,
+): Promise<boolean> {
+    if (
+        systemContext.noReasoning ||
+        !needsReasoningFallback(requestAction, systemContext)
+    ) {
+        return false;
+    }
+    try {
+        await runConfiguredReasoning(request, context);
+        return true;
+    } catch (e: any) {
+        debugRequest(
+            `Reasoning fallback failed, using default handler: ${e.message}`,
+        );
+        return false;
+    }
+}
+
+function needsErrorReasoning(
+    systemContext: CommandHandlerContext,
+    requestAction: RequestAction,
+): boolean {
+    return requestAction.actions.some(({ action }) => {
+        try {
+            return (
+                systemContext.agents.getActionConfig(action.schemaName)
+                    .errorReasoning === true
+            );
+        } catch {
+            return false;
+        }
+    });
+}
+
+async function tryErrorReasoningFallback(
+    systemContext: CommandHandlerContext,
+    context: ActionContext<CommandHandlerContext>,
+    request: string,
+    requestAction: RequestAction,
+    execResult: NonNullable<Awaited<ReturnType<typeof executeActions>>>,
+): Promise<boolean> {
+    if (
+        systemContext.noReasoning ||
+        !execResult.fallbackToReasoning ||
+        !needsErrorReasoning(systemContext, requestAction)
+    ) {
+        return false;
+    }
+
+    const { error, failedAction } = execResult;
+    const augmentedRequest =
+        `[Context: A direct action dispatch failed.\n` +
+        `Action: ${JSON.stringify(failedAction.action, undefined, 2)}\n` +
+        `Error: "${error}"\n` +
+        `Please handle the following request using the available tools.]\n\n` +
+        request;
+    try {
+        displayStatus("Action failed — retrying with reasoning...", context);
+        await runConfiguredReasoning(augmentedRequest, context, {
+            fallbackContext: {
+                failedSchema: failedAction.action.schemaName,
+                failedAction: failedAction.action.actionName,
+                error,
+            },
+        });
+        return true;
+    } catch (e: any) {
+        debugRequest(
+            `Error-triggered reasoning failed, keeping original error: ${e.message}`,
+        );
+        return false;
+    }
+}
+
 async function requestExplain(
     context: CommandHandlerContext,
     attachments: CachedImageWithDetails[] | undefined,
@@ -307,7 +641,7 @@ async function requestExplain(
 
     const { fromCache, fromUser, requestAction } = translationResult;
 
-    const notifyExplained = (error?: string) => {
+    const notifyExplained = (error?: string, detail?: ExplainedDetail) => {
         context.clientIO.notify(
             requestId,
             "explained",
@@ -316,8 +650,13 @@ async function requestExplain(
                 fromCache,
                 fromUser,
                 error,
+                detail,
             },
             DispatcherName,
+            undefined,
+            // Persist so the roadrunner icon + popover survive conversation
+            // rehydration (replayed from the DisplayLog on rejoin/reload).
+            { persist: true },
         );
     };
 
@@ -326,7 +665,33 @@ async function requestExplain(
         const error = explanationResult.success
             ? undefined
             : explanationResult?.message;
-        notifyExplained(error);
+        // The generalized form the model produced: the newly generated grammar
+        // rule (NFA mode) or the construction string (construction mode).
+        const rule =
+            result.grammarResult?.generatedRule ??
+            (explanationResult.success
+                ? explanationResult.construction?.toString()
+                : undefined);
+        const segments = explanationResult.success
+            ? buildSegments(explanationResult.data)
+            : undefined;
+        const generalizations = explanationResult.success
+            ? buildGeneralizations(
+                  requestAction.request,
+                  segments ?? [],
+                  explanationResult.data,
+              )
+            : undefined;
+        notifyExplained(
+            error,
+            buildExplainedDetail(
+                "model",
+                requestAction,
+                rule,
+                segments,
+                generalizations,
+            ),
+        );
 
         // Notify about grammar result (success or rejection)
         if (result.grammarResult) {
@@ -354,7 +719,14 @@ async function requestExplain(
     }
     if (fromCache && !fromUser) {
         // If it is from cache, and not from the user, explanation is not necessary.
-        notifyExplained();
+        notifyExplained(
+            undefined,
+            buildExplainedDetail(
+                fromCache,
+                requestAction,
+                translationResult.ruleText,
+            ),
+        );
         return;
     }
 
@@ -417,26 +789,10 @@ export class RequestCommandHandler implements CommandHandler {
             }
 
             // store attachments for later reuse
-            const cachedAttachments: CachedImageWithDetails[] = [];
-            if (
-                attachments &&
-                systemContext.session.sessionDirPath !== undefined
-            ) {
-                for (let i = 0; i < attachments?.length; i++) {
-                    const [attachmentName, tags]: [string, ExifReader.Tags] =
-                        await systemContext.session.storeUserSuppliedFile(
-                            attachments![i],
-                        );
-
-                    cachedAttachments.push(
-                        new CachedImageWithDetails(
-                            tags,
-                            attachmentName,
-                            attachments![i],
-                        ),
-                    );
-                }
-            }
+            const cachedAttachments = await cacheUserAttachments(
+                systemContext,
+                attachments,
+            );
 
             // Make sure we clear any left over streaming context
             systemContext.streamingActionContext?.closeActionContext();
@@ -446,66 +802,27 @@ export class RequestCommandHandler implements CommandHandler {
 
             // Requests with recording/reasoning prefixes bypass translation entirely
             // and go straight to Claude reasoning.
-            const REASONING_PREFIXES = [
-                "learn:",
-                "dev:",
-                "remember how to ",
-                "record ",
-            ];
-            const lowerRequest = request.trimStart().toLowerCase();
-            const forceReasoningEnv =
-                process.env.CLAUDE_FORCE_REASONING === "1";
-            if (
-                !systemContext.noReasoning &&
-                (forceReasoningEnv ||
-                    REASONING_PREFIXES.some((p) => lowerRequest.startsWith(p)))
-            ) {
+            if (shouldBypassTranslationForReasoning(request, systemContext)) {
                 await runConfiguredReasoning(request, context);
                 return;
             }
 
             // Get the history context before adding the request to memory
             const history = getHistoryContext(systemContext);
-            context.actionIO.appendDiagnosticData({
-                type: "translationContext",
-                entities: history?.entities ?? [],
-                activityContext: history?.activityContext,
-            });
-            if (
-                systemContext.session.getConfig().execution.recordUserMessages
-            ) {
-                addUserMessageToHistory(
-                    systemContext,
-                    request,
-                    cachedAttachments,
-                );
-            }
-            if (systemContext.userRequestKnowledgeExtraction === true) {
-                addRequestToMemory(systemContext, request);
-            }
-            let interpretResult: InterpretResult;
-            try {
-                interpretResult = await interpretRequest(
-                    context,
-                    request,
-                    cachedAttachments,
-                    history,
-                );
-            } catch (e: any) {
-                if (systemContext.userRequestKnowledgeExtraction === true) {
-                    addResultToMemory(
-                        systemContext,
-                        `Error translating request '${request}': ${e.message}`,
-                        DispatcherName,
-                    );
-                }
-                systemContext?.logger?.logEvent("request:exception", {
-                    request,
-                    message: e.message,
-                    stack: e.stack,
-                });
-                throw e;
-            }
+            recordRequestContext(
+                context,
+                systemContext,
+                request,
+                cachedAttachments,
+                history,
+            );
+            const interpretResult = await interpretRequestWithLogging(
+                context,
+                systemContext,
+                request,
+                cachedAttachments,
+                history,
+            );
 
             const { requestAction, tokenUsage } = interpretResult;
 
@@ -540,31 +857,12 @@ export class RequestCommandHandler implements CommandHandler {
             // `preference-clarify` feature is meant to render its own
             // interactive pick + "remember" card via executeActions, so it
             // must NOT be diverted to reasoning.
-            const interactiveCollisionClarify =
-                systemContext.session.getConfig().collision.preference
-                    .enabled &&
-                systemContext.session.getConfig().collision.preference
-                    .remember !== "never";
-            const needsReasoning = requestAction.actions.some(
-                ({ action }) =>
-                    isUnknownAction(action) ||
-                    (action.schemaName === DispatcherClarifyName &&
-                        !(
-                            interactiveCollisionClarify &&
-                            action.actionName === "clarifyMultipleAgentMatches"
-                        )),
+            const reasoningHandled = await tryReasoningFallback(
+                systemContext,
+                context,
+                request,
+                requestAction,
             );
-            let reasoningHandled = false;
-            if (needsReasoning && !systemContext.noReasoning) {
-                try {
-                    await runConfiguredReasoning(request, context);
-                    reasoningHandled = true;
-                } catch (e: any) {
-                    debugRequest(
-                        `Reasoning fallback failed, using default handler: ${e.message}`,
-                    );
-                }
-            }
             if (!reasoningHandled) {
                 const execResult = await executeActions(
                     requestAction.actions,
@@ -575,62 +873,22 @@ export class RequestCommandHandler implements CommandHandler {
                 // Error-triggered reasoning: if an action failed and at least one
                 // schema in the request opts in via errorReasoning: true, give Claude
                 // a second chance using the same reasoning loop as UnknownAction.
-                if (
-                    !systemContext.noReasoning &&
-                    execResult !== undefined &&
-                    execResult.fallbackToReasoning
-                ) {
-                    const needsErrorReasoning = requestAction.actions.some(
-                        ({ action }) => {
-                            try {
-                                return (
-                                    systemContext.agents.getActionConfig(
-                                        action.schemaName,
-                                    ).errorReasoning === true
-                                );
-                            } catch {
-                                return false;
-                            }
-                        },
-                    );
-                    let errorReasoningResolved = false;
-                    if (needsErrorReasoning) {
-                        const { error, failedAction } = execResult;
-                        const augmentedRequest =
-                            `[Context: A direct action dispatch failed.\n` +
-                            `Action: ${JSON.stringify(failedAction.action, undefined, 2)}\n` +
-                            `Error: "${error}"\n` +
-                            `Please handle the following request using the available tools.]\n\n` +
-                            request;
-                        try {
-                            displayStatus(
-                                "Action failed — retrying with reasoning...",
-                                context,
-                            );
-                            await runConfiguredReasoning(
-                                augmentedRequest,
-                                context,
-                                {
-                                    fallbackContext: {
-                                        failedSchema:
-                                            failedAction.action.schemaName,
-                                        failedAction:
-                                            failedAction.action.actionName,
-                                        error,
-                                    },
-                                },
-                            );
-                            errorReasoningResolved = true;
-                        } catch (e: any) {
-                            debugRequest(
-                                `Error-triggered reasoning failed, keeping original error: ${e.message}`,
-                            );
-                        }
-                    }
+                if (execResult !== undefined) {
+                    const errorReasoningResolved =
+                        await tryErrorReasoningFallback(
+                            systemContext,
+                            context,
+                            request,
+                            requestAction,
+                            execResult,
+                        );
                     // If error-triggered reasoning did not run (schema opted out)
                     // or failed to resolve the failure, surface the original
                     // action error instead of silently reporting success.
-                    if (!errorReasoningResolved) {
+                    if (
+                        execResult.fallbackToReasoning &&
+                        !errorReasoningResolved
+                    ) {
                         displayError(execResult.error, context);
                     }
                 }

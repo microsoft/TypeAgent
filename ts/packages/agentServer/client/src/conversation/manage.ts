@@ -454,14 +454,15 @@ export async function manageRename(
         );
     }
 
-    // Preserve original createdAt/clientCount so callers re-sorting by
-    // created time don't see zero placeholders.
+    // Preserve original createdAt/clientCount/messageCount so callers
+    // re-sorting by created time don't see zero placeholders.
     const original = all.find((c) => c.conversationId === targetId);
     const updated: ConversationInfo = {
         conversationId: targetId,
         name: trimmedNew,
         clientCount: original?.clientCount ?? 0,
         createdAt: original?.createdAt ?? "",
+        messageCount: original?.messageCount ?? 0,
     };
 
     if (isCurrent && ctx.onCurrentConversationUpdated !== undefined) {

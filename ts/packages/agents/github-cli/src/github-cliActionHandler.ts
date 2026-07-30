@@ -569,6 +569,19 @@ export function buildArgs(
             if (p.number) args.push(String(p.number));
             return args;
         }
+        case "prMergedStatus": {
+            const args = ["pr", "list"];
+            if (p.repo) args.push("--repo", String(p.repo));
+            if (p.base) args.push("--base", String(p.base));
+            if (p.branch) args.push("--head", String(p.branch));
+            args.push("--state", "merged");
+            args.push("--limit", String(p.limit ?? 20));
+            args.push(
+                "--json",
+                "number,title,url,mergedAt,headRefName,baseRefName",
+            );
+            return args;
+        }
         case "prMerge": {
             const args = ["pr", "merge"];
             if (p.number) args.push(String(p.number));
@@ -1994,6 +2007,36 @@ async function executeAction(
 
                 // Array results: issues, PRs, search repos
                 if (Array.isArray(data)) {
+                    if (action.actionName === "prMergedStatus") {
+                        const branch = String(p.branch ?? "");
+                        const base = String(p.base ?? "main");
+                        const matches = data as Array<{
+                            number?: number;
+                            title?: string;
+                            url?: string;
+                            mergedAt?: string;
+                        }>;
+
+                        if (matches.length === 0) {
+                            return createActionResultFromMarkdownDisplay(
+                                `No merged PR found from branch **${branch}** into **${base}**.`,
+                            );
+                        }
+
+                        const first = matches[0];
+                        const prLabel =
+                            first.number !== undefined
+                                ? `#${first.number}`
+                                : "matching PR";
+                        const mergedAt = first.mergedAt
+                            ? ` (merged at ${first.mergedAt})`
+                            : "";
+                        const link = first.url ? `\n\n${first.url}` : "";
+                        return createActionResultFromMarkdownDisplay(
+                            `Yes - branch **${branch}** was merged into **${base}** via PR **${prLabel}**${mergedAt}.${link}`,
+                        );
+                    }
+
                     const result = buildStructuredListResult(
                         data as Record<string, unknown>[],
                         action.actionName,

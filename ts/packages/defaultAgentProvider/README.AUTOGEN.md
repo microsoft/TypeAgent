@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=736a27e109662e5d56fe0f62cb933da28826a849d821581793389a7e46d283b5 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b28003e6c4c8501102f31e8885510564113a2d15c1675e91dbe5659772a10e75 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # default-agent-provider — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent framework. It is a core component used by the shell and CLI to initialize and manage both built-in agents and external agent providers. This package ensures that the necessary agents, configurations, and dispatcher options are available to support the TypeAgent ecosystem.
+The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent framework. It is a core component used by the TypeAgent shell and CLI to initialize, manage, and configure both built-in and external agents. This package ensures that the necessary agents and dispatcher configurations are available to support the broader TypeAgent ecosystem.
 
 ## What it does
 
-The `default-agent-provider` package provides a centralized mechanism for managing agents and their configurations. Its primary responsibilities include:
+The `default-agent-provider` package provides a centralized mechanism for managing agents, their configurations, and dispatcher settings. Its primary responsibilities include:
 
 - **Default Agent Providers**: Functions like `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` supply pre-configured agent providers and construction mechanisms for initializing agents.
 - **Agent Source Management**: The `getDefaultAppAgentSource` function manages the connected app-agent source, including the installed-agent record store and the host-owned `@package` agent.
@@ -48,7 +48,7 @@ To set up and use the `default-agent-provider` package, follow these steps:
 
    - `CS_BENCH_MAX_OLD_SPACE_MB`: Configure this variable to control the maximum old space memory allocation for the V8 engine.
    - `CS_NEGATION_GUARD`: Set this variable to enable or disable negation guard functionality.
-   - `TYPEAGENT_FEED_DISCOVERY_REGISTRIES`: Specifies the registries for feed discovery. Ensure this variable is set appropriately for your environment.
+   - `TYPEAGENT_FEED_DISCOVERY_REGISTRIES`: Specifies the registries for feed discovery.
    - `TYPEAGENT_FEED_REGISTRY`: Specifies the registry for the agent feed. This value should be set in your environment. Refer to the hand-written README for details on how to configure this variable.
    - `TYPEAGENT_FEED_SCOPES`: Defines the scopes for the agent feed. Ensure this variable is set appropriately for your environment.
 
@@ -151,6 +151,7 @@ Workspace:
 - [@typeagent/photo-agent](../../packages/agents/photo/README.md)
 - [@typeagent/powershell-typeagent](../../packages/agents/powershell/README.md)
 - [@typeagent/screencapture-agent](../../packages/agents/screencapture/README.md)
+- [@typeagent/selfhelp-agent](../../packages/agents/selfhelp/README.md)
 - [@typeagent/studio-agent](../../packages/agents/studio/README.md)
 - [@typeagent/taskflow-typeagent](../../packages/agents/taskflow/README.md)
 - [@typeagent/telemetry](../../packages/telemetry/README.md)
@@ -198,6 +199,6 @@ _5 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `59cbbc5f415e861717a2bdb75ffa0459ceb5c4c7` on `2026-07-29T18:12:59.352Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
+_Auto-generated against commit `84e4ab4096d5c3ad29bc106810cdf15e6a3138f6` on `2026-07-30T20:00:37.259Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

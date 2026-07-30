@@ -214,9 +214,14 @@ function renderResult(result: ConversationActionResult): void {
                 "  " +
                 "NAME".padEnd(nameWidth + 2) +
                 "CREATED".padEnd(22) +
+                "MESSAGES".padEnd(10) +
                 "CLIENTS";
             const divider =
-                "  " + "─".repeat(nameWidth + 2) + "─".repeat(22) + "───────";
+                "  " +
+                "─".repeat(nameWidth + 2) +
+                "─".repeat(22) +
+                "─".repeat(10) +
+                "───────";
             console.log(chalk.bold("\nConversations:"));
             console.log(chalk.dim(header));
             console.log(chalk.dim(divider));
@@ -232,6 +237,7 @@ function renderResult(result: ConversationActionResult): void {
                     marker +
                     s.name.padEnd(nameWidth + 2) +
                     created.padEnd(22) +
+                    String(s.messageCount).padEnd(10) +
                     String(s.clientCount) +
                     suffix;
                 console.log(isCurrent ? chalk.green(line) : line);

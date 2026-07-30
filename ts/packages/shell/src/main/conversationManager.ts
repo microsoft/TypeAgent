@@ -19,18 +19,18 @@ import type {
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import {
     manageConversation,
+    renderConversationActionResult,
     switchConversationSafe,
-    type ConversationActionResult,
     type ManageConversationContext,
     type ManageConversationPayload,
 } from "@typeagent/agent-server-client/conversation";
 import type { ClientIO, Dispatcher, QueueSnapshot } from "agent-dispatcher";
+import type { DisplayContent } from "@typeagent/agent-sdk";
 import { debugShell } from "./debug.js";
 import { saveUserSettings } from "agent-dispatcher/helpers/userSettings";
 
 export type ConversationManageResult = {
-    html: string;
-    kind: "info" | "warning" | "error";
+    content: DisplayContent;
     switched?: boolean;
 };
 
@@ -60,6 +60,7 @@ export function createLocalConversationBackend(): ConversationManagerBackend {
         name: "Default Conversation",
         clientCount: 1,
         createdAt: new Date().toISOString(),
+        messageCount: 0,
     };
 
     return {
@@ -107,8 +108,12 @@ export function createLocalConversationBackend(): ConversationManagerBackend {
         },
         async manageAction(): Promise<ConversationManageResult> {
             return {
-                html: "Conversation management is not supported in local mode. Connect to the Agent Server to use conversation management.",
-                kind: "warning",
+                content: {
+                    type: "text",
+                    content:
+                        "Conversation management is not supported in local mode. Connect to the Agent Server to use conversation management.",
+                    kind: "warning",
+                },
             };
         },
     };
@@ -384,81 +389,13 @@ export function createRemoteConversationBackend(
                     payload,
                 );
 
-                return renderConversationActionResult(result);
+                return {
+                    content: renderConversationActionResult(result),
+                    ...(result.kind === "ok" && result.switched
+                        ? { switched: true }
+                        : {}),
+                };
             });
         },
     };
-}
-
-function escapeHtml(s: string): string {
-    return s.replace(/[&<>"']/g, (c) => {
-        switch (c) {
-            case "&":
-                return "&amp;";
-            case "<":
-                return "&lt;";
-            case ">":
-                return "&gt;";
-            case '"':
-                return "&quot;";
-            default:
-                return "&#39;";
-        }
-    });
-}
-
-// Replace plain "<name>" runs in helper messages with bold-escaped HTML.
-function htmlizeMessage(message: string): string {
-    return message.replace(
-        /"([^"]+)"/g,
-        (_, name) => `"<b>${escapeHtml(name)}</b>"`,
-    );
-}
-
-function renderConversationActionResult(
-    result: ConversationActionResult,
-): ConversationManageResult {
-    switch (result.kind) {
-        case "ok":
-            return {
-                html: htmlizeMessage(result.message),
-                kind: "info",
-                ...(result.switched ? { switched: true } : {}),
-            };
-        case "warning":
-            return {
-                html: htmlizeMessage(result.message),
-                kind: "warning",
-            };
-        case "error":
-            return {
-                html: `❌ ${htmlizeMessage(result.message)}`,
-                kind: "error",
-            };
-        case "cancelled":
-            return { html: "Cancelled.", kind: "info" };
-        case "info":
-            return {
-                html:
-                    `<b>Current conversation:</b><br>` +
-                    `Name: ${escapeHtml(result.name)}<br>` +
-                    `<span style="font-family:monospace;font-size:smaller;">${escapeHtml(result.conversationId)}</span>`,
-                kind: "info",
-            };
-        case "list": {
-            if (result.conversations.length === 0) {
-                return { html: "<i>No conversations found.</i>", kind: "info" };
-            }
-            const items = result.conversations
-                .map((s) => {
-                    const cur =
-                        s.conversationId === result.currentConversationId
-                            ? "▸ "
-                            : "";
-                    return `<li>${cur}${escapeHtml(s.name)}</li>`;
-                })
-                .join("");
-            return { html: `<ul>${items}</ul>`, kind: "info" };
-        }
-    }
 }

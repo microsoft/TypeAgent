@@ -1,0 +1,75 @@
+{
+  "name": "@typeagent/selfhelp-agent",
+  "version": "0.0.1",
+  "description": "Help agent that answers questions about TypeAgent itself",
+  "keywords": [
+    "typeagent-agent"
+  ],
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/selfhelp"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/selfHelpManifest.json",
+    "./agent/handlers": "./dist/selfHelpActionHandler.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
+  "scripts": {
+    "asc": "asc -i ./src/selfHelpSchema.ts -o ./dist/selfHelpSchema.pas.json -t SelfHelpAction",
+    "build": "concurrently npm:tsc npm:asc npm:copy-catalog",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "copy-catalog": "node scripts/copyCatalog.mjs",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "test": "npm run test:local",
+    "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/agent-runtime": "workspace:*",
+    "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/aiclient": "workspace:*",
+    "debug": "^4.4.0",
+    "typechat": "^0.1.1"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "@types/debug": "^4.1.12",
+    "@types/jest": "^29.5.7",
+    "concurrently": "^9.1.2",
+    "jest": "^29.7.0",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/selfHelpSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/selfHelpSchema.pas.json"
+          ]
+        }
+      }
+    }
+  },
+  "typeagent": {
+    "defaultAgentName": "selfhelp"
+  }
+}

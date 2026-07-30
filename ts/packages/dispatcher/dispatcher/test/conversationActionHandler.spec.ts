@@ -2,257 +2,139 @@
 // Licensed under the MIT License.
 
 /**
- * Tests for executeConversationAction in sessionActionHandler.ts.
- *
- * getRequestId is mocked to return a stable RequestId, and
- * clientIO.takeAction is a mock on the context stub.
+ * Tests for executeConversationAction. Each conversation action delegates to
+ * the equivalent `@conversation` command via processCommandNoLock (matching the
+ * history agent), so these assert the command string it runs and the entity it
+ * returns.
  */
 
 import { describe, it, expect, jest } from "@jest/globals";
 
-// ── Mock getRequestId before importing the handler ──────────────────────────
-
-const mockRequestId = { requestId: "test-request-id" };
-
-jest.unstable_mockModule("../src/context/commandHandlerContext.js", () => ({
-    getRequestId: jest.fn(() => mockRequestId),
+// Capture the delegated command string by stubbing the command processor.
+const mockProcessCommandNoLock = jest.fn();
+jest.unstable_mockModule("../src/command/command.js", () => ({
+    processCommandNoLock: mockProcessCommandNoLock,
 }));
-
-// ── Dynamic import after mocks are installed ──────────────────────────────────
 
 const { executeConversationAction } = await import(
     "../src/context/system/action/conversationActionHandler.js"
 );
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-let mockTakeAction: jest.Mock;
-
-/** Minimal ActionContext stub — agentContext with clientIO.takeAction. */
+const agentContext = { id: "agent-context" } as any;
 function makeContext() {
-    mockTakeAction = jest.fn();
-    return {
-        sessionContext: {
-            agentContext: {
-                clientIO: {
-                    takeAction: mockTakeAction,
-                },
-                currentRequestId: mockRequestId,
-            },
-        },
-    } as any;
+    mockProcessCommandNoLock.mockClear();
+    return { sessionContext: { agentContext } } as any;
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+async function run(action: any) {
+    return executeConversationAction(
+        { schemaName: "system.conversation", ...action },
+        makeContext(),
+    );
+}
 
-describe("executeConversationAction — newConversation", () => {
-    it("sends manage-conversation with subcommand new and name", async () => {
-        const ctx = makeContext();
-        await executeConversationAction(
-            {
-                schemaName: "system.conversation",
-                actionName: "newConversation",
-                parameters: { name: "research" },
-            },
-            ctx,
-        );
-        expect(mockTakeAction).toHaveBeenCalledWith(
-            mockRequestId,
-            "manage-conversation",
-            { subcommand: "new", name: "research" },
-        );
+function expectCommand(command: string) {
+    expect(mockProcessCommandNoLock).toHaveBeenCalledWith(
+        command,
+        agentContext,
+    );
+}
+
+describe("executeConversationAction delegates to @conversation commands", () => {
+    it("newConversation with a name runs a quoted new command", async () => {
+        const r = await run({
+            actionName: "newConversation",
+            parameters: { name: "research" },
+        });
+        expectCommand('@conversation new "research"');
+        expect(r.resultEntity).toEqual({
+            name: "research",
+            type: ["conversation"],
+        });
     });
 
-    it("sends manage-conversation with subcommand new without name when omitted", async () => {
-        const ctx = makeContext();
-        await executeConversationAction(
-            {
-                schemaName: "system.conversation",
-                actionName: "newConversation",
-                parameters: {},
-            },
-            ctx,
-        );
-        expect(mockTakeAction).toHaveBeenCalledWith(
-            mockRequestId,
-            "manage-conversation",
-            { subcommand: "new" },
-        );
+    it("newConversation without a name runs a bare new command", async () => {
+        const r = await run({ actionName: "newConversation", parameters: {} });
+        expectCommand("@conversation new");
+        expect(r.resultEntity).toEqual({
+            name: "new conversation",
+            type: ["conversation"],
+        });
     });
 
-    it("preserves conversation names that contain spaces", async () => {
-        const ctx = makeContext();
-        await executeConversationAction(
-            {
-                schemaName: "system.conversation",
-                actionName: "newConversation",
-                parameters: { name: "my work project" },
-            },
-            ctx,
-        );
-        expect(mockTakeAction).toHaveBeenCalledWith(
-            mockRequestId,
-            "manage-conversation",
-            { subcommand: "new", name: "my work project" },
-        );
-    });
-});
-
-describe("executeConversationAction — listConversation", () => {
-    it("sends manage-conversation with subcommand list", async () => {
-        const ctx = makeContext();
-        await executeConversationAction(
-            {
-                schemaName: "system.conversation",
-                actionName: "listConversation",
-            },
-            ctx,
-        );
-        expect(mockTakeAction).toHaveBeenCalledWith(
-            mockRequestId,
-            "manage-conversation",
-            { subcommand: "list" },
-        );
-    });
-});
-
-describe("executeConversationAction — showConversationInfo", () => {
-    it("sends manage-conversation with subcommand info", async () => {
-        const ctx = makeContext();
-        await executeConversationAction(
-            {
-                schemaName: "system.conversation",
-                actionName: "showConversationInfo",
-            },
-            ctx,
-        );
-        expect(mockTakeAction).toHaveBeenCalledWith(
-            mockRequestId,
-            "manage-conversation",
-            { subcommand: "info" },
-        );
-    });
-});
-
-describe("executeConversationAction — switchConversation", () => {
-    it("sends manage-conversation with subcommand switch", async () => {
-        const ctx = makeContext();
-        await executeConversationAction(
-            {
-                schemaName: "system.conversation",
-                actionName: "switchConversation",
-                parameters: { name: "work" },
-            },
-            ctx,
-        );
-        expect(mockTakeAction).toHaveBeenCalledWith(
-            mockRequestId,
-            "manage-conversation",
-            { subcommand: "switch", name: "work" },
-        );
+    it("quotes conversation names that contain spaces", async () => {
+        await run({
+            actionName: "newConversation",
+            parameters: { name: "my work project" },
+        });
+        expectCommand('@conversation new "my work project"');
     });
 
-    it("preserves conversation names that contain spaces", async () => {
-        const ctx = makeContext();
-        await executeConversationAction(
-            {
-                schemaName: "system.conversation",
-                actionName: "switchConversation",
-                parameters: { name: "my work project" },
-            },
-            ctx,
-        );
-        expect(mockTakeAction).toHaveBeenCalledWith(
-            mockRequestId,
-            "manage-conversation",
-            { subcommand: "switch", name: "my work project" },
-        );
-    });
-});
-
-describe("executeConversationAction — renameConversation", () => {
-    it("sends manage-conversation with subcommand rename and newName (current conversation)", async () => {
-        const ctx = makeContext();
-        await executeConversationAction(
-            {
-                schemaName: "system.conversation",
-                actionName: "renameConversation",
-                parameters: { newName: "my project" },
-            },
-            ctx,
-        );
-        expect(mockTakeAction).toHaveBeenCalledWith(
-            mockRequestId,
-            "manage-conversation",
-            { subcommand: "rename", newName: "my project" },
-        );
+    it("escapes embedded quotes in conversation names", async () => {
+        await run({
+            actionName: "newConversation",
+            parameters: { name: 'fix "bug"' },
+        });
+        expectCommand('@conversation new "fix \\"bug\\""');
     });
 
-    it("sends manage-conversation with subcommand rename, name, and newName (targeted conversation)", async () => {
-        const ctx = makeContext();
-        await executeConversationAction(
-            {
-                schemaName: "system.conversation",
-                actionName: "renameConversation",
-                parameters: { name: "test7", newName: "test5" },
-            },
-            ctx,
-        );
-        expect(mockTakeAction).toHaveBeenCalledWith(
-            mockRequestId,
-            "manage-conversation",
-            { subcommand: "rename", name: "test7", newName: "test5" },
-        );
-    });
-});
-
-describe("executeConversationAction — deleteConversation", () => {
-    it("sends manage-conversation with subcommand delete", async () => {
-        const ctx = makeContext();
-        await executeConversationAction(
-            {
-                schemaName: "system.conversation",
-                actionName: "deleteConversation",
-                parameters: { name: "old-project" },
-            },
-            ctx,
-        );
-        expect(mockTakeAction).toHaveBeenCalledWith(
-            mockRequestId,
-            "manage-conversation",
-            { subcommand: "delete", name: "old-project" },
-        );
+    it("listConversation runs list", async () => {
+        await run({ actionName: "listConversation" });
+        expectCommand("@conversation list");
     });
 
-    it("preserves conversation names that contain spaces", async () => {
-        const ctx = makeContext();
-        await executeConversationAction(
-            {
-                schemaName: "system.conversation",
-                actionName: "deleteConversation",
-                parameters: { name: "old work project" },
-            },
-            ctx,
-        );
-        expect(mockTakeAction).toHaveBeenCalledWith(
-            mockRequestId,
-            "manage-conversation",
-            { subcommand: "delete", name: "old work project" },
-        );
+    it("showConversationInfo runs info", async () => {
+        await run({ actionName: "showConversationInfo" });
+        expectCommand("@conversation info");
     });
-});
 
-describe("executeConversationAction — invalid action", () => {
-    it("throws on an unrecognized action name", async () => {
-        const ctx = makeContext();
-        await expect(
-            executeConversationAction(
-                {
-                    schemaName: "system.conversation",
-                    actionName: "unknownAction",
-                } as any,
-                ctx,
-            ),
-        ).rejects.toThrow("Invalid action name: unknownAction");
+    it("switchConversation runs a quoted switch", async () => {
+        await run({
+            actionName: "switchConversation",
+            parameters: { name: "my work project" },
+        });
+        expectCommand('@conversation switch "my work project"');
+    });
+
+    it("nextConversation runs next", async () => {
+        await run({ actionName: "nextConversation" });
+        expectCommand("@conversation next");
+    });
+
+    it("prevConversation runs prev", async () => {
+        await run({ actionName: "prevConversation" });
+        expectCommand("@conversation prev");
+    });
+
+    it("renameConversation (current) runs rename with one quoted arg", async () => {
+        const r = await run({
+            actionName: "renameConversation",
+            parameters: { newName: "my project" },
+        });
+        expectCommand('@conversation rename "my project"');
+        expect(r.resultEntity).toEqual({
+            name: "my project",
+            type: ["conversation"],
+        });
+    });
+
+    it("renameConversation (targeted) runs rename with two quoted args", async () => {
+        const r = await run({
+            actionName: "renameConversation",
+            parameters: { name: "test7", newName: "test5" },
+        });
+        expectCommand('@conversation rename "test7" "test5"');
+        expect(r.resultEntity).toEqual({
+            name: "test5",
+            type: ["conversation"],
+        });
+    });
+
+    it("deleteConversation runs a quoted delete", async () => {
+        await run({
+            actionName: "deleteConversation",
+            parameters: { name: "old-project" },
+        });
+        expectCommand('@conversation delete "old-project"');
     });
 });

@@ -11,6 +11,7 @@ import {
 import {
     findOrCreateNamedConversation,
     manageConversation,
+    renderConversationActionResult,
     switchConversationSafe,
     type ConversationActionResult,
     type ManageConversationContext,
@@ -2150,7 +2151,8 @@ export class AgentServerBridge {
                   type: "html" | "markdown" | "text";
                   content: string;
                   kind?: "info" | "warning" | "error" | "success";
-              },
+              }
+            | ReturnType<typeof renderConversationActionResult>,
         source: string = "code.code-vscode-shell",
     ): void {
         this.broadcastToWebviews({
@@ -2879,101 +2881,27 @@ export class AgentServerBridge {
         await this.postSessionList();
     }
 
-    // Map a structured ConversationActionResult to the bridge's two
-    // display surfaces — inline action-bubble overwrite for non-switching
-    // results, conversation-notification banner for switching results
-    // (the request bubble belongs to the old conversation and gets
-    // cleared on sessionChanged).
+    // Render a ConversationActionResult into the message bubble as structured
+    // content (shared with the Electron shell). Switching results surface a
+    // notification banner instead - the request bubble belongs to the old
+    // conversation and gets cleared on sessionChanged.
     private renderManageResult(
         requestId: any,
         result: ConversationActionResult,
         _switchTargetName?: string,
     ): void {
-        switch (result.kind) {
-            case "ok":
-                if (result.switched) {
-                    this.displayConversationNotification(
-                        htmlizeManageMessage(result.message),
-                        "info",
-                    );
-                } else {
-                    this.overwriteActionBubble(
-                        requestId,
-                        {
-                            type: "html",
-                            content: htmlizeManageMessage(result.message),
-                            kind: "info",
-                        },
-                        "conversation",
-                    );
-                }
-                return;
-            case "warning":
-                this.overwriteActionBubble(
-                    requestId,
-                    {
-                        type: "html",
-                        content: htmlizeManageMessage(result.message),
-                        kind: "warning",
-                    },
-                    "conversation",
-                );
-                return;
-            case "error":
-                this.overwriteActionBubble(
-                    requestId,
-                    {
-                        type: "html",
-                        content: `❌ ${htmlizeManageMessage(result.message)}`,
-                        kind: "error",
-                    },
-                    "conversation",
-                );
-                return;
-            case "cancelled":
-                this.overwriteActionBubble(
-                    requestId,
-                    {
-                        type: "html",
-                        content: "Cancelled.",
-                        kind: "info",
-                    },
-                    "conversation",
-                );
-                return;
-            case "info":
-                this.overwriteActionBubble(
-                    requestId,
-                    {
-                        type: "html",
-                        content: `Current conversation: <b>${escapeHtml(result.name)}</b> (${escapeHtml(result.conversationId)})`,
-                        kind: "info",
-                    },
-                    "conversation",
-                );
-                return;
-            case "list": {
-                let html: string;
-                if (result.conversations.length === 0) {
-                    html = "No conversations found.";
-                } else {
-                    const rows = result.conversations.map((s) => {
-                        const isCurrent =
-                            s.conversationId === result.currentConversationId;
-                        const marker = isCurrent ? " ← <b>current</b>" : "";
-                        const date = new Date(s.createdAt).toLocaleDateString();
-                        return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.conversationId)}) — ${s.clientCount} client(s), created ${escapeHtml(date)}${marker}`;
-                    });
-                    html = `<b>Conversations (${result.conversations.length})</b><br>${rows.join("<br>")}`;
-                }
-                this.overwriteActionBubble(
-                    requestId,
-                    { type: "html", content: html, kind: "info" },
-                    "conversation",
-                );
-                return;
-            }
+        if (result.kind === "ok" && result.switched) {
+            this.displayConversationNotification(
+                htmlizeManageMessage(result.message),
+                "info",
+            );
+            return;
         }
+        this.overwriteActionBubble(
+            requestId,
+            renderConversationActionResult(result),
+            "conversation",
+        );
     }
 
     public notifyDemoState(

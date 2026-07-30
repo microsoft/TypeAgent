@@ -469,12 +469,15 @@ describe("importCopilotSessions", () => {
             expect(result.imported).toBe(1);
             expect(result.skipped).toBe(0);
 
-            const conversations = manager.listConversations();
+            const conversations = await manager.listConversations();
             expect(conversations).toHaveLength(1);
             const mirror = conversations[0];
             expect(mirror.source).toBe("copilot");
             expect(mirror.readOnly).toBe(true);
             expect(mirror.name).toBe("add a login form");
+            // Message count is derived from the synthesized display log: one
+            // user-request per imported Copilot turn (this session has two).
+            expect(mirror.messageCount).toBe(2);
 
             // Display log persisted for normal replay on join.
             const logPath = path.join(
@@ -549,7 +552,7 @@ describe("importCopilotSessions", () => {
             expect(second.skipped).toBe(2);
 
             // Still exactly two conversations, no duplicates.
-            expect(manager.listConversations()).toHaveLength(2);
+            expect(await manager.listConversations()).toHaveLength(2);
         } finally {
             await manager.close();
         }
@@ -570,7 +573,7 @@ describe("importCopilotSessions", () => {
             const result = await importCopilotSessions(manager, { dbPath });
             expect(result.total).toBe(1);
             expect(result.imported).toBe(0);
-            expect(manager.listConversations()).toHaveLength(0);
+            expect(await manager.listConversations()).toHaveLength(0);
         } finally {
             await manager.close();
         }
@@ -620,7 +623,7 @@ describe("importCopilotMirror title reconciliation", () => {
             expect(second.conversationId).toBe(first.conversationId);
             expect(second.name).toBe("Branch change summary");
 
-            const conversations = manager.listConversations();
+            const conversations = await manager.listConversations();
             expect(conversations).toHaveLength(1);
             expect(conversations[0].name).toBe("Branch change summary");
         } finally {

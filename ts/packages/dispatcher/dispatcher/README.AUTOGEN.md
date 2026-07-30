@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=c42d73fb1a1f201ab835a0bcbc314df5e1da537ba2dbf798b07cc85b351a12df -->
+<!-- AUTOGEN:DOCS:HASH:sha256=0235c1840f25212e9e2da91130de2e1d4a6fa8640f1a9ab2f70d8cd8f4934fc2 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # agent-dispatcher — AI-generated documentation
@@ -12,7 +12,7 @@
 
 ## Overview
 
-The TypeAgent Dispatcher is a TypeScript library that serves as the core orchestration component of the TypeAgent ecosystem. It processes user inputs, translates natural language into structured actions using large language models (LLMs), and coordinates interactions across various application agents. The Dispatcher is designed to integrate with multiple front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for building personal agents with natural language interfaces.
+The TypeAgent Dispatcher is a TypeScript library that acts as the central coordination hub within the TypeAgent ecosystem. It processes user inputs, translates natural language into structured actions using large language models (LLMs), and manages interactions across various application agents. The Dispatcher is designed to integrate with multiple front ends, such as the TypeAgent Shell and CLI, and supports an extensible architecture for building personal agents with natural language interfaces.
 
 ## What it does
 
@@ -172,6 +172,7 @@ Workspace:
 
 - [@typeagent/action-grammar](../../../packages/actionGrammar/README.md)
 - [@typeagent/action-schema](../../../packages/actionSchema/README.md)
+- [@typeagent/agent-cache](../../../packages/cache/README.md)
 - [@typeagent/agent-rpc](../../../packages/agentRpc/README.md)
 - [@typeagent/agent-runtime](../../../packages/typeagent/README.md)
 - [@typeagent/agent-sdk](../../../packages/agentSdk/README.md)
@@ -188,7 +189,6 @@ Workspace:
 - [@typeagent/telemetry](../../../packages/telemetry/README.md)
 - [@typeagent/typechat-utils](../../../packages/utils/typechatUtils/README.md)
 - [@typeagent/website-memory](../../../packages/memory/website/README.md)
-- [agent-cache](../../../packages/cache/README.md)
 - grammar-tools-core
 
 External: `@anthropic-ai/claude-agent-sdk`, `@azure/core-client`, `@azure/core-rest-pipeline`, `@azure/cosmos`, `@azure/identity`, `@github/copilot-sdk`, `@modelcontextprotocol/sdk`, `chalk`, `debug`, `exifreader`, `file-size`, `glob`, `html-to-text`, `open`, `proper-lockfile`, `string-width`, `typechat`, `zod`
@@ -238,6 +238,6 @@ _10 environment variables referenced from `./src/` (set in `ts/.env` or your she
 
 ---
 
-_Auto-generated against commit `33c83792f9a6ab6f17e52ca4856f765a2a056905` on `2026-07-27T20:21:59.625Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
+_Auto-generated against commit `513baf52ceffeed05addca6ca873c3e52edae019` on `2026-07-30T18:10:08.236Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter agent-dispatcher docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->

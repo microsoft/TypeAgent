@@ -21,12 +21,15 @@ import {
     initializeCommandHandlerContext,
     closeCommandHandlerContext,
     collectCommandReferenceMarkdown,
+    collectActionReference,
+    getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
     getDefaultAppAgentSource,
 } from "default-agent-provider";
+import { existsSync } from "node:fs";
 
 // Repo-relative location of the generated reference.
 export const COMMAND_REFERENCE_REL_PATH = path.join(
@@ -66,12 +69,39 @@ currently available.
 // command). Translation, explanation, and caching are disabled so the boot
 // needs no API keys; agents load regardless of missing runtime credentials
 // because credentials are only consulted at action-execution time.
-export async function generateCommandReferenceMarkdown(): Promise<string> {
+export async function generateCommandReferenceMarkdown(
+    monorepoRoot: string,
+): Promise<string> {
     const instanceDir = getInstanceDir();
     const appAgentProviders = getDefaultAppAgentProviders(instanceDir);
     // The @package management commands are provided by the install source
     // rather than a static provider; include it so they are documented too.
     const appAgentSources = [getDefaultAppAgentSource(instanceDir)];
+
+    // Resolve each command's declared action to a fully-qualified name and a
+    // link to its schema source. Built from the same providers, so it does not
+    // depend on which schemas the command context enables. The link is relative
+    // to the reference doc's own location.
+    const { provider } = await getAllActionConfigProvider(appAgentProviders);
+    const actionReference = collectActionReference(provider);
+    const docDir = path.dirname(
+        path.resolve(monorepoRoot, COMMAND_REFERENCE_REL_PATH),
+    );
+    const resolveAction = (agentName: string, actionName: string) => {
+        const entry = actionReference.get(`${agentName}\n${actionName}`);
+        if (entry === undefined) {
+            return undefined;
+        }
+        const qualifiedName = `${entry.schemaName}.${actionName}`;
+        if (entry.sourceFile === undefined || !existsSync(entry.sourceFile)) {
+            return { qualifiedName };
+        }
+        const link = path
+            .relative(docDir, entry.sourceFile)
+            .split(path.sep)
+            .join("/");
+        return { qualifiedName, link };
+    };
 
     const context = await initializeCommandHandlerContext(
         "docs-command-reference",
@@ -85,7 +115,9 @@ export async function generateCommandReferenceMarkdown(): Promise<string> {
         },
     );
     try {
-        const body = await collectCommandReferenceMarkdown(context);
+        const body = await collectCommandReferenceMarkdown(context, {
+            resolveAction,
+        });
         // Format through prettier (markdown parser, repo defaults) so the
         // written file is idempotent and passes the repo's formatting check
         // without a follow-up `prettier --write` pass.
@@ -108,7 +140,7 @@ export interface CommandReferenceWriteResult {
 export async function writeCommandReference(
     monorepoRoot: string,
 ): Promise<CommandReferenceWriteResult> {
-    const markdown = await generateCommandReferenceMarkdown();
+    const markdown = await generateCommandReferenceMarkdown(monorepoRoot);
     const targetPath = path.join(monorepoRoot, COMMAND_REFERENCE_REL_PATH);
 
     let previous: string | undefined;
