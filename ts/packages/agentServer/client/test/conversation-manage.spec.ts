@@ -6,6 +6,7 @@ import {
     manageConversation,
     manageCycle,
     manageDelete,
+    manageFind,
     manageInfo,
     manageList,
     manageNew,
@@ -180,6 +181,58 @@ describe("manageSwitch", () => {
             ctx({ currentConversationId: "a" }),
             "",
         );
+        expect(result.kind).toBe("warning");
+    });
+});
+
+describe("manageSwitch — fuzzy fallback", () => {
+    test("switches to the top fuzzy match when there is no exact name", async () => {
+        const conn = makeStubConnection({
+            list: [
+                makeInfo("a", "Workout Playlist"),
+                makeInfo("b", "Groceries"),
+            ],
+        });
+        // "workout" is not an exact name, but the stub's findConversations
+        // returns it as a substring match, so switch should adopt it.
+        const result = await manageSwitch(
+            conn,
+            fakeClientIO,
+            ctx({ currentConversationId: "b" }),
+            "workout",
+        );
+        expect(result.kind).toBe("ok");
+        if (result.kind === "ok") {
+            expect(result.switched).toBe(true);
+            expect(result.conversation?.conversationId).toBe("a");
+            expect(result.message).toMatch(/closest match/);
+        }
+    });
+});
+
+describe("manageFind", () => {
+    test("returns ranked matches", async () => {
+        const conn = makeStubConnection({
+            list: [
+                makeInfo("a", "Workout Playlist"),
+                makeInfo("b", "Groceries"),
+            ],
+        });
+        const result = await manageFind(conn, ctx(), "workout");
+        expect(result.kind).toBe("matches");
+        if (result.kind === "matches") {
+            expect(result.query).toBe("workout");
+            expect(result.matches[0].conversation.conversationId).toBe("a");
+        }
+    });
+    test("warns when nothing matches", async () => {
+        const conn = makeStubConnection({ list: [makeInfo("a", "Workout")] });
+        const result = await manageFind(conn, ctx(), "zzz-nonexistent");
+        expect(result.kind).toBe("warning");
+    });
+    test("warns when the query is blank", async () => {
+        const conn = makeStubConnection({ list: [makeInfo("a", "A")] });
+        const result = await manageFind(conn, ctx(), "   ");
         expect(result.kind).toBe("warning");
     });
 });

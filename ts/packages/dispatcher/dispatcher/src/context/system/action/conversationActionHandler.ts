@@ -41,6 +41,9 @@ export async function executeConversationAction(
         case "listConversation":
             command = "@conversation list";
             break;
+        case "findConversation":
+            command = `@conversation find ${action.parameters.query}`;
+            break;
         case "showConversationInfo":
             command = "@conversation info";
             break;

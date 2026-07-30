@@ -221,6 +221,29 @@ class ConversationDeleteCommandHandler implements CommandHandler {
     }
 }
 
+class ConversationFindCommandHandler implements CommandHandler {
+    public readonly description =
+        "Fuzzy-find conversations by name (lexical + embedding)";
+    public readonly action = "findConversation";
+    public readonly parameters = {
+        args: {
+            query: {
+                description: "Name (or approximate name) to search for",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        dispatchManageConversation(context, {
+            subcommand: "find",
+            query: params.args.query,
+        });
+    }
+}
+
 class ConversationHelpCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show conversation command help";
     public async run(context: ActionContext<CommandHandlerContext>) {
@@ -235,6 +258,7 @@ export function getConversationCommandHandlers(): CommandHandlerTable {
         commands: {
             new: new ConversationNewCommandHandler(),
             list: new ConversationListCommandHandler(),
+            find: new ConversationFindCommandHandler(),
             info: new ConversationInfoCommandHandler(),
             switch: new ConversationSwitchCommandHandler(),
             prev: new ConversationPrevCommandHandler(),

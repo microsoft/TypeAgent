@@ -559,6 +559,10 @@ function makeConnectionAdapter(): AgentServerConnection {
             const { rpc } = requireFresh();
             return rpc.invoke("listConversations", name);
         },
+        findConversations: (query: string, maxMatches?: number) => {
+            const { rpc } = requireFresh();
+            return rpc.invoke("findConversations", query, maxMatches);
+        },
         renameConversation: (id: string, newName: string) => {
             const { rpc } = requireFresh();
             return rpc.invoke(
@@ -716,6 +720,22 @@ function renderActionResult(
                 })
                 .join("");
             return ok(`<ul>${items}</ul>`);
+        }
+        case "matches": {
+            const items = result.matches
+                .map((m) => {
+                    const c = m.conversation;
+                    const cur =
+                        c.conversationId === result.currentConversationId
+                            ? "▸ "
+                            : "";
+                    const pct = Math.round(m.score * 100);
+                    return `<li>${cur}${escapeHtml(c.name)} <span style="opacity:0.6;">(${pct}%)</span></li>`;
+                })
+                .join("");
+            return ok(
+                `<b>Matches for “${escapeHtml(result.query)}”:</b><ul>${items}</ul>`,
+            );
         }
     }
 }

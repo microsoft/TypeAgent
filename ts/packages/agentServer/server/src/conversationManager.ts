@@ -9,6 +9,7 @@ import {
     ConversationNameCollisionOptions,
     CreateConversationOptions,
     ConversationInfo,
+    ConversationMatch,
     ConversationSource,
     RenameConversationOptions,
 } from "@typeagent/agent-server-protocol";
@@ -23,6 +24,10 @@ import {
     createSharedDispatcher,
     SharedDispatcher,
 } from "./sharedDispatcher.js";
+import {
+    ConversationNameIndex,
+    createConversationNameIndex,
+} from "./conversationNameIndex.js";
 import { importCopilotSessions } from "./copilot/mirrorImporter.js";
 import { lockInstanceDir } from "agent-dispatcher/internal";
 
@@ -152,6 +157,14 @@ export type ConversationManager = {
         connectionId: string,
     ): Promise<void>;
     listConversations(name?: string): Promise<ConversationInfo[]>;
+    /**
+     * Fuzzy-find conversations by name, blending lexical and embedding
+     * similarity. Sorted by descending relevance score.
+     */
+    findConversations(
+        query: string,
+        maxMatches?: number,
+    ): Promise<ConversationMatch[]>;
     renameConversation(
         conversationId: string,
         newName: string,
@@ -264,6 +277,12 @@ export async function createConversationManager(
     const unlockInstanceDir = await lockInstanceDir(baseDir);
 
     const conversations = new Map<string, ConversationRecord>();
+
+    // Fuzzy index over conversation names (lexical + embedding), backing
+    // `findConversations`. Kept in sync as conversations are created, renamed,
+    // and deleted.
+    const conversationNameIndex: ConversationNameIndex =
+        createConversationNameIndex();
 
     // Single-flight lock for "auto-create the default conversation". Two
     // concurrent first-connects could both observe "no conversations exist"
@@ -391,6 +410,24 @@ export async function createConversationManager(
         } catch {
             return 0;
         }
+    }
+
+    // Build the wire-facing ConversationInfo for a record. Shared by
+    // listConversations and findConversations so the shape stays consistent.
+    async function toConversationInfo(
+        record: ConversationRecord,
+    ): Promise<ConversationInfo> {
+        return {
+            conversationId: record.conversationId,
+            name: record.name ?? "",
+            clientCount: record.sharedDispatcher?.clientCount ?? 0,
+            createdAt: record.createdAt,
+            messageCount: await countUserMessages(record.conversationId),
+            ...(record.source !== undefined ? { source: record.source } : {}),
+            ...(record.readOnly !== undefined
+                ? { readOnly: record.readOnly }
+                : {}),
+        };
     }
 
     function ensureDispatcher(
@@ -630,6 +667,15 @@ export async function createConversationManager(
         }
     }
 
+    // Seed the fuzzy name index from the loaded registry (after the ephemeral
+    // sweep above). Names make lexical matching work immediately; embeddings
+    // are generated in the background so startup (and bulk imports) never block
+    // on embedding calls.
+    for (const record of conversations.values()) {
+        conversationNameIndex.update(record.conversationId, record.name);
+    }
+    void conversationNameIndex.prime();
+
     const manager: ConversationManager = {
         async createConversation(
             name: string,
@@ -649,6 +695,7 @@ export async function createConversationManager(
                 idleTimer: undefined,
             };
             conversations.set(conversationId, record);
+            conversationNameIndex.update(conversationId, resolvedName);
             await saveMetadata();
             debugConversation(
                 `Conversation created: "${resolvedName}" (${conversationId})`,
@@ -683,6 +730,10 @@ export async function createConversationManager(
                         `Reconciling Copilot mirror name "${existing.name}" -> "${desiredName}" (${existing.conversationId})`,
                     );
                     existing.name = desiredName;
+                    conversationNameIndex.update(
+                        existing.conversationId,
+                        desiredName,
+                    );
                     await saveMetadata();
                     renamed = true;
                 }
@@ -719,6 +770,7 @@ export async function createConversationManager(
                 },
             };
             conversations.set(conversationId, record);
+            conversationNameIndex.update(conversationId, resolvedName);
 
             // Persist the synthesized display log so joining the conversation
             // replays the imported history through the normal replay path.
@@ -931,20 +983,30 @@ export async function createConversationManager(
                 ) {
                     continue;
                 }
+                result.push(await toConversationInfo(record));
+            }
+            return result;
+        },
+
+        async findConversations(
+            query: string,
+            maxMatches: number = 10,
+        ): Promise<ConversationMatch[]> {
+            const matches = await conversationNameIndex.search(
+                query,
+                maxMatches,
+            );
+            const result: ConversationMatch[] = [];
+            for (const match of matches) {
+                const record = conversations.get(match.conversationId);
+                // The index can briefly lag a concurrent delete; skip ids that
+                // no longer resolve to a live conversation.
+                if (record === undefined) {
+                    continue;
+                }
                 result.push({
-                    conversationId: record.conversationId,
-                    name: recordName,
-                    clientCount: record.sharedDispatcher?.clientCount ?? 0,
-                    createdAt: record.createdAt,
-                    messageCount: await countUserMessages(
-                        record.conversationId,
-                    ),
-                    ...(record.source !== undefined
-                        ? { source: record.source }
-                        : {}),
-                    ...(record.readOnly !== undefined
-                        ? { readOnly: record.readOnly }
-                        : {}),
+                    conversation: await toConversationInfo(record),
+                    score: match.score,
                 });
             }
             return result;
@@ -966,6 +1028,7 @@ export async function createConversationManager(
                 conversationId,
             );
             record.name = resolvedName;
+            conversationNameIndex.update(conversationId, resolvedName);
             await saveMetadata();
             debugConversation(
                 `Conversation renamed: "${resolvedName}" (${conversationId})`,
@@ -987,6 +1050,7 @@ export async function createConversationManager(
             }
 
             conversations.delete(conversationId);
+            conversationNameIndex.remove(conversationId);
 
             // Remove persist directory
             const persistDir = getConversationPersistDir(conversationId);
