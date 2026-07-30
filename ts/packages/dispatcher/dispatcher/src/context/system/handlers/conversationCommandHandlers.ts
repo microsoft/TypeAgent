@@ -6,7 +6,6 @@ import type {
     CompletionGroups,
     PartialParsedCommandParams,
     SessionContext,
-    TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -18,20 +17,21 @@ import {
     getRequestId,
 } from "../../commandHandlerContext.js";
 import { ManageConversationPayload } from "../manageConversationPayload.js";
-import { ConversationAction } from "../schema/conversationActionSchema.js";
-import { executeConversationAction } from "../action/conversationActionHandler.js";
 
-// A @conversation command runs its equivalent conversation action, so the
-// subcommand-to-payload mapping lives only in executeConversationAction and the
-// two paths cannot drift. Each handler's `action` property records that
-// equivalence for tooling such as the action browser.
-function runConversationAction(
+// Forward the manage-conversation payload to the client, which performs the
+// actual switch/rename/etc. The equivalent conversation action runs these
+// commands (see conversationActionHandler), so the payload is built in exactly
+// one place. Each handler's `action` property records that equivalence for
+// tooling such as the action browser.
+function dispatchManageConversation(
     context: ActionContext<CommandHandlerContext>,
-    action: ConversationAction,
-) {
-    return executeConversationAction(
-        action as TypeAgentAction<ConversationAction>,
-        context,
+    payload: ManageConversationPayload,
+): void {
+    const systemContext = context.sessionContext.agentContext;
+    systemContext.clientIO.takeAction(
+        getRequestId(systemContext),
+        "manage-conversation",
+        payload,
     );
 }
 
@@ -80,10 +80,10 @@ class ConversationNewCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const { name } = params.args;
-        return runConversationAction(context, {
-            actionName: "newConversation",
-            parameters: name !== undefined ? { name } : {},
-        });
+        dispatchManageConversation(
+            context,
+            name ? { subcommand: "new", name } : { subcommand: "new" },
+        );
     }
 }
 
@@ -91,9 +91,7 @@ class ConversationListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List all conversations";
     public readonly action = "listConversation";
     public async run(context: ActionContext<CommandHandlerContext>) {
-        return runConversationAction(context, {
-            actionName: "listConversation",
-        });
+        dispatchManageConversation(context, { subcommand: "list" });
     }
 }
 
@@ -101,9 +99,7 @@ class ConversationInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show info about the current conversation";
     public readonly action = "showConversationInfo";
     public async run(context: ActionContext<CommandHandlerContext>) {
-        return runConversationAction(context, {
-            actionName: "showConversationInfo",
-        });
+        dispatchManageConversation(context, { subcommand: "info" });
     }
 }
 
@@ -127,11 +123,9 @@ class ConversationSwitchCommandHandler implements CommandHandler {
         const { name } = params.args;
         // With no name, cycle to the next conversation (a CLI convenience the
         // switchConversation action does not have).
-        return runConversationAction(
+        dispatchManageConversation(
             context,
-            name
-                ? { actionName: "switchConversation", parameters: { name } }
-                : { actionName: "nextConversation" },
+            name ? { subcommand: "switch", name } : { subcommand: "next" },
         );
     }
     public async getCompletion(
@@ -148,9 +142,7 @@ class ConversationPrevCommandHandler implements CommandHandlerNoParams {
         "Switch to the previous conversation in the list (wraps around)";
     public readonly action = "prevConversation";
     public async run(context: ActionContext<CommandHandlerContext>) {
-        return runConversationAction(context, {
-            actionName: "prevConversation",
-        });
+        dispatchManageConversation(context, { subcommand: "prev" });
     }
 }
 
@@ -159,9 +151,7 @@ class ConversationNextCommandHandler implements CommandHandlerNoParams {
         "Switch to the next conversation in the list (wraps around)";
     public readonly action = "nextConversation";
     public async run(context: ActionContext<CommandHandlerContext>) {
-        return runConversationAction(context, {
-            actionName: "nextConversation",
-        });
+        dispatchManageConversation(context, { subcommand: "next" });
     }
 }
 
@@ -186,18 +176,11 @@ class ConversationRenameCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const { nameOrNewName, newName } = params.args;
-        return runConversationAction(
-            context,
+        const payload: ManageConversationPayload =
             newName !== undefined
-                ? {
-                      actionName: "renameConversation",
-                      parameters: { name: nameOrNewName, newName },
-                  }
-                : {
-                      actionName: "renameConversation",
-                      parameters: { newName: nameOrNewName },
-                  },
-        );
+                ? { subcommand: "rename", name: nameOrNewName, newName }
+                : { subcommand: "rename", newName: nameOrNewName };
+        dispatchManageConversation(context, payload);
     }
     public async getCompletion(
         context: SessionContext<CommandHandlerContext>,
@@ -224,9 +207,9 @@ class ConversationDeleteCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        return runConversationAction(context, {
-            actionName: "deleteConversation",
-            parameters: { name: params.args.name },
+        dispatchManageConversation(context, {
+            subcommand: "delete",
+            name: params.args.name,
         });
     }
     public async getCompletion(
@@ -241,14 +224,7 @@ class ConversationDeleteCommandHandler implements CommandHandler {
 class ConversationHelpCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show conversation command help";
     public async run(context: ActionContext<CommandHandlerContext>) {
-        // No equivalent action; ask the client to render command help.
-        const systemContext = context.sessionContext.agentContext;
-        const payload: ManageConversationPayload = { subcommand: "help" };
-        systemContext.clientIO.takeAction(
-            getRequestId(systemContext),
-            "manage-conversation",
-            payload,
-        );
+        dispatchManageConversation(context, { subcommand: "help" });
     }
 }
 
