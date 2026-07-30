@@ -441,6 +441,201 @@ function buildGeneralizations(
     return result;
 }
 
+async function cacheUserAttachments(
+    systemContext: CommandHandlerContext,
+    attachments?: string[],
+): Promise<CachedImageWithDetails[]> {
+    const cachedAttachments: CachedImageWithDetails[] = [];
+    if (!attachments || systemContext.session.sessionDirPath === undefined) {
+        return cachedAttachments;
+    }
+    for (const attachment of attachments) {
+        const [attachmentName, tags]: [string, ExifReader.Tags] =
+            await systemContext.session.storeUserSuppliedFile(attachment);
+        cachedAttachments.push(
+            new CachedImageWithDetails(tags, attachmentName, attachment),
+        );
+    }
+    return cachedAttachments;
+}
+
+function shouldBypassTranslationForReasoning(
+    request: string,
+    systemContext: CommandHandlerContext,
+): boolean {
+    if (systemContext.noReasoning) {
+        return false;
+    }
+    const reasoningPrefixes = [
+        "learn:",
+        "dev:",
+        "remember how to ",
+        "record ",
+    ];
+    const lowerRequest = request.trimStart().toLowerCase();
+    return (
+        process.env.CLAUDE_FORCE_REASONING === "1" ||
+        reasoningPrefixes.some((prefix) => lowerRequest.startsWith(prefix))
+    );
+}
+
+function recordRequestContext(
+    context: ActionContext<CommandHandlerContext>,
+    systemContext: CommandHandlerContext,
+    request: string,
+    cachedAttachments: CachedImageWithDetails[],
+    history: ReturnType<typeof getHistoryContext>,
+): void {
+    context.actionIO.appendDiagnosticData({
+        type: "translationContext",
+        entities: history?.entities ?? [],
+        activityContext: history?.activityContext,
+    });
+    if (systemContext.session.getConfig().execution.recordUserMessages) {
+        addUserMessageToHistory(systemContext, request, cachedAttachments);
+    }
+    if (systemContext.userRequestKnowledgeExtraction === true) {
+        addRequestToMemory(systemContext, request);
+    }
+}
+
+async function interpretRequestWithLogging(
+    context: ActionContext<CommandHandlerContext>,
+    systemContext: CommandHandlerContext,
+    request: string,
+    cachedAttachments: CachedImageWithDetails[],
+    history: ReturnType<typeof getHistoryContext>,
+): Promise<InterpretResult> {
+    try {
+        return await interpretRequest(
+            context,
+            request,
+            cachedAttachments,
+            history,
+        );
+    } catch (e: any) {
+        if (systemContext.userRequestKnowledgeExtraction === true) {
+            addResultToMemory(
+                systemContext,
+                `Error translating request '${request}': ${e.message}`,
+                DispatcherName,
+            );
+        }
+        systemContext?.logger?.logEvent("request:exception", {
+            request,
+            message: e.message,
+            stack: e.stack,
+        });
+        throw e;
+    }
+}
+
+function canUseInteractiveCollisionClarify(
+    systemContext: CommandHandlerContext,
+): boolean {
+    return (
+        systemContext.session.getConfig().collision.preference.enabled &&
+        systemContext.session.getConfig().collision.preference.remember !==
+            "never"
+    );
+}
+
+function needsReasoningFallback(
+    requestAction: RequestAction,
+    systemContext: CommandHandlerContext,
+): boolean {
+    const interactiveCollisionClarify =
+        canUseInteractiveCollisionClarify(systemContext);
+    return requestAction.actions.some(
+        ({ action }) =>
+            isUnknownAction(action) ||
+            (action.schemaName === DispatcherClarifyName &&
+                !(
+                    interactiveCollisionClarify &&
+                    action.actionName === "clarifyMultipleAgentMatches"
+                )),
+    );
+}
+
+async function tryReasoningFallback(
+    systemContext: CommandHandlerContext,
+    context: ActionContext<CommandHandlerContext>,
+    request: string,
+    requestAction: RequestAction,
+): Promise<boolean> {
+    if (
+        systemContext.noReasoning ||
+        !needsReasoningFallback(requestAction, systemContext)
+    ) {
+        return false;
+    }
+    try {
+        await runConfiguredReasoning(request, context);
+        return true;
+    } catch (e: any) {
+        debugRequest(
+            `Reasoning fallback failed, using default handler: ${e.message}`,
+        );
+        return false;
+    }
+}
+
+function needsErrorReasoning(
+    systemContext: CommandHandlerContext,
+    requestAction: RequestAction,
+): boolean {
+    return requestAction.actions.some(({ action }) => {
+        try {
+            return (
+                systemContext.agents.getActionConfig(action.schemaName)
+                    .errorReasoning === true
+            );
+        } catch {
+            return false;
+        }
+    });
+}
+
+async function tryErrorReasoningFallback(
+    systemContext: CommandHandlerContext,
+    context: ActionContext<CommandHandlerContext>,
+    request: string,
+    requestAction: RequestAction,
+    execResult: NonNullable<Awaited<ReturnType<typeof executeActions>>>,
+): Promise<boolean> {
+    if (
+        systemContext.noReasoning ||
+        !execResult.fallbackToReasoning ||
+        !needsErrorReasoning(systemContext, requestAction)
+    ) {
+        return false;
+    }
+
+    const { error, failedAction } = execResult;
+    const augmentedRequest =
+        `[Context: A direct action dispatch failed.\n` +
+        `Action: ${JSON.stringify(failedAction.action, undefined, 2)}\n` +
+        `Error: "${error}"\n` +
+        `Please handle the following request using the available tools.]\n\n` +
+        request;
+    try {
+        displayStatus("Action failed — retrying with reasoning...", context);
+        await runConfiguredReasoning(augmentedRequest, context, {
+            fallbackContext: {
+                failedSchema: failedAction.action.schemaName,
+                failedAction: failedAction.action.actionName,
+                error,
+            },
+        });
+        return true;
+    } catch (e: any) {
+        debugRequest(
+            `Error-triggered reasoning failed, keeping original error: ${e.message}`,
+        );
+        return false;
+    }
+}
+
 async function requestExplain(
     context: CommandHandlerContext,
     attachments: CachedImageWithDetails[] | undefined,
@@ -599,26 +794,10 @@ export class RequestCommandHandler implements CommandHandler {
             }
 
             // store attachments for later reuse
-            const cachedAttachments: CachedImageWithDetails[] = [];
-            if (
-                attachments &&
-                systemContext.session.sessionDirPath !== undefined
-            ) {
-                for (let i = 0; i < attachments?.length; i++) {
-                    const [attachmentName, tags]: [string, ExifReader.Tags] =
-                        await systemContext.session.storeUserSuppliedFile(
-                            attachments![i],
-                        );
-
-                    cachedAttachments.push(
-                        new CachedImageWithDetails(
-                            tags,
-                            attachmentName,
-                            attachments![i],
-                        ),
-                    );
-                }
-            }
+            const cachedAttachments = await cacheUserAttachments(
+                systemContext,
+                attachments,
+            );
 
             // Make sure we clear any left over streaming context
             systemContext.streamingActionContext?.closeActionContext();
@@ -628,66 +807,27 @@ export class RequestCommandHandler implements CommandHandler {
 
             // Requests with recording/reasoning prefixes bypass translation entirely
             // and go straight to Claude reasoning.
-            const REASONING_PREFIXES = [
-                "learn:",
-                "dev:",
-                "remember how to ",
-                "record ",
-            ];
-            const lowerRequest = request.trimStart().toLowerCase();
-            const forceReasoningEnv =
-                process.env.CLAUDE_FORCE_REASONING === "1";
-            if (
-                !systemContext.noReasoning &&
-                (forceReasoningEnv ||
-                    REASONING_PREFIXES.some((p) => lowerRequest.startsWith(p)))
-            ) {
+            if (shouldBypassTranslationForReasoning(request, systemContext)) {
                 await runConfiguredReasoning(request, context);
                 return;
             }
 
             // Get the history context before adding the request to memory
             const history = getHistoryContext(systemContext);
-            context.actionIO.appendDiagnosticData({
-                type: "translationContext",
-                entities: history?.entities ?? [],
-                activityContext: history?.activityContext,
-            });
-            if (
-                systemContext.session.getConfig().execution.recordUserMessages
-            ) {
-                addUserMessageToHistory(
-                    systemContext,
-                    request,
-                    cachedAttachments,
-                );
-            }
-            if (systemContext.userRequestKnowledgeExtraction === true) {
-                addRequestToMemory(systemContext, request);
-            }
-            let interpretResult: InterpretResult;
-            try {
-                interpretResult = await interpretRequest(
-                    context,
-                    request,
-                    cachedAttachments,
-                    history,
-                );
-            } catch (e: any) {
-                if (systemContext.userRequestKnowledgeExtraction === true) {
-                    addResultToMemory(
-                        systemContext,
-                        `Error translating request '${request}': ${e.message}`,
-                        DispatcherName,
-                    );
-                }
-                systemContext?.logger?.logEvent("request:exception", {
-                    request,
-                    message: e.message,
-                    stack: e.stack,
-                });
-                throw e;
-            }
+            recordRequestContext(
+                context,
+                systemContext,
+                request,
+                cachedAttachments,
+                history,
+            );
+            const interpretResult = await interpretRequestWithLogging(
+                context,
+                systemContext,
+                request,
+                cachedAttachments,
+                history,
+            );
 
             const { requestAction, tokenUsage } = interpretResult;
 
@@ -722,31 +862,12 @@ export class RequestCommandHandler implements CommandHandler {
             // `preference-clarify` feature is meant to render its own
             // interactive pick + "remember" card via executeActions, so it
             // must NOT be diverted to reasoning.
-            const interactiveCollisionClarify =
-                systemContext.session.getConfig().collision.preference
-                    .enabled &&
-                systemContext.session.getConfig().collision.preference
-                    .remember !== "never";
-            const needsReasoning = requestAction.actions.some(
-                ({ action }) =>
-                    isUnknownAction(action) ||
-                    (action.schemaName === DispatcherClarifyName &&
-                        !(
-                            interactiveCollisionClarify &&
-                            action.actionName === "clarifyMultipleAgentMatches"
-                        )),
+            let reasoningHandled = await tryReasoningFallback(
+                systemContext,
+                context,
+                request,
+                requestAction,
             );
-            let reasoningHandled = false;
-            if (needsReasoning && !systemContext.noReasoning) {
-                try {
-                    await runConfiguredReasoning(request, context);
-                    reasoningHandled = true;
-                } catch (e: any) {
-                    debugRequest(
-                        `Reasoning fallback failed, using default handler: ${e.message}`,
-                    );
-                }
-            }
             if (!reasoningHandled) {
                 const execResult = await executeActions(
                     requestAction.actions,
@@ -757,62 +878,22 @@ export class RequestCommandHandler implements CommandHandler {
                 // Error-triggered reasoning: if an action failed and at least one
                 // schema in the request opts in via errorReasoning: true, give Claude
                 // a second chance using the same reasoning loop as UnknownAction.
-                if (
-                    !systemContext.noReasoning &&
-                    execResult !== undefined &&
-                    execResult.fallbackToReasoning
-                ) {
-                    const needsErrorReasoning = requestAction.actions.some(
-                        ({ action }) => {
-                            try {
-                                return (
-                                    systemContext.agents.getActionConfig(
-                                        action.schemaName,
-                                    ).errorReasoning === true
-                                );
-                            } catch {
-                                return false;
-                            }
-                        },
-                    );
-                    let errorReasoningResolved = false;
-                    if (needsErrorReasoning) {
-                        const { error, failedAction } = execResult;
-                        const augmentedRequest =
-                            `[Context: A direct action dispatch failed.\n` +
-                            `Action: ${JSON.stringify(failedAction.action, undefined, 2)}\n` +
-                            `Error: "${error}"\n` +
-                            `Please handle the following request using the available tools.]\n\n` +
-                            request;
-                        try {
-                            displayStatus(
-                                "Action failed — retrying with reasoning...",
-                                context,
-                            );
-                            await runConfiguredReasoning(
-                                augmentedRequest,
-                                context,
-                                {
-                                    fallbackContext: {
-                                        failedSchema:
-                                            failedAction.action.schemaName,
-                                        failedAction:
-                                            failedAction.action.actionName,
-                                        error,
-                                    },
-                                },
-                            );
-                            errorReasoningResolved = true;
-                        } catch (e: any) {
-                            debugRequest(
-                                `Error-triggered reasoning failed, keeping original error: ${e.message}`,
-                            );
-                        }
-                    }
+                if (execResult !== undefined) {
+                    const errorReasoningResolved =
+                        await tryErrorReasoningFallback(
+                            systemContext,
+                            context,
+                            request,
+                            requestAction,
+                            execResult,
+                        );
                     // If error-triggered reasoning did not run (schema opted out)
                     // or failed to resolve the failure, surface the original
                     // action error instead of silently reporting success.
-                    if (!errorReasoningResolved) {
+                    if (
+                        execResult.fallbackToReasoning &&
+                        !errorReasoningResolved
+                    ) {
                         displayError(execResult.error, context);
                     }
                 }
