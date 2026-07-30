@@ -10,7 +10,7 @@
  * Orchestrates the TypeAgent MSI build:
  * 1. Resolve artifact inputs (pipeline default: pre-staged local directories via --skip-download)
  * 2. Generate marketplace.json for Copilot CLI plugin registration
- * 3. Harvest file components with heat.exe (one pass per artifact dir)
+ * 3. Zip each artifact dir into a single payload archive (extracted at install time)
  * 4. Compile WiX (candle) + link to MSI (light)
  *
  * Usage:
@@ -35,6 +35,21 @@ let outputDir = "./msi-out";
 let skipDownload = false;
 let stagedAgentDir = "";
 let stagedPluginDir = "";
+// Optional TypeAgent Shell download coordinates, baked into the MSI as the
+// SHELLBASEURL / SHELLSTORAGE / SHELLCONTAINER / SHELLCHANNEL property defaults
+// so the "install the shell" option has a location on a fresh machine.
+let shellBaseUrl = "";
+let shellStorage = "";
+let shellContainer = "";
+let shellChannel = "lkg";
+// Optional Azure Artifacts Universal Package fallback for the shell download,
+// baked into the MSI so the installer can pull the shell from the feed when the
+// blob download fails (e.g. the account disallows anonymous access).
+let shellFeed = "";
+let shellPackage = "";
+let shellFeedVersion = "";
+let shellOrg = "";
+let shellProject = "";
 
 for (let i = 0; i < args.length; i++) {
     if (args[i] === "--rid") rid = args[++i];
@@ -44,6 +59,15 @@ for (let i = 0; i < args.length; i++) {
     else if (args[i] === "--skip-download") skipDownload = true;
     else if (args[i] === "--agent-dir") stagedAgentDir = args[++i];
     else if (args[i] === "--plugin-dir") stagedPluginDir = args[++i];
+    else if (args[i] === "--shell-base-url") shellBaseUrl = args[++i];
+    else if (args[i] === "--shell-storage") shellStorage = args[++i];
+    else if (args[i] === "--shell-container") shellContainer = args[++i];
+    else if (args[i] === "--shell-channel") shellChannel = args[++i];
+    else if (args[i] === "--shell-feed") shellFeed = args[++i];
+    else if (args[i] === "--shell-package") shellPackage = args[++i];
+    else if (args[i] === "--shell-feed-version") shellFeedVersion = args[++i];
+    else if (args[i] === "--shell-org") shellOrg = args[++i];
+    else if (args[i] === "--shell-project") shellProject = args[++i];
 }
 
 console.log(`📦 Building TypeAgent MSI`);
@@ -53,6 +77,25 @@ console.log(`   Plugin version: ${pluginVersion}`);
 console.log(`   Output:         ${outputDir}`);
 if (stagedAgentDir) console.log(`   Agent dir:      ${stagedAgentDir}`);
 if (stagedPluginDir) console.log(`   Plugin dir:     ${stagedPluginDir}`);
+
+// The shell download is authenticated: install-shell.ps1 uses `az storage blob
+// download --auth-mode login` first, then the Azure Artifacts feed as a
+// fallback. We intentionally do NOT derive an anonymous blob base URL here
+// (the storage account disallows anonymous access, and org policy requires
+// authenticated access). -shell-base-url may still be passed explicitly for a
+// public container in standalone scenarios.
+if (shellBaseUrl || shellStorage) {
+    console.log(`   Shell base URL: ${shellBaseUrl || "(none)"}`);
+    console.log(
+        `   Shell storage:  ${shellStorage || "(none)"}/${shellContainer || "(none)"}`,
+    );
+    console.log(`   Shell channel:  ${shellChannel}`);
+}
+if (shellFeed && shellPackage) {
+    console.log(
+        `   Shell feed:     ${shellFeed} / ${shellPackage} v${shellFeedVersion || "(latest)"}`,
+    );
+}
 
 if (rid !== "win32-x64") {
     console.error(
@@ -68,8 +111,9 @@ const outputPath = path.resolve(outputDir);
 const agentArtifactDir = path.join(outputPath, "artifact", "agent-server");
 const pluginArtifactDir = path.join(outputPath, "artifact", "copilot-plugin");
 const marketplaceDir = path.join(outputPath, "marketplace");
-const agentHeatFile = path.join(outputPath, "AgentServerFiles.wxs");
-const pluginHeatFile = path.join(outputPath, "CopilotPluginFiles.wxs");
+const payloadDir = path.join(outputPath, "payload");
+const agentZipFile = path.join(payloadDir, "agent-server.zip");
+const pluginZipFile = path.join(payloadDir, "copilot-plugin.zip");
 
 if (!fs.existsSync(outputPath)) fs.mkdirSync(outputPath, { recursive: true });
 
@@ -300,49 +344,46 @@ fs.writeFileSync(
 );
 console.log(`✅ Generated marketplace.json`);
 
-// ── Step 3: Harvest file components with heat.exe ─────────────────────────────
-const heatExe = wixTool("heat.exe");
+// ── Step 3: Zip payload archives ──────────────────────────────────────────────
+// Ship agent-server and copilot-plugin as single zip files (one MSI File
+// component each) instead of harvesting them with heat (one Component per
+// file). A flat node_modules produced tens of thousands of components, which
+// made the installer's "Computing space requirements" (CostFinalize) step take
+// minutes. A deferred custom action (extract-payload.ps1) unpacks the zips at
+// install time.
 const candleExe = wixTool("candle.exe");
 const lightExe = wixTool("light.exe");
 
-function runHeat(dir, componentGroup, dirRef, varName, outFile) {
-    console.log(`\n🔥 Harvesting ${componentGroup} from ${dir}...`);
-    runCommand(heatExe, [
-        "dir",
-        dir,
-        "-cg",
-        componentGroup,
-        "-dr",
-        dirRef,
-        "-var",
-        `var.${varName}`,
-        "-gg", // generate stable GUIDs per file path
-        "-scom", // suppress COM harvesting (avoids SelfReg DLL warnings for native binaries)
-        "-sreg", // suppress registry harvesting
-        "-srd", // suppress root directory element
-        "-sfrag", // suppress fragment wrapping (use our own Product.wxs structure)
-        "-indent",
-        "2",
-        "-o",
-        outFile,
+function zipDirectory(sourceDir, zipFile, label) {
+    console.log(`\n🗜️  Zipping ${label} -> ${zipFile}...`);
+    if (fs.existsSync(zipFile)) fs.rmSync(zipFile);
+    const psScript =
+        `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
+        // includeBaseDirectory=$false so the zip root holds the payload files
+        // directly, and they extract straight into INSTALLFOLDER/PLUGINFOLDER.
+        `[System.IO.Compression.ZipFile]::CreateFromDirectory(` +
+        `'${sourceDir.replace(/'/g, "''")}', ` +
+        `'${zipFile.replace(/'/g, "''")}', ` +
+        `[System.IO.Compression.CompressionLevel]::Optimal, $false)`;
+    runCommand("powershell.exe", [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        psScript,
     ]);
-    console.log(`✅ Harvested: ${outFile}`);
+    if (!fs.existsSync(zipFile)) {
+        console.error(`❌ Failed to create ${label} archive: ${zipFile}`);
+        process.exit(1);
+    }
+    const sizeMb = (fs.statSync(zipFile).size / 1024 / 1024).toFixed(1);
+    console.log(`✅ Zipped ${label}: ${zipFile} (${sizeMb} MB)`);
 }
 
-runHeat(
-    agentArtifactDir,
-    "AgentServerComponents",
-    "INSTALLFOLDER",
-    "AgentServerArtifactDir",
-    agentHeatFile,
-);
-runHeat(
-    pluginArtifactDir,
-    "CopilotPluginComponents",
-    "PLUGINFOLDER",
-    "CopilotPluginArtifactDir",
-    pluginHeatFile,
-);
+fs.mkdirSync(payloadDir, { recursive: true });
+zipDirectory(agentArtifactDir, agentZipFile, "agent-server");
+zipDirectory(pluginArtifactDir, pluginZipFile, "copilot-plugin");
 
 // ── Step 4: Compile WiX (candle.exe) ─────────────────────────────────────────
 console.log(`\n🕯️  Compiling WiX...`);
@@ -350,17 +391,24 @@ console.log(`\n🕯️  Compiling WiX...`);
 const wixobjDir = outputPath;
 runCommand(candleExe, [
     `-dProductVersion=${wixProductVersion}`,
-    `-dAgentServerArtifactDir=${agentArtifactDir}`,
-    `-dCopilotPluginArtifactDir=${pluginArtifactDir}`,
+    `-dAgentServerZip=${agentZipFile}`,
+    `-dCopilotPluginZip=${pluginZipFile}`,
     `-dMarketplaceDir=${marketplaceDir}`,
     `-dInstallerSourceDir=${wxsDir}`,
+    `-dShellBaseUrl=${shellBaseUrl}`,
+    `-dShellStorage=${shellStorage}`,
+    `-dShellContainer=${shellContainer}`,
+    `-dShellChannel=${shellChannel}`,
+    `-dShellFeed=${shellFeed}`,
+    `-dShellPackage=${shellPackage}`,
+    `-dShellFeedVersion=${shellFeedVersion}`,
+    `-dShellOrg=${shellOrg}`,
+    `-dShellProject=${shellProject}`,
     `-arch`,
     `x64`,
     `-o`,
     `${wixobjDir}\\`,
     wxsFile,
-    agentHeatFile,
-    pluginHeatFile,
 ]);
 console.log(`✅ Compiled WiX objects`);
 
@@ -375,19 +423,17 @@ runCommand(lightExe, [
     `WixUIExtension`,
     `-ext`,
     `WixUtilExtension`,
-    // Per-user install under LocalAppData intentionally triggers ICE38 on
-    // file-keypath components harvested by heat; suppress that specific ICE.
+    // Per-user install under LocalAppData intentionally uses File keypaths on
+    // the payload components, which triggers ICE38; suppress that specific ICE.
     `-sice:ICE38`,
-    // ICE64 flags every harvested directory under the user profile that lacks
-    // a RemoveFile entry.  For per-user installs with hundreds of auto-
-    // harvested subdirectories this is expected and safe to suppress.
+    // ICE64 flags user-profile directories that lack a RemoveFile entry
+    // (INSTALLFOLDER/PLUGINFOLDER are populated at runtime by ExtractPayload and
+    // cleaned up by CleanupPayload); safe to suppress for this per-user install.
     `-sice:ICE64`,
     `-cultures:en-us`,
     `-o`,
     msiOutputPath,
     path.join(wixobjDir, "TypeAgent-AgentServer.wixobj"),
-    path.join(wixobjDir, "AgentServerFiles.wixobj"),
-    path.join(wixobjDir, "CopilotPluginFiles.wixobj"),
 ]);
 
 if (!fs.existsSync(msiOutputPath)) {

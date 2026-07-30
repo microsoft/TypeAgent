@@ -15,7 +15,7 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    "./agent/manifest": "./manifest.json",
+    "./agent/manifest": "./src/manifest.json",
     "./agent/handlers": "./dist/actionHandler.mjs"
   },
   "files": [

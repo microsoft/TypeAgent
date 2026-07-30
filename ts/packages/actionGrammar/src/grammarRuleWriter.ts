@@ -7,6 +7,8 @@ import {
     Expr,
     GrammarParseResult,
     isExpressionSpecialChar,
+    isIdContinue,
+    isIdStart,
     isObjectSpread,
     isWhitespace,
     Rule,
@@ -78,7 +80,7 @@ export type GrammarWriterOptions = {
 //      This applies at two levels:
 //        a. Between distinct Expr elements (variables, rule refs, groups,
 //           and multi-word string tokens treated as units).
-//        b. Within a single multi-word string token: individual words are
+//        b. Within a single multi-word string token, individual words are
 //           also wrapped at the same continuation column when needed.
 //
 // IR NODE TYPES:
@@ -1088,7 +1090,18 @@ function writeValueNode(
                     } else if (elem.value === null) {
                         result.write(elem.key);
                     } else {
-                        result.write(`${elem.key}: `);
+                        let requiresQuotes = !isIdStart(elem.key[0]);
+                        for (
+                            let i = 1;
+                            !requiresQuotes && i < elem.key.length;
+                            i++
+                        ) {
+                            requiresQuotes = !isIdContinue(elem.key[i]);
+                        }
+                        const key = requiresQuotes
+                            ? JSON.stringify(elem.key)
+                            : elem.key;
+                        result.write(`${key}: `);
                         writeValueNode(
                             result,
                             elem.value,

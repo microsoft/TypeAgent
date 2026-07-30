@@ -24,7 +24,7 @@ import { handleMcpRedirect } from "./hook-mcp-redirect.js";
 import { makeTurnId, writeDemoState } from "./demo-state.js";
 import type { HookInput, HookOutput } from "./types.js";
 
-type Mode = "direct" | "mcp";
+type Mode = "direct" | "mcp" | "bypass";
 
 interface PluginConfig {
     mode: Mode;
@@ -62,11 +62,15 @@ function writeConfig(config: PluginConfig): void {
 
 function getMode(): Mode {
     const envMode = process.env.TYPEAGENT_MODE;
-    if (envMode === "direct" || envMode === "mcp") {
+    if (envMode === "direct" || envMode === "mcp" || envMode === "bypass") {
         return envMode;
     }
     const config = readConfig();
-    if (config?.mode === "direct" || config?.mode === "mcp") {
+    if (
+        config?.mode === "direct" ||
+        config?.mode === "mcp" ||
+        config?.mode === "bypass"
+    ) {
         return config.mode;
     }
     return "direct";
@@ -95,8 +99,10 @@ function handleSlashCommand(
         });
     }
 
-    // @typeagent mode <direct|mcp>
-    const modeMatch = lower.match(/^@typeagent\s+mode(?:\s+(direct|mcp))?\s*$/);
+    // @typeagent mode <direct|mcp|bypass>
+    const modeMatch = lower.match(
+        /^@typeagent\s+mode(?:\s+(direct|mcp|bypass))?\s*$/,
+    );
     if (modeMatch) {
         const newMode = modeMatch[1] as Mode | undefined;
 
@@ -105,7 +111,7 @@ function handleSlashCommand(
             const current = getMode();
             return {
                 handled: true,
-                responseContent: `TypeAgent mode: **${current}**\n\nUse \`@typeagent mode direct\` or \`@typeagent mode mcp\` to switch.`,
+                responseContent: `TypeAgent mode: **${current}**\n\nUse \`@typeagent mode direct\`, \`@typeagent mode mcp\`, or \`@typeagent mode bypass\` to switch.`,
                 handledBy: "typeagent",
             };
         }
@@ -117,7 +123,9 @@ function handleSlashCommand(
         const description =
             newMode === "direct"
                 ? "Hook handles requests directly, bypassing the LLM. Fastest response."
-                : "Hook redirects to MCP tool. LLM calls TypeAgent with streaming display.";
+                : newMode === "mcp"
+                  ? "Hook redirects to MCP tool. LLM calls TypeAgent with streaming display."
+                  : "TypeAgent is disabled. All requests bypass TypeAgent routing and fall through to other handlers.";
 
         return {
             handled: true,
@@ -180,6 +188,7 @@ function handleSlashCommand(
                 "- `@typeagent run <command>` — send command directly to TypeAgent",
                 "- `@typeagent mode direct` — switch to direct mode",
                 "- `@typeagent mode mcp` — switch to MCP mode",
+                "- `@typeagent mode bypass` — disable TypeAgent routing",
                 "- `@typeagent powershell on/off` — toggle TypeAgent PowerShell redirect",
                 "- `@typeagent status` — show this info",
             ].join("  \n"),
@@ -230,7 +239,10 @@ async function main(): Promise<void> {
     const mode = getMode();
     let output: HookOutput;
 
-    if (mode === "mcp") {
+    if (mode === "bypass") {
+        // Bypass mode: return empty to fall through to other handlers
+        output = {};
+    } else if (mode === "mcp") {
         output = handleMcpRedirect(input);
     } else {
         output = await handleDirect(input);

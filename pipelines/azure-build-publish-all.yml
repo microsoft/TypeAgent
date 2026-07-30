@@ -750,6 +750,26 @@ stages:
                     storage: $(azureStorageAccountName)
                     ContainerName: $(azureStorageContainerName)
 
+                # Also publish the win shell to the Azure Artifacts feed as a
+                # Universal Package (in addition to blob storage). The MSI's
+                # "install the shell" option downloads this via
+                # `az artifacts universal download` when the (authenticated)
+                # blob download is unavailable. Package contents = the channel
+                # .yml + NSIS setup exe already staged in shell-win.
+                - pwsh: |
+                    az extension add --name azure-devops --only-show-errors | Out-Null
+                    $pkg = "typeagent-shell.win32-x64"
+                    Write-Host "Publishing $pkg v$(packageVersion) to feed $(adoFeed)"
+                    az artifacts universal publish `
+                      --organization "$(adoOrgUrl)" --project "$(adoProject)" --scope project `
+                      --feed "$(adoFeed)" `
+                      --name "$pkg" --version "$(packageVersion)" `
+                      --path "$(Pipeline.Workspace)/shell-win" `
+                      --description "TypeAgent Shell (win32-x64), channel $(resolvedChannel)"
+                  displayName: "Publish shell-win to Universal feed"
+                  env:
+                    AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+
                 # macOS artifact — optional. The build uses continueOnError,
                 # so a failed mac build still reports SucceededWithIssues and
                 # produces no artifact; keep these steps non-fatal so a missing
@@ -910,6 +930,14 @@ stages:
                 --plugin-dir "$pluginDir" `
                 --version "$(packageVersion)" `
                 --plugin-version "$(packageVersion)" `
+                --shell-storage "$(azureStorageAccountName)" `
+                --shell-container "$(azureStorageContainerName)" `
+                --shell-channel "lkg" `
+                --shell-feed "$(adoFeed)" `
+                --shell-package "typeagent-shell.$(msiRid)" `
+                --shell-feed-version "$(packageVersion)" `
+                --shell-org "$(adoOrgUrl)" `
+                --shell-project "$(adoProject)" `
                 --output "$(MSI_BUILD_DIR)"
             displayName: "Build MSI"
 

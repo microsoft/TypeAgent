@@ -4,17 +4,30 @@
 <!--
   TypeAgent MSI — installs:
     %LOCALAPPDATA%\TypeAgent\
-      agent-server\       ← agent-server.<rid> artifact (all files from heat)
-      copilot-plugin\     ← typeagent-copilot-plugin artifact (all files from heat)
+      payload\
+        agent-server.zip   ← agent-server.<rid> artifact, zipped at build time
+        copilot-plugin.zip ← typeagent-copilot-plugin artifact, zipped at build time
+      agent-server\       ← extracted from payload\agent-server.zip at install time
+      copilot-plugin\     ← extracted from payload\copilot-plugin.zip at install time
       .github\plugin\marketplace.json  ← for `copilot plugin marketplace add`
       register-plugin.ps1 ← run after install to register the Copilot CLI plugin
 
+  The two payloads are shipped as single zip files (one File component each)
+  rather than harvested with heat (one Component per file). A node_modules tree
+  produced tens of thousands of components, which made the Windows Installer
+  "Computing space requirements" (CostFinalize) step take minutes. A deferred
+  custom action (extract-payload.ps1) unpacks the zips at install time.
+
   Build variables required (passed via candle -d):
-    ProductVersion         e.g. 0.0.1-12345
-    AgentServerArtifactDir path to downloaded agent-server artifact
-    CopilotPluginArtifactDir path to downloaded copilot-plugin artifact
-    MarketplaceDir         path to directory containing the generated marketplace.json
-    InstallerSourceDir     path to this file's directory (for register-plugin.ps1)
+    ProductVersion      e.g. 0.0.1-12345
+    AgentServerZip      path to the built agent-server.zip
+    CopilotPluginZip    path to the built copilot-plugin.zip
+    MarketplaceDir      path to directory containing the generated marketplace.json
+    InstallerSourceDir  path to this file's directory (for register-plugin.ps1)
+    ShellBaseUrl        default SHELLBASEURL (anonymous blob base for the shell); may be ""
+    ShellStorage        default SHELLSTORAGE (blob account for the shell); may be ""
+    ShellContainer      default SHELLCONTAINER (blob container for the shell); may be ""
+    ShellChannel        default SHELLCHANNEL (electron-updater channel, e.g. lkg)
 -->
 
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
@@ -52,6 +65,15 @@
     <Property Id="OLLAMAHOST" Value="http://localhost:11434" Secure="yes" />
 
     <!-- ═══════════════════════════════════════════════
+         Agent-server lifecycle
+         STARTSERVER=1 starts the daemon after install; AUTOSTART=1 registers a
+         per-user logon Scheduled Task (mirrors install-typeagent.ps1). Pass
+         STARTSERVER=0 / AUTOSTART=0 on the command line to opt out.
+         ═══════════════════════════════════════════════ -->
+    <Property Id="STARTSERVER" Value="1" Secure="yes" />
+    <Property Id="AUTOSTART" Value="1" Secure="yes" />
+
+    <!-- ═══════════════════════════════════════════════
          Optional TypeAgent Shell install (Electron app)
          SHELL=1 downloads and silently installs the shell's NSIS installer
          from Azure Blob Storage (same container as the shell auto-update feed)
@@ -60,10 +82,59 @@
          are used with the Azure CLI (az login).
          ═══════════════════════════════════════════════ -->
     <Property Id="SHELL" Value="0" Secure="yes" />
+    <!-- Shell download coordinates: baked from build vars when provided, else
+         left undefined. candle rejects Value="" (CNDL0006), so only emit Value
+         when the build var is non-empty (preprocessor comparison). -->
+    <?if $(var.ShellStorage) = "" ?>
     <Property Id="SHELLSTORAGE" Secure="yes" />
+    <?else?>
+    <Property Id="SHELLSTORAGE" Value="$(var.ShellStorage)" Secure="yes" />
+    <?endif?>
+    <?if $(var.ShellContainer) = "" ?>
     <Property Id="SHELLCONTAINER" Secure="yes" />
-    <Property Id="SHELLCHANNEL" Value="lkg" Secure="yes" />
+    <?else?>
+    <Property Id="SHELLCONTAINER" Value="$(var.ShellContainer)" Secure="yes" />
+    <?endif?>
+    <Property Id="SHELLCHANNEL" Value="$(var.ShellChannel)" Secure="yes" />
+    <?if $(var.ShellBaseUrl) = "" ?>
     <Property Id="SHELLBASEURL" Secure="yes" />
+    <?else?>
+    <Property Id="SHELLBASEURL" Value="$(var.ShellBaseUrl)" Secure="yes" />
+    <?endif?>
+    <!-- Azure Artifacts Universal Package fallback for the shell download. When
+         the authenticated blob download fails, install-shell.ps1 pulls the shell
+         from the feed (az artifacts universal download). -->
+    <?if $(var.ShellFeed) = "" ?>
+    <Property Id="SHELLFEED" Secure="yes" />
+    <?else?>
+    <Property Id="SHELLFEED" Value="$(var.ShellFeed)" Secure="yes" />
+    <?endif?>
+    <?if $(var.ShellPackage) = "" ?>
+    <Property Id="SHELLPACKAGE" Secure="yes" />
+    <?else?>
+    <Property Id="SHELLPACKAGE" Value="$(var.ShellPackage)" Secure="yes" />
+    <?endif?>
+    <?if $(var.ShellFeedVersion) = "" ?>
+    <Property Id="SHELLFEEDVERSION" Secure="yes" />
+    <?else?>
+    <Property Id="SHELLFEEDVERSION" Value="$(var.ShellFeedVersion)" Secure="yes" />
+    <?endif?>
+    <?if $(var.ShellOrg) = "" ?>
+    <Property Id="SHELLORG" Secure="yes" />
+    <?else?>
+    <Property Id="SHELLORG" Value="$(var.ShellOrg)" Secure="yes" />
+    <?endif?>
+    <?if $(var.ShellProject) = "" ?>
+    <Property Id="SHELLPROJECT" Secure="yes" />
+    <?else?>
+    <Property Id="SHELLPROJECT" Value="$(var.ShellProject)" Secure="yes" />
+    <?endif?>
+
+    <!-- Post-install guidance shown on the final page (WixUI ExitDialog). Points
+         at the manual provisioning/sign-in steps the MSI can only attempt, so a
+         fresh machine knows what to finish if agents don't respond. -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Secure="yes"
+              Value="Finish setup: the claude and copilot CLIs need a one-time sign-in (run 'claude' then 'copilot'). If agents don't respond, provision config with: node &quot;%LOCALAPPDATA%\TypeAgent\agent-server\typeagent-serve.mjs&quot; provision  (sign in when prompted)." />
 
     <!-- ═══════════════════════════════════════════════
          Directory layout
@@ -73,6 +144,7 @@
         <Directory Id="TYPEAGENTROOT" Name="TypeAgent">
           <Directory Id="INSTALLFOLDER" Name="agent-server" />
           <Directory Id="PLUGINFOLDER" Name="copilot-plugin" />
+          <Directory Id="PAYLOADFOLDER" Name="payload" />
           <Directory Id="GITHUBFOLDER" Name=".github">
             <Directory Id="PLUGINREGFOLDER" Name="plugin" />
           </Directory>
@@ -84,13 +156,17 @@
          Features
          ═══════════════════════════════════════════════ -->
     <Feature Id="ProductFeature" Title="TypeAgent" Level="1">
-      <!-- Files harvested by heat from the artifact directories -->
-      <ComponentGroupRef Id="AgentServerComponents" />
-      <ComponentGroupRef Id="CopilotPluginComponents" />
+      <!-- Payload archives (extracted at install time by ExtractPayload) -->
+      <ComponentRef Id="AgentServerZipComponent" />
+      <ComponentRef Id="CopilotPluginZipComponent" />
       <!-- Static files and registry -->
       <ComponentRef Id="MarketplaceJsonComponent" />
       <ComponentRef Id="RegisterPluginPs1Component" />
       <ComponentRef Id="RegisterPluginMjsComponent" />
+      <ComponentRef Id="ExtractPayloadPs1Component" />
+      <ComponentRef Id="InstallPrereqsPs1Component" />
+      <ComponentRef Id="ResolveNodePs1Component" />
+      <ComponentRef Id="RunServePs1Component" />
       <ComponentRef Id="InstallShellPs1Component" />
       <ComponentRef Id="RegistryComponent" />
     </Feature>
@@ -98,6 +174,21 @@
     <!-- ═══════════════════════════════════════════════
          Static components
          ═══════════════════════════════════════════════ -->
+
+    <!-- Payload archives — one File component each, extracted at install time.
+         Shipping the two node_modules-bearing trees as single zips (instead of
+         heat's one-Component-per-file) is what keeps CostFinalize fast. -->
+    <DirectoryRef Id="PAYLOADFOLDER">
+      <Component Id="AgentServerZipComponent" Guid="*">
+        <File Id="AgentServerZip" Name="agent-server.zip"
+              Source="$(var.AgentServerZip)" KeyPath="yes" />
+      </Component>
+      <Component Id="CopilotPluginZipComponent" Guid="*">
+        <File Id="CopilotPluginZip" Name="copilot-plugin.zip"
+              Source="$(var.CopilotPluginZip)" KeyPath="yes" />
+        <RemoveFolder Id="RemovePayloadFolder" Directory="PAYLOADFOLDER" On="uninstall" />
+      </Component>
+    </DirectoryRef>
 
     <!-- marketplace.json — enables `copilot plugin marketplace add <TYPEAGENTROOT>` -->
     <DirectoryRef Id="PLUGINREGFOLDER">
@@ -124,6 +215,22 @@
         <File Id="InstallShellPs1" Name="install-shell.ps1"
               Source="$(var.InstallerSourceDir)\..\..\scripts\install-shell.ps1" />
       </Component>
+      <Component Id="ExtractPayloadPs1Component" Guid="*">
+        <File Id="ExtractPayloadPs1" Name="extract-payload.ps1"
+              Source="$(var.InstallerSourceDir)\extract-payload.ps1" />
+      </Component>
+      <Component Id="InstallPrereqsPs1Component" Guid="*">
+        <File Id="InstallPrereqsPs1" Name="install-prereqs.ps1"
+              Source="$(var.InstallerSourceDir)\install-prereqs.ps1" />
+      </Component>
+      <Component Id="ResolveNodePs1Component" Guid="*">
+        <File Id="ResolveNodePs1" Name="resolve-node.ps1"
+              Source="$(var.InstallerSourceDir)\resolve-node.ps1" />
+      </Component>
+      <Component Id="RunServePs1Component" Guid="*">
+        <File Id="RunServePs1" Name="run-serve.ps1"
+              Source="$(var.InstallerSourceDir)\run-serve.ps1" />
+      </Component>
     </DirectoryRef>
 
     <!-- HKCU registry entries for config and tool discovery -->
@@ -137,6 +244,39 @@
         </RegistryKey>
       </Component>
     </DirectoryRef>
+
+    <!-- ═══════════════════════════════════════════════
+         Custom actions — payload extraction
+         Unpacks payload\agent-server.zip and payload\copilot-plugin.zip into
+         INSTALLFOLDER/PLUGINFOLDER. Runs as the installing user (impersonated)
+         so it writes under the user's LocalAppData. Fatal on failure
+         (Return="check") since the rest of the install depends on the files.
+         ═══════════════════════════════════════════════ -->
+    <SetProperty Id="ExtractPayload"
+           Before="ExtractPayload"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot;" />
+
+    <CustomAction Id="ExtractPayload"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="check"
+                  Impersonate="yes" />
+
+    <!-- Remove the extracted directories on uninstall (they are created at
+         runtime and not tracked by the MSI file table). -->
+    <SetProperty Id="CleanupPayload"
+           Before="CleanupPayload"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]extract-payload.ps1&quot; -Root &quot;[TYPEAGENTROOT].&quot; -Uninstall -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-extract-payload.log&quot;" />
+
+    <CustomAction Id="CleanupPayload"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
 
     <!-- ═══════════════════════════════════════════════
          Custom actions — Copilot CLI plugin registration
@@ -181,7 +321,7 @@
     <SetProperty Id="ProvisionSelfHostConfig"
            Before="ProvisionSelfHostConfig"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -Command &quot;&amp; node '[INSTALLFOLDER]typeagent-serve.mjs' provision --provider '[PROVIDER]' --embedding '[EMBEDDING]' --ollama-host '[OLLAMAHOST]' --force&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; provision --provider &quot;[PROVIDER]&quot; --embedding &quot;[EMBEDDING]&quot; --ollama-host &quot;[OLLAMAHOST]&quot; --force" />
 
     <CustomAction Id="ProvisionSelfHostConfig"
                   BinaryKey="WixCA"
@@ -189,6 +329,102 @@
                   Execute="deferred"
                   Return="ignore"
                   Impersonate="yes" />
+
+    <!-- ═══════════════════════════════════════════════
+         Custom action — external-CLI + Node prerequisites
+         The MSI ships the 'external' agent-server variant, which resolves the
+         claude/copilot CLIs from PATH. Install them per-user (npm i -g) and warn
+         on a missing/old Node. Impersonated (writes the user's npm prefix) and
+         non-fatal (Return="ignore") — a prerequisite hiccup must not roll back
+         the agent-server install; issues surface as warnings + the ExitDialog.
+         ═══════════════════════════════════════════════ -->
+    <SetProperty Id="InstallPrereqs"
+           Before="InstallPrereqs"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-prereqs.ps1&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-prereqs.log&quot;" />
+
+    <CustomAction Id="InstallPrereqs"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
+    <!-- ═══════════════════════════════════════════════
+         Custom action — AISYSTEMS config provisioning
+         For PROVIDER=AISYSTEMS, download config.local.yaml from Key Vault via
+         getKeys (interactive browser sign-in as the impersonated user). Non-fatal
+         (Return="ignore"): if sign-in is unavailable during install, the
+         ExitDialog reminds the user to run 'provision' manually.
+         ═══════════════════════════════════════════════ -->
+    <SetProperty Id="ProvisionAiSystemsConfig"
+           Before="ProvisionAiSystemsConfig"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; provision" />
+
+    <CustomAction Id="ProvisionAiSystemsConfig"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
+    <!-- ═══════════════════════════════════════════════
+         Custom action — start the agent-server daemon
+         For STARTSERVER=1, launch the daemon (mirrors install-typeagent.ps1).
+         Impersonated so 'node' resolves from the user PATH and the daemon runs
+         as the user. Non-fatal: a start failure (e.g. config not yet
+         provisioned) must not fail the install.
+         ═══════════════════════════════════════════════ -->
+    <SetProperty Id="StartAgentServer"
+           Before="StartAgentServer"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; start" />
+
+    <CustomAction Id="StartAgentServer"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
+    <!-- ═══════════════════════════════════════════════
+         Custom action — register/unregister autostart (per-user Scheduled Task)
+         For AUTOSTART=1, register a logon-triggered Scheduled Task so the daemon
+         restarts at sign-in (mirrors install-typeagent.ps1 autostart enable).
+         Removed on uninstall. Impersonated + non-fatal.
+         ═══════════════════════════════════════════════ -->
+    <SetProperty Id="EnableAutostart"
+           Before="EnableAutostart"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; autostart enable" />
+
+    <CustomAction Id="EnableAutostart"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
+    <SetProperty Id="DisableAutostart"
+           Before="DisableAutostart"
+           Sequence="execute"
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]run-serve.ps1&quot; -ServePath &quot;[INSTALLFOLDER]typeagent-serve.mjs&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-serve.log&quot; autostart disable" />
+
+    <CustomAction Id="DisableAutostart"
+                  BinaryKey="WixCA"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Return="ignore"
+                  Impersonate="yes" />
+
+    <!-- ═══════════════════════════════════════════════
+         Custom action — fail loudly if the shell was requested with no location
+         SHELL=1 needs a download location (SHELLBASEURL or SHELLSTORAGE). Rather
+         than silently no-op (the previous behavior masked by Return="ignore"),
+         abort with a clear message so the user knows the shell was not installed.
+         ═══════════════════════════════════════════════ -->
+    <CustomAction Id="ShellLocationMissing" Error="Installing the TypeAgent Shell requires a download location, but none was configured in this package. Re-run with SHELLBASEURL=https://&lt;account&gt;.blob.core.windows.net/&lt;container&gt;/ (or SHELLSTORAGE + SHELLCONTAINER), or clear the shell option." />
 
     <!-- ═══════════════════════════════════════════════
          Custom action — optional TypeAgent Shell install
@@ -201,7 +437,7 @@
     <SetProperty Id="InstallTypeAgentShell"
            Before="InstallTypeAgentShell"
            Sequence="execute"
-                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-shell.ps1&quot; -Storage &quot;[SHELLSTORAGE]&quot; -Container &quot;[SHELLCONTAINER]&quot; -Channel &quot;[SHELLCHANNEL]&quot; -BlobBaseUrl &quot;[SHELLBASEURL]&quot; -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-shell.log&quot;" />
+                 Value="&quot;[WindowsFolder]System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;[TYPEAGENTROOT]install-shell.ps1&quot; -Storage &quot;[SHELLSTORAGE]&quot; -Container &quot;[SHELLCONTAINER]&quot; -Channel &quot;[SHELLCHANNEL]&quot; -BlobBaseUrl &quot;[SHELLBASEURL]&quot; -Feed &quot;[SHELLFEED]&quot; -FeedPackage &quot;[SHELLPACKAGE]&quot; -FeedVersion &quot;[SHELLFEEDVERSION]&quot; -Organization &quot;[SHELLORG]&quot; -Project &quot;[SHELLPROJECT]&quot; -SkipTypeAgentCheck -LogPath &quot;[LocalAppDataFolder]TypeAgent\logs\msi-install-shell.log&quot;" />
 
     <CustomAction Id="InstallTypeAgentShell"
                   BinaryKey="WixCA"
@@ -211,10 +447,20 @@
                   Impersonate="yes" />
 
     <InstallExecuteSequence>
-      <Custom Action="RegisterCopilotPlugin"   After="InstallFiles">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="ExtractPayload"          After="InstallFiles">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="RegisterCopilotPlugin"   After="ExtractPayload">NOT REMOVE~="ALL"</Custom>
       <Custom Action="ProvisionSelfHostConfig" After="RegisterCopilotPlugin">(NOT REMOVE~="ALL") AND (PROVIDER&lt;&gt;"AISYSTEMS")</Custom>
-      <Custom Action="InstallTypeAgentShell"   After="ProvisionSelfHostConfig">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
+      <Custom Action="ProvisionAiSystemsConfig" After="ProvisionSelfHostConfig">(NOT REMOVE~="ALL") AND (PROVIDER="AISYSTEMS")</Custom>
+      <!-- Prereqs (claude/copilot from the feed) run AFTER provisioning so the
+           AISYSTEMS az login has established a session the feed token reuses. -->
+      <Custom Action="InstallPrereqs"          After="ProvisionAiSystemsConfig">NOT REMOVE~="ALL"</Custom>
+      <Custom Action="StartAgentServer"        After="InstallPrereqs">(NOT REMOVE~="ALL") AND (STARTSERVER="1")</Custom>
+      <Custom Action="EnableAutostart"         After="StartAgentServer">(NOT REMOVE~="ALL") AND (AUTOSTART="1")</Custom>
+      <Custom Action="ShellLocationMissing"    After="EnableAutostart">(NOT REMOVE~="ALL") AND (SHELL="1") AND (NOT SHELLBASEURL) AND (NOT SHELLSTORAGE) AND (NOT SHELLFEED)</Custom>
+      <Custom Action="InstallTypeAgentShell"   After="ShellLocationMissing">(NOT REMOVE~="ALL") AND (SHELL="1")</Custom>
+      <Custom Action="DisableAutostart"        Before="UnregisterCopilotPlugin">REMOVE~="ALL"</Custom>
       <Custom Action="UnregisterCopilotPlugin" Before="RemoveFiles">REMOVE~="ALL"</Custom>
+      <Custom Action="CleanupPayload"          After="UnregisterCopilotPlugin">REMOVE~="ALL"</Custom>
     </InstallExecuteSequence>
 
     <!-- UI: custom sequence adding a provider/embedding selection dialog -->
@@ -277,7 +523,10 @@
 
         <Control Id="EmbeddingLabel" Type="Text" X="20" Y="128" Width="330" Height="12"
                  Transparent="yes" NoPrefix="yes"
-                 Text="{\WixUI_Font_Title}Embedding provider (Ollama / Copilot only)" />
+                 Text="{\WixUI_Font_Title}Embedding provider (Ollama / Copilot only)">
+          <Condition Action="disable">PROVIDER="AISYSTEMS"</Condition>
+          <Condition Action="enable">PROVIDER&lt;&gt;"AISYSTEMS"</Condition>
+        </Control>
         <Control Id="EmbeddingRadio" Type="RadioButtonGroup" X="24" Y="143"
                  Width="326" Height="52" Property="EMBEDDING">
           <RadioButtonGroup Property="EMBEDDING">
@@ -290,12 +539,23 @@
             <RadioButton Value="NONE" X="0" Y="42" Width="322" Height="14"
                          Text="None — disable embeddings (semantic features degrade gracefully)" />
           </RadioButtonGroup>
+          <!-- AISYSTEMS sources embeddings from Key Vault config, so this choice
+               is ignored (ProvisionSelfHostConfig runs only for self-host
+               providers). Grey it out to avoid a misleading active selection. -->
+          <Condition Action="disable">PROVIDER="AISYSTEMS"</Condition>
+          <Condition Action="enable">PROVIDER&lt;&gt;"AISYSTEMS"</Condition>
         </Control>
 
         <Control Id="OllamaHostLabel" Type="Text" X="20" Y="205" Width="70" Height="14"
-                 Transparent="yes" NoPrefix="yes" Text="Ollama host:" />
+                 Transparent="yes" NoPrefix="yes" Text="Ollama host:">
+          <Condition Action="disable">PROVIDER="AISYSTEMS"</Condition>
+          <Condition Action="enable">PROVIDER&lt;&gt;"AISYSTEMS"</Condition>
+        </Control>
         <Control Id="OllamaHostEdit" Type="Edit" X="92" Y="203" Width="258" Height="16"
-                 Property="OLLAMAHOST" Text="{80}" />
+                 Property="OLLAMAHOST" Text="{80}">
+          <Condition Action="disable">PROVIDER="AISYSTEMS"</Condition>
+          <Condition Action="enable">PROVIDER&lt;&gt;"AISYSTEMS"</Condition>
+        </Control>
 
         <Control Id="ShellCheckBox" Type="CheckBox" X="20" Y="221" Width="340" Height="12"
                  Property="SHELL" CheckBoxValue="1"
