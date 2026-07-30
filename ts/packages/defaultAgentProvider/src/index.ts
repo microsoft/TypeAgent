@@ -8,3 +8,17 @@ export {
     getIndexingServiceRegistry,
 } from "./defaultAgentProviders.js";
 export { getDefaultConstructionProvider } from "./defaultConstructionProvider.js";
+export {
+    createOnboardingOnlyDispatcher,
+    type OnboardingDispatcherHandle,
+    type OnboardingDispatchResult,
+    type OnboardingExecutedAction,
+    type OnboardingOnlyDispatcherOptions,
+} from "./onboardingDispatcher.js";
+export {
+    createGeneratedAgentTranslator,
+    type GeneratedAgentTranslatorHandle,
+    type GeneratedAgentTranslatorOptions,
+    type GeneratedAgentTranslateResult,
+    type GeneratedAgentResolvedAction,
+} from "./generatedAgentTranslator.js";

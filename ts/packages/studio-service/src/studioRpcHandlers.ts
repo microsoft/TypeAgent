@@ -139,5 +139,93 @@ export function createStudioInvokeHandlers(
         async restoreSandboxes(repoRoot) {
             return conn.getRuntime(repoRoot).restoreSandboxes();
         },
+
+        // --- Onboarding / New Agent wizard. Each delegates to the per-workspace
+        // runtime, whose injected phaseRunner runs the onboarding agent in this
+        // service process. `?? undefined` maps JSON's trailing-null back so the
+        // runtime's default parameters apply. ---
+
+        async startOnboarding(repoRoot, seed) {
+            return conn.getRuntime(repoRoot).startOnboarding(seed);
+        },
+        async getActiveOnboardingSession(repoRoot) {
+            return conn.getRuntime(repoRoot).getActiveOnboardingSession();
+        },
+        async clearActiveOnboardingSession(repoRoot) {
+            return conn.getRuntime(repoRoot).clearActiveOnboardingSession();
+        },
+        async listPhases(repoRoot) {
+            return conn.getRuntime(repoRoot).listPhases();
+        },
+        async getDefaultInputsForPhaseOnActiveSession(repoRoot, phase) {
+            return conn
+                .getRuntime(repoRoot)
+                .getDefaultInputsForPhaseOnActiveSession(phase);
+        },
+        async runPhaseOnActiveSession(repoRoot, phase, inputs) {
+            return conn
+                .getRuntime(repoRoot)
+                .runPhaseOnActiveSession(phase, inputs ?? undefined);
+        },
+        async getPhaseStatusOnActiveSession(repoRoot, phase) {
+            return conn
+                .getRuntime(repoRoot)
+                .getPhaseStatusOnActiveSession(phase);
+        },
+        async listStalePhasesOnActiveSession(repoRoot) {
+            return conn.getRuntime(repoRoot).listStalePhasesOnActiveSession();
+        },
+        async runRemainingPhasesOnActiveSession(repoRoot) {
+            return conn
+                .getRuntime(repoRoot)
+                .runRemainingPhasesOnActiveSession();
+        },
+        async rerunPhasesOnActiveSession(repoRoot, phases) {
+            return conn.getRuntime(repoRoot).rerunPhasesOnActiveSession(phases);
+        },
+        async restorePhaseOnActiveSession(repoRoot, phase) {
+            return conn.getRuntime(repoRoot).restorePhaseOnActiveSession(phase);
+        },
+        async resolveInstallArtifactPathForActiveSession(repoRoot) {
+            return conn
+                .getRuntime(repoRoot)
+                .resolveInstallArtifactPathForActiveSession();
+        },
+        async evaluatePackagingHealthGateForActiveSession(repoRoot) {
+            return conn
+                .getRuntime(repoRoot)
+                .evaluatePackagingHealthGateForActiveSession();
+        },
+        async enforcePackagingHealthGateForActiveSession(repoRoot) {
+            return conn
+                .getRuntime(repoRoot)
+                .enforcePackagingHealthGateForActiveSession();
+        },
+        async checkPackagingHealthGate(repoRoot, artifactPath) {
+            return conn
+                .getRuntime(repoRoot)
+                .checkPackagingHealthGate(artifactPath);
+        },
+        async installLastSessionToSandbox(repoRoot, sandboxId, options) {
+            return conn
+                .getRuntime(repoRoot)
+                .installLastSessionToSandbox(
+                    sandboxId ?? undefined,
+                    options ?? undefined,
+                );
+        },
+        async installArtifactToSandbox(repoRoot, artifactPath, sandboxId) {
+            return conn
+                .getRuntime(repoRoot)
+                .installArtifactToSandbox(artifactPath, sandboxId ?? undefined);
+        },
+        async routeConversation(repoRoot, prompt) {
+            return conn.getRuntime(repoRoot).routeConversation(prompt);
+        },
+        async proveActiveSessionUtterance(repoRoot, options) {
+            return conn
+                .getRuntime(repoRoot)
+                .proveActiveSessionUtterance(options ?? undefined);
+        },
     };
 }

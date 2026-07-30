@@ -27,10 +27,33 @@ function flagToCamel(flag: string): string {
         .replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 }
 
-function buildSwitchCases(actions: DiscoveredAction[]): string {
+// The discovered `action.path` is the full command path including the base
+// command (e.g. "gh repo create" or "randomstub number"). The runtime handler
+// already invokes the base command as the executable via execFile, so the
+// switch cases must contribute only the subcommand tokens. Strip a leading
+// base-command prefix to avoid emitting it twice (which produced a bogus
+// `randomstub randomstub number ...` invocation).
+function subcommandTokens(fullPath: string, cliCommand: string): string[] {
+    const pathTokens = fullPath.trim().split(/\s+/).filter(Boolean);
+    const baseTokens = cliCommand.trim().split(/\s+/).filter(Boolean);
+    let i = 0;
+    while (
+        i < baseTokens.length &&
+        i < pathTokens.length &&
+        pathTokens[i] === baseTokens[i]
+    ) {
+        i++;
+    }
+    return pathTokens.slice(i);
+}
+
+function buildSwitchCases(
+    actions: DiscoveredAction[],
+    cliCommand: string,
+): string {
     const cases: string[] = [];
     for (const action of actions) {
-        const subCmd = action.path ?? action.name;
+        const subCmd = subcommandTokens(action.path ?? action.name, cliCommand);
         const flagLines: string[] = [];
         if (action.parameters) {
             for (const p of action.parameters) {
@@ -52,7 +75,7 @@ function buildSwitchCases(actions: DiscoveredAction[]): string {
                 ? `\n${flagLines.join("\n")}\n            `
                 : " ";
         cases.push(
-            `        case "${action.name}":\n            args.push(...${JSON.stringify(subCmd.split(" "))});${body}break;`,
+            `        case "${action.name}":\n            args.push(...${JSON.stringify(subCmd)});${body}break;`,
         );
     }
     return cases.join("\n");
@@ -65,7 +88,7 @@ export async function buildCliHandler(
     actions: DiscoveredAction[],
 ): Promise<string> {
     const tpl = await fs.readFile(templatePath(), "utf-8");
-    const switchCases = buildSwitchCases(actions);
+    const switchCases = buildSwitchCases(actions, cliCommand);
     return tpl
         .replace(/\{\{NAME\}\}/g, name)
         .replace(/\{\{PASCAL_NAME\}\}/g, pascalName)
