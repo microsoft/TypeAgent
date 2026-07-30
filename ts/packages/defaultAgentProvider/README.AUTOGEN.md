@@ -3,7 +3,7 @@
 
 <!-- AUTOGEN:DOCS:START -->
 
-<!-- AUTOGEN:DOCS:HASH:sha256=29f715489a76b8ebe958a0ed1c09b39cce3b2e9acaaa383d53cfec7589087df3 -->
+<!-- AUTOGEN:DOCS:HASH:sha256=b28003e6c4c8501102f31e8885510564113a2d15c1675e91dbe5659772a10e75 -->
 <!-- AUTOGEN:DOCS:SOURCE: ./README.md (hand-written documentation; this file is the AI-generated companion) -->
 
 # default-agent-provider — AI-generated documentation
@@ -12,11 +12,11 @@
 
 ## Overview
 
-The `default-agent-provider` package is a TypeScript library that acts as the default agent provider for the TypeAgent framework. It is a foundational component used by the TypeAgent shell and CLI to initialize, manage, and configure both built-in and external agents. This package plays a critical role in ensuring that the necessary agents and dispatcher configurations are available to support the broader TypeAgent ecosystem.
+The `default-agent-provider` package is a TypeScript library that serves as the default agent provider for the TypeAgent framework. It is a core component used by the TypeAgent shell and CLI to initialize, manage, and configure both built-in and external agents. This package ensures that the necessary agents and dispatcher configurations are available to support the broader TypeAgent ecosystem.
 
 ## What it does
 
-The `default-agent-provider` package provides a centralized mechanism for managing agents, their configurations, and dispatcher settings. Its key functionalities include:
+The `default-agent-provider` package provides a centralized mechanism for managing agents, their configurations, and dispatcher settings. Its primary responsibilities include:
 
 - **Default Agent Providers**: Functions like `getDefaultAppAgentProviders` and `getDefaultConstructionProvider` supply pre-configured agent providers and construction mechanisms for initializing agents.
 - **Agent Source Management**: The `getDefaultAppAgentSource` function manages the connected app-agent source, including the installed-agent record store and the host-owned `@package` agent.
@@ -185,7 +185,7 @@ External: `@modelcontextprotocol/sdk`, `@modelcontextprotocol/server-filesystem`
 
 ### Files of interest
 
-`./src/index.ts`, `./src/collisions/expandedCorpusRunner.ts`, `./src/collisions/listModels.ts`, …and 45 more under `./src/`.
+`./src/index.ts`, `./src/collisions/expandedCorpusRunner.ts`, `./src/collisions/listModels.ts`, …and 48 more under `./src/`.
 
 ### Environment variables
 
@@ -199,6 +199,6 @@ _5 environment variables referenced from `./src/` (set in `ts/.env` or your shel
 
 ---
 
-_Auto-generated against commit `5018562335eded84b16dedcbb8e86d59b538a978` on `2026-07-30T06:29:20.146Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
+_Auto-generated against commit `84e4ab4096d5c3ad29bc106810cdf15e6a3138f6` on `2026-07-30T20:00:37.259Z` by `docs-generate.yml`. Links validated at that commit; the working tree may have drifted by up to 24h. Re-run `pnpm --filter default-agent-provider docs:verify-links` to spot-check._
 
 <!-- AUTOGEN:DOCS:END -->
