@@ -454,6 +454,82 @@ function resolveLocalParameterRef(spec: any, ref: string): any | undefined {
     return resolved;
 }
 
+// Merge path-level and operation-level parameters, keyed by (in, name), with
+// operation-level entries overriding path-level ones. Local
+// `#/components/parameters/*` refs are resolved inline so a referenced
+// parameter isn't dropped; any other `$ref` shape (external files, deeper
+// pointers) stays unresolved and is skipped.
+function mergeOperationParameters(
+    spec: any,
+    pathLevelParams: any[],
+    op: any,
+): DiscoveredParameter[] {
+    const opLevelParams: any[] = Array.isArray(op.parameters)
+        ? op.parameters
+        : [];
+    const mergedByKey = new Map<string, any>();
+    for (const raw of [...pathLevelParams, ...opLevelParams]) {
+        if (!raw) continue;
+        const p = raw.$ref ? resolveLocalParameterRef(spec, raw.$ref) : raw;
+        if (!p || p.$ref || !p.name) continue;
+        mergedByKey.set(`${p.in ?? "query"}:${p.name}`, p);
+    }
+    return Array.from(mergedByKey.values()).map((p: any) => ({
+        name: p.name,
+        type: p.schema?.type ?? "string",
+        description: p.description,
+        required: p.required ?? false,
+        in: p.in,
+    }));
+}
+
+// Map an operation's JSON request-body properties to `in: "body"` parameters.
+function extractBodyParameters(op: any): DiscoveredParameter[] {
+    const requestBody = op.requestBody?.content?.["application/json"]?.schema;
+    if (!requestBody?.properties) return [];
+    return (Object.entries(requestBody.properties) as [string, any][]).map(
+        ([propName, propSchema]): DiscoveredParameter => ({
+            name: propName,
+            type: propSchema.type ?? "string",
+            description: propSchema.description,
+            required: requestBody.required?.includes(propName) ?? false,
+            in: "body",
+        }),
+    );
+}
+
+// Build a single DiscoveredAction from one path/method/operation.
+function buildActionForOperation(
+    spec: any,
+    pathStr: string,
+    pathLevelParams: any[],
+    method: string,
+    op: any,
+    specSource: string,
+): DiscoveredAction {
+    const name =
+        op.operationId ?? `${method}${pathStr.replace(/[^a-zA-Z0-9]/g, "_")}`;
+    const camelName = name.replace(/_([a-z])/g, (_: string, c: string) =>
+        c.toUpperCase(),
+    );
+    return {
+        name: camelName,
+        description:
+            op.summary ??
+            op.description ??
+            `${method.toUpperCase()} ${pathStr}`,
+        method: method.toUpperCase(),
+        path: pathStr,
+        parameters: [
+            ...mergeOperationParameters(spec, pathLevelParams, op),
+            ...extractBodyParameters(op),
+        ],
+        sourceUrl: specSource,
+    };
+}
+
+const OPENAPI_HTTP_METHODS = ["get", "post", "put", "patch", "delete"] as const;
+
 // Extract discovered actions from a parsed OpenAPI 3 (or Swagger 2 —
 // unsupported, will simply yield no actions since `spec.paths` items won't
 // have the shape below) spec document. Pure/synchronous so it can be unit
@@ -476,84 +552,19 @@ export function extractOpenApiActions(
             ? pathItem.parameters
             : [];
 
-        for (const method of [
-            "get",
-            "post",
-            "put",
-            "patch",
-            "delete",
-        ] as const) {
+        for (const method of OPENAPI_HTTP_METHODS) {
             const op = pathItem?.[method];
             if (!op) continue;
-
-            const name =
-                op.operationId ??
-                `${method}${pathStr.replace(/[^a-zA-Z0-9]/g, "_")}`;
-            const camelName = name.replace(
-                /_([a-z])/g,
-                (_: string, c: string) => c.toUpperCase(),
+            actions.push(
+                buildActionForOperation(
+                    spec,
+                    pathStr,
+                    pathLevelParams,
+                    method,
+                    op,
+                    specSource,
+                ),
             );
-
-            // Merge path-level parameters (shared across all operations on
-            // this path) with operation-level parameters, keyed by
-            // (name, in) — operation-level entries override path-level ones.
-            const opLevelParams: any[] = Array.isArray(op.parameters)
-                ? op.parameters
-                : [];
-            const mergedByKey = new Map<string, any>();
-            for (const raw of [...pathLevelParams, ...opLevelParams]) {
-                if (!raw) continue;
-                // Resolve local `#/components/parameters/*` refs inline so a
-                // referenced parameter isn't dropped (which would leave the
-                // generated handler substituting `undefined` into the URL).
-                // Any other `$ref` shape (external files, deeper pointers)
-                // stays unresolved and is skipped.
-                const p = raw.$ref
-                    ? resolveLocalParameterRef(spec, raw.$ref)
-                    : raw;
-                if (!p || p.$ref || !p.name) continue;
-                mergedByKey.set(`${p.in ?? "query"}:${p.name}`, p);
-            }
-
-            const parameters: DiscoveredParameter[] = Array.from(
-                mergedByKey.values(),
-            ).map((p: any) => ({
-                name: p.name,
-                type: p.schema?.type ?? "string",
-                description: p.description,
-                required: p.required ?? false,
-                in: p.in,
-            }));
-
-            // Also include request body fields as parameters
-            const requestBody =
-                op.requestBody?.content?.["application/json"]?.schema;
-            if (requestBody?.properties) {
-                for (const [propName, propSchema] of Object.entries(
-                    requestBody.properties,
-                ) as [string, any][]) {
-                    parameters.push({
-                        name: propName,
-                        type: propSchema.type ?? "string",
-                        description: propSchema.description,
-                        required:
-                            requestBody.required?.includes(propName) ?? false,
-                        in: "body",
-                    });
-                }
-            }
-
-            actions.push({
-                name: camelName,
-                description:
-                    op.summary ??
-                    op.description ??
-                    `${method.toUpperCase()} ${pathStr}`,
-                method: method.toUpperCase(),
-                path: pathStr,
-                parameters,
-                sourceUrl: specSource,
-            });
         }
     }
     return actions;
