@@ -107,8 +107,13 @@ export function addUserMessageToHistory(
     context.chatHistory.addUserEntry(request, cachedAttachments);
     // Mirror the user turn into the host's cross-conversation content index.
     // Fires regardless of the knowledge-extraction flags (which connected mode
-    // disables), so the unified index still populates there.
-    context.conversationContentSink?.(request, "user");
+    // disables), so the unified index still populates there. The request id
+    // keys the turn so a later history backfill won't index it a second time.
+    context.conversationContentSink?.(
+        request,
+        "user",
+        context.currentRequestId?.requestId,
+    );
 }
 
 // Queue the user's turn for knowledge extraction into conversation memory.
@@ -152,7 +157,11 @@ export function addResultToMemory(
 
     // Mirror the assistant turn into the host's cross-conversation content
     // index (ungated by knowledge extraction, like the user turn).
-    context.conversationContentSink?.(message, "assistant");
+    context.conversationContentSink?.(
+        message,
+        "assistant",
+        context.currentRequestId?.requestId,
+    );
 
     if (context.actionResultKnowledgeExtraction) {
         if (context.conversationManager && entities) {

@@ -119,6 +119,36 @@ Usage: `@conversation list`
 
 Equivalent action: [`system.conversation.listConversation`](../../packages/dispatcher/dispatcher/src/context/system/schema/conversationActionSchema.ts)
 
+## @conversation find - Fuzzy-find conversations by name (lexical + embedding)
+
+Usage: `@conversation find <query>`
+
+Equivalent action: [`system.conversation.findConversation`](../../packages/dispatcher/dispatcher/src/context/system/schema/conversationActionSchema.ts)
+
+### Arguments:
+
+- &lt;query&gt; - Name (or approximate name) to search for (type: string)
+
+## @conversation search - Search conversation content (knowPro message index)
+
+Usage: `@conversation search <query>`
+
+Equivalent action: [`system.conversation.searchConversation`](../../packages/dispatcher/dispatcher/src/context/system/schema/conversationActionSchema.ts)
+
+### Arguments:
+
+- &lt;query&gt; - Text to search for across conversation content (type: string)
+
+## @conversation index - Index conversation history so its content is searchable across conversations
+
+Usage: `@conversation index [<name>]`
+
+Equivalent action: [`system.conversation.indexConversation`](../../packages/dispatcher/dispatcher/src/context/system/schema/conversationActionSchema.ts)
+
+### Arguments:
+
+- &lt;name&gt; - (optional) Conversation to index by name, or 'all' for every conversation. Omit to index the current conversation. (type: string)
+
 ## @conversation info - Show info about the current conversation
 
 Usage: `@conversation info`
@@ -171,6 +201,8 @@ Equivalent action: [`system.conversation.deleteConversation`](../../packages/dis
 ## @conversation help - Show conversation command help
 
 Usage: `@conversation help`
+
+Equivalent action: [`system.conversation.help`](../../packages/dispatcher/dispatcher/src/context/system/schema/conversationActionSchema.ts)
 
 ## @copilot import - Import GitHub Copilot Chat sessions as conversation mirrors
 
@@ -392,7 +424,7 @@ Usage: `@collision optimize validate [--leave-one-out <string>] [--winners <stri
 - --run &lt;string&gt; : Run timestamp (the <ts> in optimization-run-<ts>/). Default: latest under <workdir>.
 - --phrases &lt;string&gt; : Restrict re-probing to phrases for a single neighborhood id. Faster for targeted iteration.
 - --baseline &lt;string&gt; : Override the baseline path recorded in optimization-run.json (useful when the original baseline moved).
-- --workdir &lt;string&gt; : Directory containing optimization-run-\* subdirectories. Default: <instanceDir>/collisions.
+- --workdir &lt;string&gt; : Directory containing optimization-run-* subdirectories. Default: <instanceDir>/collisions.
 - --winners &lt;string&gt; : Comma-separated attemptIds to include. Stacks ONLY these winners. Mutually exclusive with --leave-one-out.
 - --leave-one-out &lt;string&gt; : Comma-separated attemptIds to EXCLUDE. Stacks every winner except these. Useful for ablation — drop a suspected harmful winner and see whether the global numbers improve.
 
@@ -434,15 +466,15 @@ Usage: `@collision optimize distill [--workdir <string>] [--min-attempts <number
 - --min-attempts &lt;number&gt; : Minimum winners in patterns.jsonl before distill runs (default 10). (default: 10)
 - --workdir &lt;string&gt; : Workdir containing patterns.jsonl.
 
-## @collision optimize browse - Generate browse.html for one or more optimization-run-\* directories. Walks the run, writes a sortable case index plus a self-contained case.html per case showing every attempt with before/after diffs.
+## @collision optimize browse - Generate browse.html for one or more optimization-run-* directories. Walks the run, writes a sortable case index plus a self-contained case.html per case showing every attempt with before/after diffs.
 
 Usage: `@collision optimize browse [--workdir <string>] [--all] [--run <string>]`
 
 ### Flags:
 
 - --run &lt;string&gt; : Run timestamp suffix (the <ts> in optimization-run-<ts>/). Default: latest run under <workdir>.
-- --all : Generate browse.html for ALL optimization-run-\* directories under <workdir>. Overrides --run. (default: false)
-- --workdir &lt;string&gt; : Directory containing optimization-run-\* subdirectories. Default: <instanceDir>/collisions.
+- --all : Generate browse.html for ALL optimization-run-* directories under <workdir>. Overrides --run. (default: false)
+- --workdir &lt;string&gt; : Directory containing optimization-run-* subdirectories. Default: <instanceDir>/collisions.
 
 ## @collision preferences list - List stored collision preferences (Tier-1)
 
@@ -1234,6 +1266,14 @@ Usage: `@config execution subagents on`
 
 Usage: `@config execution subagents off`
 
+## @config execution reasoningForwardActions on - Turn on let the reasoning agent forward client actions (e.g. @conversation switch) to the client instead of capturing them
+
+Usage: `@config execution reasoningForwardActions on`
+
+## @config execution reasoningForwardActions off - Turn off let the reasoning agent forward client actions (e.g. @conversation switch) to the client instead of capturing them
+
+Usage: `@config execution reasoningForwardActions off`
+
 ## @config modelProvider - Show or set the active model provider (azure | openai | ollama | copilot)
 
 Usage: `@config modelProvider [<name>] [<action>]`
@@ -1522,7 +1562,7 @@ Usage: `@trace [-*|--clear] [<namespaces>...]`
 
 ### Flags:
 
-- --clear -\* : Clear all trace namespaces (default: false)
+- --clear -* : Clear all trace namespaces (default: false)
 
 ## @help - Show help
 
@@ -2241,19 +2281,3 @@ Usage: `@powershell import [--actionName <string>] <filePath>`
 ### Flags:
 
 - --actionName &lt;string&gt; : Override the generated action name
-
-## @selfhelp - Ask a question about TypeAgent (what it is, how it works, how to set it up).
-
-Usage: `@selfhelp <question>`
-
-### Arguments:
-
-- &lt;question&gt; - Your question about TypeAgent. (type: string)
-
-## @selfhelp ask - Ask a question about TypeAgent (what it is, how it works, how to set it up).
-
-Usage: `@selfhelp ask <question>`
-
-### Arguments:
-
-- &lt;question&gt; - Your question about TypeAgent. (type: string)

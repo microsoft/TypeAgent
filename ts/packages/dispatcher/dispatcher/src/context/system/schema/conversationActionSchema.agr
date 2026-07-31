@@ -181,6 +181,36 @@
     parameters: { query }
   };
 
+// Index conversation content so it becomes searchable across conversations.
+// Anchored on the verb "index"/"reindex" (and "make ... searchable") so these
+// do not collide with the search patterns above.
+<IndexConversation> =
+  // "index/reindex (this|the|current|the current) conversation"  -> current
+  <Polite> (index | reindex) (this | the current | current | the) <ConvNoun> -> {
+    actionName: "indexConversation",
+    parameters: {}
+  }
+  // "index/reindex (all/my/our/the ...) conversations"  -> all conversations
+  | <Polite> (index | reindex) <Determiner> <ConvNounPlural> -> {
+    actionName: "indexConversation",
+    parameters: { name: "all" }
+  }
+  // "make (all/my/our/the ...) conversations searchable"  -> all conversations
+  | <Polite> make <Determiner> <ConvNounPlural> searchable -> {
+    actionName: "indexConversation",
+    parameters: { name: "all" }
+  }
+  // "index/reindex (the) conversation (called|named|about|...) X"  -> named
+  | <Polite> (index | reindex) (the)? <ConvNoun> (called | named | about | on | regarding | discussing | for) $(name:wildcard) -> {
+    actionName: "indexConversation",
+    parameters: { name }
+  }
+  // "index/reindex (the|my) X conversation"  -> named
+  | <Polite> (index | reindex) (the | my)? $(name:wildcard) <ConvNoun> -> {
+    actionName: "indexConversation",
+    parameters: { name }
+  };
+
 // "conversation help" / "help with conversations" / "help managing conversations"
 <HelpConversation> =
   <Polite> (show | display | get)? <ConvNoun> help -> {
@@ -195,6 +225,7 @@
   | <ListConversation>
   | <FindConversation>
   | <SearchConversation>
+  | <IndexConversation>
   | <ShowConversationInfo>
   | <SwitchConversationNamed>
   | <NextConversation>

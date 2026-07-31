@@ -277,6 +277,38 @@ describe("system.conversation grammar", () => {
         });
     });
 
+    describe("indexConversation", () => {
+        it.each([
+            "index this conversation",
+            "index the current conversation",
+            "reindex this conversation",
+        ])("matches current-conversation %j", (input) => {
+            const r = match(input);
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("indexConversation");
+            expect(r.parameters?.name).toBeUndefined();
+        });
+
+        it.each([
+            ["index all conversations", "all"],
+            ["reindex my conversations", "all"],
+            ["index all of my conversations", "all"],
+            ["make my conversations searchable", "all"],
+            ["index the conversation about taxes", "taxes"],
+            ["index the design conversation", "design"],
+        ])("matches %j with name %j", (input, name) => {
+            const r = match(input);
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("indexConversation");
+            expect(r.parameters.name).toBe(name);
+        });
+
+        it("does NOT hijack content-search 'search my conversations for x'", () => {
+            const r = match("search my conversations for indexing");
+            expect(r?.actionName).not.toBe("indexConversation");
+        });
+    });
+
     describe("help", () => {
         it.each([
             "conversation help",

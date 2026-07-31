@@ -14,7 +14,14 @@ import {
     ConversationSource,
     RenameConversationOptions,
 } from "@typeagent/agent-server-protocol";
-import { ClientIO, Dispatcher, DispatcherOptions } from "agent-dispatcher";
+import {
+    ClientIO,
+    Dispatcher,
+    DispatcherOptions,
+    ConversationIndexTarget,
+    ConversationIndexResult,
+    ConversationIndexProgress,
+} from "agent-dispatcher";
 import type { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import type {
     DisplayLogEntry,
@@ -32,6 +39,7 @@ import {
 import {
     ContentSearchQuery,
     createConversationSearchIndex,
+    selectUnindexedTurns,
 } from "./conversationSearchIndex.js";
 import { importCopilotSessions } from "./copilot/mirrorImporter.js";
 import { lockInstanceDir } from "agent-dispatcher/internal";
@@ -39,6 +47,7 @@ import { lockInstanceDir } from "agent-dispatcher/internal";
 import registerDebug from "debug";
 const debugConversation = registerDebug("agent-server:conversation");
 const debugConversationErr = registerDebug("agent-server:conversation:error");
+const debugIndex = registerDebug("agent-server:conversation:index");
 
 const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const CONVERSATIONS_DIR = "conversations";
@@ -173,11 +182,14 @@ export type ConversationManager = {
     /**
      * Index a conversation message into the unified content-search index
      * (tagged by conversation id). Populated by callers as turns arrive.
+     * `turnKey` (the source turn's id) is recorded on user messages so the
+     * turn is counted once and skipped by a later history backfill.
      */
     indexConversationMessage(
         conversationId: string,
         text: string,
         sender?: string,
+        turnKey?: string,
     ): void;
     /**
      * Cross-conversation content search: rank conversations by how well their
@@ -189,6 +201,18 @@ export type ConversationManager = {
         query: ContentSearchQuery,
         maxMatches?: number,
     ): Promise<ConversationContentMatch[]>;
+    /**
+     * Backfill conversation history into the unified content index. For each
+     * targeted conversation, indexes the user turns not already present (live
+     * or from an earlier backfill) and reports how many were newly indexed.
+     * `currentConversationId` resolves the `current` target. `onProgress`, if
+     * given, is called as turns are indexed (for a live progress display).
+     */
+    indexConversations(
+        target: ConversationIndexTarget,
+        currentConversationId: string,
+        onProgress?: (progress: ConversationIndexProgress) => void,
+    ): Promise<ConversationIndexResult>;
     renameConversation(
         conversationId: string,
         newName: string,
@@ -405,15 +429,12 @@ export async function createConversationManager(
         await fs.promises.rename(tmpPath, metadataPath);
     }
 
-    function getConversationPersistDir(conversationId: string): string {
-        return path.join(conversationsDir, conversationId);
-    }
-
-    // Count the user requests recorded in a conversation's persisted display
-    // log. Reads from disk so idle conversations (no live dispatcher) report a
-    // count too; the log is flushed after each turn, so this trails by at most
-    // the in-flight request. Returns 0 when the log is missing or unreadable.
-    async function countUserMessages(conversationId: string): Promise<number> {
+    // Read a conversation's persisted display-log entries, or [] when the log
+    // is missing or unreadable. Shared by the user-message count and the
+    // content-index backfill so both see the same on-disk history.
+    async function readDisplayLogEntries(
+        conversationId: string,
+    ): Promise<DisplayLogEntry[]> {
         const filePath = path.join(
             getConversationPersistDir(conversationId),
             DISPLAY_LOG_FILE_NAME,
@@ -421,19 +442,42 @@ export async function createConversationManager(
         try {
             const data = await fs.promises.readFile(filePath, "utf-8");
             const parsed = JSON.parse(data);
-            if (!Array.isArray(parsed)) {
-                return 0;
-            }
-            let count = 0;
-            for (const entry of parsed as DisplayLogEntry[]) {
-                if (entry?.type === "user-request") {
-                    count++;
-                }
-            }
-            return count;
+            return Array.isArray(parsed) ? (parsed as DisplayLogEntry[]) : [];
         } catch {
-            return 0;
+            return [];
         }
+    }
+
+    // Count the user requests recorded in a conversation's persisted display
+    // log. Reads from disk so idle conversations (no live dispatcher) report a
+    // count too; the log is flushed after each turn, so this trails by at most
+    // the in-flight request. Returns 0 when the log is missing or unreadable.
+    async function countUserMessages(conversationId: string): Promise<number> {
+        const entries = await readDisplayLogEntries(conversationId);
+        let count = 0;
+        for (const entry of entries) {
+            if (entry?.type === "user-request") {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // Resolve a conversation by exact (case-insensitive) name, or undefined.
+    function findConversationByName(
+        name: string,
+    ): ConversationRecord | undefined {
+        const lower = name.toLowerCase();
+        for (const record of conversations.values()) {
+            if ((record.name ?? "").toLowerCase() === lower) {
+                return record;
+            }
+        }
+        return undefined;
+    }
+
+    function getConversationPersistDir(conversationId: string): string {
+        return path.join(conversationsDir, conversationId);
     }
 
     // Build the wire-facing ConversationInfo for a record. Shared by
@@ -447,6 +491,9 @@ export async function createConversationManager(
             clientCount: record.sharedDispatcher?.clientCount ?? 0,
             createdAt: record.createdAt,
             messageCount: await countUserMessages(record.conversationId),
+            indexedMessageCount: conversationSearchIndex.getIndexedTurns(
+                record.conversationId,
+            ).size,
             ...(record.source !== undefined ? { source: record.source } : {}),
             ...(record.readOnly !== undefined
                 ? { readOnly: record.readOnly }
@@ -496,11 +543,12 @@ export async function createConversationManager(
                         // conversation search can find it. Independent of the
                         // per-conversation memory (which connected mode leaves
                         // unextracted).
-                        conversationContentSink: (text, sender) =>
+                        conversationContentSink: (text, sender, turnKey) =>
                             manager.indexConversationMessage(
                                 record.conversationId,
                                 text,
                                 sender,
+                                turnKey,
                             ),
                         // Let the reasoning agent search across ALL
                         // conversations' content (the knowPro unified index)
@@ -519,6 +567,15 @@ export async function createConversationManager(
                                 snippets: m.snippets,
                             }));
                         },
+                        // Let `@conversation index` backfill a conversation's
+                        // (or every conversation's) history into the unified
+                        // content index. `current` resolves to this record.
+                        indexConversations: (target, onProgress) =>
+                            manager.indexConversations(
+                                target,
+                                record.conversationId,
+                                onProgress,
+                            ),
                     }),
                 )
                 .then((dispatcher) => {
@@ -1077,8 +1134,14 @@ export async function createConversationManager(
             conversationId: string,
             text: string,
             sender?: string,
+            turnKey?: string,
         ): void {
-            conversationSearchIndex.addMessage(conversationId, text, sender);
+            conversationSearchIndex.addMessage(
+                conversationId,
+                text,
+                sender,
+                turnKey,
+            );
         },
 
         async searchConversationContent(
@@ -1105,6 +1168,98 @@ export async function createConversationManager(
                 });
             }
             return result;
+        },
+
+        async indexConversations(
+            target: ConversationIndexTarget,
+            currentConversationId: string,
+            onProgress?: (progress: ConversationIndexProgress) => void,
+        ): Promise<ConversationIndexResult> {
+            let ids: string[];
+            if (target.scope === "all") {
+                ids = [...conversations.keys()];
+            } else if (target.scope === "named") {
+                const match = findConversationByName(target.name);
+                if (match === undefined) {
+                    return { indexed: [], notFound: target.name };
+                }
+                ids = [match.conversationId];
+            } else {
+                ids = [currentConversationId];
+            }
+            debugIndex(
+                "indexConversations scope=%s targeting %d conversation(s)",
+                target.scope,
+                ids.length,
+            );
+            // Plan first: select each conversation's un-indexed turns up front,
+            // so the total is known for progress reporting before any indexing
+            // begins.
+            const plan: {
+                id: string;
+                name: string;
+                turns: { text: string; turnKey: string }[];
+            }[] = [];
+            for (const id of ids) {
+                const record = conversations.get(id);
+                if (record === undefined) {
+                    continue;
+                }
+                const alreadyIndexed =
+                    conversationSearchIndex.getIndexedTurns(id);
+                const entries = await readDisplayLogEntries(id);
+                const turns = selectUnindexedTurns(entries, (turnKey) =>
+                    alreadyIndexed.has(turnKey),
+                );
+                debugIndex(
+                    "plan %s (%s): %d log entries, %d already indexed, %d to index",
+                    id,
+                    record.name ?? "",
+                    entries.length,
+                    alreadyIndexed.size,
+                    turns.length,
+                );
+                plan.push({ id, name: record.name ?? "", turns });
+            }
+            const total = plan.reduce((n, p) => n + p.turns.length, 0);
+            debugIndex(
+                "total %d turns to index across %d conversation(s)",
+                total,
+                plan.length,
+            );
+            let done = 0;
+            onProgress?.({ done, total, name: plan[0]?.name ?? "" });
+            const indexed: ConversationIndexResult["indexed"] = [];
+            for (const { id, name, turns } of plan) {
+                for (const { text, turnKey } of turns) {
+                    conversationSearchIndex.addMessage(
+                        id,
+                        text,
+                        "user",
+                        turnKey,
+                        () => {
+                            done++;
+                            debugIndex("indexed %d/%d (%s)", done, total, name);
+                            onProgress?.({ done, total, name });
+                        },
+                    );
+                }
+                indexed.push({
+                    name,
+                    newlyIndexed: turns.length,
+                    totalMessages: await countUserMessages(id),
+                });
+            }
+            // addMessage only queues; drain so the command reports completion
+            // once the turns are actually indexed and written to disk, not
+            // merely enqueued.
+            debugIndex(
+                "queued %d turns; waiting for pending index tasks",
+                total,
+            );
+            await conversationSearchIndex.waitForPendingTasks();
+            debugIndex("indexConversations done: %o", indexed);
+            return { indexed };
         },
 
         async renameConversation(

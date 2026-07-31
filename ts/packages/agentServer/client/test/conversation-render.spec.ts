@@ -32,6 +32,7 @@ describe("renderConversationActionResult — list", () => {
                     clientCount: 1,
                     createdAt: "2026-01-02T00:00:00Z",
                     messageCount: 5,
+                    indexedMessageCount: 5,
                 },
             ],
         }) as StructuredContent;
@@ -47,15 +48,17 @@ describe("renderConversationActionResult — list", () => {
         expect(table!.columns.map((c) => c.header)).toEqual([
             "Name",
             "Messages",
+            "Indexed",
             "Clients",
             "Created",
         ]);
-        // Message/client counts are numeric cells, not pluralized text.
+        // Message/client counts are numeric cells, not pluralized text; the
+        // indexed cell is an "indexed/total" ratio (missing count => 0).
         expect(table!.rows[0]).toEqual(
-            expect.arrayContaining(["Alpha", 1, 0]),
+            expect.arrayContaining(["Alpha", 1, "0/1", 0]),
         );
         expect(table!.rows[1]).toEqual(
-            expect.arrayContaining(["Beta (current)", 5, 1]),
+            expect.arrayContaining(["Beta (current)", 5, "5/5", 1]),
         );
     });
 

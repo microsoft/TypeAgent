@@ -31,6 +31,13 @@ export type ConversationInfo = {
      */
     messageCount: number;
     /**
+     * How many of this conversation's user turns are in the cross-conversation
+     * content index. Compared with {@link messageCount} it shows how completely
+     * the conversation is indexed (0 = not indexed; == messageCount = fully).
+     * Omitted by hosts without a unified content index.
+     */
+    indexedMessageCount?: number;
+    /**
      * Where this conversation came from. Omitted for native TypeAgent
      * conversations; set to `"copilot"` for imported mirrors. Clients use it to
      * badge the conversation and (together with {@link readOnly}) decide whether

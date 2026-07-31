@@ -7,6 +7,7 @@ import {
     ConversationMessageMeta,
     createConversationMemory,
 } from "@typeagent/conversation-memory";
+import { mkdir } from "node:fs/promises";
 import registerDebug from "debug";
 
 const debug = registerDebug("agent-server:conversation:searchIndex");
@@ -17,6 +18,11 @@ const debugError = registerDebug("agent-server:conversation:searchIndex:error");
 // runs unscoped, then reads this tag back off each matched message to group
 // hits by conversation.
 const CONV_TAG_PREFIX = "conv:";
+// Message tag carrying the source turn's stable id (the request id, or the
+// display-log sequence number for turns that predate request ids). Present
+// only on user messages; lets a history backfill skip turns already indexed
+// live and count each turn once, regardless of the order the two paths ran in.
+const TURN_TAG_PREFIX = "turn:";
 const UNIFIED_MEMORY_BASENAME = "unifiedMemory";
 
 /** A conversation whose content matched a query, with representative snippets. */
@@ -51,10 +57,28 @@ export type ContentSearchQuery = {
  * pass rebuilds the index to reclaim the space.
  */
 export interface ConversationSearchIndex {
-    /** Queue a conversation message for indexing, tagged by conversation id. */
-    addMessage(conversationId: string, text: string, sender?: string): void;
+    /**
+     * Queue a conversation message for indexing, tagged by conversation id.
+     * `turnKey` (the source turn's stable id) is recorded on user messages so
+     * the turn is counted once and skipped by a later history backfill.
+     * `onIndexed` (optional) fires when the message has been indexed (or
+     * immediately when there is nothing to index), for progress reporting.
+     */
+    addMessage(
+        conversationId: string,
+        text: string,
+        sender?: string,
+        turnKey?: string,
+        onIndexed?: () => void,
+    ): void;
     /** Exclude a (deleted) conversation from future search results. */
     tombstone(conversationId: string): void;
+    /**
+     * The user-turn keys already indexed for a conversation. Its size is the
+     * conversation's indexed-message count; a history backfill uses membership
+     * to skip turns that are already indexed (live or by an earlier backfill).
+     */
+    getIndexedTurns(conversationId: string): ReadonlySet<string>;
     /** Rank conversations by how well their content matches the query. */
     search(
         query: ContentSearchQuery,
@@ -76,6 +100,21 @@ function conversationIdFromTags(
     for (const tag of tags) {
         if (typeof tag === "string" && tag.startsWith(CONV_TAG_PREFIX)) {
             return tag.slice(CONV_TAG_PREFIX.length);
+        }
+    }
+    return undefined;
+}
+
+function turnTag(turnKey: string): string {
+    return TURN_TAG_PREFIX + turnKey;
+}
+
+function turnKeyFromTags(
+    tags: ReadonlyArray<string | { [k: string]: unknown }>,
+): string | undefined {
+    for (const tag of tags) {
+        if (typeof tag === "string" && tag.startsWith(TURN_TAG_PREFIX)) {
+            return tag.slice(TURN_TAG_PREFIX.length);
         }
     }
     return undefined;
@@ -128,8 +167,45 @@ export function rankConversationMatches(
     return results.slice(0, maxConversations);
 }
 
+/** The display-log fields a history backfill needs from each entry. */
+export type BackfillLogEntry = {
+    type?: string;
+    command?: string;
+    requestId?: { requestId?: string } | undefined;
+    seq?: number;
+};
+
+/**
+ * Pick the user turns from a conversation's display-log entries that are not
+ * yet indexed, in log order. Pure so it can be unit tested without a live
+ * memory: `isIndexed` reports whether a turn key is already present. The turn
+ * key is the request id, falling back to the entry sequence for turns that
+ * predate request ids (e.g. some imported mirrors).
+ */
+export function selectUnindexedTurns(
+    entries: ReadonlyArray<BackfillLogEntry>,
+    isIndexed: (turnKey: string) => boolean,
+): { text: string; turnKey: string }[] {
+    const turns: { text: string; turnKey: string }[] = [];
+    for (const entry of entries) {
+        if (entry?.type !== "user-request") {
+            continue;
+        }
+        const turnKey = entry.requestId?.requestId ?? String(entry.seq);
+        if (isIndexed(turnKey)) {
+            continue;
+        }
+        turns.push({ text: entry.command ?? "", turnKey });
+    }
+    return turns;
+}
+
 class ConversationSearchIndexImpl implements ConversationSearchIndex {
     private readonly tombstoned = new Set<string>();
+    // conversationId -> set of indexed user-turn keys. Rebuilt on startup from
+    // the persisted message tags; the map itself is not persisted.
+    private readonly turnsByConversation = new Map<string, Set<string>>();
+    private static readonly EMPTY_TURNS: ReadonlySet<string> = new Set();
 
     constructor(
         // Undefined when no model provider is configured; the index is then
@@ -138,27 +214,84 @@ class ConversationSearchIndexImpl implements ConversationSearchIndex {
         // Extract entities/topics per message for richer retrieval. Production
         // leaves this on so memory search works well; tests turn it off.
         private readonly extractKnowledge: boolean,
-    ) {}
+    ) {
+        if (this.memory !== undefined) {
+            this.rebuildTurnIndex(this.memory);
+        }
+    }
+
+    // Reconstruct the per-conversation indexed-turn sets from the tags already
+    // stored in the unified memory, so indexed counts and backfill dedup work
+    // across restarts (the memory persists; this in-memory map does not).
+    private rebuildTurnIndex(memory: ConversationMemory): void {
+        for (const message of memory.messages) {
+            const tags = message.tags ?? [];
+            const conversationId = conversationIdFromTags(tags);
+            const turnKey = turnKeyFromTags(tags);
+            if (conversationId === undefined || turnKey === undefined) {
+                continue;
+            }
+            this.recordTurn(conversationId, turnKey);
+        }
+    }
+
+    private recordTurn(conversationId: string, turnKey: string): void {
+        let turns = this.turnsByConversation.get(conversationId);
+        if (turns === undefined) {
+            turns = new Set<string>();
+            this.turnsByConversation.set(conversationId, turns);
+        }
+        turns.add(turnKey);
+    }
 
     public addMessage(
         conversationId: string,
         text: string,
         sender?: string,
+        turnKey?: string,
+        onIndexed?: () => void,
     ): void {
-        if (this.memory === undefined || text.trim().length === 0) {
+        if (this.memory === undefined) {
+            // Inert index: the turn will never be embedded, but report it as
+            // handled so a progress total can still complete.
+            onIndexed?.();
             return;
         }
+        // Record the turn key (user turns only) before the empty-text bail so a
+        // blank turn still counts, keeping the indexed total aligned with the
+        // display log's user-request count.
+        const userTurnKey = sender === "user" ? turnKey : undefined;
+        if (userTurnKey !== undefined) {
+            this.recordTurn(conversationId, userTurnKey);
+        }
+        if (text.trim().length === 0) {
+            onIndexed?.();
+            return;
+        }
+        const tags = [conversationTag(conversationId)];
+        if (userTurnKey !== undefined) {
+            tags.push(turnTag(userTurnKey));
+        }
         this.memory.queueAddMessage(
-            new ConversationMessage(text, new ConversationMessageMeta(sender), [
-                conversationTag(conversationId),
-            ]),
-            undefined,
+            new ConversationMessage(
+                text,
+                new ConversationMessageMeta(sender),
+                tags,
+            ),
+            onIndexed,
             this.extractKnowledge,
         );
     }
 
     public tombstone(conversationId: string): void {
         this.tombstoned.add(conversationId);
+    }
+
+    public getIndexedTurns(conversationId: string): ReadonlySet<string> {
+        return (
+            this.turnsByConversation.get(conversationId) ??
+            ConversationSearchIndexImpl.EMPTY_TURNS
+        );
     }
 
     public async search(
@@ -270,6 +403,10 @@ export async function createConversationSearchIndex(
     const extractKnowledge = options?.extractKnowledge ?? true;
     let memory: ConversationMemory | undefined;
     try {
+        // knowPro's writer does not create the target directory, so create it
+        // up front. Otherwise every background auto-save fails with ENOENT and
+        // the index never persists - it lives only in memory until restart.
+        await mkdir(dirPath, { recursive: true });
         memory = await createConversationMemory(
             { dirPath, baseFileName: UNIFIED_MEMORY_BASENAME },
             false,

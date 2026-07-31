@@ -251,6 +251,8 @@ export type ConversationIndexProgress = {
     done: number;
     /** Total user turns this backfill will index. */
     total: number;
+    /** Name of the conversation whose turns are currently being indexed. */
+    name: string;
 };
 
 /**

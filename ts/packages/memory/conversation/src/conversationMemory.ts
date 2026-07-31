@@ -233,7 +233,17 @@ export class ConversationMemory
     }
 
     public async waitForPendingTasks(): Promise<void> {
+        // async's queue.drain() promise only resolves on the NEXT drain event;
+        // when the queue is already idle no such event ever fires and awaiting
+        // it would hang forever. idle() short-circuits that. It is checked
+        // synchronously right before drain(), so no task can settle in the gap.
+        if (this.updatesTaskQueue.idle()) {
+            debugLogger("waitForPendingTasks: queue idle, nothing to drain");
+            return;
+        }
+        debugLogger("waitForPendingTasks: draining queue");
         await this.updatesTaskQueue.drain();
+        debugLogger("waitForPendingTasks: drained");
     }
 
     public async serialize(): Promise<ConversationMemoryData> {
@@ -398,8 +408,7 @@ export class ConversationMemory
         // To avoid knowledge duplication, we manually extract message knowledge and merge it
         // with any prior knowledge
         //
-        this.settings.conversationSettings.semanticRefIndexSettings.autoExtractKnowledge =
-            false;
+        this.settings.conversationSettings.semanticRefIndexSettings.autoExtractKnowledge = false;
     }
 }
 
@@ -426,8 +435,7 @@ export async function createConversationMemory(
 }
 
 export type ConversationTaskCallback =
-    | ((error?: any | undefined) => void)
-    | undefined;
+    ((error?: any | undefined) => void) | undefined;
 
 type AddMessageTask = {
     type: "addMessage";
@@ -439,8 +447,7 @@ type AddMessageTask = {
 
 type ConversationMemoryTasks = AddMessageTask;
 
-export interface ConversationMemoryData
-    extends kp.IConversationDataWithIndexes<ConversationMessage> {}
+export interface ConversationMemoryData extends kp.IConversationDataWithIndexes<ConversationMessage> {}
 
 export function parseConversationMemoryTranscript(
     transcriptText: string,

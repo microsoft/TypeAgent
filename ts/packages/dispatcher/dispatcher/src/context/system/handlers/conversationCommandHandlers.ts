@@ -4,6 +4,7 @@
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import type {
     CompletionGroups,
+    DisplayContent,
     PartialParsedCommandParams,
     SessionContext,
 } from "@typeagent/agent-sdk";
@@ -12,11 +13,20 @@ import {
     CommandHandlerNoParams,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
+import { displayWarn } from "@typeagent/agent-sdk/helpers/display";
 import {
     CommandHandlerContext,
+    ConversationIndexTarget,
     getRequestId,
 } from "../../commandHandlerContext.js";
+import {
+    renderConversationIndexProgress,
+    renderConversationIndexSummary,
+} from "../conversationIndexProgress.js";
 import { ManageConversationPayload } from "../manageConversationPayload.js";
+import registerDebug from "debug";
+
+const debugIndex = registerDebug("dispatcher:conversation:index");
 
 // Forward the manage-conversation payload to the client, which performs the
 // actual switch/rename/etc. The equivalent conversation action runs these
@@ -267,6 +277,95 @@ class ConversationSearchCommandHandler implements CommandHandler {
     }
 }
 
+class ConversationIndexCommandHandler implements CommandHandler {
+    public readonly description =
+        "Index conversation history so its content is searchable across conversations";
+    public readonly action = "indexConversation";
+    public readonly parameters = {
+        args: {
+            name: {
+                description:
+                    "Conversation to index by name, or 'all' for every conversation. Omit to index the current conversation.",
+                optional: true,
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        const systemContext = context.sessionContext.agentContext;
+        const indexer = systemContext.indexConversations;
+        if (indexer === undefined) {
+            displayWarn(
+                "Conversation content indexing is not available in this host.",
+                context,
+            );
+            return;
+        }
+        const { name } = params.args;
+        const target: ConversationIndexTarget =
+            name === undefined
+                ? { scope: "current" }
+                : name.toLowerCase() === "all"
+                  ? { scope: "all" }
+                  : { scope: "named", name };
+
+        // Non-blocking: create the progress bubble now, then index in the
+        // background and replace that bubble in place via clientIO.setDisplay
+        // (keyed by requestId) so the agent stays usable while indexing runs.
+        const requestId = getRequestId(systemContext);
+        const asMessage = (content: DisplayContent) => ({
+            message: content,
+            requestId,
+            source: "system",
+            actionIndex: 0,
+        });
+        const setBar = (content: DisplayContent) =>
+            systemContext.clientIO.setDisplay(asMessage(content));
+        systemContext.clientIO.appendDisplay(
+            asMessage(renderConversationIndexProgress({ done: 0, total: 0 })),
+            "block",
+        );
+        debugIndex("started (%s)", name ?? "current");
+        void indexer(target, (progress) => {
+            debugIndex(
+                "progress %d/%d (%s)",
+                progress.done,
+                progress.total,
+                progress.name,
+            );
+            setBar(renderConversationIndexProgress(progress));
+        })
+            .then((result) => {
+                debugIndex("finished: %o", result);
+                setBar(
+                    result.notFound !== undefined
+                        ? `No conversation named "${result.notFound}".`
+                        : renderConversationIndexSummary(result.indexed),
+                );
+            })
+            .catch((e) => {
+                const message = e instanceof Error ? e.message : String(e);
+                debugIndex("failed: %s", message);
+                setBar(`Indexing failed: ${message}`);
+            });
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        _params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<CompletionGroups> {
+        // Offer existing conversation names plus the special "all" target.
+        const groups = completeConversationName(context, names, "name");
+        if (names.includes("name")) {
+            groups.groups.push({ name: "all", completions: ["all"] });
+        }
+        return groups;
+    }
+}
+
 class ConversationHelpCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show conversation command help";
     public readonly action = "help";
@@ -284,6 +383,7 @@ export function getConversationCommandHandlers(): CommandHandlerTable {
             list: new ConversationListCommandHandler(),
             find: new ConversationFindCommandHandler(),
             search: new ConversationSearchCommandHandler(),
+            index: new ConversationIndexCommandHandler(),
             info: new ConversationInfoCommandHandler(),
             switch: new ConversationSwitchCommandHandler(),
             prev: new ConversationPrevCommandHandler(),

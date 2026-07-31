@@ -153,6 +153,27 @@ describe("executeConversationAction delegates to @conversation commands", () => 
         expectCommand("@conversation search the docker command");
     });
 
+    it("indexConversation (current) runs a bare index command", async () => {
+        await run({ actionName: "indexConversation", parameters: {} });
+        expectCommand("@conversation index");
+    });
+
+    it("indexConversation with 'all' runs index all (unquoted)", async () => {
+        await run({
+            actionName: "indexConversation",
+            parameters: { name: "all" },
+        });
+        expectCommand("@conversation index all");
+    });
+
+    it("indexConversation with a name runs a quoted index", async () => {
+        await run({
+            actionName: "indexConversation",
+            parameters: { name: "my work project" },
+        });
+        expectCommand('@conversation index "my work project"');
+    });
+
     it("help runs help", async () => {
         await run({ actionName: "help" });
         expectCommand("@conversation help");

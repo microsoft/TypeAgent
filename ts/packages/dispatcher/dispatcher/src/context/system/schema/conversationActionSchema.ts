@@ -6,6 +6,7 @@ export type ConversationAction =
     | ListConversationAction
     | FindConversationAction
     | SearchConversationAction
+    | IndexConversationAction
     | ShowConversationInfoAction
     | SwitchConversationAction
     | NextConversationAction
@@ -65,6 +66,24 @@ export type SearchConversationAction = {
     parameters: {
         // The text or topic to search for within conversation content
         query: string;
+    };
+};
+
+// Index a conversation's history so its content becomes searchable across
+// conversations. Use this when the user wants to index, reindex, or make a past
+// conversation (or all conversations) searchable - i.e. add older messages that
+// aren't in the content-search index yet.
+// Examples: "index this conversation", "index all conversations",
+// "reindex my conversations", "index the conversation about the Paris trip",
+// "make my conversations searchable".
+// IMPORTANT: use searchConversation to search existing content; use this only to
+// ADD a conversation's history to the index.
+export type IndexConversationAction = {
+    actionName: "indexConversation";
+    parameters: {
+        // Which conversation to index: omit for the current conversation, use
+        // "all" for every conversation, or give a conversation's name/topic.
+        name?: string;
     };
 };
 

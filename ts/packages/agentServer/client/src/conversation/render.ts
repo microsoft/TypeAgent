@@ -87,6 +87,11 @@ export function renderConversationActionResult(
                     align: "right",
                 },
                 {
+                    id: "indexed",
+                    header: "Indexed",
+                    align: "right",
+                },
+                {
                     id: "clients",
                     header: "Clients",
                     type: "number",
@@ -100,6 +105,7 @@ export function renderConversationActionResult(
                 return [
                     isCurrent ? `${c.name} (current)` : c.name,
                     c.messageCount,
+                    `${c.indexedMessageCount ?? 0}/${c.messageCount}`,
                     c.clientCount,
                     formatCreated(c.createdAt),
                 ];

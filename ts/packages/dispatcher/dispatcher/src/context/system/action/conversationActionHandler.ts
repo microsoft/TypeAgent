@@ -47,6 +47,18 @@ export async function executeConversationAction(
         case "searchConversation":
             command = `@conversation search ${action.parameters.query}`;
             break;
+        case "indexConversation": {
+            // Grammar-cache hits may drop an empty `parameters`, so read name
+            // defensively (see newConversation).
+            const name = action.parameters?.name;
+            command =
+                name === undefined
+                    ? "@conversation index"
+                    : name.toLowerCase() === "all"
+                      ? "@conversation index all"
+                      : `@conversation index ${quoteName(name)}`;
+            break;
+        }
         case "showConversationInfo":
             command = "@conversation info";
             break;

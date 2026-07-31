@@ -3278,9 +3278,6 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
-      '@typeagent/action-schema-compiler':
-        specifier: workspace:*
-        version: link:../../actionSchemaCompiler
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.13
@@ -4595,9 +4592,6 @@ importers:
       '@typeagent/screencapture-agent':
         specifier: workspace:*
         version: link:../agents/screencapture
-      '@typeagent/selfhelp-agent':
-        specifier: workspace:*
-        version: link:../agents/selfhelp
       '@typeagent/studio-agent':
         specifier: workspace:*
         version: link:../agents/studio
@@ -4782,6 +4776,9 @@ importers:
       '@typeagent/knowpro':
         specifier: workspace:*
         version: link:../../knowPro
+      '@typeagent/selfhelp':
+        specifier: workspace:*
+        version: link:../../agents/selfhelp
       '@typeagent/taskflow-typeagent':
         specifier: workspace:*
         version: link:../../agents/taskflow
