@@ -80,5 +80,29 @@ export function renderConversationActionResult(
             ];
             return createStructuredContent(blocks);
         }
+        case "matches": {
+            const items = result.matches.map((m) => {
+                const c = m.conversation;
+                const isCurrent =
+                    c.conversationId === result.currentConversationId;
+                const pct = `${Math.round(m.score * 100)}% match`;
+                const messages = `${c.messageCount} message${
+                    c.messageCount === 1 ? "" : "s"
+                }`;
+                return {
+                    text: isCurrent ? `${c.name} (current)` : c.name,
+                    subtitle: `${pct} · ${messages}`,
+                };
+            });
+            const blocks: StructuredBlock[] = [
+                {
+                    kind: "heading",
+                    level: 3,
+                    text: `Matches for “${result.query}” (${result.matches.length})`,
+                },
+                { kind: "list", items },
+            ];
+            return createStructuredContent(blocks);
+        }
     }
 }

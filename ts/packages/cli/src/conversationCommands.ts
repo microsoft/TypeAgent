@@ -127,6 +127,13 @@ function parseSlashCommand(args: string): ParsedCommand {
                     : { subcommand: "list" },
             };
         }
+        case "find": {
+            const query = parseNameArg(subArgs);
+            if (!query) {
+                return { ok: false, usage: "@conversation find <query>" };
+            }
+            return { ok: true, payload: { subcommand: "find", query } };
+        }
         case "info":
             return { ok: true, payload: { subcommand: "info" } };
         case "prev":
@@ -168,7 +175,7 @@ function parseSlashCommand(args: string): ParsedCommand {
         default:
             return {
                 ok: false,
-                usage: `Unknown subcommand '${sub}'. Available: new, switch, list, info, rename, delete`,
+                usage: `Unknown subcommand '${sub}'. Available: new, switch, list, find, info, rename, delete`,
             };
     }
 }
@@ -242,6 +249,27 @@ function renderResult(result: ConversationActionResult): void {
                     suffix;
                 console.log(isCurrent ? chalk.green(line) : line);
             }
+            console.log("");
+            break;
+        }
+        case "matches": {
+            // eslint-disable-next-line no-console
+            console.log(
+                chalk.bold(`\nMatches for '${chalk.green(result.query)}':`),
+            );
+            const currentId = result.currentConversationId;
+            for (const m of result.matches) {
+                const c = m.conversation;
+                const isCurrent = c.conversationId === currentId;
+                const marker = isCurrent ? "\u25b8 " : "  ";
+                const pct = chalk.dim(`(${Math.round(m.score * 100)}%)`);
+                const line = `${marker}${c.name}  ${pct}${
+                    isCurrent ? "  (current)" : ""
+                }`;
+                // eslint-disable-next-line no-console
+                console.log(isCurrent ? chalk.green(line) : line);
+            }
+            // eslint-disable-next-line no-console
             console.log("");
             break;
         }

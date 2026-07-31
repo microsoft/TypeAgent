@@ -17,7 +17,12 @@ export type ManageConversationPayload = {
         | "next"
         | "rename"
         | "delete"
+        | "find"
         | "help";
     name?: string;
     newName?: string;
+    /** Search term for the `find` subcommand. */
+    query?: string;
+    /** Optional cap on `find` results. */
+    maxMatches?: number;
 };

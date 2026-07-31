@@ -4,6 +4,7 @@
 export type ConversationAction =
     | NewConversationAction
     | ListConversationAction
+    | FindConversationAction
     | ShowConversationInfoAction
     | SwitchConversationAction
     | NextConversationAction
@@ -31,6 +32,21 @@ export type NewConversationAction = {
 // "what conversations do I have", "show me my conversations", "show conversation list".
 export type ListConversationAction = {
     actionName: "listConversation";
+};
+
+// Find existing conversations by approximate name or topic, WITHOUT switching.
+// Use this when the user wants to find, search for, or locate a conversation by
+// what it was about or roughly what it was named.
+// Examples: "find the conversation about the workout playlist", "search my
+// conversations for taxes", "which conversation was about the trip to Paris",
+// "locate the chat where we discussed the budget".
+// IMPORTANT: use switchConversation instead when the user wants to switch to it.
+export type FindConversationAction = {
+    actionName: "findConversation";
+    parameters: {
+        // The name or topic to search for
+        query: string;
+    };
 };
 
 // Show information about the current conversation.

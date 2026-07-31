@@ -1661,6 +1661,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
+      '@typeagent/agent-runtime':
+        specifier: workspace:*
+        version: link:../../typeagent
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -1670,12 +1673,18 @@ importers:
       '@typeagent/agent-server-protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@typeagent/aiclient':
+        specifier: workspace:*
+        version: link:../../aiclient
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
       '@typeagent/config':
         specifier: workspace:*
         version: link:../../config
+      '@typeagent/conversation-memory':
+        specifier: workspace:*
+        version: link:../../memory/conversation
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc

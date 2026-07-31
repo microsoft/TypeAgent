@@ -57,7 +57,15 @@ function loadGrammarFile(grammarFile: string): GrammarContent {
     const fullPath = getPackageFilePath(grammarFile);
     const content = fs.readFileSync(fullPath, "utf-8");
     if (grammarFile.endsWith(".ag.json")) {
-        return { format: "ag", content };
+        // Load the sibling source-map side-car if the build emitted one.
+        const mapPath = `${fullPath.slice(0, -".ag.json".length)}.ag.map.json`;
+        let sourceMap: string | undefined;
+        try {
+            sourceMap = fs.readFileSync(mapPath, "utf-8");
+        } catch {
+            // Side-car is optional.
+        }
+        return { format: "ag", content, sourceMap };
     }
     if (grammarFile.endsWith(".agr")) {
         // Raw grammar source; parsed at load time instead of via a build step.

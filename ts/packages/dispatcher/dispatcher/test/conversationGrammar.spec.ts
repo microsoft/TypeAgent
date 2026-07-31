@@ -98,6 +98,13 @@ describe("system.conversation grammar", () => {
             expect(r.parameters.name).toBe("research");
         });
 
+        it("matches 'switch to the conversation about X' (find-then-switch)", () => {
+            const r = match("switch to the conversation about gym music");
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("switchConversation");
+            expect(r.parameters.name).toBe("gym music");
+        });
+
         it("does NOT match bare 'switch to X' (no conversation anchor)", () => {
             // This avoids stealing matches from agents like browser/player that
             // legitimately use 'switch to X' for their own domain (e.g.
@@ -192,6 +199,32 @@ describe("system.conversation grammar", () => {
             const r = match("what conversation am i in");
             expect(r).toBeDefined();
             expect(r.actionName).toBe("showConversationInfo");
+        });
+    });
+
+    describe("findConversation", () => {
+        it.each([
+            ["find the conversation about taxes", "taxes"],
+            ["search my conversations for taxes", "taxes"],
+            [
+                "locate the chat about the workout playlist",
+                "the workout playlist",
+            ],
+            [
+                "which conversation was about the trip to paris",
+                "the trip to paris",
+            ],
+            ["find conversation gym music", "gym music"],
+        ])("matches %j", (input, query) => {
+            const r = match(input);
+            expect(r).toBeDefined();
+            expect(r.actionName).toBe("findConversation");
+            expect(r.parameters.query).toBe(query);
+        });
+
+        it("does NOT hijack 'what conversation am i in'", () => {
+            const r = match("what conversation am i in");
+            expect(r?.actionName).toBe("showConversationInfo");
         });
     });
 });

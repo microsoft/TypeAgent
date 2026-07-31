@@ -132,7 +132,8 @@
             "src/agent/browserSchema.agr"
           ],
           "outputGlobs": [
-            "dist/agent/browserSchema.ag.json"
+            "dist/agent/browserSchema.ag.json",
+            "dist/agent/browserSchema.ag.map.json"
           ]
         }
       },
