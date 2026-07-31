@@ -18,8 +18,8 @@ collection, not manual estimates.
 | Metric                               |               Count |
 | ------------------------------------ | ------------------: |
 | Executable command endpoints         |                 387 |
-| Valid linked endpoints               |                  43 |
-| Missing action declarations          |                 344 |
+| Valid linked endpoints               |                  46 |
+| Missing action declarations          |                 341 |
 | Invalid / dangling / ambiguous links |                   0 |
 | Runtime-only static omissions        | 1 (`mcpfilesystem`) |
 
@@ -47,13 +47,15 @@ collection, not manual estimates.
 | localPlayer     | All 16 endpoints, including bare status default, general play, and mute/shuffle toggles.     |
 | osNotifications | `sync`, `test`.                                                                              |
 | selfhelp        | Bare default and `ask`.                                                                      |
-| powershell      | `list`, `run`, `delete`, `import`; `show` remains a new-action gap.                          |
+| powershell      | All five management endpoints: `list`, `run`, `delete`, `show`, and `import`.                |
 | browser         | `open`, `close`, `learn`, `actions match`, `actions infer`, and inherited `actions` default. |
+| email           | `index`; auth management remains.                                                            |
+| greeting        | Bare command, including deterministic `--mock` action parity.                                |
 
 The current migration check is:
 
 ```text
-Command action coverage: 43 / 387 endpoints (344 missing, 0 invalid)
+Command action coverage: 46 / 387 endpoints (341 missing, 0 invalid)
 Runtime-only schemas omitted: mcpfilesystem
 ```
 
@@ -65,7 +67,7 @@ pnpm --filter @typeagent/action-browser test:local
 node tools/actionBrowser/dist/cli.js --check --allow-missing
 ```
 
-Strict completion command (expected to fail until all 344 remaining gaps
+Strict completion command (expected to fail until all 341 remaining gaps
 close):
 
 ```powershell

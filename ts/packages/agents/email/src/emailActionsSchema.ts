@@ -5,7 +5,15 @@ export type EmailAction =
     | SendEmailAction
     | ReplyEmailAction
     | ForwardEmailAction
-    | FindEmailAction;
+    | FindEmailAction
+    | IndexInboxAction;
+
+// user: index my inbox
+// agent: { "actionName": "indexInbox" }
+// Build the local keyword index from inbox email messages.
+export type IndexInboxAction = {
+    actionName: "indexInbox";
+};
 
 // Type for generating the body content of an email based on the user input
 export interface GenerateContent {

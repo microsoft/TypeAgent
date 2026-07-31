@@ -126,8 +126,9 @@ paths use a shared typed helper.
    effects, and readiness before linking PowerShell, OS notifications,
    self-help, exact localPlayer operations, and exact browser operations.
 3. **Complete agent-host actions.** Add the known localPlayer and browser gaps,
-   auth/OAuth/indexing actions, browser configuration, PowerShell `show`, and
-   dispatcher diagnostics. No agent-host command remains excluded.
+   auth/OAuth actions, browser configuration, and dispatcher diagnostics.
+   PowerShell `show` and email indexing were completed in the second
+   implementation slice. No agent-host command remains excluded.
 4. **Complete existing system families.** Finish `system.config`,
    `system.conversation`, `system.describe`, `system.grammar`, `system.history`,
    `system.notify`, and `system.settings`.

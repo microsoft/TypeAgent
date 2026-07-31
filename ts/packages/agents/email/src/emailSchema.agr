@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 // Email Management Grammar
-// Covers: sendEmail, replyEmail, forwardEmail, findEmail actions
+// Covers: sendEmail, replyEmail, forwardEmail, findEmail, indexInbox actions
 
 import { EmailAction } from "./emailActionsSchema.ts";
 
-<Start> : EmailAction = <sendEmail> | <replyEmail> | <forwardEmail> | <findEmail>;
+<Start> : EmailAction = <sendEmail> | <replyEmail> | <forwardEmail> | <findEmail> | <indexInbox>;
 
 // ===== Main Action Rules =====
 
@@ -23,6 +23,11 @@ import { EmailAction } from "./emailActionsSchema.ts";
 
 <findEmail> = <FindPhrase> $(messageRef:string) -> { actionName: "findEmail", parameters: { messageRef: messageRef } }
               | <FindPhrase> ('with' | 'having')? ('message' | 'msg')? ('reference' | 'ref' | 'id') $(messageRef:string) -> { actionName: "findEmail", parameters: { messageRef: messageRef } };
+
+<indexInbox> = (index | reindex) (my | the)? (email)? inbox
+                                 -> { actionName: "indexInbox" }
+                             | (build | rebuild) (my | the)? email index
+                                 -> { actionName: "indexInbox" };
 
 // ===== Shared Sub-Rules =====
 

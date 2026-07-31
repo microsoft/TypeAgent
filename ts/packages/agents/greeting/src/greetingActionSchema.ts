@@ -13,6 +13,8 @@ export type GreetingAction = PersonalizedGreetingAction;
 export interface PersonalizedGreetingAction {
     actionName: "personalizedGreetingAction";
     parameters: {
+        // Set true only when the caller requests the deterministic mock greeting.
+        mock?: boolean;
         // the original request/greeting from the user
         originalRequest: string;
         // a set possible generic greeting responses to the user

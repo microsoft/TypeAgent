@@ -293,30 +293,9 @@ class GoogleAuthCommandHandler implements CommandHandler {
 class EmailIndexCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Build keyword index from inbox emails for fast search";
+    public readonly action = "indexInbox";
     public async run(context: ActionContext<EmailActionContext>) {
-        const provider = context.sessionContext.agentContext.emailProvider;
-        if (provider === undefined) {
-            throw new Error("Email provider not initialized");
-        }
-        if (!provider.isAuthenticated()) {
-            displayWarn("Please log in first with '@email login'", context);
-            return;
-        }
-
-        const agentCtx = context.sessionContext.agentContext;
-        if (agentCtx.indexingInProgress) {
-            displayWarn(
-                "Index build already in progress. Progress will appear as notifications.",
-                context,
-            );
-            return;
-        }
-
-        displayStatus(
-            "Starting email keyword index build in background...",
-            context,
-        );
-        startBackgroundInitialIndex(agentCtx);
+        runEmailIndex(context);
     }
 }
 
@@ -542,6 +521,11 @@ async function executeEmailAction(
     action: TypeAgentAction<EmailAction>,
     context: ActionContext<EmailActionContext>,
 ) {
+    if (action.actionName === "indexInbox") {
+        runEmailIndex(context);
+        return;
+    }
+
     const { emailProvider } = context.sessionContext.agentContext;
     if (emailProvider === undefined) {
         throw new Error("Email provider not initialized");
@@ -566,6 +550,37 @@ async function executeEmailAction(
         actionResult.tokenUsage = tokenUsage;
         return actionResult;
     }
+}
+
+export function runEmailIndex(
+    context: ActionContext<EmailActionContext>,
+    startIndex: (
+        context: EmailActionContext,
+    ) => void = startBackgroundInitialIndex,
+): void {
+    const provider = context.sessionContext.agentContext.emailProvider;
+    if (provider === undefined) {
+        throw new Error("Email provider not initialized");
+    }
+    if (!provider.isAuthenticated()) {
+        displayWarn("Please log in first with '@email login'", context);
+        return;
+    }
+
+    const agentContext = context.sessionContext.agentContext;
+    if (agentContext.indexingInProgress) {
+        displayWarn(
+            "Index build already in progress. Progress will appear as notifications.",
+            context,
+        );
+        return;
+    }
+
+    displayStatus(
+        "Starting email keyword index build in background...",
+        context,
+    );
+    startIndex(agentContext);
 }
 
 async function handleEmailAction(

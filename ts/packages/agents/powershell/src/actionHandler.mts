@@ -28,6 +28,7 @@ import { homedir } from "os";
 import { ScriptAnalyzer } from "./analysis/scriptAnalyzer.mjs";
 import { fileURLToPath } from "url";
 import { PowerShellStore } from "./store/powerShellStore.mjs";
+import { formatPowerShellFlowDetails } from "./flowDetails.mjs";
 import type { PowerShellFlowDefinition } from "./store/powerShellStore.mjs";
 import {
     type ScriptRecipe,
@@ -250,6 +251,35 @@ async function handlePowerShellFlowAction(
             );
             return createActionResultFromTextDisplay(
                 `Script flows (${entries.length}):\n${lines.join("\n")}`,
+            );
+        }
+
+        case "showPowerShellFlow": {
+            if (!flowStore) {
+                return createActionResultFromError(
+                    "Script flow store not available",
+                );
+            }
+            const flowName = action.parameters?.flowName as string | undefined;
+            if (!flowName) {
+                return createActionResultFromError(
+                    "Missing required parameter: flowName",
+                );
+            }
+            const flow = await flowStore.getFlow(flowName);
+            if (!flow) {
+                return createActionResultFromError(
+                    `Unknown PowerShell flow '${flowName}'. Use '@powershell list' to see available flows.`,
+                );
+            }
+            const script = await flowStore.getScript(flowName);
+            const usageCount =
+                flowStore
+                    .listFlows()
+                    .find((entry) => entry.actionName === flowName)
+                    ?.usageCount ?? 0;
+            return createActionResultFromTextDisplay(
+                formatPowerShellFlowDetails(flow, script, usageCount),
             );
         }
 
@@ -849,6 +879,7 @@ class DeleteHandler implements CommandHandler {
 
 class ShowHandler implements CommandHandler {
     public readonly description = "Show details of a PowerShell flow";
+    public readonly action = "showPowerShellFlow";
     public readonly parameters = {
         args: {
             flowName: {
@@ -860,61 +891,13 @@ class ShowHandler implements CommandHandler {
         context: ActionContext<PowerShellAgentContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const store = _agentStore;
-        if (!store) {
-            throw new Error("Script flow store not available");
-        }
-
-        const flowName = params.args.flowName;
-        if (!flowName) {
-            throw new Error("Missing required argument: flowName");
-        }
-
-        const flow = await store.getFlow(flowName);
-        if (!flow) {
-            throw new Error(
-                `Unknown PowerShell flow '${flowName}'. Use '@powershell list' to see available flows.`,
-            );
-        }
-
-        const script = await store.getScript(flowName);
-        const entries = store.listFlows();
-        const entry = entries.find((e) => e.actionName === flowName);
-
-        const paramLines = flow.parameters.map(
-            (p) =>
-                `    ${p.name} (${p.type}${p.required ? ", required" : ""}): ${p.description}${p.default !== undefined ? ` [default: ${p.default}]` : ""}`,
+        return executeBuiltInPowerShellAction(
+            {
+                actionName: "showPowerShellFlow",
+                parameters: { flowName: params.args.flowName },
+            },
+            context,
         );
-        const grammarLines = flow.grammarPatterns.map(
-            (g) => `    "${g.pattern}"${g.isAlias ? " (alias)" : ""}`,
-        );
-        const cmdletList = flow.sandbox.allowedCmdlets.join(", ");
-
-        const output = [
-            `Flow: ${flow.actionName}`,
-            `Description: ${flow.description}`,
-            `Display Name: ${flow.displayName}`,
-            `Source: ${flow.source?.type ?? "unknown"}`,
-            `Usage Count: ${entry?.usageCount ?? 0}`,
-            "",
-            "Parameters:",
-            paramLines.length > 0 ? paramLines.join("\n") : "    (none)",
-            "",
-            "Grammar Patterns:",
-            grammarLines.length > 0 ? grammarLines.join("\n") : "    (none)",
-            "",
-            "Sandbox:",
-            `    Cmdlets: ${cmdletList || "(none)"}`,
-            `    Timeout: ${flow.sandbox.maxExecutionTime}s`,
-            `    Network: ${flow.sandbox.networkAccess ? "allowed" : "blocked"}`,
-            "",
-            "Script:",
-            "```powershell",
-            script ?? "(script not found)",
-            "```",
-        ];
-
-        context.actionIO.setDisplay(output.join("\n"));
     }
 }
 
@@ -933,6 +916,7 @@ const handlers: CommandHandlerTable = {
 // in that schema is a dynamic, user-created flow.
 const POWERSHELL_BUILTIN_ACTIONS = new Set([
     "listPowerShellFlows",
+    "showPowerShellFlow",
     "deletePowerShellFlow",
     "executePowerShellFlow",
     "createPowerShellFlow",
