@@ -141,8 +141,7 @@ function summarizeParameters(actionType: ActionTypeNode): string {
     const params = fields.parameters?.type;
     if (!params || params.type !== "object" || !params.fields) return "(none)";
     const names = Object.entries(params.fields).map(
-        ([name, f]) =>
-            `${name}${f.optional ? "?" : ""}: ${renderType(f.type)}`,
+        ([name, f]) => `${name}${f.optional ? "?" : ""}: ${renderType(f.type)}`,
     );
     return names.length === 0 ? "(none)" : names.join(", ");
 }
