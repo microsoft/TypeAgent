@@ -11,8 +11,8 @@ const EXACT = new Set(["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4.1-mini"]);
 /** Include every openai id equal to the prefix or starting with `${prefix}-`. */
 const PREFIXES = ["gpt-5.6", "gpt-5.4"] as const;
 
-/** Dropped from the pin (too expensive / not used in the bench). */
-const EXCLUDE = new Set(["gpt-5.4-pro"]);
+/** Dropped from the pin (not used in the bench). */
+const EXCLUDE = new Set(["gpt-5.4-pro", "gpt-5.6"]);
 
 interface Cost {
     input?: number;

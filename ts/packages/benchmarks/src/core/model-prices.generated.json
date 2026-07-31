@@ -39,11 +39,6 @@
       "cachedUsdPer1M": 0.02,
       "outUsdPer1M": 1.25
     },
-    "gpt-5.6": {
-      "inUsdPer1M": 5,
-      "cachedUsdPer1M": 0.5,
-      "outUsdPer1M": 30
-    },
     "gpt-5.6-luna": {
       "inUsdPer1M": 1,
       "cachedUsdPer1M": 0.1,
